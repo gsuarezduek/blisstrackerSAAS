@@ -3,8 +3,10 @@
 Aplicación web para gestión de tareas diarias del equipo de Bliss Marketing.
 
 ## Stack
+
 - **Backend:** Node.js + Express + Prisma + PostgreSQL
 - **Frontend:** React + Vite + Tailwind CSS
+- **Auth:** JWT (12h), almacenado en localStorage
 
 ---
 
@@ -30,7 +32,7 @@ La API corre en `http://localhost:3001`
 
 **Credenciales por defecto:**
 - Email: `admin@blissmkt.ar`
-- Password: `admin123`  ← cambiarlo desde el panel de admin
+- Password: `admin123` ← cambiarlo desde el panel de admin
 
 ### 2. Frontend
 
@@ -46,7 +48,7 @@ La app corre en `http://localhost:5173`
 
 ## Deploy en producción (team.blissmkt.ar)
 
-### Backend (servidor con Node.js)
+### Backend
 
 ```bash
 cd backend
@@ -60,6 +62,7 @@ npm run db:seed          # solo la primera vez
 ```
 
 Usar **PM2** para mantenerlo corriendo:
+
 ```bash
 npm install -g pm2
 pm2 start src/index.js --name team-tracker-api
@@ -71,8 +74,6 @@ pm2 startup
 
 ```bash
 cd frontend
-# Editar vite.config.js: cambiar proxy por URL completa del backend
-# O configurar variable de entorno VITE_API_URL=https://team.blissmkt.ar/api
 npm run build
 # Subir la carpeta dist/ al hosting
 ```
@@ -84,7 +85,6 @@ server {
     listen 80;
     server_name team.blissmkt.ar;
 
-    # Frontend (archivos estáticos)
     root /var/www/team-tracker/dist;
     index index.html;
 
@@ -92,7 +92,6 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # Backend API (proxy inverso)
     location /api/ {
         proxy_pass http://localhost:3001;
         proxy_http_version 1.1;
@@ -112,41 +111,118 @@ Luego: `certbot --nginx -d team.blissmkt.ar` para HTTPS.
 team-tracker/
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma     # Modelos: User, Project, WorkDay, Task
-│   │   └── seed.js           # Admin inicial + proyecto Bliss
+│   │   ├── schema.prisma        # Modelos de base de datos
+│   │   ├── migrations/          # Historial de migraciones
+│   │   └── seed.js              # Admin inicial + proyecto Bliss
 │   └── src/
-│       ├── controllers/      # Lógica de negocio
-│       ├── middleware/        # Auth JWT
-│       ├── routes/           # Endpoints
+│       ├── controllers/
+│       │   ├── auth.controller.js
+│       │   ├── workdays.controller.js
+│       │   ├── tasks.controller.js
+│       │   ├── projects.controller.js
+│       │   ├── services.controller.js
+│       │   ├── reports.controller.js
+│       │   ├── realtime.controller.js
+│       │   └── feedback.controller.js
+│       ├── middleware/
+│       │   └── auth.js           # JWT + adminOnly
+│       ├── routes/
 │       └── index.js
 └── frontend/
     └── src/
         ├── pages/
         │   ├── Login.jsx
-        │   ├── Dashboard.jsx  # Vista diaria del equipo
-        │   └── Admin.jsx      # Panel admin
+        │   ├── Dashboard.jsx     # Vista diaria de tareas
+        │   ├── MyProjects.jsx    # Proyectos del usuario
+        │   ├── MyReports.jsx     # Reportes personales (no admin)
+        │   ├── RealTime.jsx      # Monitor en vivo (admin)
+        │   ├── Reports.jsx       # Reportes completos (admin)
+        │   └── Admin.jsx         # Panel de administración
         ├── components/
-        │   ├── TaskCard.jsx   # Tarjeta de tarea con timer
+        │   ├── Navbar.jsx
+        │   ├── TaskCard.jsx
         │   ├── AddTaskModal.jsx
-        │   └── admin/         # Tabs: Proyectos, Equipo, Reportes
+        │   ├── FeedbackButton.jsx
+        │   ├── DateRangeFilter.jsx
+        │   └── admin/
+        │       ├── ProjectsTab.jsx
+        │       ├── TeamTab.jsx
+        │       ├── ServicesTab.jsx
+        │       └── FeedbackTab.jsx
         ├── context/AuthContext.jsx
-        └── api/client.js      # Axios con JWT automático
+        └── api/client.js         # Axios con JWT automático
 ```
 
+---
+
+## Modelos de base de datos
+
+| Modelo | Descripción |
+|--------|-------------|
+| `User` | Usuarios del sistema con rol asignado |
+| `WorkDay` | Jornada laboral por usuario por día |
+| `Task` | Tarea asociada a una jornada y proyecto |
+| `Project` | Proyectos/clientes |
+| `Service` | Servicios que ofrece la agencia |
+| `ProjectService` | Relación muchos-a-muchos: proyecto ↔ servicio |
+| `ProjectMember` | Relación muchos-a-muchos: proyecto ↔ usuario |
+| `Feedback` | Mensajes de sugerencias y errores del equipo |
+
+---
+
 ## Roles disponibles
+
 | Valor | Descripción |
 |-------|-------------|
-| ADMIN | Acceso completo + panel de administración |
-| DESIGNER | Diseñador |
-| CM | Community Manager |
-| ACCOUNT_EXECUTIVE | Ejecutivo de Cuentas |
-| ANALYST | Analista |
-| WEB_DEVELOPER | Desarrollador Web |
+| `ADMIN` | Acceso completo + panel de administración |
+| `DESIGNER` | Diseñador |
+| `CM` | Community Manager |
+| `ACCOUNT_EXECUTIVE` | Ejecutivo de Cuentas |
+| `ANALYST` | Analista |
+| `WEB_DEVELOPER` | Desarrollador Web |
+
+---
+
+## Navegación por rol
+
+### Usuario común
+| Pantalla | Descripción |
+|----------|-------------|
+| Dashboard | Tareas del día, iniciar/pausar/completar, finalizar jornada |
+| Mis Proyectos | Proyectos a los que está asignado con servicios y equipo |
+| Mis Reportes | Historial de tareas completadas por proyecto con filtro de fechas |
+
+### Administrador
+| Pantalla | Descripción |
+|----------|-------------|
+| Dashboard | Igual que usuario común |
+| Mis Proyectos | Todos los proyectos activos |
+| Tiempo Real | Monitor en vivo: quién está activo y en qué tarea trabaja |
+| Reportes | Tiempo por proyecto o por persona, con detalle de tareas |
+| Administración | Gestión de proyectos, equipo, servicios y feedback |
+
+---
 
 ## Flujo de uso diario
-1. Usuario ingresa con email y contraseña
-2. Se crea automáticamente la jornada del día
-3. Agrega tareas asociadas a un proyecto/cliente
-4. Hace clic en **Iniciar** cuando arranca una tarea → se registra la hora de inicio
-5. Hace clic en **Completar** cuando la termina → se registra la hora de fin y se calcula la duración
-6. Al terminar el día, hace clic en **Finalizar jornada**
+
+1. El usuario inicia sesión con email y contraseña
+2. La jornada se crea automáticamente al entrar al Dashboard
+3. Agrega tareas asociadas a un proyecto (solo ve sus proyectos asignados)
+4. Hace clic en **Iniciar** para arrancar una tarea — se registra la hora de inicio
+5. Solo puede tener **una tarea activa** a la vez
+6. Puede **Pausar** una tarea para retomada después, o **Completar** para cerrarla
+7. Al reanudar una tarea pausada, el tiempo de pausa se descuenta del total
+8. Al terminar el día, hace clic en **Finalizar jornada** — la sesión se cierra automáticamente
+9. Si vuelve a iniciar sesión el mismo día, la jornada se reabre
+
+---
+
+## Timezone
+
+Todas las fechas de jornadas se calculan en **America/Argentina/Buenos_Aires (UTC-3)**. Los timestamps de tareas (startedAt, completedAt, pausedAt) se almacenan en UTC en la base de datos.
+
+---
+
+## Feedback
+
+Cualquier usuario puede enviar sugerencias o reportar errores desde el botón flotante en la esquina inferior derecha. Los mensajes llegan al panel de administración → pestaña **Feedback**, donde el admin puede filtrarlos, leerlos y marcarlos como revisados.
