@@ -24,7 +24,7 @@ cp .env.example .env
 # Editar .env con tu DATABASE_URL y JWT_SECRET
 npm install
 npm run db:migrate:dev     # crea las tablas
-npm run db:seed            # crea admin y proyecto Bliss
+npm run db:seed            # crea admin, roles por defecto y proyecto Bliss
 npm run dev
 ```
 
@@ -113,7 +113,7 @@ team-tracker/
 │   ├── prisma/
 │   │   ├── schema.prisma        # Modelos de base de datos
 │   │   ├── migrations/          # Historial de migraciones
-│   │   └── seed.js              # Admin inicial + proyecto Bliss
+│   │   └── seed.js              # Admin inicial, roles por defecto y proyecto Bliss
 │   └── src/
 │       ├── controllers/
 │       │   ├── auth.controller.js
@@ -123,7 +123,9 @@ team-tracker/
 │       │   ├── services.controller.js
 │       │   ├── reports.controller.js
 │       │   ├── realtime.controller.js
-│       │   └── feedback.controller.js
+│       │   ├── roles.controller.js
+│       │   ├── feedback.controller.js
+│       │   └── notifications.controller.js
 │       ├── middleware/
 │       │   └── auth.js           # JWT + adminOnly
 │       ├── routes/
@@ -143,12 +145,16 @@ team-tracker/
         │   ├── TaskCard.jsx
         │   ├── AddTaskModal.jsx
         │   ├── FeedbackButton.jsx
+        │   ├── NotificationBell.jsx
         │   ├── DateRangeFilter.jsx
         │   └── admin/
         │       ├── ProjectsTab.jsx
         │       ├── TeamTab.jsx
         │       ├── ServicesTab.jsx
+        │       ├── RolesTab.jsx
         │       └── FeedbackTab.jsx
+        ├── hooks/
+        │   └── useRoles.js       # Hook compartido para roles dinámicos
         ├── context/AuthContext.jsx
         └── api/client.js         # Axios con JWT automático
 ```
@@ -159,27 +165,35 @@ team-tracker/
 
 | Modelo | Descripción |
 |--------|-------------|
-| `User` | Usuarios del sistema con rol asignado |
+| `User` | Usuarios del sistema con rol asignado (String, referencia a UserRole) |
+| `UserRole` | Roles dinámicos creados desde el panel de admin |
 | `WorkDay` | Jornada laboral por usuario por día |
 | `Task` | Tarea asociada a una jornada y proyecto |
 | `Project` | Proyectos/clientes |
 | `Service` | Servicios que ofrece la agencia |
 | `ProjectService` | Relación muchos-a-muchos: proyecto ↔ servicio |
 | `ProjectMember` | Relación muchos-a-muchos: proyecto ↔ usuario |
+| `Notification` | Notificaciones entre miembros de un mismo proyecto |
 | `Feedback` | Mensajes de sugerencias y errores del equipo |
 
 ---
 
-## Roles disponibles
+## Roles
 
-| Valor | Descripción |
-|-------|-------------|
-| `ADMIN` | Acceso completo + panel de administración |
+Los roles son **dinámicos**: se crean y eliminan desde el panel de administración → pestaña **Roles**. No hay un enum fijo en la base de datos.
+
+Los roles por defecto creados con el seed son:
+
+| Nombre interno | Etiqueta |
+|----------------|----------|
+| `ADMIN` | Administrador |
 | `DESIGNER` | Diseñador |
 | `CM` | Community Manager |
 | `ACCOUNT_EXECUTIVE` | Ejecutivo de Cuentas |
 | `ANALYST` | Analista |
 | `WEB_DEVELOPER` | Desarrollador Web |
+
+El rol `ADMIN` es especial: habilita el acceso al panel de administración y a las vistas exclusivas de admin. No puede eliminarse si hay usuarios con ese rol asignado.
 
 ---
 
@@ -189,8 +203,8 @@ team-tracker/
 | Pantalla | Descripción |
 |----------|-------------|
 | Dashboard | Tareas del día, iniciar/pausar/completar, finalizar jornada |
-| Mis Proyectos | Proyectos a los que está asignado con servicios y equipo |
-| Mis Reportes | Historial de tareas completadas por proyecto con filtro de fechas |
+| Mis Proyectos | Proyectos a los que está asignado, con servicios y equipo |
+| Mis Reportes | Historial de tareas completadas por proyecto, con filtro de fechas |
 
 ### Administrador
 | Pantalla | Descripción |
@@ -199,7 +213,19 @@ team-tracker/
 | Mis Proyectos | Todos los proyectos activos |
 | Tiempo Real | Monitor en vivo: quién está activo y en qué tarea trabaja |
 | Reportes | Tiempo por proyecto o por persona, con detalle de tareas |
-| Administración | Gestión de proyectos, equipo, servicios y feedback |
+| Administración | Gestión de proyectos, equipo, servicios, roles y feedback |
+
+---
+
+## Panel de administración
+
+| Pestaña | Funcionalidad |
+|---------|---------------|
+| **Proyectos** | Crear/editar proyectos, asignar servicios, gestionar equipo por proyecto, archivar/reactivar |
+| **Equipo** | Agregar/editar miembros, asignar roles, activar/desactivar usuarios |
+| **Servicios** | Crear/editar servicios disponibles para asociar a proyectos |
+| **Roles** | Crear nuevos roles o eliminar los existentes (no se puede eliminar un rol en uso) |
+| **Feedback** | Ver sugerencias y reportes de error del equipo, filtrar por tipo y estado de lectura |
 
 ---
 
@@ -212,8 +238,15 @@ team-tracker/
 5. Solo puede tener **una tarea activa** a la vez
 6. Puede **Pausar** una tarea para retomada después, o **Completar** para cerrarla
 7. Al reanudar una tarea pausada, el tiempo de pausa se descuenta del total
-8. Al terminar el día, hace clic en **Finalizar jornada** — la sesión se cierra automáticamente
-9. Si vuelve a iniciar sesión el mismo día, la jornada se reabre
+8. Al completar una tarea, los demás miembros del proyecto reciben una **notificación**
+9. Al terminar el día, hace clic en **Finalizar jornada** — la sesión se cierra automáticamente
+10. Si vuelve a iniciar sesión el mismo día, la jornada se reabre
+
+---
+
+## Notificaciones
+
+Cuando un usuario completa una tarea, todos los demás miembros del mismo proyecto reciben una notificación en tiempo real (polling cada 30 segundos). El ícono de campana en la barra de navegación muestra un badge con la cantidad de notificaciones no leídas. Al abrir el panel, todas se marcan como leídas automáticamente.
 
 ---
 

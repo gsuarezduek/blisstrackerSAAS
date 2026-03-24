@@ -1,18 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
-
-const ROLE_LABELS = {
-  ADMIN:             'Administrador',
-  DESIGNER:          'Diseñador',
-  CM:                'Community Manager',
-  ACCOUNT_EXECUTIVE: 'Ejecutivo de Cuentas',
-  ANALYST:           'Analista',
-  WEB_DEVELOPER:     'Desarrollador Web',
-}
+import useRoles from '../../hooks/useRoles'
 
 // ── Team Modal ─────────────────────────────────────────────────────────────────
 
 function TeamModal({ project, allUsers, onClose, onUpdate }) {
+  const { labelFor } = useRoles()
   const [members, setMembers]   = useState(project.members.map(pm => pm.user))
   const [query,   setQuery]     = useState('')
   const [saving,  setSaving]    = useState(false)
@@ -103,7 +96,7 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
                   <div key={u.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 border-b last:border-b-0 transition-colors">
                     <div>
                       <p className="text-sm font-medium text-gray-800">{u.name}</p>
-                      <p className="text-xs text-gray-400">{ROLE_LABELS[u.role]}</p>
+                      <p className="text-xs text-gray-400">{labelFor(u.role)}</p>
                     </div>
                     <button
                       onClick={() => addUser(u)}
@@ -133,7 +126,7 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
                   <div key={u.id} className="flex items-center justify-between px-4 py-2.5 border-b last:border-b-0">
                     <div>
                       <p className="text-sm font-medium text-gray-800">{u.name}</p>
-                      <p className="text-xs text-gray-400">{ROLE_LABELS[u.role]}</p>
+                      <p className="text-xs text-gray-400">{labelFor(u.role)}</p>
                     </div>
                     <button
                       onClick={() => removeUser(u.id)}

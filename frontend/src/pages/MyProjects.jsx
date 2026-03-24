@@ -2,23 +2,22 @@ import { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import useRoles from '../hooks/useRoles'
 
-const ROLE_LABELS = {
-  ADMIN: 'Administrador',
-  DESIGNER: 'Diseñador',
-  CM: 'Community Manager',
-  ACCOUNT_EXECUTIVE: 'Ejecutivo de Cuentas',
-  ANALYST: 'Analista',
-  WEB_DEVELOPER: 'Desarrollador Web',
-}
+const ROLE_COLORS_LIST = [
+  'bg-purple-100 text-purple-700',
+  'bg-pink-100 text-pink-700',
+  'bg-yellow-100 text-yellow-700',
+  'bg-blue-100 text-blue-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-green-100 text-green-700',
+  'bg-orange-100 text-orange-700',
+]
 
-const ROLE_COLORS = {
-  ADMIN:             'bg-purple-100 text-purple-700',
-  DESIGNER:          'bg-pink-100 text-pink-700',
-  CM:                'bg-yellow-100 text-yellow-700',
-  ACCOUNT_EXECUTIVE: 'bg-blue-100 text-blue-700',
-  ANALYST:           'bg-cyan-100 text-cyan-700',
-  WEB_DEVELOPER:     'bg-green-100 text-green-700',
+function roleColor(name) {
+  let hash = 0
+  for (const c of (name || '')) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff
+  return ROLE_COLORS_LIST[hash % ROLE_COLORS_LIST.length]
 }
 
 function Avatar({ name }) {
@@ -34,6 +33,7 @@ function Avatar({ name }) {
 
 export default function MyProjects() {
   const { user } = useAuth()
+  const { labelFor } = useRoles()
   const [projects, setProjects] = useState([])
   const [loading,  setLoading]  = useState(true)
 
@@ -109,8 +109,8 @@ export default function MyProjects() {
                         <Avatar name={pm.user.name} />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-gray-800 leading-tight">{pm.user.name}</p>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[pm.user.role]}`}>
-                            {ROLE_LABELS[pm.user.role]}
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(pm.user.role)}`}>
+                            {labelFor(pm.user.role)}
                           </span>
                         </div>
                       </div>

@@ -1,20 +1,13 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import useRoles from '../hooks/useRoles'
 import FeedbackButton from './FeedbackButton'
 import NotificationBell from './NotificationBell'
-
-const ROLE_LABELS = {
-  ADMIN: 'Administrador',
-  DESIGNER: 'Diseñador',
-  CM: 'Community Manager',
-  ACCOUNT_EXECUTIVE: 'Ejecutivo de Cuentas',
-  ANALYST: 'Analista',
-  WEB_DEVELOPER: 'Desarrollador Web',
-}
 
 export default function Navbar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { labelFor } = useRoles()
 
   function handleLogout() {
     logout()
@@ -49,7 +42,7 @@ export default function Navbar() {
         <NotificationBell />
         <div className="text-right">
           <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-          <p className="text-xs text-gray-500">{ROLE_LABELS[user?.role]}</p>
+          <p className="text-xs text-gray-500">{labelFor(user?.role)}</p>
         </div>
         <button
           onClick={handleLogout}

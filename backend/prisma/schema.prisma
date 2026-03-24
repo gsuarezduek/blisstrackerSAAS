@@ -7,13 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  DESIGNER
-  CM
-  ACCOUNT_EXECUTIVE
-  ANALYST
-  WEB_DEVELOPER
+model UserRole {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique   // identificador interno, ej: "DESIGNER"
+  label     String             // nombre para mostrar, ej: "Diseñador"
+  createdAt DateTime @default(now())
 }
 
 enum TaskStatus {
@@ -28,7 +26,7 @@ model User {
   name      String
   email     String   @unique
   password  String
-  role      Role
+  role      String
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

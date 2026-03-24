@@ -1,14 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
-
-const ROLE_LABELS = {
-  ADMIN: 'Administrador',
-  DESIGNER: 'Diseñador',
-  CM: 'Community Manager',
-  ACCOUNT_EXECUTIVE: 'Ejecutivo de Cuentas',
-  ANALYST: 'Analista',
-  WEB_DEVELOPER: 'Desarrollador Web',
-}
+import useRoles from '../../hooks/useRoles'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -20,6 +12,7 @@ function timeAgo(dateStr) {
 }
 
 export default function FeedbackTab() {
+  const { labelFor } = useRoles()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all') // 'all' | 'SUGGESTION' | 'BUG' | 'unread'
@@ -132,7 +125,7 @@ export default function FeedbackTab() {
               </div>
               <span className="text-xs font-medium text-gray-700">{f.user.name}</span>
               <span className="text-xs text-gray-400">·</span>
-              <span className="text-xs text-gray-400">{ROLE_LABELS[f.user.role]}</span>
+              <span className="text-xs text-gray-400">{labelFor(f.user.role)}</span>
               <span className="text-xs text-gray-400">·</span>
               <span className="text-xs text-gray-400">{timeAgo(f.createdAt)}</span>
               {f.read && <span className="ml-auto text-xs text-gray-300">Leído ✓</span>}

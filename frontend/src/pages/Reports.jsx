@@ -2,15 +2,7 @@ import { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import DateRangeFilter from '../components/DateRangeFilter'
 import api from '../api/client'
-
-const ROLE_LABELS = {
-  ADMIN: 'Administrador',
-  DESIGNER: 'Diseñador',
-  CM: 'Community Manager',
-  ACCOUNT_EXECUTIVE: 'Ejecutivo de Cuentas',
-  ANALYST: 'Analista',
-  WEB_DEVELOPER: 'Desarrollador Web',
-}
+import useRoles from '../hooks/useRoles'
 
 function fmtMins(mins) {
   if (!mins || mins === 0) return '0m'
@@ -160,7 +152,7 @@ function ByPersonView({ data, loading }) {
               <div className="flex items-center gap-3">
                 <span className="font-medium text-gray-800">{d.user.name}</span>
                 <span className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-0.5">
-                  {ROLE_LABELS[d.user.role]}
+                  {labelFor(d.user.role)}
                 </span>
                 <span className="text-xs text-gray-400">{d.taskCount} tarea{d.taskCount !== 1 ? 's' : ''}</span>
               </div>
@@ -233,6 +225,7 @@ function ByPersonView({ data, loading }) {
 // ── Main Reports page ──────────────────────────────────────────────────────────
 
 export default function Reports() {
+  const { labelFor } = useRoles()
   const [view, setView] = useState('project') // 'project' | 'person'
   const [projectData, setProjectData] = useState([])
   const [personData, setPersonData] = useState([])

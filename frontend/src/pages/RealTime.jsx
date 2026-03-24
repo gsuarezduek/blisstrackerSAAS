@@ -1,23 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
+import useRoles from '../hooks/useRoles'
 
-const ROLE_LABELS = {
-  ADMIN: 'Administrador',
-  DESIGNER: 'Diseñador',
-  CM: 'Community Manager',
-  ACCOUNT_EXECUTIVE: 'Ejecutivo de Cuentas',
-  ANALYST: 'Analista',
-  WEB_DEVELOPER: 'Desarrollador Web',
+const ROLE_COLORS_LIST = [
+  'bg-purple-100 text-purple-700',
+  'bg-pink-100 text-pink-700',
+  'bg-yellow-100 text-yellow-700',
+  'bg-blue-100 text-blue-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-green-100 text-green-700',
+  'bg-orange-100 text-orange-700',
+]
+
+function roleColor(name) {
+  let hash = 0
+  for (const c of (name || '')) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff
+  return ROLE_COLORS_LIST[hash % ROLE_COLORS_LIST.length]
 }
-
-const ROLE_COLORS = {
-  ADMIN: 'bg-purple-100 text-purple-700',
-  DESIGNER: 'bg-pink-100 text-pink-700',
-  CM: 'bg-yellow-100 text-yellow-700',
-  ACCOUNT_EXECUTIVE: 'bg-blue-100 text-blue-700',
-  ANALYST: 'bg-cyan-100 text-cyan-700',
-  WEB_DEVELOPER: 'bg-green-100 text-green-700',
 }
 
 const REFRESH_INTERVAL = 30 // seconds
@@ -61,6 +61,7 @@ function Avatar({ name }) {
 
 function UserCard({ entry, now }) {
   const { user, workDay, currentTask, stats } = entry
+  const { labelFor } = useRoles()
   const isActive = !workDay.endedAt
   const hasTask = !!currentTask
 
@@ -80,8 +81,8 @@ function UserCard({ entry, now }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-900 truncate">{user.name}</p>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[user.role]}`}>
-            {ROLE_LABELS[user.role]}
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(user.role)}`}>
+            {labelFor(user.role)}
           </span>
         </div>
         <div className="text-right flex-shrink-0">
