@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import FeedbackButton from './FeedbackButton'
+import NotificationBell from './NotificationBell'
 
 const ROLE_LABELS = {
   ADMIN: 'Administrador',
@@ -44,7 +45,8 @@ export default function Navbar() {
           )}
         </div>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        <NotificationBell />
         <div className="text-right">
           <p className="text-sm font-medium text-gray-900">{user?.name}</p>
           <p className="text-xs text-gray-500">{ROLE_LABELS[user?.role]}</p>

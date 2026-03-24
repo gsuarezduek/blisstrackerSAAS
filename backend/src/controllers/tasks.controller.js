@@ -108,11 +108,34 @@ async function resumeTask(req, res, next) {
 
 async function completeTask(req, res, next) {
   try {
+    const userId = req.user.id
     const task = await prisma.task.update({
-      where: { id: Number(req.params.id), userId: req.user.id },
-      data: { status: 'COMPLETED', completedAt: new Date(), pausedAt: null },
+      where:   { id: Number(req.params.id), userId },
+      data:    { status: 'COMPLETED', completedAt: new Date(), pausedAt: null },
       include: { project: true },
     })
+
+    // Notify all other members of the same project
+    const members = await prisma.projectMember.findMany({
+      where: { projectId: task.projectId, userId: { not: userId } },
+      select: { userId: true },
+    })
+
+    if (members.length > 0) {
+      const desc = task.description.length > 60
+        ? task.description.slice(0, 57) + '...'
+        : task.description
+      await prisma.notification.createMany({
+        data: members.map(m => ({
+          userId:    m.userId,
+          actorId:   userId,
+          taskId:    task.id,
+          projectId: task.projectId,
+          message:   `completó "${desc}" en ${task.project.name}`,
+        })),
+      })
+    }
+
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })

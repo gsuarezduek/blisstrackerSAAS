@@ -33,10 +33,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  workDays WorkDay[]
-  tasks    Task[]
-  feedbacks Feedback[]
-  projects  ProjectMember[]
+  workDays      WorkDay[]
+  tasks         Task[]
+  feedbacks     Feedback[]
+  projects      ProjectMember[]
+  notifications         Notification[] @relation("NotificationRecipient")
+  notificationsAsActor  Notification[] @relation("NotificationActor")
 }
 
 model Feedback {
@@ -61,9 +63,10 @@ model Project {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tasks    Task[]
-  services ProjectService[]
-  members  ProjectMember[]
+  tasks         Task[]
+  services      ProjectService[]
+  members       ProjectMember[]
+  notifications Notification[]
 }
 
 model Service {
@@ -108,6 +111,21 @@ model WorkDay {
   @@unique([userId, date])
 }
 
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int                                         // destinatario
+  user      User     @relation("NotificationRecipient", fields: [userId], references: [id])
+  actorId   Int                                         // quien completó la tarea
+  actor     User     @relation("NotificationActor",    fields: [actorId], references: [id])
+  taskId    Int
+  task      Task     @relation(fields: [taskId], references: [id])
+  projectId Int
+  project   Project  @relation(fields: [projectId], references: [id])
+  message   String                                      // ej: completó "Diseño logo" en Bliss
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
 model Task {
   id          Int        @id @default(autoincrement())
   workDayId   Int
@@ -122,6 +140,8 @@ model Task {
   pausedAt      DateTime?
   pausedMinutes Int        @default(0)
   completedAt   DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  notifications Notification[]
 }
