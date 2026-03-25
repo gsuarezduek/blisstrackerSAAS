@@ -47,15 +47,15 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[80vh]">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[80vh]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b flex-shrink-0">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b dark:border-gray-700 flex-shrink-0">
           <div>
-            <h2 className="text-base font-bold text-gray-900">Equipo del proyecto</h2>
-            <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xs">{project.name}</p>
+            <h2 className="text-base font-bold text-gray-900 dark:text-white">Equipo del proyecto</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate max-w-xs">{project.name}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors ml-4">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors ml-4">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
               <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
             </svg>
@@ -71,7 +71,7 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Buscar persona por nombre..."
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 pr-9"
+              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 pr-9"
             />
             {query && (
               <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -84,19 +84,19 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
 
           {/* Search results */}
           {query && (
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
               {suggestions.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">
+                <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">
                   {allUsers.filter(u => !memberIds.has(u.id)).length === 0
                     ? 'Todos los usuarios ya están en este proyecto'
                     : 'No se encontraron resultados'}
                 </p>
               ) : (
                 suggestions.map(u => (
-                  <div key={u.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 border-b last:border-b-0 transition-colors">
+                  <div key={u.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 border-b dark:border-gray-600 last:border-b-0 transition-colors">
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{u.name}</p>
-                      <p className="text-xs text-gray-400">{labelFor(u.role)}</p>
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{u.name}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{labelFor(u.role)}</p>
                     </div>
                     <button
                       onClick={() => addUser(u)}
@@ -113,26 +113,26 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
 
           {/* Current members */}
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
               En el proyecto · {members.length} persona{members.length !== 1 ? 's' : ''}
             </p>
             {members.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4 border border-dashed border-gray-200 rounded-xl">
+              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4 border border-dashed border-gray-200 dark:border-gray-600 rounded-xl">
                 Sin equipo asignado todavía
               </p>
             ) : (
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
                 {members.map(u => (
-                  <div key={u.id} className="flex items-center justify-between px-4 py-2.5 border-b last:border-b-0">
+                  <div key={u.id} className="flex items-center justify-between px-4 py-2.5 border-b dark:border-gray-600 last:border-b-0">
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{u.name}</p>
-                      <p className="text-xs text-gray-400">{labelFor(u.role)}</p>
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{u.name}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{labelFor(u.role)}</p>
                     </div>
                     <button
                       onClick={() => removeUser(u.id)}
                       disabled={saving}
                       title="Quitar del proyecto"
-                      className="text-gray-300 hover:text-red-500 transition-colors disabled:opacity-50 ml-3 flex-shrink-0"
+                      className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors disabled:opacity-50 ml-3 flex-shrink-0"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                         <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
@@ -147,10 +147,10 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t flex-shrink-0">
+        <div className="px-5 py-4 border-t dark:border-gray-700 flex-shrink-0">
           <button
             onClick={onClose}
-            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl py-2.5 text-sm transition-colors"
+            className="w-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl py-2.5 text-sm transition-colors"
           >
             Listo
           </button>
@@ -178,7 +178,7 @@ function ServiceCheckboxList({ allServices, selectedIds, onChange }) {
             )}
             className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
           />
-          <span className="text-xs text-gray-700">{s.name}</span>
+          <span className="text-xs text-gray-700 dark:text-gray-300">{s.name}</span>
         </label>
       ))}
     </div>
@@ -261,18 +261,18 @@ export default function ProjectsTab() {
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-gray-900 mb-4">Proyectos / Clientes</h2>
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Proyectos / Clientes</h2>
 
       {/* Create form */}
-      <form onSubmit={handleCreate} className="bg-white border rounded-xl p-4 mb-6 space-y-3">
+      <form onSubmit={handleCreate} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 mb-6 space-y-3">
         <input
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder="Nombre del proyecto o cliente"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
         />
         <div>
-          <p className="text-xs font-medium text-gray-600">Servicios asociados</p>
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Servicios asociados</p>
           <ServiceCheckboxList allServices={allServices} selectedIds={selServices} onChange={setSelServices} />
         </div>
         <button
@@ -296,16 +296,16 @@ export default function ProjectsTab() {
                 <p className="text-sm text-gray-400 text-center py-8">No hay proyectos activos</p>
               )}
               {active.map(p => (
-                <div key={p.id} className="bg-white border rounded-xl overflow-hidden">
+                <div key={p.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-hidden">
                   {editingId === p.id ? (
                     <div className="p-4 space-y-3">
                       <input
                         value={edit.name}
                         onChange={e => setEdit(prev => ({ ...prev, name: e.target.value }))}
-                        className="w-full border border-primary-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="w-full border border-primary-400 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                       <div>
-                        <p className="text-xs font-medium text-gray-600">Servicios asociados</p>
+                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Servicios asociados</p>
                         <ServiceCheckboxList
                           allServices={allServices}
                           selectedIds={edit.serviceIds}
@@ -314,7 +314,7 @@ export default function ProjectsTab() {
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => handleSaveEdit(p)} className="text-xs px-3 py-1.5 rounded-lg font-medium bg-primary-600 text-white hover:bg-primary-700 transition-colors">Guardar</button>
-                        <button onClick={() => setEditingId(null)} className="text-xs px-3 py-1.5 rounded-lg font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">Cancelar</button>
+                        <button onClick={() => setEditingId(null)} className="text-xs px-3 py-1.5 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
                       </div>
                     </div>
                   ) : (
@@ -322,7 +322,7 @@ export default function ProjectsTab() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="w-2 h-2 rounded-full flex-shrink-0 bg-green-500" />
-                          <span className="text-sm font-medium text-gray-800">{p.name}</span>
+                          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{p.name}</span>
                         </div>
                         <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                           <button
@@ -348,14 +348,14 @@ export default function ProjectsTab() {
                       {p.services.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2 ml-5">
                           {p.services.map(ps => (
-                            <span key={ps.service.id} className="text-xs bg-indigo-50 text-indigo-600 rounded px-2 py-0.5">{ps.service.name}</span>
+                            <span key={ps.service.id} className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded px-2 py-0.5">{ps.service.name}</span>
                           ))}
                         </div>
                       )}
                       {p.members.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-1.5 ml-5">
                           {p.members.map(pm => (
-                            <span key={pm.user.id} className="text-xs bg-gray-100 text-gray-600 rounded-full px-2.5 py-0.5">
+                            <span key={pm.user.id} className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full px-2.5 py-0.5">
                               {pm.user.name}
                             </span>
                           ))}
@@ -371,16 +371,16 @@ export default function ProjectsTab() {
             {archived.length > 0 && (
               <div className="mt-8">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Archivo</span>
-                  <span className="text-xs bg-gray-100 text-gray-400 rounded-full px-2 py-0.5">{archived.length}</span>
+                  <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Archivo</span>
+                  <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-full px-2 py-0.5">{archived.length}</span>
                 </div>
                 <div className="space-y-2">
                   {archived.map(p => (
-                    <div key={p.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3 opacity-60 hover:opacity-100 transition-opacity">
+                    <div key={p.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 opacity-60 hover:opacity-100 transition-opacity">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="w-2 h-2 rounded-full flex-shrink-0 bg-gray-300" />
-                          <span className="text-sm font-medium text-gray-600">{p.name}</span>
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{p.name}</span>
                         </div>
                         <button
                           onClick={() => toggleActive(p)}
@@ -392,7 +392,7 @@ export default function ProjectsTab() {
                       {p.services.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2 ml-5">
                           {p.services.map(ps => (
-                            <span key={ps.service.id} className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-0.5">{ps.service.name}</span>
+                            <span key={ps.service.id} className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded px-2 py-0.5">{ps.service.name}</span>
                           ))}
                         </div>
                       )}

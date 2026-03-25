@@ -37,7 +37,7 @@ export default function FeedbackTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-gray-900">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">
           Feedback
           {unreadCount > 0 && (
             <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
@@ -45,7 +45,7 @@ export default function FeedbackTab() {
             </span>
           )}
         </h2>
-        <span className="text-sm text-gray-400">{items.length} mensaje{items.length !== 1 ? 's' : ''} en total</span>
+        <span className="text-sm text-gray-400 dark:text-gray-500">{items.length} mensaje{items.length !== 1 ? 's' : ''} en total</span>
       </div>
 
       {/* Filter pills */}
@@ -62,7 +62,7 @@ export default function FeedbackTab() {
             className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
               filter === f.id
                 ? 'bg-primary-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             {f.label}
@@ -83,8 +83,8 @@ export default function FeedbackTab() {
         {filtered.map(f => (
           <div
             key={f.id}
-            className={`bg-white border rounded-xl p-4 transition-all ${
-              !f.read ? 'border-l-4 border-l-primary-500' : 'border-gray-200 opacity-75'
+            className={`bg-white dark:bg-gray-800 border rounded-xl p-4 transition-all ${
+              !f.read ? 'border-l-4 border-l-primary-500' : 'border-gray-200 dark:border-gray-700 opacity-75'
             }`}
           >
             <div className="flex items-start justify-between gap-3">
@@ -92,14 +92,14 @@ export default function FeedbackTab() {
                 {/* Type badge */}
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 mt-0.5 ${
                   f.type === 'BUG'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-indigo-100 text-indigo-700'
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                    : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'
                 }`}>
                   {f.type === 'BUG' ? '🐛 Error' : '💡 Sugerencia'}
                 </span>
 
                 {/* Message */}
-                <p className="text-sm text-gray-800 leading-relaxed">{f.message}</p>
+                <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">{f.message}</p>
               </div>
 
               {/* Mark read */}
@@ -117,18 +117,18 @@ export default function FeedbackTab() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-              <div className="w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-bold text-primary-700">
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+              <div className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-primary-700 dark:text-primary-400">
                   {f.user.name.charAt(0).toUpperCase()}
                 </span>
               </div>
-              <span className="text-xs font-medium text-gray-700">{f.user.name}</span>
-              <span className="text-xs text-gray-400">·</span>
-              <span className="text-xs text-gray-400">{labelFor(f.user.role)}</span>
-              <span className="text-xs text-gray-400">·</span>
-              <span className="text-xs text-gray-400">{timeAgo(f.createdAt)}</span>
-              {f.read && <span className="ml-auto text-xs text-gray-300">Leído ✓</span>}
+              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{f.user.name}</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">·</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">{labelFor(f.user.role)}</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">·</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(f.createdAt)}</span>
+              {f.read && <span className="ml-auto text-xs text-gray-300 dark:text-gray-600">Leído ✓</span>}
             </div>
           </div>
         ))}

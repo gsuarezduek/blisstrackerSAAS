@@ -75,28 +75,28 @@ export default function TeamTab() {
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-gray-900 mb-4">{editId ? 'Editar miembro' : 'Agregar miembro del equipo'}</h2>
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">{editId ? 'Editar miembro' : 'Agregar miembro del equipo'}</h2>
 
-      <form onSubmit={handleSubmit} className="bg-white border rounded-xl p-4 mb-6 grid grid-cols-2 gap-3">
+      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 mb-6 grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-medium text-gray-600">Nombre</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Nombre</label>
           <input required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
         <div>
-          <label className="text-xs font-medium text-gray-600">Email</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Email</label>
           <input required type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
         <div>
-          <label className="text-xs font-medium text-gray-600">{editId ? 'Nueva contraseña (opcional)' : 'Contraseña'}</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">{editId ? 'Nueva contraseña (opcional)' : 'Contraseña'}</label>
           <input type="password" required={!editId} value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
         <div>
-          <label className="text-xs font-medium text-gray-600">Rol</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol</label>
           <select required value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
             {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
           </select>
         </div>
@@ -104,7 +104,7 @@ export default function TeamTab() {
         <div className="col-span-2 flex gap-3">
           {editId && (
             <button type="button" onClick={() => { setEditId(null); setForm({ ...emptyForm, role: roles[0]?.name || '' }) }}
-              className="border border-gray-300 text-gray-600 rounded-lg px-4 py-2 text-sm">Cancelar</button>
+              className="border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-lg px-4 py-2 text-sm">Cancelar</button>
           )}
           <button type="submit" disabled={loading}
             className="flex-1 bg-primary-600 hover:bg-primary-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60">
@@ -115,16 +115,16 @@ export default function TeamTab() {
 
       <div className="space-y-2">
         {users.map(u => (
-          <div key={u.id} className={`flex items-center justify-between bg-white border rounded-xl px-4 py-3 ${!u.active ? 'opacity-50' : ''}`}>
+          <div key={u.id} className={`flex items-center justify-between bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-3 ${!u.active ? 'opacity-50' : ''}`}>
             <div>
-              <p className="text-sm font-medium text-gray-800">{u.name}</p>
-              <p className="text-xs text-gray-400">{u.email}</p>
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{u.name}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{u.email}</p>
             </div>
             <div className="flex items-center gap-3">
               <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor(u.role)}`}>
                 {labelFor(u.role)}
               </span>
-              <button onClick={() => startEdit(u)} className="text-xs text-gray-500 hover:text-primary-600">Editar</button>
+              <button onClick={() => startEdit(u)} className="text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">Editar</button>
               <button onClick={() => toggleActive(u)}
                 className={`text-xs ${u.active ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'}`}>
                 {u.active ? 'Desactivar' : 'Activar'}

@@ -76,17 +76,17 @@ export default function NotificationBell() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-8 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b flex items-center justify-between">
-            <span className="font-semibold text-gray-900 text-sm">Notificaciones</span>
+        <div className="absolute right-0 top-8 w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
+          <div className="px-4 py-3 border-b dark:border-gray-700 flex items-center justify-between">
+            <span className="font-semibold text-gray-900 dark:text-white text-sm">Notificaciones</span>
             {notifications.length > 0 && (
-              <span className="text-xs text-gray-400">{notifications.length} recientes</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">{notifications.length} recientes</span>
             )}
           </div>
 
           <div className="max-h-96 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="text-center py-10 text-gray-400">
+              <div className="text-center py-10 text-gray-400 dark:text-gray-500">
                 <p className="text-2xl mb-2">🔔</p>
                 <p className="text-sm">Sin notificaciones todavía</p>
               </div>
@@ -94,8 +94,8 @@ export default function NotificationBell() {
               notifications.map(n => (
                 <div
                   key={n.id}
-                  className={`px-4 py-3 border-b last:border-b-0 transition-colors ${
-                    !n.read ? 'bg-primary-50' : 'bg-white'
+                  className={`px-4 py-3 border-b dark:border-gray-700 last:border-b-0 transition-colors ${
+                    !n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800'
                   }`}
                 >
                   <div className="flex items-start gap-2.5">
@@ -104,11 +104,11 @@ export default function NotificationBell() {
                       {n.actor.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-800 leading-snug">
+                      <p className="text-sm text-gray-800 dark:text-gray-200 leading-snug">
                         <span className="font-semibold">{n.actor.name}</span>{' '}
                         {n.message}
                       </p>
-                      <p className="text-xs text-gray-400 mt-0.5">{timeAgo(n.createdAt)}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{timeAgo(n.createdAt)}</p>
                     </div>
                     {!n.read && (
                       <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-1.5" />

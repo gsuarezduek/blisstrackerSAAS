@@ -77,19 +77,19 @@ export default function Dashboard() {
   }, 0)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
 
       <main className="max-w-3xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Buen día, {user?.name.split(' ')[0]} 👋</h1>
-            <p className="text-gray-500 text-sm mt-1 capitalize">{todayLabel()}</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Buen día, {user?.name.split(' ')[0]} 👋</h1>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1 capitalize">{todayLabel()}</p>
           </div>
           <div className="text-right">
             {workDay && !workDay.endedAt && (
-              <p className="text-sm text-gray-500">Jornada: <span className="font-medium text-gray-700">{elapsed}</span></p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Jornada: <span className="font-medium text-gray-700 dark:text-gray-300">{elapsed}</span></p>
             )}
             {workDay?.endedAt && (
               <p className="text-sm text-green-600 font-medium">Jornada finalizada ✓</p>
@@ -99,19 +99,19 @@ export default function Dashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border p-4 text-center">
-            <p className="text-2xl font-bold text-gray-800">{tasks.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Total tareas</p>
+          <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
+            <p className="text-2xl font-bold text-gray-800 dark:text-white">{tasks.length}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total tareas</p>
           </div>
-          <div className="bg-white rounded-xl border p-4 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
             <p className="text-2xl font-bold text-green-600">{completed.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Completadas</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Completadas</p>
           </div>
-          <div className="bg-white rounded-xl border p-4 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
             <p className="text-2xl font-bold text-indigo-600">
               {totalMins >= 60 ? `${Math.floor(totalMins/60)}h ${totalMins%60}m` : `${totalMins}m`}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Tiempo registrado</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tiempo registrado</p>
           </div>
         </div>
 
@@ -129,7 +129,7 @@ export default function Dashboard() {
             <button
               onClick={handleFinish}
               disabled={finishing}
-              className="border border-red-300 text-red-600 hover:bg-red-50 font-medium rounded-xl px-5 py-3 transition-colors disabled:opacity-50"
+              className="border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-medium rounded-xl px-5 py-3 transition-colors disabled:opacity-50"
             >
               {finishing ? 'Finalizando...' : 'Finalizar jornada'}
             </button>
@@ -139,7 +139,7 @@ export default function Dashboard() {
         {/* Task lists */}
         {inProgress.length > 0 && (
           <section className="mb-6">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">En curso</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">En curso</h2>
             <div className="space-y-2">
               {inProgress.map(t => (
                 <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
@@ -150,7 +150,7 @@ export default function Dashboard() {
 
         {paused.length > 0 && (
           <section className="mb-6">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pausadas</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Pausadas</h2>
             <div className="space-y-2">
               {paused.map(t => (
                 <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
@@ -161,7 +161,7 @@ export default function Dashboard() {
 
         {pending.length > 0 && (
           <section className="mb-6">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pendientes</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Pendientes</h2>
             <div className="space-y-2">
               {pending.map(t => (
                 <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
@@ -172,7 +172,7 @@ export default function Dashboard() {
 
         {completed.length > 0 && (
           <section>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Completadas</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Completadas</h2>
             <div className="space-y-2">
               {completed.map(t => (
                 <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />

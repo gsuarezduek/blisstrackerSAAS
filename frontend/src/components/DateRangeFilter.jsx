@@ -55,7 +55,7 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, on
             className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
               activePreset === p.label
                 ? 'bg-primary-600 text-white'
-                : 'bg-white border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600'
+                : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 dark:hover:text-gray-200'
             }`}
           >
             {p.label}
@@ -66,21 +66,21 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, on
       {/* Custom date inputs */}
       <div className="flex gap-3 items-end flex-wrap">
         <div>
-          <label className="text-xs font-medium text-gray-600">Desde</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Desde</label>
           <input
             type="date"
             value={from}
             onChange={e => onFromChange(e.target.value)}
-            className="mt-1 block border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="mt-1 block border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-gray-600">Hasta</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Hasta</label>
           <input
             type="date"
             value={to}
             onChange={e => onToChange(e.target.value)}
-            className="mt-1 block border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="mt-1 block border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
         <button

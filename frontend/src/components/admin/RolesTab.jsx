@@ -40,17 +40,17 @@ export default function RolesTab() {
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-gray-900 mb-4">Roles</h2>
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Roles</h2>
 
-      <form onSubmit={handleCreate} className="bg-white border rounded-xl p-4 mb-6 flex gap-3 items-end">
+      <form onSubmit={handleCreate} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 mb-6 flex gap-3 items-end">
         <div className="flex-1">
-          <label className="text-xs font-medium text-gray-600">Nombre del rol</label>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Nombre del rol</label>
           <input
             required
             value={label}
             onChange={e => setLabel(e.target.value)}
             placeholder="ej: Social Media Manager"
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
         <button
@@ -66,10 +66,10 @@ export default function RolesTab() {
 
       <div className="space-y-2">
         {roles.map(r => (
-          <div key={r.id} className="flex items-center justify-between bg-white border rounded-xl px-4 py-3">
+          <div key={r.id} className="flex items-center justify-between bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-gray-800">{r.label}</p>
-              <p className="text-xs text-gray-400 font-mono">{r.name}</p>
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{r.label}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">{r.name}</p>
             </div>
             <button
               onClick={() => handleDelete(r)}

@@ -48,10 +48,10 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
   }
 
   const statusBadge = {
-    PENDING:     'bg-gray-100 text-gray-600',
-    IN_PROGRESS: 'bg-blue-100 text-blue-700',
-    PAUSED:      'bg-yellow-100 text-yellow-700',
-    COMPLETED:   'bg-green-100 text-green-700',
+    PENDING:     'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
+    IN_PROGRESS: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400',
+    PAUSED:      'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400',
+    COMPLETED:   'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400',
   }
 
   const statusLabel = {
@@ -65,16 +65,16 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
   const canResume = task.status === 'PAUSED'   && !hasActiveTask
 
   return (
-    <div className={`bg-white rounded-xl border p-4 flex items-start gap-4 transition-opacity ${task.status === 'COMPLETED' ? 'opacity-70' : ''}`}>
+    <div className={`bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 flex items-start gap-4 transition-opacity ${task.status === 'COMPLETED' ? 'opacity-70' : ''}`}>
       {/* Status dot */}
       <div className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusDot[task.status]}`} />
 
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium ${task.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+        <p className={`text-sm font-medium ${task.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
           {task.description}
         </p>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <span className="text-xs bg-indigo-50 text-indigo-600 rounded px-2 py-0.5">{task.project.name}</span>
+          <span className="text-xs bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded px-2 py-0.5">{task.project.name}</span>
           <span className={`text-xs rounded px-2 py-0.5 ${statusBadge[task.status]}`}>{statusLabel[task.status]}</span>
 
           {/* Live elapsed for in-progress */}
@@ -105,12 +105,12 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
               className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-40 ${
                 canStart
                   ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
               }`}
             >
               Iniciar
             </button>
-            <button onClick={handleDelete} className="text-gray-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+            <button onClick={handleDelete} className="text-gray-300 dark:text-gray-600 hover:text-red-400 dark:hover:text-red-400 transition-colors text-lg leading-none">×</button>
           </>
         )}
 
@@ -143,7 +143,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
             className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-40 ${
               canResume
                 ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
             }`}
           >
             Continuar

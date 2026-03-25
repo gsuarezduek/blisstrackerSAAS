@@ -41,12 +41,12 @@ export default function MyReports() {
   const byProject = data?.byProject ?? []
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Mis Reportes</h1>
-          <p className="text-gray-500 text-sm mt-1">{user?.name}</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mis Reportes</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{user?.name}</p>
         </div>
 
         <DateRangeFilter
@@ -58,13 +58,13 @@ export default function MyReports() {
         {/* Summary cards */}
         {data && (
           <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="bg-white rounded-xl border p-4 text-center">
+            <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
               <p className="text-2xl font-bold text-indigo-600">{fmtMins(data.totalMinutes)}</p>
-              <p className="text-xs text-gray-500 mt-1">Tiempo total registrado</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tiempo total registrado</p>
             </div>
-            <div className="bg-white rounded-xl border p-4 text-center">
+            <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
               <p className="text-2xl font-bold text-green-600">{data.taskCount}</p>
-              <p className="text-xs text-gray-500 mt-1">Tareas completadas</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tareas completadas</p>
             </div>
           </div>
         )}
@@ -75,20 +75,20 @@ export default function MyReports() {
         {!loading && byProject.length > 0 && (
           <div className="space-y-3">
             {byProject.map(p => (
-              <div key={p.project.id} className="bg-white border rounded-xl overflow-hidden">
+              <div key={p.project.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-hidden">
                 <button
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   onClick={() => setExpandedProject(expandedProject === p.project.id ? null : p.project.id)}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="font-medium text-gray-800">{p.project.name}</span>
-                    <span className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-0.5">
+                    <span className="font-medium text-gray-800 dark:text-gray-200">{p.project.name}</span>
+                    <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded px-2 py-0.5">
                       {p.taskList.length} tarea{p.taskList.length !== 1 ? 's' : ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-bold text-primary-600">{fmtMins(p.minutes)}</span>
-                    <span className="text-gray-400 text-sm">
+                    <span className="text-gray-400 dark:text-gray-500 text-sm">
                       {expandedProject === p.project.id ? '▲' : '▼'}
                     </span>
                   </div>
@@ -106,14 +106,14 @@ export default function MyReports() {
 
                 {/* Task list */}
                 {expandedProject === p.project.id && (
-                  <div className="border-t px-4 py-3 space-y-1.5 bg-gray-50">
+                  <div className="border-t dark:border-gray-700 px-4 py-3 space-y-1.5 bg-gray-50 dark:bg-gray-800/50">
                     {p.taskList.map(task => (
-                      <div key={task.id} className="flex items-start justify-between text-sm py-1.5 border-b border-gray-100 last:border-b-0">
+                      <div key={task.id} className="flex items-start justify-between text-sm py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
                         <div className="flex items-start gap-2 flex-1 min-w-0">
                           <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                          <span className="text-gray-700">{task.description}</span>
+                          <span className="text-gray-700 dark:text-gray-300">{task.description}</span>
                         </div>
-                        <span className="text-gray-500 flex-shrink-0 ml-3">{fmtMins(task.minutes)}</span>
+                        <span className="text-gray-500 dark:text-gray-400 flex-shrink-0 ml-3">{fmtMins(task.minutes)}</span>
                       </div>
                     ))}
                   </div>
