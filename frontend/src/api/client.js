@@ -6,12 +6,17 @@ import axios from 'axios'
 //  baseURL: import.meta.env.VITE_API_URL + '/api'
 //})
 
-//Esta funciona en desarrollo y producción
-const baseURL = import.meta.env.VITE_API_URL 
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api'
+//Esta funciona en desarrollo y producción 
+// const baseURL = import.meta.env.VITE_API_URL 
+//  ? `${import.meta.env.VITE_API_URL}/api`
+//  : '/api'
 
-const api = axios.create({ baseURL })
+//const api = axios.create({ baseURL })
+
+const api = axios.create({ 
+  baseURL: `${import.meta.env.VITE_API_URL}/api`
+})
+
 
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('token')
