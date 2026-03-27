@@ -74,4 +74,47 @@ async function update(req, res, next) {
   }
 }
 
-module.exports = { list, listAll, create, update }
+async function projectTasks(req, res, next) {
+  try {
+    const projectId = Number(req.params.id)
+    const userId = req.user.id
+    const isAdmin = req.user.role === 'ADMIN'
+
+    // Verificar que el usuario es miembro del proyecto (o admin)
+    if (!isAdmin) {
+      const member = await prisma.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId } },
+      })
+      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        projectId,
+        status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED'] },
+      },
+      include: {
+        user: { select: { id: true, name: true, role: true } },
+      },
+      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+    })
+
+    // Agrupar por usuario
+    const byUser = {}
+    for (const task of tasks) {
+      const uid = task.user.id
+      if (!byUser[uid]) byUser[uid] = { user: task.user, tasks: [] }
+      byUser[uid].tasks.push({ id: task.id, description: task.description, status: task.status, createdAt: task.createdAt, startedAt: task.startedAt })
+    }
+
+    res.json({ project, byUser: Object.values(byUser) })
+  } catch (err) { next(err) }
+}
+
+module.exports = { list, listAll, create, update, projectTasks }

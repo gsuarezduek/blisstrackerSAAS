@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs')
 const { PrismaClient } = require('@prisma/client')
+const { sendWelcomeEmail } = require('../services/email.service')
 
 const prisma = new PrismaClient()
 
@@ -24,6 +25,12 @@ async function create(req, res, next) {
       data: { name, email, password: hashed, role },
       select: { id: true, name: true, email: true, role: true, active: true },
     })
+
+    // Enviar email de bienvenida (no bloquea si falla)
+    sendWelcomeEmail(email, name, password).catch(err =>
+      console.error('[sendWelcomeEmail] Error:', err.message)
+    )
+
     res.status(201).json(user)
   } catch (err) {
     if (err.code === 'P2002') return res.status(409).json({ error: 'Email ya registrado' })

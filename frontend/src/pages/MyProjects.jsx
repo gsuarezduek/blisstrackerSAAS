@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
@@ -34,6 +35,7 @@ function Avatar({ name }) {
 export default function MyProjects() {
   const { user } = useAuth()
   const { labelFor } = useRoles()
+  const navigate = useNavigate()
   const [projects, setProjects] = useState([])
   const [loading,  setLoading]  = useState(true)
 
@@ -68,12 +70,21 @@ export default function MyProjects() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {projects.map(p => (
-            <div key={p.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-4">
+            <div
+            key={p.id}
+            onClick={() => navigate(`/my-projects/${p.id}`)}
+            className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-4 cursor-pointer hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all"
+          >
 
               {/* Project name */}
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
-                <h2 className="font-bold text-gray-900 dark:text-white text-lg leading-tight">{p.name}</h2>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
+                  <h2 className="font-bold text-gray-900 dark:text-white text-lg leading-tight">{p.name}</h2>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
+                  <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+                </svg>
               </div>
 
               {/* Services */}

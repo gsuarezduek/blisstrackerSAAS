@@ -13,7 +13,7 @@ export default function Login() {
   const resetOk = searchParams.get('reset') === 'ok'
 
   if (user) {
-    navigate(user.role === 'ADMIN' ? '/admin' : '/', { replace: true })
+    navigate('/', { replace: true })
     return null
   }
 
@@ -22,8 +22,8 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      const u = await login(email, password)
-      navigate(u.role === 'ADMIN' ? '/admin' : '/', { replace: true })
+      await login(email, password)
+      navigate('/', { replace: true })
     } catch (err) {
       setError(err.response?.data?.error || 'Error al iniciar sesión')
     } finally {
