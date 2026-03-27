@@ -18,9 +18,13 @@ export default function Dashboard() {
   const [finishing, setFinishing] = useState(false)
   const [elapsed, setElapsed] = useState('')
 
+  const [carryOver, setCarryOver] = useState([])
+
   const loadToday = useCallback(async () => {
     const { data } = await api.get('/workdays/today')
-    setWorkDay(data)
+    const { carryOverTasks, ...wd } = data
+    setWorkDay(wd)
+    setCarryOver(carryOverTasks ?? [])
   }, [])
 
   useEffect(() => { loadToday() }, [loadToday])
@@ -54,6 +58,15 @@ export default function Dashboard() {
   }
 
   function handleUpdateTask(updated) {
+    // Si la tarea estaba en carryOver y se completó, sacarla de ahí
+    if (carryOver.find(t => t.id === updated.id)) {
+      if (updated.status === 'COMPLETED') {
+        setCarryOver(prev => prev.filter(t => t.id !== updated.id))
+      } else {
+        setCarryOver(prev => prev.map(t => t.id === updated.id ? updated : t))
+      }
+      return
+    }
     setWorkDay(prev => ({
       ...prev,
       tasks: prev.tasks.map(t => t.id === updated.id ? updated : t),
@@ -61,6 +74,10 @@ export default function Dashboard() {
   }
 
   function handleDeleteTask(id) {
+    if (carryOver.find(t => t.id === id)) {
+      setCarryOver(prev => prev.filter(t => t.id !== id))
+      return
+    }
     setWorkDay(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== id) }))
   }
 
@@ -69,7 +86,7 @@ export default function Dashboard() {
   const inProgress = tasks.filter(t => t.status === 'IN_PROGRESS')
   const paused     = tasks.filter(t => t.status === 'PAUSED')
   const completed  = tasks.filter(t => t.status === 'COMPLETED')
-  const hasActiveTask = inProgress.length > 0
+  const hasActiveTask = inProgress.length > 0 || carryOver.some(t => t.status === 'IN_PROGRESS')
 
   const totalMins = completed.reduce((acc, t) => {
     if (!t.startedAt || !t.completedAt) return acc
@@ -135,6 +152,20 @@ export default function Dashboard() {
             </button>
           )}
         </div>
+
+        {/* Carry-over tasks from previous days */}
+        {carryOver.length > 0 && (
+          <section className="mb-6">
+            <h2 className="text-xs font-semibold text-orange-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+              <span>⏳</span> Pendientes de días anteriores
+            </h2>
+            <div className="space-y-2">
+              {carryOver.map(t => (
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Task lists */}
         {inProgress.length > 0 && (

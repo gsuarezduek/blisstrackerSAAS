@@ -44,7 +44,18 @@ async function getOrCreateToday(req, res, next) {
       })
     }
 
-    res.json(workDay)
+    // Tareas pendientes/pausadas/en curso de días anteriores
+    const carryOverTasks = await prisma.task.findMany({
+      where: {
+        userId,
+        status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED'] },
+        workDay: { date: { lt: date } },
+      },
+      include: { project: true },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    res.json({ ...workDay, carryOverTasks })
   } catch (err) { next(err) }
 }
 
