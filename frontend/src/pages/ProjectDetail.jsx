@@ -5,18 +5,20 @@ import api from '../api/client'
 import useRoles from '../hooks/useRoles'
 
 const STATUS_LABEL = {
+  BLOCKED:     'Bloqueada',
   IN_PROGRESS: 'En curso',
-  PAUSED: 'Pausada',
-  PENDING: 'Pendiente',
+  PAUSED:      'Pausada',
+  PENDING:     'Pendiente',
 }
 
 const STATUS_CLASS = {
+  BLOCKED:     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   PAUSED:      'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
   PENDING:     'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
 }
 
-const STATUS_ORDER = { IN_PROGRESS: 0, PAUSED: 1, PENDING: 2 }
+const STATUS_ORDER = { BLOCKED: 0, IN_PROGRESS: 1, PAUSED: 2, PENDING: 3 }
 
 const AVATAR_COLORS = ['bg-indigo-500','bg-pink-500','bg-yellow-500','bg-green-500','bg-blue-500','bg-purple-500','bg-red-500','bg-cyan-500']
 
@@ -126,11 +128,18 @@ export default function ProjectDetail() {
                         .slice()
                         .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
                         .map(task => (
-                          <div key={task.id} className="flex items-start gap-3 px-4 py-3">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${STATUS_CLASS[task.status]}`}>
-                              {STATUS_LABEL[task.status]}
-                            </span>
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{task.description}</p>
+                          <div key={task.id} className={`flex flex-col gap-1.5 px-4 py-3 ${task.status === 'BLOCKED' ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
+                            <div className="flex items-start gap-3">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${STATUS_CLASS[task.status]}`}>
+                                {STATUS_LABEL[task.status]}
+                              </span>
+                              <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{task.description}</p>
+                            </div>
+                            {task.status === 'BLOCKED' && task.blockedReason && (
+                              <div className="ml-0 flex items-start gap-1.5 pl-2 border-l-2 border-red-300 dark:border-red-700">
+                                <p className="text-xs text-red-600 dark:text-red-400">{task.blockedReason}</p>
+                              </div>
+                            )}
                           </div>
                         ))}
                     </div>

@@ -14,7 +14,7 @@ async function getOrCreateToday(req, res, next) {
       where: { userId_date: { userId, date } },
       include: {
         tasks: {
-          include: { project: true },
+          include: { project: true, createdBy: { select: { id: true, name: true } } },
           orderBy: { createdAt: 'asc' },
         },
       },
@@ -25,7 +25,7 @@ async function getOrCreateToday(req, res, next) {
         data: { userId, date },
         include: {
           tasks: {
-            include: { project: true },
+            include: { project: true, createdBy: { select: { id: true, name: true } } },
             orderBy: { createdAt: 'asc' },
           },
         },
@@ -37,7 +37,7 @@ async function getOrCreateToday(req, res, next) {
         data: { endedAt: null, startedAt: new Date() },
         include: {
           tasks: {
-            include: { project: true },
+            include: { project: true, createdBy: { select: { id: true, name: true } } },
             orderBy: { createdAt: 'asc' },
           },
         },
@@ -48,10 +48,10 @@ async function getOrCreateToday(req, res, next) {
     const carryOverTasks = await prisma.task.findMany({
       where: {
         userId,
-        status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED'] },
+        status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         workDay: { date: { lt: date } },
       },
-      include: { project: true },
+      include: { project: true, createdBy: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'asc' },
     })
 

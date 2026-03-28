@@ -85,6 +85,7 @@ export default function Dashboard() {
   const pending    = tasks.filter(t => t.status === 'PENDING')
   const inProgress = tasks.filter(t => t.status === 'IN_PROGRESS')
   const paused     = tasks.filter(t => t.status === 'PAUSED')
+  const blocked    = tasks.filter(t => t.status === 'BLOCKED')
   const completed  = tasks.filter(t => t.status === 'COMPLETED')
   const hasActiveTask = inProgress.length > 0 || carryOver.some(t => t.status === 'IN_PROGRESS')
 
@@ -173,6 +174,19 @@ export default function Dashboard() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">En curso</h2>
             <div className="space-y-2">
               {inProgress.map(t => (
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {blocked.length > 0 && (
+          <section className="mb-6">
+            <h2 className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              <span>⚠</span> Bloqueadas
+            </h2>
+            <div className="space-y-2">
+              {blocked.map(t => (
                 <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
               ))}
             </div>

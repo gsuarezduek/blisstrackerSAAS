@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../api/client'
+import { useAuth } from '../context/AuthContext'
 
 function ProjectCombobox({ projects, value, onChange }) {
   const [query, setQuery] = useState('')
@@ -88,9 +89,11 @@ function ProjectCombobox({ projects, value, onChange }) {
 }
 
 export default function AddTaskModal({ onAdd, onClose }) {
+  const { user } = useAuth()
   const [description, setDescription] = useState('')
   const [projectId, setProjectId] = useState('')
   const [projects, setProjects] = useState([])
+  const [assigneeId, setAssigneeId] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -100,12 +103,22 @@ export default function AddTaskModal({ onAdd, onClose }) {
     })
   }, [])
 
+  // Reset assignee to self when project changes
+  useEffect(() => {
+    setAssigneeId(user ? String(user.id) : '')
+  }, [projectId, user])
+
+  const selectedProject = projects.find(p => String(p.id) === projectId)
+  const members = selectedProject?.members ?? []
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!description.trim() || !projectId) return
     setLoading(true)
     try {
-      const { data } = await api.post('/tasks', { description: description.trim(), projectId })
+      const body = { description: description.trim(), projectId }
+      if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
+      const { data } = await api.post('/tasks', body)
       onAdd(data)
       onClose()
     } finally {
@@ -134,6 +147,23 @@ export default function AddTaskModal({ onAdd, onClose }) {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proyecto / Cliente</label>
             <ProjectCombobox projects={projects} value={projectId} onChange={setProjectId} />
           </div>
+
+          {members.length > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asignar a</label>
+              <select
+                value={assigneeId}
+                onChange={e => setAssigneeId(e.target.value)}
+                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {members.map(pm => (
+                  <option key={pm.user.id} value={String(pm.user.id)}>
+                    {pm.user.name}{String(pm.user.id) === String(user?.id) ? ' (yo)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex gap-3 pt-2">
             <button
               type="button"

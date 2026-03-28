@@ -97,7 +97,7 @@ async function projectTasks(req, res, next) {
     const tasks = await prisma.task.findMany({
       where: {
         projectId,
-        status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED'] },
+        status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
       },
       include: {
         user: { select: { id: true, name: true, role: true } },
@@ -110,7 +110,7 @@ async function projectTasks(req, res, next) {
     for (const task of tasks) {
       const uid = task.user.id
       if (!byUser[uid]) byUser[uid] = { user: task.user, tasks: [] }
-      byUser[uid].tasks.push({ id: task.id, description: task.description, status: task.status, createdAt: task.createdAt, startedAt: task.startedAt })
+      byUser[uid].tasks.push({ id: task.id, description: task.description, status: task.status, blockedReason: task.blockedReason, createdAt: task.createdAt, startedAt: task.startedAt })
     }
 
     res.json({ project, byUser: Object.values(byUser) })

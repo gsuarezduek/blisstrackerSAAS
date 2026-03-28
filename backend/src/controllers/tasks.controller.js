@@ -7,10 +7,27 @@ function todayString() {
 
 async function create(req, res, next) {
   try {
-    const userId = req.user.id
-    const { description, projectId } = req.body
+    const requesterId = req.user.id
+    const isAdmin = req.user.role === 'ADMIN'
+    const { description, projectId, targetUserId } = req.body
     if (!description || !projectId) {
       return res.status(400).json({ error: 'Descripción y proyecto requeridos' })
+    }
+
+    const userId = targetUserId ? Number(targetUserId) : requesterId
+
+    // If assigning to someone else, verify both requester and target belong to the project
+    if (userId !== requesterId) {
+      if (!isAdmin) {
+        const requesterMember = await prisma.projectMember.findUnique({
+          where: { projectId_userId: { projectId: Number(projectId), userId: requesterId } },
+        })
+        if (!requesterMember) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+      }
+      const targetMember = await prisma.projectMember.findUnique({
+        where: { projectId_userId: { projectId: Number(projectId), userId } },
+      })
+      if (!targetMember) return res.status(400).json({ error: 'El usuario no pertenece a este proyecto' })
     }
 
     const date = todayString()
@@ -22,8 +39,14 @@ async function create(req, res, next) {
     }
 
     const task = await prisma.task.create({
-      data: { description, projectId: Number(projectId), userId, workDayId: workDay.id },
-      include: { project: true },
+      data: {
+        description,
+        projectId: Number(projectId),
+        userId,
+        workDayId: workDay.id,
+        createdById: userId !== requesterId ? requesterId : null,
+      },
+      include: { project: true, createdBy: { select: { id: true, name: true } } },
     })
     res.status(201).json(task)
   } catch (err) { next(err) }
@@ -143,6 +166,36 @@ async function completeTask(req, res, next) {
   }
 }
 
+async function blockTask(req, res, next) {
+  try {
+    const { reason } = req.body
+    if (!reason?.trim()) return res.status(400).json({ error: 'La razón del bloqueo es requerida' })
+    const task = await prisma.task.update({
+      where: { id: Number(req.params.id), userId: req.user.id },
+      data: { status: 'BLOCKED', blockedReason: reason.trim() },
+      include: { project: true, createdBy: { select: { id: true, name: true } } },
+    })
+    res.json(task)
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
+    next(err)
+  }
+}
+
+async function unblockTask(req, res, next) {
+  try {
+    const task = await prisma.task.update({
+      where: { id: Number(req.params.id), userId: req.user.id },
+      data: { status: 'PENDING', blockedReason: null },
+      include: { project: true, createdBy: { select: { id: true, name: true } } },
+    })
+    res.json(task)
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
+    next(err)
+  }
+}
+
 async function remove(req, res, next) {
   try {
     await prisma.task.delete({ where: { id: Number(req.params.id), userId: req.user.id } })
@@ -153,4 +206,4 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { create, startTask, pauseTask, resumeTask, completeTask, remove }
+module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove }
