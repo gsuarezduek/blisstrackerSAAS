@@ -45,11 +45,9 @@ async function me(req, res) {
 async function forgotPassword(req, res, next) {
   try {
     const { email } = req.body
-    console.log('[forgotPassword] email recibido:', email)
     if (!email) return res.status(400).json({ error: 'Email requerido' })
 
     const user = await prisma.user.findUnique({ where: { email } })
-    console.log('[forgotPassword] usuario encontrado:', user ? `id=${user.id}` : 'no encontrado')
     if (!user || !user.active) {
       return res.json({ message: 'Si el email existe, recibirás un correo en breve.' })
     }
@@ -58,7 +56,6 @@ async function forgotPassword(req, res, next) {
       where: { userId: user.id, used: false },
       data: { used: true },
     })
-    console.log('[forgotPassword] tokens anteriores invalidados')
 
     const token = crypto.randomBytes(32).toString('hex')
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
@@ -66,19 +63,12 @@ async function forgotPassword(req, res, next) {
     await prisma.passwordResetToken.create({
       data: { token, userId: user.id, expiresAt },
     })
-    console.log('[forgotPassword] token creado en DB')
 
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`
-    console.log('[forgotPassword] FRONTEND_URL:', process.env.FRONTEND_URL)
-    console.log('[forgotPassword] enviando email a:', user.email)
-
     await sendPasswordReset(user.email, user.name, resetUrl)
-    console.log('[forgotPassword] email enviado OK')
 
     res.json({ message: 'Si el email existe, recibirás un correo en breve.' })
   } catch (err) {
-    console.error('[forgotPassword] ERROR:', err.message)
-    console.error(err)
     next(err)
   }
 }
