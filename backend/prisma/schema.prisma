@@ -168,9 +168,10 @@ model Task {
   blockedReason String?
   startedAt     DateTime?
   pausedAt      DateTime?
-  pausedMinutes Int        @default(0)
-  completedAt   DateTime?
-  createdAt     DateTime   @default(now())
+  pausedMinutes   Int        @default(0)
+  completedAt     DateTime?
+  minutesOverride Int?
+  createdAt       DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
   notifications Notification[]

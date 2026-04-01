@@ -206,4 +206,24 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove }
+async function setDuration(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    const { minutes } = req.body
+    if (!Number.isInteger(minutes) || minutes < 0) {
+      return res.status(400).json({ error: 'minutes debe ser un entero mayor o igual a 0' })
+    }
+    const task = await prisma.task.findUnique({ where: { id } })
+    if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
+    if (task.status !== 'COMPLETED') {
+      return res.status(400).json({ error: 'Solo se puede editar la duración de tareas completadas' })
+    }
+    const updated = await prisma.task.update({
+      where: { id },
+      data: { minutesOverride: minutes },
+    })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
+module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, setDuration }

@@ -1,6 +1,11 @@
 const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
+function calcMins(t) {
+  if (t.minutesOverride !== null && t.minutesOverride !== undefined) return t.minutesOverride
+  return Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+}
+
 // Returns time per project within a date range
 async function byProject(req, res, next) {
   try {
@@ -20,7 +25,7 @@ async function byProject(req, res, next) {
     // Group by project
     const map = {}
     for (const t of tasks) {
-      const mins = Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+      const mins = calcMins(t)
       const key = t.project.id
       if (!map[key]) map[key] = { project: t.project, totalMinutes: 0, taskCount: 0, byUser: {} }
       map[key].totalMinutes += mins
@@ -29,7 +34,7 @@ async function byProject(req, res, next) {
       if (!map[key].byUser[uid]) map[key].byUser[uid] = { user: t.user, minutes: 0, tasks: 0, taskList: [] }
       map[key].byUser[uid].minutes += mins
       map[key].byUser[uid].tasks += 1
-      map[key].byUser[uid].taskList.push({ id: t.id, description: t.description, minutes: mins, completedAt: t.completedAt })
+      map[key].byUser[uid].taskList.push({ id: t.id, description: t.description, minutes: mins, completedAt: t.completedAt, isOverride: t.minutesOverride !== null && t.minutesOverride !== undefined })
     }
 
     const result = Object.values(map).map(({ byUser, ...rest }) => ({
@@ -93,7 +98,7 @@ async function byUserSummary(req, res, next) {
     // Group by user → project → tasks
     const map = {}
     for (const t of tasks) {
-      const mins = Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+      const mins = calcMins(t)
       const uid = t.user.id
       if (!map[uid]) map[uid] = { user: t.user, totalMinutes: 0, taskCount: 0, byProject: {} }
       map[uid].totalMinutes += mins
@@ -101,7 +106,7 @@ async function byUserSummary(req, res, next) {
       const pid = t.project.id
       if (!map[uid].byProject[pid]) map[uid].byProject[pid] = { project: t.project, minutes: 0, taskList: [] }
       map[uid].byProject[pid].minutes += mins
-      map[uid].byProject[pid].taskList.push({ id: t.id, description: t.description, minutes: mins, completedAt: t.completedAt })
+      map[uid].byProject[pid].taskList.push({ id: t.id, description: t.description, minutes: mins, completedAt: t.completedAt, isOverride: t.minutesOverride !== null && t.minutesOverride !== undefined })
     }
 
     const result = Object.values(map)
@@ -137,12 +142,12 @@ async function mine(req, res, next) {
     let totalMinutes = 0
     const byProject = {}
     for (const t of tasks) {
-      const mins = Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+      const mins = calcMins(t)
       totalMinutes += mins
       const pid = t.project.id
       if (!byProject[pid]) byProject[pid] = { project: t.project, minutes: 0, taskList: [] }
       byProject[pid].minutes += mins
-      byProject[pid].taskList.push({ id: t.id, description: t.description, minutes: mins, completedAt: t.completedAt })
+      byProject[pid].taskList.push({ id: t.id, description: t.description, minutes: mins, completedAt: t.completedAt, isOverride: t.minutesOverride !== null && t.minutesOverride !== undefined })
     }
 
     res.json({

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import api from '../api/client'
+import { linkify } from '../utils/linkify'
 
 // Active minutes worked, excluding paused time
 function activeMinutes(task) {
@@ -100,8 +101,8 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
         <div className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusDot[task.status]}`} />
 
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium ${task.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
-            {task.description}
+          <p className={`text-sm font-medium text-justify ${task.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+            {linkify(task.description)}
           </p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="text-xs bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded px-2 py-0.5">{task.project.name}</span>
@@ -124,7 +125,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-col gap-1.5 flex-shrink-0 w-24">
           {task.status === 'PENDING' && (
             <>
               <button
@@ -146,25 +147,25 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
           {task.status === 'IN_PROGRESS' && (
             <>
               <button
+                onClick={() => call('complete')}
+                disabled={loading}
+                className="w-full text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                Completar
+              </button>
+              <button
                 onClick={() => call('pause')}
                 disabled={loading}
-                className="text-xs bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+                className="w-full text-xs bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
               >
                 Pausar
               </button>
               <button
                 onClick={() => { setShowBlockForm(v => !v); setBlockReason('') }}
                 disabled={loading}
-                className="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+                className="w-full text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
               >
                 Bloquear
-              </button>
-              <button
-                onClick={() => call('complete')}
-                disabled={loading}
-                className="text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                Completar
               </button>
             </>
           )}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import { linkify } from '../utils/linkify'
 import api from '../api/client'
 import useRoles from '../hooks/useRoles'
 
@@ -133,7 +134,7 @@ export default function ProjectDetail() {
                               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${STATUS_CLASS[task.status]}`}>
                                 {STATUS_LABEL[task.status]}
                               </span>
-                              <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{task.description}</p>
+                              <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{linkify(task.description)}</p>
                             </div>
                             {task.status === 'BLOCKED' && task.blockedReason && (
                               <div className="ml-0 flex items-start gap-1.5 pl-2 border-l-2 border-red-300 dark:border-red-700">

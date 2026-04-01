@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import Navbar from '../components/Navbar'
+import { linkify } from '../utils/linkify'
 import api from '../api/client'
 import useRoles from '../hooks/useRoles'
 
@@ -102,7 +103,7 @@ function UserCard({ entry, now }) {
           <div className="flex items-start gap-2">
             <span className="text-blue-400 mt-0.5">▶</span>
             <div>
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-300">{currentTask.description}</p>
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-300">{linkify(currentTask.description)}</p>
               <span className="text-xs bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded px-2 py-0.5 mt-1 inline-block">
                 {currentTask.project.name}
               </span>
