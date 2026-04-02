@@ -172,7 +172,7 @@ async function blockTask(req, res, next) {
     if (!reason?.trim()) return res.status(400).json({ error: 'La razón del bloqueo es requerida' })
     const task = await prisma.task.update({
       where: { id: Number(req.params.id), userId: req.user.id },
-      data: { status: 'BLOCKED', blockedReason: reason.trim() },
+      data: { status: 'BLOCKED', blockedReason: reason.trim(), pausedAt: new Date() },
       include: { project: true, createdBy: { select: { id: true, name: true } } },
     })
     res.json(task)
@@ -184,9 +184,34 @@ async function blockTask(req, res, next) {
 
 async function unblockTask(req, res, next) {
   try {
+    const userId = req.user.id
+
+    const active = await prisma.task.findFirst({
+      where: { userId, status: 'IN_PROGRESS' },
+    })
+    if (active) {
+      return res.status(409).json({ error: 'Ya tenés una tarea en curso. Pausala o completala primero.' })
+    }
+
+    const current = await prisma.task.findUnique({
+      where: { id: Number(req.params.id) },
+    })
+    if (!current || current.userId !== userId) {
+      return res.status(404).json({ error: 'Tarea no encontrada' })
+    }
+
+    // Accumulate time spent blocked so it doesn't count as work time
+    const blockedMs  = current.pausedAt ? Date.now() - new Date(current.pausedAt).getTime() : 0
+    const addedMins  = Math.round(blockedMs / 60000)
+
     const task = await prisma.task.update({
-      where: { id: Number(req.params.id), userId: req.user.id },
-      data: { status: 'PENDING', blockedReason: null },
+      where: { id: Number(req.params.id) },
+      data: {
+        status:        'IN_PROGRESS',
+        blockedReason: null,
+        pausedAt:      null,
+        pausedMinutes: { increment: addedMins },
+      },
       include: { project: true, createdBy: { select: { id: true, name: true } } },
     })
     res.json(task)

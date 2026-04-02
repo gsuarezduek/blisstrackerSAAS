@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar'
 import { linkify } from '../utils/linkify'
 import api from '../api/client'
 import useRoles from '../hooks/useRoles'
+import UserTasksModal from '../components/UserTasksModal'
 
 const ROLE_COLORS_LIST = [
   'bg-purple-100 text-purple-700',
@@ -141,21 +142,24 @@ function UserCard({ entry, now }) {
 }
 
 export default function RealTime() {
-  const [data, setData] = useState([])
+  const { labelFor } = useRoles()
+  const [entries, setEntries] = useState([])
+  const [notStarted, setNotStarted] = useState([])
   const [loading, setLoading] = useState(true)
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [selectedUser, setSelectedUser] = useState(null)
   const now = useNow()
 
   const load = useCallback(async () => {
     try {
       const { data: res } = await api.get('/realtime')
-      // Sort: in-progress first, then active without task, then finished
-      res.sort((a, b) => {
+      const sorted = [...res.entries].sort((a, b) => {
         const rank = e => e.currentTask ? 0 : !e.workDay.endedAt ? 1 : 2
         return rank(a) - rank(b) || a.user.name.localeCompare(b.user.name)
       })
-      setData(res)
+      setEntries(sorted)
+      setNotStarted(res.notStarted)
       setLastUpdate(new Date())
     } finally {
       setLoading(false)
@@ -176,8 +180,8 @@ export default function RealTime() {
     return () => clearInterval(t)
   }, [load])
 
-  const active = data.filter(e => !e.workDay.endedAt)
-  const finished = data.filter(e => e.workDay.endedAt)
+  const active = entries.filter(e => !e.workDay.endedAt)
+  const finished = entries.filter(e => e.workDay.endedAt)
   const workingNow = active.filter(e => e.currentTask).length
 
   return (
@@ -226,17 +230,16 @@ export default function RealTime() {
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{finished.length} finalizaron jornada</span>
             </div>
           )}
+          {notStarted.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-2 flex items-center gap-2">
+              <span className="w-2 h-2 bg-gray-200 rounded-full" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{notStarted.length} sin jornada</span>
+            </div>
+          )}
         </div>
 
         {loading && (
           <div className="text-center py-20 text-gray-400">Cargando...</div>
-        )}
-
-        {!loading && data.length === 0 && (
-          <div className="text-center py-20 text-gray-400">
-            <p className="text-4xl mb-3">🌙</p>
-            <p className="font-medium">Nadie ha iniciado jornada hoy todavía</p>
-          </div>
         )}
 
         {/* Active users grid */}
@@ -245,7 +248,9 @@ export default function RealTime() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Activos ahora</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {active.map(entry => (
-                <UserCard key={entry.user.id} entry={entry} now={now} />
+                <button key={entry.user.id} className="text-left" onClick={() => setSelectedUser(entry.user)}>
+                  <UserCard entry={entry} now={now} />
+                </button>
               ))}
             </div>
           </section>
@@ -253,16 +258,45 @@ export default function RealTime() {
 
         {/* Finished users */}
         {finished.length > 0 && (
-          <section>
+          <section className="mb-8">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Finalizaron jornada</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {finished.map(entry => (
-                <UserCard key={entry.user.id} entry={entry} now={now} />
+                <button key={entry.user.id} className="text-left" onClick={() => setSelectedUser(entry.user)}>
+                  <UserCard entry={entry} now={now} />
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Not started */}
+        {notStarted.length > 0 && (
+          <section>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">No iniciaron jornada</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {notStarted.map(user => (
+                <button key={user.id} className="text-left" onClick={() => setSelectedUser(user)}>
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border-2 border-gray-100 dark:border-gray-700 opacity-50 p-5 flex items-center gap-3">
+                    <Avatar name={user.name} />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 dark:text-white truncate">{user.name}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(user.role)}`}>
+                        {labelFor(user.role)}
+                      </span>
+                    </div>
+                    <span className="ml-auto text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full flex-shrink-0">Sin jornada</span>
+                  </div>
+                </button>
               ))}
             </div>
           </section>
         )}
       </main>
+
+      {selectedUser && (
+        <UserTasksModal user={selectedUser} onClose={() => setSelectedUser(null)} />
+      )}
     </div>
   )
 }

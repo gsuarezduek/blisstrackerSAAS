@@ -80,4 +80,21 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { list, create, update, remove }
+async function getUserTasks(req, res, next) {
+  try {
+    const tasks = await prisma.task.findMany({
+      where: { userId: Number(req.params.id), status: { not: 'COMPLETED' } },
+      include: { project: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    const map = {}
+    for (const t of tasks) {
+      const pid = t.project.id
+      if (!map[pid]) map[pid] = { project: t.project, tasks: [] }
+      map[pid].tasks.push(t)
+    }
+    res.json(Object.values(map))
+  } catch (err) { next(err) }
+}
+
+module.exports = { list, create, update, remove, getUserTasks }

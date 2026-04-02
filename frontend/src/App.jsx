@@ -43,7 +43,7 @@ export default function App() {
           <Route path="/my-projects" element={<PrivateRoute><MyProjects /></PrivateRoute>} />
           <Route path="/my-projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><MyProfile /></PrivateRoute>} />
-          <Route path="/realtime" element={<AdminRoute><RealTime /></AdminRoute>} />
+          <Route path="/realtime" element={<PrivateRoute><RealTime /></PrivateRoute>} />
           <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
           <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -47,7 +47,15 @@ async function snapshot(req, res, next) {
       }
     })
 
-    res.json(result)
+    const workedIds = new Set(workDays.map(wd => wd.userId))
+    const allUsers = await prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, role: true },
+      orderBy: { name: 'asc' },
+    })
+    const notStarted = allUsers.filter(u => !workedIds.has(u.id))
+
+    res.json({ entries: result, notStarted })
   } catch (err) { next(err) }
 }
 

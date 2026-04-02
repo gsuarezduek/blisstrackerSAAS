@@ -1,11 +1,11 @@
 const router = require('express').Router()
-const { list, create, update, remove } = require('../controllers/users.controller')
+const { list, create, update, remove, getUserTasks } = require('../controllers/users.controller')
 const { auth, adminOnly } = require('../middleware/auth')
 
-router.use(auth, adminOnly)
-router.get('/', list)
-router.post('/', create)
-router.put('/:id', update)
-router.delete('/:id', remove)
+router.get('/:id/tasks', auth, getUserTasks)
+router.get('/', auth, adminOnly, list)
+router.post('/', auth, adminOnly, create)
+router.put('/:id', auth, adminOnly, update)
+router.delete('/:id', auth, adminOnly, remove)
 
 module.exports = router
