@@ -101,6 +101,7 @@ model Project {
   services      ProjectService[]
   members       ProjectMember[]
   notifications Notification[]
+  links         ProjectLink[]
 }
 
 model Service {
@@ -129,6 +130,17 @@ model ProjectMember {
   user      User    @relation(fields: [userId], references: [id])
 
   @@id([projectId, userId])
+}
+
+model ProjectLink {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label     String
+  url       String
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
 }
 
 model WorkDay {

@@ -3,40 +3,21 @@ import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import useRoles from '../hooks/useRoles'
 
-const ROLE_COLORS_LIST = [
-  'bg-purple-100 text-purple-700',
-  'bg-pink-100 text-pink-700',
-  'bg-yellow-100 text-yellow-700',
-  'bg-blue-100 text-blue-700',
-  'bg-cyan-100 text-cyan-700',
-  'bg-green-100 text-green-700',
-  'bg-orange-100 text-orange-700',
+const COUNT_CONFIG = [
+  { key: 'IN_PROGRESS',    label: 'En curso',    bg: 'bg-blue-100 dark:bg-blue-900/30',     text: 'text-blue-700 dark:text-blue-400' },
+  { key: 'BLOCKED',        label: 'Bloqueadas',  bg: 'bg-red-100 dark:bg-red-900/30',       text: 'text-red-700 dark:text-red-400' },
+  { key: 'PAUSED',         label: 'Pausadas',    bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400' },
+  { key: 'PENDING',        label: 'Pendientes',  bg: 'bg-gray-100 dark:bg-gray-700',        text: 'text-gray-600 dark:text-gray-400' },
+  { key: 'COMPLETED_WEEK', label: 'Esta semana', bg: 'bg-green-100 dark:bg-green-900/30',   text: 'text-green-700 dark:text-green-400' },
 ]
-
-function roleColor(name) {
-  let hash = 0
-  for (const c of (name || '')) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff
-  return ROLE_COLORS_LIST[hash % ROLE_COLORS_LIST.length]
-}
-
-function Avatar({ user }) {
-  return (
-    <img
-      src={`/perfiles/${user.avatar ?? 'bee.png'}`}
-      alt={user.name}
-      className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
-    />
-  )
-}
 
 export default function MyProjects() {
   const { user } = useAuth()
-  const { labelFor } = useRoles()
   const navigate = useNavigate()
   const [projects, setProjects] = useState([])
   const [loading,  setLoading]  = useState(true)
+  const [search,   setSearch]   = useState('')
 
   useEffect(() => {
     api.get('/projects')
@@ -45,6 +26,9 @@ export default function MyProjects() {
   }, [])
 
   const isAdmin = user?.role === 'ADMIN'
+  const filtered = projects.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -53,7 +37,9 @@ export default function MyProjects() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mis Proyectos</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {isAdmin ? `${projects.length} proyectos activos` : `Participás en ${projects.length} proyecto${projects.length !== 1 ? 's' : ''}`}
+            {isAdmin
+              ? `${projects.length} proyectos activos`
+              : `Participás en ${projects.length} proyecto${projects.length !== 1 ? 's' : ''}`}
           </p>
         </div>
 
@@ -67,72 +53,67 @@ export default function MyProjects() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {projects.map(p => (
-            <div
-            key={p.id}
-            onClick={() => navigate(`/my-projects/${p.id}`)}
-            className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-4 cursor-pointer hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all"
-          >
-
-              {/* Project name */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
-                  <h2 className="font-bold text-gray-900 dark:text-white text-lg leading-tight">{p.name}</h2>
-                </div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
-                  <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+        {!loading && projects.length > 0 && (
+          <div className="relative mb-5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
+            </svg>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar proyecto..."
+              className="w-full pl-9 pr-9 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-xl py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                  <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
                 </svg>
-              </div>
+              </button>
+            )}
+          </div>
+        )}
 
-              {/* Services */}
-              {p.services.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">Servicios</p>
+        {!loading && search && filtered.length === 0 && (
+          <p className="text-sm text-gray-400 text-center py-8">Sin resultados para "{search}"</p>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filtered.map(p => {
+            const counts = p.taskCounts ?? {}
+            const activePills = COUNT_CONFIG.filter(c => counts[c.key] > 0)
+            return (
+              <div
+                key={p.id}
+                onClick={() => navigate(`/my-projects/${p.id}`)}
+                className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-4 cursor-pointer hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all"
+              >
+                {/* Project name */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
+                    <h2 className="font-bold text-gray-900 dark:text-white text-lg leading-tight">{p.name}</h2>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
+                    <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+                  </svg>
+                </div>
+
+                {/* Task count pills */}
+                {activePills.length > 0 ? (
                   <div className="flex flex-wrap gap-1.5">
-                    {p.services.map(ps => (
-                      <span key={ps.service.id} className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 rounded-full px-3 py-1 font-medium">
-                        {ps.service.name}
+                    {activePills.map(c => (
+                      <span key={c.key} className={`text-xs font-semibold px-2.5 py-1 rounded-full ${c.bg} ${c.text}`}>
+                        {counts[c.key]} {c.label}
                       </span>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {p.services.length === 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Servicios</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin servicios asignados</p>
-                </div>
-              )}
-
-              {/* Team */}
-              <div>
-                <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
-                  Equipo · {p.members.length} persona{p.members.length !== 1 ? 's' : ''}
-                </p>
-                {p.members.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {p.members.map(pm => (
-                      <div key={pm.user.id} className="flex items-center gap-2.5">
-                        <Avatar user={pm.user} />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight">{pm.user.name}</p>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(pm.user.role)}`}>
-                            {labelFor(pm.user.role)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 ) : (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin equipo asignado</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin tareas pendientes esta semana</p>
                 )}
               </div>
-
-            </div>
-          ))}
+            )
+          })}
         </div>
       </main>
     </div>

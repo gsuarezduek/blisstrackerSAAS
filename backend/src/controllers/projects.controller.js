@@ -1,8 +1,22 @@
 const prisma = require('../lib/prisma')
 
+const TZ = 'America/Argentina/Buenos_Aires'
+
+function weekMondayStr() {
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+  const [y, m, d] = todayStr.split('-').map(Number)
+  const today = new Date(y, m - 1, d)
+  const dow = today.getDay()
+  const daysToMonday = dow === 0 ? 6 : dow - 1
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - daysToMonday)
+  return monday.toISOString().slice(0, 10)
+}
+
 const includeDetails = {
   services: { include: { service: true }, orderBy: { service: { name: 'asc' } } },
   members:  { include: { user: { select: { id: true, name: true, role: true, avatar: true } } }, orderBy: { user: { name: 'asc' } } },
+  links:    { orderBy: { createdAt: 'asc' } },
 }
 
 // Active projects — admin gets all, regular users get only their assigned projects
@@ -13,7 +27,54 @@ async function list(req, res, next) {
       ? { active: true }
       : { active: true, members: { some: { userId: req.user.id } } }
     const projects = await prisma.project.findMany({ where, orderBy: { name: 'asc' }, include: includeDetails })
-    res.json(projects)
+
+    const projectIds = projects.map(p => p.id)
+    if (projectIds.length === 0) return res.json([])
+
+    const monday = weekMondayStr()
+
+    const [activeCounts, completedWeekRaw] = await Promise.all([
+      prisma.task.groupBy({
+        by: ['projectId', 'status'],
+        where: {
+          projectId: { in: projectIds },
+          status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
+        },
+        _count: { _all: true },
+      }),
+      prisma.task.findMany({
+        where: {
+          projectId: { in: projectIds },
+          status: 'COMPLETED',
+          workDay: { date: { gte: monday } },
+        },
+        select: { projectId: true },
+      }),
+    ])
+
+    // Build counts map per projectId
+    const countsMap = {}
+    for (const row of activeCounts) {
+      if (!countsMap[row.projectId]) countsMap[row.projectId] = {}
+      countsMap[row.projectId][row.status] = row._count._all
+    }
+    for (const row of completedWeekRaw) {
+      if (!countsMap[row.projectId]) countsMap[row.projectId] = {}
+      countsMap[row.projectId].COMPLETED_WEEK = (countsMap[row.projectId].COMPLETED_WEEK ?? 0) + 1
+    }
+
+    const result = projects.map(p => ({
+      ...p,
+      taskCounts: {
+        IN_PROGRESS:    countsMap[p.id]?.IN_PROGRESS    ?? 0,
+        PENDING:        countsMap[p.id]?.PENDING        ?? 0,
+        PAUSED:         countsMap[p.id]?.PAUSED         ?? 0,
+        BLOCKED:        countsMap[p.id]?.BLOCKED        ?? 0,
+        COMPLETED_WEEK: countsMap[p.id]?.COMPLETED_WEEK ?? 0,
+      },
+    }))
+
+    res.json(result)
   } catch (err) { next(err) }
 }
 
@@ -79,7 +140,7 @@ async function projectTasks(req, res, next) {
     const userId = req.user.id
     const isAdmin = req.user.role === 'ADMIN'
 
-    // Verificar que el usuario es miembro del proyecto (o admin)
+    // Verificar acceso
     if (!isAdmin) {
       const member = await prisma.projectMember.findUnique({
         where: { projectId_userId: { projectId, userId } },
@@ -89,31 +150,123 @@ async function projectTasks(req, res, next) {
 
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, name: true },
+      select: {
+        id: true, name: true, createdAt: true,
+        links:    { orderBy: { createdAt: 'asc' } },
+        services: { include: { service: true }, orderBy: { service: { name: 'asc' } } },
+        members:  { include: { user: { select: { id: true, name: true, role: true, avatar: true } } }, orderBy: { user: { name: 'asc' } } },
+      },
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const tasks = await prisma.task.findMany({
-      where: {
-        projectId,
-        status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
-      },
-      include: {
-        user: { select: { id: true, name: true, role: true, avatar: true } },
-      },
-      orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
-    })
+    const monday = weekMondayStr()
 
-    // Agrupar por usuario
+    const [activeTasks, completedThisWeek] = await Promise.all([
+      prisma.task.findMany({
+        where: {
+          projectId,
+          status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
+        },
+        include: { user: { select: { id: true, name: true, role: true, avatar: true } } },
+        orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+      }),
+      prisma.task.findMany({
+        where: {
+          projectId,
+          status: 'COMPLETED',
+          workDay: { date: { gte: monday } },
+        },
+        include: { user: { select: { id: true, name: true, role: true, avatar: true } } },
+        orderBy: { completedAt: 'desc' },
+      }),
+    ])
+
+    // Agrupar tareas activas por usuario
     const byUser = {}
-    for (const task of tasks) {
+    for (const task of activeTasks) {
       const uid = task.user.id
       if (!byUser[uid]) byUser[uid] = { user: task.user, tasks: [] }
-      byUser[uid].tasks.push({ id: task.id, description: task.description, status: task.status, blockedReason: task.blockedReason, createdAt: task.createdAt, startedAt: task.startedAt })
+      byUser[uid].tasks.push({
+        id: task.id, description: task.description, status: task.status,
+        blockedReason: task.blockedReason, createdAt: task.createdAt, startedAt: task.startedAt,
+      })
     }
 
-    res.json({ project, byUser: Object.values(byUser) })
+    res.json({
+      project,
+      byUser: Object.values(byUser),
+      completedThisWeek: completedThisWeek.map(t => ({
+        id: t.id, description: t.description, completedAt: t.completedAt,
+        user: t.user,
+      })),
+    })
   } catch (err) { next(err) }
 }
 
-module.exports = { list, listAll, create, update, projectTasks }
+async function projectCompletedHistory(req, res, next) {
+  try {
+    const projectId = Number(req.params.id)
+    const userId = req.user.id
+    const isAdmin = req.user.role === 'ADMIN'
+    const skip = Math.max(0, Number(req.query.skip ?? 0))
+    const TAKE = 20
+
+    if (!isAdmin) {
+      const member = await prisma.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId } },
+      })
+      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    }
+
+    const tasks = await prisma.task.findMany({
+      where: { projectId, status: 'COMPLETED' },
+      include: { user: { select: { id: true, name: true, role: true, avatar: true } } },
+      orderBy: { completedAt: 'desc' },
+      skip,
+      take: TAKE + 1,
+    })
+
+    const hasMore = tasks.length > TAKE
+    res.json({
+      tasks: tasks.slice(0, TAKE).map(t => ({
+        id: t.id, description: t.description, completedAt: t.completedAt,
+        user: t.user,
+      })),
+      hasMore,
+    })
+  } catch (err) { next(err) }
+}
+
+// Replace all links for a project (admin only handled at route level)
+async function saveLinks(req, res, next) {
+  try {
+    const projectId = Number(req.params.id)
+    const { links } = req.body // [{ label, url }]
+
+    if (!Array.isArray(links)) {
+      return res.status(400).json({ error: 'links debe ser un array' })
+    }
+    for (const l of links) {
+      if (!l.label?.trim() || !l.url?.trim()) {
+        return res.status(400).json({ error: 'Cada link requiere label y url' })
+      }
+    }
+
+    await prisma.$transaction([
+      prisma.projectLink.deleteMany({ where: { projectId } }),
+      ...(links.length > 0
+        ? [prisma.projectLink.createMany({
+            data: links.map(l => ({ projectId, label: l.label.trim(), url: l.url.trim() })),
+          })]
+        : []),
+    ])
+
+    const updated = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: includeDetails,
+    })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
+module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks }
