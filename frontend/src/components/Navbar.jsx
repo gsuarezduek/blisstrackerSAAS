@@ -75,7 +75,10 @@ export default function Navbar() {
         <div className="px-4 py-3 flex items-center justify-between">
 
           {/* Logo */}
-          <span className="text-xl font-bold text-primary-600">Bliss Tracker</span>
+          <div className="flex items-center gap-2">
+            <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-7 h-7" />
+            <span className="text-xl font-bold text-gray-900 dark:text-white">BlissTracker</span>
+          </div>
 
           {/* Desktop links */}
           <div className="hidden md:flex gap-5 text-sm">

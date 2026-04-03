@@ -83,7 +83,7 @@ export default function FeedbackButton() {
                       onClick={() => setType('SUGGESTION')}
                       className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-colors ${
                         type === 'SUGGESTION'
-                          ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                          ? 'bg-primary-50 border-primary-300 text-primary-700'
                           : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
                       }`}
                     >

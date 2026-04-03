@@ -63,16 +63,16 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
 
   const statusDot = {
     PENDING:     'bg-gray-300',
-    IN_PROGRESS: 'bg-blue-500 animate-pulse',
-    PAUSED:      'bg-yellow-400',
+    IN_PROGRESS: 'bg-primary-500 animate-pulse',
+    PAUSED:      'bg-gray-400',
     BLOCKED:     'bg-red-500',
     COMPLETED:   'bg-green-500',
   }
 
   const statusBadge = {
     PENDING:     'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
-    IN_PROGRESS: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400',
-    PAUSED:      'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400',
+    IN_PROGRESS: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400',
+    PAUSED:      'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
     BLOCKED:     'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400',
     COMPLETED:   'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400',
   }
@@ -148,7 +148,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
             {linkify(task.description)}
           </p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <Link to={`/my-projects/${task.project.id}`} className="text-xs bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded px-2 py-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 transition-colors">{task.project.name}</Link>
+            <Link to={`/my-projects/${task.project.id}`} className="text-xs bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded px-2 py-0.5 hover:bg-primary-100 dark:hover:bg-primary-900/70 transition-colors">{task.project.name}</Link>
             <span className={`text-xs rounded px-2 py-0.5 ${statusBadge[task.status]}`}>{statusLabel[task.status]}</span>
 
             {task.status === 'IN_PROGRESS' && task.startedAt && (
@@ -189,21 +189,21 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
               <button
                 onClick={() => call('complete')}
                 disabled={loading}
-                className="w-full text-xs bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+                className="w-full text-xs border border-green-400 text-green-600 dark:text-green-400 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
               >
                 Completar
               </button>
               <button
                 onClick={() => call('pause')}
                 disabled={loading}
-                className="w-full text-xs bg-yellow-400 hover:bg-yellow-500 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+                className="w-full text-xs border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
               >
                 Pausar
               </button>
               <button
                 onClick={() => { setShowBlockForm(v => !v); setBlockReason('') }}
                 disabled={loading}
-                className="w-full text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+                className="w-full text-xs border border-red-300 dark:border-red-700 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
               >
                 Bloquear
               </button>
@@ -217,8 +217,8 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
               title={hasActiveTask ? 'Pausá o completá la tarea en curso primero' : ''}
               className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-40 ${
                 canResume
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                  ? 'border border-primary-400 dark:border-primary-600 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20'
+                  : 'border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
               }`}
             >
               Continuar
@@ -229,7 +229,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
             <button
               onClick={() => call('unblock')}
               disabled={loading}
-              className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+              className="text-xs border border-primary-400 dark:border-primary-600 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
             >
               Continuar
             </button>

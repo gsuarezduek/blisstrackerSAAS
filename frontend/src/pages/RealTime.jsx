@@ -62,7 +62,7 @@ function UserCard({ entry, now }) {
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-2xl border-2 p-5 flex flex-col gap-4 transition-all ${
-      hasTask ? 'border-blue-300 shadow-md shadow-blue-50' :
+      hasTask ? 'border-primary-300 shadow-md shadow-primary-50/30' :
       isActive ? 'border-gray-200 dark:border-gray-600' : 'border-gray-100 dark:border-gray-700 opacity-60'
     }`}>
       {/* User header */}
@@ -71,7 +71,7 @@ function UserCard({ entry, now }) {
           <Avatar user={user} />
           <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-800 ${
             !isActive ? 'bg-gray-300' :
-            hasTask ? 'bg-blue-500 animate-pulse' : 'bg-green-400'
+            hasTask ? 'bg-primary-500 animate-pulse' : 'bg-green-400'
           }`} />
         </div>
         <div className="flex-1 min-w-0">
@@ -86,7 +86,7 @@ function UserCard({ entry, now }) {
           {hasTask && (
             <div className="text-right">
               <p className="text-xs text-gray-400 dark:text-gray-500">En tarea hace</p>
-              <p className="text-sm font-bold text-blue-600 tabular-nums">{elapsed(currentTask.startedAt, now)}</p>
+              <p className="text-sm font-bold text-primary-600 tabular-nums">{elapsed(currentTask.startedAt, now)}</p>
             </div>
           )}
         </div>
@@ -94,12 +94,12 @@ function UserCard({ entry, now }) {
 
       {/* Current task */}
       {hasTask && (
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl px-4 py-3">
+        <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl px-4 py-3">
           <div className="flex items-start gap-2">
-            <span className="text-blue-400 mt-0.5">▶</span>
+            <span className="text-primary-400 mt-0.5">▶</span>
             <div>
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-300">{linkify(currentTask.description)}</p>
-              <span className="text-xs bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded px-2 py-0.5 mt-1 inline-block">
+              <p className="text-sm font-medium text-primary-900 dark:text-primary-300">{linkify(currentTask.description)}</p>
+              <span className="text-xs bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-700 rounded px-2 py-0.5 mt-1 inline-block">
                 {currentTask.project.name}
               </span>
             </div>

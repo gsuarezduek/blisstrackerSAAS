@@ -289,4 +289,4 @@ async function starTask(req, res, next) {
   }
 }
 
-module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, setDuration, starTask }
+module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, setDuration, starTask, assertNoActiveTask }

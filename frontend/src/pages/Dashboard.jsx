@@ -12,6 +12,61 @@ function todayLabel() {
   return new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+function getDailyInsight(tasks, carryOver) {
+  const all = [...tasks, ...carryOver]
+  if (all.length === 0) {
+    return { text: 'Definí tus tareas para empezar el día con foco.', icon: '💡', tone: 'neutral' }
+  }
+
+  const blocked   = all.filter(t => t.status === 'BLOCKED')
+  const completed = all.filter(t => t.status === 'COMPLETED')
+  const pending   = all.filter(t => t.status === 'PENDING' || t.status === 'PAUSED')
+  const inProgress = all.filter(t => t.status === 'IN_PROGRESS')
+
+  // 1. Bloqueos — prioridad máxima
+  if (blocked.length > 0) {
+    const s = blocked.length === 1
+      ? `"${blocked[0].description.slice(0, 40)}${blocked[0].description.length > 40 ? '…' : ''}"`
+      : `${blocked.length} tareas`
+    return { text: `Tenés ${s} bloqueada${blocked.length > 1 ? 's' : ''} — resolvé ese impedimento antes de seguir.`, icon: '⚠️', tone: 'warning' }
+  }
+
+  // 2. Muchas pendientes, pocas completadas
+  if (pending.length >= 5 && completed.length <= 1) {
+    return { text: `Tenés ${pending.length} tareas sin iniciar. Elegí una y avanzá — el foco llega cuando empezás.`, icon: '🎯', tone: 'alert' }
+  }
+
+  // 3. Demasiados proyectos distintos
+  const projectIds = new Set(all.filter(t => t.status !== 'COMPLETED').map(t => t.project?.id).filter(Boolean))
+  if (projectIds.size >= 4) {
+    return { text: `Estás distribuido en ${projectIds.size} proyectos distintos hoy. Considerá priorizar uno.`, icon: '⚡', tone: 'alert' }
+  }
+
+  // 4. Buen progreso
+  if (completed.length >= 3 && completed.length >= pending.length) {
+    return { text: `Buen ritmo hoy — ya completaste ${completed.length} tarea${completed.length > 1 ? 's' : ''}. Seguí así.`, icon: '✅', tone: 'positive' }
+  }
+
+  // 5. Tarea en curso — mostrar foco actual
+  if (inProgress.length > 0) {
+    const name = inProgress[0].project?.name
+    return { text: `Estás enfocado en ${name ? `"${name}"` : 'una tarea'}. Terminala antes de arrancar algo nuevo.`, icon: '🔥', tone: 'positive' }
+  }
+
+  // 6. Un proyecto dominante entre pendientes
+  const counts = {}
+  for (const t of pending) {
+    const name = t.project?.name
+    if (name) counts[name] = (counts[name] || 0) + 1
+  }
+  const topProject = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
+  if (topProject && topProject[1] >= 2) {
+    return { text: `La mayoría de tus tareas pendientes son de "${topProject[0]}". Buen momento para enfocarte ahí.`, icon: '📌', tone: 'neutral' }
+  }
+
+  return { text: `Tenés ${pending.length} tarea${pending.length !== 1 ? 's' : ''} por hacer. Elegí la más importante y empezá.`, icon: '💡', tone: 'neutral' }
+}
+
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -178,16 +233,33 @@ export default function Dashboard() {
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total tareas</p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
-            <p className="text-2xl font-bold text-green-600">{completed.length}</p>
+            <p className="text-2xl font-bold text-primary-600">{completed.length}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Completadas</p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
-            <p className="text-2xl font-bold text-indigo-600">
+            <p className="text-2xl font-bold text-primary-600">
               {totalMins >= 60 ? `${Math.floor(totalMins/60)}h ${totalMins%60}m` : `${totalMins}m`}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tiempo registrado</p>
           </div>
         </div>
+
+        {/* Daily insight */}
+        {user?.dailyInsightEnabled !== false && workDay && !workDay.endedAt && (() => {
+          const insight = getDailyInsight(tasks, carryOver)
+          const styles = {
+            warning:  'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400',
+            alert:    'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400',
+            positive: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400',
+            neutral:  'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400',
+          }
+          return (
+            <div className={`flex items-center gap-2.5 border rounded-xl px-4 py-3 mb-6 text-sm ${styles[insight.tone]}`}>
+              <span className="text-base flex-shrink-0">{insight.icon}</span>
+              <p className="leading-snug">{insight.text}</p>
+            </div>
+          )
+        })()}
 
         {/* Actions */}
         <div className="flex gap-3 mb-6">
@@ -225,7 +297,7 @@ export default function Dashboard() {
         {/* 2. Destacadas (starred no-en-curso) */}
         {starred.length > 0 && (
           <section className="mb-6">
-            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Destacadas</h2>
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Destacadas: Foco del día</h2>
             <div className="space-y-2">
               {starred.map(t => (
                 <TaskCard key={`starred-${t.id}`} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />

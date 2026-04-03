@@ -14,8 +14,8 @@ const STATUS_LABEL = {
 
 const STATUS_CLASS = {
   BLOCKED:     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  PAUSED:      'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  IN_PROGRESS: 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400',
+  PAUSED:      'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
   PENDING:     'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
 }
 
@@ -172,7 +172,7 @@ export default function ProjectDetail() {
                 <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">Servicios</p>
                 <div className="flex flex-wrap gap-1.5">
                   {data.project.services.map(ps => (
-                    <span key={ps.service.id} className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 rounded-full px-2.5 py-0.5 font-medium">
+                    <span key={ps.service.id} className="text-xs bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 border border-primary-100 dark:border-primary-800 rounded-full px-2.5 py-0.5 font-medium">
                       {ps.service.name}
                     </span>
                   ))}

@@ -4,9 +4,9 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 async function sendPasswordReset(email, name, resetUrl) {
   const { error } = await resend.emails.send({
-    from: 'Bliss Team Tracker <gaston@blissmkt.ar>',
+    from: 'BlissTracker <gaston@blissmkt.ar>',
     to: email,
-    subject: 'Recuperar contraseña — Bliss Team Tracker',
+    subject: 'Recuperar contraseña — BlissTracker',
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
         <h2 style="color: #1e293b; margin-bottom: 8px;">Recuperar contraseña</h2>
@@ -18,7 +18,7 @@ async function sendPasswordReset(email, name, resetUrl) {
         </a>
         <p style="color: #94a3b8; font-size: 14px;">Este enlace expira en 1 hora. Si no solicitaste el cambio, podés ignorar este correo.</p>
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="color: #cbd5e1; font-size: 12px;">Bliss Team Tracker</p>
+        <p style="color: #cbd5e1; font-size: 12px;">BlissTracker</p>
       </div>
     `,
   })
@@ -31,13 +31,13 @@ async function sendWelcomeEmail(email, name) {
   const forgotUrl = `${process.env.FRONTEND_URL}/forgot-password`
 
   const { error } = await resend.emails.send({
-    from: 'Bliss Team Tracker <gaston@blissmkt.ar>',
+    from: 'BlissTracker <gaston@blissmkt.ar>',
     to: email,
-    subject: 'Bienvenido a Bliss Team Tracker',
+    subject: 'Bienvenido a BlissTracker',
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
         <h2 style="color: #1e293b; margin-bottom: 8px;">¡Bienvenido, ${name}!</h2>
-        <p style="color: #475569; margin-bottom: 24px;">Tu cuenta en Bliss Team Tracker fue creada. Tu email de acceso es:</p>
+        <p style="color: #475569; margin-bottom: 24px;">Tu cuenta en BlissTracker fue creada. Tu email de acceso es:</p>
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px;">
           <p style="margin: 0; color: #475569; font-size: 14px;"><strong>Email:</strong> ${email}</p>
         </div>
@@ -49,7 +49,7 @@ async function sendWelcomeEmail(email, name) {
         </a>
         <p style="color: #94a3b8; font-size: 14px;">Una vez que establezcas tu contraseña, podés ingresar desde <a href="${loginUrl}" style="color: #4f46e5;">acá</a>.</p>
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="color: #cbd5e1; font-size: 12px;">Bliss Team Tracker</p>
+        <p style="color: #cbd5e1; font-size: 12px;">BlissTracker</p>
       </div>
     `,
   })
@@ -59,11 +59,11 @@ async function sendWelcomeEmail(email, name) {
 
 async function sendWeeklySummaryEmail(email, name, html, weekLabel) {
   const subject = weekLabel
-    ? `Tu semana en Bliss — ${weekLabel}`
-    : 'Tu resumen semanal — Bliss Team Tracker'
+    ? `Tu semana en BlissTracker — ${weekLabel}`
+    : 'Tu resumen semanal — BlissTracker'
 
   const { error } = await resend.emails.send({
-    from: 'Bliss Team Tracker <gaston@blissmkt.ar>',
+    from: 'BlissTracker <gaston@blissmkt.ar>',
     to: email,
     subject,
     html,

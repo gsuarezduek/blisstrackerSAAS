@@ -93,7 +93,7 @@ export default function FeedbackTab() {
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 mt-0.5 ${
                   f.type === 'BUG'
                     ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                    : 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'
+                    : 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                 }`}>
                   {f.type === 'BUG' ? '🐛 Error' : '💡 Sugerencia'}
                 </span>

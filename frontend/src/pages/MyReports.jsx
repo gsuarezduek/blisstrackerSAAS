@@ -55,7 +55,7 @@ export default function MyReports() {
         {data && (
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
-              <p className="text-2xl font-bold text-indigo-600">{fmtMins(data.totalMinutes)}</p>
+              <p className="text-2xl font-bold text-primary-600">{fmtMins(data.totalMinutes)}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tiempo total registrado</p>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">

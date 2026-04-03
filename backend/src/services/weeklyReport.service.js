@@ -338,7 +338,7 @@ function buildWeeklyEmailHtml(user, data, analysis) {
   <!-- Footer -->
   <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 0 0 16px 0;" />
   <p style="color: #cbd5e1; font-size: 12px; text-align: center; margin: 0;">
-    Bliss Team Tracker · Podés desactivar este resumen en <strong>Preferencias</strong>
+    BlissTracker · Podés desactivar este resumen en <strong>Preferencias</strong>
   </p>
 
 </div>
@@ -372,7 +372,12 @@ async function sendAllWeeklyReports() {
     select: { id: true, name: true, email: true },
   })
   console.log(`[WeeklyReport] Enviando a ${users.length} usuario${users.length !== 1 ? 's' : ''}...`)
-  await Promise.allSettled(users.map(u => sendWeeklyReportForUser(u)))
+  for (let i = 0; i < users.length; i++) {
+    await sendWeeklyReportForUser(users[i])
+    if (i < users.length - 1) {
+      await new Promise(r => setTimeout(r, 3000))
+    }
+  }
   console.log('[WeeklyReport] Proceso finalizado.')
 }
 

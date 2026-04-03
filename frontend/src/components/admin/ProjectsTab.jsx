@@ -419,7 +419,7 @@ export default function ProjectsTab() {
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <button
                             onClick={() => setTeamProject(p)}
-                            className="text-xs px-3 py-1.5 rounded-lg font-medium bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                            className="text-xs px-3 py-1.5 rounded-lg font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors"
                           >
                             👥 {p.members.length > 0 ? `Equipo (${p.members.length})` : 'Equipo'}
                           </button>
@@ -444,7 +444,7 @@ export default function ProjectsTab() {
                           <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-1.5">Servicios</p>
                           <div className="flex flex-wrap gap-1.5">
                             {p.services.map(ps => (
-                              <span key={ps.service.id} className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 rounded-full px-2.5 py-0.5">{ps.service.name}</span>
+                              <span key={ps.service.id} className="text-xs bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 border border-primary-100 dark:border-primary-800 rounded-full px-2.5 py-0.5">{ps.service.name}</span>
                             ))}
                           </div>
                         </div>

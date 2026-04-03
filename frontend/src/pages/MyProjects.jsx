@@ -5,9 +5,9 @@ import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
 const COUNT_CONFIG = [
-  { key: 'IN_PROGRESS',    label: 'En curso',    bg: 'bg-blue-100 dark:bg-blue-900/30',     text: 'text-blue-700 dark:text-blue-400' },
-  { key: 'BLOCKED',        label: 'Bloqueadas',  bg: 'bg-red-100 dark:bg-red-900/30',       text: 'text-red-700 dark:text-red-400' },
-  { key: 'PAUSED',         label: 'Pausadas',    bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-400' },
+  { key: 'IN_PROGRESS',    label: 'En curso',    bg: 'bg-primary-100 dark:bg-primary-900/30',  text: 'text-primary-700 dark:text-primary-400' },
+  { key: 'BLOCKED',        label: 'Bloqueadas',  bg: 'bg-red-100 dark:bg-red-900/30',          text: 'text-red-700 dark:text-red-400' },
+  { key: 'PAUSED',         label: 'Pausadas',    bg: 'bg-gray-100 dark:bg-gray-700',           text: 'text-gray-500 dark:text-gray-400' },
   { key: 'PENDING',        label: 'Pendientes',  bg: 'bg-gray-100 dark:bg-gray-700',        text: 'text-gray-600 dark:text-gray-400' },
   { key: 'COMPLETED_WEEK', label: 'Esta semana', bg: 'bg-green-100 dark:bg-green-900/30',   text: 'text-green-700 dark:text-green-400' },
 ]

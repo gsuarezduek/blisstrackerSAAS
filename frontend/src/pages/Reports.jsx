@@ -28,9 +28,9 @@ function ByProjectView({ data, loading, onEditTask }) {
   return (
     <>
       {totalMins > 0 && (
-        <div className="bg-indigo-50 rounded-xl px-4 py-3 mb-5 flex items-center justify-between">
-          <span className="text-sm text-indigo-700 font-medium">Tiempo total registrado</span>
-          <span className="text-xl font-bold text-indigo-700">{fmtMins(totalMins)}</span>
+        <div className="bg-primary-50 rounded-xl px-4 py-3 mb-5 flex items-center justify-between">
+          <span className="text-sm text-primary-700 font-medium">Tiempo total registrado</span>
+          <span className="text-xl font-bold text-primary-700">{fmtMins(totalMins)}</span>
         </div>
       )}
 
@@ -140,9 +140,9 @@ function ByPersonView({ data, loading, onEditTask }) {
   return (
     <>
       {totalMins > 0 && (
-        <div className="bg-indigo-50 rounded-xl px-4 py-3 mb-5 flex items-center justify-between">
-          <span className="text-sm text-indigo-700 font-medium">Tiempo total registrado</span>
-          <span className="text-xl font-bold text-indigo-700">{fmtMins(totalMins)}</span>
+        <div className="bg-primary-50 rounded-xl px-4 py-3 mb-5 flex items-center justify-between">
+          <span className="text-sm text-primary-700 font-medium">Tiempo total registrado</span>
+          <span className="text-xl font-bold text-primary-700">{fmtMins(totalMins)}</span>
         </div>
       )}
 

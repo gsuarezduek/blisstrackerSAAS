@@ -48,7 +48,7 @@ export default function ResetPassword() {
     <div className="min-h-screen bg-gradient-to-br from-primary-700 to-primary-500 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Bliss</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">BlissTracker</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">Nueva contraseña</p>
         </div>
 

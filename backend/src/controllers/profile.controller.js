@@ -9,7 +9,7 @@ const PERSONAL_FIELDS = [
 
 const PROFILE_SELECT = {
   id: true, name: true, email: true, role: true,
-  createdAt: true, avatar: true, weeklyEmailEnabled: true,
+  createdAt: true, avatar: true, weeklyEmailEnabled: true, dailyInsightEnabled: true,
   phone: true, birthday: true, address: true, dni: true,
   cuit: true, alias: true, maritalStatus: true, children: true,
   educationLevel: true, educationTitle: true, bloodType: true,
@@ -93,14 +93,26 @@ async function changePassword(req, res, next) {
 
 async function updatePreferences(req, res, next) {
   try {
-    const { weeklyEmailEnabled } = req.body
-    if (typeof weeklyEmailEnabled !== 'boolean') {
-      return res.status(400).json({ error: 'weeklyEmailEnabled debe ser un booleano' })
+    const data = {}
+    if ('weeklyEmailEnabled' in req.body) {
+      if (typeof req.body.weeklyEmailEnabled !== 'boolean') {
+        return res.status(400).json({ error: 'weeklyEmailEnabled debe ser un booleano' })
+      }
+      data.weeklyEmailEnabled = req.body.weeklyEmailEnabled
+    }
+    if ('dailyInsightEnabled' in req.body) {
+      if (typeof req.body.dailyInsightEnabled !== 'boolean') {
+        return res.status(400).json({ error: 'dailyInsightEnabled debe ser un booleano' })
+      }
+      data.dailyInsightEnabled = req.body.dailyInsightEnabled
+    }
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'No se enviaron preferencias válidas' })
     }
     const user = await prisma.user.update({
       where: { id: req.user.id },
-      data: { weeklyEmailEnabled },
-      select: { id: true, weeklyEmailEnabled: true },
+      data,
+      select: { id: true, weeklyEmailEnabled: true, dailyInsightEnabled: true },
     })
     res.json(user)
   } catch (err) { next(err) }

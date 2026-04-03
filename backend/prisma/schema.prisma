@@ -49,6 +49,7 @@ model User {
   emergencyContact String?
   avatar              String   @default("bee.png")
   weeklyEmailEnabled  Boolean  @default(true)
+  dailyInsightEnabled Boolean  @default(true)
 
   workDays      WorkDay[]
   tasks         Task[]

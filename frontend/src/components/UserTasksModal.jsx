@@ -12,8 +12,8 @@ const STATUS_LABEL = {
 
 const STATUS_CLASS = {
   BLOCKED:     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  PAUSED:      'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  IN_PROGRESS: 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400',
+  PAUSED:      'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
   PENDING:     'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
 }
 
@@ -65,7 +65,7 @@ export default function UserTasksModal({ user, onClose }) {
             <div className="space-y-4">
               {byProject.map(({ project, tasks }) => (
                 <div key={project.id}>
-                  <p className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide mb-2">
+                  <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide mb-2">
                     {project.name}
                   </p>
                   <div className="space-y-1.5">
