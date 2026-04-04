@@ -4,7 +4,7 @@ import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
 
-export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
+export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, onAddToToday, onMoveToBacklog }) {
   const [loading, setLoading] = useState(false)
   const [showBlockForm, setShowBlockForm] = useState(false)
   const [blockReason, setBlockReason] = useState('')
@@ -61,6 +61,26 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
     }
   }
 
+  async function handleAddToToday() {
+    setLoading(true)
+    try {
+      const { data } = await api.patch(`/tasks/${task.id}/add-to-today`)
+      onAddToToday?.(data)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleMoveToBacklog() {
+    setLoading(true)
+    try {
+      const { data } = await api.patch(`/tasks/${task.id}/move-to-backlog`)
+      onUpdate(data)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const statusDot = {
     PENDING:     'bg-gray-300',
     IN_PROGRESS: 'bg-primary-500 animate-pulse',
@@ -88,6 +108,10 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
   const canStart  = task.status === 'PENDING'  && !hasActiveTask
   const canResume = task.status === 'PAUSED'   && !hasActiveTask
   const isBlocked = task.status === 'BLOCKED'
+
+  const canMoveToBacklog = !backlog
+    && onMoveToBacklog
+    && ['PENDING', 'PAUSED', 'BLOCKED'].includes(task.status)
 
   const borderClass = isBlocked
     ? 'border-red-300 dark:border-red-700'
@@ -168,8 +192,22 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 flex-shrink-0 w-24">
-          {task.status === 'PENDING' && (
+        {/* Action column */}
+        <div className={`flex flex-col gap-1.5 flex-shrink-0 ${backlog ? 'w-28' : 'w-24'}`}>
+
+          {/* Backlog mode: single "Agregar a hoy" action */}
+          {backlog && (
+            <button
+              onClick={handleAddToToday}
+              disabled={loading}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-100 dark:hover:bg-primary-900/50 disabled:opacity-40"
+            >
+              {loading ? '...' : 'Agregar a hoy'}
+            </button>
+          )}
+
+          {/* Normal mode: state-based actions */}
+          {!backlog && task.status === 'PENDING' && (
             <button
               onClick={() => call('start')}
               disabled={loading || !canStart}
@@ -184,7 +222,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
             </button>
           )}
 
-          {task.status === 'IN_PROGRESS' && (
+          {!backlog && task.status === 'IN_PROGRESS' && (
             <>
               <button
                 onClick={() => call('complete')}
@@ -210,7 +248,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
             </>
           )}
 
-          {task.status === 'PAUSED' && (
+          {!backlog && task.status === 'PAUSED' && (
             <button
               onClick={() => call('resume')}
               disabled={loading || !canResume}
@@ -225,13 +263,25 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask }) {
             </button>
           )}
 
-          {isBlocked && (
+          {!backlog && isBlocked && (
             <button
               onClick={() => call('unblock')}
               disabled={loading}
               className="text-xs border border-primary-400 dark:border-primary-600 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
             >
               Continuar
+            </button>
+          )}
+
+          {/* Move to backlog — secondary action for PENDING / PAUSED / BLOCKED today tasks */}
+          {canMoveToBacklog && (
+            <button
+              onClick={handleMoveToBacklog}
+              disabled={loading}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-40 text-center w-full mt-0.5"
+              title="Mover al Backlog"
+            >
+              → Backlog
             </button>
           )}
         </div>

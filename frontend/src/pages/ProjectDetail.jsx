@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar'
 import { linkify } from '../utils/linkify'
 import api from '../api/client'
 import useRoles from '../hooks/useRoles'
+import UserTasksModal from '../components/UserTasksModal'
 
 const STATUS_LABEL = {
   BLOCKED:     'Bloqueada',
@@ -59,6 +60,7 @@ export default function ProjectDetail() {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
+  const [selectedUser, setSelectedUser] = useState(null)
 
   // Archive state
   const [archive,      setArchive]      = useState([])
@@ -223,7 +225,10 @@ export default function ProjectDetail() {
                   })
                   .map(({ user, tasks }) => (
                     <div key={user.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                      <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
+                      <button
+                        className="w-full text-left flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
+                        onClick={() => setSelectedUser(user)}
+                      >
                         <Avatar user={user} />
                         <div className="min-w-0">
                           <p className="font-semibold text-gray-900 dark:text-white text-sm leading-tight">{user.name}</p>
@@ -232,7 +237,7 @@ export default function ProjectDetail() {
                         <span className="ml-auto text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">
                           {tasks.length} tarea{tasks.length !== 1 ? 's' : ''}
                         </span>
-                      </div>
+                      </button>
                       <div className="divide-y divide-gray-100 dark:divide-gray-700">
                         {tasks
                           .slice()
@@ -338,6 +343,10 @@ export default function ProjectDetail() {
           </>
         )}
       </main>
+
+      {selectedUser && (
+        <UserTasksModal user={selectedUser} onClose={() => setSelectedUser(null)} />
+      )}
     </div>
   )
 }

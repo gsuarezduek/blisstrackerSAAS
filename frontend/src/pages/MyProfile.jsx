@@ -1,20 +1,26 @@
 import { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
+import AvatarLightbox from '../components/AvatarLightbox'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
 
 const AVATARS = [
-  { file: 'bee.png',        label: 'Clásica' },
-  { file: 'bee2.png',       label: 'Alternativa' },
-  { file: 'beeartist.png',  label: 'Artista' },
-  { file: 'beecoffee.png',  label: 'Coffee' },
-  { file: 'beecorp.png',    label: 'Corp' },
-  { file: 'beefitness.png', label: 'Fitness' },
-  { file: 'beehacker.png',  label: 'Hacker' },
-  { file: 'beeloween.png',  label: 'Halloween' },
-  { file: 'beepunk.png',    label: 'Punk' },
-  { file: 'beezen.png',     label: 'Zen' },
+  { file: 'bee.png',          label: 'Clásica' },
+  { file: 'bee2.png',         label: 'Alternativa' },
+  { file: 'babee.png',        label: 'Baby' },
+  { file: 'beeartist.png',    label: 'Artista' },
+  { file: 'beecoffee.png',    label: 'Coffee' },
+  { file: 'beecorp.png',      label: 'Corp' },
+  { file: 'beecypher.png',    label: 'Cypher' },
+  { file: 'beefitness.png',   label: 'Fitness' },
+  { file: 'beegamer.png',     label: 'Gamer' },
+  { file: 'beehacker.png',    label: 'Hacker' },
+  { file: 'beeloween.png',    label: 'Halloween' },
+  { file: 'beenfluencer.png', label: 'Influencer' },
+  { file: 'beepunk.png',      label: 'Punk' },
+  { file: 'beezen.png',       label: 'Zen' },
+  { file: 'beezombie.png',    label: 'Zombie' },
 ]
 
 function Field({ label, children }) {
@@ -88,6 +94,7 @@ export default function MyProfile() {
 
   const [avatarSaving, setAvatarSaving] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(null)
+  const [lightbox, setLightbox] = useState(false)
 
   useEffect(() => {
     api.get('/profile').then(({ data }) => {
@@ -186,11 +193,13 @@ export default function MyProfile() {
         {/* Identity card */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
           <div className="flex items-center gap-5 mb-5">
-            <img
-              src={`/perfiles/${profile.avatar ?? 'bee.png'}`}
-              alt="avatar"
-              className="w-24 h-24 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 flex-shrink-0"
-            />
+            <button onClick={() => setLightbox(true)} className="flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+              <img
+                src={`/perfiles/${profile.avatar ?? 'bee.png'}`}
+                alt="avatar"
+                className="w-24 h-24 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 hover:opacity-90 transition-opacity cursor-zoom-in"
+              />
+            </button>
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">{profile.name}</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{labelFor(profile.role)}</p>
@@ -405,6 +414,14 @@ export default function MyProfile() {
         </div>
 
       </main>
+
+      {lightbox && (
+        <AvatarLightbox
+          src={`/perfiles/${profile.avatar ?? 'bee.png'}`}
+          alt={profile.name}
+          onClose={() => setLightbox(false)}
+        />
+      )}
     </div>
   )
 }

@@ -16,7 +16,7 @@ const PROFILE_SELECT = {
   medicalConditions: true, healthInsurance: true, emergencyContact: true,
 }
 
-const ALLOWED_AVATARS = ['bee.png', 'bee2.png', 'beeartist.png', 'beecoffee.png', 'beecorp.png', 'beefitness.png', 'beehacker.png', 'beeloween.png', 'beepunk.png', 'beezen.png']
+const ALLOWED_AVATARS = ['bee.png', 'bee2.png', 'babee.png', 'beeartist.png', 'beecoffee.png', 'beecorp.png', 'beecypher.png', 'beefitness.png', 'beegamer.png', 'beehacker.png', 'beeloween.png', 'beenfluencer.png', 'beepunk.png', 'beezen.png', 'beezombie.png']
 
 async function getProfile(req, res, next) {
   try {

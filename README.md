@@ -180,7 +180,7 @@ team-tracker/
         │   ├── ResetPassword.jsx     # Formulario de nueva contraseña
         │   ├── Dashboard.jsx         # Tareas del día + insight diario IA (con feedback y refresh)
         │   ├── MyProjects.jsx        # Proyectos con pills de conteos de tareas
-        │   ├── ProjectDetail.jsx     # Tareas activas + completadas semana + archivo histórico
+        │   ├── ProjectDetail.jsx     # Tareas activas + completadas semana + archivo histórico (click en usuario abre modal)
         │   ├── MyReports.jsx         # Reportes personales
         │   ├── RealTime.jsx          # Actividad del equipo en tiempo real
         │   ├── Reports.jsx           # Reportes completos (admin)
@@ -192,9 +192,10 @@ team-tracker/
         │   ├── TaskCard.jsx          # Tarjeta de tarea con todas las acciones + link al proyecto
         │   ├── AddTaskModal.jsx      # Modal con combobox de proyecto + asignación
         │   ├── NotificationBell.jsx  # Campana con panel (completadas en azul, bloqueadas en rojo)
+        │   ├── AvatarLightbox.jsx    # Overlay fullscreen para ver foto de perfil ampliada
         │   ├── FeedbackButton.jsx
         │   ├── InactivityModal.jsx
-        │   ├── UserTasksModal.jsx
+        │   ├── UserTasksModal.jsx    # Modal de tareas de un usuario (avatar clickeable con lightbox)
         │   └── admin/
         │       ├── ProjectsTab.jsx         # Gestión de proyectos con buscador y links útiles
         │       ├── TeamTab.jsx
@@ -235,6 +236,21 @@ team-tracker/
 | `DailyInsight` | Coaching IA generado diariamente por usuario (cacheado, con feedback) |
 | `UserInsightMemory` | Perfil de productividad acumulado: tendencias, fortalezas y estadísticas históricas |
 | `RoleExpectation` | Tareas recurrentes y dependencias configuradas por rol para el coaching IA |
+
+---
+
+## Backlog y foco diario
+
+El Dashboard separa las tareas en dos grupos:
+
+| Grupo | Descripción |
+|-------|-------------|
+| **Tareas del día** | Las que el usuario decide trabajar hoy. Son las únicas visibles en el flujo principal. |
+| **Backlog** | Depósito de tareas planificadas que no son para hoy. Se muestra contraído al final, antes de las completadas. |
+
+Las tareas nuevas se crean siempre en "Tareas del día". Cualquier tarea PENDING, PAUSED o BLOCKED puede moverse al Backlog con el botón "→ Backlog". Desde el Backlog, el botón "Agregar a hoy" la vuelve al día (incluyendo carry-over de días anteriores). Solo las tareas del día pueden iniciarse.
+
+Las tareas completadas también están contraídas por defecto. Al expandir se ven las de hoy; con "Cargar más" se carga el historial de días anteriores de a 10, con fecha y duración.
 
 ---
 
@@ -311,13 +327,14 @@ Cuando `taskQualityEnabled` está activo, el insight detecta tareas con descripc
 Cada **viernes a las 14:00 (Buenos Aires)** se envía un email generado por Claude Haiku a todos los usuarios con `weeklyEmailEnabled: true`. Incluye:
 
 1. Resumen de la semana (datos clave)
-2. Análisis de patrones y uso del tiempo
+2. Análisis de patrones y uso del tiempo (personalizado con la memoria histórica si está disponible)
 3. Insight principal accionable
 4. Riesgos o alertas si el comportamiento continúa
 5. 3 recomendaciones específicas
 6. Enfoque sugerido para la próxima semana
+7. Tareas de rol no registradas (si hay expectativas configuradas y hubo omisiones en la semana)
 
-Los usuarios se procesan secuencialmente (3 segundos entre cada uno) para no superar el límite de la API de Claude. Se puede disparar de forma inmediata desde **Preferencias → "Enviar ahora"**.
+El prompt incluye el perfil de productividad histórico del usuario y las expectativas de su rol, igual que el insight diario. Los usuarios se procesan secuencialmente (3 segundos entre cada uno) para no superar el límite de la API de Claude. Se puede disparar de forma inmediata desde **Preferencias → "Enviar ahora"**.
 
 ---
 
@@ -327,10 +344,12 @@ Cada usuario controla sus features de IA desde **Preferencias**:
 
 | Preferencia | Flag | Descripción |
 |-------------|------|-------------|
-| Insight diario | `dailyInsightEnabled` | Muestra la tarjeta de coaching en el Dashboard |
+| Insight diario (toggle maestro) | `dailyInsightEnabled` | Activa/desactiva todo el sistema de coaching diario |
 | Memoria de aprendizaje | `insightMemoryEnabled` | El sistema acumula el perfil de productividad del usuario |
 | Coaching de calidad | `taskQualityEnabled` | El insight detecta y sugiere mejorar tareas con descripciones vagas |
-| Resumen semanal | `weeklyEmailEnabled` | Recibe el email de análisis semanal cada viernes |
+| Resumen semanal | `weeklyEmailEnabled` | Recibe el email de análisis semanal cada viernes (independiente) |
+
+`insightMemoryEnabled` y `taskQualityEnabled` son subordinados al insight diario: desactivar el toggle maestro apaga los tres flags juntos en un solo request. En Preferencias se muestran como características incluidas (no toggles individuales), y se dimean cuando el sistema está apagado.
 
 Los administradores también ven un acceso directo a **Admin → Roles IA** para configurar las expectativas de su puesto.
 
@@ -367,16 +386,21 @@ Hay 10 avatares disponibles en `frontend/public/perfiles/`:
 |---------|-------------|
 | `bee.png` | Clásica (por defecto) |
 | `bee2.png` | Alternativa |
+| `babee.png` | Baby |
 | `beeartist.png` | Artista |
 | `beecoffee.png` | Coffee |
 | `beecorp.png` | Corp |
+| `beecypher.png` | Cypher |
 | `beefitness.png` | Fitness |
+| `beegamer.png` | Gamer |
 | `beehacker.png` | Hacker |
 | `beeloween.png` | Halloween |
+| `beenfluencer.png` | Influencer |
 | `beepunk.png` | Punk |
 | `beezen.png` | Zen |
+| `beezombie.png` | Zombie |
 
-Las fotos se muestran en: Navbar (dropdown), detalle de proyecto, Actividad y notificaciones.
+Las fotos se muestran en: Navbar (dropdown), detalle de proyecto, Actividad y notificaciones. Haciendo click en cualquier foto se abre un lightbox para verla a tamaño completo.
 
 ---
 

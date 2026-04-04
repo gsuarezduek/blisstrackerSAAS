@@ -201,6 +201,7 @@ model Task {
   completedAt     DateTime?
   minutesOverride Int?
   starred         Int        @default(0)  // 0=sin estrella 1=amarillo 2=naranja 3=rojo
+  isBacklog       Boolean    @default(false)
   createdAt       DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 

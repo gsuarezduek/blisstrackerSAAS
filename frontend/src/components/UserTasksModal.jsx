@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import useRoles from '../hooks/useRoles'
+import AvatarLightbox from './AvatarLightbox'
 
 const STATUS_LABEL = {
   BLOCKED:     'Bloqueada',
@@ -24,6 +25,7 @@ export default function UserTasksModal({ user, onClose }) {
   const [byProject, setByProject] = useState([])
   const [completedThisWeek, setCompletedThisWeek] = useState([])
   const [loading, setLoading] = useState(true)
+  const [lightbox, setLightbox] = useState(false)
 
   useEffect(() => {
     api.get(`/users/${user.id}/tasks`)
@@ -41,11 +43,13 @@ export default function UserTasksModal({ user, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <img
-              src={`/perfiles/${user.avatar || 'bee.png'}`}
-              alt={user.name}
-              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-            />
+            <button onClick={() => setLightbox(true)} className="flex-shrink-0 rounded-full focus:outline-none">
+              <img
+                src={`/perfiles/${user.avatar || 'bee.png'}`}
+                alt={user.name}
+                className="w-10 h-10 rounded-full object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
+              />
+            </button>
             <div>
               <h2 className="text-base font-bold text-gray-900 dark:text-white">{user.name}</h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">{labelFor(user.role)}</p>
@@ -121,6 +125,13 @@ export default function UserTasksModal({ user, onClose }) {
           )}
         </div>
       </div>
+      {lightbox && (
+        <AvatarLightbox
+          src={`/perfiles/${user.avatar || 'bee.png'}`}
+          alt={user.name}
+          onClose={() => setLightbox(false)}
+        />
+      )}
     </div>
   )
 }

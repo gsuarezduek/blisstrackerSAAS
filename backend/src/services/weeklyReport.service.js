@@ -123,7 +123,48 @@ async function getWeeklyData(userId) {
   }
 }
 
-async function generateAnalysis(user, data) {
+const FREQ_LABEL = { daily: 'diaria', weekly: 'semanal', monthly: 'mensual', first_week: 'primera semana del mes' }
+
+function buildRoleContext(roleExpectation) {
+  if (!roleExpectation) return ''
+  let ctx = ''
+  if (roleExpectation.description) ctx += `\nDESCRIPCIÓN DEL ROL: ${roleExpectation.description}\n`
+  const tasks = Array.isArray(roleExpectation.recurrentTasks) ? roleExpectation.recurrentTasks : []
+  if (tasks.length > 0) {
+    ctx += `TAREAS RECURRENTES DEL ROL:\n`
+    for (const t of tasks) {
+      const freq = FREQ_LABEL[t.frequency] || t.frequency
+      const detail = t.detail ? ` (${t.detail})` : ''
+      ctx += `  - ${t.task} [${freq}]${detail}\n`
+    }
+  }
+  const deps = Array.isArray(roleExpectation.dependencies) ? roleExpectation.dependencies : []
+  if (deps.length > 0) {
+    ctx += `DEPENDENCIAS DEL ROL:\n`
+    for (const d of deps) {
+      const dir = d.direction === 'delivers' ? 'Entrega a' : 'Recibe de'
+      ctx += `  - ${dir} ${d.roleName}: ${d.description}\n`
+    }
+  }
+  return ctx
+}
+
+function buildMemoryContext(memory) {
+  if (!memory) return ''
+  let ctx = '\nPERFIL DE PRODUCTIVIDAD HISTÓRICO:\n'
+  if (memory.tendencias)      ctx += `Tendencias: ${memory.tendencias}\n`
+  if (memory.fortalezas)      ctx += `Fortalezas: ${memory.fortalezas}\n`
+  if (memory.areasDeAtencion) ctx += `Áreas de atención: ${memory.areasDeAtencion}\n`
+  const stats = memory.estadisticas || {}
+  if (stats.tasaCompletado !== undefined) {
+    ctx += `Estadísticas históricas: tasa de completado ${Math.round(stats.tasaCompletado * 100)}%, `
+    ctx += `${stats.promedioTareasPorDia} tareas/día en promedio, `
+    ctx += `${stats.proyectosSimultaneos} proyectos simultáneos en promedio\n`
+  }
+  return ctx
+}
+
+async function generateAnalysis(user, data, roleExpectation, memory) {
   const { week, completedTasks, totalMinutes, byProject, pendingTasks, prev, workDays } = data
 
   const projectSummary = byProject
@@ -144,9 +185,13 @@ async function generateAnalysis(user, data) {
     ? `Semana anterior (${fmtDate(prev.week.from)} – ${fmtDate(prev.week.to)}): ${prev.completedCount} tareas, ${fmtMins(prev.totalMinutes)} registrados`
     : 'Sin datos de la semana anterior para comparar'
 
+  const roleCtx   = buildRoleContext(roleExpectation)
+  const memoryCtx = buildMemoryContext(memory)
+
   const userPrompt = `
 Analiza la semana laboral de ${user.name} y generá el JSON de análisis de productividad.
 
+ROL: ${user.role}${roleCtx}${memoryCtx}
 SEMANA: ${fmtDate(week.from)} al ${fmtDate(week.to)}
 DÍAS TRABAJADOS: ${workDays.length} día${workDays.length !== 1 ? 's' : ''}
 
@@ -169,19 +214,23 @@ Esta semana: ${completedTasks.length} tareas, ${fmtMins(totalMinutes)} registrad
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
-      system: `Sos un coach de productividad. Analizás datos reales de trabajo y devolvés ÚNICAMENTE un objeto JSON válido (sin markdown, sin bloques de código, sin texto extra antes o después) con exactamente estas claves:
+      system: `Sos un coach de productividad que aplica la metodología GTD. Analizás datos reales de trabajo y devolvés ÚNICAMENTE un objeto JSON válido (sin markdown, sin bloques de código, sin texto extra antes o después) con exactamente estas claves:
 - resumen: string (2-3 oraciones con lo más relevante de la semana)
-- quePasoRealmente: string (análisis de patrones, foco, uso del tiempo, 3-5 oraciones)
-- insightPrincipal: string (UNA conclusión concreta y útil, 1-2 oraciones)
+- quePasoRealmente: string (análisis de patrones, foco, uso del tiempo, 3-5 oraciones; si hay PERFIL DE PRODUCTIVIDAD HISTÓRICO, usalo para contextualizar — por ejemplo si esta semana fue mejor o peor que el patrón habitual)
+- insightPrincipal: string (UNA conclusión concreta y útil, 1-2 oraciones; personalizala con el historial si está disponible)
 - riesgos: string (posibles problemas si este comportamiento continúa, 2-3 oraciones)
-- recomendaciones: array de exactamente 3 strings (acciones concretas y específicas)
+- recomendaciones: array de exactamente 3 strings (acciones concretas y específicas para la próxima semana)
 - enfoqueProximaSemana: string (qué priorizar la próxima semana, 2-3 oraciones)
+- omisionesRol: string o null (si hay TAREAS RECURRENTES DEL ROL, analizá si alguna tarea semanal o mensual esperada no aparece en las completadas de esta semana y mencionala; null si no hay expectativas configuradas o no hay omisiones)
 
 Escribís en español rioplatense, forma clara, directa y ligeramente crítica cuando aporta valor. Nunca inventás información que no esté en los datos. Si no hay suficiente información para una sección, lo decís brevemente. Escribís como un humano, no como un robot. Evitás frases genéricas.`,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
-    const text = msg.content[0].text.trim()
+    let text = msg.content[0].text.trim()
+    if (text.startsWith('```')) {
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    }
     return JSON.parse(text)
   } catch (err) {
     console.error('[WeeklyReport] Error generando análisis con Claude:', err.message)
@@ -192,6 +241,7 @@ Escribís en español rioplatense, forma clara, directa y ligeramente crítica c
       riesgos: 'Sin análisis disponible.',
       recomendaciones: ['Revisá tus tareas pendientes', 'Priorizá según impacto', 'Definí objetivos claros para la próxima semana'],
       enfoqueProximaSemana: 'Continuá con las tareas pendientes y definí prioridades claras.',
+      omisionesRol: null,
     }
   }
 }
@@ -335,6 +385,13 @@ function buildWeeklyEmailHtml(user, data, analysis) {
     ${morePending}
   </div>` : ''}
 
+  ${analysis.omisionesRol ? `
+  <!-- Omisiones de rol -->
+  <div style="background: #fffbeb; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #fde68a;">
+    <h2 style="color: #92400e; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">🎯 Tareas de rol no registradas</h2>
+    <p style="color: #78350f; font-size: 14px; line-height: 1.7; margin: 0;">${analysis.omisionesRol}</p>
+  </div>` : ''}
+
   <!-- Footer -->
   <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 0 0 16px 0;" />
   <p style="color: #cbd5e1; font-size: 12px; text-align: center; margin: 0;">
@@ -348,14 +405,22 @@ function buildWeeklyEmailHtml(user, data, analysis) {
 
 async function sendWeeklyReportForUser(user) {
   try {
-    const data = await getWeeklyData(user.id)
+    const [data, roleExpectation, memory] = await Promise.all([
+      getWeeklyData(user.id),
+      user.role
+        ? prisma.roleExpectation.findUnique({ where: { roleName: user.role } })
+        : null,
+      user.insightMemoryEnabled !== false
+        ? prisma.userInsightMemory.findUnique({ where: { userId: user.id } })
+        : null,
+    ])
 
     if (data.workDays.length === 0 && data.completedTasks.length === 0) {
       console.log(`[WeeklyReport] Sin actividad para ${user.name} (${user.email}), omitiendo.`)
       return
     }
 
-    const analysis = await generateAnalysis(user, data)
+    const analysis = await generateAnalysis(user, data, roleExpectation, memory)
     const html     = buildWeeklyEmailHtml(user, data, analysis)
 
     const weekLabel = `${fmtDate(data.week.from)} – ${fmtDate(data.week.to)}`
@@ -369,7 +434,7 @@ async function sendWeeklyReportForUser(user) {
 async function sendAllWeeklyReports() {
   const users = await prisma.user.findMany({
     where: { active: true, weeklyEmailEnabled: true },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, role: true, insightMemoryEnabled: true },
   })
   console.log(`[WeeklyReport] Enviando a ${users.length} usuario${users.length !== 1 ? 's' : ''}...`)
   for (let i = 0; i < users.length; i++) {

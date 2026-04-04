@@ -58,6 +58,10 @@ async function startTask(req, res, next) {
     const userId = req.user.id
     await assertNoActiveTask(userId)
 
+    const existing = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
+    if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
+    if (existing.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para iniciarla.' })
+
     const task = await prisma.task.update({
       where: { id: Number(req.params.id), userId },
       data: { status: 'IN_PROGRESS', startedAt: new Date() },
@@ -95,6 +99,7 @@ async function resumeTask(req, res, next) {
     if (!current || current.userId !== userId) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
+    if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para reanudarla.' })
 
     // Accumulate the time spent paused
     const pausedMs   = current.pausedAt ? Date.now() - new Date(current.pausedAt).getTime() : 0
@@ -204,6 +209,7 @@ async function unblockTask(req, res, next) {
     if (!current || current.userId !== userId) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
+    if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para desbloquearla.' })
 
     // Accumulate time spent blocked so it doesn't count as work time
     const blockedMs  = current.pausedAt ? Date.now() - new Date(current.pausedAt).getTime() : 0
@@ -289,4 +295,90 @@ async function starTask(req, res, next) {
   }
 }
 
-module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, setDuration, starTask, assertNoActiveTask }
+async function completedHistory(req, res, next) {
+  try {
+    const userId = req.user.id
+    const skip   = Math.max(0, Number(req.query.skip) || 0)
+    const take   = 10
+    const { before } = req.query // YYYY-MM-DD — only return tasks from workdays before this date
+
+    const where = { userId, status: 'COMPLETED' }
+    if (before) where.workDay = { date: { lt: before } }
+
+    const tasks = await prisma.task.findMany({
+      where,
+      include: { project: { select: { id: true, name: true } }, workDay: { select: { date: true } } },
+      orderBy: { completedAt: 'desc' },
+      skip,
+      take: take + 1,
+    })
+
+    const hasMore = tasks.length > take
+    res.json({ tasks: tasks.slice(0, take), hasMore })
+  } catch (err) { next(err) }
+}
+
+async function addToToday(req, res, next) {
+  try {
+    const userId = req.user.id
+    const taskId = Number(req.params.id)
+
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: { workDay: true },
+    })
+    if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
+    if (task.status === 'COMPLETED') return res.status(400).json({ error: 'No podés mover al día una tarea completada.' })
+
+    // If it's already in today's workday and not backlog, nothing to do
+    const date = todayString()
+    if (task.workDay.date === date && !task.isBacklog) {
+      return res.status(400).json({ error: 'La tarea ya está en el día de hoy.' })
+    }
+
+    // If the task is IN_PROGRESS (carry-over edge case), check no other active task
+    if (task.status === 'IN_PROGRESS') {
+      await assertNoActiveTask(userId)
+    }
+
+    // Get or create today's workday
+    let workDay = await prisma.workDay.findUnique({ where: { userId_date: { userId, date } } })
+    if (!workDay) {
+      workDay = await prisma.workDay.create({ data: { userId, date } })
+    }
+
+    const updated = await prisma.task.update({
+      where: { id: taskId },
+      data: { isBacklog: false, workDayId: workDay.id },
+      include: { project: true, createdBy: { select: { id: true, name: true } } },
+    })
+    res.json(updated)
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
+    next(err)
+  }
+}
+
+async function moveToBacklog(req, res, next) {
+  try {
+    const userId = req.user.id
+    const taskId = Number(req.params.id)
+
+    const task = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
+    if (task.status === 'IN_PROGRESS') return res.status(400).json({ error: 'Pausá la tarea en curso antes de moverla al Backlog.' })
+    if (task.status === 'COMPLETED') return res.status(400).json({ error: 'No podés mover al Backlog una tarea completada.' })
+
+    const updated = await prisma.task.update({
+      where: { id: taskId },
+      data: { isBacklog: true },
+      include: { project: true, createdBy: { select: { id: true, name: true } } },
+    })
+    res.json(updated)
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
+    next(err)
+  }
+}
+
+module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, setDuration, starTask, addToToday, moveToBacklog, completedHistory, assertNoActiveTask }

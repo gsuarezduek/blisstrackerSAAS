@@ -21,13 +21,19 @@ export default function Dashboard() {
   const [elapsed, setElapsed] = useState('')
 
   const [carryOver, setCarryOver] = useState([])
+  const [backlogOpen,       setBacklogOpen]       = useState(false)
+  const [completedOpen,     setCompletedOpen]     = useState(false)
+  const [completedHistory,  setCompletedHistory]  = useState([])
+  const [completedSkip,     setCompletedSkip]     = useState(0)
+  const [completedHasMore,  setCompletedHasMore]  = useState(false)
+  const [completedLoading,  setCompletedLoading]  = useState(false)
   const [autoPausedTask, setAutoPausedTask] = useState(null)
 
   // AI Insight
   const [insight, setInsight] = useState(null)
   const [insightLoading, setInsightLoading] = useState(false)
   const [insightRefreshing, setInsightRefreshing] = useState(false)
-  const [insightCooldown, setInsightCooldown] = useState(null) // waitMins
+  const [insightCooldown, setInsightCooldown] = useState(null)
 
   const loadToday = useCallback(async () => {
     const { data } = await api.get('/workdays/today')
@@ -35,7 +41,6 @@ export default function Dashboard() {
     setWorkDay(wd)
     setCarryOver(carryOverTasks ?? [])
 
-    // Restore auto-paused modal if task was paused by inactivity detection
     const storedId = localStorage.getItem('autoPaused')
     if (storedId) {
       const taskId = Number(storedId)
@@ -54,7 +59,7 @@ export default function Dashboard() {
     setInsightLoading(true)
     api.get('/insights')
       .then(r => setInsight(r.data))
-      .catch(() => {}) // silencioso — no bloquear el dashboard
+      .catch(() => {})
       .finally(() => setInsightLoading(false))
   }, [workDay?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -81,7 +86,7 @@ export default function Dashboard() {
     } catch (_) {}
   }
 
-  // Live clock for workday elapsed time
+  // Live clock
   useEffect(() => {
     if (!workDay?.startedAt || workDay?.endedAt) return
     const update = () => {
@@ -110,7 +115,6 @@ export default function Dashboard() {
   }
 
   function handleUpdateTask(updated) {
-    // Si la tarea estaba en carryOver y se completó, sacarla de ahí
     if (carryOver.find(t => t.id === updated.id)) {
       if (updated.status === 'COMPLETED') {
         setCarryOver(prev => prev.filter(t => t.id !== updated.id))
@@ -133,32 +137,66 @@ export default function Dashboard() {
     setWorkDay(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== id) }))
   }
 
-  const tasks = workDay?.tasks ?? []
-  const activeTask = tasks.find(t => t.status === 'IN_PROGRESS')
-    ?? carryOver.find(t => t.status === 'IN_PROGRESS')
-    ?? null
+  // "Agregar a hoy" desde Backlog: mueve carry-over a workDay.tasks, o actualiza task existente
+  function handleAddToToday(updated) {
+    if (carryOver.find(t => t.id === updated.id)) {
+      setCarryOver(prev => prev.filter(t => t.id !== updated.id))
+      setWorkDay(prev => ({ ...prev, tasks: [...prev.tasks, updated] }))
+    } else {
+      setWorkDay(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === updated.id ? updated : t) }))
+    }
+  }
 
-  // Inactivity detection for the active task
+  // Derived state
+  const tasks = workDay?.tasks ?? []
+
+  // Today focus = tasks in today's workday that are NOT backlog
+  const focusTasks = tasks.filter(t => !t.isBacklog)
+
+  // Backlog = today's backlog tasks + carry-over from previous days
+  const allBacklog = [...tasks.filter(t => t.isBacklog), ...carryOver]
+
+  const activeTask = focusTasks.find(t => t.status === 'IN_PROGRESS') ?? null
+  const hasActiveTask = !!activeTask
+
+  // Inactivity detection
   async function handleAutoPause() {
-    const task = activeTask
-    if (!task) return
+    if (!activeTask) return
     try {
-      const { data } = await api.patch(`/tasks/${task.id}/pause`)
+      const { data } = await api.patch(`/tasks/${activeTask.id}/pause`)
       handleUpdateTask(data)
-      localStorage.setItem('autoPaused', String(task.id))
+      localStorage.setItem('autoPaused', String(activeTask.id))
       setAutoPausedTask(data)
     } catch (_) {}
   }
 
-  const { dismiss } = useInactivity({
-    activeTask,
-    onAutoPause: handleAutoPause,
-  })
+  const { dismiss } = useInactivity({ activeTask, onAutoPause: handleAutoPause })
 
   function clearAutoPaused() {
     localStorage.removeItem('autoPaused')
     setAutoPausedTask(null)
     dismiss()
+  }
+
+  const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+
+  async function loadCompletedHistory(skip = 0) {
+    setCompletedLoading(true)
+    try {
+      const { data } = await api.get(`/tasks/completed?skip=${skip}&before=${todayDate}`)
+      setCompletedHistory(prev => skip === 0 ? data.tasks : [...prev, ...data.tasks])
+      setCompletedHasMore(data.hasMore)
+      setCompletedSkip(skip + data.tasks.length)
+    } finally {
+      setCompletedLoading(false)
+    }
+  }
+
+  function handleToggleCompleted() {
+    setCompletedOpen(v => {
+      if (!v && completedHistory.length === 0) loadCompletedHistory(0)
+      return !v
+    })
   }
 
   async function handleResumeAutoPaused() {
@@ -170,24 +208,24 @@ export default function Dashboard() {
     clearAutoPaused()
   }
 
-  // Tareas destacadas: de hoy + carryOver, no completadas, no en curso, con estrella, ordenadas por nivel desc
-  const starred = [...tasks, ...carryOver]
+  // Sections from focus tasks
+  const inProgress = focusTasks.filter(t => t.status === 'IN_PROGRESS')
+  const completed  = focusTasks.filter(t => t.status === 'COMPLETED')
+
+  const starred = focusTasks
     .filter(t => (t.starred ?? 0) > 0 && t.status !== 'COMPLETED' && t.status !== 'IN_PROGRESS')
-    .sort((a, b) => (b.starred ?? 0) - (a.starred ?? 0))
   const starredIds = new Set(starred.map(t => t.id))
 
-  // En curso incluye todas (starred o no). Las starred no-en-curso van solo a su sección.
-  const inProgress = tasks.filter(t => t.status === 'IN_PROGRESS')
-  const pending    = tasks.filter(t => t.status === 'PENDING'  && !starredIds.has(t.id))
-  const paused     = tasks.filter(t => t.status === 'PAUSED'   && !starredIds.has(t.id))
-  const blocked    = tasks.filter(t => t.status === 'BLOCKED'  && !starredIds.has(t.id))
-  const completed  = tasks.filter(t => t.status === 'COMPLETED')
-  const hasActiveTask = tasks.some(t => t.status === 'IN_PROGRESS') || carryOver.some(t => t.status === 'IN_PROGRESS')
+  const paused  = focusTasks.filter(t => t.status === 'PAUSED'  && !starredIds.has(t.id))
+  const blocked = focusTasks.filter(t => t.status === 'BLOCKED' && !starredIds.has(t.id))
+  const pending = focusTasks.filter(t => t.status === 'PENDING' && !starredIds.has(t.id))
 
   const totalMins = completed.reduce((acc, t) => {
     if (!t.startedAt || !t.completedAt) return acc
     return acc + Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
   }, 0)
+
+  const activeFocusCount = focusTasks.filter(t => t.status !== 'COMPLETED').length
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -213,8 +251,8 @@ export default function Dashboard() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
-            <p className="text-2xl font-bold text-gray-800 dark:text-white">{tasks.length}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total tareas</p>
+            <p className="text-2xl font-bold text-gray-800 dark:text-white">{activeFocusCount}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tareas de hoy</p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4 text-center">
             <p className="text-2xl font-bold text-primary-600">{completed.length}</p>
@@ -279,7 +317,6 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
-              {/* Actions */}
               <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-black/5 dark:border-white/10">
                 <div className="flex items-center gap-1">
                   <button
@@ -322,7 +359,7 @@ export default function Dashboard() {
               + Agregar tarea
             </button>
           )}
-          {!workDay?.endedAt && tasks.length > 0 && (
+          {!workDay?.endedAt && (
             <button
               onClick={handleFinish}
               disabled={finishing}
@@ -345,45 +382,31 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* 2. Destacadas (starred no-en-curso) */}
+        {/* 2. Destacadas (starred, no en curso) */}
         {starred.length > 0 && (
           <section className="mb-6">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Destacadas: Foco del día</h2>
             <div className="space-y-2">
               {starred.map(t => (
-                <TaskCard key={`starred-${t.id}`} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} />
               ))}
             </div>
           </section>
         )}
 
-        {/* 3. Carry-over de días anteriores (no starred) */}
-        {carryOver.some(t => !starredIds.has(t.id)) && (
-          <section className="mb-6">
-            <h2 className="text-xs font-semibold text-orange-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-              <span>⏳</span> Pendientes de días anteriores
-            </h2>
-            <div className="space-y-2">
-              {carryOver.filter(t => !starredIds.has(t.id)).map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* 4. Pausadas */}
+        {/* 3. Pausadas */}
         {paused.length > 0 && (
           <section className="mb-6">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Pausadas</h2>
             <div className="space-y-2">
               {paused.map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} />
               ))}
             </div>
           </section>
         )}
 
-        {/* 5. Bloqueadas */}
+        {/* 4. Bloqueadas */}
         {blocked.length > 0 && (
           <section className="mb-6">
             <h2 className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
@@ -391,42 +414,177 @@ export default function Dashboard() {
             </h2>
             <div className="space-y-2">
               {blocked.map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} />
               ))}
             </div>
           </section>
         )}
 
-        {/* 6. Pendientes */}
+        {/* 5. Pendientes */}
         {pending.length > 0 && (
           <section className="mb-6">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Pendientes</h2>
             <div className="space-y-2">
               {pending.map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} />
               ))}
             </div>
           </section>
         )}
 
-        {completed.length > 0 && (
-          <section>
-            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Completadas</h2>
-            <div className="space-y-2">
-              {completed.map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {tasks.length === 0 && (
+        {/* Empty state */}
+        {focusTasks.length === 0 && (
           <div className="text-center py-16 text-gray-400">
             <p className="text-4xl mb-3">📋</p>
-            <p className="font-medium">No hay tareas por hoy</p>
-            <p className="text-sm mt-1">Agregá tu primera tarea para empezar</p>
+            <p className="font-medium">No hay tareas para hoy</p>
+            {allBacklog.length > 0
+              ? <p className="text-sm mt-1">Expandí el Backlog para agregar tareas al día</p>
+              : <p className="text-sm mt-1">Agregá tu primera tarea para empezar</p>
+            }
           </div>
         )}
+
+        {/* 6. Backlog — collapsible */}
+        {allBacklog.length > 0 && (
+          <section className={focusTasks.length > 0 ? 'mb-6' : 'mb-6'}>
+            <button
+              onClick={() => setBacklogOpen(v => !v)}
+              className="w-full flex items-center justify-between py-2 group"
+            >
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Backlog</h2>
+                <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
+                  {allBacklog.length}
+                </span>
+              </div>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${backlogOpen ? 'rotate-180' : ''}`}
+              >
+                <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clipRule="evenodd" />
+              </svg>
+            </button>
+
+            {backlogOpen && (
+              <div className="space-y-2 mt-2">
+                {allBacklog.map(t => (
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    onUpdate={handleUpdateTask}
+                    onDelete={handleDeleteTask}
+                    hasActiveTask={hasActiveTask}
+                    backlog
+                    onAddToToday={handleAddToToday}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 7. Completadas — historial paginado collapsible */}
+        <section className="mb-6">
+          <button
+            onClick={handleToggleCompleted}
+            className="w-full flex items-center justify-between py-2"
+          >
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Completadas</h2>
+              {completed.length > 0 && (
+                <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">
+                  {completed.length} hoy
+                </span>
+              )}
+            </div>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${completedOpen ? 'rotate-180' : ''}`}
+            >
+              <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clipRule="evenodd" />
+            </svg>
+          </button>
+
+          {completedOpen && (
+            <div className="mt-2 bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+              {/* Hoy */}
+              {completed.length === 0 && completedHistory.length === 0 && !completedLoading && (
+                <p className="text-sm text-gray-400 text-center py-6">No hay tareas completadas aún</p>
+              )}
+              {completed.map(t => {
+                const mins = t.minutesOverride !== null && t.minutesOverride !== undefined
+                  ? t.minutesOverride
+                  : Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+                return (
+                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+                    <span className="text-green-500 flex-shrink-0 text-sm">✓</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 leading-snug truncate">{t.description}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
+                        {mins > 0 && (
+                          <>
+                            <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                              {mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins}m`}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Historial de días anteriores */}
+              {completedHistory.map(t => {
+                const mins = t.minutesOverride !== null && t.minutesOverride !== undefined
+                  ? t.minutesOverride
+                  : Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+                const dateStr = new Date(t.completedAt).toLocaleDateString('es-AR', {
+                  weekday: 'short', day: 'numeric', month: 'short',
+                })
+                return (
+                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+                    <span className="text-gray-300 dark:text-gray-600 flex-shrink-0 text-sm">✓</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 leading-snug truncate">{t.description}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
+                        <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500 capitalize">{dateStr}</span>
+                        {mins > 0 && (
+                          <>
+                            <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                              {mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins}m`}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {completedLoading && (
+                <p className="text-sm text-gray-400 text-center py-4">Cargando...</p>
+              )}
+              {completedHasMore && !completedLoading && (
+                <button
+                  onClick={() => loadCompletedHistory(completedSkip)}
+                  className="w-full py-3 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
+                >
+                  Cargar más
+                </button>
+              )}
+            </div>
+          )}
+        </section>
       </main>
 
       {showModal && <AddTaskModal onAdd={handleAddTask} onClose={() => setShowModal(false)} />}
