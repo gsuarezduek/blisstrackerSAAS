@@ -1,0 +1,14 @@
+ALTER TABLE "User" ADD COLUMN "insightMemoryEnabled" BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE "UserInsightMemory" (
+  "id" SERIAL PRIMARY KEY,
+  "userId" INTEGER NOT NULL UNIQUE,
+  "tendencias" TEXT NOT NULL DEFAULT '',
+  "fortalezas" TEXT NOT NULL DEFAULT '',
+  "areasDeAtencion" TEXT NOT NULL DEFAULT '',
+  "estadisticas" JSONB NOT NULL DEFAULT '{}',
+  "weekStart" TEXT NOT NULL DEFAULT '',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "UserInsightMemory_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);

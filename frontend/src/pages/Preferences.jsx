@@ -1,22 +1,29 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
 export default function Preferences() {
-  const { updateUser } = useAuth()
+  const { user, updateUser } = useAuth()
   const [weeklyEmail,   setWeeklyEmail]   = useState(true)
   const [dailyInsight,  setDailyInsight]  = useState(true)
+  const [insightMemory, setInsightMemory] = useState(true)
+  const [taskQuality,   setTaskQuality]   = useState(true)
   const [togglingW,     setTogglingW]     = useState(false)
   const [togglingD,     setTogglingD]     = useState(false)
+  const [togglingM,     setTogglingM]     = useState(false)
+  const [togglingQ,     setTogglingQ]     = useState(false)
   const [sending,       setSending]       = useState(false)
   const [sendMsg,       setSendMsg]       = useState({ text: '', error: false })
   const [loaded,        setLoaded]        = useState(false)
 
   useEffect(() => {
     api.get('/profile').then(({ data }) => {
-      setWeeklyEmail(data.weeklyEmailEnabled  ?? true)
-      setDailyInsight(data.dailyInsightEnabled ?? true)
+      setWeeklyEmail(data.weeklyEmailEnabled     ?? true)
+      setDailyInsight(data.dailyInsightEnabled   ?? true)
+      setInsightMemory(data.insightMemoryEnabled ?? true)
+      setTaskQuality(data.taskQualityEnabled     ?? true)
       setLoaded(true)
     })
   }, [])
@@ -29,6 +36,26 @@ export default function Preferences() {
       setWeeklyEmail(next)
     } catch (_) {}
     finally { setTogglingW(false) }
+  }
+
+  async function handleToggleTaskQuality() {
+    const next = !taskQuality
+    setTogglingQ(true)
+    try {
+      await api.patch('/profile/preferences', { taskQualityEnabled: next })
+      setTaskQuality(next)
+    } catch (_) {}
+    finally { setTogglingQ(false) }
+  }
+
+  async function handleToggleMemory() {
+    const next = !insightMemory
+    setTogglingM(true)
+    try {
+      await api.patch('/profile/preferences', { insightMemoryEnabled: next })
+      setInsightMemory(next)
+    } catch (_) {}
+    finally { setTogglingM(false) }
   }
 
   async function handleToggleInsight() {
@@ -82,20 +109,77 @@ export default function Preferences() {
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Configurá cómo querés usar BlissTracker.</p>
         </div>
 
-        {/* Dashboard */}
+        {/* Insight diario con IA */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Dashboard</h2>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">Personalizá qué información se muestra en tu pantalla principal.</p>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Insight diario con IA</h2>
+            <span className="text-xs bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded-full px-2 py-0.5 font-medium">IA</span>
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
+            Un coach de productividad personal basado en GTD que analiza tus tareas cada día y genera recomendaciones concretas y accionables.
+          </p>
 
-          {/* Toggle insight diario */}
-          <div className="flex items-start justify-between gap-4 py-4">
+          {/* Fase 1 — Insight básico */}
+          <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Insight diario</p>
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Activar insight diario</p>
+                <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">Activo</span>
+              </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                Muestra una recomendación en tiempo real basada en tus tareas del día: bloqueos, foco, progreso y distribución por proyecto.
+                Muestra un análisis en tu dashboard cada día: bloqueos, foco, progreso y distribución por proyecto. Se genera una vez y se cachea hasta el día siguiente.
               </p>
             </div>
             <Toggle on={dailyInsight} onToggle={handleToggleInsight} disabled={togglingD} />
+          </div>
+
+          {/* Fase 2 — Conocimiento de roles (solo admins) */}
+          {user?.isAdmin && (
+            <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Conocimiento de roles</p>
+                  <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">Activo</span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                  Configurá las tareas recurrentes y dependencias de cada rol para que el insight detecte tareas clave sin registrar.
+                </p>
+              </div>
+              <Link
+                to="/admin?tab=role-ai"
+                className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200 dark:border-primary-800 transition-colors whitespace-nowrap"
+              >
+                Configurar →
+              </Link>
+            </div>
+          )}
+
+          {/* Fase 3 — Memoria de aprendizaje */}
+          <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Memoria de aprendizaje</p>
+                <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">Activo</span>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                El sistema aprende de tus patrones semana a semana: cuándo tendés a bloquearte, en qué proyectos rendís mejor y qué días son más productivos. El insight evoluciona con vos.
+              </p>
+            </div>
+            <Toggle on={insightMemory} onToggle={handleToggleMemory} disabled={togglingM} />
+          </div>
+
+          {/* Fase 4 — Coaching de calidad de tareas */}
+          <div className="flex items-start justify-between gap-4 py-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Coaching de calidad de tareas</p>
+                <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">Activo</span>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                La IA detecta tareas con descripciones vagas y sugiere reformularlas como acciones concretas según GTD. "Trabajar en web" se convierte en "Enviar 3 opciones de homepage para aprobación".
+              </p>
+            </div>
+            <Toggle on={taskQuality} onToggle={handleToggleTaskQuality} disabled={togglingQ} />
           </div>
         </div>
 

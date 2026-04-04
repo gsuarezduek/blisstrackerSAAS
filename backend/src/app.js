@@ -18,6 +18,8 @@ const feedbackRoutes     = require('./routes/feedback.routes')
 const notificationsRoutes = require('./routes/notifications.routes')
 const rolesRoutes        = require('./routes/roles.routes')
 const profileRoutes      = require('./routes/profile.routes')
+const insightsRoutes          = require('./routes/insights.routes')
+const roleExpectationsRoutes  = require('./routes/roleExpectations.routes')
 
 const app = express()
 
@@ -65,6 +67,8 @@ app.use('/api/feedback',      feedbackRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/roles',         rolesRoutes)
 app.use('/api/profile',       profileRoutes)
+app.use('/api/insights',           insightsRoutes)
+app.use('/api/role-expectations',  roleExpectationsRoutes)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 

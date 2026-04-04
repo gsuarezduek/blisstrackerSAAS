@@ -22,11 +22,15 @@ const STATUS_ORDER = { IN_PROGRESS: 0, BLOCKED: 1, PAUSED: 2, PENDING: 3 }
 export default function UserTasksModal({ user, onClose }) {
   const { labelFor } = useRoles()
   const [byProject, setByProject] = useState([])
+  const [completedThisWeek, setCompletedThisWeek] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     api.get(`/users/${user.id}/tasks`)
-      .then(r => setByProject(r.data))
+      .then(r => {
+        setByProject(r.data.byProject)
+        setCompletedThisWeek(r.data.completedThisWeek)
+      })
       .finally(() => setLoading(false))
   }, [user.id])
 
@@ -36,9 +40,16 @@ export default function UserTasksModal({ user, onClose }) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b dark:border-gray-700">
-          <div>
-            <h2 className="text-base font-bold text-gray-900 dark:text-white">{user.name}</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{labelFor(user.role)}</p>
+          <div className="flex items-center gap-3">
+            <img
+              src={`/perfiles/${user.avatar || 'bee.png'}`}
+              alt={user.name}
+              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+            />
+            <div>
+              <h2 className="text-base font-bold text-gray-900 dark:text-white">{user.name}</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{labelFor(user.role)}</p>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -54,15 +65,15 @@ export default function UserTasksModal({ user, onClose }) {
             <p className="text-center text-gray-400 py-8">Cargando...</p>
           )}
 
-          {!loading && byProject.length === 0 && (
+          {!loading && byProject.length === 0 && completedThisWeek.length === 0 && (
             <div className="text-center py-8 text-gray-400">
               <p className="text-3xl mb-2">✅</p>
-              <p className="text-sm">No tiene tareas activas</p>
+              <p className="text-sm">No tiene tareas activas esta semana</p>
             </div>
           )}
 
           {!loading && byProject.length > 0 && (
-            <div className="space-y-4">
+            <div className="space-y-4 mb-6">
               {byProject.map(({ project, tasks }) => (
                 <div key={project.id}>
                   <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wide mb-2">
@@ -85,6 +96,27 @@ export default function UserTasksModal({ user, onClose }) {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {!loading && completedThisWeek.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide mb-2">
+                Completadas esta semana ({completedThisWeek.length})
+              </p>
+              <div className="space-y-1.5">
+                {completedThisWeek.map(task => (
+                  <div key={task.id} className="flex items-start gap-2.5 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
+                    <span className="text-green-500 flex-shrink-0 mt-0.5 text-sm">✓</span>
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 leading-snug line-through">
+                        {linkify(task.description)}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{task.project.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

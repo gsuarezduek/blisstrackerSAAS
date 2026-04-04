@@ -12,61 +12,6 @@ function todayLabel() {
   return new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-function getDailyInsight(tasks, carryOver) {
-  const all = [...tasks, ...carryOver]
-  if (all.length === 0) {
-    return { text: 'Definí tus tareas para empezar el día con foco.', icon: '💡', tone: 'neutral' }
-  }
-
-  const blocked   = all.filter(t => t.status === 'BLOCKED')
-  const completed = all.filter(t => t.status === 'COMPLETED')
-  const pending   = all.filter(t => t.status === 'PENDING' || t.status === 'PAUSED')
-  const inProgress = all.filter(t => t.status === 'IN_PROGRESS')
-
-  // 1. Bloqueos — prioridad máxima
-  if (blocked.length > 0) {
-    const s = blocked.length === 1
-      ? `"${blocked[0].description.slice(0, 40)}${blocked[0].description.length > 40 ? '…' : ''}"`
-      : `${blocked.length} tareas`
-    return { text: `Tenés ${s} bloqueada${blocked.length > 1 ? 's' : ''} — resolvé ese impedimento antes de seguir.`, icon: '⚠️', tone: 'warning' }
-  }
-
-  // 2. Muchas pendientes, pocas completadas
-  if (pending.length >= 5 && completed.length <= 1) {
-    return { text: `Tenés ${pending.length} tareas sin iniciar. Elegí una y avanzá — el foco llega cuando empezás.`, icon: '🎯', tone: 'alert' }
-  }
-
-  // 3. Demasiados proyectos distintos
-  const projectIds = new Set(all.filter(t => t.status !== 'COMPLETED').map(t => t.project?.id).filter(Boolean))
-  if (projectIds.size >= 4) {
-    return { text: `Estás distribuido en ${projectIds.size} proyectos distintos hoy. Considerá priorizar uno.`, icon: '⚡', tone: 'alert' }
-  }
-
-  // 4. Buen progreso
-  if (completed.length >= 3 && completed.length >= pending.length) {
-    return { text: `Buen ritmo hoy — ya completaste ${completed.length} tarea${completed.length > 1 ? 's' : ''}. Seguí así.`, icon: '✅', tone: 'positive' }
-  }
-
-  // 5. Tarea en curso — mostrar foco actual
-  if (inProgress.length > 0) {
-    const name = inProgress[0].project?.name
-    return { text: `Estás enfocado en ${name ? `"${name}"` : 'una tarea'}. Terminala antes de arrancar algo nuevo.`, icon: '🔥', tone: 'positive' }
-  }
-
-  // 6. Un proyecto dominante entre pendientes
-  const counts = {}
-  for (const t of pending) {
-    const name = t.project?.name
-    if (name) counts[name] = (counts[name] || 0) + 1
-  }
-  const topProject = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
-  if (topProject && topProject[1] >= 2) {
-    return { text: `La mayoría de tus tareas pendientes son de "${topProject[0]}". Buen momento para enfocarte ahí.`, icon: '📌', tone: 'neutral' }
-  }
-
-  return { text: `Tenés ${pending.length} tarea${pending.length !== 1 ? 's' : ''} por hacer. Elegí la más importante y empezá.`, icon: '💡', tone: 'neutral' }
-}
-
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -77,6 +22,12 @@ export default function Dashboard() {
 
   const [carryOver, setCarryOver] = useState([])
   const [autoPausedTask, setAutoPausedTask] = useState(null)
+
+  // AI Insight
+  const [insight, setInsight] = useState(null)
+  const [insightLoading, setInsightLoading] = useState(false)
+  const [insightRefreshing, setInsightRefreshing] = useState(false)
+  const [insightCooldown, setInsightCooldown] = useState(null) // waitMins
 
   const loadToday = useCallback(async () => {
     const { data } = await api.get('/workdays/today')
@@ -96,6 +47,39 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => { loadToday() }, [loadToday])
+
+  // Load AI insight once workday is available
+  useEffect(() => {
+    if (!workDay || workDay.endedAt || user?.dailyInsightEnabled === false) return
+    setInsightLoading(true)
+    api.get('/insights')
+      .then(r => setInsight(r.data))
+      .catch(() => {}) // silencioso — no bloquear el dashboard
+      .finally(() => setInsightLoading(false))
+  }, [workDay?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleRefreshInsight() {
+    setInsightRefreshing(true)
+    setInsightCooldown(null)
+    try {
+      const { data } = await api.post('/insights/refresh')
+      setInsight(data)
+    } catch (err) {
+      if (err.response?.status === 429) {
+        setInsightCooldown(err.response.data.waitMins)
+      }
+    } finally {
+      setInsightRefreshing(false)
+    }
+  }
+
+  async function handleInsightFeedback(value) {
+    if (!insight) return
+    try {
+      const { data } = await api.post('/insights/feedback', { feedback: value })
+      setInsight(data)
+    } catch (_) {}
+  }
 
   // Live clock for workday elapsed time
   useEffect(() => {
@@ -246,17 +230,84 @@ export default function Dashboard() {
 
         {/* Daily insight */}
         {user?.dailyInsightEnabled !== false && workDay && !workDay.endedAt && (() => {
-          const insight = getDailyInsight(tasks, carryOver)
-          const styles = {
-            warning:  'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400',
-            alert:    'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400',
-            positive: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400',
-            neutral:  'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400',
+          const toneStyles = {
+            warning:  'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
+            alert:    'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800',
+            positive: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+            neutral:  'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700',
           }
+          const toneText = {
+            warning:  'text-red-700 dark:text-red-400',
+            alert:    'text-amber-700 dark:text-amber-400',
+            positive: 'text-green-700 dark:text-green-400',
+            neutral:  'text-gray-600 dark:text-gray-400',
+          }
+          const toneIcon = { warning: '⚠️', alert: '🎯', positive: '✅', neutral: '💡' }
+
+          if (insightLoading) {
+            return (
+              <div className="flex items-center gap-2.5 border rounded-xl px-4 py-3 mb-6 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                <span className="text-sm text-gray-400 animate-pulse">Generando insight del día...</span>
+              </div>
+            )
+          }
+
+          if (!insight) return null
+
+          const tone = insight.tono || 'neutral'
           return (
-            <div className={`flex items-center gap-2.5 border rounded-xl px-4 py-3 mb-6 text-sm ${styles[insight.tone]}`}>
-              <span className="text-base flex-shrink-0">{insight.icon}</span>
-              <p className="leading-snug">{insight.text}</p>
+            <div className={`border rounded-xl px-4 py-3 mb-6 ${toneStyles[tone]}`}>
+              <div className="flex items-start gap-2.5">
+                <span className="text-base flex-shrink-0 mt-0.5">{toneIcon[tone]}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold leading-snug ${toneText[tone]}`}>{insight.titulo}</p>
+                  <p className={`text-sm leading-snug mt-0.5 ${toneText[tone]} opacity-90`}>{insight.mensaje}</p>
+                  {insight.alertaRol && (
+                    <p className="text-xs mt-2 leading-snug text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-2.5 py-1.5">
+                      <span className="font-medium">⚠️ Rol:</span> {insight.alertaRol}
+                    </p>
+                  )}
+                  {insight.alertaGTD && (
+                    <p className="text-xs mt-2 leading-snug text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-2.5 py-1.5">
+                      <span className="font-medium">📝 GTD:</span> {insight.alertaGTD}
+                    </p>
+                  )}
+                  {insight.sugerencia && (
+                    <p className={`text-xs mt-1.5 leading-snug ${toneText[tone]} opacity-75`}>
+                      <span className="font-medium">Acción:</span> {insight.sugerencia}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {/* Actions */}
+              <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-black/5 dark:border-white/10">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleInsightFeedback(insight.feedback === 'up' ? null : 'up')}
+                    className={`text-sm px-2 py-0.5 rounded-lg transition-colors ${insight.feedback === 'up' ? 'bg-green-200 dark:bg-green-800 text-green-700 dark:text-green-300' : 'text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30'}`}
+                    title="Útil"
+                  >👍</button>
+                  <button
+                    onClick={() => handleInsightFeedback(insight.feedback === 'down' ? null : 'down')}
+                    className={`text-sm px-2 py-0.5 rounded-lg transition-colors ${insight.feedback === 'down' ? 'bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-300' : 'text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30'}`}
+                    title="No útil"
+                  >👎</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {insightCooldown && (
+                    <span className="text-xs text-gray-400">Disponible en {insightCooldown}min</span>
+                  )}
+                  <button
+                    onClick={handleRefreshInsight}
+                    disabled={insightRefreshing}
+                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40 transition-colors flex items-center gap-1"
+                    title="Regenerar insight"
+                  >
+                    <span className={insightRefreshing ? 'animate-spin inline-block' : ''}>↺</span>
+                    <span>Regenerar</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )
         })()}

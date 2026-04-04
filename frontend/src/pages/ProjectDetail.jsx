@@ -186,12 +186,12 @@ export default function ProjectDetail() {
                 <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">
                   Equipo · {data.project.members.length} persona{data.project.members.length !== 1 ? 's' : ''}
                 </p>
-                <div className="flex flex-wrap gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {data.project.members.map(pm => (
-                    <div key={pm.user.id} className="flex items-center gap-2">
+                    <div key={pm.user.id} className="flex items-center gap-2 min-w-0">
                       <Avatar user={pm.user} size="sm" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight">{pm.user.name}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight truncate">{pm.user.name}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(pm.user.role)}`}>
                           {labelFor(pm.user.role)}
                         </span>

@@ -1,0 +1,9 @@
+CREATE TABLE "RoleExpectation" (
+  "id" SERIAL PRIMARY KEY,
+  "roleName" TEXT NOT NULL UNIQUE,
+  "description" TEXT NOT NULL DEFAULT '',
+  "recurrentTasks" JSONB NOT NULL DEFAULT '[]',
+  "dependencies" JSONB NOT NULL DEFAULT '[]',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

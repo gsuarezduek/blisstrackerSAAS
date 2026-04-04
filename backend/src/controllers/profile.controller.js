@@ -9,7 +9,7 @@ const PERSONAL_FIELDS = [
 
 const PROFILE_SELECT = {
   id: true, name: true, email: true, role: true,
-  createdAt: true, avatar: true, weeklyEmailEnabled: true, dailyInsightEnabled: true,
+  createdAt: true, avatar: true, weeklyEmailEnabled: true, dailyInsightEnabled: true, insightMemoryEnabled: true, taskQualityEnabled: true,
   phone: true, birthday: true, address: true, dni: true,
   cuit: true, alias: true, maritalStatus: true, children: true,
   educationLevel: true, educationTitle: true, bloodType: true,
@@ -106,13 +106,25 @@ async function updatePreferences(req, res, next) {
       }
       data.dailyInsightEnabled = req.body.dailyInsightEnabled
     }
+    if ('insightMemoryEnabled' in req.body) {
+      if (typeof req.body.insightMemoryEnabled !== 'boolean') {
+        return res.status(400).json({ error: 'insightMemoryEnabled debe ser un booleano' })
+      }
+      data.insightMemoryEnabled = req.body.insightMemoryEnabled
+    }
+    if ('taskQualityEnabled' in req.body) {
+      if (typeof req.body.taskQualityEnabled !== 'boolean') {
+        return res.status(400).json({ error: 'taskQualityEnabled debe ser un booleano' })
+      }
+      data.taskQualityEnabled = req.body.taskQualityEnabled
+    }
     if (Object.keys(data).length === 0) {
       return res.status(400).json({ error: 'No se enviaron preferencias válidas' })
     }
     const user = await prisma.user.update({
       where: { id: req.user.id },
       data,
-      select: { id: true, weeklyEmailEnabled: true, dailyInsightEnabled: true },
+      select: { id: true, weeklyEmailEnabled: true, dailyInsightEnabled: true, insightMemoryEnabled: true, taskQualityEnabled: true },
     })
     res.json(user)
   } catch (err) { next(err) }

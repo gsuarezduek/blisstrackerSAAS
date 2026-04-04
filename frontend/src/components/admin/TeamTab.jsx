@@ -18,7 +18,7 @@ function roleColor(roleName) {
   return ROLE_COLORS[hash % ROLE_COLORS.length]
 }
 
-const emptyForm = { name: '', email: '', password: '', role: '' }
+const emptyForm = { name: '', email: '', password: '', role: '', isAdmin: false }
 
 const MARITAL_LABELS = {
   soltero: 'Soltero/a', casado: 'Casado/a', divorciado: 'Divorciado/a',
@@ -47,6 +47,7 @@ export default function TeamTab() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [expandedId, setExpandedId] = useState(null)
+  const [showInactive, setShowInactive] = useState(false)
 
   useEffect(() => {
     api.get('/users').then(r => setUsers(r.data))
@@ -62,7 +63,7 @@ export default function TeamTab() {
     setLoading(true)
     try {
       if (editId) {
-        const payload = { name: form.name, email: form.email, role: form.role }
+        const payload = { name: form.name, email: form.email, role: form.role, isAdmin: form.isAdmin }
         if (form.password) payload.password = form.password
         const { data } = await api.put(`/users/${editId}`, payload)
         setUsers(prev => prev.map(u => u.id === data.id ? data : u))
@@ -81,7 +82,7 @@ export default function TeamTab() {
 
   function startEdit(u) {
     setEditId(u.id)
-    setForm({ name: u.name, email: u.email, password: '', role: u.role })
+    setForm({ name: u.name, email: u.email, password: '', role: u.role, isAdmin: u.isAdmin ?? false })
   }
 
   async function toggleActive(u) {
@@ -127,6 +128,23 @@ export default function TeamTab() {
             {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
           </select>
         </div>
+        <div className="col-span-2 flex items-center justify-between py-1">
+          <div>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Administrador</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Acceso al panel de admin, reportes y gestión del equipo</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setForm(p => ({ ...p, isAdmin: !p.isAdmin }))}
+            className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${
+              form.isAdmin ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+            }`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+              form.isAdmin ? 'translate-x-5' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
         {error && <p className="col-span-2 text-red-500 text-sm">{error}</p>}
         <div className="col-span-2 flex gap-3">
           {editId && (
@@ -141,7 +159,7 @@ export default function TeamTab() {
       </form>
 
       <div className="space-y-2">
-        {users.map(u => {
+        {users.filter(u => u.active).map(u => {
           const isExpanded = expandedId === u.id
           const birthday = u.birthday
             ? new Date(u.birthday).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -159,13 +177,17 @@ export default function TeamTab() {
                   <p className="text-xs text-gray-400 dark:text-gray-500">{u.email}</p>
                 </div>
                 <div className="flex items-center gap-3">
+                  {u.isAdmin && (
+                    <span className="text-xs px-2 py-1 rounded-full font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
+                      Admin
+                    </span>
+                  )}
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor(u.role)}`}>
                     {labelFor(u.role)}
                   </span>
                   <button onClick={() => startEdit(u)} className="text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">Editar</button>
-                  <button onClick={() => toggleActive(u)}
-                    className={`text-xs ${u.active ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'}`}>
-                    {u.active ? 'Desactivar' : 'Activar'}
+                  <button onClick={() => toggleActive(u)} className="text-xs text-red-500 hover:text-red-700">
+                    Desactivar
                   </button>
                   {/* Expand toggle */}
                   <button
@@ -226,6 +248,58 @@ export default function TeamTab() {
           )
         })}
       </div>
+
+      {/* Historial de usuarios inactivos */}
+      {users.some(u => !u.active) && (
+        <div className="mt-6">
+          <button
+            onClick={() => setShowInactive(v => !v)}
+            className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors w-full"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+              className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`}
+            >
+              <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clipRule="evenodd" />
+            </svg>
+            <span className="font-medium">Historial de usuarios</span>
+            <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 text-xs">
+              {users.filter(u => !u.active).length}
+            </span>
+          </button>
+
+          {showInactive && (
+            <div className="mt-3 space-y-2">
+              {users.filter(u => !u.active).map(u => (
+                <div key={u.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl opacity-50">
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{u.name}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{u.email}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {u.isAdmin && (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
+                          Admin
+                        </span>
+                      )}
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor(u.role)}`}>
+                        {labelFor(u.role)}
+                      </span>
+                      <button
+                        onClick={() => toggleActive(u)}
+                        className="text-xs text-green-500 hover:text-green-700"
+                      >
+                        Activar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

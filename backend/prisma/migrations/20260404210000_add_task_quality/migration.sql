@@ -1,0 +1,2 @@
+ALTER TABLE "User" ADD COLUMN "taskQualityEnabled" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "DailyInsight" ADD COLUMN "alertaGTD" TEXT;

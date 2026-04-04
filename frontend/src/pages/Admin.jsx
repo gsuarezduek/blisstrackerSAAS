@@ -4,18 +4,25 @@ import TeamTab from '../components/admin/TeamTab'
 import ServicesTab from '../components/admin/ServicesTab'
 import RolesTab from '../components/admin/RolesTab'
 import FeedbackTab from '../components/admin/FeedbackTab'
+import RoleExpectationsTab from '../components/admin/RoleExpectationsTab'
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 const TABS = [
-  { id: 'projects', label: '📁 Proyectos' },
-  { id: 'team', label: '👥 Equipo' },
-  { id: 'services', label: '🛠 Servicios' },
-  { id: 'roles', label: '🏷 Roles' },
-  { id: 'feedback', label: '💬 Feedback' },
+  { id: 'projects',     label: '📁 Proyectos' },
+  { id: 'team',         label: '👥 Equipo' },
+  { id: 'services',     label: '🛠 Servicios' },
+  { id: 'roles',        label: '🏷 Roles' },
+  { id: 'role-ai',      label: '🎯 Roles IA' },
+  { id: 'feedback',     label: '💬 Feedback' },
 ]
 
+const VALID_TABS = new Set(TABS.map(t => t.id))
+
 export default function Admin() {
-  const [tab, setTab] = useState('projects')
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab')
+  const [tab, setTab] = useState(VALID_TABS.has(initialTab) ? initialTab : 'projects')
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -44,6 +51,7 @@ export default function Admin() {
         {tab === 'team' && <TeamTab />}
         {tab === 'services' && <ServicesTab />}
         {tab === 'roles' && <RolesTab />}
+        {tab === 'role-ai' && <RoleExpectationsTab />}
         {tab === 'feedback' && <FeedbackTab />}
       </main>
     </div>

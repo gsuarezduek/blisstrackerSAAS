@@ -23,14 +23,14 @@ async function login(req, res, next) {
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role, name: user.name, email: user.email },
+      { id: user.id, role: user.role, isAdmin: user.isAdmin, name: user.name, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     )
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, isAdmin: user.isAdmin, avatar: user.avatar },
     })
   } catch (err) {
     next(err)
@@ -41,7 +41,7 @@ async function me(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, name: true, email: true, role: true, avatar: true, dailyInsightEnabled: true },
+      select: { id: true, name: true, email: true, role: true, isAdmin: true, avatar: true, dailyInsightEnabled: true },
     })
     res.json(user)
   } catch (err) { next(err) }
@@ -125,14 +125,14 @@ async function googleLogin(req, res, next) {
     }
 
     const token = jwt.sign(
-      { id: user.id, role: user.role, name: user.name, email: user.email },
+      { id: user.id, role: user.role, isAdmin: user.isAdmin, name: user.name, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     )
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, isAdmin: user.isAdmin, avatar: user.avatar },
     })
   } catch (err) {
     next(err)

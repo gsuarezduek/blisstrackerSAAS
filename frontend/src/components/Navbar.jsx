@@ -36,7 +36,7 @@ export default function Navbar() {
     setMenuOpen(false)
   }
 
-  const isAdmin = user?.role === 'ADMIN'
+  const isAdmin = user?.isAdmin === true
   const avatarSrc = `/perfiles/${user?.avatar ?? 'bee.png'}`
 
   const links = [

@@ -78,8 +78,8 @@ describe('auth middleware', () => {
 // ── adminOnly ─────────────────────────────────────────────────────────────────
 
 describe('adminOnly middleware', () => {
-  it('llama next() si el usuario es ADMIN', () => {
-    const req  = { user: { role: 'ADMIN' } }
+  it('llama next() si el usuario tiene isAdmin = true', () => {
+    const req  = { user: { role: 'DESIGNER', isAdmin: true } }
     const res  = makeRes()
     const next = jest.fn()
 
@@ -88,8 +88,8 @@ describe('adminOnly middleware', () => {
     expect(next).toHaveBeenCalledTimes(1)
   })
 
-  it('retorna 403 si el usuario no es ADMIN', () => {
-    const req  = { user: { role: 'DESIGNER' } }
+  it('retorna 403 si isAdmin es false aunque el role sea cualquier string', () => {
+    const req  = { user: { role: 'DESIGNER', isAdmin: false } }
     const res  = makeRes()
     const next = jest.fn()
 

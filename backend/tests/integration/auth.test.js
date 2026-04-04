@@ -22,6 +22,7 @@ const mockUser = {
   email:    'ana@test.com',
   password: '$2a$10$hashedpassword',
   role:     'USER',
+  isAdmin:  false,
   active:   true,
   avatar:   'bee.png',
 }
