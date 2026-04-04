@@ -237,7 +237,11 @@ Escribís en español rioplatense, tono directo y humano. No usás frases genér
     messages: [{ role: 'user', content: context }],
   })
 
-  const text = msg.content[0].text.trim()
+  let text = msg.content[0].text.trim()
+  // El modelo a veces envuelve el JSON en bloques de código markdown
+  if (text.startsWith('```')) {
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+  }
   const parsed = JSON.parse(text)
   return {
     titulo:     String(parsed.titulo || 'Insight del día').slice(0, 100),
