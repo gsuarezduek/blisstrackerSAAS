@@ -92,12 +92,22 @@ export default function NotificationBell() {
               </div>
             ) : (
               notifications.map(n => {
-                const isBlocked = n.type === 'BLOCKED'
+                const isBlocked      = n.type === 'BLOCKED'
+                const isAddedProject = n.type === 'ADDED_TO_PROJECT'
+
                 const bgClass = isBlocked
-                  ? (!n.read ? 'bg-red-100 dark:bg-red-900/40' : 'bg-red-50 dark:bg-red-900/20')
-                  : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
-                const dotClass = isBlocked ? 'bg-red-500' : 'bg-primary-500'
-                const avatarClass = isBlocked ? 'bg-red-500' : 'bg-primary-500'
+                  ? (!n.read ? 'bg-red-100 dark:bg-red-900/40'   : 'bg-red-50 dark:bg-red-900/20')
+                  : isAddedProject
+                    ? (!n.read ? 'bg-green-100 dark:bg-green-900/40' : 'bg-green-50 dark:bg-green-900/20')
+                    : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
+
+                const dotClass = isBlocked ? 'bg-red-500' : isAddedProject ? 'bg-green-500' : 'bg-primary-500'
+                const textClass = isBlocked
+                  ? 'text-red-800 dark:text-red-200'
+                  : isAddedProject
+                    ? 'text-green-800 dark:text-green-200'
+                    : 'text-gray-800 dark:text-gray-200'
+
                 return (
                   <div
                     key={n.id}
@@ -113,9 +123,12 @@ export default function NotificationBell() {
                         {isBlocked && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">⚠</span>
                         )}
+                        {isAddedProject && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">＋</span>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm leading-snug ${isBlocked ? 'text-red-800 dark:text-red-200' : 'text-gray-800 dark:text-gray-200'}`}>
+                        <p className={`text-sm leading-snug ${textClass}`}>
                           <span className="font-semibold">{n.actor.name}</span>{' '}
                           {n.message}
                         </p>

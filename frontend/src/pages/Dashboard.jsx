@@ -34,6 +34,8 @@ export default function Dashboard() {
   const [insightLoading, setInsightLoading] = useState(false)
   const [insightRefreshing, setInsightRefreshing] = useState(false)
   const [insightCooldown, setInsightCooldown] = useState(null)
+  const [insightExpanded, setInsightExpanded] = useState(false)
+  const [insightDismissed, setInsightDismissed] = useState(false)
 
   const loadToday = useCallback(async () => {
     const { data } = await api.get('/workdays/today')
@@ -58,7 +60,11 @@ export default function Dashboard() {
     if (!workDay || workDay.endedAt || user?.dailyInsightEnabled === false) return
     setInsightLoading(true)
     api.get('/insights')
-      .then(r => setInsight(r.data))
+      .then(r => {
+        setInsight(r.data)
+        const dismissedId = localStorage.getItem('insightDismissed')
+        setInsightDismissed(dismissedId === String(r.data.id))
+      })
       .catch(() => {})
       .finally(() => setInsightLoading(false))
   }, [workDay?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -290,16 +296,38 @@ export default function Dashboard() {
             )
           }
 
-          if (!insight) return null
+          if (!insight || insightDismissed) return null
 
           const tone = insight.tono || 'neutral'
+
+          const handleDismiss = () => {
+            localStorage.setItem('insightDismissed', String(insight.id))
+            setInsightDismissed(true)
+          }
+
           return (
-            <div className={`border rounded-xl px-4 py-3 mb-6 ${toneStyles[tone]}`}>
-              <div className="flex items-start gap-2.5">
-                <span className="text-base flex-shrink-0 mt-0.5">{toneIcon[tone]}</span>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold leading-snug ${toneText[tone]}`}>{insight.titulo}</p>
-                  <p className={`text-sm leading-snug mt-0.5 ${toneText[tone]} opacity-90`}>{insight.mensaje}</p>
+            <div className={`border rounded-xl mb-6 ${toneStyles[tone]}`}>
+              {/* Header row — always visible */}
+              <div
+                className="flex items-center gap-2.5 px-4 py-3 cursor-pointer select-none"
+                onClick={() => setInsightExpanded(v => !v)}
+              >
+                <span className="text-base flex-shrink-0">{toneIcon[tone]}</span>
+                <p className={`text-sm font-semibold leading-snug flex-1 min-w-0 ${toneText[tone]}`}>{insight.titulo}</p>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDismiss() }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0 text-base leading-none px-1"
+                  title="Cerrar"
+                >×</button>
+                <span className={`text-gray-400 flex-shrink-0 transition-transform duration-200 ${insightExpanded ? 'rotate-180' : ''}`}>
+                  ▾
+                </span>
+              </div>
+
+              {/* Expanded content */}
+              {insightExpanded && (
+                <div className="px-4 pb-3">
+                  <p className={`text-sm leading-snug ${toneText[tone]} opacity-90`}>{insight.mensaje}</p>
                   {insight.alertaRol && (
                     <p className="text-xs mt-2 leading-snug text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-2.5 py-1.5">
                       <span className="font-medium">⚠️ Rol:</span> {insight.alertaRol}
@@ -315,36 +343,36 @@ export default function Dashboard() {
                       <span className="font-medium">Acción:</span> {insight.sugerencia}
                     </p>
                   )}
+                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-black/5 dark:border-white/10">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleInsightFeedback(insight.feedback === 'up' ? null : 'up')}
+                        className={`text-sm px-2 py-0.5 rounded-lg transition-colors ${insight.feedback === 'up' ? 'bg-green-200 dark:bg-green-800 text-green-700 dark:text-green-300' : 'text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30'}`}
+                        title="Útil"
+                      >👍</button>
+                      <button
+                        onClick={() => handleInsightFeedback(insight.feedback === 'down' ? null : 'down')}
+                        className={`text-sm px-2 py-0.5 rounded-lg transition-colors ${insight.feedback === 'down' ? 'bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-300' : 'text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30'}`}
+                        title="No útil"
+                      >👎</button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {insightCooldown && (
+                        <span className="text-xs text-gray-400">Disponible en {insightCooldown}min</span>
+                      )}
+                      <button
+                        onClick={handleRefreshInsight}
+                        disabled={insightRefreshing}
+                        className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40 transition-colors flex items-center gap-1"
+                        title="Regenerar insight"
+                      >
+                        <span className={insightRefreshing ? 'animate-spin inline-block' : ''}>↺</span>
+                        <span>Regenerar</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-black/5 dark:border-white/10">
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleInsightFeedback(insight.feedback === 'up' ? null : 'up')}
-                    className={`text-sm px-2 py-0.5 rounded-lg transition-colors ${insight.feedback === 'up' ? 'bg-green-200 dark:bg-green-800 text-green-700 dark:text-green-300' : 'text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30'}`}
-                    title="Útil"
-                  >👍</button>
-                  <button
-                    onClick={() => handleInsightFeedback(insight.feedback === 'down' ? null : 'down')}
-                    className={`text-sm px-2 py-0.5 rounded-lg transition-colors ${insight.feedback === 'down' ? 'bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-300' : 'text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30'}`}
-                    title="No útil"
-                  >👎</button>
-                </div>
-                <div className="flex items-center gap-2">
-                  {insightCooldown && (
-                    <span className="text-xs text-gray-400">Disponible en {insightCooldown}min</span>
-                  )}
-                  <button
-                    onClick={handleRefreshInsight}
-                    disabled={insightRefreshing}
-                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40 transition-colors flex items-center gap-1"
-                    title="Regenerar insight"
-                  >
-                    <span className={insightRefreshing ? 'animate-spin inline-block' : ''}>↺</span>
-                    <span>Regenerar</span>
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           )
         })()}

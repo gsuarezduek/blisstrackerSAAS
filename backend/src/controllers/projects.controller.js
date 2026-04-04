@@ -117,7 +117,15 @@ async function update(req, res, next) {
       await prisma.projectService.deleteMany({ where: { projectId: Number(id) } })
       data.services = { create: serviceIds.map(serviceId => ({ serviceId: Number(serviceId) })) }
     }
+    let newMemberIds = []
     if (memberIds !== undefined) {
+      const existing = await prisma.projectMember.findMany({
+        where: { projectId: Number(id) },
+        select: { userId: true },
+      })
+      const existingIds = new Set(existing.map(m => m.userId))
+      newMemberIds = memberIds.map(Number).filter(uid => !existingIds.has(uid))
+
       await prisma.projectMember.deleteMany({ where: { projectId: Number(id) } })
       data.members = { create: memberIds.map(userId => ({ userId: Number(userId) })) }
     }
@@ -127,6 +135,20 @@ async function update(req, res, next) {
       data,
       include: includeDetails,
     })
+
+    // Notificar a los miembros recién agregados
+    if (newMemberIds.length > 0) {
+      await prisma.notification.createMany({
+        data: newMemberIds.map(uid => ({
+          userId:    uid,
+          actorId:   req.user.id,
+          projectId: Number(id),
+          type:      'ADDED_TO_PROJECT',
+          message:   `te agregó al proyecto "${project.name}"`,
+        })),
+      })
+    }
+
     res.json(project)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Proyecto no encontrado' })

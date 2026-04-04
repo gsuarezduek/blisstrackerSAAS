@@ -94,6 +94,7 @@ enum FeedbackType {
 enum NotificationType {
   COMPLETED
   BLOCKED
+  ADDED_TO_PROJECT
 }
 
 model Project {
@@ -170,8 +171,8 @@ model Notification {
   user      User             @relation("NotificationRecipient", fields: [userId], references: [id])
   actorId   Int                                         // quien realizó la acción
   actor     User             @relation("NotificationActor",    fields: [actorId], references: [id])
-  taskId    Int
-  task      Task             @relation(fields: [taskId], references: [id])
+  taskId    Int?
+  task      Task?            @relation(fields: [taskId], references: [id])
   projectId Int
   project   Project          @relation(fields: [projectId], references: [id])
   type      NotificationType @default(COMPLETED)

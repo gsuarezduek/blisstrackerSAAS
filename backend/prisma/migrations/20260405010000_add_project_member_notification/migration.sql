@@ -1,0 +1,2 @@
+ALTER TYPE "NotificationType" ADD VALUE 'ADDED_TO_PROJECT';
+ALTER TABLE "Notification" ALTER COLUMN "taskId" DROP NOT NULL;
