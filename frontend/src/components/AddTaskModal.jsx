@@ -88,28 +88,30 @@ function ProjectCombobox({ projects, value, onChange }) {
   )
 }
 
-export default function AddTaskModal({ onAdd, onClose }) {
+export default function AddTaskModal({ onAdd, onClose, lockedProject }) {
   const { user } = useAuth()
   const [description, setDescription] = useState('')
-  const [projectId, setProjectId] = useState('')
+  const [projectId, setProjectId] = useState(lockedProject ? String(lockedProject.id) : '')
   const [projects, setProjects] = useState([])
   const [assigneeId, setAssigneeId] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (lockedProject) return
     api.get('/projects').then(r => {
       setProjects(r.data)
       if (r.data.length > 0) setProjectId(String(r.data[0].id))
     })
-  }, [])
+  }, [lockedProject])
 
   // Reset assignee to self when project changes
   useEffect(() => {
     setAssigneeId(user ? String(user.id) : '')
   }, [projectId, user])
 
-  const selectedProject = projects.find(p => String(p.id) === projectId)
-  const members = selectedProject?.members ?? []
+  const members = lockedProject
+    ? (lockedProject.members ?? [])
+    : (projects.find(p => String(p.id) === projectId)?.members ?? [])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -145,7 +147,13 @@ export default function AddTaskModal({ onAdd, onClose }) {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proyecto / Cliente</label>
-            <ProjectCombobox projects={projects} value={projectId} onChange={setProjectId} />
+            {lockedProject ? (
+              <div className="w-full border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
+                {lockedProject.name}
+              </div>
+            ) : (
+              <ProjectCombobox projects={projects} value={projectId} onChange={setProjectId} />
+            )}
           </div>
 
           {members.length > 1 && (

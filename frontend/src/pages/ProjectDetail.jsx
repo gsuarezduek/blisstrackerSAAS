@@ -5,6 +5,7 @@ import { linkify } from '../utils/linkify'
 import api from '../api/client'
 import useRoles from '../hooks/useRoles'
 import UserTasksModal from '../components/UserTasksModal'
+import AddTaskModal from '../components/AddTaskModal'
 
 const STATUS_LABEL = {
   BLOCKED:     'Bloqueada',
@@ -61,6 +62,7 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
   const [selectedUser, setSelectedUser] = useState(null)
+  const [showAddTask, setShowAddTask] = useState(false)
 
   // Archive state
   const [archive,      setArchive]      = useState([])
@@ -95,6 +97,12 @@ export default function ProjectDetail() {
 
   const totalPending = data?.byUser.reduce((s, u) => s + u.tasks.length, 0) ?? 0
 
+  async function handleAddTask() {
+    const { data: res } = await api.get(`/projects/${id}/tasks`)
+    setData(res)
+    setShowAddTask(false)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
@@ -123,25 +131,36 @@ export default function ProjectDetail() {
         {data && (
           <>
             {/* Header */}
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{data.project.name}</h1>
-              </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <p className="text-gray-500 dark:text-gray-400 text-sm">
-                  {totalPending === 0
-                    ? 'No hay tareas pendientes'
-                    : `${totalPending} tarea${totalPending !== 1 ? 's' : ''} pendiente${totalPending !== 1 ? 's' : ''}`}
-                </p>
-                {data.project.createdAt && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    Activo desde: <span className="font-medium text-gray-500 dark:text-gray-400">
-                      {new Date(data.project.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </span>
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{data.project.name}</h1>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    {totalPending === 0
+                      ? 'No hay tareas pendientes'
+                      : `${totalPending} tarea${totalPending !== 1 ? 's' : ''} pendiente${totalPending !== 1 ? 's' : ''}`}
                   </p>
-                )}
+                  {data.project.createdAt && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      Activo desde: <span className="font-medium text-gray-500 dark:text-gray-400">
+                        {new Date(data.project.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                    </p>
+                  )}
+                </div>
               </div>
+              <button
+                onClick={() => setShowAddTask(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors flex-shrink-0"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                </svg>
+                Agregar tarea
+              </button>
             </div>
 
             {/* Links útiles */}
@@ -346,6 +365,14 @@ export default function ProjectDetail() {
 
       {selectedUser && (
         <UserTasksModal user={selectedUser} onClose={() => setSelectedUser(null)} />
+      )}
+
+      {showAddTask && data && (
+        <AddTaskModal
+          lockedProject={data.project}
+          onAdd={handleAddTask}
+          onClose={() => setShowAddTask(false)}
+        />
       )}
     </div>
   )

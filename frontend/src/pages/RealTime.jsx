@@ -143,6 +143,7 @@ export default function RealTime() {
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [selectedUser, setSelectedUser] = useState(null)
+  const [search, setSearch] = useState('')
   const now = useNow()
 
   const load = useCallback(async () => {
@@ -174,8 +175,12 @@ export default function RealTime() {
     return () => clearInterval(t)
   }, [load])
 
-  const active = entries.filter(e => !e.workDay.endedAt)
-  const finished = entries.filter(e => e.workDay.endedAt)
+  const q = search.trim().toLowerCase()
+  const matchUser = name => !q || name.toLowerCase().includes(q)
+
+  const active = entries.filter(e => !e.workDay.endedAt && matchUser(e.user.name))
+  const finished = entries.filter(e => e.workDay.endedAt && matchUser(e.user.name))
+  const filteredNotStarted = notStarted.filter(u => matchUser(u.name))
   const workingNow = active.filter(e => e.currentTask).length
 
   return (
@@ -206,6 +211,26 @@ export default function RealTime() {
               {lastUpdate && ` · Última actualización ${lastUpdate.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
             </p>
           </div>
+        </div>
+
+        {/* Search */}
+        <div className="relative mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+            <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
+          </svg>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar persona..."
+            className="w-full pl-9 pr-9 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-xl py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Summary pills */}
@@ -265,11 +290,11 @@ export default function RealTime() {
         )}
 
         {/* Not started */}
-        {notStarted.length > 0 && (
+        {filteredNotStarted.length > 0 && (
           <section>
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">No iniciaron jornada</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {notStarted.map(user => (
+              {filteredNotStarted.map(user => (
                 <button key={user.id} className="text-left" onClick={() => setSelectedUser(user)}>
                   <div className="bg-white dark:bg-gray-800 rounded-2xl border-2 border-gray-100 dark:border-gray-700 opacity-50 p-5 flex items-center gap-3">
                     <Avatar user={user} />
