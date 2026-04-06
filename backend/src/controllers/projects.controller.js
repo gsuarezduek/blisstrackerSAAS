@@ -190,7 +190,7 @@ async function projectTasks(req, res, next) {
           status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         },
         include: { user: { select: { id: true, name: true, role: true, avatar: true } } },
-        orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
       }),
       prisma.task.findMany({
         where: {
@@ -259,10 +259,19 @@ async function projectCompletedHistory(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Replace all links for a project (admin only handled at route level)
+// Replace all links for a project (any project member or admin)
 async function saveLinks(req, res, next) {
   try {
     const projectId = Number(req.params.id)
+    const userId = req.user.id
+
+    if (!req.user.isAdmin) {
+      const member = await prisma.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId } },
+      })
+      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    }
+
     const { links } = req.body // [{ label, url }]
 
     if (!Array.isArray(links)) {

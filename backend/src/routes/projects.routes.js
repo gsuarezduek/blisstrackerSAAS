@@ -8,6 +8,6 @@ router.get('/:id/tasks', auth, projectTasks)             // tareas activas + com
 router.get('/:id/completed', auth, projectCompletedHistory) // historial paginado de completadas
 router.post('/', auth, adminOnly, create)
 router.put('/:id', auth, adminOnly, update)
-router.put('/:id/links', auth, adminOnly, saveLinks)
+router.put('/:id/links', auth, saveLinks)
 
 module.exports = router

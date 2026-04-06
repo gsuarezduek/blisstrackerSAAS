@@ -11,7 +11,7 @@ async function getOrCreateToday(req, res, next) {
       include: {
         tasks: {
           include: { project: true, createdBy: { select: { id: true, name: true } } },
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: 'desc' },
         },
       },
     })
@@ -22,7 +22,7 @@ async function getOrCreateToday(req, res, next) {
         include: {
           tasks: {
             include: { project: true, createdBy: { select: { id: true, name: true } } },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
           },
         },
       })
@@ -34,7 +34,7 @@ async function getOrCreateToday(req, res, next) {
         include: {
           tasks: {
             include: { project: true, createdBy: { select: { id: true, name: true } } },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
           },
         },
       })
@@ -48,7 +48,7 @@ async function getOrCreateToday(req, res, next) {
         workDay: { date: { lt: date } },
       },
       include: { project: true, createdBy: { select: { id: true, name: true } } },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
     })
 
     res.json({ ...workDay, carryOverTasks })

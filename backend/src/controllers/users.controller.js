@@ -104,7 +104,7 @@ async function getUserTasks(req, res, next) {
       prisma.task.findMany({
         where: { userId, status: { not: 'COMPLETED' } },
         include: { project: true },
-        orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'desc' },
       }),
       prisma.task.findMany({
         where: {
