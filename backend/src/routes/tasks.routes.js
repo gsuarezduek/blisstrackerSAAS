@@ -1,5 +1,6 @@
 const router = require('express').Router()
 const { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, setDuration, starTask, addToToday, moveToBacklog, completedHistory } = require('../controllers/tasks.controller')
+const { listComments, addComment } = require('../controllers/comments.controller')
 const { auth, adminOnly } = require('../middleware/auth')
 
 router.use(auth)
@@ -16,5 +17,7 @@ router.patch('/:id/add-to-today',  addToToday)
 router.patch('/:id/move-to-backlog', moveToBacklog)
 router.delete('/:id', remove)
 router.patch('/:id/duration', adminOnly, setDuration)
+router.get('/:id/comments',  listComments)
+router.post('/:id/comments', addComment)
 
 module.exports = router

@@ -4,7 +4,7 @@ import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
 
-export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, onAddToToday, onMoveToBacklog }) {
+export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, onAddToToday, onMoveToBacklog, onOpenComments }) {
   const [loading, setLoading] = useState(false)
   const [showBlockForm, setShowBlockForm] = useState(false)
   const [blockReason, setBlockReason] = useState('')
@@ -188,6 +188,23 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
               <span className="text-xs text-gray-400 dark:text-gray-500">
                 Asignada por {task.createdBy.name.split(' ')[0]}
               </span>
+            )}
+            {onOpenComments && (task._count?.comments ?? 0) > 0 && (
+              <button
+                onClick={() => onOpenComments(task)}
+                className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              >
+                💬 {task._count.comments}
+              </button>
+            )}
+            {onOpenComments && (task._count?.comments ?? 0) === 0 && (
+              <button
+                onClick={() => onOpenComments(task)}
+                title="Comentar"
+                className="text-xs text-gray-300 dark:text-gray-600 hover:text-primary-500 dark:hover:text-primary-400 transition-colors"
+              >
+                💬
+              </button>
             )}
           </div>
         </div>

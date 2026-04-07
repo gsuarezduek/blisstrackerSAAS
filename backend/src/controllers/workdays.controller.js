@@ -1,6 +1,12 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 
+const taskInclude = {
+  project: true,
+  createdBy: { select: { id: true, name: true } },
+  _count: { select: { comments: true } },
+}
+
 async function getOrCreateToday(req, res, next) {
   try {
     const userId = req.user.id
@@ -10,7 +16,7 @@ async function getOrCreateToday(req, res, next) {
       where: { userId_date: { userId, date } },
       include: {
         tasks: {
-          include: { project: true, createdBy: { select: { id: true, name: true } } },
+          include: taskInclude,
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -21,7 +27,7 @@ async function getOrCreateToday(req, res, next) {
         data: { userId, date },
         include: {
           tasks: {
-            include: { project: true, createdBy: { select: { id: true, name: true } } },
+            include: taskInclude,
             orderBy: { createdAt: 'desc' },
           },
         },
@@ -33,7 +39,7 @@ async function getOrCreateToday(req, res, next) {
         data: { endedAt: null, startedAt: new Date() },
         include: {
           tasks: {
-            include: { project: true, createdBy: { select: { id: true, name: true } } },
+            include: taskInclude,
             orderBy: { createdAt: 'desc' },
           },
         },
@@ -47,7 +53,7 @@ async function getOrCreateToday(req, res, next) {
         status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         workDay: { date: { lt: date } },
       },
-      include: { project: true, createdBy: { select: { id: true, name: true } } },
+      include: taskInclude,
       orderBy: { createdAt: 'desc' },
     })
 

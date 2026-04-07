@@ -137,8 +137,9 @@ team-tracker/
 │       ├── controllers/
 │       │   ├── auth.controller.js          # Login, Google OAuth, forgot/reset password
 │       │   ├── workdays.controller.js      # Jornada diaria + carry-over
-│       │   ├── tasks.controller.js         # CRUD tareas + block/unblock/star
-│       │   ├── projects.controller.js      # Proyectos + tareas + historial paginado
+│       │   ├── tasks.controller.js         # CRUD tareas + block/unblock/star/backlog
+│       │   ├── comments.controller.js      # Comentarios en tareas + notificaciones
+│       │   ├── projects.controller.js      # Proyectos + tareas + links + historial paginado
 │       │   ├── profile.controller.js       # Perfil personal + avatar + preferencias (4 flags IA)
 │       │   ├── insights.controller.js      # Insight diario con IA: generar, refrescar, feedback
 │       │   ├── roleExpectations.controller.js  # Expectativas de rol para coaching IA
@@ -155,6 +156,7 @@ team-tracker/
 │       │   ├── weeklyReport.service.js # Resumen semanal con Claude Haiku + cron viernes 14:00
 │       │   └── insightMemory.service.js # Memoria de productividad semanal + cron sábado 00:00
 │       ├── routes/
+│       │   ├── tasks.routes.js             # Tareas + comentarios
 │       │   ├── insights.routes.js          # GET / · POST /refresh · POST /feedback
 │       │   └── roleExpectations.routes.js  # GET /mine · GET / · GET /:role · PUT /:role
 │       ├── utils/
@@ -180,7 +182,7 @@ team-tracker/
         │   ├── ResetPassword.jsx     # Formulario de nueva contraseña
         │   ├── Dashboard.jsx         # Tareas del día + insight diario IA (con feedback y refresh)
         │   ├── MyProjects.jsx        # Proyectos con pills de conteos de tareas
-        │   ├── ProjectDetail.jsx     # Tareas activas + completadas semana + archivo histórico (click en usuario abre modal)
+        │   ├── ProjectDetail.jsx     # Tareas activas por persona + links útiles (editables por cualquier miembro) + completadas semana + archivo histórico
         │   ├── MyReports.jsx         # Reportes personales
         │   ├── RealTime.jsx          # Actividad del equipo en tiempo real
         │   ├── Reports.jsx           # Reportes completos (admin)
@@ -189,9 +191,10 @@ team-tracker/
         │   └── Preferences.jsx       # Sistema IA: insight diario, memoria, calidad, resumen semanal
         ├── components/
         │   ├── Navbar.jsx            # Logo + nombre + dropdown de usuario
-        │   ├── TaskCard.jsx          # Tarjeta de tarea con todas las acciones + link al proyecto
+        │   ├── TaskCard.jsx          # Tarjeta de tarea con todas las acciones + indicador 💬 de comentarios
+        │   ├── TaskCommentsModal.jsx # Modal para ver y agregar comentarios en una tarea
         │   ├── AddTaskModal.jsx      # Modal con combobox de proyecto + asignación
-        │   ├── NotificationBell.jsx  # Campana con panel (completadas en azul, bloqueadas en rojo)
+        │   ├── NotificationBell.jsx  # Campana con panel (completadas, bloqueadas, comentarios)
         │   ├── AvatarLightbox.jsx    # Overlay fullscreen para ver foto de perfil ampliada
         │   ├── FeedbackButton.jsx
         │   ├── InactivityModal.jsx
@@ -224,13 +227,14 @@ team-tracker/
 | `User` | Usuarios con rol, avatar, `isAdmin` y 4 preferencias IA |
 | `UserRole` | Roles dinámicos creados desde el panel de admin |
 | `WorkDay` | Jornada laboral por usuario por día |
-| `Task` | Tarea con estado, prioridad (starred) y registro de tiempo |
+| `Task` | Tarea con estado, prioridad (starred), backlog y registro de tiempo |
+| `TaskComment` | Comentarios en tareas; notifica al dueño y a comentadores previos |
 | `Project` | Proyectos/clientes |
-| `ProjectLink` | Links útiles asociados a un proyecto (Drive, Figma, etc.) |
+| `ProjectLink` | Links útiles asociados a un proyecto (Drive, Figma, etc.) — editables por cualquier miembro |
 | `Service` | Servicios que ofrece la agencia |
 | `ProjectService` | Relación muchos-a-muchos: proyecto ↔ servicio |
 | `ProjectMember` | Relación muchos-a-muchos: proyecto ↔ usuario |
-| `Notification` | Notificaciones tipadas (COMPLETED / BLOCKED) entre miembros del proyecto |
+| `Notification` | Notificaciones tipadas (COMPLETED / BLOCKED / ADDED_TO_PROJECT / TASK_COMMENT) |
 | `Feedback` | Mensajes de sugerencias y errores del equipo |
 | `PasswordResetToken` | Tokens de un solo uso para recuperación de contraseña |
 | `DailyInsight` | Coaching IA generado diariamente por usuario (cacheado, con feedback) |
@@ -249,6 +253,8 @@ El Dashboard separa las tareas en dos grupos:
 | **Backlog** | Depósito de tareas planificadas que no son para hoy. Se muestra contraído al final, antes de las completadas. |
 
 Las tareas nuevas se crean siempre en "Tareas del día". Cualquier tarea PENDING, PAUSED o BLOCKED puede moverse al Backlog con el botón "→ Backlog". Desde el Backlog, el botón "Agregar a hoy" la vuelve al día (incluyendo carry-over de días anteriores). Solo las tareas del día pueden iniciarse.
+
+Las tareas se muestran ordenadas de más nuevas a más antiguas dentro de cada sección.
 
 Las tareas completadas también están contraídas por defecto. Al expandir se ven las de hoy; con "Cargar más" se carga el historial de días anteriores de a 10, con fecha y duración.
 
@@ -277,6 +283,17 @@ Hasta **3 tareas** pueden estar destacadas simultáneamente. Tienen 3 niveles de
 | 3 | Rojo | Urgente |
 
 Las tareas destacadas aparecen en la sección **"Destacadas: Foco del día"** del Dashboard, por debajo de las tareas en curso. Si una tarea destacada pasa a `IN_PROGRESS`, se mueve a la sección "En curso".
+
+---
+
+## Comentarios en tareas
+
+Cualquier miembro de un proyecto puede dejar comentarios en las tareas, tanto en el Dashboard (tareas propias) como en la vista de detalle del proyecto (tareas de otros).
+
+- Las tareas con comentarios muestran un indicador 💬 N en el TaskCard.
+- Las tareas sin comentarios muestran un 💬 tenue para invitar a comentar.
+- Al hacer click se abre `TaskCommentsModal` con el historial de comentarios y un campo para agregar uno nuevo (Ctrl+Enter para enviar).
+- **Notificaciones:** al comentar se notifica al dueño de la tarea y a todos los que habían comentado antes (sin duplicados, sin auto-notificarse). Aparecen en azul en el panel de notificaciones con badge 💬.
 
 ---
 
@@ -362,7 +379,7 @@ Los administradores también ven un acceso directo a **Admin → Roles IA** para
 |----------|-------------|
 | Dashboard | Tareas del día + carry-over + destacadas + insight diario IA |
 | Mis Proyectos | Proyectos asignados con pills de conteos de tareas por estado |
-| Detalle de proyecto | Tareas activas por persona + servicios + equipo + completadas esta semana + archivo histórico |
+| Detalle de proyecto | Tareas activas por persona + links útiles + servicios + equipo + completadas esta semana + archivo histórico |
 | Mis Reportes | Historial de tareas completadas por proyecto con filtro de fechas |
 | Perfil | Avatar, datos personales, cambio de contraseña |
 | Preferencias | Control de las 4 features de IA + botón de prueba del resumen semanal |
@@ -380,7 +397,7 @@ El panel de admin soporta deep linking: `/admin?tab=role-ai` navega directamente
 
 ## Fotos de perfil
 
-Hay 10 avatares disponibles en `frontend/public/perfiles/`:
+Hay 15 avatares disponibles en `frontend/public/perfiles/`:
 
 | Archivo | Descripción |
 |---------|-------------|
@@ -406,9 +423,14 @@ Las fotos se muestran en: Navbar (dropdown), detalle de proyecto, Actividad y no
 
 ## Notificaciones
 
-Las notificaciones se generan en dos eventos:
-- **Tarea completada** → fondo azul en el panel
-- **Tarea bloqueada** → fondo rojo, con badge ⚠ sobre la foto del actor
+Las notificaciones se generan en cuatro eventos:
+
+| Tipo | Color | Descripción |
+|------|-------|-------------|
+| `COMPLETED` | Azul (primary) | Un miembro completó una tarea del proyecto |
+| `BLOCKED` | Rojo | Un miembro bloqueó una tarea; badge ⚠ sobre la foto |
+| `ADDED_TO_PROJECT` | Verde | Fuiste agregado a un proyecto; badge ＋ sobre la foto |
+| `TASK_COMMENT` | Azul | Alguien comentó en una tarea tuya o donde participaste; badge 💬 |
 
 Polling cada 30 segundos. Se marcan como leídas al abrir el panel.
 
@@ -438,8 +460,9 @@ Todas las fechas de jornadas se calculan en **America/Argentina/Buenos_Aires (UT
 5. Agrega tareas con descripción y proyecto; puede asignarla a otro miembro
 6. Hace clic en **Iniciar** — solo puede tener **una tarea activa** a la vez
 7. Desde una tarea en curso puede pausar, bloquear (requiere razón) o completar
-8. Al completar, los demás miembros del proyecto reciben una notificación
-9. Al terminar el día, hace clic en **Finalizar jornada** — la sesión se cierra
+8. Puede dejar comentarios en cualquier tarea del proyecto — el dueño y otros comentadores reciben notificación
+9. Al completar, los demás miembros del proyecto reciben una notificación
+10. Al terminar el día, hace clic en **Finalizar jornada** — la sesión se cierra
 
 ---
 

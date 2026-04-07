@@ -1,6 +1,12 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 
+const taskInclude = {
+  project: true,
+  createdBy: { select: { id: true, name: true } },
+  _count: { select: { comments: true } },
+}
+
 async function assertNoActiveTask(userId) {
   const active = await prisma.task.findFirst({ where: { userId, status: 'IN_PROGRESS' } })
   if (active) throw Object.assign(new Error('Ya tenés una tarea en curso. Pausala o completala primero.'), { status: 409 })
@@ -47,7 +53,7 @@ async function create(req, res, next) {
         workDayId: workDay.id,
         createdById: userId !== requesterId ? requesterId : null,
       },
-      include: { project: true, createdBy: { select: { id: true, name: true } } },
+      include: taskInclude,
     })
     res.status(201).json(task)
   } catch (err) { next(err) }
@@ -65,7 +71,7 @@ async function startTask(req, res, next) {
     const task = await prisma.task.update({
       where: { id: Number(req.params.id), userId },
       data: { status: 'IN_PROGRESS', startedAt: new Date() },
-      include: { project: true },
+      include: taskInclude,
     })
     res.json(task)
   } catch (err) {
@@ -79,7 +85,7 @@ async function pauseTask(req, res, next) {
     const task = await prisma.task.update({
       where: { id: Number(req.params.id), userId: req.user.id },
       data: { status: 'PAUSED', pausedAt: new Date() },
-      include: { project: true },
+      include: taskInclude,
     })
     res.json(task)
   } catch (err) {
@@ -112,7 +118,7 @@ async function resumeTask(req, res, next) {
         pausedAt:      null,
         pausedMinutes: { increment: addedMins },
       },
-      include: { project: true },
+      include: taskInclude,
     })
     res.json(task)
   } catch (err) {
@@ -127,7 +133,7 @@ async function completeTask(req, res, next) {
     const task = await prisma.task.update({
       where:   { id: Number(req.params.id), userId },
       data:    { status: 'COMPLETED', completedAt: new Date(), pausedAt: null },
-      include: { project: true },
+      include: taskInclude,
     })
 
     // Notify all other members of the same project
@@ -167,7 +173,7 @@ async function blockTask(req, res, next) {
     const task = await prisma.task.update({
       where: { id: Number(req.params.id), userId },
       data: { status: 'BLOCKED', blockedReason: reason.trim(), pausedAt: new Date() },
-      include: { project: true, createdBy: { select: { id: true, name: true } } },
+      include: taskInclude,
     })
 
     // Notificar a todos los miembros del proyecto
@@ -223,7 +229,7 @@ async function unblockTask(req, res, next) {
         pausedAt:      null,
         pausedMinutes: { increment: addedMins },
       },
-      include: { project: true, createdBy: { select: { id: true, name: true } } },
+      include: taskInclude,
     })
     res.json(task)
   } catch (err) {
@@ -286,7 +292,7 @@ async function starTask(req, res, next) {
     const updated = await prisma.task.update({
       where: { id },
       data: { starred: nextLevel },
-      include: { project: true, createdBy: { select: { id: true, name: true } } },
+      include: taskInclude,
     })
     res.json(updated)
   } catch (err) {
@@ -350,7 +356,7 @@ async function addToToday(req, res, next) {
     const updated = await prisma.task.update({
       where: { id: taskId },
       data: { isBacklog: false, workDayId: workDay.id },
-      include: { project: true, createdBy: { select: { id: true, name: true } } },
+      include: taskInclude,
     })
     res.json(updated)
   } catch (err) {
@@ -372,7 +378,7 @@ async function moveToBacklog(req, res, next) {
     const updated = await prisma.task.update({
       where: { id: taskId },
       data: { isBacklog: true },
-      include: { project: true, createdBy: { select: { id: true, name: true } } },
+      include: taskInclude,
     })
     res.json(updated)
   } catch (err) {

@@ -61,6 +61,7 @@ model User {
   tasksCreated  Task[]         @relation("TaskCreatedBy")
   feedbacks     Feedback[]
   projects      ProjectMember[]
+  taskComments  TaskComment[]
   notifications         Notification[] @relation("NotificationRecipient")
   notificationsAsActor  Notification[] @relation("NotificationActor")
   passwordResetTokens   PasswordResetToken[]
@@ -95,6 +96,7 @@ enum NotificationType {
   COMPLETED
   BLOCKED
   ADDED_TO_PROJECT
+  TASK_COMMENT
 }
 
 model Project {
@@ -207,6 +209,7 @@ model Task {
   updatedAt     DateTime   @updatedAt
 
   notifications Notification[]
+  comments      TaskComment[]
 
   @@index([userId, status])
   @@index([projectId])
@@ -233,6 +236,21 @@ model RoleExpectation {
   dependencies   Json     @default("[]")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model TaskComment {
+  id        Int          @id @default(autoincrement())
+  taskId    Int
+  task      Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User         @relation(fields: [userId], references: [id])
+  content   String
+  parentId  Int?
+  parent    TaskComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   TaskComment[] @relation("CommentReplies")
+  createdAt DateTime     @default(now())
+
+  @@index([taskId])
 }
 
 model DailyInsight {

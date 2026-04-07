@@ -6,6 +6,7 @@ import api from '../api/client'
 import useRoles from '../hooks/useRoles'
 import UserTasksModal from '../components/UserTasksModal'
 import AddTaskModal from '../components/AddTaskModal'
+import TaskCommentsModal from '../components/TaskCommentsModal'
 
 const STATUS_LABEL = {
   BLOCKED:     'Bloqueada',
@@ -65,6 +66,7 @@ export default function ProjectDetail() {
   const [showAddTask, setShowAddTask] = useState(false)
   const [linkForm, setLinkForm] = useState(null) // null = oculto, { label, url } = visible
   const [linkSaving, setLinkSaving] = useState(false)
+  const [commentTask, setCommentTask] = useState(null)
 
   // Archive state
   const [archive,      setArchive]      = useState([])
@@ -103,6 +105,18 @@ export default function ProjectDetail() {
     const { data: res } = await api.get(`/projects/${id}/tasks`)
     setData(res)
     setShowAddTask(false)
+  }
+
+  function handleCommentAdded(taskId, newCount) {
+    setData(prev => ({
+      ...prev,
+      byUser: prev.byUser.map(u => ({
+        ...u,
+        tasks: u.tasks.map(t =>
+          t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t
+        ),
+      })),
+    }))
   }
 
   async function handleAddLink() {
@@ -353,7 +367,27 @@ export default function ProjectDetail() {
                                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${STATUS_CLASS[task.status]}`}>
                                   {STATUS_LABEL[task.status]}
                                 </span>
-                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{linkify(task.description)}</p>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{linkify(task.description)}</p>
+                                  <div className="mt-1">
+                                    {(task._count?.comments ?? 0) > 0 ? (
+                                      <button
+                                        onClick={() => setCommentTask(task)}
+                                        className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                                      >
+                                        💬 {task._count.comments} comentario{task._count.comments !== 1 ? 's' : ''}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => setCommentTask(task)}
+                                        title="Agregar comentario"
+                                        className="text-xs text-gray-300 dark:text-gray-600 hover:text-primary-500 dark:hover:text-primary-400 transition-colors"
+                                      >
+                                        💬 Comentar
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                               {task.status === 'BLOCKED' && task.blockedReason && (
                                 <div className="ml-0 flex items-start gap-1.5 pl-2 border-l-2 border-red-300 dark:border-red-700">
@@ -458,6 +492,14 @@ export default function ProjectDetail() {
           lockedProject={data.project}
           onAdd={handleAddTask}
           onClose={() => setShowAddTask(false)}
+        />
+      )}
+
+      {commentTask && (
+        <TaskCommentsModal
+          task={{ ...commentTask, project: commentTask.project ?? data?.project }}
+          onClose={() => setCommentTask(null)}
+          onCommentAdded={count => handleCommentAdded(commentTask.id, count)}
         />
       )}
     </div>

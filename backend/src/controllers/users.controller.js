@@ -103,7 +103,7 @@ async function getUserTasks(req, res, next) {
     const [activeTasks, completedTasks] = await Promise.all([
       prisma.task.findMany({
         where: { userId, status: { not: 'COMPLETED' } },
-        include: { project: true },
+        include: { project: true, _count: { select: { comments: true } } },
         orderBy: { createdAt: 'desc' },
       }),
       prisma.task.findMany({

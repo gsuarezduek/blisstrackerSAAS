@@ -58,6 +58,7 @@ Full-stack task tracker for a marketing agency. Backend is a REST API; frontend 
 - **Email** is sent via Resend HTTP API (`src/services/email.service.js`) — not SMTP. Railway blocks outbound SMTP ports.
 - **Prisma singleton** at `src/lib/prisma.js` — all controllers import from here to avoid connection pool exhaustion.
 - **Shared utilities:** `src/utils/dates.js` exports `todayString()` (Buenos Aires timezone).
+- **Shared task include:** `tasks.controller.js` and `workdays.controller.js` each define a `taskInclude` constant (`{ project, createdBy, _count: { comments } }`) used in all task queries so the comment count is always returned.
 - **Weekly AI report** at `src/services/weeklyReport.service.js` — generates productivity analysis with Claude Haiku, sent every Friday at 14:00 ART via `node-cron`. Users are processed sequentially with a 3s delay between each to stay within the Claude API rate limit. Includes user memory profile (if `insightMemoryEnabled`) and role expectations in the prompt context, producing an additional `omisionesRol` field in the analysis (missing recurring role tasks for the week). Both Claude responses strip markdown code fences before JSON parsing.
 - **Insight memory** at `src/services/insightMemory.service.js` — generates a weekly learning profile per user (tendencias, fortalezas, areasDeAtencion, estadisticas) using Claude Haiku. Updated every Saturday at 00:00 ART via `node-cron`. Sequential processing with 3s delay.
 
@@ -87,7 +88,13 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced on the backend v
 
 **Starred tasks:** Up to 3 tasks can be starred simultaneously. `starred` is an Int 0–3 (0=none, 1=yellow, 2=orange, 3=red). Starred tasks appear in a dedicated "Destacadas: Foco del día" section above other statuses but below "En curso". A starred IN_PROGRESS task appears only in "En curso".
 
-**Notifications:** Typed with `NotificationType` enum (`COMPLETED` / `BLOCKED`). BLOCKED notifications render with red background in the bell dropdown.
+**Task ordering:** Tasks are displayed newest-first within each section. The backend returns tasks with `orderBy: { createdAt: 'desc' }` and the Dashboard also sorts in the frontend to guarantee order after local state updates.
+
+**Task comments:** Any project member can comment on any task in the project. Comments are stored in `TaskComment` with `content` (text), `taskId`, `userId`, and optional `parentId` (for future threading). The `_count.comments` field is always included in task responses so the 💬 indicator stays accurate across all state transitions. Notifications of type `TASK_COMMENT` are sent to the task owner and all previous unique commenters (excluding the current commenter). Comments are accessible via `GET/POST /api/tasks/:id/comments` — both require project membership.
+
+**Notifications:** Typed with `NotificationType` enum (`COMPLETED` / `BLOCKED` / `ADDED_TO_PROJECT` / `TASK_COMMENT`). BLOCKED = red background, TASK_COMMENT = blue background with 💬 badge, ADDED_TO_PROJECT = green background with ＋ badge.
+
+**Project links:** Stored in `ProjectLink`. Any project member (not just admins) can add or delete links via `PUT /api/projects/:id/links`. The backend verifies membership before allowing writes. Links are always visible in `ProjectDetail` even when the list is empty, with an inline form to add new ones.
 
 **Roles and admin access:** `User.role` is a plain `String` referencing `UserRole.name` — it defines the team role (e.g. "DESIGNER", "CM"). Admin access is controlled by a separate `User.isAdmin Boolean` field, fully decoupled from the role. This allows a user to have any team role and also be admin. `adminOnly` middleware checks `req.user.isAdmin`. When a user is deactivated, they are automatically removed from all projects.
 
@@ -111,7 +118,7 @@ The context sent to Claude includes: current task states + blocked reasons + car
 
 **User insight memory:** Generated weekly (Saturday 00:00 ART) by `insightMemory.service.js`. Analyzes the last 4 weeks of task data and uses Claude Haiku to produce: `tendencias`, `fortalezas`, `areasDeAtencion`, and raw `estadisticas` (`{ tasaCompletado, promedioTareasPorDia, proyectosSimultaneos }`). Stored in `UserInsightMemory` (one record per user, upserted weekly). Included in both the daily insight context (when `insightMemoryEnabled` is true) and the weekly email report.
 
-**Project detail view:** `/my-projects/:id` shows active tasks grouped by user, tasks completed this week, and a lazy-loaded paginated archive of all completed tasks (20 at a time, `GET /api/projects/:id/completed?skip=N`). Clicking a user's header row opens `UserTasksModal` with all their active tasks and completed-this-week tasks.
+**Project detail view:** `/my-projects/:id` shows active tasks grouped by user, tasks completed this week, and a lazy-loaded paginated archive of all completed tasks (20 at a time, `GET /api/projects/:id/completed?skip=N`). Clicking a user's header row opens `UserTasksModal` with all their active tasks and completed-this-week tasks. Each task shows a 💬 button to open `TaskCommentsModal`.
 
 **Backlog:** Tasks have an `isBacklog Boolean @default(false)` field. Backlog tasks belong to the current workday but are hidden from the main focus view. They appear in a collapsible "Backlog" section in the Dashboard. `PATCH /api/tasks/:id/move-to-backlog` sets `isBacklog=true` (blocked for IN_PROGRESS and COMPLETED). `PATCH /api/tasks/:id/add-to-today` sets `isBacklog=false` and moves the task to today's workday — carry-over tasks from previous days can also be added to today this way. Backlog tasks show an "Agregar a hoy" button instead of "Iniciar". The backend blocks `start`, `resume`, and `unblock` on backlog tasks with a 400 error. Carry-over tasks from previous days are grouped into the backlog in the Dashboard.
 
@@ -127,7 +134,8 @@ The context sent to Claude includes: current task states + blocked reasons + car
 - When a model has two relations to the same model, named relations are required (see `Task.createdBy` / `Task.user` both pointing to `User`).
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`.
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`.
+- `TaskComment.content` is the text field (not `text`) — the table existed prior to migration with this column name. The `parentId` self-relation field exists in the DB for future threading but is not used by the UI yet.
 
 ### API routes summary
 ```
@@ -160,10 +168,13 @@ PATCH  /api/tasks/:id/move-to-backlog    # isBacklog=true (blocked if IN_PROGRES
 GET    /api/tasks/completed              # paginated history (?skip=N&before=YYYY-MM-DD, 10/page)
 PATCH  /api/tasks/:id/duration           # admin only
 DELETE /api/tasks/:id
+GET    /api/tasks/:id/comments           # list comments (project member or admin)
+POST   /api/tasks/:id/comments           # add comment + notify owner + previous commenters
 
 GET    /api/projects                     # user's projects with taskCounts (or all if admin)
 GET    /api/projects/:id/tasks           # active tasks + completedThisWeek + project info
 GET    /api/projects/:id/completed       # paginated completed history (?skip=N, returns hasMore)
+PUT    /api/projects/:id/links           # save all links for a project (any project member or admin)
 GET    /api/realtime                     # team snapshot for today
 GET    /api/reports/by-project
 GET    /api/reports/by-user

@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar'
 import TaskCard from '../components/TaskCard'
 import AddTaskModal from '../components/AddTaskModal'
 import InactivityModal from '../components/InactivityModal'
+import TaskCommentsModal from '../components/TaskCommentsModal'
 import { useInactivity } from '../hooks/useInactivity'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
@@ -28,6 +29,7 @@ export default function Dashboard() {
   const [completedHasMore,  setCompletedHasMore]  = useState(false)
   const [completedLoading,  setCompletedLoading]  = useState(false)
   const [autoPausedTask, setAutoPausedTask] = useState(null)
+  const [commentTask, setCommentTask] = useState(null)
 
   // AI Insight
   const [insight, setInsight] = useState(null)
@@ -153,14 +155,25 @@ export default function Dashboard() {
     }
   }
 
+  function handleCommentAdded(taskId, newCount) {
+    const update = list => list.map(t =>
+      t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t
+    )
+    setWorkDay(prev => ({ ...prev, tasks: update(prev.tasks) }))
+    setCarryOver(prev => update(prev))
+  }
+
   // Derived state
   const tasks = workDay?.tasks ?? []
 
-  // Today focus = tasks in today's workday that are NOT backlog
-  const focusTasks = tasks.filter(t => !t.isBacklog)
+  // Today focus = tasks in today's workday that are NOT backlog, newest first
+  const focusTasks = tasks
+    .filter(t => !t.isBacklog)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
-  // Backlog = today's backlog tasks + carry-over from previous days
+  // Backlog = today's backlog tasks + carry-over from previous days, newest first
   const allBacklog = [...tasks.filter(t => t.isBacklog), ...carryOver]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
   const activeTask = focusTasks.find(t => t.status === 'IN_PROGRESS') ?? null
   const hasActiveTask = !!activeTask
@@ -404,7 +417,7 @@ export default function Dashboard() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">En curso</h2>
             <div className="space-y-2">
               {inProgress.map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} />
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onOpenComments={setCommentTask} />
               ))}
             </div>
           </section>
@@ -416,7 +429,7 @@ export default function Dashboard() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Destacadas: Foco del día</h2>
             <div className="space-y-2">
               {starred.map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} />
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} onOpenComments={setCommentTask} />
               ))}
             </div>
           </section>
@@ -428,7 +441,7 @@ export default function Dashboard() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Pausadas</h2>
             <div className="space-y-2">
               {paused.map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} />
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} onOpenComments={setCommentTask} />
               ))}
             </div>
           </section>
@@ -442,7 +455,7 @@ export default function Dashboard() {
             </h2>
             <div className="space-y-2">
               {blocked.map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} />
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} onOpenComments={setCommentTask} />
               ))}
             </div>
           </section>
@@ -454,7 +467,7 @@ export default function Dashboard() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Pendientes</h2>
             <div className="space-y-2">
               {pending.map(t => (
-                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} />
+                <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} onOpenComments={setCommentTask} />
               ))}
             </div>
           </section>
@@ -506,6 +519,7 @@ export default function Dashboard() {
                     hasActiveTask={hasActiveTask}
                     backlog
                     onAddToToday={handleAddToToday}
+                    onOpenComments={setCommentTask}
                   />
                 ))}
               </div>
@@ -616,6 +630,14 @@ export default function Dashboard() {
       </main>
 
       {showModal && <AddTaskModal onAdd={handleAddTask} onClose={() => setShowModal(false)} />}
+
+      {commentTask && (
+        <TaskCommentsModal
+          task={commentTask}
+          onClose={() => setCommentTask(null)}
+          onCommentAdded={count => handleCommentAdded(commentTask.id, count)}
+        />
+      )}
 
       <InactivityModal
         phase={autoPausedTask ? 'auto_paused' : null}

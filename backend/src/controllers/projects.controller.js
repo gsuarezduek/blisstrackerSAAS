@@ -189,7 +189,10 @@ async function projectTasks(req, res, next) {
           projectId,
           status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         },
-        include: { user: { select: { id: true, name: true, role: true, avatar: true } } },
+        include: {
+          user: { select: { id: true, name: true, role: true, avatar: true } },
+          _count: { select: { comments: true } },
+        },
         orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
       }),
       prisma.task.findMany({
@@ -211,6 +214,7 @@ async function projectTasks(req, res, next) {
       byUser[uid].tasks.push({
         id: task.id, description: task.description, status: task.status,
         blockedReason: task.blockedReason, createdAt: task.createdAt, startedAt: task.startedAt,
+        projectId: task.projectId, _count: task._count,
       })
     }
 
