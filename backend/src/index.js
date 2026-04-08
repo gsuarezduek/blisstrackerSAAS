@@ -7,16 +7,26 @@ const cron = require('node-cron')
 const { sendAllWeeklyReports } = require('./services/weeklyReport.service')
 const { updateAllMemories }    = require('./services/insightMemory.service')
 
+// In-memory locks — prevent overlapping runs if a job takes longer than its schedule
+let weeklyReportRunning = false
+let insightMemoryRunning = false
+
 // Cron: resumen semanal — viernes 14:00 hora Buenos Aires
 cron.schedule('0 14 * * 5', async () => {
+  if (weeklyReportRunning) { console.log('[WeeklyReport] Ya en ejecución, se omite.'); return }
+  weeklyReportRunning = true
   console.log('[WeeklyReport] Iniciando envío automático (viernes 14:00 ART)...')
-  await sendAllWeeklyReports()
+  try { await sendAllWeeklyReports() }
+  finally { weeklyReportRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: actualizar memoria de insights — sábados 00:00 hora Buenos Aires
 cron.schedule('0 0 * * 6', async () => {
+  if (insightMemoryRunning) { console.log('[InsightMemory] Ya en ejecución, se omite.'); return }
+  insightMemoryRunning = true
   console.log('[InsightMemory] Iniciando actualización semanal (sábado 00:00 ART)...')
-  await updateAllMemories()
+  try { await updateAllMemories() }
+  finally { insightMemoryRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: auto-pausar tareas EN CURSO al final del día — medianoche hora Buenos Aires

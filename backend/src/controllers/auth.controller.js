@@ -139,4 +139,10 @@ async function googleLogin(req, res, next) {
   }
 }
 
-module.exports = { login, me, forgotPassword, resetPassword, googleLogin }
+function logout(req, res) {
+  // JWT is stateless — actual token removal happens on the client.
+  // This endpoint exists as a clean contract and for future token blacklisting.
+  res.json({ ok: true })
+}
+
+module.exports = { login, me, forgotPassword, resetPassword, googleLogin, logout }

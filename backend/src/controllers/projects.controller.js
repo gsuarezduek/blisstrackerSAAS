@@ -297,6 +297,8 @@ async function saveLinks(req, res, next) {
       if (!l.label?.trim() || !l.url?.trim()) {
         return res.status(400).json({ error: 'Cada link requiere label y url' })
       }
+      try { new URL(l.url.trim()) }
+      catch { return res.status(400).json({ error: `URL inválida: ${l.url}` }) }
     }
 
     await prisma.$transaction([

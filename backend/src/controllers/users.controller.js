@@ -17,11 +17,16 @@ async function list(req, res, next) {
   } catch (err) { next(err) }
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 async function create(req, res, next) {
   try {
     const { name, email, password, role, isAdmin = false } = req.body
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: 'Todos los campos son requeridos' })
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ error: 'Email inválido' })
     }
     const hashed = await bcrypt.hash(password, 10)
     const user = await prisma.user.create({
@@ -47,7 +52,10 @@ async function update(req, res, next) {
     const { name, email, role, active, password, isAdmin } = req.body
     const data = {}
     if (name !== undefined) data.name = name
-    if (email !== undefined) data.email = email
+    if (email !== undefined) {
+      if (!EMAIL_REGEX.test(email)) return res.status(400).json({ error: 'Email inválido' })
+      data.email = email
+    }
     if (role !== undefined) data.role = role
     if (active !== undefined) data.active = active
     if (isAdmin !== undefined) data.isAdmin = !!isAdmin

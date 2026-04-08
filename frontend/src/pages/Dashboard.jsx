@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import TaskCard from '../components/TaskCard'
@@ -167,15 +167,18 @@ export default function Dashboard() {
   const tasks = workDay?.tasks ?? []
 
   // Today focus = tasks in today's workday that are NOT backlog, newest first
-  const focusTasks = tasks
-    .filter(t => !t.isBacklog)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  const focusTasks = useMemo(() =>
+    tasks.filter(t => !t.isBacklog).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [tasks]
+  )
 
   // Backlog = today's backlog tasks + carry-over from previous days, newest first
-  const allBacklog = [...tasks.filter(t => t.isBacklog), ...carryOver]
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  const allBacklog = useMemo(() =>
+    [...tasks.filter(t => t.isBacklog), ...carryOver].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [tasks, carryOver]
+  )
 
-  const activeTask = focusTasks.find(t => t.status === 'IN_PROGRESS') ?? null
+  const activeTask = useMemo(() => focusTasks.find(t => t.status === 'IN_PROGRESS') ?? null, [focusTasks])
   const hasActiveTask = !!activeTask
 
   // Inactivity detection
@@ -228,23 +231,21 @@ export default function Dashboard() {
   }
 
   // Sections from focus tasks
-  const inProgress = focusTasks.filter(t => t.status === 'IN_PROGRESS')
-  const completed  = focusTasks.filter(t => t.status === 'COMPLETED')
-
-  const starred = focusTasks
-    .filter(t => (t.starred ?? 0) > 0 && t.status !== 'COMPLETED' && t.status !== 'IN_PROGRESS')
-  const starredIds = new Set(starred.map(t => t.id))
-
-  const paused  = focusTasks.filter(t => t.status === 'PAUSED'  && !starredIds.has(t.id))
-  const blocked = focusTasks.filter(t => t.status === 'BLOCKED' && !starredIds.has(t.id))
-  const pending = focusTasks.filter(t => t.status === 'PENDING' && !starredIds.has(t.id))
-
-  const totalMins = completed.reduce((acc, t) => {
-    if (!t.startedAt || !t.completedAt) return acc
-    return acc + Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
-  }, 0)
-
-  const activeFocusCount = focusTasks.filter(t => t.status !== 'COMPLETED').length
+  const { inProgress, completed, starred, paused, blocked, pending, totalMins, activeFocusCount } = useMemo(() => {
+    const inProgress = focusTasks.filter(t => t.status === 'IN_PROGRESS')
+    const completed  = focusTasks.filter(t => t.status === 'COMPLETED')
+    const starred    = focusTasks.filter(t => (t.starred ?? 0) > 0 && t.status !== 'COMPLETED' && t.status !== 'IN_PROGRESS')
+    const starredIds = new Set(starred.map(t => t.id))
+    const paused     = focusTasks.filter(t => t.status === 'PAUSED'  && !starredIds.has(t.id))
+    const blocked    = focusTasks.filter(t => t.status === 'BLOCKED' && !starredIds.has(t.id))
+    const pending    = focusTasks.filter(t => t.status === 'PENDING' && !starredIds.has(t.id))
+    const totalMins  = completed.reduce((acc, t) => {
+      if (!t.startedAt || !t.completedAt) return acc
+      return acc + Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+    }, 0)
+    const activeFocusCount = focusTasks.filter(t => t.status !== 'COMPLETED').length
+    return { inProgress, completed, starred, paused, blocked, pending, totalMins, activeFocusCount }
+  }, [focusTasks])
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

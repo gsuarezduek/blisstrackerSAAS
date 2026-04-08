@@ -12,6 +12,14 @@ async function assertNoActiveTask(userId) {
   if (active) throw Object.assign(new Error('Ya tenés una tarea en curso. Pausala o completala primero.'), { status: 409 })
 }
 
+// Converts a Prisma P2002 on the active-task index into a clean 409
+function handleActiveTaskConflict(err) {
+  if (err.code === 'P2002' && err.meta?.target?.includes?.('one_active_task_per_user')) {
+    return Object.assign(new Error('Ya tenés una tarea en curso. Pausala o completala primero.'), { status: 409 })
+  }
+  return err
+}
+
 async function create(req, res, next) {
   try {
     const requesterId = req.user.id
@@ -76,7 +84,7 @@ async function startTask(req, res, next) {
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
-    next(err)
+    next(handleActiveTaskConflict(err))
   }
 }
 
@@ -123,7 +131,7 @@ async function resumeTask(req, res, next) {
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
-    next(err)
+    next(handleActiveTaskConflict(err))
   }
 }
 
@@ -234,7 +242,7 @@ async function unblockTask(req, res, next) {
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
-    next(err)
+    next(handleActiveTaskConflict(err))
   }
 }
 
@@ -370,7 +378,7 @@ async function addToToday(req, res, next) {
     res.json(updated)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
-    next(err)
+    next(handleActiveTaskConflict(err))
   }
 }
 
