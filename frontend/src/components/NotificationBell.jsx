@@ -1,5 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../api/client'
+
+const FILTERS = [
+  { key: 'all',              label: 'Todas',       types: null },
+  { key: 'TASK_MENTION',     label: '@',           types: ['TASK_MENTION'] },
+  { key: 'TASK_COMMENT',     label: '💬',          types: ['TASK_COMMENT'] },
+  { key: 'BLOCKED',          label: '🔒',          types: ['BLOCKED'] },
+  { key: 'COMPLETED',        label: '✓',           types: ['COMPLETED'] },
+  { key: 'ADDED_TO_PROJECT', label: '＋',          types: ['ADDED_TO_PROJECT'] },
+]
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -12,9 +22,25 @@ function timeAgo(dateStr) {
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState([])
   const [open,          setOpen]          = useState(false)
+  const [activeFilter,  setActiveFilter]  = useState('all')
   const containerRef = useRef(null)
 
   const unreadCount = notifications.filter(n => !n.read).length
+
+  const filtered = useMemo(() => {
+    const f = FILTERS.find(f => f.key === activeFilter)
+    if (!f?.types) return notifications
+    return notifications.filter(n => f.types.includes(n.type))
+  }, [notifications, activeFilter])
+
+  const unreadByType = useMemo(() => {
+    const counts = {}
+    for (const f of FILTERS) {
+      if (!f.types) continue
+      counts[f.key] = notifications.filter(n => !n.read && f.types.includes(n.type)).length
+    }
+    return counts
+  }, [notifications])
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -46,6 +72,7 @@ export default function NotificationBell() {
   async function handleOpen() {
     const wasOpen = open
     setOpen(prev => !prev)
+    if (wasOpen) setActiveFilter('all')
 
     // Mark all as read when opening
     if (!wasOpen && unreadCount > 0) {
@@ -76,47 +103,87 @@ export default function NotificationBell() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-8 w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b dark:border-gray-700 flex items-center justify-between">
-            <span className="font-semibold text-gray-900 dark:text-white text-sm">Notificaciones</span>
-            {notifications.length > 0 && (
-              <span className="text-xs text-gray-400 dark:text-gray-500">{notifications.length} recientes</span>
-            )}
+        <div className="fixed inset-x-2 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-8 sm:w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
+          <div className="px-4 pt-3 pb-2 border-b dark:border-gray-700">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="font-semibold text-gray-900 dark:text-white text-sm">Notificaciones</span>
+              {notifications.length > 0 && (
+                <span className="text-xs text-gray-400 dark:text-gray-500">{notifications.length} recientes</span>
+              )}
+            </div>
+            {/* Filter pills */}
+            <div className="flex gap-1 flex-wrap">
+              {FILTERS.map(f => {
+                const badge = f.types ? unreadByType[f.key] : 0
+                const isActive = activeFilter === f.key
+                return (
+                  <button
+                    key={f.key}
+                    onClick={() => setActiveFilter(f.key)}
+                    className={`relative text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                      isActive
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {f.label}
+                    {badge > 0 && (
+                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none">
+                        {badge > 9 ? '9+' : badge}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
-            {notifications.length === 0 ? (
+          <div className="max-h-80 overflow-y-auto">
+            {filtered.length === 0 ? (
               <div className="text-center py-10 text-gray-400 dark:text-gray-500">
                 <p className="text-2xl mb-2">🔔</p>
-                <p className="text-sm">Sin notificaciones todavía</p>
+                <p className="text-sm">
+                  {notifications.length === 0 ? 'Sin notificaciones todavía' : 'Sin notificaciones de este tipo'}
+                </p>
               </div>
             ) : (
-              notifications.map(n => {
+              filtered.map(n => {
                 const isBlocked      = n.type === 'BLOCKED'
                 const isAddedProject = n.type === 'ADDED_TO_PROJECT'
                 const isComment      = n.type === 'TASK_COMMENT'
+                const isMention      = n.type === 'TASK_MENTION'
 
                 const bgClass = isBlocked
-                  ? (!n.read ? 'bg-red-100 dark:bg-red-900/40'   : 'bg-red-50 dark:bg-red-900/20')
+                  ? (!n.read ? 'bg-red-100 dark:bg-red-900/40'      : 'bg-red-50 dark:bg-red-900/20')
                   : isAddedProject
                     ? (!n.read ? 'bg-green-100 dark:bg-green-900/40' : 'bg-green-50 dark:bg-green-900/20')
                     : isComment
                       ? (!n.read ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-blue-50 dark:bg-blue-900/20')
-                      : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
+                      : isMention
+                        ? (!n.read ? 'bg-purple-100 dark:bg-purple-900/40' : 'bg-purple-50 dark:bg-purple-900/20')
+                        : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
 
-                const dotClass = isBlocked ? 'bg-red-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : 'bg-primary-500'
+                const dotClass = isBlocked ? 'bg-red-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : isMention ? 'bg-purple-500' : 'bg-primary-500'
                 const textClass = isBlocked
                   ? 'text-red-800 dark:text-red-200'
                   : isAddedProject
                     ? 'text-green-800 dark:text-green-200'
                     : isComment
                       ? 'text-blue-800 dark:text-blue-200'
-                      : 'text-gray-800 dark:text-gray-200'
+                      : isMention
+                        ? 'text-purple-800 dark:text-purple-200'
+                        : 'text-gray-800 dark:text-gray-200'
+
+                const dest = n.projectId
+                  ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
+                  : null
 
                 return (
-                  <div
+                  <Link
                     key={n.id}
-                    className={`px-4 py-3 border-b dark:border-gray-700 last:border-b-0 transition-colors ${bgClass}`}
+                    to={dest ?? '#'}
+                    onClick={() => setOpen(false)}
+                    className={`block px-4 py-3 border-b dark:border-gray-700 last:border-b-0 transition-colors hover:brightness-95 ${bgClass}`}
                   >
                     <div className="flex items-start gap-2.5">
                       <div className="relative flex-shrink-0 mt-0.5">
@@ -134,19 +201,29 @@ export default function NotificationBell() {
                         {isComment && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-blue-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">💬</span>
                         )}
+                        {isMention && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-[8px] leading-none">@</span>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm leading-snug ${textClass}`}>
                           <span className="font-semibold">{n.actor.name}</span>{' '}
                           {n.message}
                         </p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{timeAgo(n.createdAt)}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {n.project?.name && (
+                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded px-1.5 py-0.5 truncate max-w-[140px]">
+                              {n.project.name}
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(n.createdAt)}</span>
+                        </div>
                       </div>
                       {!n.read && (
                         <span className={`w-2 h-2 rounded-full ${dotClass} flex-shrink-0 mt-1.5`} />
                       )}
                     </div>
-                  </div>
+                  </Link>
                 )
               })
             )}

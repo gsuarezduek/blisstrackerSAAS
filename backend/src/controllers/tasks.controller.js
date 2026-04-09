@@ -165,7 +165,7 @@ async function completeTask(req, res, next) {
           taskId:    task.id,
           projectId: task.projectId,
           type:      'COMPLETED',
-          message:   `completó "${desc}" en ${task.project.name}`,
+          message:   `completó "${desc}"`,
         })),
       })
     }
@@ -204,7 +204,7 @@ async function blockTask(req, res, next) {
           taskId:    task.id,
           projectId: task.projectId,
           type:      'BLOCKED',
-          message:   `bloqueó "${desc}" en ${task.project.name}`,
+          message:   `bloqueó "${desc}"`,
         })),
       })
     }

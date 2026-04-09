@@ -3,6 +3,7 @@ import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import useRoles from '../hooks/useRoles'
 import AvatarLightbox from './AvatarLightbox'
+import TaskCommentsModal from './TaskCommentsModal'
 
 const STATUS_LABEL = {
   BLOCKED:     'Bloqueada',
@@ -26,6 +27,7 @@ export default function UserTasksModal({ user, onClose }) {
   const [completedThisWeek, setCompletedThisWeek] = useState([])
   const [loading, setLoading] = useState(true)
   const [lightbox, setLightbox] = useState(false)
+  const [commentTask, setCommentTask] = useState(null)
 
   useEffect(() => {
     api.get(`/users/${user.id}/tasks`)
@@ -88,14 +90,23 @@ export default function UserTasksModal({ user, onClose }) {
                       .slice()
                       .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9))
                       .map(task => (
-                        <div key={task.id} className="flex items-start gap-2.5 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
+                        <button
+                          key={task.id}
+                          onClick={() => setCommentTask({ ...task, project })}
+                          className="w-full flex items-start gap-2.5 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors rounded px-1 -mx-1"
+                        >
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${STATUS_CLASS[task.status]}`}>
                             {STATUS_LABEL[task.status]}
                           </span>
-                          <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
-                            {linkify(task.description)}
-                          </p>
-                        </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug text-left">
+                              {linkify(task.description)}
+                            </p>
+                            {(task._count?.comments ?? 0) > 0 && (
+                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">💬 {task._count.comments}</p>
+                            )}
+                          </div>
+                        </button>
                       ))}
                   </div>
                 </div>
@@ -110,7 +121,11 @@ export default function UserTasksModal({ user, onClose }) {
               </p>
               <div className="space-y-1.5">
                 {completedThisWeek.map(task => (
-                  <div key={task.id} className="flex items-start gap-2.5 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
+                  <button
+                    key={task.id}
+                    onClick={() => setCommentTask(task)}
+                    className="w-full flex items-start gap-2.5 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-b-0 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors rounded px-1 -mx-1"
+                  >
                     <span className="text-green-500 flex-shrink-0 mt-0.5 text-sm">✓</span>
                     <div className="min-w-0">
                       <p className="text-sm text-gray-500 dark:text-gray-400 leading-snug line-through">
@@ -118,7 +133,7 @@ export default function UserTasksModal({ user, onClose }) {
                       </p>
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{task.project.name}</p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -130,6 +145,13 @@ export default function UserTasksModal({ user, onClose }) {
           src={`/perfiles/${user.avatar || 'bee.png'}`}
           alt={user.name}
           onClose={() => setLightbox(false)}
+        />
+      )}
+      {commentTask && (
+        <TaskCommentsModal
+          task={commentTask}
+          onClose={() => setCommentTask(null)}
+          onCommentAdded={count => setCommentTask(prev => ({ ...prev, _count: { ...prev._count, comments: count } }))}
         />
       )}
     </div>

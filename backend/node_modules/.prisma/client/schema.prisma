@@ -97,6 +97,7 @@ enum NotificationType {
   BLOCKED
   ADDED_TO_PROJECT
   TASK_COMMENT
+  TASK_MENTION
 }
 
 model Project {

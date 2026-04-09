@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { linkify } from '../utils/linkify'
 import api from '../api/client'
@@ -60,6 +60,7 @@ function fmtDate(iso, tz = 'America/Argentina/Buenos_Aires') {
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user: authUser } = useAuth()
   const { labelFor } = useRoles()
   const [data,    setData]    = useState(null)
@@ -98,6 +99,19 @@ export default function ProjectDetail() {
   useEffect(() => {
     api.get('/projects').then(r => setProjectList(r.data)).catch(() => {})
   }, [])
+
+  // Abrir modal de comentarios desde ?task=:id (eg. al llegar desde una notificación)
+  useEffect(() => {
+    const taskId = Number(searchParams.get('task'))
+    if (!taskId || !data) return
+    let found = null
+    for (const u of data.byUser ?? []) {
+      found = u.tasks.find(t => t.id === taskId)
+      if (found) break
+    }
+    if (!found) found = data.completedThisWeek?.find(t => t.id === taskId)
+    if (found) setCommentTask(found)
+  }, [data, searchParams])
 
   const loadArchive = useCallback(async (skip = 0) => {
     setArchiveLoading(true)
@@ -573,7 +587,10 @@ export default function ProjectDetail() {
                                   {STATUS_LABEL[task.status]}
                                 </span>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{linkify(task.description)}</p>
+                                  <p
+                                    onClick={() => setCommentTask(task)}
+                                    className="text-sm text-gray-700 dark:text-gray-300 leading-snug cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                                  >{linkify(task.description)}</p>
                                   <div className="mt-1">
                                     {(task._count?.comments ?? 0) > 0 ? (
                                       <button

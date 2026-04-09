@@ -86,6 +86,28 @@ async function list(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Project members list (any project member or admin can call this)
+async function getMembers(req, res, next) {
+  try {
+    const id = await resolveProjectId(req.params.id)
+    if (!id) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    if (!req.user.isAdmin) {
+      const member = await prisma.projectMember.findUnique({
+        where: { projectId_userId: { projectId: id, userId: req.user.id } },
+      })
+      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    }
+
+    const members = await prisma.projectMember.findMany({
+      where: { projectId: id },
+      include: { user: { select: { id: true, name: true, avatar: true } } },
+      orderBy: { user: { name: 'asc' } },
+    })
+    res.json(members.map(m => m.user))
+  } catch (err) { next(err) }
+}
+
 // Admin: all projects including inactive
 async function listAll(req, res, next) {
   try {
@@ -464,4 +486,4 @@ async function saveSituation(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, getGlobalSettings, saveGlobalSettings, sendTestEmail, getAiUsage }
+module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, getGlobalSettings, saveGlobalSettings, sendTestEmail, getAiUsage, getMembers }

@@ -1,8 +1,23 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import { useAuth } from '../context/AuthContext'
 import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
+
+// Resalta @menciones en texto plano (igual que el regex del backend: 1 o 2 palabras)
+function renderWithMentions(text) {
+  const parts = []
+  let lastIndex = 0
+  const regex = /@([A-Za-záéíóúÁÉÍÓÚñÑüÜ]+(?:\s+[A-Za-záéíóúÁÉÍÓÚñÑüÜ]+)?)/g
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index))
+    parts.push(<span key={match.index} className="text-purple-600 dark:text-purple-400 font-medium">{match[0]}</span>)
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex))
+  return parts.length > 0 ? parts : text
+}
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -46,6 +61,15 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   const bottomRef                 = useRef(null)
   const textareaRef               = useRef(null)
 
+  // @mention autocomplete
+  const [members, setMembers]               = useState([])
+  const [mentionQuery, setMentionQuery]     = useState(null)  // null = inactive
+  const [mentionStart, setMentionStart]     = useState(-1)
+  const [mentionIdx, setMentionIdx]         = useState(0)
+  const mentionMatches = mentionQuery !== null
+    ? members.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    : []
+
   // Edit state
   const [editing, setEditing]         = useState(false)
   const [editDesc, setEditDesc]       = useState(task.description)
@@ -61,6 +85,30 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
       .then(r => setComments(r.data))
       .finally(() => setLoading(false))
   }, [task.id])
+
+  useEffect(() => {
+    const projectId = task.project?.id ?? task.projectId
+    if (projectId) {
+      api.get(`/projects/${projectId}/members`)
+        .then(r => setMembers(r.data))
+        .catch(() => {})
+    }
+  }, [task.project?.id, task.projectId])
+
+  const selectMention = useCallback((member) => {
+    const cursorPos = textareaRef.current?.selectionStart ?? text.length
+    const before = text.slice(0, mentionStart)
+    const after  = text.slice(cursorPos)
+    const newText = `${before}@${member.name} ${after}`
+    setText(newText)
+    setMentionQuery(null)
+    setMentionStart(-1)
+    const newCursor = mentionStart + member.name.length + 2
+    setTimeout(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(newCursor, newCursor)
+    }, 0)
+  }, [text, mentionStart])
 
   useEffect(() => {
     if (!loading) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -105,7 +153,48 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
     }
   }
 
+  function handleTextChange(e) {
+    const val = e.target.value
+    const pos = e.target.selectionStart
+    setText(val)
+    // Detect if cursor is inside a @mention being typed
+    const before = val.slice(0, pos)
+    const atIdx  = before.lastIndexOf('@')
+    if (atIdx !== -1) {
+      const afterAt = before.slice(atIdx + 1)
+      if (!afterAt.includes(' ') && !afterAt.includes('\n')) {
+        setMentionQuery(afterAt)
+        setMentionStart(atIdx)
+        setMentionIdx(0)
+        return
+      }
+    }
+    setMentionQuery(null)
+    setMentionStart(-1)
+  }
+
   function handleKeyDown(e) {
+    if (mentionQuery !== null && mentionMatches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionIdx(i => Math.min(i + 1, mentionMatches.length - 1))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionIdx(i => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        selectMention(mentionMatches[mentionIdx])
+        return
+      }
+      if (e.key === 'Escape') {
+        setMentionQuery(null)
+        return
+      }
+    }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
       handleSubmit()
@@ -257,7 +346,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                   <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(c.createdAt)}</span>
                 </div>
                 <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug mt-0.5">
-                  {linkify(c.content)}
+                  {renderWithMentions(c.content)}
                 </p>
               </div>
             </div>
@@ -267,15 +356,37 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
 
         {/* Footer */}
         <div className="px-5 pb-5 pt-3 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
-          <textarea
-            ref={textareaRef}
-            rows={2}
-            value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Agregar un comentario... (Ctrl+Enter para enviar)"
-            className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
-          />
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              rows={2}
+              value={text}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Agregar un comentario... Usá @ para mencionar"
+              className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
+            />
+            {/* Mention autocomplete dropdown */}
+            {mentionQuery !== null && mentionMatches.length > 0 && (
+              <div className="absolute bottom-full mb-1 left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg overflow-hidden z-10">
+                {mentionMatches.map((m, i) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); selectMention(m) }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${i === mentionIdx ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                  >
+                    <img
+                      src={`/perfiles/${m.avatar ?? 'bee.png'}`}
+                      alt={m.name}
+                      className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
+                    />
+                    <span className="text-gray-800 dark:text-gray-200 font-medium">{m.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {error && (
             <p className="text-xs text-red-500 mt-1">{error}</p>
           )}
