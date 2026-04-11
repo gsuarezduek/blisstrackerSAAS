@@ -3,6 +3,7 @@ const { list, getByRole, upsert, getMyRoleExpectation } = require('../controller
 const { auth, adminOnly } = require('../middleware/auth')
 
 router.get('/mine',        auth, getMyRoleExpectation)   // cualquier usuario autenticado
+router.get('/all',         auth, list)                   // todos los roles — cualquier usuario autenticado (para Docs)
 router.get('/',            auth, adminOnly, list)
 router.get('/:roleName',   auth, adminOnly, getByRole)
 router.put('/:roleName',   auth, adminOnly, upsert)

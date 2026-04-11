@@ -38,6 +38,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import MyProfile from './pages/MyProfile'
 import Preferences from './pages/Preferences'
+import Docs from './pages/Docs'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="/my-projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
           <Route path="/profile"      element={<PrivateRoute><MyProfile    /></PrivateRoute>} />
           <Route path="/preferences"  element={<PrivateRoute><Preferences  /></PrivateRoute>} />
+          <Route path="/docs"         element={<PrivateRoute><Docs         /></PrivateRoute>} />
           <Route path="/realtime" element={<PrivateRoute><RealTime /></PrivateRoute>} />
           <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
           <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
