@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 
 const FREQ_OPTIONS = [
@@ -61,6 +61,7 @@ export default function RoleExpectationsTab() {
   })
   const [saving, setSaving]     = useState(false)
   const [savedRole, setSavedRole] = useState(null)
+  const formRef = useRef(form)
 
   useEffect(() => {
     Promise.all([api.get('/roles'), api.get('/role-expectations')]).then(([r, e]) => {
@@ -93,19 +94,21 @@ export default function RoleExpectationsTab() {
   function cancelEdit() { setEditingRole(null); setSavedRole(null) }
 
   async function handleSave(roleName) {
+    // Leer siempre el form más reciente desde la ref, no desde el closure
+    const current = formRef.current
     setSaving(true)
     try {
       const { data } = await api.put(`/role-expectations/${roleName}`, {
-        description: form.description,
-        expectedResults: form.expectedResults.map(r => r.text).filter(Boolean),
-        operationalResponsibilities: form.operationalResponsibilities
+        description: current.description,
+        expectedResults: current.expectedResults.map(r => r.text).filter(Boolean),
+        operationalResponsibilities: current.operationalResponsibilities
           .filter(r => r.category)
           .map(({ category, items }) => ({
             category,
             items: items.map(i => i.text).filter(Boolean),
           })),
-        recurrentTasks: form.recurrentTasks.map(({ id, ...rest }) => rest),
-        dependencies:   form.dependencies.map(({ id, ...rest }) => rest),
+        recurrentTasks: current.recurrentTasks.map(({ id, ...rest }) => rest),
+        dependencies:   current.dependencies.map(({ id, ...rest }) => rest),
       })
       setExpectations(prev => ({ ...prev, [roleName]: data }))
       setSavedRole(roleName)
@@ -116,6 +119,9 @@ export default function RoleExpectationsTab() {
   }
 
   // ── Resultados esperados ──────────────────────────────────────
+  // Mantener ref sincronizado para que handleSave siempre lea el form más reciente
+  useEffect(() => { formRef.current = form }, [form])
+
   const addResult    = () => setForm(f => ({ ...f, expectedResults: [...f.expectedResults, emptyResult()] }))
   const removeResult = id => setForm(f => ({ ...f, expectedResults: f.expectedResults.filter(r => r.id !== id) }))
   const updateResult = (id, text) => setForm(f => ({
