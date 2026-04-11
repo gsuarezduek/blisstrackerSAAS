@@ -14,70 +14,80 @@ const TABS = [
 // ── Filosofía ──────────────────────────────────────────────────────────────
 
 function FilosofiaTab() {
+  const principles = [
+    {
+      icon: '🚫',
+      title: 'Sin prioridades artificiales',
+      body: 'En la práctica, todo termina siendo "alta prioridad" y las listas crecen sin control. En lugar de eso: elegir pocas tareas importantes por día y ejecutarlas bien.',
+      accent: 'border-red-200 dark:border-red-800',
+      iconBg: 'bg-red-50 dark:bg-red-900/30',
+    },
+    {
+      icon: '📅',
+      title: 'Sin fechas ni deadlines complejos',
+      body: 'Las fechas generan sobrecarga mental y sensación constante de atraso. Trabajamos por día, no por acumulación futura. Las tareas no completadas se trasladan al siguiente día (carry-over).',
+      accent: 'border-amber-200 dark:border-amber-800',
+      iconBg: 'bg-amber-50 dark:bg-amber-900/30',
+    },
+    {
+      icon: '⚡',
+      title: 'Menos ruido, más acción',
+      body: 'Cada funcionalidad extra tiene un costo. Por eso el sistema es simple: crear tareas es rápido, entender qué hacer es inmediato, ejecutar es lo principal.',
+      accent: 'border-blue-200 dark:border-blue-800',
+      iconBg: 'bg-blue-50 dark:bg-blue-900/30',
+    },
+    {
+      icon: '🎯',
+      title: 'Foco en ejecución, no en organización',
+      body: 'Muchos sistemas optimizan la planificación. Nosotros optimizamos la ejecución: menos tiempo gestionando tareas, más tiempo haciendo trabajo real.',
+      accent: 'border-green-200 dark:border-green-800',
+      iconBg: 'bg-green-50 dark:bg-green-900/30',
+    },
+    {
+      icon: '🧠',
+      title: 'Una forma de trabajo más humana',
+      body: 'El trabajo real no es lineal ni perfectamente planificable. Este sistema se adapta: permite reorganizarse diariamente y hace visible el progreso real.',
+      accent: 'border-purple-200 dark:border-purple-800',
+      iconBg: 'bg-purple-50 dark:bg-purple-900/30',
+    },
+  ]
+
   return (
-    <div className="max-w-2xl mx-auto space-y-8 text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Simplicidad + Foco Diario</h2>
-        <p>En Bliss Team Tracker elegimos un enfoque simple: trabajar con claridad en el presente.</p>
-        <p className="mt-2">En lugar de usar múltiples etiquetas, prioridades, fechas y configuraciones complejas, el sistema está diseñado para responder una sola pregunta:</p>
-        <p className="mt-3 text-lg font-semibold text-primary-600 dark:text-primary-400">¿Qué es lo importante que tengo que hacer hoy?</p>
+    <div className="max-w-2xl mx-auto space-y-6">
+
+      {/* Hero */}
+      <div className="bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl p-7 text-white">
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary-200 mb-2">Filosofía de trabajo</p>
+        <h2 className="text-2xl font-bold leading-snug mb-3">Simplicidad + Foco Diario</h2>
+        <p className="text-primary-100 text-sm leading-relaxed mb-4">
+          En lugar de usar múltiples etiquetas, prioridades, fechas y configuraciones complejas, el sistema está diseñado para responder una sola pregunta:
+        </p>
+        <div className="bg-white/15 rounded-xl px-4 py-3 text-center">
+          <p className="text-lg font-semibold">¿Qué es lo importante que tengo que hacer hoy?</p>
+        </div>
       </div>
 
-      <Section title="Por qué no usamos prioridades">
-        <p>En muchos sistemas, las tareas se clasifican como alta, media o baja prioridad. En la práctica, esto suele generar más confusión que claridad:</p>
-        <ul className="mt-2 space-y-1 list-disc list-inside">
-          <li>Todo termina siendo "alta prioridad"</li>
-          <li>Las listas crecen sin control</li>
-          <li>Se pierde el foco real</li>
-        </ul>
-        <p className="mt-3">En lugar de eso, promovemos una decisión consciente: <strong className="text-gray-900 dark:text-white">elegir pocas tareas importantes por día y ejecutarlas bien.</strong></p>
-      </Section>
+      {/* Principios */}
+      <div className="space-y-3">
+        {principles.map(p => (
+          <div key={p.title} className={`bg-white dark:bg-gray-800 border ${p.accent} rounded-2xl p-5 flex gap-4`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl ${p.iconBg}`}>
+              {p.icon}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{p.title}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{p.body}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
-      <Section title="Por qué evitamos fechas y deadlines complejos">
-        <p>Las fechas pueden ser útiles en algunos contextos, pero en el trabajo diario suelen generar:</p>
-        <ul className="mt-2 space-y-1 list-disc list-inside">
-          <li>Sobrecarga mental</li>
-          <li>Planes que no se cumplen</li>
-          <li>Sensación constante de atraso</li>
-        </ul>
-        <p className="mt-3">Nuestro enfoque es distinto: <strong className="text-gray-900 dark:text-white">trabajamos por día, no por acumulación futura.</strong></p>
-        <p className="mt-2">Las tareas no desaparecen: se trasladan al día siguiente si no se completan (carry-over), manteniendo visibilidad sin generar presión artificial.</p>
-      </Section>
-
-      <Section title="Menos ruido, más acción">
-        <p>Cada funcionalidad extra tiene un costo: más decisiones, más tiempo organizando en lugar de hacer, más fricción en el uso diario.</p>
-        <p className="mt-2">Por eso elegimos un sistema donde:</p>
-        <ul className="mt-2 space-y-1 list-disc list-inside">
-          <li>Crear tareas es rápido</li>
-          <li>Entender qué hacer es inmediato</li>
-          <li>Ejecutar es lo principal</li>
-        </ul>
-      </Section>
-
-      <Section title="Foco en ejecución, no en organización">
-        <p>Muchos sistemas optimizan la planificación. Nosotros optimizamos la ejecución.</p>
-        <p className="mt-2">Esto significa:</p>
-        <ul className="mt-2 space-y-1 list-disc list-inside">
-          <li>Menos tiempo gestionando tareas</li>
-          <li>Más tiempo haciendo trabajo real</li>
-          <li>Más claridad para todo el equipo</li>
-        </ul>
-      </Section>
-
-      <Section title="Una forma de trabajo más humana">
-        <p>El trabajo real no es lineal ni perfectamente planificable. Surgen imprevistos, cambios y nuevas prioridades todos los días.</p>
-        <p className="mt-2">Este sistema se adapta a esa realidad:</p>
-        <ul className="mt-2 space-y-1 list-disc list-inside">
-          <li>Permite reorganizarse diariamente</li>
-          <li>Reduce la frustración de planes que no se cumplen</li>
-          <li>Hace visible el progreso real</li>
-        </ul>
-      </Section>
-
-      <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 rounded-2xl p-5 text-center">
-        <p className="text-base font-semibold text-gray-900 dark:text-white">No buscamos hacer más cosas.</p>
-        <p className="text-base font-semibold text-gray-900 dark:text-white">Buscamos hacer mejor las cosas importantes.</p>
-        <p className="text-primary-600 dark:text-primary-400 font-medium mt-2">Y para eso, menos es más.</p>
+      {/* Cierre */}
+      <div className="bg-gray-900 dark:bg-gray-700 rounded-2xl p-6 text-center">
+        <p className="text-white font-semibold text-base leading-relaxed">
+          No buscamos hacer más cosas.<br />Buscamos hacer mejor las cosas importantes.
+        </p>
+        <p className="text-primary-400 font-medium mt-3 text-sm">Y para eso, menos es más.</p>
       </div>
     </div>
   )
@@ -87,142 +97,165 @@ function FilosofiaTab() {
 
 function ManualTab() {
   return (
-    <div className="max-w-2xl mx-auto space-y-8 text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
+    <div className="max-w-2xl mx-auto space-y-6">
 
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Manual de Uso</h2>
-        <p className="text-gray-500 dark:text-gray-400">Trabajar con claridad, foco y ejecución.</p>
-        <p className="mt-1 font-semibold text-gray-900 dark:text-white">BlissTracker no es para organizar tareas. Es para decidir qué hacer hoy y hacerlo bien.</p>
+      {/* Hero */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+        <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">Manual de Uso</p>
+        <p className="text-xl font-bold text-gray-900 dark:text-white leading-snug">
+          Decidir qué hacer hoy.<br />Y hacerlo bien.
+        </p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">BlissTracker no es para organizar tareas. Es para ejecutarlas con claridad y foco.</p>
       </div>
 
-      <Section title="Reglas básicas">
-        <ol className="space-y-3 list-decimal list-inside">
-          {[
-            ['Todo está en BlissTracker', 'Nada queda en WhatsApp, cabeza o mails.'],
-            ['Cada tarea debe ser clara', 'Tiene que ser una acción concreta.'],
-            ['Solo 1 tarea en curso', 'No multitarea.'],
-            ['Máximo 3 tareas destacadas', 'Son tu foco real del día.'],
-            ['Si no es para hoy → Backlog', 'No sobrecargar el día.'],
-            ['Si no podés avanzar → BLOCKED', 'No simular progreso.'],
-          ].map(([rule, desc]) => (
-            <li key={rule}>
-              <strong className="text-gray-900 dark:text-white">{rule}</strong>
-              <p className="ml-5 text-gray-500 dark:text-gray-400">{desc}</p>
-            </li>
-          ))}
-        </ol>
-      </Section>
-
-      <Section title="Cómo escribir una tarea">
-        <p className="font-medium text-gray-900 dark:text-white">Tiene que poder ejecutarse sin pensar.</p>
-        <div className="mt-3 space-y-1.5">
-          {[
-            ['❌', 'Ver campaña'],
-            ['❌', 'Trabajar en web'],
-            ['❌', 'Revisar cliente'],
-            ['✅', 'Ajustar presupuesto campaña Meta cliente X'],
-            ['✅', 'Diseñar 3 placas para Instagram cliente Y'],
-            ['✅', 'Enviar propuesta por mail a cliente Z'],
-          ].map(([icon, text]) => (
-            <div key={text} className="flex items-center gap-2">
-              <span className="text-base">{icon}</span>
-              <span className={icon === '✅' ? 'text-gray-900 dark:text-white' : 'text-gray-400 line-through'}>{text}</span>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="Cómo organizar tu día">
-        <p>Cada mañana:</p>
-        <ol className="mt-2 space-y-1 list-decimal list-inside">
-          <li>Revisar Dashboard</li>
-          <li>Ver tareas pendientes</li>
-          <li><strong className="text-gray-900 dark:text-white">Elegir 3 tareas clave (destacadas)</strong></li>
-        </ol>
-        <p className="mt-3 text-primary-600 dark:text-primary-400 font-medium">Si no definís tu foco, el día se desordena solo.</p>
-      </Section>
-
-      <Section title="Cómo trabajar">
-        <ul className="space-y-1 list-disc list-inside">
-          <li>Siempre 1 tarea activa</li>
-          <li>No saltar entre tareas</li>
-          <li>Completar antes de empezar otra</li>
-        </ul>
-        <p className="mt-3 font-medium text-gray-900 dark:text-white">Terminar cosas &gt; empezar muchas.</p>
-      </Section>
-
-      <Section title="Cuando aparece algo nuevo">
-        <p className="font-semibold text-gray-900 dark:text-white">SIEMPRE:</p>
-        <ol className="mt-2 space-y-1 list-decimal list-inside">
-          <li>Crear tarea</li>
-          <li>Definirla bien</li>
-          <li>Decidir: ¿Hoy? → tareas del día / ¿Después? → backlog</li>
-        </ol>
-        <p className="mt-3 text-primary-600 dark:text-primary-400 font-medium">Nunca ejecutar directo sin registrar.</p>
-      </Section>
-
-      <Section title="Uso correcto de estados">
+      {/* Reglas básicas */}
+      <DocCard title="Reglas básicas" icon="⚖️">
         <div className="space-y-2">
           {[
-            ['PENDING',     'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',     'Pendiente — todavía no empezaste'],
-            ['IN_PROGRESS', 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300', 'Estás trabajando ahora mismo'],
-            ['PAUSED',      'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',     'Pausa temporal — vas a retomarlo'],
-            ['BLOCKED',     'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',      'No podés avanzar — registrá el motivo'],
-            ['COMPLETED',   'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400', 'Terminado'],
-          ].map(([status, cls, desc]) => (
-            <div key={status} className="flex items-center gap-3">
-              <span className={`text-xs font-mono font-semibold px-2.5 py-1 rounded-lg flex-shrink-0 ${cls}`}>{status}</span>
-              <span>{desc}</span>
+            ['1', 'Todo está en BlissTracker', 'Nada queda en WhatsApp, cabeza o mails.'],
+            ['2', 'Cada tarea debe ser clara', 'Tiene que ser una acción concreta.'],
+            ['3', 'Solo 1 tarea en curso', 'No multitarea.'],
+            ['4', 'Máximo 3 tareas destacadas', 'Son tu foco real del día.'],
+            ['5', 'Si no es para hoy → Backlog', 'No sobrecargar el día.'],
+            ['6', 'Si no podés avanzar → BLOCKED', 'No simular progreso.'],
+          ].map(([num, rule, desc]) => (
+            <div key={rule} className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-700 last:border-0">
+              <span className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{num}</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{rule}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc}</p>
+              </div>
             </div>
           ))}
         </div>
-        <p className="mt-3 text-amber-600 dark:text-amber-400 font-medium">No mentirse con los estados.</p>
-      </Section>
+      </DocCard>
 
-      <Section title="Errores prohibidos">
-        <ul className="space-y-1 list-disc list-inside text-red-600 dark:text-red-400">
+      {/* Cómo escribir una tarea */}
+      <DocCard title="Cómo escribir una tarea" icon="✍️">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">Tiene que poder ejecutarse sin pensar.</p>
+        <div className="space-y-1.5">
           {[
-            'Tareas vagas ("ver", "chequear", "trabajar en")',
-            'Más de 10 tareas en el día',
-            'Varias tareas en progreso',
-            'No usar backlog',
-            'No completar tareas',
-            'No bloquear cuando corresponde',
-          ].map(e => <li key={e}>{e}</li>)}
-        </ul>
-      </Section>
+            [false, 'Ver campaña'],
+            [false, 'Trabajar en web'],
+            [false, 'Revisar cliente'],
+          ].map(([, text]) => (
+            <div key={text} className="flex items-center gap-2.5 px-3 py-2 bg-red-50 dark:bg-red-900/10 rounded-xl">
+              <span className="text-red-400 text-sm flex-shrink-0">✗</span>
+              <span className="text-sm text-red-500 dark:text-red-400 line-through">{text}</span>
+            </div>
+          ))}
+          <div className="border-t border-gray-100 dark:border-gray-700 my-2" />
+          {[
+            'Ajustar presupuesto campaña Meta cliente X',
+            'Diseñar 3 placas para Instagram cliente Y',
+            'Enviar propuesta por mail a cliente Z',
+          ].map(text => (
+            <div key={text} className="flex items-center gap-2.5 px-3 py-2 bg-green-50 dark:bg-green-900/10 rounded-xl">
+              <span className="text-green-500 text-sm flex-shrink-0">✓</span>
+              <span className="text-sm text-green-800 dark:text-green-300 font-medium">{text}</span>
+            </div>
+          ))}
+        </div>
+      </DocCard>
 
-      <Section title="Uso del backlog">
+      {/* Cómo organizar tu día */}
+      <DocCard title="Cómo organizar tu día" icon="📅">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Cada mañana:</p>
+        <div className="space-y-2">
+          {[
+            ['1', 'Revisar Dashboard', false],
+            ['2', 'Ver tareas pendientes', false],
+            ['3', 'Elegir 3 tareas clave (destacadas)', true],
+          ].map(([n, step, highlight]) => (
+            <div key={step} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl ${highlight ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-gray-50 dark:bg-gray-700/40'}`}>
+              <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 ${highlight ? 'bg-primary-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>{n}</span>
+              <p className={`text-sm ${highlight ? 'font-semibold text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'}`}>{step}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-primary-600 dark:text-primary-400 font-medium mt-3">Si no definís tu foco, el día se desordena solo.</p>
+      </DocCard>
+
+      {/* Estados */}
+      <DocCard title="Uso correcto de estados" icon="🧱">
+        <div className="space-y-2">
+          {[
+            ['PENDING',     'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',               'Pendiente',     'Todavía no empezaste'],
+            ['IN_PROGRESS', 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300','En progreso',   'Estás trabajando ahora mismo'],
+            ['PAUSED',      'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',               'Pausada',       'Pausa temporal — vas a retomarlo'],
+            ['BLOCKED',     'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',                'Bloqueada',     'No podés avanzar — registrá el motivo'],
+            ['COMPLETED',   'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',        'Completada',    'Terminado'],
+          ].map(([status, cls, label, desc]) => (
+            <div key={status} className="flex items-center gap-3 py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg flex-shrink-0 w-28 text-center ${cls}`}>{label}</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">{desc}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-3">No mentirse con los estados.</p>
+      </DocCard>
+
+      {/* Backlog */}
+      <DocCard title="Uso del backlog" icon="🧠">
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-3">
-            <p className="font-semibold text-red-600 dark:text-red-400 mb-1">El backlog NO es</p>
-            <ul className="space-y-0.5 text-red-500 dark:text-red-400">
-              <li>❌ Acumulación de tareas</li>
-              <li>❌ Cosas olvidadas</li>
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-4">
+            <p className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wide mb-2">No es</p>
+            <ul className="space-y-1.5 text-sm text-red-600 dark:text-red-400">
+              <li className="flex items-start gap-1.5"><span>✗</span> Acumulación de tareas</li>
+              <li className="flex items-start gap-1.5"><span>✗</span> Cosas olvidadas</li>
             </ul>
           </div>
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-xl p-3">
-            <p className="font-semibold text-green-600 dark:text-green-400 mb-1">El backlog ES</p>
-            <ul className="space-y-0.5 text-green-600 dark:text-green-400">
-              <li>✅ Planificación futura</li>
-              <li>✅ Lo que no es prioridad hoy</li>
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-xl p-4">
+            <p className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wide mb-2">Sí es</p>
+            <ul className="space-y-1.5 text-sm text-green-700 dark:text-green-400">
+              <li className="flex items-start gap-1.5"><span>✓</span> Planificación futura</li>
+              <li className="flex items-start gap-1.5"><span>✓</span> Lo que no es prioridad hoy</li>
             </ul>
           </div>
         </div>
-      </Section>
+      </DocCard>
 
-      <Section title="Uso del insight (IA)">
-        <ul className="space-y-1 list-disc list-inside">
-          <li>Leerlo todos los días</li>
-          <li>Aplicar al menos 1 sugerencia</li>
-          <li>Prestar atención a tareas mal definidas, falta de foco y patrones repetidos</li>
-        </ul>
-        <p className="mt-3 text-amber-600 dark:text-amber-400 font-medium">Ignorarlo = perder valor del sistema.</p>
-      </Section>
+      {/* Errores + IA en fila */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <DocCard title="Errores prohibidos" icon="🔥">
+          <ul className="space-y-2">
+            {[
+              'Tareas vagas ("ver", "chequear")',
+              'Más de 10 tareas en el día',
+              'Varias tareas en progreso',
+              'No usar backlog',
+              'No completar tareas',
+              'No bloquear cuando corresponde',
+            ].map(e => (
+              <li key={e} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <span className="text-red-400 flex-shrink-0 mt-0.5">—</span>{e}
+              </li>
+            ))}
+          </ul>
+        </DocCard>
 
-      <div className="bg-gray-900 dark:bg-gray-700 rounded-2xl p-5 text-center">
-        <p className="text-white font-semibold text-base">Regla final</p>
-        <p className="text-primary-400 font-medium mt-1">Si una tarea no está clara, no se va a hacer.</p>
+        <DocCard title="Uso del insight IA" icon="🤖">
+          <ul className="space-y-2">
+            {[
+              'Leerlo todos los días',
+              'Aplicar al menos 1 sugerencia',
+              'Atender tareas mal definidas',
+              'Observar patrones repetidos',
+              'Detectar falta de foco',
+            ].map(e => (
+              <li key={e} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <span className="text-primary-400 flex-shrink-0 mt-0.5">→</span>{e}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-3">Ignorarlo = perder valor del sistema.</p>
+        </DocCard>
+      </div>
+
+      {/* Regla final */}
+      <div className="bg-gradient-to-br from-gray-900 to-gray-800 dark:from-gray-700 dark:to-gray-800 rounded-2xl p-6 text-center">
+        <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Regla final</p>
+        <p className="text-white font-bold text-lg">Si una tarea no está clara,<br />no se va a hacer.</p>
       </div>
     </div>
   )
@@ -442,10 +475,13 @@ function RolesTab() {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function Section({ title, children }) {
+function DocCard({ title, icon, children }) {
   return (
-    <div>
-      <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-lg">{icon}</span>
+        <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wide">{title}</h3>
+      </div>
       {children}
     </div>
   )

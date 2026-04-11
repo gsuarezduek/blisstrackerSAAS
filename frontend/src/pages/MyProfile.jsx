@@ -6,21 +6,24 @@ import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
 
 const AVATARS = [
-  { file: 'bee.png',          label: 'Clásica' },
-  { file: 'bee2.png',         label: 'Alternativa' },
-  { file: 'babee.png',        label: 'Baby' },
-  { file: 'beeartist.png',    label: 'Artista' },
-  { file: 'beecoffee.png',    label: 'Coffee' },
-  { file: 'beecorp.png',      label: 'Corp' },
-  { file: 'beecypher.png',    label: 'Cypher' },
-  { file: 'beefitness.png',   label: 'Fitness' },
-  { file: 'beegamer.png',     label: 'Gamer' },
-  { file: 'beehacker.png',    label: 'Hacker' },
-  { file: 'beeloween.png',    label: 'Halloween' },
-  { file: 'beenfluencer.png', label: 'Influencer' },
-  { file: 'beepunk.png',      label: 'Punk' },
-  { file: 'beezen.png',       label: 'Zen' },
-  { file: 'beezombie.png',    label: 'Zombie' },
+  { file: '1babee.png',        label: 'Baby Bee' },
+  { file: '2bee.png',          label: 'Bee' },
+  { file: '11beeartist.png',   label: 'Bee Artista' },
+  { file: '12beecoffee.png',   label: 'Bee Coffee' },
+  { file: '13beecorp.png',     label: 'Bee Corp' },
+  { file: '14beefitness.png',  label: 'Bee Fitness' },
+  { file: '15futbee.png',      label: 'Fut Bee' },
+  { file: '16beeloween.png',   label: 'Bee-loween' },
+  { file: '17beepunk.png',     label: 'Bee Punk' },
+  { file: '18golfbee.png',     label: 'Golf Bee' },
+  { file: '19beenfluencer.png',label: 'Bee-nfluencer' },
+  { file: '20beecypher.png',   label: 'Bee Cypher' },
+  { file: '21beegamer.png',    label: 'Bee Gamer' },
+  { file: '22beehacker.png',   label: 'Bee Hacker' },
+  { file: '30harleybee.png',   label: 'Harley Bee' },
+  { file: '31beezen.png',      label: 'Bee Zen' },
+  { file: '32beezombie.png',   label: 'Bee Zombie' },
+  { file: '33darthbee.png',    label: 'Darth Bee' },
 ]
 
 function Field({ label, children }) {
@@ -94,7 +97,12 @@ export default function MyProfile() {
 
   const [avatarSaving, setAvatarSaving] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(null)
-  const [lightbox, setLightbox] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(null) // null = cerrado
+
+  function openLightbox(file) {
+    const idx = AVATARS.findIndex(a => a.file === file)
+    setLightboxIndex(idx >= 0 ? idx : 0)
+  }
 
   useEffect(() => {
     api.get('/profile').then(({ data }) => {
@@ -193,9 +201,9 @@ export default function MyProfile() {
         {/* Identity card */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
           <div className="flex items-center gap-5 mb-5">
-            <button onClick={() => setLightbox(true)} className="flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+            <button onClick={() => openLightbox(profile.avatar ?? '2bee.png')} className="flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
               <img
-                src={`/perfiles/${profile.avatar ?? 'bee.png'}`}
+                src={`/perfiles/${profile.avatar ?? '2bee.png'}`}
                 alt="avatar"
                 className="w-24 h-24 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 hover:opacity-90 transition-opacity cursor-zoom-in"
               />
@@ -212,23 +220,34 @@ export default function MyProfile() {
           <div>
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">Foto de perfil</p>
             <div className="flex items-end gap-3 flex-wrap">
-              {AVATARS.map(a => (
-                <button
-                  key={a.file}
-                  onClick={() => setSelectedAvatar(a.file)}
-                  title={a.label}
-                  className={`rounded-full transition-all ${
-                    selectedAvatar === a.file
-                      ? 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-800'
-                      : 'opacity-60 hover:opacity-90'
-                  }`}
-                >
-                  <img
-                    src={`/perfiles/${a.file}`}
-                    alt={a.label}
-                    className="w-12 h-12 rounded-full object-cover"
-                  />
-                </button>
+              {AVATARS.map((a, i) => (
+                <div key={a.file} className="relative group">
+                  <button
+                    onClick={() => setSelectedAvatar(a.file)}
+                    title={a.label}
+                    className={`rounded-full transition-all ${
+                      selectedAvatar === a.file
+                        ? 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-800'
+                        : 'opacity-60 hover:opacity-90'
+                    }`}
+                  >
+                    <img
+                      src={`/perfiles/${a.file}`}
+                      alt={a.label}
+                      className="w-12 h-12 rounded-full object-cover"
+                    />
+                  </button>
+                  {/* Botón de zoom */}
+                  <button
+                    onClick={() => setLightboxIndex(i)}
+                    title={`Ver ${a.label}`}
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-gray-800/80 hover:bg-gray-700 rounded-full text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                      <path d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" />
+                    </svg>
+                  </button>
+                </div>
               ))}
               {selectedAvatar !== (profile.avatar ?? 'bee.png') && (
                 <button
@@ -415,11 +434,12 @@ export default function MyProfile() {
 
       </main>
 
-      {lightbox && (
+      {lightboxIndex !== null && (
         <AvatarLightbox
-          src={`/perfiles/${profile.avatar ?? 'bee.png'}`}
-          alt={profile.name}
-          onClose={() => setLightbox(false)}
+          avatars={AVATARS}
+          index={lightboxIndex}
+          onNavigate={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
         />
       )}
     </div>
