@@ -171,8 +171,8 @@ model WorkDay {
   tasks Task[]
 
   @@unique([userId, date])
+  @@index([userId, date])
   @@index([date])
-  @@index([userId])
 }
 
 model Notification {

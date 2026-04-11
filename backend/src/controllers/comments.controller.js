@@ -78,11 +78,17 @@ async function addComment(req, res, next) {
       })
       for (const pm of projectMembers) {
         if (pm.user.id === userId) continue
-        const fullName = pm.user.name.toLowerCase()
+        const fullName  = pm.user.name.toLowerCase()
         const firstName = pm.user.name.split(' ')[0].toLowerCase()
-        if (mentionedNames.has(fullName) || mentionedNames.has(firstName)) {
-          mentionedUserIds.add(pm.user.id)
-        }
+        // A captured mention may include an extra word (e.g. "@Administrador hola" captures
+        // "administrador hola"). We match if any captured string equals or starts with the name.
+        const matched = [...mentionedNames].some(captured =>
+          captured === fullName ||
+          captured === firstName ||
+          captured.startsWith(fullName + ' ') ||
+          captured.startsWith(firstName + ' ')
+        )
+        if (matched) mentionedUserIds.add(pm.user.id)
       }
     }
 

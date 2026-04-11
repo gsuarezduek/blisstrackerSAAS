@@ -4,11 +4,12 @@ import { linkify } from '../utils/linkify'
 import { useAuth } from '../context/AuthContext'
 import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
 
-// Resalta @menciones en texto plano (igual que el regex del backend: 1 o 2 palabras)
+// Resalta @menciones en texto plano. Captura exactamente una palabra después del @.
+// El backend maneja la detección de nombres de dos palabras por su cuenta.
 function renderWithMentions(text) {
   const parts = []
   let lastIndex = 0
-  const regex = /@([A-Za-záéíóúÁÉÍÓÚñÑüÜ]+(?:\s+[A-Za-záéíóúÁÉÍÓÚñÑüÜ]+)?)/g
+  const regex = /@([A-Za-záéíóúÁÉÍÓÚñÑüÜ]+)/g
   let match
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index))

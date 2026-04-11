@@ -76,7 +76,7 @@ async function changePassword(req, res, next) {
       return res.status(400).json({ error: 'Datos incompletos' })
     }
     if (newPassword.length < 12) {
-      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' })
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 12 caracteres' })
     }
 
     const user = await prisma.user.findUnique({ where: { id: req.user.id } })

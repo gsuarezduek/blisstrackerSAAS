@@ -67,6 +67,22 @@ async function create(req, res, next) {
       },
       include: taskInclude,
     })
+
+    // Notify the assignee if someone else created the task
+    if (userId !== requesterId) {
+      const desc = description.length > 60 ? description.slice(0, 57) + '...' : description
+      await prisma.notification.create({
+        data: {
+          userId:    userId,
+          actorId:   requesterId,
+          taskId:    task.id,
+          projectId: Number(projectId),
+          type:      'TASK_MENTION',
+          message:   `te asignó una tarea: "${desc}"`,
+        },
+      })
+    }
+
     res.status(201).json(task)
   } catch (err) { next(err) }
 }

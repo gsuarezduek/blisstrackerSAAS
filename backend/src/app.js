@@ -75,11 +75,17 @@ app.use('/api/admin/productivity',  adminProductivityRoutes)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 
+const { handlePrismaError } = require('./lib/prismaError')
+
 app.use((err, req, res, next) => {
+  // Handle Prisma errors that weren't caught by individual controllers
+  if (err.code?.startsWith?.('P2') && handlePrismaError(err, res)) return
+
   const isProd = process.env.NODE_ENV === 'production'
   const message = isProd && !err.isOperational
     ? 'Internal server error'
     : (err.message || 'Internal server error')
+  console.error('[error]', err.code ?? err.message)
   res.status(err.status || 500).json({ error: message })
 })
 
