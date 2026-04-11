@@ -18,11 +18,21 @@ function getNWeeksAgoMonday(n) {
   return monday.toISOString().slice(0, 10)
 }
 
+// Minutos activos reales: descuenta pausas del tiempo total
+function taskMins(t) {
+  if (t.minutesOverride != null) return t.minutesOverride
+  if (t.startedAt && t.completedAt) {
+    const raw = Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000)
+    return Math.min(480, Math.max(0, raw - (t.pausedMinutes || 0)))
+  }
+  return 0
+}
+
 async function generateMemoryForUser(userId) {
   const fourWeeksAgo = getNWeeksAgoMonday(4)
   const today = todayString()
 
-  const [user, completedTasks, workDays] = await Promise.all([
+  const [user, completedTasks, workDays, previousMemories] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, role: true },
@@ -33,19 +43,43 @@ async function generateMemoryForUser(userId) {
         status: 'COMPLETED',
         workDay: { date: { gte: fourWeeksAgo, lte: today } },
       },
-      include: { project: true, workDay: { select: { date: true } } },
+      select: {
+        id: true,
+        projectId: true,
+        startedAt: true,
+        completedAt: true,
+        pausedMinutes: true,
+        minutesOverride: true,
+        project: { select: { name: true } },
+        workDay: { select: { date: true } },
+      },
     }),
     prisma.workDay.findMany({
       where: { userId, date: { gte: fourWeeksAgo, lte: today } },
       include: {
-        tasks: { select: { id: true, status: true, projectId: true, blockedReason: true } },
+        tasks: {
+          select: {
+            id: true,
+            status: true,
+            projectId: true,
+            blockedReason: true,
+            pausedMinutes: true,
+          },
+        },
       },
+    }),
+    // Últimas 3 memorias anteriores para mostrar evolución
+    prisma.userInsightMemory.findMany({
+      where: { userId, weekStart: { not: '' } },
+      orderBy: { weekStart: 'desc' },
+      take: 3,
+      select: { weekStart: true, estadisticas: true },
     }),
   ])
 
   if (!user) return null
 
-  // Estadísticas
+  // Estadísticas base
   const workDaysWithTasks = workDays.filter(wd => wd.tasks.length > 0)
   const totalCreated   = workDays.reduce((s, wd) => s + wd.tasks.length, 0)
   const totalCompleted = completedTasks.length
@@ -63,16 +97,35 @@ async function generateMemoryForUser(userId) {
       ) / 10
     : 0
 
-  // Contexto para Claude
+  // Promedio de minutos en PAUSED para tareas completadas que fueron pausadas
+  const pausedCompleted = completedTasks.filter(t => (t.pausedMinutes || 0) > 0)
+  const avgPauseMinutes = pausedCompleted.length > 0
+    ? Math.round(pausedCompleted.reduce((s, t) => s + t.pausedMinutes, 0) / pausedCompleted.length)
+    : 0
+
+  // Tareas atascadas (siguen PAUSED o BLOCKED en el período)
+  const stuckTasksCount = workDays.reduce(
+    (s, wd) => s + wd.tasks.filter(t => t.status === 'PAUSED' || t.status === 'BLOCKED').length, 0
+  )
+
+  // Distribución por proyecto con tiempo real
   const byProject = {}
   for (const t of completedTasks) {
-    byProject[t.project.name] = (byProject[t.project.name] || 0) + 1
+    const name = t.project.name
+    if (!byProject[name]) byProject[name] = { count: 0, minutes: 0 }
+    byProject[name].count   += 1
+    byProject[name].minutes += taskMins(t)
   }
   const projectSummary = Object.entries(byProject)
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1].minutes - a[1].minutes)
     .slice(0, 8)
-    .map(([p, n]) => `${p} (${n})`)
-    .join(', ')
+    .map(([p, { count, minutes }]) => {
+      const h = Math.floor(minutes / 60)
+      const m = minutes % 60
+      const timeStr = h > 0 ? `${h}h${m > 0 ? m + 'm' : ''}` : `${m}m`
+      return `${p}: ${count} tareas, ${timeStr}`
+    })
+    .join(' | ')
 
   // Días con bloqueos
   const daysWithBlocks = new Set()
@@ -80,23 +133,52 @@ async function generateMemoryForUser(userId) {
     if (wd.tasks.some(t => t.status === 'BLOCKED')) daysWithBlocks.add(wd.date)
   }
 
+  // Contexto para Claude
+  const totalMinutes = Object.values(byProject).reduce((s, v) => s + v.minutes, 0)
+  const totalHours = Math.floor(totalMinutes / 60)
+  const totalMinsRem = totalMinutes % 60
+
   let ctx = `ANÁLISIS DE LAS ÚLTIMAS 4 SEMANAS\n`
   ctx += `Rol: ${user.role}\n`
   ctx += `Días trabajados: ${workDaysWithTasks.length}\n`
   ctx += `Tareas creadas: ${totalCreated} | Completadas: ${totalCompleted} (${Math.round(tasaCompletado * 100)}%)\n`
   ctx += `Promedio tareas/día: ${promedioTareasPorDia} | Proyectos simultáneos: ${proyectosSimultaneos}\n`
-  if (projectSummary) ctx += `Proyectos con tareas completadas: ${projectSummary}\n`
+  if (totalMinutes > 0) {
+    ctx += `Tiempo total trabajado: ${totalHours > 0 ? totalHours + 'h' : ''}${totalMinsRem > 0 ? totalMinsRem + 'm' : ''}\n`
+  }
+  if (projectSummary) ctx += `Distribución por proyecto: ${projectSummary}\n`
   if (daysWithBlocks.size > 0) ctx += `Días con bloqueos activos: ${daysWithBlocks.size}\n`
+  if (stuckTasksCount > 0) ctx += `Tareas atascadas (PAUSED/BLOCKED sin resolver): ${stuckTasksCount}\n`
+  if (avgPauseMinutes > 0) {
+    const ph = Math.floor(avgPauseMinutes / 60)
+    const pm = avgPauseMinutes % 60
+    ctx += `Promedio en pausa antes de retomar: ${ph > 0 ? ph + 'h' : ''}${pm > 0 ? pm + 'm' : ''}\n`
+  }
+
+  // Evolución histórica (últimas semanas previas)
+  if (previousMemories.length > 0) {
+    ctx += `\nEVOLUCIÓN HISTÓRICA:\n`
+    for (const m of previousMemories) {
+      const s = m.estadisticas || {}
+      if (s.tasaCompletado !== undefined) {
+        ctx += `  Semana ${m.weekStart}: ${Math.round(s.tasaCompletado * 100)}% completado`
+        if (s.promedioTareasPorDia) ctx += `, ${s.promedioTareasPorDia} tareas/día`
+        if (s.avgPauseMinutes) ctx += `, ${s.avgPauseMinutes}m pausa prom.`
+        if (s.stuckTasksCount) ctx += `, ${s.stuckTasksCount} atascadas`
+        ctx += '\n'
+      }
+    }
+  }
 
   const msg = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 300,
+    max_tokens: 400,
     system: `Analizás el historial de trabajo de un usuario y generás un perfil de productividad en JSON.
 
 Devolvés ÚNICAMENTE un objeto JSON válido con estas claves:
-- tendencias: 1-2 oraciones sobre patrones de comportamiento (cuándo rinde mejor, qué proyectos prioriza, etc.)
-- fortalezas: 1 oración sobre en qué áreas o proyectos tiene mejor rendimiento
-- areasDeAtencion: 1-2 oraciones sobre patrones negativos recurrentes (baja tasa de completado, muchos proyectos simultáneos, bloqueos frecuentes, etc.) — null si no hay señales preocupantes
+- tendencias: 1-2 oraciones sobre patrones de comportamiento. Usá horas trabajadas por proyecto (no solo cantidad de tareas). Si hay evolución histórica, comentá si mejoró o empeoró.
+- fortalezas: 1 oración sobre en qué áreas o proyectos tiene mejor rendimiento (mencioná proyectos concretos).
+- areasDeAtencion: 1-2 oraciones sobre patrones negativos (baja tasa de completado, bloqueos frecuentes, tareas que quedan atascadas mucho tiempo, desequilibrio de tiempo entre proyectos, etc.). null si no hay señales preocupantes.
 
 Español rioplatense, directo. Solo hechos que los datos muestran. No supongas lo que no está en los datos.`,
     messages: [{ role: 'user', content: ctx }],
@@ -111,24 +193,42 @@ Español rioplatense, directo. Solo hechos que los datos muestran. No supongas l
   try { parsed = JSON.parse(rawText) }
   catch { throw new Error('Respuesta de IA inválida') }
 
-  return prisma.userInsightMemory.upsert({
-    where: { userId },
+  const estadisticas = {
+    tasaCompletado,
+    promedioTareasPorDia,
+    proyectosSimultaneos,
+    avgPauseMinutes,
+    stuckTasksCount,
+  }
+
+  await prisma.userInsightMemory.upsert({
+    where: { userId_weekStart: { userId, weekStart: fourWeeksAgo } },
     create: {
       userId,
       tendencias:      String(parsed.tendencias      || ''),
       fortalezas:      String(parsed.fortalezas      || ''),
       areasDeAtencion: parsed.areasDeAtencion ? String(parsed.areasDeAtencion) : '',
-      estadisticas:    { tasaCompletado, promedioTareasPorDia, proyectosSimultaneos },
-      weekStart:       fourWeeksAgo,
+      estadisticas,
+      weekStart: fourWeeksAgo,
     },
     update: {
       tendencias:      String(parsed.tendencias      || ''),
       fortalezas:      String(parsed.fortalezas      || ''),
       areasDeAtencion: parsed.areasDeAtencion ? String(parsed.areasDeAtencion) : '',
-      estadisticas:    { tasaCompletado, promedioTareasPorDia, proyectosSimultaneos },
-      weekStart:       fourWeeksAgo,
+      estadisticas,
     },
   })
+
+  // Mantener solo las últimas 4 entradas por usuario
+  const allRecords = await prisma.userInsightMemory.findMany({
+    where: { userId, weekStart: { not: '' } },
+    orderBy: { weekStart: 'desc' },
+    select: { id: true },
+  })
+  if (allRecords.length > 4) {
+    const toDelete = allRecords.slice(4).map(r => r.id)
+    await prisma.userInsightMemory.deleteMany({ where: { id: { in: toDelete } } })
+  }
 }
 
 async function updateAllMemories() {

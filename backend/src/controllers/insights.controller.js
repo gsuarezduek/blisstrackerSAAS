@@ -62,17 +62,30 @@ function buildRoleContext(roleExpectation) {
   return ctx
 }
 
-function buildMemoryContext(memory) {
-  if (!memory) return ''
-  let ctx = '\nPERFIL DE PRODUCTIVIDAD (últimas semanas):\n'
-  if (memory.tendencias)      ctx += `Tendencias: ${memory.tendencias}\n`
-  if (memory.fortalezas)      ctx += `Fortalezas: ${memory.fortalezas}\n`
-  if (memory.areasDeAtencion) ctx += `Áreas de atención: ${memory.areasDeAtencion}\n`
-  const stats = memory.estadisticas || {}
-  if (stats.tasaCompletado !== undefined) {
-    ctx += `Estadísticas históricas: tasa de completado ${Math.round(stats.tasaCompletado * 100)}%, `
-    ctx += `${stats.promedioTareasPorDia} tareas/día, `
-    ctx += `${stats.proyectosSimultaneos} proyectos simultáneos en promedio\n`
+function buildMemoryContext(memories) {
+  if (!memories || memories.length === 0) return ''
+  const latest = memories[0]
+  let ctx = '\nPERFIL DE PRODUCTIVIDAD:\n'
+  if (latest.tendencias)      ctx += `Tendencias: ${latest.tendencias}\n`
+  if (latest.fortalezas)      ctx += `Fortalezas: ${latest.fortalezas}\n`
+  if (latest.areasDeAtencion) ctx += `Áreas de atención: ${latest.areasDeAtencion}\n`
+  const s = latest.estadisticas || {}
+  if (s.tasaCompletado !== undefined) {
+    ctx += `Estadísticas: ${Math.round(s.tasaCompletado * 100)}% completado, ${s.promedioTareasPorDia} tareas/día`
+    if (s.avgPauseMinutes > 0) ctx += `, ${s.avgPauseMinutes}m pausa prom.`
+    if (s.stuckTasksCount > 0) ctx += `, ${s.stuckTasksCount} tareas atascadas`
+    ctx += '\n'
+  }
+  if (memories.length > 1) {
+    ctx += 'Evolución reciente:\n'
+    for (const m of memories.slice(1)) {
+      const ms = m.estadisticas || {}
+      if (ms.tasaCompletado !== undefined) {
+        ctx += `  ${m.weekStart}: ${Math.round(ms.tasaCompletado * 100)}% completado`
+        if (ms.promedioTareasPorDia) ctx += `, ${ms.promedioTareasPorDia} tareas/día`
+        ctx += '\n'
+      }
+    }
   }
   return ctx
 }
@@ -211,7 +224,11 @@ async function generateInsight(userId) {
       ? prisma.roleExpectation.findUnique({ where: { roleName: user.role } })
       : null,
     user?.insightMemoryEnabled !== false
-      ? prisma.userInsightMemory.findUnique({ where: { userId } })
+      ? prisma.userInsightMemory.findMany({
+          where: { userId, weekStart: { not: '' } },
+          orderBy: { weekStart: 'desc' },
+          take: 4,
+        })
       : null,
   ])
 

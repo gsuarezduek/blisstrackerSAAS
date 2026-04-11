@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
@@ -88,6 +88,30 @@ function ProjectCombobox({ projects, value, onChange }) {
   )
 }
 
+// Detecta descripciones vagas usando patrones GTD comunes
+const VAGUE_PATTERNS = [
+  /^(trabajar en|trabajar sobre|trabajar con)\b/i,
+  /^(hacer|hacer el|hacer la|hacer los|hacer las)\s+\w+$/i,
+  /^(ver|ver qué|ver si|ver cómo|ver el|ver la)\b/i,
+  /^(revisar|checkear|checar)\s*$/i,
+  /^(continuar|seguir con|seguir el|seguir la)\b/i,
+  /^(arreglar|solucionar)\s*$/i,
+  /^(pendiente|pending|todo|tareas?)\s*$/i,
+  /^(llamar|llamada|reunión|meeting)\s*$/i,
+]
+
+function getGtdWarning(desc) {
+  const trimmed = desc.trim()
+  if (trimmed.length === 0) return null
+  if (trimmed.length < 12) return 'La descripción es muy corta. ¿Qué resultado específico buscás?'
+  for (const pattern of VAGUE_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      return 'Esta descripción puede ser vaga. Intentá incluir qué vas a hacer y cuál es el resultado concreto. Ej: "Redactar propuesta de precios para cliente X" en lugar de "Trabajar en propuesta".'
+    }
+  }
+  return null
+}
+
 export default function AddTaskModal({ onAdd, onClose, lockedProject }) {
   const { user } = useAuth()
   const [description, setDescription] = useState('')
@@ -95,6 +119,9 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject }) {
   const [projects, setProjects] = useState([])
   const [assigneeId, setAssigneeId] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showGtdWarning, setShowGtdWarning] = useState(false)
+
+  const gtdWarning = useMemo(() => getGtdWarning(description), [description])
 
   useEffect(() => {
     if (lockedProject) return
@@ -115,9 +142,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject }) {
     : (projects.find(p => String(p.id) === projectId)?.members ?? [])
   ).map(pm => ({ id: pm.user.id, name: pm.user.name }))
 
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!description.trim() || !projectId) return
+  async function doSubmit() {
     setLoading(true)
     try {
       const body = { description: description.trim(), projectId }
@@ -128,6 +153,16 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!description.trim() || !projectId) return
+    if (gtdWarning && !showGtdWarning) {
+      setShowGtdWarning(true)
+      return
+    }
+    await doSubmit()
   }
 
   return (
@@ -142,10 +177,23 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject }) {
               required
               rows={3}
               value={description}
-              onChange={e => setDescription(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+              onChange={e => { setDescription(e.target.value); setShowGtdWarning(false) }}
+              className={`w-full border dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${
+                showGtdWarning
+                  ? 'border-amber-400 focus:ring-amber-400'
+                  : 'border-gray-300 dark:border-gray-600 focus:ring-primary-500'
+              }`}
               placeholder="¿Qué vas a hacer?"
             />
+            {showGtdWarning && gtdWarning && (
+              <div className="mt-2 flex gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 p-3">
+                <span className="text-amber-500 flex-shrink-0 mt-0.5">⚠️</span>
+                <div className="text-xs text-amber-800 dark:text-amber-300">
+                  <p className="font-medium mb-1">Sugerencia GTD</p>
+                  <p>{gtdWarning}</p>
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Proyecto / Cliente</label>
@@ -185,9 +233,13 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject }) {
             <button
               type="submit"
               disabled={loading || !projectId}
-              className="flex-1 bg-primary-600 hover:bg-primary-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60"
+              className={`flex-1 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60 ${
+                showGtdWarning
+                  ? 'bg-amber-500 hover:bg-amber-600'
+                  : 'bg-primary-600 hover:bg-primary-700'
+              }`}
             >
-              {loading ? 'Guardando...' : 'Agregar tarea'}
+              {loading ? 'Guardando...' : showGtdWarning ? 'Guardar igual' : 'Agregar tarea'}
             </button>
           </div>
         </form>

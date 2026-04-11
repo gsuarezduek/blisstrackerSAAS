@@ -234,7 +234,7 @@ team-tracker/
 | `Service` | Servicios que ofrece la agencia |
 | `ProjectService` | Relación muchos-a-muchos: proyecto ↔ servicio |
 | `ProjectMember` | Relación muchos-a-muchos: proyecto ↔ usuario |
-| `Notification` | Notificaciones tipadas (COMPLETED / BLOCKED / ADDED_TO_PROJECT / TASK_COMMENT) |
+| `Notification` | Notificaciones tipadas (COMPLETED / BLOCKED / ADDED_TO_PROJECT / TASK_COMMENT / TASK_MENTION) |
 | `Feedback` | Mensajes de sugerencias y errores del equipo |
 | `PasswordResetToken` | Tokens de un solo uso para recuperación de contraseña |
 | `DailyInsight` | Coaching IA generado diariamente por usuario (cacheado, con feedback) |
@@ -274,26 +274,30 @@ Las tareas completadas también están contraídas por defecto. Al expandir se v
 
 ## Tareas destacadas (starred)
 
-Hasta **3 tareas** pueden estar destacadas simultáneamente. Tienen 3 niveles de prioridad indicados por el color de la estrella:
+Hasta **3 tareas** pueden estar destacadas simultáneamente. La estrella es el único indicador de estado y prioridad en el TaskCard (el punto de estado fue reemplazado):
 
-| Nivel | Color | Significado |
-|-------|-------|-------------|
-| 1 | Amarillo | Prioridad normal |
-| 2 | Naranja | Prioridad alta |
-| 3 | Rojo | Urgente |
+| Estado | Apariencia |
+|--------|-----------|
+| Sin destacar + activa (`IN_PROGRESS`) | Estrella vacía verde, pulsando |
+| Sin destacar + otros estados | Estrella vacía gris |
+| Nivel 1 | Estrella llena verde |
+| Nivel 2 | Estrella llena amarilla |
+| Nivel 3 | Estrella llena roja |
 
-Las tareas destacadas aparecen en la sección **"Destacadas: Foco del día"** del Dashboard, por debajo de las tareas en curso. Si una tarea destacada pasa a `IN_PROGRESS`, se mueve a la sección "En curso".
+Cualquier nivel de estrella pulsa si la tarea está `IN_PROGRESS`. Las tareas destacadas aparecen en la sección **"Destacadas: Foco del día"** del Dashboard, por debajo de las tareas en curso. Si una tarea destacada pasa a `IN_PROGRESS`, se mueve a la sección "En curso".
 
 ---
 
 ## Comentarios en tareas
 
-Cualquier miembro de un proyecto puede dejar comentarios en las tareas, tanto en el Dashboard (tareas propias) como en la vista de detalle del proyecto (tareas de otros).
+Cualquier miembro de un proyecto puede dejar comentarios en las tareas, tanto en el Dashboard (tareas propias) como en la vista de detalle del proyecto (tareas de otros). El modal de comentarios también se puede abrir haciendo click en el **título de la tarea**.
 
 - Las tareas con comentarios muestran un indicador 💬 N en el TaskCard.
 - Las tareas sin comentarios muestran un 💬 tenue para invitar a comentar.
-- Al hacer click se abre `TaskCommentsModal` con el historial de comentarios y un campo para agregar uno nuevo (Ctrl+Enter para enviar).
-- **Notificaciones:** al comentar se notifica al dueño de la tarea y a todos los que habían comentado antes (sin duplicados, sin auto-notificarse). Aparecen en azul en el panel de notificaciones con badge 💬.
+- Al hacer click se abre `TaskCommentsModal` con el historial y un campo para agregar uno nuevo (Ctrl+Enter para enviar).
+- **@menciones:** escribir `@` muestra un dropdown con miembros del proyecto. Al seleccionar uno, se inserta `@Nombre` en el texto. Las menciones se resaltan en **púrpura** en el comentario renderizado.
+- **Notificaciones al comentar:** el dueño de la tarea y todos los comentadores previos reciben una notificación azul 💬. Los usuarios mencionados con `@` reciben una notificación **púrpura @** en su lugar (sin duplicado con la notificación de comentario).
+- **Edición de descripción:** el dueño de la tarea o un admin puede editar la descripción directamente desde el modal (ícono de lápiz, Ctrl+Enter para guardar).
 
 ---
 
@@ -379,10 +383,10 @@ Los administradores también ven un acceso directo a **Admin → Roles IA** para
 |----------|-------------|
 | Dashboard | Tareas del día + carry-over + destacadas + insight diario IA |
 | Mis Proyectos | Proyectos asignados con pills de conteos de tareas por estado |
-| Detalle de proyecto | Tareas activas por persona + links útiles + servicios + equipo + completadas esta semana + archivo histórico |
-| Mis Reportes | Historial de tareas completadas por proyecto con filtro de fechas |
+| Detalle de proyecto | Tareas activas por persona (título clickeable abre comentarios) + tabs: Situación / Links / Personas / Servicios + completadas esta semana + archivo histórico + navegación "Siguiente proyecto →" |
+| Mis Reportes | Historial de tareas completadas por proyecto con filtro de fechas. Permite editar la duración de cualquier tarea propia (✎). |
 | Perfil | Avatar, datos personales, cambio de contraseña |
-| Preferencias | Control de las 4 features de IA + botón de prueba del resumen semanal |
+| Preferencias | Control de las 4 features de IA + botón de prueba del resumen semanal. Los admins ven tabs: **Globales** (configuración del sistema) y **Personales** (preferencias individuales). |
 
 ### Administrador (todo lo anterior más)
 | Pantalla | Descripción |
@@ -423,16 +427,21 @@ Las fotos se muestran en: Navbar (dropdown), detalle de proyecto, Actividad y no
 
 ## Notificaciones
 
-Las notificaciones se generan en cuatro eventos:
+Las notificaciones se generan en cinco eventos:
 
-| Tipo | Color | Descripción |
-|------|-------|-------------|
-| `COMPLETED` | Azul (primary) | Un miembro completó una tarea del proyecto |
-| `BLOCKED` | Rojo | Un miembro bloqueó una tarea; badge ⚠ sobre la foto |
-| `ADDED_TO_PROJECT` | Verde | Fuiste agregado a un proyecto; badge ＋ sobre la foto |
-| `TASK_COMMENT` | Azul | Alguien comentó en una tarea tuya o donde participaste; badge 💬 |
+| Tipo | Color | Badge | Descripción |
+|------|-------|-------|-------------|
+| `COMPLETED` | Naranja (primary) | — | Un miembro completó una tarea del proyecto |
+| `BLOCKED` | Rojo | ⚠ | Un miembro bloqueó una tarea |
+| `ADDED_TO_PROJECT` | Verde | ＋ | Fuiste agregado a un proyecto |
+| `TASK_COMMENT` | Azul | 💬 | Alguien comentó en una tarea tuya o donde participaste |
+| `TASK_MENTION` | Púrpura | @ | Te mencionaron con @ en un comentario, o alguien te asignó una tarea |
 
-Polling cada 30 segundos. Se marcan como leídas al abrir el panel.
+Cada notificación es un **link clickeable** que navega al proyecto y abre automáticamente el modal de comentarios de la tarea correspondiente. El nombre del proyecto se muestra como pill junto a la fecha.
+
+El panel incluye **6 filtros** en pills: Todas · @ · 💬 · 🔒 · ✓ · ＋. Cada filtro muestra el conteo de no-leídas de ese tipo.
+
+En mobile el panel ocupa ~95% del ancho de pantalla. Polling cada 2 minutos. Se marcan como leídas al abrir el panel.
 
 ---
 
@@ -460,7 +469,7 @@ Todas las fechas de jornadas se calculan en **America/Argentina/Buenos_Aires (UT
 5. Agrega tareas con descripción y proyecto; puede asignarla a otro miembro
 6. Hace clic en **Iniciar** — solo puede tener **una tarea activa** a la vez
 7. Desde una tarea en curso puede pausar, bloquear (requiere razón) o completar
-8. Puede dejar comentarios en cualquier tarea del proyecto — el dueño y otros comentadores reciben notificación
+8. Puede dejar comentarios en cualquier tarea del proyecto — puede mencionar compañeros con `@Nombre`. El dueño y otros comentadores reciben notificación; los mencionados reciben una notificación @ especial.
 9. Al completar, los demás miembros del proyecto reciben una notificación
 10. Al terminar el día, hace clic en **Finalizar jornada** — la sesión se cierra
 

@@ -151,17 +151,31 @@ function buildRoleContext(roleExpectation) {
   return ctx
 }
 
-function buildMemoryContext(memory) {
-  if (!memory) return ''
+function buildMemoryContext(memories) {
+  if (!memories || memories.length === 0) return ''
+  const latest = memories[0]
   let ctx = '\nPERFIL DE PRODUCTIVIDAD HISTÓRICO:\n'
-  if (memory.tendencias)      ctx += `Tendencias: ${memory.tendencias}\n`
-  if (memory.fortalezas)      ctx += `Fortalezas: ${memory.fortalezas}\n`
-  if (memory.areasDeAtencion) ctx += `Áreas de atención: ${memory.areasDeAtencion}\n`
-  const stats = memory.estadisticas || {}
-  if (stats.tasaCompletado !== undefined) {
-    ctx += `Estadísticas históricas: tasa de completado ${Math.round(stats.tasaCompletado * 100)}%, `
-    ctx += `${stats.promedioTareasPorDia} tareas/día en promedio, `
-    ctx += `${stats.proyectosSimultaneos} proyectos simultáneos en promedio\n`
+  if (latest.tendencias)      ctx += `Tendencias: ${latest.tendencias}\n`
+  if (latest.fortalezas)      ctx += `Fortalezas: ${latest.fortalezas}\n`
+  if (latest.areasDeAtencion) ctx += `Áreas de atención: ${latest.areasDeAtencion}\n`
+  const s = latest.estadisticas || {}
+  if (s.tasaCompletado !== undefined) {
+    ctx += `Estadísticas: ${Math.round(s.tasaCompletado * 100)}% completado, ${s.promedioTareasPorDia} tareas/día en promedio`
+    if (s.avgPauseMinutes > 0) ctx += `, ${s.avgPauseMinutes}m en pausa promedio`
+    if (s.stuckTasksCount > 0) ctx += `, ${s.stuckTasksCount} tareas que quedaron atascadas`
+    ctx += '\n'
+  }
+  if (memories.length > 1) {
+    ctx += 'Evolución por semana:\n'
+    for (const m of memories.slice(1)) {
+      const ms = m.estadisticas || {}
+      if (ms.tasaCompletado !== undefined) {
+        ctx += `  ${m.weekStart}: ${Math.round(ms.tasaCompletado * 100)}% completado`
+        if (ms.promedioTareasPorDia) ctx += `, ${ms.promedioTareasPorDia} tareas/día`
+        if (ms.stuckTasksCount > 0) ctx += `, ${ms.stuckTasksCount} atascadas`
+        ctx += '\n'
+      }
+    }
   }
   return ctx
 }
@@ -417,7 +431,11 @@ async function sendWeeklyReportForUser(user) {
         ? prisma.roleExpectation.findUnique({ where: { roleName: user.role } })
         : null,
       user.insightMemoryEnabled !== false
-        ? prisma.userInsightMemory.findUnique({ where: { userId: user.id } })
+        ? prisma.userInsightMemory.findMany({
+            where: { userId: user.id, weekStart: { not: '' } },
+            orderBy: { weekStart: 'desc' },
+            take: 4,
+          })
         : null,
     ])
 

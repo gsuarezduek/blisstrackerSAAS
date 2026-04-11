@@ -293,7 +293,7 @@ export default function ProjectDetail() {
                 >
                   {data.project.situationEnabled !== false && <option value="situacion">Situación</option>}
                   {data.project.linksEnabled !== false && <option value="links">Links útiles</option>}
-                  <option value="personas">Personas</option>
+                  <option value="personas">Equipo</option>
                   {data.project.services?.length > 0 && <option value="servicios">Servicios</option>}
                 </select>
                 {/* Desktop */}
@@ -318,7 +318,7 @@ export default function ProjectDetail() {
                     onClick={() => setInfoTab('personas')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'personas' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                   >
-                    Personas
+                    Equipo
                   </button>
                   {data.project.services?.length > 0 && (
                     <button

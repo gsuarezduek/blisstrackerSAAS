@@ -57,7 +57,7 @@ model User {
   workDays      WorkDay[]
   tasks         Task[]
   dailyInsights DailyInsight[]
-  insightMemory UserInsightMemory?
+  insightMemories UserInsightMemory[]
   tasksCreated  Task[]         @relation("TaskCreatedBy")
   feedbacks     Feedback[]
   projects      ProjectMember[]
@@ -227,15 +227,18 @@ model Task {
 
 model UserInsightMemory {
   id              Int      @id @default(autoincrement())
-  userId          Int      @unique
+  userId          Int
   user            User     @relation(fields: [userId], references: [id])
   tendencias      String   @default("")
   fortalezas      String   @default("")
   areasDeAtencion String   @default("")
   estadisticas    Json     @default("{}")
-  weekStart       String   @default("") // YYYY-MM-DD — semana que cubre esta memoria
+  weekStart       String   @default("") // YYYY-MM-DD — lunes de inicio de la ventana de 4 semanas
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@unique([userId, weekStart])
+  @@index([userId])
 }
 
 model RoleExpectation {
