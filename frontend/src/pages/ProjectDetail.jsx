@@ -591,6 +591,11 @@ export default function ProjectDetail() {
                                     onClick={() => setCommentTask(task)}
                                     className="text-sm text-gray-700 dark:text-gray-300 leading-snug cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
                                   >{linkify(task.description)}</p>
+                                  {task.createdBy && (
+                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                      Creada por {task.createdBy.name.split(' ')[0]}
+                                    </p>
+                                  )}
                                   <div className="mt-1">
                                     {(task._count?.comments ?? 0) > 0 ? (
                                       <button

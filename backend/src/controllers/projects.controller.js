@@ -223,8 +223,9 @@ async function projectTasks(req, res, next) {
           status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         },
         include: {
-          user: { select: { id: true, name: true, role: true, avatar: true } },
-          _count: { select: { comments: true } },
+          user:      { select: { id: true, name: true, role: true, avatar: true } },
+          createdBy: { select: { id: true, name: true } },
+          _count:    { select: { comments: true } },
         },
         orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
         take: ACTIVE_LIMIT,
@@ -253,6 +254,7 @@ async function projectTasks(req, res, next) {
         id: task.id, description: task.description, status: task.status,
         blockedReason: task.blockedReason, createdAt: task.createdAt, startedAt: task.startedAt,
         projectId: task.projectId, _count: task._count,
+        createdBy: task.createdBy?.id !== task.user.id ? task.createdBy : null,
       })
     }
 

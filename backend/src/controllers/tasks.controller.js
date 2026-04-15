@@ -445,4 +445,33 @@ async function moveToBacklog(req, res, next) {
   }
 }
 
-module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, editTask, setDuration, starTask, addToToday, moveToBacklog, completedHistory, assertNoActiveTask }
+async function delegated(req, res, next) {
+  try {
+    const createdById = req.user.id
+
+    // Completadas hace más de 7 días se excluyen de la vista
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        createdById,
+        userId: { not: createdById },
+        OR: [
+          { status: { not: 'COMPLETED' } },
+          { status: 'COMPLETED', completedAt: { gte: weekAgo } },
+        ],
+      },
+      include: {
+        project: true,
+        user: { select: { id: true, name: true, avatar: true } },
+        _count: { select: { comments: true } },
+      },
+      orderBy: [{ project: { name: 'asc' } }, { createdAt: 'desc' }],
+    })
+
+    res.json(tasks)
+  } catch (err) { next(err) }
+}
+
+module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, editTask, setDuration, starTask, addToToday, moveToBacklog, completedHistory, delegated, assertNoActiveTask }

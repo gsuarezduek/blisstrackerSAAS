@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 
-const INACTIVITY_MS = 60 * 60 * 1000  // 60 minutes
+const INACTIVITY_MS = 2 * 60 * 60 * 1000  // 120 minutes
 
 function sendChromeNotification(taskDescription) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return
   try {
     new Notification('Tarea pausada por inactividad', {
-      body: `"${taskDescription}" fue pausada automáticamente tras 60 minutos sin actividad.`,
+      body: `"${taskDescription}" fue pausada automáticamente tras 120 minutos sin actividad.`,
       icon: '/favicon.ico',
       tag: 'inactivity-check',
     })
@@ -41,7 +41,7 @@ export function useInactivity({ activeTask, onAutoPause }) {
     return () => events.forEach(e => window.removeEventListener(e, handler))
   }, [])
 
-  // Inactivity watcher — polls every 30s, pauses immediately at 60 min
+  // Inactivity watcher — polls every 30s, pauses immediately at 120 min
   useEffect(() => {
     if (!activeTask) return
     const t = setInterval(() => {

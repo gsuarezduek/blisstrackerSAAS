@@ -22,6 +22,8 @@ export default function Dashboard() {
   const [elapsed, setElapsed] = useState('')
 
   const [carryOver, setCarryOver] = useState([])
+  const [delegated, setDelegated] = useState([])
+  const [delegatedOpen, setDelegatedOpen] = useState(false)
   const [backlogOpen,       setBacklogOpen]       = useState(false)
   const [completedOpen,     setCompletedOpen]     = useState(false)
   const [completedHistory,  setCompletedHistory]  = useState([])
@@ -56,6 +58,10 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => { loadToday() }, [loadToday])
+
+  useEffect(() => {
+    api.get('/tasks/delegated').then(r => setDelegated(r.data)).catch(() => {})
+  }, [])
 
   // Load AI insight once workday is available
   useEffect(() => {
@@ -184,6 +190,17 @@ export default function Dashboard() {
   )
 
   const activeTask = useMemo(() => focusTasks.find(t => t.status === 'IN_PROGRESS') ?? null, [focusTasks])
+
+  // Delegadas agrupadas por proyecto
+  const delegatedByProject = useMemo(() => {
+    const map = {}
+    for (const t of delegated) {
+      const pid = t.project.id
+      if (!map[pid]) map[pid] = { project: t.project, tasks: [] }
+      map[pid].tasks.push(t)
+    }
+    return Object.values(map)
+  }, [delegated])
   const hasActiveTask = !!activeTask
 
   // Inactivity detection
@@ -533,7 +550,86 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* 7. Completadas — historial paginado collapsible */}
+        {/* 7. Delegadas — collapsible */}
+        {delegatedByProject.length > 0 && (
+          <section className="mb-6">
+            <button
+              onClick={() => setDelegatedOpen(v => !v)}
+              className="w-full flex items-center justify-between py-2 group"
+            >
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Delegadas</h2>
+                <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
+                  {delegated.length}
+                </span>
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${delegatedOpen ? 'rotate-180' : ''}`}>
+                <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clipRule="evenodd" />
+              </svg>
+            </button>
+
+            {delegatedOpen && (
+              <div className="mt-2 space-y-4">
+                {delegatedByProject.map(({ project, tasks }) => (
+                  <div key={project.id}>
+                    <p className="text-xs font-medium text-primary-600 dark:text-primary-400 mb-1.5 px-1">{project.name}</p>
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+                      {tasks.map(t => {
+                        const statusLabel = {
+                          PENDING:     'Pendiente',
+                          IN_PROGRESS: 'En curso',
+                          PAUSED:      'Pausada',
+                          BLOCKED:     'Bloqueada',
+                          COMPLETED:   'Completada',
+                        }
+                        const statusColor = {
+                          PENDING:     'text-gray-400 dark:text-gray-500',
+                          IN_PROGRESS: 'text-primary-600 dark:text-primary-400',
+                          PAUSED:      'text-gray-500 dark:text-gray-400',
+                          BLOCKED:     'text-red-600 dark:text-red-400',
+                          COMPLETED:   'text-green-600 dark:text-green-400',
+                        }
+                        return (
+                          <div
+                            key={t.id}
+                            className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                            onClick={() => setCommentTask(t)}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-medium leading-snug truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+                                {t.description}
+                              </p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <img
+                                  src={`/perfiles/${t.user.avatar || 'bee.png'}`}
+                                  alt={t.user.name}
+                                  className="w-4 h-4 rounded-full object-cover flex-shrink-0"
+                                />
+                                <span className="text-xs text-gray-400 dark:text-gray-500">{t.user.name}</span>
+                                {(t._count?.comments ?? 0) > 0 && (
+                                  <>
+                                    <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                                    <span className="text-xs text-gray-400 dark:text-gray-500">💬 {t._count.comments}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <span className={`text-xs font-medium flex-shrink-0 ${statusColor[t.status]}`}>
+                              {statusLabel[t.status]}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 8. Completadas — historial paginado collapsible */}
         <section className="mb-6">
           <button
             onClick={handleToggleCompleted}
