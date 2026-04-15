@@ -20,6 +20,8 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
     try {
       const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`)
       onUpdate(data)
+    } catch (err) {
+      if (err.response?.data?.error) alert(err.response.data.error)
     } finally {
       setLoading(false)
     }
@@ -112,8 +114,8 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
   return (
     <div className={`relative bg-white dark:bg-gray-800 rounded-xl border p-4 flex flex-col gap-3 transition-opacity ${task.status === 'COMPLETED' ? 'opacity-70' : ''} ${borderClass}`}>
 
-      {/* Delete button — top-right corner, only for PENDING tasks */}
-      {task.status === 'PENDING' && (
+      {/* Delete button — top-right corner, for PENDING and PAUSED tasks */}
+      {(task.status === 'PENDING' || task.status === 'PAUSED') && (
         <button
           onClick={() => setShowDeleteConfirm(true)}
           title="Eliminar tarea"

@@ -22,6 +22,14 @@ function buildDateWhere(from, to) {
   return { date: range }
 }
 
+// Filtra por completedAt usando el día en Buenos Aires (UTC-3)
+function buildCompletedAtWhere(from, to) {
+  const range = {}
+  if (from) range.gte = new Date(from + 'T00:00:00-03:00')
+  if (to)   range.lte = new Date(to   + 'T23:59:59-03:00')
+  return range
+}
+
 // Minimal select shared across report queries — avoids loading full model columns
 const taskSelect = {
   id:              true,
@@ -39,11 +47,11 @@ async function byProject(req, res, next) {
   try {
     let { from, to } = req.query
     if (!from && !to) ({ from, to } = defaultDateRange())
+    const completedAtRange = buildCompletedAtWhere(from, to)
     const where = {
       status: 'COMPLETED',
       startedAt: { not: null },
-      completedAt: { not: null },
-      workDay: buildDateWhere(from, to),
+      completedAt: { not: null, ...completedAtRange },
     }
 
     const tasks = await prisma.task.findMany({
@@ -84,11 +92,11 @@ async function byUser(req, res, next) {
   try {
     let { userId, from, to } = req.query
     if (!from && !to) ({ from, to } = defaultDateRange())
+    const completedAtRange = buildCompletedAtWhere(from, to)
     const where = {
       status: 'COMPLETED',
       startedAt: { not: null },
-      completedAt: { not: null },
-      workDay: buildDateWhere(from, to),
+      completedAt: { not: null, ...completedAtRange },
     }
     if (userId) where.userId = Number(userId)
 
@@ -113,11 +121,11 @@ async function byUserSummary(req, res, next) {
   try {
     let { from, to } = req.query
     if (!from && !to) ({ from, to } = defaultDateRange())
+    const completedAtRange = buildCompletedAtWhere(from, to)
     const where = {
       status: 'COMPLETED',
       startedAt: { not: null },
-      completedAt: { not: null },
-      workDay: buildDateWhere(from, to),
+      completedAt: { not: null, ...completedAtRange },
     }
 
     const tasks = await prisma.task.findMany({
@@ -156,12 +164,12 @@ async function mine(req, res, next) {
   try {
     let { from, to } = req.query
     if (!from && !to) ({ from, to } = defaultDateRange())
+    const completedAtRange = buildCompletedAtWhere(from, to)
     const where = {
       userId: req.user.id,
       status: 'COMPLETED',
       startedAt: { not: null },
-      completedAt: { not: null },
-      workDay: buildDateWhere(from, to),
+      completedAt: { not: null, ...completedAtRange },
     }
 
     const tasks = await prisma.task.findMany({

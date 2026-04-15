@@ -166,9 +166,10 @@ export default function Dashboard() {
   // Derived state
   const tasks = workDay?.tasks ?? []
 
-  // Carry-over activos (IN_PROGRESS/PAUSED/BLOCKED) se muestran en el foco normal, no en backlog
-  const carryOverActive  = useMemo(() => carryOver.filter(t => t.status !== 'PENDING'), [carryOver])
-  const carryOverPending = useMemo(() => carryOver.filter(t => t.status === 'PENDING'),  [carryOver])
+  // Carry-over activos (IN_PROGRESS/PAUSED/BLOCKED sin isBacklog) se muestran en el foco normal
+  // Carry-over con isBacklog=true siempre van al backlog, sin importar el status
+  const carryOverActive  = useMemo(() => carryOver.filter(t => t.status !== 'PENDING' && !t.isBacklog), [carryOver])
+  const carryOverPending = useMemo(() => carryOver.filter(t => t.status === 'PENDING'  || t.isBacklog),  [carryOver])
 
   // Today focus = tasks in today's workday that are NOT backlog + carry-over activos, newest first
   const focusTasks = useMemo(() =>
