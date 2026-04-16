@@ -70,7 +70,33 @@ function StatCard({ icon, label, value, sub }) {
   )
 }
 
-function MiniDashboard({ users, lastLoginsMap }) {
+function StatCardSlider({ slides }) {
+  const [active, setActive] = useState(0)
+  const { icon, label, value, sub } = slides[active]
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4 relative">
+      <div className="absolute top-3 right-3 flex gap-1">
+        {slides.map((_, i) => (
+          <button key={i} onClick={() => setActive(i)}
+            className={`w-2 h-2 rounded-full transition-colors ${
+              i === active
+                ? 'bg-gray-400 dark:bg-gray-400'
+                : 'bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500'
+            }`}
+          />
+        ))}
+      </div>
+      <span className="text-2xl flex-shrink-0">{icon}</span>
+      <div className="min-w-0 pr-6">
+        <p className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{value}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+        {sub && <p className="text-xs text-primary-600 dark:text-primary-400 mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  )
+}
+
+function MiniDashboard({ users, lastLoginsMap, dashStats }) {
   const { labelFor } = useRoles()
   const today = todayBA()
   const HORIZON = 30
@@ -155,6 +181,16 @@ function MiniDashboard({ users, lastLoginsMap }) {
 
   const maxRole = roleDistrib[0]?.[1] || 1
 
+  // Promedio global de horario de ingreso (promedio de los últimos logins de cada usuario activo)
+  const globalAvgLoginTime = useMemo(() => {
+    const times = activeUsers
+      .map(u => lastLoginsMap[u.id])
+      .filter(Boolean)
+      .map(iso => minutesFromMidnight(iso))
+    if (!times.length) return null
+    return minsToTime(times.reduce((a, b) => a + b, 0) / times.length)
+  }, [activeUsers, lastLoginsMap])
+
   const todayBA_str = todayStr()
   const loggedInToday = activeUsers.filter(u => {
     const last = lastLoginsMap[u.id]
@@ -166,21 +202,18 @@ function MiniDashboard({ users, lastLoginsMap }) {
       {/* Fila 1: stats numéricas */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard icon="👥" label="Personas activas"      value={activeUsers.length} />
-        <StatCard icon="📅" label="Antigüedad promedio"   value={avgTenureYears} />
-        {incompleteCount > 0
-          ? <StatCard
-              icon="📋"
-              label="Legajos incompletos"
-              value={incompleteCount}
-              sub="Sin datos personales"
-            />
-          : <StatCard
-              icon="🟢"
-              label="Iniciaron sesión hoy"
-              value={`${loggedInToday} / ${activeUsers.length}`}
-              sub={loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${activeUsers.length - loggedInToday} aún no ingresaron`}
-            />
-        }
+        <StatCardSlider slides={[
+          { icon: '📅', label: 'Antigüedad promedio',       value: avgTenureYears,                        sub: 'del equipo activo' },
+          { icon: '📁', label: 'Proyectos por persona',     value: dashStats.projectsPerPerson,           sub: 'promedio de asignaciones' },
+          { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—',           sub: 'sobre últimos registros' },
+        ]} />
+        <StatCardSlider slides={[
+          {   icon: '🟢',  label: 'Iniciaron sesión hoy', value: `${loggedInToday} / ${activeUsers.length}`,
+              sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${activeUsers.length - loggedInToday} aún no ingresaron` },
+          incompleteCount > 0
+            ? { icon: '📋', label: 'Legajos incompletos', value: incompleteCount,  sub: 'Sin datos personales' }
+            : { icon: '✅', label: 'Legajos completos',   value: activeUsers.length, sub: 'Todos completos ✓' },
+        ]} />
       </div>
 
       {/* Fila 2: cumpleaños + aniversarios */}
@@ -273,7 +306,7 @@ function MiniDashboard({ users, lastLoginsMap }) {
             🕐 Último ingreso
           </p>
           <div className="space-y-2">
-            {lastLoginRows.map(u => (
+            {lastLoginRows.slice(0, 10).map(u => (
               <div key={u.id} className="flex items-center gap-2.5">
                 <img src={`/perfiles/${u.avatar || 'bee.png'}`} alt={u.name}
                   className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
@@ -288,6 +321,11 @@ function MiniDashboard({ users, lastLoginsMap }) {
                 </span>
               </div>
             ))}
+            {lastLoginRows.length > 10 && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 pt-1">
+                +{lastLoginRows.length - 10} más — ver en Legajos
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -702,6 +740,7 @@ export default function RRHH() {
   const [tab, setTab]           = useState('legajos')
   const [users, setUsers]       = useState([])
   const [lastLoginsMap, setLastLoginsMap] = useState({})
+  const [dashStats, setDashStats] = useState({ projectsPerPerson: 0 })
 
   useEffect(() => {
     api.get('/users').then(r => setUsers(r.data)).catch(() => {})
@@ -712,6 +751,9 @@ export default function RRHH() {
         setLastLoginsMap(map)
       })
       .catch(() => {})
+    api.get('/admin/rrhh/dashboard-stats')
+      .then(r => setDashStats(r.data))
+      .catch(() => {})
   }, [])
 
   return (
@@ -721,7 +763,7 @@ export default function RRHH() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">RRHH</h1>
 
         {/* Mini dashboard — siempre visible */}
-        {users.length > 0 && <MiniDashboard users={users} lastLoginsMap={lastLoginsMap} />}
+        {users.length > 0 && <MiniDashboard users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} />}
 
         {/* Tabs */}
         <div className="mb-4">

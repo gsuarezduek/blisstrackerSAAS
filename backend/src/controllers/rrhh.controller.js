@@ -121,4 +121,21 @@ async function updateVacationDays(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { loginHistory, lastLogins, userSummary, updateVacationDays }
+// Stats globales para el mini dashboard
+async function dashboardStats(req, res, next) {
+  try {
+    const [activeUsers, totalMemberships] = await Promise.all([
+      prisma.user.count({ where: { active: true } }),
+      prisma.projectMember.count({
+        where: { user: { active: true } },
+      }),
+    ])
+    res.json({
+      projectsPerPerson: activeUsers > 0
+        ? Math.round((totalMemberships / activeUsers) * 10) / 10
+        : 0,
+    })
+  } catch (err) { next(err) }
+}
+
+module.exports = { loginHistory, lastLogins, userSummary, updateVacationDays, dashboardStats }
