@@ -29,6 +29,8 @@ class ErrorBoundary extends React.Component {
 import Login2 from './pages/Login2'
 import Dashboard from './pages/Dashboard'
 import Admin from './pages/Admin'
+import Productivity from './pages/Productivity'
+import RRHH from './pages/RRHH'
 import RealTime from './pages/RealTime'
 import Reports from './pages/Reports'
 import MyReports from './pages/MyReports'
@@ -73,8 +75,10 @@ export default function App() {
           <Route path="/preferences"  element={<PrivateRoute><Preferences  /></PrivateRoute>} />
           <Route path="/docs"         element={<PrivateRoute><Docs         /></PrivateRoute>} />
           <Route path="/realtime" element={<PrivateRoute><RealTime /></PrivateRoute>} />
-          <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
-          <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+          <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
+          <Route path="/admin"              element={<AdminRoute><Admin        /></AdminRoute>} />
+          <Route path="/admin/productivity" element={<AdminRoute><Productivity /></AdminRoute>} />
+          <Route path="/admin/rrhh"         element={<AdminRoute><RRHH        /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

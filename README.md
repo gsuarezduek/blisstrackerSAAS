@@ -187,6 +187,8 @@ team-tracker/
         │   ├── RealTime.jsx          # Actividad del equipo en tiempo real
         │   ├── Reports.jsx           # Reportes completos (admin)
         │   ├── Admin.jsx             # Panel de administración (con deep linking ?tab=)
+        │   ├── Productivity.jsx      # Panel de productividad (admin, wraps ProductivityTab)
+        │   ├── RRHH.jsx              # Panel de RRHH: legajos, ingresos, mini dashboard
         │   ├── MyProfile.jsx         # Perfil personal, avatar y datos personales
         │   └── Preferences.jsx       # Sistema IA: insight diario, memoria, calidad, resumen semanal
         ├── components/
@@ -224,8 +226,9 @@ team-tracker/
 
 | Modelo | Descripción |
 |--------|-------------|
-| `User` | Usuarios con rol, avatar, `isAdmin` y 4 preferencias IA |
+| `User` | Usuarios con rol, avatar, `isAdmin`, 4 preferencias IA y `vacationDays` |
 | `UserRole` | Roles dinámicos creados desde el panel de admin |
+| `UserLogin` | Registro de cada inicio de sesión: `userId`, `loginAt` (UTC), `method` (email/google) |
 | `WorkDay` | Jornada laboral por usuario por día |
 | `Task` | Tarea con estado, prioridad (starred), backlog y registro de tiempo |
 | `TaskComment` | Comentarios en tareas; notifica al dueño y a comentadores previos |
@@ -393,9 +396,33 @@ Los administradores también ven un acceso directo a **Admin → Roles IA** para
 |----------|-------------|
 | Actividad | Monitor en vivo del equipo con fotos y estado en tiempo real |
 | Reportes | Tiempo por proyecto o por persona con detalle de tareas |
-| Administración | Proyectos (con links y buscador), equipo, servicios, roles, feedback y **Roles IA** (expectativas por puesto) |
+| Administración → Panel | Proyectos (con links y buscador), equipo, servicios, roles, feedback y **Roles IA** (expectativas por puesto). Deep linking: `/admin?tab=role-ai`. |
+| Administración → Productividad | Vista de productividad del equipo |
+| Administración → RRHH | Panel de Recursos Humanos (ver abajo) |
 
-El panel de admin soporta deep linking: `/admin?tab=role-ai` navega directamente a la pestaña de Roles IA.
+El menú de navegación agrupa las tres secciones de administración en un dropdown **"Administración"**.
+
+### Panel RRHH (`/admin/rrhh`)
+
+Panel de recursos humanos con tres niveles de información:
+
+**Mini Dashboard** (siempre visible):
+- Personas activas, antigüedad promedio, legajos incompletos
+- Próximos cumpleaños y aniversarios laborales (horizonte 30 días)
+- Distribución del equipo por roles
+- Último ingreso de cada persona
+
+**Legajos** (tab por defecto): seleccionar una persona para ver su ficha completa:
+- Horario promedio histórico de ingreso (calculado sobre todos los registros)
+- Proyectos en los que participa (con indicador activo/inactivo)
+- Días de vacaciones pendientes con botones `+` / `−` (mínimo 0)
+- Datos personales: teléfono, dirección, DNI, CUIT, alias bancario, estado civil, hijos, nivel educativo, grupo sanguíneo, obra social, contacto de emergencia
+
+**Ingresos**: historial de ingresos con filtros:
+- Atajos de fecha: Hoy · Esta semana · Semana pasada · Este mes · Mes pasado
+- Selector de rango manual + filtro por persona
+- Resultados agrupados por usuario (filas colapsables, cerradas por defecto)
+- Ordenamiento por horario promedio: ↑ Más temprano / ↓ Más tarde
 
 ---
 
@@ -447,7 +474,7 @@ En mobile el panel ocupa ~95% del ancho de pantalla. Polling cada 2 minutos. Se 
 
 ## Detección de inactividad
 
-`hooks/useInactivity.js` monitorea mouse y teclado. Si el usuario lleva 60 minutos sin actividad con una tarea `IN_PROGRESS`:
+`hooks/useInactivity.js` monitorea mouse y teclado. Si el usuario lleva **120 minutos** sin actividad con una tarea `IN_PROGRESS`:
 1. Muestra un modal de advertencia + notificación Chrome
 2. Si no responde en 10 minutos más, pausa la tarea automáticamente
 3. Al recargar la página, el modal se restaura desde `localStorage` (`autoPaused`)

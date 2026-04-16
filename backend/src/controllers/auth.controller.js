@@ -28,6 +28,8 @@ async function login(req, res, next) {
       { expiresIn: '12h' }
     )
 
+    prisma.userLogin.create({ data: { userId: user.id, method: 'email' } }).catch(() => {})
+
     res.json({
       token,
       user: { id: user.id, name: user.name, email: user.email, role: user.role, isAdmin: user.isAdmin, avatar: user.avatar },
@@ -129,6 +131,8 @@ async function googleLogin(req, res, next) {
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     )
+
+    prisma.userLogin.create({ data: { userId: user.id, method: 'google' } }).catch(() => {})
 
     res.json({
       token,

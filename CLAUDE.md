@@ -71,7 +71,7 @@ Full-stack task tracker for a marketing agency. Backend is a REST API; frontend 
 - `context/AuthContext.jsx` — global auth state; validates token on mount via `GET /auth/me` (hits DB, returns fresh `avatar` and `dailyInsightEnabled`). Exposes `updateUser()` for local state updates without re-login.
 - `context/ThemeContext.jsx` — dark mode toggle persisted to `localStorage`.
 - `hooks/useRoles.js` — fetches `UserRole` list for label lookups (role names are internal strings like `"DESIGNER"`; labels are display strings like `"Diseñador"`). Has module-level cache so it only fetches once per session.
-- `hooks/useInactivity.js` — tracks mouse/keyboard activity; after 60 min idle on an IN_PROGRESS task shows a warning modal + Chrome notification; auto-pauses after a further 10 min.
+- `hooks/useInactivity.js` — tracks mouse/keyboard activity; after 120 min idle on an IN_PROGRESS task shows a warning modal + Chrome notification; auto-pauses after a further 10 min.
 - `utils/format.js` — shared `fmtMins()`, `activeMinutes()`, `completedDuration()`.
 - `utils/linkify.jsx` — converts plain URLs in text to clickable `<a>` tags (returns array of strings/elements, never a plain string).
 
@@ -139,6 +139,16 @@ The context sent to Claude includes: current task states + blocked reasons + car
 
 **Preferences tabs:** `Preferences.jsx` shows a tab bar for admins: **Globales** (default — AI usage panel, project settings, timezone, email sender) and **Personales** (insight toggles, notifications). Non-admin users see only the personal view without tabs.
 
+**Login tracking:** Every successful login (email or Google OAuth) records a `UserLogin` row fire-and-forget (`prisma.userLogin.create(...).catch(() => {})`). The `UserLogin` model stores `userId`, `loginAt` (UTC), and `method` (`"email"` | `"google"`). The RRHH panel uses this to show login history per user and compute the historical average login time (in Buenos Aires timezone).
+
+**RRHH panel (`/admin/rrhh`):** Admin-only page at `frontend/src/pages/RRHH.jsx`. Structure:
+- **MiniDashboard** — always visible at the top: active user count, average tenure, incomplete profiles count, upcoming birthdays (30-day horizon), upcoming work anniversaries (≥1 year, 30-day horizon), role distribution bar chart, last login per person.
+- **Tabs:** Legajos (default) · Ingresos
+- **Legajos tab** — select a person to view: header (avatar, name, role, email) + 3 summary cards (historical avg login time, projects with active/inactive dot, vacation days with ±1 buttons) + personal data grid.
+- **Ingresos tab** — date range filter with shortcut pills (Hoy / Esta semana / Semana pasada / Este mes / Mes pasado) + manual date pickers + person filter + search button. Results shown as collapsible user rows (collapsed by default), each showing login count + avg time. Sort control (↑ Más temprano / ↓ Más tarde) appears bottom-right when there are ≥2 users.
+- `vacationDays Int @default(0)` on `User` — managed exclusively via the RRHH panel. Floors at 0.
+- The Navbar "Administración" dropdown links to Productividad (`/admin/productivity`), RRHH (`/admin/rrhh`), and Panel (`/admin`).
+
 **AI insight context — backlog separation:** The context sent to Claude explicitly separates backlog tasks from pending tasks, labeling them as "planificación semanal, no son prioridad inmediata." This prevents Claude from suggesting to remove tasks from the backlog in daily coaching.
 
 ### Prisma schema notes
@@ -147,7 +157,7 @@ The context sent to Claude includes: current task states + blocked reasons + car
 - When a model has two relations to the same model, named relations are required (see `Task.createdBy` / `Task.user` both pointing to `User`).
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`.
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`.
 - `TaskComment.content` is the text field (not `text`) — the table existed prior to migration with this column name. The `parentId` self-relation field exists in the DB for future threading but is not used by the UI yet.
 - `WorkDay` has `@@index([userId, date])` (composite) in addition to the individual indexes — added for performance on carry-over queries.
 
@@ -196,8 +206,13 @@ GET    /api/reports/by-user
 GET    /api/reports/by-user-summary
 GET    /api/reports/mine
 
-GET    /api/users                        # list all users (admin only)
+GET    /api/users                        # list all users (admin only) — includes vacationDays
 GET    /api/users/:id/tasks              # active tasks + completedThisWeek for a user
+
+GET    /api/admin/rrhh/logins            # login history filtered by date range + optional userId (admin)
+GET    /api/admin/rrhh/last-logins       # most recent login per active user (admin)
+GET    /api/admin/rrhh/user-summary/:id  # avg historical login time + projects for a user (admin)
+PATCH  /api/admin/rrhh/vacation-days/:id # update vacationDays by delta +1/-1, floor 0 (admin)
 
 GET    /api/notifications
 POST   /api/notifications/read-all
@@ -224,8 +239,10 @@ PUT    /api/role-expectations/:roleName  # create or update role expectation (ad
 /profile          → MyProfile.jsx        (PrivateRoute)
 /preferences      → Preferences.jsx      (PrivateRoute)
 /realtime         → RealTime.jsx         (PrivateRoute)
-/reports          → Reports.jsx          (AdminRoute)
-/admin            → Admin.jsx            (AdminRoute)  — accepts ?tab= query param
+/reports             → Reports.jsx          (AdminRoute)
+/admin               → Admin.jsx            (AdminRoute)  — accepts ?tab= query param
+/admin/productivity  → Productivity.jsx     (AdminRoute)  — wraps ProductivityTab
+/admin/rrhh          → RRHH.jsx             (AdminRoute)  — HR panel
 ```
 
 ### Testing

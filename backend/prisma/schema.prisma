@@ -53,6 +53,7 @@ model User {
   insightMemoryEnabled  Boolean  @default(true)
   taskQualityEnabled    Boolean  @default(true)
   isAdmin               Boolean  @default(false)
+  vacationDays          Int      @default(0)
 
   workDays      WorkDay[]
   tasks         Task[]
@@ -65,6 +66,18 @@ model User {
   notifications         Notification[] @relation("NotificationRecipient")
   notificationsAsActor  Notification[] @relation("NotificationActor")
   passwordResetTokens   PasswordResetToken[]
+  loginEvents   UserLogin[]
+}
+
+model UserLogin {
+  id       Int      @id @default(autoincrement())
+  userId   Int
+  user     User     @relation(fields: [userId], references: [id])
+  loginAt  DateTime @default(now())
+  method   String   // "email" | "google"
+
+  @@index([userId])
+  @@index([loginAt])
 }
 
 model PasswordResetToken {

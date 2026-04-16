@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation, useMatch } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
 import FeedbackButton from './FeedbackButton'
@@ -14,14 +14,18 @@ export default function Navbar() {
   const { dark, toggle } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [adminOpen, setAdminOpen] = useState(false)
+  const [adminMobileOpen, setAdminMobileOpen] = useState(false)
   const profileRef = useRef(null)
+  const adminRef = useRef(null)
 
-  // Cerrar el dropdown de perfil al hacer click afuera
+  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh')
+
+  // Cerrar dropdowns al hacer click afuera
   useEffect(() => {
     function handleClickOutside(e) {
-      if (profileRef.current && !profileRef.current.contains(e.target)) {
-        setProfileOpen(false)
-      }
+      if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)
+      if (adminRef.current   && !adminRef.current.contains(e.target))   setAdminOpen(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -44,10 +48,13 @@ export default function Navbar() {
     { to: '/my-projects', label: 'Mis Proyectos' },
     ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
     { to: '/realtime', label: 'Actividad', dot: true },
-    ...(isAdmin ? [
-      { to: '/reports', label: 'Reportes' },
-      { to: '/admin', label: 'Administración' },
-    ] : []),
+    ...(isAdmin ? [{ to: '/reports', label: 'Reportes' }] : []),
+  ]
+
+  const adminSublinks = [
+    { to: '/admin/productivity', label: '📊 Productividad' },
+    { to: '/admin/rrhh',         label: '👥 RRHH' },
+    { to: '/admin',              label: '⚙️ Panel' },
   ]
 
   function NavLink({ to, label, dot, onClick }) {
@@ -81,10 +88,46 @@ export default function Navbar() {
           </div>
 
           {/* Desktop links */}
-          <div className="hidden md:flex gap-5 text-sm">
+          <div className="hidden md:flex gap-5 text-sm items-center">
             {links.map(l => (
               <NavLink key={l.to} {...l} />
             ))}
+            {isAdmin && (
+              <div ref={adminRef} className="relative">
+                <button
+                  onClick={() => setAdminOpen(o => !o)}
+                  className={`flex items-center gap-1 transition-colors ${
+                    isAdminRoute
+                      ? 'text-primary-600 dark:text-primary-400 font-semibold'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400'
+                  }`}
+                >
+                  Administración
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                    className={`w-3.5 h-3.5 transition-transform ${adminOpen ? 'rotate-180' : ''}`}>
+                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                {adminOpen && (
+                  <div className="absolute left-0 mt-2 w-44 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg py-1 z-50">
+                    {adminSublinks.map(s => (
+                      <Link
+                        key={s.to}
+                        to={s.to}
+                        onClick={() => setAdminOpen(false)}
+                        className={`flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
+                          location.pathname === s.to
+                            ? 'text-primary-600 dark:text-primary-400 font-semibold bg-primary-50 dark:bg-primary-900/20'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {s.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right side */}
@@ -215,6 +258,42 @@ export default function Navbar() {
                 <NavLink {...l} onClick={closeMenu} />
               </div>
             ))}
+            {isAdmin && (
+              <div className="py-2">
+                <button
+                  onClick={() => setAdminMobileOpen(o => !o)}
+                  className={`flex items-center gap-1 text-sm transition-colors w-full ${
+                    isAdminRoute
+                      ? 'text-primary-600 dark:text-primary-400 font-semibold'
+                      : 'text-gray-600 dark:text-gray-300'
+                  }`}
+                >
+                  Administración
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                    className={`w-3.5 h-3.5 ml-auto transition-transform ${adminMobileOpen ? 'rotate-180' : ''}`}>
+                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                {adminMobileOpen && (
+                  <div className="ml-3 mt-1 space-y-1 border-l-2 border-gray-200 dark:border-gray-700 pl-3">
+                    {adminSublinks.map(s => (
+                      <Link
+                        key={s.to}
+                        to={s.to}
+                        onClick={closeMenu}
+                        className={`block py-1.5 text-sm transition-colors ${
+                          location.pathname === s.to
+                            ? 'text-primary-600 dark:text-primary-400 font-semibold'
+                            : 'text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400'
+                        }`}
+                      >
+                        {s.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Profile links */}
             <div className="pt-2 border-t border-gray-100 dark:border-gray-700 mt-2 space-y-2">
