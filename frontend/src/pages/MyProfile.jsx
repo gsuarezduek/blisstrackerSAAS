@@ -115,6 +115,7 @@ export default function MyProfile() {
         dni:              data.dni ?? '',
         cuit:             data.cuit ?? '',
         alias:            data.alias ?? '',
+        bankName:         data.bankName ?? '',
         maritalStatus:    data.maritalStatus ?? '',
         children:         data.children ?? '',
         educationLevel:   data.educationLevel ?? '',
@@ -360,6 +361,9 @@ export default function MyProfile() {
                 </Field>
                 <Field label="Alias CBU">
                   <Input value={form.alias} onChange={set('alias')} placeholder="nombre.alias.mp" />
+                </Field>
+                <Field label="Banco">
+                  <Input value={form.bankName} onChange={set('bankName')} placeholder="Ej: Santander, Galicia, Naranja X" />
                 </Field>
               </div>
             </div>

@@ -96,11 +96,16 @@ async function startTask(req, res, next) {
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para iniciarla.' })
 
-    const task = await prisma.task.update({
-      where: { id: Number(req.params.id), userId },
-      data: { status: 'IN_PROGRESS', startedAt: new Date() },
-      include: taskInclude,
-    })
+    const now = new Date()
+    const taskId = Number(req.params.id)
+    const [task] = await prisma.$transaction([
+      prisma.task.update({
+        where: { id: taskId, userId },
+        data: { status: 'IN_PROGRESS', startedAt: now },
+        include: taskInclude,
+      }),
+      prisma.taskSession.create({ data: { taskId, startedAt: now } }),
+    ])
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -110,11 +115,19 @@ async function startTask(req, res, next) {
 
 async function pauseTask(req, res, next) {
   try {
-    const task = await prisma.task.update({
-      where: { id: Number(req.params.id), userId: req.user.id },
-      data: { status: 'PAUSED', pausedAt: new Date() },
-      include: taskInclude,
-    })
+    const now = new Date()
+    const taskId = Number(req.params.id)
+    const [task] = await prisma.$transaction([
+      prisma.task.update({
+        where: { id: taskId, userId: req.user.id },
+        data: { status: 'PAUSED', pausedAt: now },
+        include: taskInclude,
+      }),
+      prisma.taskSession.updateMany({
+        where: { taskId, endedAt: null },
+        data: { endedAt: now },
+      }),
+    ])
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -136,18 +149,23 @@ async function resumeTask(req, res, next) {
     if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para reanudarla.' })
 
     // Accumulate the time spent paused
-    const pausedMs   = current.pausedAt ? Date.now() - new Date(current.pausedAt).getTime() : 0
+    const now        = new Date()
+    const pausedMs   = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
     const addedMins  = Math.round(pausedMs / 60000)
+    const taskId     = Number(req.params.id)
 
-    const task = await prisma.task.update({
-      where: { id: Number(req.params.id) },
-      data: {
-        status:        'IN_PROGRESS',
-        pausedAt:      null,
-        pausedMinutes: { increment: addedMins },
-      },
-      include: taskInclude,
-    })
+    const [task] = await prisma.$transaction([
+      prisma.task.update({
+        where: { id: taskId },
+        data: {
+          status:        'IN_PROGRESS',
+          pausedAt:      null,
+          pausedMinutes: { increment: addedMins },
+        },
+        include: taskInclude,
+      }),
+      prisma.taskSession.create({ data: { taskId, startedAt: now } }),
+    ])
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -158,11 +176,19 @@ async function resumeTask(req, res, next) {
 async function completeTask(req, res, next) {
   try {
     const userId = req.user.id
-    const task = await prisma.task.update({
-      where:   { id: Number(req.params.id), userId },
-      data:    { status: 'COMPLETED', completedAt: new Date(), pausedAt: null },
-      include: taskInclude,
-    })
+    const now    = new Date()
+    const taskId = Number(req.params.id)
+    const [task] = await prisma.$transaction([
+      prisma.task.update({
+        where:   { id: taskId, userId },
+        data:    { status: 'COMPLETED', completedAt: now, pausedAt: null },
+        include: taskInclude,
+      }),
+      prisma.taskSession.updateMany({
+        where: { taskId, endedAt: null },
+        data:  { endedAt: now },
+      }),
+    ])
 
     // Notify all other members of the same project
     const members = await prisma.projectMember.findMany({
@@ -198,11 +224,19 @@ async function blockTask(req, res, next) {
     const userId = req.user.id
     const { reason } = req.body
     if (!reason?.trim()) return res.status(400).json({ error: 'La razón del bloqueo es requerida' })
-    const task = await prisma.task.update({
-      where: { id: Number(req.params.id), userId },
-      data: { status: 'BLOCKED', blockedReason: reason.trim(), pausedAt: new Date() },
-      include: taskInclude,
-    })
+    const now    = new Date()
+    const taskId = Number(req.params.id)
+    const [task] = await prisma.$transaction([
+      prisma.task.update({
+        where: { id: taskId, userId },
+        data: { status: 'BLOCKED', blockedReason: reason.trim(), pausedAt: now },
+        include: taskInclude,
+      }),
+      prisma.taskSession.updateMany({
+        where: { taskId, endedAt: null },
+        data:  { endedAt: now },
+      }),
+    ])
 
     // Notificar a todos los miembros del proyecto
     const members = await prisma.projectMember.findMany({
@@ -246,19 +280,24 @@ async function unblockTask(req, res, next) {
     if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para desbloquearla.' })
 
     // Accumulate time spent blocked so it doesn't count as work time
-    const blockedMs  = current.pausedAt ? Date.now() - new Date(current.pausedAt).getTime() : 0
+    const now        = new Date()
+    const blockedMs  = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
     const addedMins  = Math.round(blockedMs / 60000)
+    const taskId     = Number(req.params.id)
 
-    const task = await prisma.task.update({
-      where: { id: Number(req.params.id) },
-      data: {
-        status:        'IN_PROGRESS',
-        blockedReason: null,
-        pausedAt:      null,
-        pausedMinutes: { increment: addedMins },
-      },
-      include: taskInclude,
-    })
+    const [task] = await prisma.$transaction([
+      prisma.task.update({
+        where: { id: taskId },
+        data: {
+          status:        'IN_PROGRESS',
+          blockedReason: null,
+          pausedAt:      null,
+          pausedMinutes: { increment: addedMins },
+        },
+        include: taskInclude,
+      }),
+      prisma.taskSession.create({ data: { taskId, startedAt: now } }),
+    ])
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })

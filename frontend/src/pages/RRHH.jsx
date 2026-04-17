@@ -51,7 +51,7 @@ function relativeDay(days) {
   return `en ${days} días`
 }
 
-const PERSONAL_FIELDS = ['phone','birthday','address','dni','cuit','alias',
+const PERSONAL_FIELDS = ['phone','birthday','address','dni','cuit','alias','bankName',
   'maritalStatus','children','educationLevel','educationTitle',
   'bloodType','medicalConditions','healthInsurance','emergencyContact']
 
@@ -181,15 +181,8 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
 
   const maxRole = roleDistrib[0]?.[1] || 1
 
-  // Promedio global de horario de ingreso (promedio de los últimos logins de cada usuario activo)
-  const globalAvgLoginTime = useMemo(() => {
-    const times = activeUsers
-      .map(u => lastLoginsMap[u.id])
-      .filter(Boolean)
-      .map(iso => minutesFromMidnight(iso))
-    if (!times.length) return null
-    return minsToTime(times.reduce((a, b) => a + b, 0) / times.length)
-  }, [activeUsers, lastLoginsMap])
+  // Promedio global de horario de ingreso (calculado server-side con primer ingreso del día)
+  const globalAvgLoginTime = dashStats.avgFirstLoginTime ?? null
 
   const todayBA_str = todayStr()
   const loggedInToday = activeUsers.filter(u => {
@@ -360,11 +353,11 @@ function dateShortcuts() {
 function TabIngresos({ users }) {
   const [logins, setLogins]     = useState([])
   const [loading, setLoading]   = useState(false)
-  const [from, setFrom]         = useState(thirtyDaysAgo)
+  const [from, setFrom]         = useState(todayStr)
   const [to, setTo]             = useState(todayStr)
   const [userId, setUserId]     = useState('')
   const [expanded, setExpanded] = useState({})   // { [userId]: true }
-  const [activeShortcut, setActiveShortcut] = useState(null)
+  const [activeShortcut, setActiveShortcut] = useState('Hoy')
   const [sortOrder, setSortOrder] = useState('asc')  // 'asc' | 'desc'
 
   const shortcuts = useMemo(() => dateShortcuts(), [])
@@ -405,7 +398,14 @@ function TabIngresos({ users }) {
     for (const uid of Object.keys(map))
       map[uid].logins.sort((a, b) => new Date(a.loginAt) - new Date(b.loginAt))
     return Object.values(map).map(({ user, logins }) => {
-      const avgMins = logins.reduce((acc, l) => acc + minutesFromMidnight(l.loginAt), 0) / logins.length
+      // Solo el primer ingreso del día para calcular el promedio
+      const byDay = {}
+      for (const l of logins) {
+        const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: TZ })
+        if (!byDay[day]) byDay[day] = l   // logins ya ordenados asc → primero gana
+      }
+      const firstPerDay = Object.values(byDay)
+      const avgMins = firstPerDay.reduce((acc, l) => acc + minutesFromMidnight(l.loginAt), 0) / firstPerDay.length
       return { user, logins, avgMins, avgTime: minsToTime(avgMins) }
     }).sort((a, b) =>
       sortOrder === 'asc' ? a.avgMins - b.avgMins : b.avgMins - a.avgMins
@@ -712,6 +712,7 @@ function TabLegajos({ users, onVacationUpdate }) {
                   <Field label="DNI"                    value={selected.dni} />
                   <Field label="CUIT"                   value={selected.cuit} />
                   <Field label="Alias bancario"         value={selected.alias} />
+                  <Field label="Banco"                  value={selected.bankName} />
                   <Field label="Estado civil"           value={CIVIL_LABELS[selected.maritalStatus] ?? selected.maritalStatus} />
                   <Field label="Hijos"                  value={selected.children !== null && selected.children !== undefined ? String(selected.children) : null} />
                   <Field label="Nivel educativo"        value={EDU_LABELS[selected.educationLevel] ?? selected.educationLevel} />

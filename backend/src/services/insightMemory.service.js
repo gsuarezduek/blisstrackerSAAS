@@ -1,6 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk')
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
+const { parseAIJson } = require('../utils/parseAIJson')
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const AI_TIMEOUT_MS = 20000
@@ -55,7 +56,10 @@ async function generateMemoryForUser(userId) {
       where: {
         userId,
         status: 'COMPLETED',
-        workDay: { date: { gte: fourWeeksAgo, lte: today } },
+        completedAt: {
+          gte: new Date(fourWeeksAgo + 'T00:00:00-03:00'),
+          lte: new Date(today        + 'T23:59:59-03:00'),
+        },
       },
       select: {
         id: true,
@@ -263,12 +267,8 @@ Español rioplatense, directo. Solo hechos que los datos muestran. No supongas l
   }, { timeout: AI_TIMEOUT_MS })
   logTokens('insightMemory', userId, msg.usage)
 
-  let rawText = msg.content[0].text.trim()
-  if (rawText.startsWith('```')) {
-    rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-  }
   let parsed
-  try { parsed = JSON.parse(rawText) }
+  try { parsed = parseAIJson(msg.content[0].text) }
   catch { throw new Error('Respuesta de IA inválida') }
 
   const estadisticas = {

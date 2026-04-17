@@ -1,6 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk')
 const prisma = require('../lib/prisma')
 const { sendWeeklySummaryEmail } = require('./email.service')
+const { parseAIJson } = require('../utils/parseAIJson')
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const AI_TIMEOUT_MS = 30000
@@ -48,21 +49,46 @@ function fmtDate(dateStr) {
   return new Date(y, m - 1, d).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })
 }
 
+// Calcula minutos de una tarea atribuibles a un rango de fechas usando sesiones.
+// Para tareas sin sesiones (creadas antes de la migración) usa el total completo como fallback.
+function calcMinsForRange(t, from, to) {
+  if (t.minutesOverride != null) return t.minutesOverride
+  if (t.sessions && t.sessions.length > 0) {
+    const rangeStart = new Date(from + 'T00:00:00-03:00')
+    const rangeEnd   = new Date(to   + 'T23:59:59-03:00')
+    let total = 0
+    for (const s of t.sessions) {
+      if (!s.endedAt) continue
+      const sStart = new Date(s.startedAt) < rangeStart ? rangeStart : new Date(s.startedAt)
+      const sEnd   = new Date(s.endedAt)   > rangeEnd   ? rangeEnd   : new Date(s.endedAt)
+      if (sEnd > sStart) total += (sEnd - sStart) / 60000
+    }
+    return Math.round(total)
+  }
+  return calcMins(t)
+}
+
 async function getWeeklyData(userId) {
   const currentWeek = getWeekBounds(0)
   const prevWeek    = getWeekBounds(1)
 
   const [completedTasks, pendingTasks, prevTasks, workDays] = await Promise.all([
-    // Tareas completadas esta semana
+    // Tareas completadas esta semana (filtro por completedAt, no por workDay)
     prisma.task.findMany({
       where: {
         userId,
         status: 'COMPLETED',
         startedAt:   { not: null },
-        completedAt: { not: null },
-        workDay: { date: { gte: currentWeek.from, lte: currentWeek.to } },
+        completedAt: {
+          not: null,
+          gte: new Date(currentWeek.from + 'T00:00:00-03:00'),
+          lte: new Date(currentWeek.to   + 'T23:59:59-03:00'),
+        },
       },
-      include: { project: { select: { id: true, name: true } } },
+      include: {
+        project:  { select: { id: true, name: true } },
+        sessions: { select: { startedAt: true, endedAt: true }, where: { endedAt: { not: null } } },
+      },
       orderBy: { completedAt: 'asc' },
     }),
     // Tareas pendientes actuales (cualquier semana)
@@ -80,10 +106,16 @@ async function getWeeklyData(userId) {
         userId,
         status: 'COMPLETED',
         startedAt:   { not: null },
-        completedAt: { not: null },
-        workDay: { date: { gte: prevWeek.from, lte: prevWeek.to } },
+        completedAt: {
+          not: null,
+          gte: new Date(prevWeek.from + 'T00:00:00-03:00'),
+          lte: new Date(prevWeek.to   + 'T23:59:59-03:00'),
+        },
       },
-      select: { id: true, minutesOverride: true, pausedMinutes: true, startedAt: true, completedAt: true },
+      select: {
+        id: true, minutesOverride: true, pausedMinutes: true, startedAt: true, completedAt: true,
+        sessions: { select: { startedAt: true, endedAt: true }, where: { endedAt: { not: null } } },
+      },
     }),
     // Días trabajados esta semana
     prisma.workDay.findMany({
@@ -95,11 +127,11 @@ async function getWeeklyData(userId) {
     }),
   ])
 
-  // Agrupar completadas por proyecto
+  // Agrupar completadas por proyecto (solo tiempo que cayó dentro de esta semana)
   const byProject = {}
   let totalMinutes = 0
   for (const t of completedTasks) {
-    const mins = calcMins(t)
+    const mins = calcMinsForRange(t, currentWeek.from, currentWeek.to)
     totalMinutes += mins
     const pid = t.project.id
     if (!byProject[pid]) byProject[pid] = { project: t.project, minutes: 0, tasks: [] }
@@ -108,7 +140,7 @@ async function getWeeklyData(userId) {
   }
 
   // Semana anterior
-  const prevTotalMinutes = prevTasks.reduce((s, t) => s + calcMins(t), 0)
+  const prevTotalMinutes = prevTasks.reduce((s, t) => s + calcMinsForRange(t, prevWeek.from, prevWeek.to), 0)
 
   return {
     week: currentWeek,
@@ -295,12 +327,8 @@ Escribís en español rioplatense, forma clara, directa y ligeramente crítica c
     }, { timeout: AI_TIMEOUT_MS })
     logTokens('weeklyReport', user.id, msg.usage)
 
-    let text = msg.content[0].text.trim()
-    if (text.startsWith('```')) {
-      text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-    }
     let parsed
-    try { parsed = JSON.parse(text) }
+    try { parsed = parseAIJson(msg.content[0].text) }
     catch { throw new Error('Respuesta de IA inválida') }
     return parsed
   } catch (err) {

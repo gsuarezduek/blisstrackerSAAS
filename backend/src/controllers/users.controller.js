@@ -8,7 +8,7 @@ async function list(req, res, next) {
       select: {
         id: true, name: true, email: true, role: true, isAdmin: true, active: true, createdAt: true,
         avatar: true, vacationDays: true,
-        phone: true, birthday: true, address: true, dni: true, cuit: true, alias: true,
+        phone: true, birthday: true, address: true, dni: true, cuit: true, alias: true, bankName: true,
         maritalStatus: true, children: true, educationLevel: true, educationTitle: true,
         bloodType: true, medicalConditions: true, healthInsurance: true, emergencyContact: true,
       },

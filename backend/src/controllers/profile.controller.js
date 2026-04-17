@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs')
 const prisma = require('../lib/prisma')
 
 const PERSONAL_FIELDS = [
-  'phone', 'birthday', 'address', 'dni', 'cuit', 'alias',
+  'phone', 'birthday', 'address', 'dni', 'cuit', 'alias', 'bankName',
   'maritalStatus', 'children', 'educationLevel', 'educationTitle',
   'bloodType', 'medicalConditions', 'healthInsurance', 'emergencyContact',
 ]
@@ -11,7 +11,7 @@ const PROFILE_SELECT = {
   id: true, name: true, email: true, role: true,
   createdAt: true, avatar: true, weeklyEmailEnabled: true, dailyInsightEnabled: true, insightMemoryEnabled: true, taskQualityEnabled: true,
   phone: true, birthday: true, address: true, dni: true,
-  cuit: true, alias: true, maritalStatus: true, children: true,
+  cuit: true, alias: true, bankName: true, maritalStatus: true, children: true,
   educationLevel: true, educationTitle: true, bloodType: true,
   medicalConditions: true, healthInsurance: true, emergencyContact: true,
 }

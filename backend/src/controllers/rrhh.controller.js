@@ -75,6 +75,7 @@ async function userSummary(req, res, next) {
       prisma.userLogin.findMany({
         where: { userId },
         select: { loginAt: true },
+        orderBy: { loginAt: 'asc' },
       }),
       prisma.projectMember.findMany({
         where: { userId, project: { active: true } },
@@ -82,10 +83,18 @@ async function userSummary(req, res, next) {
       }),
     ])
 
+    // Solo el primer ingreso del día por persona
+    const byDay = {}
+    for (const l of logins) {
+      const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: TZ })
+      if (!byDay[day]) byDay[day] = l.loginAt   // sorted asc → primero gana
+    }
+    const firstLogins = Object.values(byDay)
+
     let avgLoginTime = null
-    if (logins.length > 0) {
-      const totalMins = logins.reduce((acc, l) => acc + loginMinsFromMidnight(l.loginAt), 0)
-      avgLoginTime = minsToTime(totalMins / logins.length)
+    if (firstLogins.length > 0) {
+      const totalMins = firstLogins.reduce((acc, iso) => acc + loginMinsFromMidnight(iso), 0)
+      avgLoginTime = minsToTime(totalMins / firstLogins.length)
     }
 
     res.json({
@@ -124,14 +133,33 @@ async function updateVacationDays(req, res, next) {
 // Stats globales para el mini dashboard
 async function dashboardStats(req, res, next) {
   try {
-    const [activeUsers, activeProjects] = await Promise.all([
+    const [activeUsers, activeProjects, allLogins] = await Promise.all([
       prisma.user.count({ where: { active: true } }),
       prisma.project.count({ where: { active: true } }),
+      prisma.userLogin.findMany({
+        where: { user: { active: true } },
+        select: { userId: true, loginAt: true },
+        orderBy: { loginAt: 'asc' },
+      }),
     ])
+
+    // Primer ingreso del día por usuario → promedio global
+    const byUserDay = {}
+    for (const l of allLogins) {
+      const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: TZ })
+      const key = `${l.userId}::${day}`
+      if (!byUserDay[key]) byUserDay[key] = l.loginAt  // sorted asc → primero gana
+    }
+    const firstLoginMins = Object.values(byUserDay).map(iso => loginMinsFromMidnight(iso))
+    const avgFirstLoginTime = firstLoginMins.length > 0
+      ? minsToTime(firstLoginMins.reduce((a, b) => a + b, 0) / firstLoginMins.length)
+      : null
+
     res.json({
       projectsPerPerson: activeUsers > 0
         ? Math.round((activeProjects / activeUsers) * 10) / 10
         : 0,
+      avgFirstLoginTime,
     })
   } catch (err) { next(err) }
 }

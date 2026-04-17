@@ -164,7 +164,7 @@ export default function TeamTab() {
           const birthday = u.birthday
             ? new Date(u.birthday).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
             : null
-          const hasPersonalData = u.phone || u.birthday || u.address || u.dni || u.cuit || u.alias ||
+          const hasPersonalData = u.phone || u.birthday || u.address || u.dni || u.cuit || u.alias || u.bankName ||
             u.maritalStatus || u.children !== null || u.educationLevel || u.educationTitle ||
             u.bloodType || u.medicalConditions || u.healthInsurance || u.emergencyContact
 
@@ -223,6 +223,7 @@ export default function TeamTab() {
                       <DataField label="DNI" value={u.dni} />
                       <DataField label="CUIT" value={u.cuit} />
                       <DataField label="Alias CBU" value={u.alias} />
+                      <DataField label="Banco" value={u.bankName} />
 
                       {/* Personal */}
                       <DataField label="Estado civil" value={MARITAL_LABELS[u.maritalStatus] ?? u.maritalStatus} />

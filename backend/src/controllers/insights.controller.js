@@ -1,6 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk')
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
+const { parseAIJson } = require('../utils/parseAIJson')
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const AI_TIMEOUT_MS = 20000
@@ -357,12 +358,8 @@ Escribís en español rioplatense, tono directo y humano. No usás frases genér
   }, { timeout: AI_TIMEOUT_MS })
   logTokens('insight', userId, msg.usage)
 
-  let text = msg.content[0].text.trim()
-  if (text.startsWith('```')) {
-    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-  }
   let parsed
-  try { parsed = JSON.parse(text) }
+  try { parsed = parseAIJson(msg.content[0].text) }
   catch { throw Object.assign(new Error('Respuesta de IA inválida. Intentá de nuevo.'), { status: 502 }) }
   return {
     titulo:     String(parsed.titulo || 'Insight del día').slice(0, 100),
