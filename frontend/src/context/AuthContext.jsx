@@ -33,10 +33,17 @@ export function AuthProvider({ children }) {
     return data.user
   }
 
-  // Recibe un JWT ya obtenido (ej: desde el popup de OAuth)
+  // Recibe un JWT ya obtenido (ej: desde AuthCallback o popup de OAuth)
   function loginWithToken(token, user) {
     localStorage.setItem('token', token)
     setUser(user)
+  }
+
+  // Cambia al usuario a otro workspace: obtiene un nuevo JWT y redirige al subdominio
+  async function switchWorkspace(targetSlug) {
+    const { data } = await api.post('/auth/switch-workspace', { targetSlug })
+    const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+    window.location.href = `https://${targetSlug}.${appDomain}/auth?token=${data.token}`
   }
 
   function logout() {
@@ -50,7 +57,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, loginWithToken, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, loginWithToken, switchWorkspace, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   )

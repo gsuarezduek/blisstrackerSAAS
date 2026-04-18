@@ -41,6 +41,7 @@ import ProjectDetail from './pages/ProjectDetail'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import OAuthPopup from './pages/OAuthPopup'
+import AuthCallback from './pages/AuthCallback'
 import MyProfile from './pages/MyProfile'
 import Preferences from './pages/Preferences'
 import Docs from './pages/Docs'
@@ -70,7 +71,8 @@ export default function App() {
         <Routes>
           <Route path="/login"    element={<Login2     />} />
           <Route path="/register" element={<Register   />} />
-          <Route path="/oauth"    element={<OAuthPopup />} />
+          <Route path="/oauth"    element={<OAuthPopup    />} />
+          <Route path="/auth"     element={<AuthCallback  />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />

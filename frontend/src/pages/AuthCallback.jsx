@@ -1,0 +1,45 @@
+/**
+ * /auth?token=JWT
+ * Recibe el token generado en blisstracker.app/login,
+ * lo guarda en localStorage y redirige al dashboard.
+ */
+import { useEffect } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import api from '../api/client'
+
+export default function AuthCallback() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { loginWithToken } = useAuth()
+
+  useEffect(() => {
+    const token = searchParams.get('token')
+    if (!token) { navigate('/login', { replace: true }); return }
+
+    // Limpiar el token de la URL antes de guardarlo
+    window.history.replaceState({}, '', '/auth')
+
+    localStorage.setItem('token', token)
+
+    // Obtener datos frescos del usuario
+    api.get('/auth/me')
+      .then(r => {
+        loginWithToken(token, r.data)
+        navigate('/', { replace: true })
+      })
+      .catch(() => {
+        localStorage.removeItem('token')
+        navigate('/login', { replace: true })
+      })
+  }, [])
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="text-center space-y-3">
+        <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-10 h-10 mx-auto animate-pulse" />
+        <p className="text-sm text-gray-500 dark:text-gray-400">Iniciando sesión…</p>
+      </div>
+    </div>
+  )
+}

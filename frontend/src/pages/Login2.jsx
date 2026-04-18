@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
+import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 
@@ -146,6 +147,151 @@ function SlidePanel() {
   )
 }
 
+// ── Login desde dominio raíz (sin workspace) ──────────────────────────────────
+
+function WorkspacePicker({ workspaces }) {
+  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="flex items-center gap-3">
+          <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-10 h-10" />
+          <span className="text-xl font-bold text-gray-900 dark:text-white">BlissTracker</span>
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Tus workspaces</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Elegí a cuál querés ingresar.</p>
+        </div>
+        <div className="space-y-2">
+          {workspaces.map(ws => (
+            <a
+              key={ws.slug}
+              href={`https://${ws.slug}.${appDomain}/auth?token=${ws.token}`}
+              className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors group"
+            >
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white group-hover:text-primary-700 dark:group-hover:text-primary-400">
+                  {ws.name}
+                </p>
+                <p className="text-xs text-gray-400">{ws.slug}.{appDomain}</p>
+              </div>
+              <svg className="w-4 h-4 text-gray-400 group-hover:text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </a>
+          ))}
+        </div>
+        <p className="text-center text-xs text-gray-400 dark:text-gray-500">
+          ¿No ves tu workspace?{' '}
+          <a href={`https://${appDomain}/register`} className="text-primary-600 hover:text-primary-700 font-medium">
+            Crear uno nuevo
+          </a>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function RootLogin() {
+  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+  const [email,      setEmail]      = useState('')
+  const [password,   setPassword]   = useState('')
+  const [error,      setError]      = useState('')
+  const [loading,    setLoading]    = useState(false)
+  const [workspaces, setWorkspaces] = useState(null)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, { email, password })
+      if (data.workspaces?.length === 1) {
+        window.location.href = `https://${data.workspaces[0].slug}.${appDomain}/auth?token=${data.workspaces[0].token}`
+      } else {
+        setWorkspaces(data.workspaces)
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al iniciar sesión')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleGoogleSuccess({ credential }) {
+    setError('')
+    setLoading(true)
+    try {
+      const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/google`, { credential })
+      if (data.workspaces?.length === 1) {
+        window.location.href = `https://${data.workspaces[0].slug}.${appDomain}/auth?token=${data.workspaces[0].token}`
+      } else {
+        setWorkspaces(data.workspaces)
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo iniciar sesión con Google')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (workspaces) return <WorkspacePicker workspaces={workspaces} />
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6 py-12">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="flex items-center gap-3">
+          <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-10 h-10" />
+          <span className="text-xl font-bold text-gray-900 dark:text-white">BlissTracker</span>
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Bienvenido</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Iniciá sesión para continuar.</p>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="email" required autoFocus value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="tu@empresa.com"
+            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
+          />
+          <input
+            type="password" required value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="Contraseña"
+            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
+          />
+          {error && (
+            <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-xl px-4 py-3">{error}</div>
+          )}
+          <button type="submit" disabled={loading}
+            className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl px-4 py-2.5 transition-colors">
+            {loading ? 'Ingresando…' : 'Ingresar'}
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+            <span className="text-xs text-gray-400">o</span>
+            <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+          </div>
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setError('No se pudo iniciar sesión con Google')}
+              useOneTap={false} text="continue_with" locale="es"
+            />
+          </div>
+        </form>
+        <p className="text-center text-xs text-gray-400 dark:text-gray-500">
+          ¿No tenés cuenta?{' '}
+          <a href={`https://${appDomain}/register`} className="text-primary-600 hover:text-primary-700 font-medium">
+            Crear workspace
+          </a>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ── Google OAuth via popup ─────────────────────────────────────────────────────
 
 function GoogleOAuthButton({ slug, onSuccess, onError, disabled }) {
@@ -207,46 +353,7 @@ export default function Login2() {
   }
 
   if (!slug) {
-    const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6">
-        <div className="text-center max-w-sm space-y-4">
-          <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-12 h-12 mx-auto" />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">¿Cuál es tu workspace?</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Ingresá directamente a <strong>tuempresa.{appDomain}</strong>
-          </p>
-          <div className="flex rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600 focus-within:ring-2 focus-within:ring-primary-500">
-            <input
-              type="text"
-              autoFocus
-              placeholder="tuempresa"
-              className="flex-1 px-4 py-2.5 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 outline-none"
-              onKeyDown={e => {
-                if (e.key === 'Enter' && e.target.value.trim()) {
-                  window.location.href = `https://${e.target.value.trim()}.${appDomain}/login`
-                }
-              }}
-            />
-            <button
-              className="px-4 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium transition-colors"
-              onClick={e => {
-                const input = e.target.closest('div').querySelector('input')
-                if (input.value.trim()) window.location.href = `https://${input.value.trim()}.${appDomain}/login`
-              }}
-            >
-              Ir
-            </button>
-          </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            ¿No tenés cuenta?{' '}
-            <a href={`https://${appDomain}/register`} className="text-primary-600 hover:text-primary-700 font-medium">
-              Creá tu workspace
-            </a>
-          </p>
-        </div>
-      </div>
-    )
+    return <RootLogin />
   }
 
   if (notFound) {

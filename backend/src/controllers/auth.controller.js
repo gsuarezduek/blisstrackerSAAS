@@ -25,13 +25,40 @@ function signToken(user, member, workspace) {
   )
 }
 
+// Formatea el objeto user para la respuesta, dado el member del workspace
+function formatUser(user, member) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: member.teamRole,
+    isAdmin: member.role === 'admin' || member.role === 'owner',
+    avatar: user.avatar,
+    dailyInsightEnabled: member.dailyInsightEnabled,
+  }
+}
+
+// Devuelve user + lista de workspaces con token por workspace (para login sin X-Workspace)
+async function buildWorkspaceList(user) {
+  const members = await prisma.workspaceMember.findMany({
+    where: { userId: user.id, active: true },
+    include: { workspace: true },
+  })
+  return members.map(m => ({
+    id:   m.workspace.id,
+    name: m.workspace.name,
+    slug: m.workspace.slug,
+    role: m.role,
+    token: signToken(user, m, m.workspace),
+  }))
+}
+
 /**
  * POST /api/auth/login
  * Body: { email, password }
- * Header: X-Workspace: slug
- *
- * El slug viene en el header porque el login también necesita contexto de workspace
- * para poder emitir el JWT con workspaceId correcto.
+ * Header X-Workspace opcional:
+ *   - Con header → responde { token, user } (comportamiento de workspace)
+ *   - Sin header  → responde { user, workspaces: [{ id, name, slug, role, token }] }
  */
 async function login(req, res, next) {
   try {
@@ -41,52 +68,41 @@ async function login(req, res, next) {
     if (!email || !password) {
       return res.status(400).json({ error: 'Email y contraseña requeridos' })
     }
-    if (!slug) {
-      return res.status(400).json({ error: 'Header X-Workspace requerido' })
-    }
 
-    const [user, workspace] = await Promise.all([
-      prisma.user.findUnique({ where: { email } }),
-      prisma.workspace.findUnique({ where: { slug } }),
-    ])
-
-    if (!workspace) {
-      return res.status(404).json({ error: 'Workspace no encontrado' })
-    }
-    if (!user) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
-    }
+    const user = await prisma.user.findUnique({ where: { email } })
+    if (!user) return res.status(401).json({ error: 'Credenciales inválidas' })
 
     const valid = await bcrypt.compare(password, user.password)
-    if (!valid) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
+    if (!valid) return res.status(401).json({ error: 'Credenciales inválidas' })
+
+    if (slug) {
+      // Login desde subdominio de workspace
+      const workspace = await prisma.workspace.findUnique({ where: { slug } })
+      if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
+
+      const member = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId: workspace.id, userId: user.id } },
+      })
+      if (!member || !member.active) {
+        return res.status(403).json({ error: 'No sos miembro de este workspace' })
+      }
+
+      prisma.userLogin.create({
+        data: { userId: user.id, workspaceId: workspace.id, method: 'email' },
+      }).catch(() => {})
+
+      return res.json({ token: signToken(user, member, workspace), user: formatUser(user, member) })
     }
 
-    const member = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId: workspace.id, userId: user.id } },
-    })
-
-    if (!member || !member.active) {
-      return res.status(403).json({ error: 'No sos miembro de este workspace' })
+    // Login desde dominio raíz — devuelve todos los workspaces con sus tokens
+    const workspaces = await buildWorkspaceList(user)
+    if (!workspaces.length) {
+      return res.status(403).json({ error: 'No pertenecés a ningún workspace' })
     }
-
-    const token = signToken(user, member, workspace)
-
-    prisma.userLogin.create({
-      data: { userId: user.id, workspaceId: workspace.id, method: 'email' },
-    }).catch(() => {})
 
     res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: member.teamRole,
-        isAdmin: member.role === 'admin' || member.role === 'owner',
-        avatar: user.avatar,
-        dailyInsightEnabled: member.dailyInsightEnabled,
-      },
+      user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar },
+      workspaces,
     })
   } catch (err) {
     next(err)
@@ -184,7 +200,7 @@ async function resetPassword(req, res, next) {
 
 /**
  * POST /api/auth/google
- * Header: X-Workspace: slug
+ * Header X-Workspace opcional — mismo comportamiento que login.
  */
 async function googleLogin(req, res, next) {
   try {
@@ -192,7 +208,6 @@ async function googleLogin(req, res, next) {
     const slug = req.headers['x-workspace']
 
     if (!credential) return res.status(400).json({ error: 'Token de Google requerido' })
-    if (!slug) return res.status(400).json({ error: 'Header X-Workspace requerido' })
 
     const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
     const ticket = await client.verifyIdToken({
@@ -204,44 +219,66 @@ async function googleLogin(req, res, next) {
       return res.status(401).json({ error: 'El email de Google no está verificado' })
     }
 
+    const user = await prisma.user.findUnique({ where: { email: payload.email } })
+    if (!user) return res.status(404).json({ error: 'No existe una cuenta con ese email de Google' })
+
+    if (slug) {
+      const workspace = await prisma.workspace.findUnique({ where: { slug } })
+      if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
+
+      const member = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId: workspace.id, userId: user.id } },
+      })
+      if (!member || !member.active) {
+        return res.status(403).json({ error: 'No sos miembro de este workspace' })
+      }
+
+      prisma.userLogin.create({
+        data: { userId: user.id, workspaceId: workspace.id, method: 'google' },
+      }).catch(() => {})
+
+      return res.json({ token: signToken(user, member, workspace), user: formatUser(user, member) })
+    }
+
+    // Sin workspace — devuelve todos los workspaces
+    const workspaces = await buildWorkspaceList(user)
+    if (!workspaces.length) {
+      return res.status(403).json({ error: 'No pertenecés a ningún workspace' })
+    }
+
+    res.json({
+      user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar },
+      workspaces,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * POST /api/auth/switch-workspace
+ * Requiere auth. Genera un token para otro workspace del mismo usuario.
+ */
+async function switchWorkspace(req, res, next) {
+  try {
+    const { targetSlug } = req.body
+    if (!targetSlug) return res.status(400).json({ error: 'targetSlug requerido' })
+
     const [user, workspace] = await Promise.all([
-      prisma.user.findUnique({ where: { email: payload.email } }),
-      prisma.workspace.findUnique({ where: { slug } }),
+      prisma.user.findUnique({ where: { id: req.user.userId } }),
+      prisma.workspace.findUnique({ where: { slug: targetSlug } }),
     ])
 
-    if (!workspace) {
-      return res.status(404).json({ error: 'Workspace no encontrado' })
-    }
-    if (!user) {
-      return res.status(404).json({ error: 'No existe una cuenta activa con ese email de Google' })
-    }
+    if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
 
     const member = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId: workspace.id, userId: user.id } },
     })
-
     if (!member || !member.active) {
       return res.status(403).json({ error: 'No sos miembro de este workspace' })
     }
 
-    const token = signToken(user, member, workspace)
-
-    prisma.userLogin.create({
-      data: { userId: user.id, workspaceId: workspace.id, method: 'google' },
-    }).catch(() => {})
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: member.teamRole,
-        isAdmin: member.role === 'admin' || member.role === 'owner',
-        avatar: user.avatar,
-        dailyInsightEnabled: member.dailyInsightEnabled,
-      },
-    })
+    res.json({ token: signToken(user, member, workspace), slug: targetSlug })
   } catch (err) {
     next(err)
   }
@@ -251,4 +288,4 @@ function logout(req, res) {
   res.json({ ok: true })
 }
 
-module.exports = { login, me, forgotPassword, resetPassword, googleLogin, logout }
+module.exports = { login, me, forgotPassword, resetPassword, googleLogin, switchWorkspace, logout }

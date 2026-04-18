@@ -8,6 +8,9 @@ const c = require('../controllers/workspace.controller')
 router.post('/',    c.createWorkspace)
 router.get('/info', c.getInfo)
 
+// Rutas autenticadas SIN workspace (solo auth)
+router.get('/mine', auth, c.getMine)
+
 // Rutas autenticadas + workspace
 router.use(auth)
 router.use(resolveWorkspace)

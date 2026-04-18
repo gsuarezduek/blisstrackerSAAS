@@ -15,6 +15,25 @@ const MEMBER_SELECT = {
 }
 
 /**
+ * GET /api/workspaces/mine
+ * Lista todos los workspaces del usuario autenticado.
+ */
+async function getMine(req, res, next) {
+  try {
+    const members = await prisma.workspaceMember.findMany({
+      where: { userId: req.user.userId, active: true },
+      include: { workspace: { select: { id: true, name: true, slug: true, status: true } } },
+    })
+    res.json(members.map(m => ({
+      id:   m.workspace.id,
+      name: m.workspace.name,
+      slug: m.workspace.slug,
+      role: m.role,
+    })))
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/workspaces/current
  * Info del workspace actual.
  */
@@ -326,4 +345,4 @@ async function getInfo(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getCurrent, updateCurrent, listMembers, addMember, updateMember, toggleMemberActive, createWorkspace, getInfo }
+module.exports = { getMine, getCurrent, updateCurrent, listMembers, addMember, updateMember, toggleMemberActive, createWorkspace, getInfo }
