@@ -9,33 +9,17 @@
  *   3. Obtiene el ID token → llama al backend con X-Workspace: slug
  *   4. Recibe el JWT → postMessage al opener → cierra el popup
  */
-import { useSearchParams } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
-import axios from 'axios'
 
 export default function OAuthPopup() {
-  const [searchParams] = useSearchParams()
-  const workspace = searchParams.get('workspace') || ''
 
-  async function handleSuccess({ credential }) {
-    try {
-      const { data } = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/auth/google`,
-        { credential },
-        { headers: { 'X-Workspace': workspace } }
-      )
-      window.opener?.postMessage(
-        { type: 'GOOGLE_AUTH_SUCCESS', token: data.token, user: data.user },
-        '*'
-      )
-    } catch (err) {
-      window.opener?.postMessage(
-        { type: 'GOOGLE_AUTH_ERROR', error: err.response?.data?.error || 'Error al iniciar sesión con Google' },
-        '*'
-      )
-    } finally {
-      window.close()
-    }
+  function handleSuccess({ credential }) {
+    // Devuelve el credential al opener — es quien tiene el X-Workspace correcto
+    window.opener?.postMessage(
+      { type: 'GOOGLE_CREDENTIAL', credential },
+      '*'
+    )
+    window.close()
   }
 
   function handleError() {

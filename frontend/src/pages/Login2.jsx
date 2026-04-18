@@ -158,9 +158,9 @@ function GoogleOAuthButton({ slug, onSuccess, onError, disabled }) {
     if (!popup) { onError('El navegador bloqueó la ventana emergente. Permitila e intentá de nuevo.'); return }
 
     function onMessage(e) {
-      if (e.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+      if (e.data?.type === 'GOOGLE_CREDENTIAL') {
         window.removeEventListener('message', onMessage)
-        onSuccess(e.data.token, e.data.user)
+        onSuccess(e.data.credential)
       } else if (e.data?.type === 'GOOGLE_AUTH_ERROR') {
         window.removeEventListener('message', onMessage)
         onError(e.data.error)
@@ -194,7 +194,7 @@ export default function Login2() {
   const [password, setPassword] = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
-  const { login, loginWithToken, user } = useAuth()
+  const { login, loginWithGoogle, user } = useAuth()
   const { workspace, notFound, suspended, slug } = useWorkspace()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -321,7 +321,18 @@ export default function Login2() {
             <div className="flex justify-center">
               <GoogleOAuthButton
                 slug={slug}
-                onSuccess={(token, user) => { loginWithToken(token, user); navigate('/', { replace: true }) }}
+                onSuccess={async (credential) => {
+                  setError('')
+                  setLoading(true)
+                  try {
+                    await loginWithGoogle(credential)
+                    navigate('/', { replace: true })
+                  } catch (err) {
+                    setError(err.response?.data?.error || 'No se pudo iniciar sesión con Google')
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
                 onError={setError}
                 disabled={loading}
               />
