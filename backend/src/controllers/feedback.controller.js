@@ -10,8 +10,13 @@ async function create(req, res, next) {
       return res.status(400).json({ error: 'Tipo inválido' })
     }
     const feedback = await prisma.feedback.create({
-      data: { userId: req.user.id, type, message: message.trim() },
-      include: { user: { select: { id: true, name: true, role: true } } },
+      data: {
+        userId: req.user.userId,
+        workspaceId: req.workspace?.id ?? null,
+        type,
+        message: message.trim(),
+      },
+      include: { user: { select: { id: true, name: true } } },
     })
     res.status(201).json(feedback)
   } catch (err) { next(err) }
@@ -19,8 +24,10 @@ async function create(req, res, next) {
 
 async function list(req, res, next) {
   try {
+    const where = req.workspace ? { workspaceId: req.workspace.id } : {}
     const feedbacks = await prisma.feedback.findMany({
-      include: { user: { select: { id: true, name: true, role: true } } },
+      where,
+      include: { user: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' },
     })
     res.json(feedbacks)

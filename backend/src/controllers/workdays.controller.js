@@ -9,49 +9,41 @@ const taskInclude = {
 
 async function getOrCreateToday(req, res, next) {
   try {
-    const userId = req.user.id
-    const date = todayString()
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const date = todayString(tz)
 
     let workDay = await prisma.workDay.findUnique({
-      where: { userId_date: { userId, date } },
+      where: { userId_workspaceId_date: { userId, workspaceId, date } },
       include: {
-        tasks: {
-          include: taskInclude,
-          orderBy: { createdAt: 'desc' },
-        },
+        tasks: { include: taskInclude, orderBy: { createdAt: 'desc' } },
       },
     })
 
     if (!workDay) {
       workDay = await prisma.workDay.create({
-        data: { userId, date },
+        data: { userId, workspaceId, date },
         include: {
-          tasks: {
-            include: taskInclude,
-            orderBy: { createdAt: 'desc' },
-          },
+          tasks: { include: taskInclude, orderBy: { createdAt: 'desc' } },
         },
       })
     } else if (workDay.endedAt) {
-      // Reopen workday if user logs back in after finishing
       workDay = await prisma.workDay.update({
-        where: { userId_date: { userId, date } },
+        where: { userId_workspaceId_date: { userId, workspaceId, date } },
         data: { endedAt: null, startedAt: new Date() },
         include: {
-          tasks: {
-            include: taskInclude,
-            orderBy: { createdAt: 'desc' },
-          },
+          tasks: { include: taskInclude, orderBy: { createdAt: 'desc' } },
         },
       })
     }
 
-    // Tareas pendientes/pausadas/en curso de días anteriores
+    // Tareas de días anteriores aún activas en este workspace
     const carryOverTasks = await prisma.task.findMany({
       where: {
         userId,
         status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
-        workDay: { date: { lt: date } },
+        workDay: { date: { lt: date }, workspaceId },
       },
       include: taskInclude,
       orderBy: { createdAt: 'desc' },
@@ -63,11 +55,13 @@ async function getOrCreateToday(req, res, next) {
 
 async function finish(req, res, next) {
   try {
-    const userId = req.user.id
-    const date = todayString()
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const date = todayString(tz)
 
     const workDay = await prisma.workDay.update({
-      where: { userId_date: { userId, date } },
+      where: { userId_workspaceId_date: { userId, workspaceId, date } },
       data: { endedAt: new Date() },
     })
     res.json(workDay)

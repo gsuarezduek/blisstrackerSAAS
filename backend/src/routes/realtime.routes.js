@@ -1,7 +1,11 @@
 const router = require('express').Router()
 const { snapshot } = require('../controllers/realtime.controller')
-const { auth, adminOnly } = require('../middleware/auth')
+const { auth } = require('../middleware/auth')
+const { resolveWorkspace } = require('../middleware/workspace')
 
-router.get('/', auth, snapshot)
+router.use(auth)
+router.use(resolveWorkspace)
+
+router.get('/', snapshot)
 
 module.exports = router

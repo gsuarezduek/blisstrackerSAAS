@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 
 // ── Slides ─────────────────────────────────────────────────────────────────────
 
@@ -153,6 +154,7 @@ export default function Login2() {
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
   const { login, loginWithGoogle, user } = useAuth()
+  const { workspace, notFound, suspended, slug } = useWorkspace()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const resetOk = searchParams.get('reset') === 'ok'
@@ -160,6 +162,34 @@ export default function Login2() {
   if (user) {
     navigate('/', { replace: true })
     return null
+  }
+
+  if (notFound) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6">
+        <div className="text-center max-w-sm">
+          <p className="text-5xl mb-4">🔍</p>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Workspace no encontrado</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            No existe ningún workspace con el nombre <strong>{slug}</strong>. Verificá la URL o pedile a tu equipo que te invite.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (suspended) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6">
+        <div className="text-center max-w-sm">
+          <p className="text-5xl mb-4">🔒</p>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Acceso suspendido</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            El workspace <strong>{slug}</strong> está suspendido. Contactá al administrador para regularizar el pago.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   async function handleSubmit(e) {
@@ -189,7 +219,9 @@ export default function Login2() {
         <div className="w-full max-w-sm">
 
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Bienvenido</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {workspace ? `Bienvenido a ${workspace.name}` : 'Bienvenido'}
+            </h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Entrá y empezá tu día con foco</p>
           </div>
 

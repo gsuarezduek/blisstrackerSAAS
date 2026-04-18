@@ -1,20 +1,24 @@
 const bcrypt = require('bcryptjs')
 const prisma = require('../lib/prisma')
 
+// Campos personales globales del User (no dependen del workspace)
 const PERSONAL_FIELDS = [
   'phone', 'birthday', 'address', 'dni', 'cuit', 'alias', 'bankName',
   'maritalStatus', 'children', 'educationLevel', 'educationTitle',
   'bloodType', 'medicalConditions', 'healthInsurance', 'emergencyContact',
 ]
 
-const PROFILE_SELECT = {
-  id: true, name: true, email: true, role: true,
-  createdAt: true, avatar: true, weeklyEmailEnabled: true, dailyInsightEnabled: true, insightMemoryEnabled: true, taskQualityEnabled: true,
+const USER_SELECT = {
+  id: true, name: true, email: true,
+  createdAt: true, avatar: true,
   phone: true, birthday: true, address: true, dni: true,
   cuit: true, alias: true, bankName: true, maritalStatus: true, children: true,
   educationLevel: true, educationTitle: true, bloodType: true,
   medicalConditions: true, healthInsurance: true, emergencyContact: true,
 }
+
+// Flags de preferencias que viven en WorkspaceMember
+const PREF_FLAGS = ['weeklyEmailEnabled', 'dailyInsightEnabled', 'insightMemoryEnabled', 'taskQualityEnabled']
 
 const ALLOWED_AVATARS = [
   '1babee.png', '2bee.png',
@@ -24,31 +28,34 @@ const ALLOWED_AVATARS = [
   '30harleybee.png', '31beezen.png', '32beezombie.png', '33darthbee.png',
 ]
 
+/**
+ * GET /api/profile
+ * Devuelve datos del User + preferencias del WorkspaceMember actual.
+ */
 async function getProfile(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: PROFILE_SELECT,
+      where: { id: req.user.userId },
+      select: USER_SELECT,
     })
-    res.json(user)
+    const member = req.workspaceMember
+
+    res.json({
+      ...user,
+      role: member?.teamRole ?? '',
+      isAdmin: member?.role === 'admin' || member?.role === 'owner',
+      weeklyEmailEnabled: member?.weeklyEmailEnabled ?? true,
+      dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
+      insightMemoryEnabled: member?.insightMemoryEnabled ?? true,
+      taskQualityEnabled: member?.taskQualityEnabled ?? true,
+    })
   } catch (err) { next(err) }
 }
 
-async function updateAvatar(req, res, next) {
-  try {
-    const { avatar } = req.body
-    if (!ALLOWED_AVATARS.includes(avatar)) {
-      return res.status(400).json({ error: 'Avatar no válido' })
-    }
-    const user = await prisma.user.update({
-      where: { id: req.user.id },
-      data: { avatar },
-      select: { id: true, name: true, email: true, role: true, avatar: true },
-    })
-    res.json(user)
-  } catch (err) { next(err) }
-}
-
+/**
+ * PATCH /api/profile
+ * Actualiza datos personales globales del User.
+ */
 async function updateProfile(req, res, next) {
   try {
     const data = {}
@@ -67,14 +74,44 @@ async function updateProfile(req, res, next) {
     }
 
     const user = await prisma.user.update({
-      where: { id: req.user.id },
+      where: { id: req.user.userId },
       data,
-      select: PROFILE_SELECT,
+      select: USER_SELECT,
     })
-    res.json(user)
+    const member = req.workspaceMember
+    res.json({
+      ...user,
+      role: member?.teamRole ?? '',
+      isAdmin: member?.role === 'admin' || member?.role === 'owner',
+      weeklyEmailEnabled: member?.weeklyEmailEnabled ?? true,
+      dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
+      insightMemoryEnabled: member?.insightMemoryEnabled ?? true,
+      taskQualityEnabled: member?.taskQualityEnabled ?? true,
+    })
   } catch (err) { next(err) }
 }
 
+/**
+ * PATCH /api/profile/avatar
+ */
+async function updateAvatar(req, res, next) {
+  try {
+    const { avatar } = req.body
+    if (!ALLOWED_AVATARS.includes(avatar)) {
+      return res.status(400).json({ error: 'Avatar no válido' })
+    }
+    const user = await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { avatar },
+      select: { id: true, name: true, email: true, avatar: true },
+    })
+    res.json({ ...user, role: req.workspaceMember?.teamRole ?? '' })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/profile/change-password
+ */
 async function changePassword(req, res, next) {
   try {
     const { currentPassword, newPassword } = req.body
@@ -85,65 +122,68 @@ async function changePassword(req, res, next) {
       return res.status(400).json({ error: 'La contraseña debe tener al menos 12 caracteres' })
     }
 
-    const user = await prisma.user.findUnique({ where: { id: req.user.id } })
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId } })
     const valid = await bcrypt.compare(currentPassword, user.password)
     if (!valid) {
       return res.status(400).json({ error: 'La contraseña actual es incorrecta' })
     }
 
     const hashed = await bcrypt.hash(newPassword, 10)
-    await prisma.user.update({ where: { id: req.user.id }, data: { password: hashed } })
+    await prisma.user.update({ where: { id: req.user.userId }, data: { password: hashed } })
     res.json({ message: 'Contraseña actualizada correctamente' })
   } catch (err) { next(err) }
 }
 
+/**
+ * PATCH /api/profile/preferences
+ * Actualiza flags de preferencias en WorkspaceMember.
+ */
 async function updatePreferences(req, res, next) {
   try {
     const data = {}
-    if ('weeklyEmailEnabled' in req.body) {
-      if (typeof req.body.weeklyEmailEnabled !== 'boolean') {
-        return res.status(400).json({ error: 'weeklyEmailEnabled debe ser un booleano' })
+    for (const flag of PREF_FLAGS) {
+      if (flag in req.body) {
+        if (typeof req.body[flag] !== 'boolean') {
+          return res.status(400).json({ error: `${flag} debe ser un booleano` })
+        }
+        data[flag] = req.body[flag]
       }
-      data.weeklyEmailEnabled = req.body.weeklyEmailEnabled
-    }
-    if ('dailyInsightEnabled' in req.body) {
-      if (typeof req.body.dailyInsightEnabled !== 'boolean') {
-        return res.status(400).json({ error: 'dailyInsightEnabled debe ser un booleano' })
-      }
-      data.dailyInsightEnabled = req.body.dailyInsightEnabled
-    }
-    if ('insightMemoryEnabled' in req.body) {
-      if (typeof req.body.insightMemoryEnabled !== 'boolean') {
-        return res.status(400).json({ error: 'insightMemoryEnabled debe ser un booleano' })
-      }
-      data.insightMemoryEnabled = req.body.insightMemoryEnabled
-    }
-    if ('taskQualityEnabled' in req.body) {
-      if (typeof req.body.taskQualityEnabled !== 'boolean') {
-        return res.status(400).json({ error: 'taskQualityEnabled debe ser un booleano' })
-      }
-      data.taskQualityEnabled = req.body.taskQualityEnabled
     }
     if (Object.keys(data).length === 0) {
       return res.status(400).json({ error: 'No se enviaron preferencias válidas' })
     }
-    const user = await prisma.user.update({
-      where: { id: req.user.id },
+
+    const member = await prisma.workspaceMember.update({
+      where: {
+        workspaceId_userId: {
+          workspaceId: req.workspace.id,
+          userId: req.user.userId,
+        },
+      },
       data,
-      select: { id: true, weeklyEmailEnabled: true, dailyInsightEnabled: true, insightMemoryEnabled: true, taskQualityEnabled: true },
     })
-    res.json(user)
+
+    res.json({
+      id: req.user.userId,
+      weeklyEmailEnabled: member.weeklyEmailEnabled,
+      dailyInsightEnabled: member.dailyInsightEnabled,
+      insightMemoryEnabled: member.insightMemoryEnabled,
+      taskQualityEnabled: member.taskQualityEnabled,
+    })
   } catch (err) { next(err) }
 }
 
+/**
+ * POST /api/profile/weekly-email/send
+ */
 async function sendTestWeeklyEmail(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
+      where: { id: req.user.userId },
       select: { id: true, name: true, email: true },
     })
     const { sendWeeklyReportForUser } = require('../services/weeklyReport.service')
-    await sendWeeklyReportForUser(user)
+    await sendWeeklyReportForUser(user, req.workspace)
     res.json({ ok: true, message: `Email enviado a ${user.email}` })
   } catch (err) { next(err) }
 }

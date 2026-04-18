@@ -1,11 +1,15 @@
 const router = require('express').Router()
 const { list, getByRole, upsert, getMyRoleExpectation } = require('../controllers/roleExpectations.controller')
-const { auth, adminOnly } = require('../middleware/auth')
+const { auth } = require('../middleware/auth')
+const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
-router.get('/mine',        auth, getMyRoleExpectation)   // cualquier usuario autenticado
-router.get('/all',         auth, list)                   // todos los roles — cualquier usuario autenticado (para Docs)
-router.get('/',            auth, adminOnly, list)
-router.get('/:roleName',   auth, adminOnly, getByRole)
-router.put('/:roleName',   auth, adminOnly, upsert)
+router.use(auth)
+router.use(resolveWorkspace)
+
+router.get('/mine',       getMyRoleExpectation)
+router.get('/all',        list)                        // para la vista Docs (cualquier miembro)
+router.get('/',           workspaceAdminOnly, list)
+router.get('/:roleName',  workspaceAdminOnly, getByRole)
+router.put('/:roleName',  workspaceAdminOnly, upsert)
 
 module.exports = router

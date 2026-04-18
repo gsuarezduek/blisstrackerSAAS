@@ -3,7 +3,7 @@ const prisma = require('../lib/prisma')
 async function list(req, res, next) {
   try {
     const services = await prisma.service.findMany({
-      where: { active: true },
+      where: { workspaceId: req.workspace.id, active: true },
       orderBy: { name: 'asc' },
     })
     res.json(services)
@@ -12,7 +12,10 @@ async function list(req, res, next) {
 
 async function listAll(req, res, next) {
   try {
-    const services = await prisma.service.findMany({ orderBy: { name: 'asc' } })
+    const services = await prisma.service.findMany({
+      where: { workspaceId: req.workspace.id },
+      orderBy: { name: 'asc' },
+    })
     res.json(services)
   } catch (err) { next(err) }
 }
@@ -21,7 +24,9 @@ async function create(req, res, next) {
   try {
     const { name } = req.body
     if (!name) return res.status(400).json({ error: 'Nombre requerido' })
-    const service = await prisma.service.create({ data: { name } })
+    const service = await prisma.service.create({
+      data: { workspaceId: req.workspace.id, name },
+    })
     res.status(201).json(service)
   } catch (err) {
     if (err.code === 'P2002') return res.status(409).json({ error: 'Servicio ya existe' })

@@ -1,10 +1,14 @@
 const router = require('express').Router()
 const { list, listAll, create, update } = require('../controllers/services.controller')
-const { auth, adminOnly } = require('../middleware/auth')
+const { auth } = require('../middleware/auth')
+const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
-router.get('/', auth, list)
-router.get('/all', auth, adminOnly, listAll)
-router.post('/', auth, adminOnly, create)
-router.put('/:id', auth, adminOnly, update)
+router.use(auth)
+router.use(resolveWorkspace)
+
+router.get('/',      list)
+router.get('/all',   listAll)
+router.post('/',     workspaceAdminOnly, create)
+router.put('/:id',   workspaceAdminOnly, update)
 
 module.exports = router

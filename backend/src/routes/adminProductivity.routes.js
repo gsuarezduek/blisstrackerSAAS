@@ -1,9 +1,13 @@
 const router = require('express').Router()
-const { auth, adminOnly } = require('../middleware/auth')
+const { auth } = require('../middleware/auth')
+const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 const { listProductivity, refreshProductivity } = require('../controllers/adminProductivity.controller')
 
-router.use(auth, adminOnly)
-router.get('/',                      listProductivity)
-router.post('/:userId/refresh',      refreshProductivity)
+router.use(auth)
+router.use(resolveWorkspace)
+router.use(workspaceAdminOnly)
+
+router.get('/',                 listProductivity)
+router.post('/:userId/refresh', refreshProductivity)
 
 module.exports = router

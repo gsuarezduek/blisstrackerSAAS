@@ -1,19 +1,23 @@
 const router = require('express').Router()
-const { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, getGlobalSettings, saveGlobalSettings, sendTestEmail, getAiUsage, getMembers } = require('../controllers/projects.controller')
-const { auth, adminOnly } = require('../middleware/auth')
+const c = require('../controllers/projects.controller')
+const { auth } = require('../middleware/auth')
+const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
-router.get('/', auth, list)                              // active only — for task creation
-router.get('/all', auth, adminOnly, listAll)             // admin: all including inactive
-router.get('/settings', auth, adminOnly, getGlobalSettings)
-router.patch('/settings', auth, adminOnly, saveGlobalSettings)
-router.post('/settings/test-email', auth, adminOnly, sendTestEmail)
-router.get('/settings/ai-usage', auth, adminOnly, getAiUsage)
-router.get('/:id/members', auth, getMembers)
-router.get('/:id/tasks', auth, projectTasks)             // tareas activas + completadas esta semana
-router.get('/:id/completed', auth, projectCompletedHistory) // historial paginado de completadas
-router.post('/', auth, adminOnly, create)
-router.put('/:id', auth, adminOnly, update)
-router.put('/:id/links', auth, saveLinks)
-router.patch('/:id/situation', auth, saveSituation)
+router.use(auth)
+router.use(resolveWorkspace)
+
+router.get('/',                            c.list)
+router.get('/all',                         workspaceAdminOnly, c.listAll)
+router.get('/settings',                    workspaceAdminOnly, c.getGlobalSettings)
+router.patch('/settings',                  workspaceAdminOnly, c.saveGlobalSettings)
+router.post('/settings/test-email',        workspaceAdminOnly, c.sendTestEmail)
+router.get('/settings/ai-usage',           workspaceAdminOnly, c.getAiUsage)
+router.get('/:id/members',                 c.getMembers)
+router.get('/:id/tasks',                   c.projectTasks)
+router.get('/:id/completed',               c.projectCompletedHistory)
+router.post('/',                           workspaceAdminOnly, c.create)
+router.put('/:id',                         workspaceAdminOnly, c.update)
+router.put('/:id/links',                   c.saveLinks)
+router.patch('/:id/situation',             c.saveSituation)
 
 module.exports = router

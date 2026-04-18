@@ -1,9 +1,13 @@
 const router = require('express').Router()
 const { list, create, remove } = require('../controllers/roles.controller')
-const { auth, adminOnly } = require('../middleware/auth')
+const { auth } = require('../middleware/auth')
+const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
-router.get('/',    auth, list)
-router.post('/',   auth, adminOnly, create)
-router.delete('/:id', auth, adminOnly, remove)
+router.use(auth)
+router.use(resolveWorkspace)
+
+router.get('/',       list)
+router.post('/',      workspaceAdminOnly, create)
+router.delete('/:id', workspaceAdminOnly, remove)
 
 module.exports = router

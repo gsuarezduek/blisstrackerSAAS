@@ -12,7 +12,6 @@ async function assertNoActiveTask(userId) {
   if (active) throw Object.assign(new Error('Ya tenés una tarea en curso. Pausala o completala primero.'), { status: 409 })
 }
 
-// Converts a Prisma P2002 on the active-task index into a clean 409
 function handleActiveTaskConflict(err) {
   if (err.code === 'P2002' && err.meta?.target?.includes?.('one_active_task_per_user')) {
     return Object.assign(new Error('Ya tenés una tarea en curso. Pausala o completala primero.'), { status: 409 })
@@ -20,10 +19,16 @@ function handleActiveTaskConflict(err) {
   return err
 }
 
+function isAdmin(req) {
+  const m = req.workspaceMember
+  return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
+}
+
 async function create(req, res, next) {
   try {
-    const requesterId = req.user.id
-    const isAdmin = req.user.isAdmin
+    const requesterId = req.user.userId
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
     const { description, projectId, targetUserId } = req.body
     if (!description || !projectId) {
       return res.status(400).json({ error: 'Descripción y proyecto requeridos' })
@@ -31,30 +36,26 @@ async function create(req, res, next) {
 
     const userId = targetUserId ? Number(targetUserId) : requesterId
 
-    // If assigning to someone else, verify access
     if (userId !== requesterId) {
-      if (!isAdmin) {
-        // Non-admin: requester must be a member of the project
+      if (!isAdmin(req)) {
         const requesterMember = await prisma.projectMember.findUnique({
           where: { projectId_userId: { projectId: Number(projectId), userId: requesterId } },
         })
         if (!requesterMember) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
-        // Non-admin: target must also be a member
         const targetMember = await prisma.projectMember.findUnique({
           where: { projectId_userId: { projectId: Number(projectId), userId } },
         })
         if (!targetMember) return res.status(400).json({ error: 'El usuario no pertenece a este proyecto' })
       }
-      // Admins can assign to anyone in any project — no membership check needed
     }
 
-    const date = todayString()
+    const date = todayString(tz)
     let workDay = await prisma.workDay.findUnique({
-      where: { userId_date: { userId, date } },
+      where: { userId_workspaceId_date: { userId, workspaceId, date } },
     })
     if (!workDay) {
-      workDay = await prisma.workDay.create({ data: { userId, date } })
+      workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
     }
 
     const task = await prisma.task.create({
@@ -68,17 +69,17 @@ async function create(req, res, next) {
       include: taskInclude,
     })
 
-    // Notify the assignee if someone else created the task
     if (userId !== requesterId) {
       const desc = description.length > 60 ? description.slice(0, 57) + '...' : description
       await prisma.notification.create({
         data: {
-          userId:    userId,
-          actorId:   requesterId,
-          taskId:    task.id,
-          projectId: Number(projectId),
-          type:      'TASK_MENTION',
-          message:   `te asignó una tarea: "${desc}"`,
+          userId,
+          actorId:    requesterId,
+          taskId:     task.id,
+          projectId:  Number(projectId),
+          workspaceId,
+          type:       'TASK_MENTION',
+          message:    `te asignó una tarea: "${desc}"`,
         },
       })
     }
@@ -89,7 +90,7 @@ async function create(req, res, next) {
 
 async function startTask(req, res, next) {
   try {
-    const userId = req.user.id
+    const userId = req.user.userId
     await assertNoActiveTask(userId)
 
     const existing = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
@@ -119,14 +120,11 @@ async function pauseTask(req, res, next) {
     const taskId = Number(req.params.id)
     const [task] = await prisma.$transaction([
       prisma.task.update({
-        where: { id: taskId, userId: req.user.id },
+        where: { id: taskId, userId: req.user.userId },
         data: { status: 'PAUSED', pausedAt: now },
         include: taskInclude,
       }),
-      prisma.taskSession.updateMany({
-        where: { taskId, endedAt: null },
-        data: { endedAt: now },
-      }),
+      prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
     ])
     res.json(task)
   } catch (err) {
@@ -137,31 +135,24 @@ async function pauseTask(req, res, next) {
 
 async function resumeTask(req, res, next) {
   try {
-    const userId = req.user.id
+    const userId = req.user.userId
     await assertNoActiveTask(userId)
 
-    const current = await prisma.task.findUnique({
-      where: { id: Number(req.params.id) },
-    })
+    const current = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!current || current.userId !== userId) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
     if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para reanudarla.' })
 
-    // Accumulate the time spent paused
-    const now        = new Date()
-    const pausedMs   = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
-    const addedMins  = Math.round(pausedMs / 60000)
-    const taskId     = Number(req.params.id)
+    const now       = new Date()
+    const pausedMs  = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
+    const addedMins = Math.round(pausedMs / 60000)
+    const taskId    = Number(req.params.id)
 
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId },
-        data: {
-          status:        'IN_PROGRESS',
-          pausedAt:      null,
-          pausedMinutes: { increment: addedMins },
-        },
+        data: { status: 'IN_PROGRESS', pausedAt: null, pausedMinutes: { increment: addedMins } },
         include: taskInclude,
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
@@ -175,7 +166,8 @@ async function resumeTask(req, res, next) {
 
 async function completeTask(req, res, next) {
   try {
-    const userId = req.user.id
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
     const now    = new Date()
     const taskId = Number(req.params.id)
     const [task] = await prisma.$transaction([
@@ -184,30 +176,24 @@ async function completeTask(req, res, next) {
         data:    { status: 'COMPLETED', completedAt: now, pausedAt: null },
         include: taskInclude,
       }),
-      prisma.taskSession.updateMany({
-        where: { taskId, endedAt: null },
-        data:  { endedAt: now },
-      }),
+      prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
     ])
 
-    // Notify all other members of the same project
     const members = await prisma.projectMember.findMany({
       where: { projectId: task.projectId, userId: { not: userId } },
       select: { userId: true },
     })
-
     if (members.length > 0) {
-      const desc = task.description.length > 60
-        ? task.description.slice(0, 57) + '...'
-        : task.description
+      const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
       await prisma.notification.createMany({
         data: members.map(m => ({
-          userId:    m.userId,
-          actorId:   userId,
-          taskId:    task.id,
-          projectId: task.projectId,
-          type:      'COMPLETED',
-          message:   `completó "${desc}"`,
+          userId:      m.userId,
+          actorId:     userId,
+          taskId:      task.id,
+          projectId:   task.projectId,
+          workspaceId,
+          type:        'COMPLETED',
+          message:     `completó "${desc}"`,
         })),
       })
     }
@@ -221,7 +207,8 @@ async function completeTask(req, res, next) {
 
 async function blockTask(req, res, next) {
   try {
-    const userId = req.user.id
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
     const { reason } = req.body
     if (!reason?.trim()) return res.status(400).json({ error: 'La razón del bloqueo es requerida' })
     const now    = new Date()
@@ -232,29 +219,24 @@ async function blockTask(req, res, next) {
         data: { status: 'BLOCKED', blockedReason: reason.trim(), pausedAt: now },
         include: taskInclude,
       }),
-      prisma.taskSession.updateMany({
-        where: { taskId, endedAt: null },
-        data:  { endedAt: now },
-      }),
+      prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
     ])
 
-    // Notificar a todos los miembros del proyecto
     const members = await prisma.projectMember.findMany({
       where: { projectId: task.projectId, userId: { not: userId } },
       select: { userId: true },
     })
     if (members.length > 0) {
-      const desc = task.description.length > 60
-        ? task.description.slice(0, 57) + '...'
-        : task.description
+      const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
       await prisma.notification.createMany({
         data: members.map(m => ({
-          userId:    m.userId,
-          actorId:   userId,
-          taskId:    task.id,
-          projectId: task.projectId,
-          type:      'BLOCKED',
-          message:   `bloqueó "${desc}"`,
+          userId:      m.userId,
+          actorId:     userId,
+          taskId:      task.id,
+          projectId:   task.projectId,
+          workspaceId,
+          type:        'BLOCKED',
+          message:     `bloqueó "${desc}"`,
         })),
       })
     }
@@ -268,32 +250,24 @@ async function blockTask(req, res, next) {
 
 async function unblockTask(req, res, next) {
   try {
-    const userId = req.user.id
+    const userId = req.user.userId
     await assertNoActiveTask(userId)
 
-    const current = await prisma.task.findUnique({
-      where: { id: Number(req.params.id) },
-    })
+    const current = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!current || current.userId !== userId) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
     if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para desbloquearla.' })
 
-    // Accumulate time spent blocked so it doesn't count as work time
-    const now        = new Date()
-    const blockedMs  = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
-    const addedMins  = Math.round(blockedMs / 60000)
-    const taskId     = Number(req.params.id)
+    const now       = new Date()
+    const blockedMs = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
+    const addedMins = Math.round(blockedMs / 60000)
+    const taskId    = Number(req.params.id)
 
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId },
-        data: {
-          status:        'IN_PROGRESS',
-          blockedReason: null,
-          pausedAt:      null,
-          pausedMinutes: { increment: addedMins },
-        },
+        data: { status: 'IN_PROGRESS', blockedReason: null, pausedAt: null, pausedMinutes: { increment: addedMins } },
         include: taskInclude,
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
@@ -313,7 +287,7 @@ async function editTask(req, res, next) {
 
     const task = await prisma.task.findUnique({ where: { id } })
     if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
-    if (!req.user.isAdmin && task.userId !== req.user.id) {
+    if (!isAdmin(req) && task.userId !== req.user.userId) {
       return res.status(403).json({ error: 'No tenés permiso para editar esta tarea' })
     }
 
@@ -328,7 +302,7 @@ async function editTask(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    await prisma.task.delete({ where: { id: Number(req.params.id), userId: req.user.id } })
+    await prisma.task.delete({ where: { id: Number(req.params.id), userId: req.user.userId } })
     res.json({ ok: true })
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -348,29 +322,25 @@ async function setDuration(req, res, next) {
     if (task.status !== 'COMPLETED') {
       return res.status(400).json({ error: 'Solo se puede editar la duración de tareas completadas' })
     }
-    if (!req.user.isAdmin && task.userId !== req.user.id) {
+    if (!isAdmin(req) && task.userId !== req.user.userId) {
       return res.status(403).json({ error: 'No tenés permiso para editar esta tarea' })
     }
-    const updated = await prisma.task.update({
-      where: { id },
-      data: { minutesOverride: minutes },
-    })
+    const updated = await prisma.task.update({ where: { id }, data: { minutesOverride: minutes } })
     res.json(updated)
   } catch (err) { next(err) }
 }
 
 async function starTask(req, res, next) {
   try {
-    const userId = req.user.id
+    const userId = req.user.userId
     const id = Number(req.params.id)
 
     const task = await prisma.task.findUnique({ where: { id } })
     if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
 
     const currentLevel = task.starred || 0
-    const nextLevel = (currentLevel + 1) % 4  // ciclo: 0→1→2→3→0
+    const nextLevel = (currentLevel + 1) % 4
 
-    // Al agregar una nueva estrella (0→1), verificar límite de 3 destacadas
     if (nextLevel === 1) {
       const starredCount = await prisma.task.count({
         where: { userId, starred: { gt: 0 }, status: { not: 'COMPLETED' } },
@@ -394,13 +364,14 @@ async function starTask(req, res, next) {
 
 async function completedHistory(req, res, next) {
   try {
-    const userId = req.user.id
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
     const skip   = Math.max(0, Number(req.query.skip) || 0)
     const take   = 10
-    const { before } = req.query // YYYY-MM-DD — only return tasks from workdays before this date
+    const { before } = req.query
 
-    const where = { userId, status: 'COMPLETED' }
-    if (before) where.workDay = { date: { lt: before } }
+    const where = { userId, status: 'COMPLETED', workDay: { workspaceId } }
+    if (before) where.workDay = { ...where.workDay, date: { lt: before } }
 
     const tasks = await prisma.task.findMany({
       where,
@@ -417,23 +388,20 @@ async function completedHistory(req, res, next) {
 
 async function addToToday(req, res, next) {
   try {
-    const userId = req.user.id
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
     const taskId = Number(req.params.id)
 
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
-      include: { workDay: true },
-    })
+    const task = await prisma.task.findUnique({ where: { id: taskId }, include: { workDay: true } })
     if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (task.status === 'COMPLETED') return res.status(400).json({ error: 'No podés mover al día una tarea completada.' })
 
-    // If it's already in today's workday and not backlog, nothing to do
-    const date = todayString()
+    const date = todayString(tz)
     if (task.workDay.date === date && !task.isBacklog) {
       return res.status(400).json({ error: 'La tarea ya está en el día de hoy.' })
     }
 
-    // If the task is IN_PROGRESS (carry-over edge case), check no OTHER active task
     if (task.status === 'IN_PROGRESS') {
       const otherActive = await prisma.task.findFirst({
         where: { userId, status: 'IN_PROGRESS', id: { not: taskId } },
@@ -444,10 +412,11 @@ async function addToToday(req, res, next) {
       )
     }
 
-    // Get or create today's workday
-    let workDay = await prisma.workDay.findUnique({ where: { userId_date: { userId, date } } })
+    let workDay = await prisma.workDay.findUnique({
+      where: { userId_workspaceId_date: { userId, workspaceId, date } },
+    })
     if (!workDay) {
-      workDay = await prisma.workDay.create({ data: { userId, date } })
+      workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
     }
 
     const updated = await prisma.task.update({
@@ -464,7 +433,7 @@ async function addToToday(req, res, next) {
 
 async function moveToBacklog(req, res, next) {
   try {
-    const userId = req.user.id
+    const userId = req.user.userId
     const taskId = Number(req.params.id)
 
     const task = await prisma.task.findUnique({ where: { id: taskId } })
@@ -486,9 +455,9 @@ async function moveToBacklog(req, res, next) {
 
 async function delegated(req, res, next) {
   try {
-    const createdById = req.user.id
+    const createdById = req.user.userId
+    const workspaceId = req.workspace.id
 
-    // Completadas hace más de 7 días se excluyen de la vista
     const weekAgo = new Date()
     weekAgo.setDate(weekAgo.getDate() - 7)
 
@@ -496,6 +465,7 @@ async function delegated(req, res, next) {
       where: {
         createdById,
         userId: { not: createdById },
+        workDay: { workspaceId },
         OR: [
           { status: { not: 'COMPLETED' } },
           { status: 'COMPLETED', completedAt: { gte: weekAgo } },

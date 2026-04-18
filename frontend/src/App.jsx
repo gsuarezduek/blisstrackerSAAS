@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { WorkspaceProvider } from './context/WorkspaceContext'
 import React from 'react'
 
 class ErrorBoundary extends React.Component {
@@ -27,6 +28,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 import Login2 from './pages/Login2'
+import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Admin from './pages/Admin'
 import Productivity from './pages/Productivity'
@@ -61,10 +63,12 @@ export default function App() {
     <ErrorBoundary>
     <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
     <ThemeProvider>
+    <WorkspaceProvider>
     <AuthProvider>
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
-          <Route path="/login" element={<Login2 />} />
+          <Route path="/login"    element={<Login2    />} />
+          <Route path="/register" element={<Register  />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
@@ -83,6 +87,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </WorkspaceProvider>
     </ThemeProvider>
     </GoogleOAuthProvider>
     </ErrorBoundary>

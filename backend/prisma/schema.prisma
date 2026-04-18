@@ -7,77 +7,132 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model UserRole {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique   // identificador interno, ej: "DESIGNER"
-  label     String             // nombre para mostrar, ej: "Diseñador"
-  createdAt DateTime @default(now())
+// ─── WORKSPACE ───────────────────────────────────────────────────────────────
+
+model Workspace {
+  id               Int      @id @default(autoincrement())
+  name             String
+  slug             String   @unique   // subdominio, ej: "bliss"
+  timezone         String   @default("America/Argentina/Buenos_Aires")
+  status           String   @default("trialing") // trialing | active | past_due | suspended | cancelled
+  trialEndsAt      DateTime?
+  stripeCustomerId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  members          WorkspaceMember[]
+  projects         Project[]
+  userRoles        UserRole[]
+  services         Service[]
+  roleExpectations RoleExpectation[]
+  aiTokenLogs      AiTokenLog[]
+  dailyInsights    DailyInsight[]
+  insightMemories  UserInsightMemory[]
+  notifications    Notification[]
+  workDays         WorkDay[]
+  subscription     Subscription?
+  loginEvents      UserLogin[]
+  feedbacks        Feedback[]
+
+  @@index([slug])
 }
 
-enum TaskStatus {
-  PENDING
-  IN_PROGRESS
-  PAUSED
-  BLOCKED
-  COMPLETED
+model WorkspaceMember {
+  workspaceId Int
+  userId      Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+
+  role        String    @default("member")   // "owner" | "admin" | "member"
+  teamRole    String    @default("")          // ej: "DESIGNER", "CM" (referencia a UserRole.name)
+  active      Boolean   @default(true)
+  vacationDays Int      @default(0)
+
+  // Preferencias IA (por workspace)
+  weeklyEmailEnabled    Boolean @default(true)
+  dailyInsightEnabled   Boolean @default(true)
+  insightMemoryEnabled  Boolean @default(true)
+  taskQualityEnabled    Boolean @default(true)
+
+  joinedAt    DateTime  @default(now())
+
+  @@id([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
 }
+
+model Subscription {
+  id             Int      @id @default(autoincrement())
+  workspaceId    Int      @unique
+  workspace      Workspace @relation(fields: [workspaceId], references: [id])
+  stripeSubId    String?  @unique
+  planName       String   @default("pro")
+  status         String   // active | past_due | cancelled | trialing
+  seats          Int      @default(0)
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ─── USER (global — datos personales, no workspace-specific) ─────────────────
 
 model User {
   id        Int      @id @default(autoincrement())
   name      String
   email     String   @unique
   password  String
-  role      String
-  active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Datos personales (opcionales)
-  phone            String?
-  birthday         DateTime?
-  address          String?
-  dni              String?
-  cuit             String?
-  alias            String?
-  bankName         String?
-  maritalStatus    String?
-  children         Int?
-  educationLevel   String?
-  educationTitle   String?
-  bloodType        String?
-  medicalConditions String?
-  healthInsurance  String?
-  emergencyContact String?
-  avatar              String   @default("bee.png")
-  weeklyEmailEnabled    Boolean  @default(true)
-  dailyInsightEnabled   Boolean  @default(true)
-  insightMemoryEnabled  Boolean  @default(true)
-  taskQualityEnabled    Boolean  @default(true)
-  isAdmin               Boolean  @default(false)
-  vacationDays          Int      @default(0)
+  // Super admin global (solo equipo Bliss)
+  isSuperAdmin Boolean @default(false)
 
-  workDays      WorkDay[]
-  tasks         Task[]
-  dailyInsights DailyInsight[]
-  insightMemories UserInsightMemory[]
-  tasksCreated  Task[]         @relation("TaskCreatedBy")
-  feedbacks     Feedback[]
-  projects      ProjectMember[]
-  taskComments  TaskComment[]
+  // Datos personales (opcionales, globales al usuario)
+  phone             String?
+  birthday          DateTime?
+  address           String?
+  dni               String?
+  cuit              String?
+  alias             String?
+  bankName          String?
+  maritalStatus     String?
+  children          Int?
+  educationLevel    String?
+  educationTitle    String?
+  bloodType         String?
+  medicalConditions String?
+  healthInsurance   String?
+  emergencyContact  String?
+  avatar            String   @default("bee.png")
+
+  // Relaciones
+  workspaceMembers      WorkspaceMember[]
+  workDays              WorkDay[]
+  tasks                 Task[]
+  tasksCreated          Task[]         @relation("TaskCreatedBy")
+  taskComments          TaskComment[]
+  dailyInsights         DailyInsight[]
+  insightMemories       UserInsightMemory[]
+  feedbacks             Feedback[]
+  projects              ProjectMember[]
   notifications         Notification[] @relation("NotificationRecipient")
   notificationsAsActor  Notification[] @relation("NotificationActor")
   passwordResetTokens   PasswordResetToken[]
-  loginEvents   UserLogin[]
+  loginEvents           UserLogin[]
 }
 
 model UserLogin {
-  id       Int      @id @default(autoincrement())
-  userId   Int
-  user     User     @relation(fields: [userId], references: [id])
-  loginAt  DateTime @default(now())
-  method   String   // "email" | "google"
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  workspaceId Int?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
+  loginAt     DateTime  @default(now())
+  method      String    // "email" | "google"
 
   @@index([userId])
+  @@index([workspaceId])
   @@index([loginAt])
 }
 
@@ -92,13 +147,15 @@ model PasswordResetToken {
 }
 
 model Feedback {
-  id        Int          @id @default(autoincrement())
-  userId    Int
-  user      User         @relation(fields: [userId], references: [id])
-  type      FeedbackType
-  message   String
-  read      Boolean      @default(false)
-  createdAt DateTime     @default(now())
+  id          Int          @id @default(autoincrement())
+  userId      Int
+  user        User         @relation(fields: [userId], references: [id])
+  workspaceId Int?
+  workspace   Workspace?   @relation(fields: [workspaceId], references: [id])
+  type        FeedbackType
+  message     String
+  read        Boolean      @default(false)
+  createdAt   DateTime     @default(now())
 }
 
 enum FeedbackType {
@@ -106,18 +163,26 @@ enum FeedbackType {
   BUG
 }
 
-enum NotificationType {
-  COMPLETED
-  BLOCKED
-  ADDED_TO_PROJECT
-  TASK_COMMENT
-  TASK_MENTION
+// ─── WORKSPACE-SCOPED: ROLES, PROYECTOS, SERVICIOS ───────────────────────────
+
+model UserRole {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String   // identificador interno, ej: "DESIGNER"
+  label       String   // nombre para mostrar, ej: "Diseñador"
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }
 
 model Project {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  active    Boolean  @default(true)
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  active      Boolean  @default(true)
   situation        String?
   timezone         String  @default("America/Argentina/Buenos_Aires")
   linksEnabled     Boolean @default(true)
@@ -132,16 +197,24 @@ model Project {
   members       ProjectMember[]
   notifications Notification[]
   links         ProjectLink[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }
 
 model Service {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   projects ProjectService[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }
 
 model ProjectService {
@@ -173,39 +246,33 @@ model ProjectLink {
   @@index([projectId])
 }
 
+// ─── WORKDAY & TASKS ─────────────────────────────────────────────────────────
+
 model WorkDay {
-  id        Int       @id @default(autoincrement())
-  userId    Int
-  user      User      @relation(fields: [userId], references: [id])
-  date      String    // "YYYY-MM-DD"
-  startedAt DateTime  @default(now())
-  endedAt   DateTime?
-  createdAt DateTime  @default(now())
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  date        String    // "YYYY-MM-DD"
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
 
   tasks Task[]
 
-  @@unique([userId, date])
+  @@unique([userId, workspaceId, date])
   @@index([userId, date])
+  @@index([workspaceId, date])
   @@index([date])
 }
 
-model Notification {
-  id        Int              @id @default(autoincrement())
-  userId    Int                                         // destinatario
-  user      User             @relation("NotificationRecipient", fields: [userId], references: [id])
-  actorId   Int                                         // quien realizó la acción
-  actor     User             @relation("NotificationActor",    fields: [actorId], references: [id])
-  taskId    Int?
-  task      Task?            @relation(fields: [taskId], references: [id])
-  projectId Int
-  project   Project          @relation(fields: [projectId], references: [id])
-  type      NotificationType @default(COMPLETED)
-  message   String
-  read      Boolean          @default(false)
-  createdAt DateTime         @default(now())
-
-  @@index([userId])
-  @@index([userId, read])
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  PAUSED
+  BLOCKED
+  COMPLETED
 }
 
 model Task {
@@ -226,10 +293,10 @@ model Task {
   pausedMinutes   Int        @default(0)
   completedAt     DateTime?
   minutesOverride Int?
-  starred         Int        @default(0)  // 0=sin estrella 1=amarillo 2=naranja 3=rojo
+  starred         Int        @default(0)
   isBacklog       Boolean    @default(false)
   createdAt       DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  updatedAt       DateTime   @updatedAt
 
   notifications Notification[]
   comments      TaskComment[]
@@ -251,34 +318,6 @@ model TaskSession {
   @@index([startedAt])
 }
 
-model UserInsightMemory {
-  id              Int      @id @default(autoincrement())
-  userId          Int
-  user            User     @relation(fields: [userId], references: [id])
-  tendencias      String   @default("")
-  fortalezas      String   @default("")
-  areasDeAtencion String   @default("")
-  estadisticas    Json     @default("{}")
-  weekStart       String   @default("") // YYYY-MM-DD — lunes de inicio de la ventana de 4 semanas
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@unique([userId, weekStart])
-  @@index([userId])
-}
-
-model RoleExpectation {
-  id                          Int      @id @default(autoincrement())
-  roleName                    String   @unique
-  description                 String   @default("")  // Propósito del rol
-  expectedResults             Json     @default("[]") // string[]
-  operationalResponsibilities Json     @default("[]") // [{category, items: string[]}]
-  recurrentTasks              Json     @default("[]") // [{task, frequency, detail}]
-  dependencies                Json     @default("[]") // [{direction, roleName, description}]
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
-}
-
 model TaskComment {
   id        Int          @id @default(autoincrement())
   taskId    Int
@@ -294,8 +333,85 @@ model TaskComment {
   @@index([taskId])
 }
 
+// ─── NOTIFICACIONES ──────────────────────────────────────────────────────────
+
+enum NotificationType {
+  COMPLETED
+  BLOCKED
+  ADDED_TO_PROJECT
+  TASK_COMMENT
+  TASK_MENTION
+}
+
+model Notification {
+  id          Int              @id @default(autoincrement())
+  userId      Int
+  user        User             @relation("NotificationRecipient", fields: [userId], references: [id])
+  actorId     Int
+  actor       User             @relation("NotificationActor", fields: [actorId], references: [id])
+  workspaceId Int
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id])
+  taskId      Int?
+  task        Task?            @relation(fields: [taskId], references: [id])
+  projectId   Int
+  project     Project          @relation(fields: [projectId], references: [id])
+  type        NotificationType @default(COMPLETED)
+  message     String
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([workspaceId])
+}
+
+// ─── AI: INSIGHTS, MEMORY, TOKENS ────────────────────────────────────────────
+
+model DailyInsight {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  date        String   // "YYYY-MM-DD" en timezone del workspace
+  titulo      String
+  mensaje     String
+  sugerencia  String?
+  alertaRol   String?
+  alertaGTD   String?
+  tono        String   // warning | alert | positive | neutral
+  feedback    String?  // "up" | "down" | null
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, workspaceId, date])
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+model UserInsightMemory {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id])
+  workspaceId     Int
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  tendencias      String   @default("")
+  fortalezas      String   @default("")
+  areasDeAtencion String   @default("")
+  estadisticas    Json     @default("{}")
+  weekStart       String   @default("") // YYYY-MM-DD
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, workspaceId, weekStart])
+  @@index([userId])
+  @@index([workspaceId])
+}
+
 model AiTokenLog {
   id           Int      @id @default(autoincrement())
+  workspaceId  Int?
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id])
   service      String   // "insight" | "weeklyReport" | "insightMemory"
   userId       Int?
   inputTokens  Int      @default(0)
@@ -303,23 +419,24 @@ model AiTokenLog {
   createdAt    DateTime @default(now())
 
   @@index([createdAt])
+  @@index([workspaceId])
 }
 
-model DailyInsight {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id])
-  date       String   // "YYYY-MM-DD" Buenos Aires
-  titulo     String
-  mensaje    String
-  sugerencia String?
-  alertaRol  String?
-  alertaGTD  String?
-  tono       String   // warning | alert | positive | neutral
-  feedback   String?  // "up" | "down" | null
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+// ─── ROLES IA ─────────────────────────────────────────────────────────────────
 
-  @@unique([userId, date])
-  @@index([userId])
+model RoleExpectation {
+  id                          Int      @id @default(autoincrement())
+  workspaceId                 Int
+  workspace                   Workspace @relation(fields: [workspaceId], references: [id])
+  roleName                    String
+  description                 String   @default("")
+  expectedResults             Json     @default("[]")
+  operationalResponsibilities Json     @default("[]")
+  recurrentTasks              Json     @default("[]")
+  dependencies                Json     @default("[]")
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@unique([workspaceId, roleName])
+  @@index([workspaceId])
 }

@@ -7,19 +7,30 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const AI_TIMEOUT_MS = 30000
 const { logTokens } = require('../lib/logTokens')
 
-const TZ = 'America/Argentina/Buenos_Aires'
-
-function toDateString(date) {
-  return date.toLocaleDateString('en-CA', { timeZone: TZ })
+// Devuelve el string de offset UTC para una timezone dada, p.ej. "-03:00" o "+05:30".
+// Se calcula dinámicamente para respetar el horario de verano.
+function tzOffsetStr(tz) {
+  const now   = new Date()
+  const local = new Date(now.toLocaleString('en-US', { timeZone: tz }))
+  const utc   = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }))
+  const diffMins = Math.round((local - utc) / 60000)
+  const sign  = diffMins >= 0 ? '+' : '-'
+  const abs   = Math.abs(diffMins)
+  const h     = Math.floor(abs / 60).toString().padStart(2, '0')
+  const m     = (abs % 60).toString().padStart(2, '0')
+  return `${sign}${h}:${m}`
 }
 
-function getWeekBounds(offsetWeeks = 0) {
+function toDateString(date, tz) {
+  return date.toLocaleDateString('en-CA', { timeZone: tz })
+}
+
+function getWeekBounds(offsetWeeks = 0, tz) {
   const now = new Date()
-  const localDateStr = toDateString(now)
+  const localDateStr = toDateString(now, tz)
   const [y, m, d] = localDateStr.split('-').map(Number)
   const today = new Date(y, m - 1, d)
 
-  // Day of week: 0=Sun, 1=Mon ... 6=Sat
   const dow = today.getDay()
   const daysToMonday = dow === 0 ? 6 : dow - 1
   const monday = new Date(today)
@@ -51,11 +62,12 @@ function fmtDate(dateStr) {
 
 // Calcula minutos de una tarea atribuibles a un rango de fechas usando sesiones.
 // Para tareas sin sesiones (creadas antes de la migración) usa el total completo como fallback.
-function calcMinsForRange(t, from, to) {
+function calcMinsForRange(t, from, to, tz) {
+  const offset = tzOffsetStr(tz)
   if (t.minutesOverride != null) return t.minutesOverride
   if (t.sessions && t.sessions.length > 0) {
-    const rangeStart = new Date(from + 'T00:00:00-03:00')
-    const rangeEnd   = new Date(to   + 'T23:59:59-03:00')
+    const rangeStart = new Date(from + 'T00:00:00' + offset)
+    const rangeEnd   = new Date(to   + 'T23:59:59' + offset)
     let total = 0
     for (const s of t.sessions) {
       if (!s.endedAt) continue
@@ -68,12 +80,15 @@ function calcMinsForRange(t, from, to) {
   return calcMins(t)
 }
 
-async function getWeeklyData(userId) {
-  const currentWeek = getWeekBounds(0)
-  const prevWeek    = getWeekBounds(1)
+async function getWeeklyData(userId, workspace) {
+  const tz          = workspace.timezone
+  const workspaceId = workspace.id
+  const offset      = tzOffsetStr(tz)
+  const currentWeek = getWeekBounds(0, tz)
+  const prevWeek    = getWeekBounds(1, tz)
 
   const [completedTasks, pendingTasks, prevTasks, workDays] = await Promise.all([
-    // Tareas completadas esta semana (filtro por completedAt, no por workDay)
+    // Tareas completadas esta semana (filtro por completedAt)
     prisma.task.findMany({
       where: {
         userId,
@@ -81,9 +96,10 @@ async function getWeeklyData(userId) {
         startedAt:   { not: null },
         completedAt: {
           not: null,
-          gte: new Date(currentWeek.from + 'T00:00:00-03:00'),
-          lte: new Date(currentWeek.to   + 'T23:59:59-03:00'),
+          gte: new Date(currentWeek.from + 'T00:00:00' + offset),
+          lte: new Date(currentWeek.to   + 'T23:59:59' + offset),
         },
+        workDay: { workspaceId },
       },
       include: {
         project:  { select: { id: true, name: true } },
@@ -91,11 +107,12 @@ async function getWeeklyData(userId) {
       },
       orderBy: { completedAt: 'asc' },
     }),
-    // Tareas pendientes actuales (cualquier semana)
+    // Tareas pendientes actuales
     prisma.task.findMany({
       where: {
         userId,
         status: { in: ['PENDING', 'PAUSED', 'BLOCKED'] },
+        workDay: { workspaceId },
       },
       include: { project: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'asc' },
@@ -108,9 +125,10 @@ async function getWeeklyData(userId) {
         startedAt:   { not: null },
         completedAt: {
           not: null,
-          gte: new Date(prevWeek.from + 'T00:00:00-03:00'),
-          lte: new Date(prevWeek.to   + 'T23:59:59-03:00'),
+          gte: new Date(prevWeek.from + 'T00:00:00' + offset),
+          lte: new Date(prevWeek.to   + 'T23:59:59' + offset),
         },
+        workDay: { workspaceId },
       },
       select: {
         id: true, minutesOverride: true, pausedMinutes: true, startedAt: true, completedAt: true,
@@ -121,6 +139,7 @@ async function getWeeklyData(userId) {
     prisma.workDay.findMany({
       where: {
         userId,
+        workspaceId,
         date: { gte: currentWeek.from, lte: currentWeek.to },
       },
       select: { date: true, startedAt: true, endedAt: true },
@@ -131,7 +150,7 @@ async function getWeeklyData(userId) {
   const byProject = {}
   let totalMinutes = 0
   for (const t of completedTasks) {
-    const mins = calcMinsForRange(t, currentWeek.from, currentWeek.to)
+    const mins = calcMinsForRange(t, currentWeek.from, currentWeek.to, tz)
     totalMinutes += mins
     const pid = t.project.id
     if (!byProject[pid]) byProject[pid] = { project: t.project, minutes: 0, tasks: [] }
@@ -139,8 +158,7 @@ async function getWeeklyData(userId) {
     byProject[pid].tasks.push({ description: t.description, minutes: mins })
   }
 
-  // Semana anterior
-  const prevTotalMinutes = prevTasks.reduce((s, t) => s + calcMinsForRange(t, prevWeek.from, prevWeek.to), 0)
+  const prevTotalMinutes = prevTasks.reduce((s, t) => s + calcMinsForRange(t, prevWeek.from, prevWeek.to, tz), 0)
 
   return {
     week: currentWeek,
@@ -325,7 +343,7 @@ Esta semana: ${completedTasks.length} tareas, ${fmtMins(totalMinutes)} registrad
 Escribís en español rioplatense, forma clara, directa y ligeramente crítica cuando aporta valor. Nunca inventás información que no esté en los datos. Si no hay suficiente información para una sección, lo decís brevemente. Escribís como un humano, no como un robot. Evitás frases genéricas.`,
       messages: [{ role: 'user', content: userPrompt }],
     }, { timeout: AI_TIMEOUT_MS })
-    logTokens('weeklyReport', user.id, msg.usage)
+    logTokens('weeklyReport', user.id, msg.usage, user.workspaceId)
 
     let parsed
     try { parsed = parseAIJson(msg.content[0].text) }
@@ -502,16 +520,21 @@ function buildWeeklyEmailHtml(user, data, analysis) {
 </html>`
 }
 
-async function sendWeeklyReportForUser(user) {
+// user: { id, name, email, role (teamRole), workspaceId, insightMemoryEnabled }
+// workspace: { id, timezone }
+async function sendWeeklyReportForUser(user, workspace) {
   try {
+    const workspaceId = workspace.id
     const [data, roleExpectation, memory] = await Promise.all([
-      getWeeklyData(user.id),
+      getWeeklyData(user.id, workspace),
       user.role
-        ? prisma.roleExpectation.findUnique({ where: { roleName: user.role } })
+        ? prisma.roleExpectation.findUnique({
+            where: { workspaceId_roleName: { workspaceId, roleName: user.role } },
+          })
         : null,
       user.insightMemoryEnabled !== false
         ? prisma.userInsightMemory.findMany({
-            where: { userId: user.id, weekStart: { not: '' } },
+            where: { userId: user.id, workspaceId },
             orderBy: { weekStart: 'desc' },
             take: 4,
           })
@@ -535,17 +558,37 @@ async function sendWeeklyReportForUser(user) {
 }
 
 async function sendAllWeeklyReports() {
-  const users = await prisma.user.findMany({
-    where: { active: true, weeklyEmailEnabled: true },
-    select: { id: true, name: true, email: true, role: true, insightMemoryEnabled: true },
+  // Obtener todos los miembros activos con weeklyEmailEnabled en workspaces activos
+  const members = await prisma.workspaceMember.findMany({
+    where: {
+      active: true,
+      weeklyEmailEnabled: true,
+      workspace: { status: { in: ['active', 'trialing'] } },
+    },
+    include: {
+      user:      { select: { id: true, name: true, email: true } },
+      workspace: { select: { id: true, timezone: true } },
+    },
   })
-  console.log(`[WeeklyReport] Enviando a ${users.length} usuario${users.length !== 1 ? 's' : ''}...`)
-  for (let i = 0; i < users.length; i++) {
-    await sendWeeklyReportForUser(users[i])
-    if (i < users.length - 1) {
+
+  console.log(`[WeeklyReport] Enviando a ${members.length} miembro${members.length !== 1 ? 's' : ''}...`)
+
+  for (let i = 0; i < members.length; i++) {
+    const m = members[i]
+    const user = {
+      id:                  m.user.id,
+      name:                m.user.name,
+      email:               m.user.email,
+      role:                m.teamRole || null,
+      workspaceId:         m.workspaceId,
+      insightMemoryEnabled: m.insightMemoryEnabled,
+    }
+    await sendWeeklyReportForUser(user, m.workspace)
+    if (i < members.length - 1) {
       await new Promise(r => setTimeout(r, 3000))
     }
   }
+
   console.log('[WeeklyReport] Proceso finalizado.')
 }
 

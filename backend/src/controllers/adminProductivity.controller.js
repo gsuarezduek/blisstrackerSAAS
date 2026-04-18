@@ -3,26 +3,33 @@ const { generateMemoryForUser } = require('../services/insightMemory.service')
 
 async function listProductivity(req, res, next) {
   try {
-    const users = await prisma.user.findMany({
-      where: { active: true },
-      select: {
-        id: true, name: true, role: true, avatar: true,
-        insightMemories: {
+    const workspaceId = req.workspace.id
+
+    const members = await prisma.workspaceMember.findMany({
+      where: { workspaceId, active: true },
+      include: {
+        user: {
           select: {
-            tendencias: true, fortalezas: true, areasDeAtencion: true,
-            estadisticas: true, weekStart: true, updatedAt: true,
+            id: true, name: true, avatar: true,
+            insightMemories: {
+              where: { workspaceId },
+              select: {
+                tendencias: true, fortalezas: true, areasDeAtencion: true,
+                estadisticas: true, weekStart: true, updatedAt: true,
+              },
+              orderBy: { weekStart: 'desc' },
+              take: 1,
+            },
           },
-          orderBy: { weekStart: 'desc' },
-          take: 1,
         },
       },
-      orderBy: { name: 'asc' },
+      orderBy: { user: { name: 'asc' } },
     })
 
-    // Normalizar: exponer el registro más reciente como `insightMemory` (o null)
-    const result = users.map(u => ({
-      ...u,
-      insightMemory: u.insightMemories[0] ?? null,
+    const result = members.map(m => ({
+      ...m.user,
+      role: m.teamRole,
+      insightMemory: m.user.insightMemories[0] ?? null,
       insightMemories: undefined,
     }))
 
@@ -33,12 +40,16 @@ async function listProductivity(req, res, next) {
 async function refreshProductivity(req, res, next) {
   try {
     const userId = Number(req.params.userId)
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, active: true } })
-    if (!user || !user.active) return res.status(404).json({ error: 'Usuario no encontrado' })
+    const workspace = req.workspace
 
-    await generateMemoryForUser(userId)
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId: workspace.id, userId } },
+    })
+    if (!member || !member.active) return res.status(404).json({ error: 'Usuario no encontrado' })
+
+    await generateMemoryForUser(userId, workspace)
     const memory = await prisma.userInsightMemory.findFirst({
-      where: { userId },
+      where: { userId, workspaceId: workspace.id },
       orderBy: { weekStart: 'desc' },
       select: {
         tendencias: true, fortalezas: true, areasDeAtencion: true,

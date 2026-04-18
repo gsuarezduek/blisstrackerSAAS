@@ -6,10 +6,22 @@ const { parseAIJson } = require('../utils/parseAIJson')
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const AI_TIMEOUT_MS = 20000
 const { logTokens } = require('../lib/logTokens')
-const TZ = 'America/Argentina/Buenos_Aires'
 
-function getNWeeksAgoMonday(n) {
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+// Devuelve el string de offset UTC para una timezone dada, p.ej. "-03:00" o "+05:30".
+function tzOffsetStr(tz) {
+  const now   = new Date()
+  const local = new Date(now.toLocaleString('en-US', { timeZone: tz }))
+  const utc   = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }))
+  const diffMins = Math.round((local - utc) / 60000)
+  const sign  = diffMins >= 0 ? '+' : '-'
+  const abs   = Math.abs(diffMins)
+  const h     = Math.floor(abs / 60).toString().padStart(2, '0')
+  const m     = (abs % 60).toString().padStart(2, '0')
+  return `${sign}${h}:${m}`
+}
+
+function getNWeeksAgoMonday(n, tz) {
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const [y, m, d] = todayStr.split('-').map(Number)
   const today = new Date(y, m - 1, d)
   const dow = today.getDay()
@@ -19,8 +31,8 @@ function getNWeeksAgoMonday(n) {
   return monday.toISOString().slice(0, 10)
 }
 
-function daysAgo(n) {
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+function daysAgo(n, tz) {
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const [y, m, d] = todayStr.split('-').map(Number)
   const date = new Date(y, m - 1, d - n)
   return date.toISOString().slice(0, 10)
@@ -42,24 +54,33 @@ function fmtMins(m) {
   return h > 0 ? `${h}h${min > 0 ? min + 'm' : ''}` : `${min}m`
 }
 
-async function generateMemoryForUser(userId) {
-  const fourWeeksAgo = getNWeeksAgoMonday(4)
-  const today = todayString()
-  const thirtyDaysAgo = daysAgo(30)
+// workspace: { id, timezone }
+async function generateMemoryForUser(userId, workspace) {
+  const tz          = workspace.timezone
+  const workspaceId = workspace.id
+  const offset      = tzOffsetStr(tz)
+  const fourWeeksAgo  = getNWeeksAgoMonday(4, tz)
+  const today         = todayString(tz)
+  const thirtyDaysAgo = daysAgo(30, tz)
 
-  const [user, completedTasks, workDays, previousMemories, feedbackRecords] = await Promise.all([
+  const [user, member, completedTasks, workDays, previousMemories, feedbackRecords] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, role: true, insightMemoryEnabled: true },
+      select: { id: true, name: true },
+    }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { teamRole: true, insightMemoryEnabled: true },
     }),
     prisma.task.findMany({
       where: {
         userId,
         status: 'COMPLETED',
         completedAt: {
-          gte: new Date(fourWeeksAgo + 'T00:00:00-03:00'),
-          lte: new Date(today        + 'T23:59:59-03:00'),
+          gte: new Date(fourWeeksAgo + 'T00:00:00' + offset),
+          lte: new Date(today        + 'T23:59:59' + offset),
         },
+        workDay: { workspaceId },
       },
       select: {
         id: true,
@@ -73,7 +94,7 @@ async function generateMemoryForUser(userId) {
       },
     }),
     prisma.workDay.findMany({
-      where: { userId, date: { gte: fourWeeksAgo, lte: today } },
+      where: { userId, workspaceId, date: { gte: fourWeeksAgo, lte: today } },
       include: {
         tasks: {
           select: {
@@ -89,7 +110,7 @@ async function generateMemoryForUser(userId) {
     }),
     // Últimas 3 memorias para comparar evolución
     prisma.userInsightMemory.findMany({
-      where: { userId, weekStart: { not: '' } },
+      where: { userId, workspaceId },
       orderBy: { weekStart: 'desc' },
       take: 3,
       select: { weekStart: true, estadisticas: true },
@@ -98,6 +119,7 @@ async function generateMemoryForUser(userId) {
     prisma.dailyInsight.findMany({
       where: {
         userId,
+        workspaceId,
         feedback: { not: null },
         createdAt: { gte: new Date(thirtyDaysAgo) },
       },
@@ -105,12 +127,14 @@ async function generateMemoryForUser(userId) {
     }),
   ])
 
-  if (!user) return null
+  if (!user || !member) return null
+
+  const teamRole = member.teamRole || null
 
   // Perfil del rol
-  const roleExpectation = user.role
+  const roleExpectation = teamRole
     ? await prisma.roleExpectation.findUnique({
-        where: { roleName: user.role },
+        where: { workspaceId_roleName: { workspaceId, roleName: teamRole } },
         select: { description: true, expectedResults: true, operationalResponsibilities: true, recurrentTasks: true },
       })
     : null
@@ -192,7 +216,7 @@ async function generateMemoryForUser(userId) {
 
   // Contexto para Claude
   let ctx = `ANÁLISIS DE LAS ÚLTIMAS 4 SEMANAS\n`
-  ctx += `Rol: ${user.role}\n`
+  ctx += `Rol: ${teamRole || 'Sin rol definido'}\n`
 
   // Perfil del rol — para que Claude contextualice el rendimiento
   if (roleExpectation) {
@@ -265,7 +289,7 @@ Devolvés ÚNICAMENTE un objeto JSON válido con estas claves:
 Español rioplatense, directo. Solo hechos que los datos muestran. No supongas lo que no está en los datos.`,
     messages: [{ role: 'user', content: ctx }],
   }, { timeout: AI_TIMEOUT_MS })
-  logTokens('insightMemory', userId, msg.usage)
+  logTokens('insightMemory', userId, msg.usage, workspaceId)
 
   let parsed
   try { parsed = parseAIJson(msg.content[0].text) }
@@ -285,9 +309,10 @@ Español rioplatense, directo. Solo hechos que los datos muestran. No supongas l
   }
 
   await prisma.userInsightMemory.upsert({
-    where: { userId_weekStart: { userId, weekStart: fourWeeksAgo } },
+    where: { userId_workspaceId_weekStart: { userId, workspaceId, weekStart: fourWeeksAgo } },
     create: {
       userId,
+      workspaceId,
       tendencias:      String(parsed.tendencias      || ''),
       fortalezas:      String(parsed.fortalezas      || ''),
       areasDeAtencion: parsed.areasDeAtencion ? String(parsed.areasDeAtencion) : '',
@@ -302,9 +327,9 @@ Español rioplatense, directo. Solo hechos que los datos muestran. No supongas l
     },
   })
 
-  // Mantener solo las últimas 4 entradas por usuario
+  // Mantener solo las últimas 4 entradas por usuario/workspace
   const allRecords = await prisma.userInsightMemory.findMany({
-    where: { userId, weekStart: { not: '' } },
+    where: { userId, workspaceId },
     orderBy: { weekStart: 'desc' },
     select: { id: true },
   })
@@ -315,21 +340,30 @@ Español rioplatense, directo. Solo hechos que los datos muestran. No supongas l
 }
 
 async function updateAllMemories() {
-  const users = await prisma.user.findMany({
-    where: { active: true, insightMemoryEnabled: true },
-    select: { id: true, name: true },
+  // Obtener todos los miembros activos con insightMemoryEnabled en workspaces activos
+  const members = await prisma.workspaceMember.findMany({
+    where: {
+      active: true,
+      insightMemoryEnabled: true,
+      workspace: { status: { in: ['active', 'trialing'] } },
+    },
+    include: {
+      user:      { select: { id: true, name: true } },
+      workspace: { select: { id: true, timezone: true } },
+    },
   })
 
-  console.log(`[InsightMemory] Procesando ${users.length} usuarios...`)
+  console.log(`[InsightMemory] Procesando ${members.length} miembro${members.length !== 1 ? 's' : ''}...`)
 
-  for (let i = 0; i < users.length; i++) {
+  for (let i = 0; i < members.length; i++) {
+    const m = members[i]
     try {
-      await generateMemoryForUser(users[i].id)
-      console.log(`[InsightMemory] ✓ ${users[i].name}`)
+      await generateMemoryForUser(m.user.id, m.workspace)
+      console.log(`[InsightMemory] ✓ ${m.user.name}`)
     } catch (err) {
-      console.error(`[InsightMemory] Error para ${users[i].name}:`, err.message)
+      console.error(`[InsightMemory] Error para ${m.user.name}:`, err.message)
     }
-    if (i < users.length - 1) {
+    if (i < members.length - 1) {
       await new Promise(r => setTimeout(r, 3000))
     }
   }

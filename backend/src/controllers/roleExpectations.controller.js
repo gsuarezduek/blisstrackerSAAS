@@ -3,6 +3,7 @@ const prisma = require('../lib/prisma')
 async function list(req, res, next) {
   try {
     const expectations = await prisma.roleExpectation.findMany({
+      where: { workspaceId: req.workspace.id },
       orderBy: { roleName: 'asc' },
     })
     res.json(expectations)
@@ -12,7 +13,9 @@ async function list(req, res, next) {
 async function getByRole(req, res, next) {
   try {
     const { roleName } = req.params
-    const expectation = await prisma.roleExpectation.findUnique({ where: { roleName } })
+    const expectation = await prisma.roleExpectation.findUnique({
+      where: { workspaceId_roleName: { workspaceId: req.workspace.id, roleName } },
+    })
     if (!expectation) return res.json(null)
     res.json(expectation)
   } catch (err) { next(err) }
@@ -29,10 +32,11 @@ async function upsert(req, res, next) {
       dependencies                = [],
     } = req.body
 
+    const workspaceId = req.workspace.id
     const data = { description, expectedResults, operationalResponsibilities, recurrentTasks, dependencies }
     const expectation = await prisma.roleExpectation.upsert({
-      where:  { roleName },
-      create: { roleName, ...data },
+      where:  { workspaceId_roleName: { workspaceId, roleName } },
+      create: { workspaceId, roleName, ...data },
       update: data,
     })
     res.json(expectation)
@@ -41,13 +45,10 @@ async function upsert(req, res, next) {
 
 async function getMyRoleExpectation(req, res, next) {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { role: true },
-    })
-    if (!user?.role) return res.json(null)
+    const teamRole = req.workspaceMember?.teamRole
+    if (!teamRole) return res.json(null)
     const expectation = await prisma.roleExpectation.findUnique({
-      where: { roleName: user.role },
+      where: { workspaceId_roleName: { workspaceId: req.workspace.id, roleName: teamRole } },
     })
     res.json(expectation)
   } catch (err) { next(err) }

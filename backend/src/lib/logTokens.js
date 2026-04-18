@@ -5,13 +5,15 @@ const prisma = require('./prisma')
  * @param {'insight'|'weeklyReport'|'insightMemory'} service
  * @param {number|null} userId
  * @param {{ input_tokens: number, output_tokens: number }} usage  — Anthropic usage object
+ * @param {number|null} [workspaceId]
  */
-async function logTokens(service, userId, usage) {
+async function logTokens(service, userId, usage, workspaceId) {
   try {
     await prisma.aiTokenLog.create({
       data: {
         service,
-        userId: userId ?? null,
+        userId:      userId      ?? null,
+        workspaceId: workspaceId ?? null,
         inputTokens:  usage.input_tokens  ?? 0,
         outputTokens: usage.output_tokens ?? 0,
       },

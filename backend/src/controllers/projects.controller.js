@@ -1,9 +1,7 @@
 const prisma = require('../lib/prisma')
 
-const TZ = 'America/Argentina/Buenos_Aires'
-
-function weekMondayStr() {
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+function weekMondayStr(tz) {
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const [y, m, d] = todayStr.split('-').map(Number)
   const today = new Date(y, m - 1, d)
   const dow = today.getDay()
@@ -13,54 +11,56 @@ function weekMondayStr() {
   return monday.toISOString().slice(0, 10)
 }
 
-// Resolves a route param that can be either a numeric ID or a project name
-async function resolveProjectId(param) {
+async function resolveProjectId(param, workspaceId) {
   const num = Number(param)
   if (Number.isInteger(num) && num > 0) return num
-  const project = await prisma.project.findFirst({ where: { name: param } })
+  const project = await prisma.project.findFirst({ where: { name: param, workspaceId } })
   return project?.id ?? null
+}
+
+function isAdmin(req) {
+  const m = req.workspaceMember
+  return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
 }
 
 const includeDetails = {
   services: { include: { service: true }, orderBy: { service: { name: 'asc' } } },
-  members:  { include: { user: { select: { id: true, name: true, role: true, avatar: true } } }, orderBy: { user: { name: 'asc' } } },
-  links:    { orderBy: { createdAt: 'asc' } },
+  members:  {
+    include: { user: { select: { id: true, name: true, avatar: true } } },
+    orderBy: { user: { name: 'asc' } },
+  },
+  links: { orderBy: { createdAt: 'asc' } },
 }
 
-// Active projects — admin gets all, regular users get only their assigned projects
 async function list(req, res, next) {
   try {
-    const isAdmin = req.user.isAdmin
-    const where = isAdmin
-      ? { active: true }
-      : { active: true, members: { some: { userId: req.user.id } } }
-    const projects = await prisma.project.findMany({ where, orderBy: { name: 'asc' }, include: includeDetails })
+    const workspaceId = req.workspace.id
+    const userId = req.user.userId
+    const admin = isAdmin(req)
+    const tz = req.workspace.timezone
 
+    const where = admin
+      ? { active: true, workspaceId }
+      : { active: true, workspaceId, members: { some: { userId } } }
+
+    const projects = await prisma.project.findMany({ where, orderBy: { name: 'asc' }, include: includeDetails })
     const projectIds = projects.map(p => p.id)
     if (projectIds.length === 0) return res.json([])
 
-    const monday = weekMondayStr()
+    const monday = weekMondayStr(tz)
 
     const [activeCounts, completedWeekRaw] = await Promise.all([
       prisma.task.groupBy({
         by: ['projectId', 'status'],
-        where: {
-          projectId: { in: projectIds },
-          status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
-        },
+        where: { projectId: { in: projectIds }, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] } },
         _count: { _all: true },
       }),
       prisma.task.findMany({
-        where: {
-          projectId: { in: projectIds },
-          status: 'COMPLETED',
-          workDay: { date: { gte: monday } },
-        },
+        where: { projectId: { in: projectIds }, status: 'COMPLETED', workDay: { date: { gte: monday } } },
         select: { projectId: true },
       }),
     ])
 
-    // Build counts map per projectId
     const countsMap = {}
     for (const row of activeCounts) {
       if (!countsMap[row.projectId]) countsMap[row.projectId] = {}
@@ -86,15 +86,15 @@ async function list(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Project members list (any project member or admin can call this)
 async function getMembers(req, res, next) {
   try {
-    const id = await resolveProjectId(req.params.id)
+    const workspaceId = req.workspace.id
+    const id = await resolveProjectId(req.params.id, workspaceId)
     if (!id) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    if (!req.user.isAdmin) {
+    if (!isAdmin(req)) {
       const member = await prisma.projectMember.findUnique({
-        where: { projectId_userId: { projectId: id, userId: req.user.id } },
+        where: { projectId_userId: { projectId: id, userId: req.user.userId } },
       })
       if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
     }
@@ -108,10 +108,13 @@ async function getMembers(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Admin: all projects including inactive
 async function listAll(req, res, next) {
   try {
-    const projects = await prisma.project.findMany({ orderBy: { name: 'asc' }, include: includeDetails })
+    const projects = await prisma.project.findMany({
+      where: { workspaceId: req.workspace.id },
+      orderBy: { name: 'asc' },
+      include: includeDetails,
+    })
     res.json(projects)
   } catch (err) { next(err) }
 }
@@ -122,6 +125,7 @@ async function create(req, res, next) {
     if (!name) return res.status(400).json({ error: 'Nombre requerido' })
     const project = await prisma.project.create({
       data: {
+        workspaceId: req.workspace.id,
         name,
         services: { create: serviceIds.map(serviceId => ({ serviceId: Number(serviceId) })) },
         members:  { create: memberIds.map(userId   => ({ userId:    Number(userId)    })) },
@@ -137,6 +141,7 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
+    const workspaceId = req.workspace.id
     const { id } = req.params
     const { name, active, serviceIds, memberIds } = req.body
     const data = {}
@@ -166,15 +171,15 @@ async function update(req, res, next) {
       include: includeDetails,
     })
 
-    // Notificar a los miembros recién agregados
     if (newMemberIds.length > 0) {
       await prisma.notification.createMany({
         data: newMemberIds.map(uid => ({
-          userId:    uid,
-          actorId:   req.user.id,
-          projectId: Number(id),
-          type:      'ADDED_TO_PROJECT',
-          message:   `te agregó al proyecto "${project.name}"`,
+          userId:      uid,
+          actorId:     req.user.userId,
+          workspaceId,
+          projectId:   Number(id),
+          type:        'ADDED_TO_PROJECT',
+          message:     `te agregó al proyecto "${project.name}"`,
         })),
       })
     }
@@ -188,13 +193,14 @@ async function update(req, res, next) {
 
 async function projectTasks(req, res, next) {
   try {
-    const projectId = await resolveProjectId(req.params.id)
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const userId = req.user.id
-    const isAdmin = req.user.isAdmin
+    const userId = req.user.userId
+    const admin = isAdmin(req)
 
-    // Verificar acceso
-    if (!isAdmin) {
+    if (!admin) {
       const member = await prisma.projectMember.findUnique({
         where: { projectId_userId: { projectId, userId } },
       })
@@ -208,22 +214,22 @@ async function projectTasks(req, res, next) {
         timezone: true, linksEnabled: true, situationEnabled: true,
         links:    { orderBy: { createdAt: 'asc' } },
         services: { include: { service: true }, orderBy: { service: { name: 'asc' } } },
-        members:  { include: { user: { select: { id: true, name: true, role: true, avatar: true } } }, orderBy: { user: { name: 'asc' } } },
+        members:  {
+          include: { user: { select: { id: true, name: true, avatar: true } } },
+          orderBy: { user: { name: 'asc' } },
+        },
       },
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const monday = weekMondayStr()
-
+    const monday = weekMondayStr(tz)
     const ACTIVE_LIMIT = 200
+
     const [activeTasks, completedThisWeek, activeCount] = await Promise.all([
       prisma.task.findMany({
-        where: {
-          projectId,
-          status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
-        },
+        where: { projectId, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] } },
         include: {
-          user:      { select: { id: true, name: true, role: true, avatar: true } },
+          user:      { select: { id: true, name: true, avatar: true } },
           createdBy: { select: { id: true, name: true } },
           _count:    { select: { comments: true } },
         },
@@ -231,12 +237,8 @@ async function projectTasks(req, res, next) {
         take: ACTIVE_LIMIT,
       }),
       prisma.task.findMany({
-        where: {
-          projectId,
-          status: 'COMPLETED',
-          workDay: { date: { gte: monday } },
-        },
-        include: { user: { select: { id: true, name: true, role: true, avatar: true } } },
+        where: { projectId, status: 'COMPLETED', workDay: { date: { gte: monday } } },
+        include: { user: { select: { id: true, name: true, avatar: true } } },
         orderBy: { completedAt: 'desc' },
         take: 100,
       }),
@@ -245,7 +247,6 @@ async function projectTasks(req, res, next) {
       }),
     ])
 
-    // Agrupar tareas activas por usuario
     const byUser = {}
     for (const task of activeTasks) {
       const uid = task.user.id
@@ -262,8 +263,7 @@ async function projectTasks(req, res, next) {
       project,
       byUser: Object.values(byUser),
       completedThisWeek: completedThisWeek.map(t => ({
-        id: t.id, description: t.description, completedAt: t.completedAt,
-        user: t.user,
+        id: t.id, description: t.description, completedAt: t.completedAt, user: t.user,
       })),
       activeCount,
       activeLimit: ACTIVE_LIMIT,
@@ -273,14 +273,14 @@ async function projectTasks(req, res, next) {
 
 async function projectCompletedHistory(req, res, next) {
   try {
-    const projectId = await resolveProjectId(req.params.id)
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const userId = req.user.id
-    const isAdmin = req.user.isAdmin
+    const userId = req.user.userId
     const skip = Math.max(0, Number(req.query.skip ?? 0))
     const TAKE = 20
 
-    if (!isAdmin) {
+    if (!isAdmin(req)) {
       const member = await prisma.projectMember.findUnique({
         where: { projectId_userId: { projectId, userId } },
       })
@@ -289,7 +289,7 @@ async function projectCompletedHistory(req, res, next) {
 
     const tasks = await prisma.task.findMany({
       where: { projectId, status: 'COMPLETED' },
-      include: { user: { select: { id: true, name: true, role: true, avatar: true } } },
+      include: { user: { select: { id: true, name: true, avatar: true } } },
       orderBy: { completedAt: 'desc' },
       skip,
       take: TAKE + 1,
@@ -298,33 +298,29 @@ async function projectCompletedHistory(req, res, next) {
     const hasMore = tasks.length > TAKE
     res.json({
       tasks: tasks.slice(0, TAKE).map(t => ({
-        id: t.id, description: t.description, completedAt: t.completedAt,
-        user: t.user,
+        id: t.id, description: t.description, completedAt: t.completedAt, user: t.user,
       })),
       hasMore,
     })
   } catch (err) { next(err) }
 }
 
-// Replace all links for a project (any project member or admin)
 async function saveLinks(req, res, next) {
   try {
-    const projectId = await resolveProjectId(req.params.id)
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const userId = req.user.id
+    const userId = req.user.userId
 
-    if (!req.user.isAdmin) {
+    if (!isAdmin(req)) {
       const member = await prisma.projectMember.findUnique({
         where: { projectId_userId: { projectId, userId } },
       })
       if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
     }
 
-    const { links } = req.body // [{ label, url }]
-
-    if (!Array.isArray(links)) {
-      return res.status(400).json({ error: 'links debe ser un array' })
-    }
+    const { links } = req.body
+    if (!Array.isArray(links)) return res.status(400).json({ error: 'links debe ser un array' })
     for (const l of links) {
       if (!l.label?.trim() || !l.url?.trim()) {
         return res.status(400).json({ error: 'Cada link requiere label y url' })
@@ -342,24 +338,22 @@ async function saveLinks(req, res, next) {
         : []),
     ])
 
-    const updated = await prisma.project.findUnique({
-      where: { id: projectId },
-      include: includeDetails,
-    })
+    const updated = await prisma.project.findUnique({ where: { id: projectId }, include: includeDetails })
     res.json(updated)
   } catch (err) { next(err) }
 }
 
-// GET /api/projects/settings — returns global settings (reads from first project or defaults)
 async function getGlobalSettings(req, res, next) {
   try {
+    const workspace = req.workspace
     const first = await prisma.project.findFirst({
-      select: { timezone: true, linksEnabled: true, situationEnabled: true, emailFrom: true, aiWeeklyTokenLimit: true },
+      where: { workspaceId: workspace.id },
+      select: { linksEnabled: true, situationEnabled: true, emailFrom: true, aiWeeklyTokenLimit: true },
       orderBy: { id: 'asc' },
     })
     const effectiveEmailFrom = first?.emailFrom ?? process.env.EMAIL_FROM ?? null
     res.json({
-      timezone: first?.timezone ?? 'America/Argentina/Buenos_Aires',
+      timezone: workspace.timezone,
       linksEnabled: first?.linksEnabled ?? true,
       situationEnabled: first?.situationEnabled ?? true,
       emailFrom: effectiveEmailFrom,
@@ -368,31 +362,21 @@ async function getGlobalSettings(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// GET /api/projects/settings/ai-usage — token usage stats for admins
 async function getAiUsage(req, res, next) {
   try {
+    const workspaceId = req.workspace.id
     const now = new Date()
     const startOfDay   = new Date(now); startOfDay.setHours(0, 0, 0, 0)
     const startOfWeek  = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0, 0, 0, 0)
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
     const [day, week, month] = await Promise.all([
-      prisma.aiTokenLog.aggregate({
-        where: { createdAt: { gte: startOfDay } },
-        _sum: { inputTokens: true, outputTokens: true },
-      }),
-      prisma.aiTokenLog.aggregate({
-        where: { createdAt: { gte: startOfWeek } },
-        _sum: { inputTokens: true, outputTokens: true },
-      }),
-      prisma.aiTokenLog.aggregate({
-        where: { createdAt: { gte: startOfMonth } },
-        _sum: { inputTokens: true, outputTokens: true },
-      }),
+      prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfDay } }, _sum: { inputTokens: true, outputTokens: true } }),
+      prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfWeek } }, _sum: { inputTokens: true, outputTokens: true } }),
+      prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfMonth } }, _sum: { inputTokens: true, outputTokens: true } }),
     ])
 
     const toTotal = (agg) => (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0)
-
     res.json({
       day:   { input: day._sum.inputTokens ?? 0,   output: day._sum.outputTokens ?? 0,   total: toTotal(day) },
       week:  { input: week._sum.inputTokens ?? 0,  output: week._sum.outputTokens ?? 0,  total: toTotal(week) },
@@ -401,73 +385,78 @@ async function getAiUsage(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// PATCH /api/projects/settings — applies settings to ALL projects
 async function saveGlobalSettings(req, res, next) {
   try {
     const { timezone, linksEnabled, situationEnabled, emailFrom, aiWeeklyTokenLimit } = req.body
-    const data = {}
+    const workspaceData = {}
+    const projectData = {}
 
     if (timezone !== undefined) {
       try { Intl.DateTimeFormat(undefined, { timeZone: timezone }) }
       catch { return res.status(400).json({ error: 'Zona horaria inválida' }) }
-      data.timezone = timezone
+      workspaceData.timezone = timezone
     }
-    if (linksEnabled !== undefined) data.linksEnabled = Boolean(linksEnabled)
-    if (situationEnabled !== undefined) data.situationEnabled = Boolean(situationEnabled)
+    if (linksEnabled !== undefined)    projectData.linksEnabled    = Boolean(linksEnabled)
+    if (situationEnabled !== undefined) projectData.situationEnabled = Boolean(situationEnabled)
     if (aiWeeklyTokenLimit !== undefined) {
       const limit = Number(aiWeeklyTokenLimit)
       if (!Number.isInteger(limit) || limit < 0) {
         return res.status(400).json({ error: 'aiWeeklyTokenLimit debe ser un entero positivo' })
       }
-      data.aiWeeklyTokenLimit = limit
+      projectData.aiWeeklyTokenLimit = limit
     }
     if (emailFrom !== undefined) {
-      // Accept null/empty (clear) or a string with a valid email address
       if (emailFrom === null || emailFrom === '') {
-        data.emailFrom = null
+        projectData.emailFrom = null
       } else if (typeof emailFrom === 'string') {
-        // Must contain a valid email address
         const emailMatch = emailFrom.match(/<([^>]+)>/) || [null, emailFrom.trim()]
         const addr = emailMatch[1]
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
           return res.status(400).json({ error: 'Dirección de email inválida' })
         }
-        data.emailFrom = emailFrom.trim()
+        projectData.emailFrom = emailFrom.trim()
       }
     }
 
-    if (Object.keys(data).length === 0) return res.json({ ok: true })
-    await prisma.project.updateMany({ data })
-    res.json({ ok: true, ...data })
+    const workspaceId = req.workspace.id
+    await Promise.all([
+      Object.keys(workspaceData).length > 0
+        ? prisma.workspace.update({ where: { id: workspaceId }, data: workspaceData })
+        : Promise.resolve(),
+      Object.keys(projectData).length > 0
+        ? prisma.project.updateMany({ where: { workspaceId }, data: projectData })
+        : Promise.resolve(),
+    ])
+
+    res.json({ ok: true, ...workspaceData, ...projectData })
   } catch (err) { next(err) }
 }
 
-// POST /api/projects/settings/test-email — sends a test email to the current admin
 async function sendTestEmail(req, res, next) {
   try {
     const { sendTestSettingsEmail } = require('../services/email.service')
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
+      where: { id: req.user.userId },
       select: { name: true, email: true },
     })
-    // Get current emailFrom from DB
     const settings = await prisma.project.findFirst({
+      where: { workspaceId: req.workspace.id },
       select: { emailFrom: true },
       orderBy: { id: 'asc' },
     })
-    const emailFrom = settings?.emailFrom || null
-    await sendTestSettingsEmail(user.email, user.name, emailFrom)
+    await sendTestSettingsEmail(user.email, user.name, settings?.emailFrom || null)
     res.json({ ok: true, sentTo: user.email })
   } catch (err) { next(err) }
 }
 
 async function saveSituation(req, res, next) {
   try {
-    const projectId = await resolveProjectId(req.params.id)
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const userId = req.user.id
+    const userId = req.user.userId
 
-    if (!req.user.isAdmin) {
+    if (!isAdmin(req)) {
       const member = await prisma.projectMember.findUnique({
         where: { projectId_userId: { projectId, userId } },
       })

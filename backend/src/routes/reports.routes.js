@@ -1,10 +1,14 @@
 const router = require('express').Router()
 const { byProject, byUser, byUserSummary, mine } = require('../controllers/reports.controller')
-const { auth, adminOnly } = require('../middleware/auth')
+const { auth } = require('../middleware/auth')
+const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
-router.get('/mine', auth, mine)                              // any logged user
-router.get('/by-project', auth, adminOnly, byProject)
-router.get('/by-user', auth, adminOnly, byUser)
-router.get('/by-user-summary', auth, adminOnly, byUserSummary)
+router.use(auth)
+router.use(resolveWorkspace)
+
+router.get('/mine',           mine)
+router.get('/by-project',     workspaceAdminOnly, byProject)
+router.get('/by-user',        workspaceAdminOnly, byUser)
+router.get('/by-user-summary', workspaceAdminOnly, byUserSummary)
 
 module.exports = router

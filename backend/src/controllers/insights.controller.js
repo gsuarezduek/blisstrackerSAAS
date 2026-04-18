@@ -6,8 +6,7 @@ const { parseAIJson } = require('../utils/parseAIJson')
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const AI_TIMEOUT_MS = 20000
 const { logTokens } = require('../lib/logTokens')
-const TZ = 'America/Argentina/Buenos_Aires'
-const COOLDOWN_MS = 60 * 60 * 1000 // 1 hora
+const COOLDOWN_MS = 60 * 60 * 1000
 
 function fmtMins(m) {
   if (m < 60) return `${m}m`
@@ -20,8 +19,8 @@ function calcMins(t) {
   return Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
 }
 
-function getWeekStart() {
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+function getWeekStart(tz) {
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const [y, m, d] = todayStr.split('-').map(Number)
   const today = new Date(y, m - 1, d)
   const dow = today.getDay()
@@ -31,15 +30,13 @@ function getWeekStart() {
   return monday.toISOString().slice(0, 10)
 }
 
-// Retorna la fecha de N días atrás en Buenos Aires (YYYY-MM-DD)
-function dateNDaysAgo(n) {
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+function dateNDaysAgo(n, tz) {
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const [y, m, d] = todayStr.split('-').map(Number)
   const date = new Date(y, m - 1, d - n)
   return date.toISOString().slice(0, 10)
 }
 
-// Días transcurridos entre dos strings YYYY-MM-DD
 function daysBetween(dateA, dateB) {
   return Math.round(Math.abs(new Date(dateA) - new Date(dateB)) / 86400000)
 }
@@ -56,10 +53,7 @@ const FREQ_LABEL = {
 function buildRoleContext(roleExpectation) {
   if (!roleExpectation) return ''
   let ctx = ''
-
-  if (roleExpectation.description) {
-    ctx += `\nPROPÓSITO DEL ROL: ${roleExpectation.description}\n`
-  }
+  if (roleExpectation.description) ctx += `\nPROPÓSITO DEL ROL: ${roleExpectation.description}\n`
 
   const results = Array.isArray(roleExpectation.expectedResults) ? roleExpectation.expectedResults : []
   if (results.length > 0) {
@@ -94,7 +88,6 @@ function buildRoleContext(roleExpectation) {
       ctx += `  - ${dir} ${d.roleName}: ${d.description}\n`
     }
   }
-
   return ctx
 }
 
@@ -132,8 +125,6 @@ function buildMemoryContext(memories) {
       ctx += `  ${p.nombre}: ${p.completadas}/${p.creadas} completadas (${pct}%)${timeStr}\n`
     }
   }
-
-  // Evolución semana a semana
   if (memories.length > 1) {
     ctx += 'Evolución:\n'
     for (const mem of memories.slice(1)) {
@@ -146,14 +137,13 @@ function buildMemoryContext(memories) {
       }
     }
   }
-
   return ctx
 }
 
-function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpectation, memory, yesterdayInsight, today) {
+function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpectation, memory, yesterdayInsight, today, tz) {
   const now = new Date()
-  const timeStr = now.toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
-  const dateStr = now.toLocaleDateString('es-AR', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const timeStr = now.toLocaleTimeString('es-AR', { timeZone: tz, hour: '2-digit', minute: '2-digit' })
+  const dateStr = now.toLocaleDateString('es-AR', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   const all = [...todayTasks, ...carryOver]
   const inProgress     = all.filter(t => t.status === 'IN_PROGRESS')
@@ -163,14 +153,12 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
   const backlog        = all.filter(t => t.status === 'PENDING' && t.isBacklog)
   const completedToday = todayTasks.filter(t => t.status === 'COMPLETED')
 
-  // Set de IDs de carry-over para lookup rápido
   const carryOverIds = new Set(carryOver.map(t => t.id))
-
+  const teamRole = user.teamRole ?? user.role ?? ''
   const roleCtx   = buildRoleContext(roleExpectation)
   const memoryCtx = buildMemoryContext(memory)
-  let ctx = `FECHA: ${dateStr}\nHORA: ${timeStr}\nROL DEL USUARIO: ${user.role}${roleCtx}${memoryCtx}\n`
+  let ctx = `FECHA: ${dateStr}\nHORA: ${timeStr}\nROL DEL USUARIO: ${teamRole}${roleCtx}${memoryCtx}\n`
 
-  // Sugerencia de ayer
   if (yesterdayInsight?.sugerencia) {
     ctx += `SUGERENCIA DE AYER: "${yesterdayInsight.sugerencia}"\n`
     ctx += `(Tené en cuenta el estado actual de las tareas para evaluar si fue seguida)\n\n`
@@ -180,9 +168,7 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
     ctx += `EN CURSO (${inProgress.length}):\n`
     for (const t of inProgress) {
       const mins = t.startedAt ? Math.round((Date.now() - new Date(t.startedAt)) / 60000) : 0
-      const age = carryOverIds.has(t.id) && t.workDay?.date
-        ? ` ⚠ lleva ${daysBetween(today, t.workDay.date)} día(s) abierta`
-        : ''
+      const age = carryOverIds.has(t.id) && t.workDay?.date ? ` ⚠ lleva ${daysBetween(today, t.workDay.date)} día(s) abierta` : ''
       ctx += `  - [${t.project.name}] "${t.description}" — en curso hace ${fmtMins(mins)}${age}\n`
     }
     ctx += '\n'
@@ -191,9 +177,7 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
   if (blocked.length > 0) {
     ctx += `BLOQUEADAS (${blocked.length}):\n`
     for (const t of blocked) {
-      const age = carryOverIds.has(t.id) && t.workDay?.date
-        ? ` ⚠ lleva ${daysBetween(today, t.workDay.date)} día(s) bloqueada`
-        : ''
+      const age = carryOverIds.has(t.id) && t.workDay?.date ? ` ⚠ lleva ${daysBetween(today, t.workDay.date)} día(s) bloqueada` : ''
       ctx += `  - [${t.project.name}] "${t.description}"${t.blockedReason ? ` — motivo: "${t.blockedReason}"` : ''}${age}\n`
     }
     ctx += '\n'
@@ -202,9 +186,7 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
   if (paused.length > 0) {
     ctx += `PAUSADAS (${paused.length}):\n`
     for (const t of paused) {
-      const age = carryOverIds.has(t.id) && t.workDay?.date
-        ? ` (${daysBetween(today, t.workDay.date)} día(s) sin retomar)`
-        : ''
+      const age = carryOverIds.has(t.id) && t.workDay?.date ? ` (${daysBetween(today, t.workDay.date)} día(s) sin retomar)` : ''
       ctx += `  - [${t.project.name}] "${t.description}"${age}\n`
     }
     ctx += '\n'
@@ -214,9 +196,7 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
     ctx += `PENDIENTES HOY (${pending.length}):\n`
     const visible = pending.slice(0, 12)
     for (const t of visible) {
-      const age = carryOverIds.has(t.id) && t.workDay?.date
-        ? ` (${daysBetween(today, t.workDay.date)} día(s) sin iniciar)`
-        : ''
+      const age = carryOverIds.has(t.id) && t.workDay?.date ? ` (${daysBetween(today, t.workDay.date)} día(s) sin iniciar)` : ''
       ctx += `  - [${t.project.name}] "${t.description}"${age}\n`
     }
     if (pending.length > 12) ctx += `  ... y ${pending.length - 12} más\n`
@@ -226,9 +206,7 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
   if (backlog.length > 0) {
     ctx += `BACKLOG (${backlog.length}) — planificación semanal, no son prioridad inmediata:\n`
     const visible = backlog.slice(0, 8)
-    for (const t of visible) {
-      ctx += `  - [${t.project.name}] "${t.description}"\n`
-    }
+    for (const t of visible) ctx += `  - [${t.project.name}] "${t.description}"\n`
     if (backlog.length > 8) ctx += `  ... y ${backlog.length - 8} más\n`
     ctx += '\n'
   }
@@ -236,18 +214,14 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
   if (completedToday.length > 0) {
     const todayMins = completedToday.reduce((s, t) => s + calcMins(t), 0)
     ctx += `COMPLETADAS HOY (${completedToday.length}) — ${fmtMins(todayMins)} registrados:\n`
-    for (const t of completedToday) {
-      ctx += `  - [${t.project.name}] "${t.description}" (${fmtMins(calcMins(t))})\n`
-    }
+    for (const t of completedToday) ctx += `  - [${t.project.name}] "${t.description}" (${fmtMins(calcMins(t))})\n`
     ctx += '\n'
   }
 
   if (completedThisWeek.length > 0) {
     const weekMins = completedThisWeek.reduce((s, t) => s + calcMins(t), 0)
     const byProject = {}
-    for (const t of completedThisWeek) {
-      byProject[t.project.name] = (byProject[t.project.name] || 0) + 1
-    }
+    for (const t of completedThisWeek) byProject[t.project.name] = (byProject[t.project.name] || 0) + 1
     const summary = Object.entries(byProject).map(([p, n]) => `${p} (${n})`).join(', ')
     ctx += `SEMANA EN CURSO: ${completedThisWeek.length} tareas completadas, ${fmtMins(weekMins)} registrados\n`
     ctx += `Proyectos: ${summary}\n`
@@ -263,27 +237,30 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
   return ctx.trim()
 }
 
-async function generateInsight(userId) {
-  const today = todayString()
-  const yesterday = dateNDaysAgo(1)
-  const weekStart = getWeekStart()
+async function generateInsight(userId, workspace, member) {
+  const tz = workspace.timezone
+  const workspaceId = workspace.id
+  const today     = todayString(tz)
+  const yesterday = dateNDaysAgo(1, tz)
+  const weekStart = getWeekStart(tz)
+  const teamRole  = member?.teamRole ?? ''
+  const insightMemoryEnabled = member?.insightMemoryEnabled ?? true
+  const taskQualityEnabled   = member?.taskQualityEnabled   ?? true
 
   const [user, workDay, carryOver, completedThisWeek] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, role: true, insightMemoryEnabled: true, taskQualityEnabled: true },
+      select: { id: true, name: true },
     }),
     prisma.workDay.findUnique({
-      where: { userId_date: { userId, date: today } },
-      include: {
-        tasks: { include: { project: true }, orderBy: { createdAt: 'asc' } },
-      },
+      where: { userId_workspaceId_date: { userId, workspaceId, date: today } },
+      include: { tasks: { include: { project: true }, orderBy: { createdAt: 'asc' } } },
     }),
     prisma.task.findMany({
       where: {
         userId,
         status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
-        workDay: { date: { lt: today } },
+        workDay: { date: { lt: today }, workspaceId },
       },
       include: { project: true, workDay: { select: { date: true } } },
     }),
@@ -291,32 +268,34 @@ async function generateInsight(userId) {
       where: {
         userId,
         status: 'COMPLETED',
-        workDay: { date: { gte: weekStart, lte: today } },
+        workDay: { date: { gte: weekStart, lte: today }, workspaceId },
       },
       include: { project: true },
     }),
   ])
 
-  // Fetch role expectation, memoria y sugerencia de ayer en paralelo
   const [roleExpectation, memory, yesterdayInsight] = await Promise.all([
-    user?.role
-      ? prisma.roleExpectation.findUnique({ where: { roleName: user.role } })
+    teamRole
+      ? prisma.roleExpectation.findUnique({
+          where: { workspaceId_roleName: { workspaceId, roleName: teamRole } },
+        })
       : null,
-    user?.insightMemoryEnabled !== false
+    insightMemoryEnabled
       ? prisma.userInsightMemory.findMany({
-          where: { userId, weekStart: { not: '' } },
+          where: { userId, workspaceId, weekStart: { not: '' } },
           orderBy: { weekStart: 'desc' },
           take: 4,
         })
       : null,
     prisma.dailyInsight.findUnique({
-      where: { userId_date: { userId, date: yesterday } },
+      where: { userId_workspaceId_date: { userId, workspaceId, date: yesterday } },
       select: { sugerencia: true },
     }),
   ])
 
+  const userWithRole = { ...user, teamRole }
   const todayTasks = workDay?.tasks ?? []
-  const context = buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpectation, memory, yesterdayInsight, today)
+  const context = buildContext(userWithRole, todayTasks, carryOver, completedThisWeek, roleExpectation, memory, yesterdayInsight, today, tz)
 
   const msg = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -341,7 +320,7 @@ Si el contexto incluye información del rol (PROPÓSITO DEL ROL, RESULTADOS ESPE
 - RESPONSABILIDADES OPERATIVAS: si el usuario lleva varios días sin tareas de una categoría clave de su rol (ej: "Soporte a campañas"), eso puede ser una omisión relevante.
 Solo generás alertaRol si hay una omisión concreta y accionable. No generás alertas genéricas ni recordatorios de lo que "debería" hacer sin evidencia en los datos.
 
-Si el contexto incluye PERFIL DE PRODUCTIVIDAD, usá esa memoria para personalizar el coaching. No la repitas textualmente — interpretala. Si hay datos de velocidad (quick wins / trabajo profundo), usálos para calibrar las sugerencias. Si hay datos de receptividad al coaching (% de insights aceptados), ajustá el tono en consecuencia.
+Si el contexto incluye PERFIL DE PRODUCTIVIDAD, usá esa memoria para personalizar el coaching. No la repitas textualmente — interpretala.
 
 Analizás los datos reales del usuario y generás un coaching específico, concreto y accionable para su día de trabajo.
 
@@ -356,35 +335,38 @@ Devolvés ÚNICAMENTE un objeto JSON válido (sin markdown, sin bloques de códi
 Escribís en español rioplatense, tono directo y humano. No usás frases genéricas. No felicitás por cosas básicas.`,
     messages: [{ role: 'user', content: context }],
   }, { timeout: AI_TIMEOUT_MS })
-  logTokens('insight', userId, msg.usage)
+  logTokens('insight', userId, msg.usage, workspaceId)
 
   let parsed
   try { parsed = parseAIJson(msg.content[0].text) }
   catch { throw Object.assign(new Error('Respuesta de IA inválida. Intentá de nuevo.'), { status: 502 }) }
+
   return {
     titulo:     String(parsed.titulo || 'Insight del día').slice(0, 100),
     mensaje:    String(parsed.mensaje || ''),
     sugerencia: parsed.sugerencia ? String(parsed.sugerencia) : null,
     alertaRol:  parsed.alertaRol  ? String(parsed.alertaRol)  : null,
-    alertaGTD:  (user?.taskQualityEnabled !== false && parsed.alertaGTD)
-                  ? String(parsed.alertaGTD) : null,
+    alertaGTD:  (taskQualityEnabled && parsed.alertaGTD) ? String(parsed.alertaGTD) : null,
     tono:       ['warning', 'alert', 'positive', 'neutral'].includes(parsed.tono) ? parsed.tono : 'neutral',
   }
 }
 
 async function getDailyInsight(req, res, next) {
   try {
-    const userId = req.user.id
-    const date   = todayString()
+    const userId = req.user.userId
+    const workspace = req.workspace
+    const member   = req.workspaceMember
+    const tz = workspace.timezone
+    const date = todayString(tz)
 
     const existing = await prisma.dailyInsight.findUnique({
-      where: { userId_date: { userId, date } },
+      where: { userId_workspaceId_date: { userId, workspaceId: workspace.id, date } },
     })
     if (existing) return res.json(existing)
 
-    const data = await generateInsight(userId)
+    const data = await generateInsight(userId, workspace, member)
     const insight = await prisma.dailyInsight.create({
-      data: { userId, date, ...data },
+      data: { userId, workspaceId: workspace.id, date, ...data },
     })
     res.json(insight)
   } catch (err) {
@@ -398,11 +380,14 @@ async function getDailyInsight(req, res, next) {
 
 async function refreshDailyInsight(req, res, next) {
   try {
-    const userId = req.user.id
-    const date   = todayString()
+    const userId = req.user.userId
+    const workspace = req.workspace
+    const member   = req.workspaceMember
+    const tz = workspace.timezone
+    const date = todayString(tz)
 
     const existing = await prisma.dailyInsight.findUnique({
-      where: { userId_date: { userId, date } },
+      where: { userId_workspaceId_date: { userId, workspaceId: workspace.id, date } },
     })
 
     if (existing) {
@@ -414,12 +399,14 @@ async function refreshDailyInsight(req, res, next) {
           waitMins,
         })
       }
-      await prisma.dailyInsight.delete({ where: { userId_date: { userId, date } } })
+      await prisma.dailyInsight.delete({
+        where: { userId_workspaceId_date: { userId, workspaceId: workspace.id, date } },
+      })
     }
 
-    const data = await generateInsight(userId)
+    const data = await generateInsight(userId, workspace, member)
     const insight = await prisma.dailyInsight.create({
-      data: { userId, date, ...data },
+      data: { userId, workspaceId: workspace.id, date, ...data },
     })
     res.json(insight)
   } catch (err) {
@@ -430,14 +417,16 @@ async function refreshDailyInsight(req, res, next) {
 
 async function saveFeedback(req, res, next) {
   try {
-    const userId = req.user.id
-    const date   = todayString()
+    const userId = req.user.userId
+    const workspace = req.workspace
+    const tz = workspace.timezone
+    const date = todayString(tz)
     const { feedback } = req.body
     if (feedback !== null && !['up', 'down'].includes(feedback)) {
       return res.status(400).json({ error: 'feedback debe ser "up", "down" o null' })
     }
     const insight = await prisma.dailyInsight.update({
-      where: { userId_date: { userId, date } },
+      where: { userId_workspaceId_date: { userId, workspaceId: workspace.id, date } },
       data: { feedback },
     })
     res.json(insight)

@@ -1,9 +1,13 @@
 const router = require('express').Router()
 const { create, list, markRead } = require('../controllers/feedback.controller')
-const { auth, adminOnly } = require('../middleware/auth')
+const { auth } = require('../middleware/auth')
+const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
-router.post('/', auth, create)                     // any logged user can send
-router.get('/', auth, adminOnly, list)             // only admin can read all
-router.put('/:id/read', auth, adminOnly, markRead) // mark as read
+router.use(auth)
+router.use(resolveWorkspace)
+
+router.post('/',           create)
+router.get('/',            workspaceAdminOnly, list)
+router.put('/:id/read',    workspaceAdminOnly, markRead)
 
 module.exports = router

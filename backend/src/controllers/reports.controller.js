@@ -5,9 +5,7 @@ function calcMins(t) {
   return Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
 }
 
-// Default fallback: last 90 days in Buenos Aires timezone
-function defaultDateRange() {
-  const tz = 'America/Argentina/Buenos_Aires'
+function defaultDateRange(tz = 'America/Argentina/Buenos_Aires') {
   const to = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const d = new Date()
   d.setDate(d.getDate() - 90)
@@ -15,22 +13,23 @@ function defaultDateRange() {
   return { from, to }
 }
 
-function buildDateWhere(from, to) {
-  const range = {}
-  if (from) range.gte = from
-  if (to)   range.lte = to
-  return { date: range }
-}
+// Filtra por completedAt usando el timezone del workspace
+function buildCompletedAtWhere(from, to, tz = 'America/Argentina/Buenos_Aires') {
+  // Obtener el offset UTC para la timezone dada (aproximación para ART y similares)
+  const testDate = new Date(`${from}T12:00:00Z`)
+  const localStr = testDate.toLocaleDateString('en-CA', { timeZone: tz })
+  const offsetMs = new Date(`${localStr}T12:00:00Z`) - testDate
+  const offsetH  = -Math.round(offsetMs / 3600000)
+  const sign     = offsetH <= 0 ? '+' : '-'
+  const pad      = String(Math.abs(offsetH)).padStart(2, '0')
+  const tzStr    = `${sign}${pad}:00`
 
-// Filtra por completedAt usando el día en Buenos Aires (UTC-3)
-function buildCompletedAtWhere(from, to) {
   const range = {}
-  if (from) range.gte = new Date(from + 'T00:00:00-03:00')
-  if (to)   range.lte = new Date(to   + 'T23:59:59-03:00')
+  if (from) range.gte = new Date(`${from}T00:00:00${tzStr}`)
+  if (to)   range.lte = new Date(`${to}T23:59:59${tzStr}`)
   return range
 }
 
-// Minimal select shared across report queries — avoids loading full model columns
 const taskSelect = {
   id:              true,
   description:     true,
@@ -39,23 +38,24 @@ const taskSelect = {
   pausedMinutes:   true,
   minutesOverride: true,
   project: { select: { id: true, name: true } },
-  user:    { select: { id: true, name: true, role: true } },
+  user:    { select: { id: true, name: true } },
 }
 
-// Returns time per project within a date range
 async function byProject(req, res, next) {
   try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
     let { from, to } = req.query
-    if (!from && !to) ({ from, to } = defaultDateRange())
-    const completedAtRange = buildCompletedAtWhere(from, to)
-    const where = {
-      status: 'COMPLETED',
-      startedAt: { not: null },
-      completedAt: { not: null, ...completedAtRange },
-    }
+    if (!from && !to) ({ from, to } = defaultDateRange(tz))
+    const completedAtRange = buildCompletedAtWhere(from, to, tz)
 
     const tasks = await prisma.task.findMany({
-      where,
+      where: {
+        status: 'COMPLETED',
+        startedAt: { not: null },
+        completedAt: { not: null, ...completedAtRange },
+        workDay: { workspaceId },
+      },
       select: taskSelect,
       orderBy: { completedAt: 'desc' },
     })
@@ -87,16 +87,19 @@ async function byProject(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Returns daily summary for a specific user (admin detail view — needs workDay.date)
 async function byUser(req, res, next) {
   try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
     let { userId, from, to } = req.query
-    if (!from && !to) ({ from, to } = defaultDateRange())
-    const completedAtRange = buildCompletedAtWhere(from, to)
+    if (!from && !to) ({ from, to } = defaultDateRange(tz))
+    const completedAtRange = buildCompletedAtWhere(from, to, tz)
+
     const where = {
       status: 'COMPLETED',
       startedAt: { not: null },
       completedAt: { not: null, ...completedAtRange },
+      workDay: { workspaceId },
     }
     if (userId) where.userId = Number(userId)
 
@@ -116,20 +119,21 @@ async function byUser(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Returns all users with their tasks grouped by project
 async function byUserSummary(req, res, next) {
   try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
     let { from, to } = req.query
-    if (!from && !to) ({ from, to } = defaultDateRange())
-    const completedAtRange = buildCompletedAtWhere(from, to)
-    const where = {
-      status: 'COMPLETED',
-      startedAt: { not: null },
-      completedAt: { not: null, ...completedAtRange },
-    }
+    if (!from && !to) ({ from, to } = defaultDateRange(tz))
+    const completedAtRange = buildCompletedAtWhere(from, to, tz)
 
     const tasks = await prisma.task.findMany({
-      where,
+      where: {
+        status: 'COMPLETED',
+        startedAt: { not: null },
+        completedAt: { not: null, ...completedAtRange },
+        workDay: { workspaceId },
+      },
       select: taskSelect,
       orderBy: { completedAt: 'desc' },
     })
@@ -159,21 +163,23 @@ async function byUserSummary(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Returns the logged-in user's completed tasks grouped by project
 async function mine(req, res, next) {
   try {
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
     let { from, to } = req.query
-    if (!from && !to) ({ from, to } = defaultDateRange())
-    const completedAtRange = buildCompletedAtWhere(from, to)
-    const where = {
-      userId: req.user.id,
-      status: 'COMPLETED',
-      startedAt: { not: null },
-      completedAt: { not: null, ...completedAtRange },
-    }
+    if (!from && !to) ({ from, to } = defaultDateRange(tz))
+    const completedAtRange = buildCompletedAtWhere(from, to, tz)
 
     const tasks = await prisma.task.findMany({
-      where,
+      where: {
+        userId,
+        status: 'COMPLETED',
+        startedAt: { not: null },
+        completedAt: { not: null, ...completedAtRange },
+        workDay: { workspaceId },
+      },
       select: {
         id: true, description: true, startedAt: true,
         completedAt: true, pausedMinutes: true, minutesOverride: true,
