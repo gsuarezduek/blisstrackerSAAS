@@ -206,6 +206,49 @@ export default function Login2() {
     return null
   }
 
+  if (!slug) {
+    const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6">
+        <div className="text-center max-w-sm space-y-4">
+          <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-12 h-12 mx-auto" />
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">¿Cuál es tu workspace?</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            Ingresá directamente a <strong>tuempresa.{appDomain}</strong>
+          </p>
+          <div className="flex rounded-xl overflow-hidden border border-gray-300 dark:border-gray-600 focus-within:ring-2 focus-within:ring-primary-500">
+            <input
+              type="text"
+              autoFocus
+              placeholder="tuempresa"
+              className="flex-1 px-4 py-2.5 text-sm bg-white dark:bg-gray-700 dark:text-gray-100 outline-none"
+              onKeyDown={e => {
+                if (e.key === 'Enter' && e.target.value.trim()) {
+                  window.location.href = `https://${e.target.value.trim()}.${appDomain}/login`
+                }
+              }}
+            />
+            <button
+              className="px-4 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium transition-colors"
+              onClick={e => {
+                const input = e.target.closest('div').querySelector('input')
+                if (input.value.trim()) window.location.href = `https://${input.value.trim()}.${appDomain}/login`
+              }}
+            >
+              Ir
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            ¿No tenés cuenta?{' '}
+            <a href={`https://${appDomain}/register`} className="text-primary-600 hover:text-primary-700 font-medium">
+              Creá tu workspace
+            </a>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   if (notFound) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6">
