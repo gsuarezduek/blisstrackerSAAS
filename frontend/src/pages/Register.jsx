@@ -97,7 +97,6 @@ export default function Register() {
               value={slug}
               onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 30))}
               placeholder="mi-empresa"
-              pattern="^[a-z0-9-]{2,30}$"
               title="Solo letras minúsculas, números y guiones (2-30 caracteres)"
               className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
             />
