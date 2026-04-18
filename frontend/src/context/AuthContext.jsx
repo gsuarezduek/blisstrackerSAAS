@@ -33,6 +33,12 @@ export function AuthProvider({ children }) {
     return data.user
   }
 
+  // Recibe un JWT ya obtenido (ej: desde el popup de OAuth)
+  function loginWithToken(token, user) {
+    localStorage.setItem('token', token)
+    setUser(user)
+  }
+
   function logout() {
     api.post('/auth/logout').catch(() => {})
     localStorage.removeItem('token')
@@ -44,7 +50,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, loginWithToken, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   )

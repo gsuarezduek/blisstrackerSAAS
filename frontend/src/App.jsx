@@ -40,6 +40,7 @@ import MyProjects from './pages/MyProjects'
 import ProjectDetail from './pages/ProjectDetail'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
+import OAuthPopup from './pages/OAuthPopup'
 import MyProfile from './pages/MyProfile'
 import Preferences from './pages/Preferences'
 import Docs from './pages/Docs'
@@ -67,8 +68,9 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
-          <Route path="/login"    element={<Login2    />} />
-          <Route path="/register" element={<Register  />} />
+          <Route path="/login"    element={<Login2     />} />
+          <Route path="/register" element={<Register   />} />
+          <Route path="/oauth"    element={<OAuthPopup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
