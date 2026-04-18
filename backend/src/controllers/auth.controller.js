@@ -140,9 +140,11 @@ async function forgotPassword(req, res, next) {
       data: { token, userId: user.id, expiresAt },
     })
 
-    const slug = req.headers['x-workspace'] ?? 'app'
-    const domain = process.env.APP_DOMAIN ?? 'localhost:5173'
-    const resetUrl = `https://${slug}.${domain}/reset-password?token=${token}`
+    const domain = process.env.APP_DOMAIN
+    const slug = req.headers['x-workspace']
+    const resetUrl = domain && slug
+      ? `https://${slug}.${domain}/reset-password?token=${token}`
+      : `${process.env.FRONTEND_URL}/reset-password?token=${token}`
 
     await sendPasswordReset(user.email, user.name, resetUrl)
 
