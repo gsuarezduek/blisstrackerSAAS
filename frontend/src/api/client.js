@@ -3,14 +3,17 @@ import axios from 'axios'
 // Extrae el slug del workspace desde el hostname.
 // En producción: 'bliss.blisstracker.app' → 'bliss'
 // En desarrollo: usa VITE_WORKSPACE_SLUG o 'bliss' como fallback
+// Slugs reservados que no corresponden a ningún workspace
+const RESERVED_SLUGS = ['www', 'app', 'api', 'mail', 'static', 'cdn']
+
 function getWorkspaceSlug() {
   const hostname = window.location.hostname
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
   const escapedDomain = appDomain.replace(/\./g, '\\.')
   const match = hostname.match(new RegExp(`^([a-z0-9-]+)\\.${escapedDomain}$`))
-  if (match) return match[1]
+  if (match && !RESERVED_SLUGS.includes(match[1])) return match[1]
   // Fallback para desarrollo local
-  return import.meta.env.VITE_WORKSPACE_SLUG || 'bliss'
+  return import.meta.env.VITE_WORKSPACE_SLUG || ''
 }
 
 const api = axios.create({

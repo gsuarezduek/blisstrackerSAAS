@@ -29,6 +29,24 @@ cron.schedule('0 0 * * 6', async () => {
   finally { insightMemoryRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
+// Cron: limpiar notificaciones antiguas — domingos 03:00 hora Buenos Aires
+cron.schedule('0 3 * * 0', async () => {
+  console.log('[NotifCleanup] Limpiando notificaciones antiguas...')
+  const prisma = require('./lib/prisma')
+  const now = new Date()
+  const cutoffRead   = new Date(now - 30 * 24 * 60 * 60 * 1000)  // 30 días
+  const cutoffUnread = new Date(now - 90 * 24 * 60 * 60 * 1000)  // 90 días
+  const { count } = await prisma.notification.deleteMany({
+    where: {
+      OR: [
+        { read: true,  createdAt: { lt: cutoffRead   } },
+        { read: false, createdAt: { lt: cutoffUnread } },
+      ],
+    },
+  })
+  console.log(count > 0 ? `[NotifCleanup] ${count} notificación(es) eliminada(s).` : '[NotifCleanup] Nada que limpiar.')
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
 // Cron: auto-pausar tareas EN CURSO al final del día — medianoche hora Buenos Aires
 cron.schedule('0 0 * * *', async () => {
   console.log('[AutoPause] Pausando tareas en curso al cierre del día...')

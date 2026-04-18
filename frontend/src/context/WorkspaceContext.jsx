@@ -12,6 +12,19 @@ export function WorkspaceProvider({ children }) {
   const slug = getWorkspaceSlug()
 
   useEffect(() => {
+    // Sin slug = dominio raíz (www.blisstracker.app o blisstracker.app)
+    // No hay workspace que resolver; redirigir a /register
+    if (!slug) {
+      const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+      if (window.location.hostname.includes(appDomain)) {
+        window.location.href = `https://${appDomain}/register`
+      } else {
+        // Desarrollo local sin slug configurado
+        setLoading(false)
+      }
+      return
+    }
+
     api.get('/workspaces/info')
       .then(r => setWorkspace(r.data))
       .catch(err => {
