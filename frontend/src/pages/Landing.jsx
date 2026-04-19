@@ -321,8 +321,10 @@ export default function Landing() {
               },
             ].map((item, i) => (
               <div key={i} className="bg-gray-800 border border-gray-700 rounded-2xl p-6">
-                <div className="text-3xl mb-4">{item.emoji}</div>
-                <h3 className="text-white font-bold text-lg mb-2">{item.title}</h3>
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-2xl">{item.emoji}</span>
+                  <h3 className="text-white font-bold text-lg leading-tight">{item.title}</h3>
+                </div>
                 <p className="text-gray-400 text-sm leading-relaxed">{item.desc}</p>
               </div>
             ))}
@@ -333,11 +335,12 @@ export default function Landing() {
       {/* ── Solution ── */}
       <section className="py-24 px-4 sm:px-6 bg-white">
         <div className="max-w-3xl mx-auto text-center">
-          <p className="text-primary-500 font-semibold text-xs uppercase tracking-widest mb-4">
+          <p className="text-primary-500 font-semibold text-xs uppercase tracking-widest mb-6">
             La solución
           </p>
+          <BlissLogo variant="lockup" dark={false} className="h-12 w-auto mx-auto mb-8" />
           <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-6">
-            BlissTracker no es otro gestor de tareas.
+            No es otro gestor de tareas.
           </h2>
           <p className="text-gray-500 text-lg leading-relaxed mb-4">
             Es una herramienta de ejecución. Diseñada para que tu equipo sepa exactamente en qué trabajar,
