@@ -27,6 +27,8 @@ class ErrorBoundary extends React.Component {
     return this.props.children
   }
 }
+import { getWorkspaceSlug } from './api/client'
+import Landing from './pages/Landing'
 import Login2 from './pages/Login2'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
@@ -70,6 +72,14 @@ function SuperAdminRoute({ children }) {
   return children
 }
 
+// En el dominio raíz (sin slug de workspace) muestra la landing.
+// En un subdominio de workspace, muestra la app normal.
+function RootPage() {
+  const slug = getWorkspaceSlug()
+  if (!slug) return <Landing />
+  return <PrivateRoute><Dashboard /></PrivateRoute>
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -86,7 +96,7 @@ export default function App() {
           <Route path="/join"     element={<JoinWorkspace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/" element={<RootPage />} />
           <Route path="/my-reports"  element={<PrivateRoute><MyReports  /></PrivateRoute>} />
           <Route path="/my-projects" element={<PrivateRoute><MyProjects /></PrivateRoute>} />
           <Route path="/my-projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
