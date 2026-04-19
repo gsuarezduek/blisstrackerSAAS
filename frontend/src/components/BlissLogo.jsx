@@ -1,5 +1,4 @@
-import { useContext } from 'react'
-import { ThemeContext } from '../context/ThemeContext'
+import { useTheme } from '../context/ThemeContext'
 
 /**
  * BlissLogo — sistema de logo unificado.
@@ -14,7 +13,7 @@ import { ThemeContext } from '../context/ThemeContext'
  * Para forzar una versión: variant="lockup" dark={true|false}
  */
 export default function BlissLogo({ variant = 'icon', dark, className = '', alt = 'BlissTracker', ...props }) {
-  const theme = useContext(ThemeContext)
+  const theme = useTheme()
   const isDark = dark !== undefined ? dark : theme?.dark
 
   const src = {
