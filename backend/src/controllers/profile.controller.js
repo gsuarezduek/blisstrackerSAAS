@@ -22,10 +22,13 @@ const PREF_FLAGS = ['weeklyEmailEnabled', 'dailyInsightEnabled', 'insightMemoryE
 
 const ALLOWED_AVATARS = [
   '1babee.png', '2bee.png',
+  '10beemate.png',
   '11beeartist.png', '12beecoffee.png', '13beecorp.png', '14beefitness.png',
   '15futbee.png', '16beeloween.png', '17beepunk.png', '18golfbee.png',
   '19beenfluencer.png', '20beecypher.png', '21beegamer.png', '22beehacker.png',
+  '23beeJ.png',
   '30harleybee.png', '31beezen.png', '32beezombie.png', '33darthbee.png',
+  '34beeBorg.png', '35beempire.png', '36beecodelica.png',
 ]
 
 /**

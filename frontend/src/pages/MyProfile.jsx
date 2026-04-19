@@ -8,6 +8,7 @@ import useRoles from '../hooks/useRoles'
 const AVATARS = [
   { file: '1babee.png',        label: 'Baby Bee' },
   { file: '2bee.png',          label: 'Bee' },
+  { file: '10beemate.png',     label: 'Bee Mate' },
   { file: '11beeartist.png',   label: 'Bee Artista' },
   { file: '12beecoffee.png',   label: 'Bee Coffee' },
   { file: '13beecorp.png',     label: 'Bee Corp' },
@@ -20,10 +21,14 @@ const AVATARS = [
   { file: '20beecypher.png',   label: 'Bee Cypher' },
   { file: '21beegamer.png',    label: 'Bee Gamer' },
   { file: '22beehacker.png',   label: 'Bee Hacker' },
+  { file: '23beeJ.png',        label: 'Bee J' },
   { file: '30harleybee.png',   label: 'Harley Bee' },
   { file: '31beezen.png',      label: 'Bee Zen' },
   { file: '32beezombie.png',   label: 'Bee Zombie' },
   { file: '33darthbee.png',    label: 'Darth Bee' },
+  { file: '34beeBorg.png',     label: 'Bee Borg' },
+  { file: '35beempire.png',    label: 'Bee-mpire' },
+  { file: '36beecodelica.png', label: 'Bee-codelica' },
 ]
 
 function Field({ label, children }) {

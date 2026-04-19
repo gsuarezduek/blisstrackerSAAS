@@ -123,12 +123,17 @@ async function create(req, res, next) {
   try {
     const { name, serviceIds = [], memberIds = [] } = req.body
     if (!name) return res.status(400).json({ error: 'Nombre requerido' })
+
+    // Asegurar que el creador siempre quede como miembro
+    const creatorId = req.user.userId
+    const uniqueMemberIds = [...new Set([creatorId, ...memberIds.map(Number)])]
+
     const project = await prisma.project.create({
       data: {
         workspaceId: req.workspace.id,
         name,
         services: { create: serviceIds.map(serviceId => ({ serviceId: Number(serviceId) })) },
-        members:  { create: memberIds.map(userId   => ({ userId:    Number(userId)    })) },
+        members:  { create: uniqueMemberIds.map(userId => ({ userId })) },
       },
       include: includeDetails,
     })
