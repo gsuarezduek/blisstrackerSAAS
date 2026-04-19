@@ -25,10 +25,14 @@ async function resolveWorkspace(req, res, next) {
       return res.status(402).json({ error: 'Workspace suspendido. Verificá el estado de tu suscripción.' })
     }
 
-    // Super admins pueden acceder a cualquier workspace sin ser miembros
+    // Super admins pueden acceder a cualquier workspace.
+    // Si además son miembros, cargamos sus datos de miembro (para isAdmin, teamRole, etc.)
     if (req.user?.isSuperAdmin) {
       req.workspace = workspace
-      req.workspaceMember = null
+      const superMember = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId: workspace.id, userId: req.user.userId } },
+      })
+      req.workspaceMember = superMember ?? null
       return next()
     }
 

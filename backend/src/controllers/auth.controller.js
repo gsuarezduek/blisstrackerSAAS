@@ -125,7 +125,7 @@ async function me(req, res, next) {
     res.json({
       ...user,
       role: member?.teamRole ?? '',
-      isAdmin: member?.role === 'admin' || member?.role === 'owner',
+      isAdmin: user.isSuperAdmin || member?.role === 'admin' || member?.role === 'owner',
       dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
     })
   } catch (err) { next(err) }
