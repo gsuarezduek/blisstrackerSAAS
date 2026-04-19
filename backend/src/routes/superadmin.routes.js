@@ -18,5 +18,7 @@ router.get('/workspaces',               c.listWorkspaces)
 router.get('/workspaces/:id',           c.getWorkspace)
 router.patch('/workspaces/:id/status',  c.updateWorkspaceStatus)
 router.post('/impersonate',             c.impersonate)
+router.get('/feedback',                 c.listFeedback)
+router.put('/feedback/:id/read',        c.markFeedbackRead)
 
 module.exports = router

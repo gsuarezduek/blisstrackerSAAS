@@ -184,7 +184,7 @@ async function dashboardStats(req, res, next) {
       prisma.userLogin.findMany({
         where: {
           workspaceId,
-          workspaceMember: { some: { workspaceId, active: true } },
+          user: { workspaceMembers: { some: { workspaceId, active: true } } },
         },
         select: { userId: true, loginAt: true },
         orderBy: { loginAt: 'asc' },

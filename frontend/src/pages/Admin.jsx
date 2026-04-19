@@ -3,7 +3,6 @@ import ProjectsTab from '../components/admin/ProjectsTab'
 import TeamTab from '../components/admin/TeamTab'
 import ServicesTab from '../components/admin/ServicesTab'
 import RolesTab from '../components/admin/RolesTab'
-import FeedbackTab from '../components/admin/FeedbackTab'
 import RoleExpectationsTab from '../components/admin/RoleExpectationsTab'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -14,7 +13,6 @@ const TABS = [
   { id: 'services',  label: '🛠 Servicios' },
   { id: 'roles',     label: '🏷 Roles' },
   { id: 'role-ai',   label: '🎯 Roles IA' },
-  { id: 'feedback',  label: '💬 Feedback' },
 ]
 
 const VALID_TABS = new Set(TABS.map(t => t.id))
@@ -66,7 +64,6 @@ export default function Admin() {
         {tab === 'services' && <ServicesTab />}
         {tab === 'roles' && <RolesTab />}
         {tab === 'role-ai' && <RoleExpectationsTab />}
-        {tab === 'feedback' && <FeedbackTab />}
       </main>
     </div>
   )

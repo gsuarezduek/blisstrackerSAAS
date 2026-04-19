@@ -182,4 +182,38 @@ async function getStats(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, impersonate, getStats }
+/**
+ * GET /api/superadmin/feedback
+ * Lista todos los feedbacks de todos los workspaces.
+ */
+async function listFeedback(req, res, next) {
+  try {
+    const feedbacks = await prisma.feedback.findMany({
+      include: {
+        user:      { select: { id: true, name: true, avatar: true } },
+        workspace: { select: { id: true, name: true, slug: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    res.json(feedbacks)
+  } catch (err) { next(err) }
+}
+
+/**
+ * PUT /api/superadmin/feedback/:id/read
+ * Marcar feedback como leído.
+ */
+async function markFeedbackRead(req, res, next) {
+  try {
+    const feedback = await prisma.feedback.update({
+      where: { id: Number(req.params.id) },
+      data: { read: true },
+    })
+    res.json(feedback)
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'No encontrado' })
+    next(err)
+  }
+}
+
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, impersonate, getStats, listFeedback, markFeedbackRead }
