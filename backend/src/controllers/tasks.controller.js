@@ -7,14 +7,29 @@ const taskInclude = {
   _count: { select: { comments: true } },
 }
 
-async function assertNoActiveTask(userId) {
-  const active = await prisma.task.findFirst({ where: { userId, status: 'IN_PROGRESS' } })
-  if (active) throw Object.assign(new Error('Ya tenés una tarea en curso. Pausala o completala primero.'), { status: 409 })
+async function assertNoActiveTask(userId, currentWorkspaceId) {
+  const active = await prisma.task.findFirst({
+    where: { userId, status: 'IN_PROGRESS' },
+    include: { workDay: { select: { workspaceId: true } } },
+  })
+  if (!active) return
+
+  const activeWorkspaceId = active.workDay?.workspaceId
+  const isSameWorkspace = !currentWorkspaceId || activeWorkspaceId === currentWorkspaceId
+
+  const msg = isSameWorkspace
+    ? 'Ya tenés una tarea en curso. Pausala o completala primero.'
+    : 'Tenés una tarea activa en otro workspace. Pausala o completala antes de iniciar una nueva.'
+
+  throw Object.assign(new Error(msg), { status: 409, isOperational: true })
 }
 
 function handleActiveTaskConflict(err) {
   if (err.code === 'P2002' && err.meta?.target?.includes?.('one_active_task_per_user')) {
-    return Object.assign(new Error('Ya tenés una tarea en curso. Pausala o completala primero.'), { status: 409 })
+    return Object.assign(
+      new Error('Ya tenés una tarea en curso. Pausala o completala primero.'),
+      { status: 409, isOperational: true }
+    )
   }
   return err
 }
@@ -66,7 +81,6 @@ async function create(req, res, next) {
     }
 
     if (!workDay) {
-      console.error('[create-task-debug] workDay is null', { userId, workspaceId, date, projectId })
       return res.status(500).json({ error: 'No se pudo obtener la jornada laboral. Recargá la página.' })
     }
 
@@ -103,7 +117,7 @@ async function create(req, res, next) {
 async function startTask(req, res, next) {
   try {
     const userId = req.user.userId
-    await assertNoActiveTask(userId)
+    await assertNoActiveTask(userId, req.workspace?.id)
 
     const existing = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -148,7 +162,7 @@ async function pauseTask(req, res, next) {
 async function resumeTask(req, res, next) {
   try {
     const userId = req.user.userId
-    await assertNoActiveTask(userId)
+    await assertNoActiveTask(userId, req.workspace?.id)
 
     const current = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!current || current.userId !== userId) {
@@ -263,7 +277,7 @@ async function blockTask(req, res, next) {
 async function unblockTask(req, res, next) {
   try {
     const userId = req.user.userId
-    await assertNoActiveTask(userId)
+    await assertNoActiveTask(userId, req.workspace?.id)
 
     const current = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!current || current.userId !== userId) {
