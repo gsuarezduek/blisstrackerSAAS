@@ -438,6 +438,10 @@ async function addToToday(req, res, next) {
       }
     }
 
+    if (!workDay) {
+      return res.status(500).json({ error: 'No se pudo obtener la jornada laboral. Recargá la página.' })
+    }
+
     const updated = await prisma.task.update({
       where: { id: taskId },
       data: { isBacklog: false, workDayId: workDay.id },
