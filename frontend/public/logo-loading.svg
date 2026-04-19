@@ -1,0 +1,97 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BlissTracker cargando">
+  <defs>
+    <linearGradient id="centerHexL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFB366"/>
+      <stop offset="100%" stop-color="#FF8C2E"/>
+    </linearGradient>
+    <linearGradient id="outerDim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#8A4E1C"/>
+      <stop offset="100%" stop-color="#5E3512"/>
+    </linearGradient>
+    <linearGradient id="outerBright" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFB366"/>
+      <stop offset="100%" stop-color="#FF8C2E"/>
+    </linearGradient>
+    <linearGradient id="bgL" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1F1812"/>
+      <stop offset="100%" stop-color="#140E0A"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <style><![CDATA[
+    @keyframes bliss-loading {
+      0%   { opacity: 0; }
+      8%   { opacity: 1; }
+      25%  { opacity: 0.55; }
+      50%  { opacity: 0; }
+      100% { opacity: 0; }
+    }
+    .glow {
+      opacity: 0;
+      animation: bliss-loading 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      transform-origin: 256px 256px;
+    }
+    .glow-1 { animation-delay: 0s;    }
+    .glow-2 { animation-delay: 0.13s; }
+    .glow-3 { animation-delay: 0.26s; }
+    .glow-4 { animation-delay: 0.39s; }
+    .glow-5 { animation-delay: 0.52s; }
+    .glow-6 { animation-delay: 0.65s; }
+
+    @keyframes bliss-pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.75; }
+    }
+    .center-glow {
+      animation: bliss-pulse 1.6s ease-in-out infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .glow { animation: none; opacity: 0.5; }
+      .center-glow { animation: none; }
+    }
+  ]]></style>
+
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#bgL)"/>
+
+  <!-- Hexágonos exteriores base (siempre visibles) -->
+  <g stroke="#2A1F17" stroke-width="3">
+    <polygon points="176,117.44 216,48.16 296,48.16 336,117.44 296,186.72 216,186.72" fill="url(#outerDim)"/>
+    <polygon points="296,186.72 336,117.44 416,117.44 456,186.72 416,256 336,256" fill="url(#outerDim)"/>
+    <polygon points="296,325.28 336,256 416,256 456,325.28 416,394.56 336,394.56" fill="url(#outerDim)"/>
+    <polygon points="176,394.56 216,325.28 296,325.28 336,394.56 296,463.84 216,463.84" fill="url(#outerDim)"/>
+    <polygon points="56,325.28 96,256 176,256 216,325.28 176,394.56 96,394.56" fill="url(#outerDim)"/>
+    <polygon points="56,186.72 96,117.44 176,117.44 216,186.72 176,256 96,256" fill="url(#outerDim)"/>
+  </g>
+
+  <!-- Capa animada (se encienden en secuencia horaria) -->
+  <g filter="url(#softGlow)">
+    <polygon class="glow glow-1" points="176,117.44 216,48.16 296,48.16 336,117.44 296,186.72 216,186.72" fill="url(#outerBright)"/>
+    <polygon class="glow glow-2" points="296,186.72 336,117.44 416,117.44 456,186.72 416,256 336,256" fill="url(#outerBright)"/>
+    <polygon class="glow glow-3" points="296,325.28 336,256 416,256 456,325.28 416,394.56 336,394.56" fill="url(#outerBright)"/>
+    <polygon class="glow glow-4" points="176,394.56 216,325.28 296,325.28 336,394.56 296,463.84 216,463.84" fill="url(#outerBright)"/>
+    <polygon class="glow glow-5" points="56,325.28 96,256 176,256 216,325.28 176,394.56 96,394.56" fill="url(#outerBright)"/>
+    <polygon class="glow glow-6" points="56,186.72 96,117.44 176,117.44 216,186.72 176,256 96,256" fill="url(#outerBright)"/>
+  </g>
+
+  <!-- Centro con check (pulso sutil) -->
+  <g class="center-glow">
+    <polygon
+      points="176,256 216,186.72 296,186.72 336,256 296,325.28 216,325.28"
+      fill="url(#centerHexL)"/>
+    <path
+      d="M 205 258 L 240 295 L 305 222"
+      fill="none"
+      stroke="#FFFFFF"
+      stroke-width="22"
+      stroke-linecap="round"
+      stroke-linejoin="round"/>
+  </g>
+</svg>

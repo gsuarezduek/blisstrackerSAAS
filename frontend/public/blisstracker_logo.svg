@@ -1,24 +1,35 @@
-<svg width="100%" viewBox="0 0 340 320" xmlns="http://www.w3.org/2000/svg">
-  <!-- 7 hexágonos flat-top, radio 52px -->
-  <!-- Centro: 170,160 -->
-  <!-- Ring: N=(170,74) NE=(241,117) SE=(241,203) S=(170,246) SW=(99,203) NW=(99,117) -->
-
-  <!-- NW -->
-  <polygon points="149,117 124,160 74,160 49,117 74,74 124,74" fill="#FF9500" stroke="#E07800" stroke-width="1.5" stroke-linejoin="round" opacity="0.82" style="fill:rgb(255, 149, 0);stroke:rgb(224, 120, 0);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:round;opacity:0.82;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <!-- N -->
-  <polygon points="220,74 195,117 145,117 120,74 145,31 195,31" fill="#FF9500" stroke="#E07800" stroke-width="1.5" stroke-linejoin="round" opacity="0.82" style="fill:rgb(255, 149, 0);stroke:rgb(224, 120, 0);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:round;opacity:0.82;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <!-- NE -->
-  <polygon points="291,117 266,160 216,160 191,117 216,74 266,74" fill="#FF9500" stroke="#E07800" stroke-width="1.5" stroke-linejoin="round" opacity="0.82" style="fill:rgb(255, 149, 0);stroke:rgb(224, 120, 0);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:round;opacity:0.82;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <!-- SW -->
-  <polygon points="149,203 124,246 74,246 49,203 74,160 124,160" fill="#FF9500" stroke="#E07800" stroke-width="1.5" stroke-linejoin="round" opacity="0.82" style="fill:rgb(255, 149, 0);stroke:rgb(224, 120, 0);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:round;opacity:0.82;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <!-- S -->
-  <polygon points="220,246 195,289 145,289 120,246 145,203 195,203" fill="#FF9500" stroke="#E07800" stroke-width="1.5" stroke-linejoin="round" opacity="0.82" style="fill:rgb(255, 149, 0);stroke:rgb(224, 120, 0);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:round;opacity:0.82;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-  <!-- SE -->
-  <polygon points="291,203 266,246 216,246 191,203 216,160 266,160" fill="#FF9500" stroke="#E07800" stroke-width="1.5" stroke-linejoin="round" opacity="0.82" style="fill:rgb(255, 149, 0);stroke:rgb(224, 120, 0);color:rgb(0, 0, 0);stroke-width:1.5px;stroke-linecap:butt;stroke-linejoin:round;opacity:0.82;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-
-  <!-- Centro -->
-  <polygon points="220,160 195,203 145,203 120,160 145,117 195,117" fill="#FF8C00" stroke="#CC6600" stroke-width="2" stroke-linejoin="round" style="fill:rgb(255, 140, 0);stroke:rgb(204, 102, 0);color:rgb(0, 0, 0);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
-
-  <!-- Checkmark -->
-  <polyline points="149,160 163,175 192,146" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" style="fill:none;stroke:rgb(255, 255, 255);color:rgb(0, 0, 0);stroke-width:4px;stroke-linecap:round;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, &quot;system-ui&quot;, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BlissTracker logo">
+  <defs>
+    <linearGradient id="hexA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFAE5C"/>
+      <stop offset="100%" stop-color="#E67A1F"/>
+    </linearGradient>
+    <linearGradient id="bgA" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1F1812"/>
+      <stop offset="100%" stop-color="#140E0A"/>
+    </linearGradient>
+    <filter id="softShadowA" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+      <feOffset dx="0" dy="6" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.35"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#bgA)"/>
+  <polygon
+    points="76,256 166,100.12 346,100.12 436,256 346,411.88 166,411.88"
+    fill="url(#hexA)"
+    filter="url(#softShadowA)"/>
+  <path
+    d="M 165 262 L 228 328 L 355 190"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="44"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
 </svg>

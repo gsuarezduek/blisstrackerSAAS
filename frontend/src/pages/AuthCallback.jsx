@@ -7,6 +7,7 @@ import { useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/client'
+import BlissLogo from '../components/BlissLogo'
 
 export default function AuthCallback() {
   const [searchParams] = useSearchParams()
@@ -37,7 +38,7 @@ export default function AuthCallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
       <div className="text-center space-y-3">
-        <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-10 h-10 mx-auto animate-pulse" />
+        <BlissLogo variant="loading" className="w-16 h-16 mx-auto" />
         <p className="text-sm text-gray-500 dark:text-gray-400">Iniciando sesión…</p>
       </div>
     </div>

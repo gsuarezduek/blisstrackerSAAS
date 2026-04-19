@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
+import BlissLogo from '../components/BlissLogo'
 
 // ─── App Mockup ───────────────────────────────────────────────────────────────
 
@@ -228,9 +229,8 @@ export default function Landing() {
       {/* ── Navbar ── */}
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
-          <div className="flex items-center gap-2">
-            <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-7 h-7" />
-            <span className="font-bold text-lg text-gray-900">BlissTracker</span>
+          <div className="flex items-center">
+            <BlissLogo variant="lockup" dark={false} className="h-8 w-auto" />
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
@@ -567,7 +567,7 @@ export default function Landing() {
       {/* ── Final CTA ── */}
       <section className="py-24 px-4 sm:px-6 bg-gray-900 text-center">
         <div className="max-w-2xl mx-auto">
-          <img src="/blisstracker_logo.svg" alt="" className="w-14 h-14 mx-auto mb-5 opacity-90" />
+          <BlissLogo variant="honeycomb" className="w-20 h-20 mx-auto mb-5" />
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4 leading-tight">
             Tu equipo puede ejecutar mejor.<br />Empezá hoy.
           </h2>
@@ -587,7 +587,7 @@ export default function Landing() {
       <footer className="py-8 px-4 sm:px-6 bg-gray-950 border-t border-gray-800">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
           <div className="flex items-center gap-2">
-            <img src="/blisstracker_logo.svg" alt="" className="w-5 h-5 opacity-60" />
+            <BlissLogo variant="icon" className="w-5 h-5 opacity-60" alt="" />
             <span>BlissTracker &copy; {new Date().getFullYear()}</span>
           </div>
           <div className="flex items-center gap-6">

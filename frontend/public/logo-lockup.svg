@@ -1,0 +1,19 @@
+<svg viewBox="0 0 1200 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BlissTracker">
+  <defs>
+    <linearGradient id="hexC" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFAE5C"/>
+      <stop offset="100%" stop-color="#E67A1F"/>
+    </linearGradient>
+  </defs>
+  <polygon
+    points="52,160 106,66.47 214,66.47 268,160 214,253.53 106,253.53"
+    fill="url(#hexC)"/>
+  <path
+    d="M 95 164 L 137 208 L 222 116"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+  <text x="320" y="205" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="120" letter-spacing="-3"><tspan fill="#E67A1F" font-weight="700">Bliss</tspan><tspan fill="#3B2618" font-weight="400">Tracker</tspan></text>
+</svg>
