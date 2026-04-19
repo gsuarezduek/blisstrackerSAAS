@@ -418,8 +418,8 @@ function buildWeeklyEmailHtml(user, data, analysis) {
   <!-- Logo -->
   <div style="text-align: center; padding: 16px 0 4px;">
     <img src="https://bliss.${process.env.APP_DOMAIN || 'blisstracker.app'}/logo-lockup.svg"
-         alt="BlissTracker" width="180" height="48"
-         style="display: inline-block; height: 48px; width: auto; max-width: 180px;" />
+         alt="BlissTracker" width="220" height="34"
+         style="display: inline-block; width: 220px; height: 34px;" />
   </div>
 
   <!-- Header -->

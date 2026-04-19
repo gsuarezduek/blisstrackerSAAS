@@ -506,6 +506,158 @@ function SectionComingSoon({ label, description }) {
   )
 }
 
+// ─── Brand Manual ─────────────────────────────────────────────────────────────
+
+const PALETTE = [
+  { hex: '#FFAE5C', name: 'Orange Light' },
+  { hex: '#FF8C2E', name: 'Orange Primary' },
+  { hex: '#E67A1F', name: 'Orange Deep' },
+  { hex: '#8A4E1C', name: 'Amber Dark' },
+  { hex: '#3B2618', name: 'Brown Text' },
+  { hex: '#140E0A', name: 'Background Dark', border: true },
+  { hex: '#FFF4E6', name: 'Cream Text', border: true },
+  { hex: '#FFFFFF', name: 'Check / Highlight', border: true },
+]
+
+function LogoPreviewRow({ dark, sizes, src, label }) {
+  return (
+    <div className={`rounded-xl p-5 flex items-center gap-6 flex-wrap ${dark ? 'bg-[#140E0A]' : 'bg-[#F5EFE6]'}`}>
+      {sizes.map(s => (
+        <div key={s} className="flex flex-col items-center gap-2">
+          <img src={src} width={s} height={s} alt={`${label} ${s}px`} className="block" />
+          <span className={`text-[10px] font-semibold uppercase tracking-wide ${dark ? 'text-[#B8A896]' : 'text-[#7A6B5E]'}`}>{s} px</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function BrandCard({ title, subtitle, children, note }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h2>
+        {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>}
+      </div>
+      {children}
+      {note && (
+        <div className="border-l-2 border-primary-400 pl-4 py-1 bg-primary-50 dark:bg-primary-900/20 rounded-r-lg">
+          <p className="text-xs text-primary-800 dark:text-primary-300 leading-relaxed">{note}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SectionBrandManual() {
+  return (
+    <div className="space-y-6">
+      <div className="mb-2">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manual de Marca</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Sistema de logo BlissTracker — tres variantes con fondo transparente.
+        </p>
+      </div>
+
+      {/* Variante A */}
+      <BrandCard
+        title="Variante A — Minimalista"
+        subtitle="Hexágono único con check grueso. Fondo transparente — funciona sobre cualquier superficie."
+        note="A 16 px el check sigue visible porque el trazo fue engrosado a 44 y se mantiene la silueta hexagonal reconocible. Ideal para favicon, badge de notificación y app icon."
+      >
+        <LogoPreviewRow src="/blisstracker_logo.svg" sizes={[16, 32, 64, 128, 256]} label="Variante A" />
+        <LogoPreviewRow src="/blisstracker_logo.svg" sizes={[16, 32, 64, 128, 256]} label="Variante A" dark />
+      </BrandCard>
+
+      {/* Variante B */}
+      <BrandCard
+        title="Variante B — Panal Sutil"
+        subtitle="Panal completo con fondo transparente. Hexágonos exteriores en ámbar oscuro que funcionan sobre fondos claros y oscuros."
+        note="Los hexágonos exteriores usan un ámbar medio (#C46F29 → #8A4E1C) que tiene suficiente contraste sobre blanco y no se pierde sobre fondos oscuros. No usar a menos de 48 px — a ese tamaño los detalles del panal exterior se pierden; usar la Variante A."
+      >
+        <LogoPreviewRow src="/logo-honeycomb.svg" sizes={[32, 64, 128, 256]} label="Variante B" />
+        <LogoPreviewRow src="/logo-honeycomb.svg" sizes={[32, 64, 128, 256]} label="Variante B" dark />
+      </BrandCard>
+
+      {/* Variante B Loading */}
+      <BrandCard
+        title="Variante B — Loading Animation"
+        subtitle="Los hexágonos exteriores se iluminan en secuencia rotativa para indicar que la app está procesando."
+        note="Ciclo de 1.6 s, easing cubic-bezier(0.4, 0, 0.2, 1), delay incremental de 130 ms entre hexágonos. Respeta prefers-reduced-motion. El check central tiene un pulso sutil. Funciona en <img>, <object>, inline SVG. No requiere JavaScript."
+      >
+        <div className="rounded-xl p-6 bg-[#F5EFE6] flex items-center gap-10 flex-wrap">
+          {[64, 128, 192].map(s => (
+            <div key={s} className="flex flex-col items-center gap-2">
+              <img src="/logo-loading.svg" width={s} height={s} alt={`Loading ${s}px`} />
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#7A6B5E]">{s} px</span>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl p-6 bg-[#140E0A] flex items-center gap-10 flex-wrap">
+          {[64, 128, 192].map(s => (
+            <div key={s} className="flex flex-col items-center gap-2">
+              <img src="/logo-loading.svg" width={s} height={s} alt={`Loading ${s}px`} />
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#B8A896]">{s} px</span>
+            </div>
+          ))}
+        </div>
+      </BrandCard>
+
+      {/* Variante C */}
+      <BrandCard
+        title="Variante C — Lockup Horizontal (Isotipo + Wordmark)"
+        subtitle='Para headers, material impreso, firmas de email y landing page. Incluye versión clara y oscura.'
+        note={'"Bliss" en bold y naranja da énfasis, "Tracker" en regular actúa como descriptor funcional. El isotipo y el wordmark comparten la misma altura visual, creando equilibrio. El espacio entre mark y texto equivale al ancho de una "o" — patrón clásico de lockup.'}
+      >
+        <div className="rounded-xl p-8 bg-[#F5EFE6] flex items-center justify-center">
+          <img src="/logo-lockup.svg" alt="BlissTracker lockup versión clara" className="h-14 w-auto" />
+        </div>
+        <div className="rounded-xl p-8 bg-[#140E0A] flex items-center justify-center">
+          <img src="/logo-lockup-dark.svg" alt="BlissTracker lockup versión oscura" className="h-14 w-auto" />
+        </div>
+      </BrandCard>
+
+      {/* Paleta */}
+      <BrandCard
+        title="Paleta de colores"
+        subtitle="Tokens coherentes entre las tres variantes."
+      >
+        <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
+          {PALETTE.map(({ hex, name, border }) => (
+            <div key={hex} className="flex flex-col items-center gap-1.5">
+              <div
+                className={`w-12 h-12 rounded-xl ${border ? 'border border-gray-200 dark:border-gray-600' : ''}`}
+                style={{ background: hex }}
+              />
+              <code className="text-[10px] text-gray-500 dark:text-gray-400">{hex}</code>
+              <span className="text-[10px] text-gray-400 dark:text-gray-500 text-center leading-tight">{name}</span>
+            </div>
+          ))}
+        </div>
+      </BrandCard>
+
+      {/* Uso recomendado */}
+      <BrandCard title="Guía de uso">
+        <div className="space-y-2">
+          {[
+            { variant: 'Variante A', uses: 'App icon, favicon, badges, redes sociales (avatar), usos ≤ 128 px', icon: '/blisstracker_logo.svg' },
+            { variant: 'Variante B', uses: 'Splash screen, about page, merchandising, usos ≥ 256 px con espacio narrativo', icon: '/logo-honeycomb.svg' },
+            { variant: 'Variante C', uses: 'Headers web, documentos, firmas de email, material impreso, lockup horizontal', icon: '/logo-lockup.svg' },
+          ].map(row => (
+            <div key={row.variant} className="flex items-center gap-4 p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50">
+              <img src={row.icon} className="w-8 h-8 flex-shrink-0" alt={row.variant} />
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{row.variant}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{row.uses}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </BrandCard>
+    </div>
+  )
+}
+
 // ─── Sidebar nav items ────────────────────────────────────────────────────────
 
 const NAV_GROUPS = [
@@ -645,6 +797,16 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
+      {
+        id: 'brand',
+        label: 'Manual de Marca',
+        implemented: true,
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm3.5 4.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM5 12.5l2.5-3 2 2.5 2.5-3.5L15 13H5z" clipRule="evenodd" />
+          </svg>
+        ),
+      },
     ],
   },
 ]
@@ -696,6 +858,7 @@ export default function SuperAdmin() {
     }
     if (section === 'feedback')   return <SectionFeedback />
     if (section === 'emails')     return <SectionEmails />
+    if (section === 'brand')      return <SectionBrandManual />
 
     // Not yet implemented
     return (

@@ -4,6 +4,7 @@ import axios from 'axios'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
+import BlissLogo from '../components/BlissLogo'
 
 // ── Slides ─────────────────────────────────────────────────────────────────────
 
@@ -97,9 +98,8 @@ function SlidePanel() {
     <div className="flex flex-col justify-center h-full px-12 py-12 gap-10">
 
       {/* Logo */}
-      <div className="flex items-center gap-4">
-        <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-14 h-14" />
-        <span className="text-2xl font-bold text-white tracking-tight">BlissTracker</span>
+      <div>
+        <BlissLogo variant="lockup" dark={true} className="h-10 w-auto" />
       </div>
 
       {/* Slide */}
@@ -154,10 +154,7 @@ function WorkspacePicker({ workspaces }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6">
       <div className="w-full max-w-sm space-y-6">
-        <div className="flex items-center gap-3">
-          <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-10 h-10" />
-          <span className="text-xl font-bold text-gray-900 dark:text-white">BlissTracker</span>
-        </div>
+        <BlissLogo variant="lockup" className="h-8 w-auto" />
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Tus workspaces</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm">Elegí a cuál querés ingresar.</p>
@@ -247,10 +244,7 @@ function RootLogin() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-6 py-12">
       <div className="w-full max-w-sm space-y-6">
-        <div className="flex items-center gap-3">
-          <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-10 h-10" />
-          <span className="text-xl font-bold text-gray-900 dark:text-white">BlissTracker</span>
-        </div>
+        <BlissLogo variant="lockup" className="h-8 w-auto" />
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Bienvenido</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm">Iniciá sesión para continuar.</p>
