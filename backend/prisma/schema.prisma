@@ -35,6 +35,7 @@ model Workspace {
   feedbacks        Feedback[]
   invitations      WorkspaceInvitation[]
   deletionRequest  WorkspaceDeletionRequest?
+  emailLogs        EmailLog[]
 
   @@index([slug])
 }
@@ -444,6 +445,24 @@ model RoleExpectation {
 
   @@unique([workspaceId, roleName])
   @@index([workspaceId])
+}
+
+// ─── EMAIL LOG ───────────────────────────────────────────────────────────────
+
+model EmailLog {
+  id          Int        @id @default(autoincrement())
+  workspaceId Int?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  to          String     // destinatario(s), puede ser comma-separated
+  subject     String
+  type        String     // passwordReset | welcome | weeklySummary | testSettings | invitation | deletionWarning
+  status      String     @default("sent") // sent | failed
+  errorMsg    String?
+  createdAt   DateTime   @default(now())
+
+  @@index([workspaceId])
+  @@index([createdAt])
+  @@index([status])
 }
 
 // ─── ELIMINACIÓN DE WORKSPACE ────────────────────────────────────────────────

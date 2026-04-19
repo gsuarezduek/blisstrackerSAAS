@@ -113,7 +113,7 @@ async function addMember(req, res, next) {
       user = await prisma.user.create({
         data: { name, email, password: hashed },
       })
-      sendWelcomeEmail(email, name).catch(err =>
+      sendWelcomeEmail(email, name, workspaceId).catch(err =>
         console.error('[sendWelcomeEmail] Error:', err.message)
       )
     }
@@ -332,7 +332,7 @@ async function createWorkspace(req, res, next) {
       return { workspace, owner }
     })
 
-    sendWelcomeEmail(ownerEmail, ownerName).catch(() => {})
+    sendWelcomeEmail(ownerEmail, ownerName, result.workspace.id).catch(() => {})
 
     res.status(201).json({
       workspace: { id: result.workspace.id, name: result.workspace.name, slug: result.workspace.slug },
@@ -409,7 +409,7 @@ async function inviteMember(req, res, next) {
     const domain = process.env.APP_DOMAIN || 'blisstracker.app'
     const joinUrl = `https://${domain}/join?token=${token}`
 
-    sendInvitationEmail(email, inviter.name, workspace.name, joinUrl).catch(err =>
+    sendInvitationEmail(email, inviter.name, workspace.name, joinUrl, workspaceId).catch(err =>
       console.error('[sendInvitationEmail] Error:', err.message)
     )
 
@@ -647,6 +647,7 @@ async function scheduleDeletion(req, res, next) {
       requesterName,
       cancelUrl,
       scheduledAt,
+      workspace.id,
     ).catch(err => console.error('[sendWorkspaceDeletionWarning]', err.message))
 
     res.status(201).json(deletionReq)

@@ -550,7 +550,7 @@ async function sendWeeklyReportForUser(user, workspace) {
     const html     = buildWeeklyEmailHtml(user, data, analysis)
 
     const weekLabel = `${fmtDate(data.week.from)} – ${fmtDate(data.week.to)}`
-    await sendWeeklySummaryEmail(user.email, user.name, html, weekLabel)
+    await sendWeeklySummaryEmail(user.email, user.name, html, weekLabel, user.workspaceId)
     console.log(`[WeeklyReport] Email enviado a ${user.name} (${user.email})`)
   } catch (err) {
     console.error(`[WeeklyReport] Error procesando ${user.email}:`, err.message)

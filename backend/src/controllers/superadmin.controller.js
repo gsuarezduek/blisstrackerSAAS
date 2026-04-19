@@ -216,4 +216,32 @@ async function markFeedbackRead(req, res, next) {
   }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, impersonate, getStats, listFeedback, markFeedbackRead }
+/**
+ * GET /api/superadmin/email-logs
+ * Lista todos los logs de emails enviados. Soporta filtros ?status=&type=&limit=&offset=
+ */
+async function listEmailLogs(req, res, next) {
+  try {
+    const { status, type, limit = 50, offset = 0 } = req.query
+    const where = {}
+    if (status) where.status = status
+    if (type)   where.type   = type
+
+    const [logs, total] = await Promise.all([
+      prisma.emailLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: Number(limit),
+        skip: Number(offset),
+        include: {
+          workspace: { select: { id: true, name: true, slug: true } },
+        },
+      }),
+      prisma.emailLog.count({ where }),
+    ])
+
+    res.json({ logs, total })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs }

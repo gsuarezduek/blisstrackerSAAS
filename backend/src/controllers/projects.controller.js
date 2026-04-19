@@ -449,7 +449,7 @@ async function sendTestEmail(req, res, next) {
       select: { emailFrom: true },
       orderBy: { id: 'asc' },
     })
-    await sendTestSettingsEmail(user.email, user.name, settings?.emailFrom || null)
+    await sendTestSettingsEmail(user.email, user.name, settings?.emailFrom || null, req.workspace.id)
     res.json({ ok: true, sentTo: user.email })
   } catch (err) { next(err) }
 }

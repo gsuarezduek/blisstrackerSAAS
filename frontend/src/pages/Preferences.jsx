@@ -29,14 +29,6 @@ export default function Preferences() {
   const [cancellingDel,      setCancellingDel]      = useState(false)
   const [deletionMsg,        setDeletionMsg]        = useState({ text: '', error: false })
 
-  // Email sender config (derived from globalSettings.emailFrom)
-  const [emailFromName,    setEmailFromName]    = useState('')
-  const [emailFromAddress, setEmailFromAddress] = useState('')
-  const [savingEmail,      setSavingEmail]      = useState(false)
-  const [emailMsg,         setEmailMsg]         = useState({ text: '', error: false })
-  const [sendingTest,      setSendingTest]      = useState(false)
-  const [testMsg,          setTestMsg]          = useState({ text: '', error: false })
-  const [showDns,          setShowDns]          = useState(false)
 
   const TIMEZONES = [
     { value: 'America/Argentina/Buenos_Aires', label: 'Buenos Aires (UTC-3)' },
@@ -70,19 +62,7 @@ export default function Preferences() {
   useEffect(() => {
     if (!user?.isAdmin) return
     api.get('/projects/settings')
-      .then(({ data }) => {
-        setGlobalSettings(data)
-        if (data.emailFrom) {
-          const m = data.emailFrom.match(/^(.*?)\s*<([^>]+)>$/)
-          if (m) {
-            setEmailFromName(m[1].trim())
-            setEmailFromAddress(m[2].trim())
-          } else {
-            setEmailFromName('')
-            setEmailFromAddress(data.emailFrom.trim())
-          }
-        }
-      })
+      .then(({ data }) => setGlobalSettings(data))
       .catch(() => setGlobalSettingsError(true))
   }, [user?.isAdmin])
 
@@ -124,40 +104,6 @@ export default function Preferences() {
       setDeletionMsg({ text: err.response?.data?.error || 'Error al cancelar.', error: true })
     } finally {
       setCancellingDel(false)
-    }
-  }
-
-  async function handleSaveEmailFrom() {
-    if (!emailFromAddress.trim()) {
-      setEmailMsg({ text: 'La dirección de email es requerida.', error: true })
-      return
-    }
-    const combined = emailFromName.trim()
-      ? `${emailFromName.trim()} <${emailFromAddress.trim()}>`
-      : emailFromAddress.trim()
-    setSavingEmail(true)
-    setEmailMsg({ text: '', error: false })
-    try {
-      await api.patch('/projects/settings', { emailFrom: combined })
-      setGlobalSettings(prev => ({ ...prev, emailFrom: combined }))
-      setEmailMsg({ text: 'Remitente guardado correctamente.', error: false })
-    } catch (err) {
-      setEmailMsg({ text: err.response?.data?.error || 'Error al guardar.', error: true })
-    } finally {
-      setSavingEmail(false)
-    }
-  }
-
-  async function handleSendTestEmail() {
-    setSendingTest(true)
-    setTestMsg({ text: '', error: false })
-    try {
-      const { data } = await api.post('/projects/settings/test-email')
-      setTestMsg({ text: `Email enviado a ${data.sentTo}. Revisá tu bandeja de entrada.`, error: false })
-    } catch (err) {
-      setTestMsg({ text: err.response?.data?.error || 'Error al enviar el email de prueba.', error: true })
-    } finally {
-      setSendingTest(false)
     }
   }
 
@@ -362,96 +308,6 @@ export default function Preferences() {
                     <Toggle on={globalSettings.situationEnabled !== false} onToggle={() => handleGlobalSetting({ situationEnabled: !globalSettings.situationEnabled })} />
                   </div>
 
-                  {/* Remitente de emails */}
-                  <div className="pt-4 space-y-4">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-0.5">Remitente de emails</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Nombre y dirección que aparece en los emails enviados por BlissTracker (resúmenes semanales, bienvenidas, recupero de contraseña).
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Nombre</label>
-                        <input type="text" value={emailFromName} onChange={e => setEmailFromName(e.target.value)} placeholder="BlissTracker"
-                          className="w-full text-sm border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-400" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Email</label>
-                        <input type="email" value={emailFromAddress} onChange={e => setEmailFromAddress(e.target.value)} placeholder="hola@tudominio.com"
-                          className="w-full text-sm border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-400" />
-                      </div>
-                    </div>
-                    {(emailFromName || emailFromAddress) && (
-                      <p className="text-xs text-gray-400 dark:text-gray-500">
-                        Vista previa: <span className="font-mono text-gray-600 dark:text-gray-300">
-                          {emailFromName.trim() ? `${emailFromName.trim()} <${emailFromAddress.trim()}>` : emailFromAddress.trim()}
-                        </span>
-                      </p>
-                    )}
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <button onClick={handleSaveEmailFrom} disabled={savingEmail}
-                        className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl px-4 py-2 transition-colors disabled:opacity-50">
-                        {savingEmail ? 'Guardando...' : 'Guardar remitente'}
-                      </button>
-                      <button onClick={handleSendTestEmail} disabled={sendingTest}
-                        className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl px-4 py-2 transition-colors disabled:opacity-50">
-                        {sendingTest ? 'Enviando...' : 'Enviar email de prueba'}
-                      </button>
-                    </div>
-                    {emailMsg.text && (
-                      <p className={`text-sm rounded-lg px-3 py-2 ${emailMsg.error ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'}`}>
-                        {emailMsg.text}
-                      </p>
-                    )}
-                    {testMsg.text && (
-                      <p className={`text-sm rounded-lg px-3 py-2 ${testMsg.error ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'}`}>
-                        {testMsg.text}
-                      </p>
-                    )}
-                    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-                      <button onClick={() => setShowDns(v => !v)}
-                        className="w-full flex items-center justify-between px-4 py-3 text-left bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">¿Cómo configurar el dominio en Resend?</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 text-gray-400 transition-transform ${showDns ? 'rotate-180' : ''}`}>
-                          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                      {showDns && (
-                        <div className="px-4 py-4 space-y-4 text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800">
-                          <p>Para enviar emails desde tu propio dominio necesitás agregar estos registros DNS en tu proveedor (GoDaddy, Namecheap, Cloudflare, etc.) y verificar el dominio en <strong className="text-gray-700 dark:text-gray-300">resend.com/domains</strong>.</p>
-                          <div className="space-y-3">
-                            <div>
-                              <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">1. SPF — autoriza a Resend a enviar en tu nombre</p>
-                              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 font-mono space-y-1">
-                                <p><span className="text-gray-400">Tipo:</span> <strong>TXT</strong></p>
-                                <p><span className="text-gray-400">Host:</span> <strong>@</strong> (o tu dominio raíz)</p>
-                                <p><span className="text-gray-400">Valor:</span> <strong>v=spf1 include:amazonses.com ~all</strong></p>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">2. DKIM — firma criptográfica de los emails</p>
-                              <p className="mb-1">Resend genera 2 registros CNAME únicos para tu dominio. Los encontrás en <strong className="text-gray-700 dark:text-gray-300">resend.com/domains → tu dominio → DNS Records</strong>. Se ven así:</p>
-                              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 font-mono space-y-1">
-                                <p><span className="text-gray-400">Tipo:</span> <strong>CNAME</strong></p>
-                                <p><span className="text-gray-400">Host:</span> <strong>resend._domainkey.tudominio.com</strong></p>
-                                <p><span className="text-gray-400">Valor:</span> <strong>p.resend.com</strong></p>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">3. DMARC — política de autenticación (recomendado)</p>
-                              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 font-mono space-y-1">
-                                <p><span className="text-gray-400">Tipo:</span> <strong>TXT</strong></p>
-                                <p><span className="text-gray-400">Host:</span> <strong>_dmarc</strong></p>
-                                <p><span className="text-gray-400">Valor:</span> <strong>{'v=DMARC1; p=none;'}</strong></p>
-                              </div>
-                            </div>
-                            <p className="text-gray-400 dark:text-gray-500">Los cambios DNS pueden tardar hasta 48h en propagarse. Una vez verificado el dominio en Resend, guardá el remitente y enviá un email de prueba.</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 </div>
               </div>
             )}
