@@ -276,6 +276,15 @@ async function createWorkspace(req, res, next) {
     const trialEndsAt = new Date()
     trialEndsAt.setDate(trialEndsAt.getDate() + 14)
 
+    // Si el email ya tiene cuenta, verificar que la contraseña sea correcta
+    const existingOwner = await prisma.user.findUnique({ where: { email: ownerEmail } })
+    if (existingOwner) {
+      const valid = await bcrypt.compare(ownerPassword, existingOwner.password)
+      if (!valid) {
+        return res.status(401).json({ error: 'Ya existe una cuenta con ese email. La contraseña ingresada es incorrecta.' })
+      }
+    }
+
     const hashed = await bcrypt.hash(ownerPassword, 10)
 
     const result = await prisma.$transaction(async (tx) => {
@@ -308,6 +317,15 @@ async function createWorkspace(req, res, next) {
           workspaceId: workspace.id,
           status: 'trialing',
           planName: 'pro',
+        },
+      })
+
+      // Crear proyecto por defecto con el nombre del workspace
+      await tx.project.create({
+        data: {
+          workspaceId: workspace.id,
+          name: workspaceName,
+          members: { create: [{ userId: owner.id }] },
         },
       })
 

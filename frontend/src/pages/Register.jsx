@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 
@@ -20,7 +20,22 @@ export default function Register() {
   const [ownerPassword, setOwnerPassword] = useState('')
   const [error,         setError]         = useState('')
   const [loading,       setLoading]       = useState(false)
+  const [emailExists,   setEmailExists]   = useState(false)
   const navigate = useNavigate()
+
+  // Detectar si el email ya tiene cuenta (con debounce)
+  useEffect(() => {
+    if (!ownerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) {
+      setEmailExists(false)
+      return
+    }
+    const t = setTimeout(() => {
+      api.get(`/auth/check-email?email=${encodeURIComponent(ownerEmail)}`)
+        .then(r => setEmailExists(r.data.exists))
+        .catch(() => setEmailExists(false))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [ownerEmail])
 
   // Auto-generar slug desde el nombre del workspace
   function handleWorkspaceNameChange(val) {
@@ -135,7 +150,7 @@ export default function Register() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-              Contraseña
+              {emailExists ? 'Tu contraseña actual' : 'Contraseña'}
             </label>
             <input
               type="password"
@@ -146,6 +161,11 @@ export default function Register() {
               placeholder="••••••••"
               className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
             />
+            {emailExists && (
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1.5">
+                Este email ya tiene una cuenta. Ingresá tu contraseña para crear el nuevo workspace.
+              </p>
+            )}
           </div>
 
           {error && (
