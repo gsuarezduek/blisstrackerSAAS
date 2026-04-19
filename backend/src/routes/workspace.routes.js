@@ -8,6 +8,10 @@ const c = require('../controllers/workspace.controller')
 router.post('/',    c.createWorkspace)
 router.get('/info', c.getInfo)
 
+// Rutas públicas de invitaciones
+router.get('/invitations/:token', c.getInvitation)
+router.post('/join',              c.joinWorkspace)
+
 // Rutas autenticadas SIN workspace (solo auth)
 router.get('/mine', auth, c.getMine)
 
@@ -22,5 +26,9 @@ router.get('/current/members', c.listMembers)
 router.post('/current/members', workspaceAdminOnly, c.addMember)
 router.put('/current/members/:userId', workspaceAdminOnly, c.updateMember)
 router.patch('/current/members/:userId/toggle-active', workspaceAdminOnly, c.toggleMemberActive)
+
+router.get('/current/invitations',       workspaceAdminOnly, c.listInvitations)
+router.post('/current/invitations',      workspaceAdminOnly, c.inviteMember)
+router.delete('/current/invitations/:id', workspaceAdminOnly, c.cancelInvitation)
 
 module.exports = router

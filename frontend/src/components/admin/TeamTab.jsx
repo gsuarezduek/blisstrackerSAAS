@@ -1,6 +1,140 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 
+const emptyInvite = { email: '', memberRole: 'member', teamRole: '' }
+
+function InvitationsSection({ roles }) {
+  const [open, setOpen]             = useState(false)
+  const [invitations, setInvitations] = useState([])
+  const [form, setForm]             = useState(emptyInvite)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState('')
+  const [success, setSuccess]       = useState('')
+
+  useEffect(() => {
+    if (open) {
+      api.get('/workspaces/current/invitations').then(r => setInvitations(r.data)).catch(() => {})
+    }
+  }, [open])
+
+  async function handleInvite(e) {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    setLoading(true)
+    try {
+      await api.post('/workspaces/current/invitations', form)
+      setSuccess(`Invitación enviada a ${form.email}`)
+      setForm(emptyInvite)
+      const r = await api.get('/workspaces/current/invitations')
+      setInvitations(r.data)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al enviar la invitación')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleCancel(id) {
+    await api.delete(`/workspaces/current/invitations/${id}`)
+    setInvitations(prev => prev.filter(i => i.id !== id))
+  }
+
+  return (
+    <div className="mt-6">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+          className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>
+          <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clipRule="evenodd" />
+        </svg>
+        ✉️ Invitar por email
+        {invitations.length > 0 && (
+          <span className="bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 rounded-full px-2 py-0.5 text-xs">
+            {invitations.length} pendiente{invitations.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-4">
+          {/* Formulario de invitación */}
+          <form onSubmit={handleInvite} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Email a invitar</label>
+              <input
+                required type="email" value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                placeholder="nombre@empresa.com"
+                className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol en workspace</label>
+              <select
+                value={form.memberRole}
+                onChange={e => setForm(p => ({ ...p, memberRole: e.target.value }))}
+                className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="member">Miembro</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol en equipo (opcional)</label>
+              <select
+                value={form.teamRole}
+                onChange={e => setForm(p => ({ ...p, teamRole: e.target.value }))}
+                className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Sin rol</option>
+                {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
+              </select>
+            </div>
+            {error   && <p className="col-span-2 text-red-500 text-sm">{error}</p>}
+            {success && <p className="col-span-2 text-green-600 dark:text-green-400 text-sm">{success}</p>}
+            <div className="col-span-2">
+              <button
+                type="submit" disabled={loading}
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60"
+              >
+                {loading ? 'Enviando...' : 'Enviar invitación'}
+              </button>
+            </div>
+          </form>
+
+          {/* Invitaciones pendientes */}
+          {invitations.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Invitaciones pendientes</p>
+              <div className="space-y-2">
+                {invitations.map(inv => (
+                  <div key={inv.id} className="flex items-center justify-between bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{inv.email}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        {inv.memberRole} {inv.teamRole ? `· ${inv.teamRole}` : ''} · enviada por {inv.invitedBy}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleCancel(inv.id)}
+                      className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const ROLE_COLORS = [
   'bg-purple-100 text-purple-700',
   'bg-pink-100 text-pink-700',
@@ -249,6 +383,9 @@ export default function TeamTab() {
           )
         })}
       </div>
+
+      {/* Invitar por email */}
+      <InvitationsSection roles={roles} />
 
       {/* Historial de usuarios inactivos */}
       {users.some(u => !u.active) && (

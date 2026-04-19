@@ -33,6 +33,7 @@ model Workspace {
   subscription     Subscription?
   loginEvents      UserLogin[]
   feedbacks        Feedback[]
+  invitations      WorkspaceInvitation[]
 
   @@index([slug])
 }
@@ -120,6 +121,7 @@ model User {
   notificationsAsActor  Notification[] @relation("NotificationActor")
   passwordResetTokens   PasswordResetToken[]
   loginEvents           UserLogin[]
+  sentInvitations       WorkspaceInvitation[] @relation("InvitedByUser")
 }
 
 model UserLogin {
@@ -439,4 +441,24 @@ model RoleExpectation {
 
   @@unique([workspaceId, roleName])
   @@index([workspaceId])
+}
+
+// ─── INVITACIONES ─────────────────────────────────────────────────────────────
+
+model WorkspaceInvitation {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  email       String
+  token       String    @unique
+  memberRole  String    @default("member")   // "admin" | "member"
+  teamRole    String    @default("")
+  invitedById Int
+  invitedBy   User      @relation("InvitedByUser", fields: [invitedById], references: [id])
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([email, workspaceId])
 }

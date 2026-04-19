@@ -111,4 +111,31 @@ async function sendTestSettingsEmail(email, name, fromOverride) {
   if (error) throw new Error(error.message)
 }
 
-module.exports = { sendPasswordReset, sendWelcomeEmail, sendWeeklySummaryEmail, sendTestSettingsEmail }
+async function sendInvitationEmail(email, inviterName, workspaceName, joinUrl) {
+  const from = await getEmailFrom()
+  const { error } = await resend.emails.send({
+    from,
+    to: email,
+    subject: `${inviterName} te invitó a ${workspaceName} en BlissTracker`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+        <h2 style="color: #1e293b; margin-bottom: 8px;">Fuiste invitado a ${workspaceName}</h2>
+        <p style="color: #475569; margin-bottom: 24px;">
+          <strong>${inviterName}</strong> te invitó a unirte al workspace <strong>${workspaceName}</strong> en BlissTracker.
+        </p>
+        <a href="${joinUrl}"
+           style="display: inline-block; background: #f7931a; color: white; text-decoration: none;
+                  padding: 12px 24px; border-radius: 8px; font-weight: 600; margin-bottom: 24px;">
+          Aceptar invitación
+        </a>
+        <p style="color: #94a3b8; font-size: 14px;">Este enlace expira en 7 días. Si no esperabas esta invitación, podés ignorar este correo.</p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        <p style="color: #cbd5e1; font-size: 12px;">BlissTracker</p>
+      </div>
+    `,
+  })
+
+  if (error) throw new Error(error.message)
+}
+
+module.exports = { sendPasswordReset, sendWelcomeEmail, sendWeeklySummaryEmail, sendTestSettingsEmail, sendInvitationEmail }

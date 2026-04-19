@@ -22,21 +22,26 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const { data } = await api.post('/auth/login', { email, password })
     localStorage.setItem('token', data.token)
-    setUser(data.user)
-    return data.user
+    // Fetch /auth/me para obtener el perfil completo (incl. isSuperAdmin)
+    const meRes = await api.get('/auth/me').catch(() => ({ data: data.user }))
+    setUser(meRes.data)
+    return meRes.data
   }
 
   async function loginWithGoogle(credential) {
     const { data } = await api.post('/auth/google', { credential })
     localStorage.setItem('token', data.token)
-    setUser(data.user)
-    return data.user
+    const meRes = await api.get('/auth/me').catch(() => ({ data: data.user }))
+    setUser(meRes.data)
+    return meRes.data
   }
 
   // Recibe un JWT ya obtenido (ej: desde AuthCallback o popup de OAuth)
-  function loginWithToken(token, user) {
+  async function loginWithToken(token, userData) {
     localStorage.setItem('token', token)
-    setUser(user)
+    // Fetch /auth/me para obtener el perfil completo (incl. isSuperAdmin)
+    const meRes = await api.get('/auth/me').catch(() => ({ data: userData }))
+    setUser(meRes.data)
   }
 
   // Cambia al usuario a otro workspace: obtiene un nuevo JWT y redirige al subdominio

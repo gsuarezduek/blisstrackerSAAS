@@ -45,6 +45,8 @@ import AuthCallback from './pages/AuthCallback'
 import MyProfile from './pages/MyProfile'
 import Preferences from './pages/Preferences'
 import Docs from './pages/Docs'
+import SuperAdmin from './pages/SuperAdmin'
+import JoinWorkspace from './pages/JoinWorkspace'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -57,6 +59,14 @@ function AdminRoute({ children }) {
   if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Cargando...</div>
   if (!user) return <Navigate to="/login" replace />
   if (!user.isAdmin) return <Navigate to="/" replace />
+  return children
+}
+
+function SuperAdminRoute({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Cargando...</div>
+  if (!user) return <Navigate to="/login" replace />
+  if (!user.isSuperAdmin) return <Navigate to="/" replace />
   return children
 }
 
@@ -73,6 +83,7 @@ export default function App() {
           <Route path="/register" element={<Register   />} />
           <Route path="/oauth"    element={<OAuthPopup    />} />
           <Route path="/auth"     element={<AuthCallback  />} />
+          <Route path="/join"     element={<JoinWorkspace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
@@ -84,6 +95,7 @@ export default function App() {
           <Route path="/docs"         element={<PrivateRoute><Docs         /></PrivateRoute>} />
           <Route path="/realtime" element={<PrivateRoute><RealTime /></PrivateRoute>} />
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
+          <Route path="/superadmin" element={<SuperAdminRoute><SuperAdmin /></SuperAdminRoute>} />
           <Route path="/admin"              element={<AdminRoute><Admin        /></AdminRoute>} />
           <Route path="/admin/productivity" element={<AdminRoute><Productivity /></AdminRoute>} />
           <Route path="/admin/rrhh"         element={<AdminRoute><RRHH        /></AdminRoute>} />
