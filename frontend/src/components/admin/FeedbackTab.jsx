@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import useRoles from '../../hooks/useRoles'
+import LoadingSpinner from '../LoadingSpinner'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -70,7 +71,7 @@ export default function FeedbackTab() {
         ))}
       </div>
 
-      {loading && <div className="text-center py-12 text-gray-400">Cargando...</div>}
+      {loading && <LoadingSpinner className="py-12" />}
 
       {!loading && filtered.length === 0 && (
         <div className="text-center py-12 text-gray-400">

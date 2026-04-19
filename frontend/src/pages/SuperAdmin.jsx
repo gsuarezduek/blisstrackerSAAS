@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -125,7 +126,7 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
           </div>
 
           {loading ? (
-            <p className="text-sm text-gray-400 text-center py-8">Cargando...</p>
+            <LoadingSpinner size="sm" className="py-8" />
           ) : detail ? (
             <>
               <div className="grid grid-cols-3 gap-3">
@@ -227,7 +228,7 @@ function SectionDashboard({ stats, workspaces, loading, onSelectWorkspace }) {
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-gray-400 text-sm">Cargando...</div>
+          <LoadingSpinner size="sm" className="py-8" />
         ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">No hay workspaces.</div>
         ) : (
@@ -720,9 +721,7 @@ export default function SuperAdmin() {
           <span className="text-gray-300 dark:text-gray-600">·</span>
           <span className="text-sm text-gray-500 dark:text-gray-400">{currentNavItem?.label}</span>
         </div>
-        <span className="text-xs bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300 px-3 py-1 rounded-full font-medium">
-          BlissTracker
-        </span>
+        <img src="/logo-lockup.svg" alt="BlissTracker" className="h-7 w-auto" />
       </header>
 
       <div className="flex flex-1 overflow-hidden">

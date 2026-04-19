@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import Navbar from '../components/Navbar'
+import LoadingSpinner from '../components/LoadingSpinner'
 import { linkify } from '../utils/linkify'
 import api from '../api/client'
 import useRoles from '../hooks/useRoles'
@@ -267,7 +268,7 @@ export default function RealTime() {
         </div>
 
         {loading && (
-          <div className="text-center py-20 text-gray-400">Cargando...</div>
+          <LoadingSpinner className="py-20" />
         )}
 
         {/* Active users grid */}

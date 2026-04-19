@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import { useAuth } from '../context/AuthContext'
+import LoadingSpinner from './LoadingSpinner'
 import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
 
 // Resalta @menciones en texto plano. Captura exactamente una palabra después del @.
@@ -325,9 +326,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {loading && (
-            <p className="text-sm text-gray-400 text-center py-6">Cargando...</p>
-          )}
+          {loading && <LoadingSpinner size="sm" className="py-6" />}
           {!loading && comments.length === 0 && (
             <div className="text-center py-8">
               <p className="text-2xl mb-2">💬</p>

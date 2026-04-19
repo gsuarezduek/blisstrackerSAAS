@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
@@ -43,7 +44,7 @@ export default function MyProjects() {
           </p>
         </div>
 
-        {loading && <div className="text-center py-16 text-gray-400">Cargando...</div>}
+        {loading && <LoadingSpinner className="py-16" />}
 
         {!loading && projects.length === 0 && (
           <div className="text-center py-16 text-gray-400">

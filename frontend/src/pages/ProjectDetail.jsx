@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import LoadingSpinner from '../components/LoadingSpinner'
 import { linkify } from '../utils/linkify'
 import api from '../api/client'
 import useRoles from '../hooks/useRoles'
@@ -238,7 +239,7 @@ export default function ProjectDetail() {
           )
         })()}
 
-        {loading && <div className="text-center py-16 text-gray-400">Cargando...</div>}
+        {loading && <LoadingSpinner className="py-16" />}
 
         {error && (
           <div className="text-center py-16 text-gray-400">

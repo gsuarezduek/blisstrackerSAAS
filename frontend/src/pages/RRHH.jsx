@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
+import LoadingSpinner from '../components/LoadingSpinner'
 import useRoles from '../hooks/useRoles'
 
 const TZ = 'America/Argentina/Buenos_Aires'
@@ -492,7 +493,7 @@ function TabIngresos({ users }) {
         </div>
       )}
 
-      {loading && <p className="text-sm text-gray-400 text-center py-12">Cargando...</p>}
+      {loading && <LoadingSpinner className="py-12" />}
 
       {!loading && logins.length === 0 && (
         <div className="text-center py-16 text-gray-400">
@@ -642,7 +643,7 @@ function TabLegajos({ users, onVacationUpdate }) {
                 🕐 Horario promedio de ingreso
               </p>
               {summaryLoading
-                ? <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Cargando...</p>
+                ? <LoadingSpinner size="sm" className="mt-1" />
                 : summary?.avgLoginTime
                   ? <>
                       <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{summary.avgLoginTime}</p>
@@ -660,7 +661,7 @@ function TabLegajos({ users, onVacationUpdate }) {
                 📁 Proyectos
               </p>
               {summaryLoading
-                ? <p className="text-sm text-gray-400 dark:text-gray-500">Cargando...</p>
+                ? <LoadingSpinner size="sm" className="mt-1" />
                 : !summary?.projects?.length
                   ? <p className="text-sm text-gray-400 dark:text-gray-500">Sin proyectos asignados</p>
                   : <div className="flex flex-col gap-1.5">

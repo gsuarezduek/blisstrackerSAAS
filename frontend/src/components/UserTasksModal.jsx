@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import useRoles from '../hooks/useRoles'
+import LoadingSpinner from './LoadingSpinner'
 import AvatarLightbox from './AvatarLightbox'
 import TaskCommentsModal from './TaskCommentsModal'
 
@@ -67,9 +68,7 @@ export default function UserTasksModal({ user, onClose }) {
 
         {/* Content */}
         <div className="overflow-y-auto flex-1 px-5 py-4">
-          {loading && (
-            <p className="text-center text-gray-400 py-8">Cargando...</p>
-          )}
+          {loading && <LoadingSpinner size="sm" className="py-8" />}
 
           {!loading && byProject.length === 0 && completedThisWeek.length === 0 && (
             <div className="text-center py-8 text-gray-400">

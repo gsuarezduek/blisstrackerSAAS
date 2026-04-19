@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import { linkify } from '../utils/linkify'
+import LoadingSpinner from '../components/LoadingSpinner'
 import DateRangeFilter from '../components/DateRangeFilter'
 import EditDurationModal from '../components/EditDurationModal'
 import api from '../api/client'
@@ -23,7 +24,7 @@ function ByProjectView({ data, loading, onEditTask }) {
     setExpandedUser(expandedUser === key ? null : key)
   }
 
-  if (loading) return <div className="text-center py-16 text-gray-400">Cargando...</div>
+  if (loading) return <LoadingSpinner className="py-16" />
 
   return (
     <>
@@ -135,7 +136,7 @@ function ByPersonView({ data, loading, onEditTask }) {
     setExpandedProject(expandedProject === key ? null : key)
   }
 
-  if (loading) return <div className="text-center py-16 text-gray-400">Cargando...</div>
+  if (loading) return <LoadingSpinner className="py-16" />
 
   return (
     <>

@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { WorkspaceProvider } from './context/WorkspaceContext'
 import React from 'react'
+import LoadingSpinner from './components/LoadingSpinner'
 
 class ErrorBoundary extends React.Component {
   state = { error: null }
@@ -52,13 +53,13 @@ import JoinWorkspace from './pages/JoinWorkspace'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
-  if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Cargando...</div>
+  if (loading) return <LoadingSpinner size="lg" fullPage />
   return user ? children : <Navigate to="/login" replace />
 }
 
 function AdminRoute({ children }) {
   const { user, loading } = useAuth()
-  if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Cargando...</div>
+  if (loading) return <LoadingSpinner size="lg" fullPage />
   if (!user) return <Navigate to="/login" replace />
   if (!user.isAdmin) return <Navigate to="/" replace />
   return children
@@ -66,7 +67,7 @@ function AdminRoute({ children }) {
 
 function SuperAdminRoute({ children }) {
   const { user, loading } = useAuth()
-  if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">Cargando...</div>
+  if (loading) return <LoadingSpinner size="lg" fullPage />
   if (!user) return <Navigate to="/login" replace />
   if (!user.isSuperAdmin) return <Navigate to="/" replace />
   return children

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function Preferences() {
   const { user, updateUser } = useAuth()
@@ -225,7 +226,7 @@ export default function Preferences() {
               {aiUsageError ? (
                 <p className="text-sm text-red-500 dark:text-red-400">No se pudieron cargar las estadísticas.</p>
               ) : !aiUsage ? (
-                <p className="text-sm text-gray-400 dark:text-gray-500 animate-pulse">Cargando estadísticas...</p>
+                <LoadingSpinner size="sm" className="py-2" />
               ) : (() => {
                 const limit = globalSettings?.aiWeeklyTokenLimit ?? 500000
                 const weekPct = limit > 0 ? Math.min(100, Math.round((aiUsage.week.total / limit) * 100)) : 0

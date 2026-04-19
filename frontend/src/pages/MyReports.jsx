@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import { linkify } from '../utils/linkify'
+import LoadingSpinner from '../components/LoadingSpinner'
 import DateRangeFilter from '../components/DateRangeFilter'
 import EditDurationModal from '../components/EditDurationModal'
 import api from '../api/client'
@@ -67,7 +68,7 @@ export default function MyReports() {
           </div>
         )}
 
-        {loading && <div className="text-center py-16 text-gray-400">Cargando...</div>}
+        {loading && <LoadingSpinner className="py-16" />}
 
         {/* Projects list */}
         {!loading && byProject.length > 0 && (

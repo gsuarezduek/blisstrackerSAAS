@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Navbar from '../components/Navbar'
 import AvatarLightbox from '../components/AvatarLightbox'
+import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
@@ -190,7 +191,7 @@ export default function MyProfile() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Navbar />
-        <div className="flex items-center justify-center py-20 text-gray-400">Cargando...</div>
+        <LoadingSpinner className="py-20" />
       </div>
     )
   }

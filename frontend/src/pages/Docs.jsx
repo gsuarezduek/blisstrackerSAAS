@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 const TABS = [
   { id: 'filosofia', label: 'Filosofía' },
@@ -289,9 +290,7 @@ function RolesTab() {
   }, [user])
 
   if (loading) return (
-    <div className="text-center py-16 text-gray-400 dark:text-gray-500">
-      <p className="animate-pulse text-sm">Cargando roles...</p>
-    </div>
+    <LoadingSpinner className="py-16" />
   )
 
   if (expectations.length === 0) return (

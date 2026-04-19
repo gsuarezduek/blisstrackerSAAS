@@ -415,8 +415,15 @@ function buildWeeklyEmailHtml(user, data, analysis) {
 <body style="margin: 0; padding: 0; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
 <div style="max-width: 600px; margin: 0 auto; padding: 24px 16px;">
 
+  <!-- Logo -->
+  <div style="text-align: center; padding: 16px 0 4px;">
+    <img src="https://bliss.${process.env.APP_DOMAIN || 'blisstracker.app'}/logo-lockup.svg"
+         alt="BlissTracker" width="180" height="48"
+         style="display: inline-block; height: 48px; width: auto; max-width: 180px;" />
+  </div>
+
   <!-- Header -->
-  <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); border-radius: 16px; padding: 32px; margin-bottom: 24px; text-align: center;">
+  <div style="background: linear-gradient(135deg, #E67A1F 0%, #C45E0A 100%); border-radius: 16px; padding: 32px; margin-bottom: 24px; text-align: center;">
     <p style="color: rgba(255,255,255,0.8); font-size: 13px; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 1px;">Resumen semanal</p>
     <h1 style="color: white; margin: 0 0 8px 0; font-size: 24px; font-weight: 700;">Hola, ${user.name.split(' ')[0]} 👋</h1>
     <p style="color: rgba(255,255,255,0.8); margin: 0; font-size: 14px;">${fmtDate(week.from)} — ${fmtDate(week.to)}</p>
@@ -510,10 +517,14 @@ function buildWeeklyEmailHtml(user, data, analysis) {
   </div>` : ''}
 
   <!-- Footer -->
-  <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 0 0 16px 0;" />
-  <p style="color: #cbd5e1; font-size: 12px; text-align: center; margin: 0;">
-    BlissTracker · Podés desactivar este resumen en <strong>Preferencias</strong>
-  </p>
+  <div style="text-align: center; padding: 16px 0 4px; border-top: 1px solid #e2e8f0; margin-top: 8px;">
+    <img src="https://bliss.${process.env.APP_DOMAIN || 'blisstracker.app'}/blisstracker_logo.svg"
+         alt="" width="18" height="18"
+         style="display: inline-block; vertical-align: middle; margin-right: 6px; opacity: 0.5;" />
+    <span style="color: #cbd5e1; font-size: 12px; vertical-align: middle;">
+      BlissTracker · Podés desactivar este resumen en <strong>Preferencias</strong>
+    </span>
+  </div>
 
 </div>
 </body>

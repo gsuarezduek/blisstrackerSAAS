@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
+import LoadingSpinner from '../components/LoadingSpinner'
 import TaskCard from '../components/TaskCard'
 import AddTaskModal from '../components/AddTaskModal'
 import InactivityModal from '../components/InactivityModal'
@@ -345,7 +346,8 @@ export default function Dashboard() {
           if (insightLoading) {
             return (
               <div className="flex items-center gap-2.5 border rounded-xl px-4 py-3 mb-6 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-                <span className="text-sm text-gray-400 animate-pulse">Generando insight del día...</span>
+                <LoadingSpinner size="sm" />
+                <span className="text-sm text-gray-400">Generando insight del día...</span>
               </div>
             )
           }
@@ -734,7 +736,7 @@ export default function Dashboard() {
               })}
 
               {completedLoading && (
-                <p className="text-sm text-gray-400 text-center py-4">Cargando...</p>
+                <LoadingSpinner size="sm" className="py-4" />
               )}
               {completedHasMore && !completedLoading && (
                 <button

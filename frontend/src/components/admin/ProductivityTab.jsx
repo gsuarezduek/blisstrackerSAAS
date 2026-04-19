@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import LoadingSpinner from '../LoadingSpinner'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -58,11 +59,7 @@ export default function ProductivityTab() {
   }
 
   if (loading) {
-    return (
-      <div className="text-center py-16 text-gray-400 dark:text-gray-500">
-        <p className="animate-pulse text-sm">Cargando productividad del equipo...</p>
-      </div>
-    )
+    return <LoadingSpinner className="py-16" />
   }
 
   const withMemory    = users.filter(u => u.insightMemory)
