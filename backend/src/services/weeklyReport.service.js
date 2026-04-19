@@ -521,7 +521,7 @@ function buildWeeklyEmailHtml(user, data, analysis) {
 }
 
 // user: { id, name, email, role (teamRole), workspaceId, insightMemoryEnabled }
-// workspace: { id, timezone }
+// workspace: { id, name, timezone }
 async function sendWeeklyReportForUser(user, workspace) {
   try {
     const workspaceId = workspace.id
@@ -549,13 +549,19 @@ async function sendWeeklyReportForUser(user, workspace) {
     const analysis = await generateAnalysis(user, data, roleExpectation, memory)
     const html     = buildWeeklyEmailHtml(user, data, analysis)
 
-    const weekLabel = `${fmtDate(data.week.from)} – ${fmtDate(data.week.to)}`
-    await sendWeeklySummaryEmail(user.email, user.name, html, weekLabel, user.workspaceId)
+    const weekLabel      = `${fmtDate(data.week.from)} – ${fmtDate(data.week.to)}`
+    const workspaceName  = workspace.name || 'BlissTracker'
+    await sendWeeklySummaryEmail(user.email, user.name, html, weekLabel, user.workspaceId, workspaceName)
     console.log(`[WeeklyReport] Email enviado a ${user.name} (${user.email})`)
   } catch (err) {
     console.error(`[WeeklyReport] Error procesando ${user.email}:`, err.message)
   }
 }
+
+// Procesa en baches de BATCH_SIZE en paralelo con una pausa entre baches.
+// Esto evita saturar la API de Claude y el proveedor de email al crecer la base de usuarios.
+const BATCH_SIZE     = 5
+const BATCH_DELAY_MS = 15000  // 15s entre baches → 1.000 usuarios ≈ 50 min, todos reciben a primera hora
 
 async function sendAllWeeklyReports() {
   // Obtener todos los miembros activos con weeklyEmailEnabled en workspaces activos
@@ -567,25 +573,31 @@ async function sendAllWeeklyReports() {
     },
     include: {
       user:      { select: { id: true, name: true, email: true } },
-      workspace: { select: { id: true, timezone: true } },
+      workspace: { select: { id: true, name: true, timezone: true } },
     },
   })
 
-  console.log(`[WeeklyReport] Enviando a ${members.length} miembro${members.length !== 1 ? 's' : ''}...`)
+  console.log(`[WeeklyReport] Enviando a ${members.length} miembro${members.length !== 1 ? 's' : ''} en baches de ${BATCH_SIZE}...`)
 
-  for (let i = 0; i < members.length; i++) {
-    const m = members[i]
-    const user = {
-      id:                  m.user.id,
-      name:                m.user.name,
-      email:               m.user.email,
-      role:                m.teamRole || null,
-      workspaceId:         m.workspaceId,
-      insightMemoryEnabled: m.insightMemoryEnabled,
-    }
-    await sendWeeklyReportForUser(user, m.workspace)
-    if (i < members.length - 1) {
-      await new Promise(r => setTimeout(r, 3000))
+  for (let i = 0; i < members.length; i += BATCH_SIZE) {
+    const batch = members.slice(i, i + BATCH_SIZE)
+    await Promise.allSettled(
+      batch.map(m => {
+        const user = {
+          id:                   m.user.id,
+          name:                 m.user.name,
+          email:                m.user.email,
+          role:                 m.teamRole || null,
+          workspaceId:          m.workspaceId,
+          insightMemoryEnabled: m.insightMemoryEnabled,
+        }
+        return sendWeeklyReportForUser(user, m.workspace)
+      })
+    )
+    const processed = Math.min(i + BATCH_SIZE, members.length)
+    console.log(`[WeeklyReport] Bache completado: ${processed}/${members.length}`)
+    if (processed < members.length) {
+      await new Promise(r => setTimeout(r, BATCH_DELAY_MS))
     }
   }
 

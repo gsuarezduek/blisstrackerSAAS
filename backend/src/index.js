@@ -11,11 +11,11 @@ const { updateAllMemories }    = require('./services/insightMemory.service')
 let weeklyReportRunning = false
 let insightMemoryRunning = false
 
-// Cron: resumen semanal — viernes 14:00 hora Buenos Aires
-cron.schedule('0 14 * * 5', async () => {
+// Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
+cron.schedule('1 0 * * 5', async () => {
   if (weeklyReportRunning) { console.log('[WeeklyReport] Ya en ejecución, se omite.'); return }
   weeklyReportRunning = true
-  console.log('[WeeklyReport] Iniciando envío automático (viernes 14:00 ART)...')
+  console.log('[WeeklyReport] Iniciando envío automático (viernes 00:01 ART)...')
   try { await sendAllWeeklyReports() }
   finally { weeklyReportRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })

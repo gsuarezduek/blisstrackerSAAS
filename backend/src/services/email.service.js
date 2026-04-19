@@ -103,11 +103,12 @@ async function sendWelcomeEmail(email, name, workspaceId) {
   }
 }
 
-async function sendWeeklySummaryEmail(email, name, html, weekLabel, workspaceId) {
+async function sendWeeklySummaryEmail(email, name, html, weekLabel, workspaceId, workspaceName) {
   const from = await getEmailFrom(workspaceId)
+  const wsLabel = workspaceName || 'BlissTracker'
   const subject = weekLabel
-    ? `Tu semana en BlissTracker — ${weekLabel}`
-    : 'Tu resumen semanal — BlissTracker'
+    ? `Tu semana en ${wsLabel} — ${weekLabel}`
+    : `Tu resumen semanal — ${wsLabel}`
   try {
     const { error } = await resend.emails.send({ from, to: email, subject, html })
     if (error) throw new Error(error.message)

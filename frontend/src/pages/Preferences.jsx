@@ -459,7 +459,7 @@ export default function Preferences() {
                     <span className="text-xs bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded-full px-2 py-0.5 font-medium">IA</span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                    Recibís un análisis de tu semana generado por inteligencia artificial cada <strong className="text-gray-600 dark:text-gray-300">viernes a las 14:00</strong>. Incluye tareas completadas, tiempo por proyecto, insights de productividad y recomendaciones accionables.
+                    Recibís un análisis de tu semana generado por inteligencia artificial cada <strong className="text-gray-600 dark:text-gray-300">viernes a primera hora</strong>. Incluye tareas completadas, tiempo por proyecto, insights de productividad y recomendaciones accionables.
                   </p>
                 </div>
                 <Toggle on={weeklyEmail} onToggle={handleToggleWeekly} disabled={togglingW} />
