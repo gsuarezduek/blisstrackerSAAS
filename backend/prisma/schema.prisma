@@ -34,6 +34,7 @@ model Workspace {
   loginEvents      UserLogin[]
   feedbacks        Feedback[]
   invitations      WorkspaceInvitation[]
+  deletionRequest  WorkspaceDeletionRequest?
 
   @@index([slug])
 }
@@ -121,7 +122,9 @@ model User {
   notificationsAsActor  Notification[] @relation("NotificationActor")
   passwordResetTokens   PasswordResetToken[]
   loginEvents           UserLogin[]
-  sentInvitations       WorkspaceInvitation[] @relation("InvitedByUser")
+  sentInvitations           WorkspaceInvitation[]      @relation("InvitedByUser")
+  deletionRequestsMade      WorkspaceDeletionRequest[] @relation("DeletionRequestedBy")
+  deletionRequestsCancelled WorkspaceDeletionRequest[] @relation("DeletionCancelledBy")
 }
 
 model UserLogin {
@@ -441,6 +444,23 @@ model RoleExpectation {
 
   @@unique([workspaceId, roleName])
   @@index([workspaceId])
+}
+
+// ─── ELIMINACIÓN DE WORKSPACE ────────────────────────────────────────────────
+
+model WorkspaceDeletionRequest {
+  id            Int       @id @default(autoincrement())
+  workspaceId   Int       @unique
+  workspace     Workspace @relation(fields: [workspaceId], references: [id])
+  requestedById Int
+  requestedBy   User      @relation("DeletionRequestedBy", fields: [requestedById], references: [id])
+  scheduledAt   DateTime  // requestedAt + 48h
+  cancelledAt   DateTime?
+  cancelledById Int?
+  cancelledBy   User?     @relation("DeletionCancelledBy", fields: [cancelledById], references: [id])
+  createdAt     DateTime  @default(now())
+
+  @@index([scheduledAt])
 }
 
 // ─── INVITACIONES ─────────────────────────────────────────────────────────────

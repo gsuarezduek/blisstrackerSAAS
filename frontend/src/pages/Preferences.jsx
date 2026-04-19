@@ -19,6 +19,16 @@ export default function Preferences() {
   const [aiUsage,             setAiUsage]             = useState(null)
   const [aiUsageError,        setAiUsageError]        = useState(false)
 
+  // Eliminación de workspace
+  const [workspaceName,      setWorkspaceName]      = useState('')
+  const [deletionRequest,    setDeletionRequest]    = useState(null)   // null | { scheduledAt, requestedBy }
+  const [deletionLoaded,     setDeletionLoaded]     = useState(false)
+  const [showDeleteModal,    setShowDeleteModal]     = useState(false)
+  const [deleteConfirmName,  setDeleteConfirmName]  = useState('')
+  const [deletingWS,         setDeletingWS]         = useState(false)
+  const [cancellingDel,      setCancellingDel]      = useState(false)
+  const [deletionMsg,        setDeletionMsg]        = useState({ text: '', error: false })
+
   // Email sender config (derived from globalSettings.emailFrom)
   const [emailFromName,    setEmailFromName]    = useState('')
   const [emailFromAddress, setEmailFromAddress] = useState('')
@@ -75,6 +85,47 @@ export default function Preferences() {
       })
       .catch(() => setGlobalSettingsError(true))
   }, [user?.isAdmin])
+
+  // Cargar estado de eliminación — todos los admins (para ver el banner y cancelar)
+  useEffect(() => {
+    if (!user?.isAdmin) return
+    api.get('/workspaces/current/deletion-request')
+      .then(({ data }) => { setDeletionRequest(data); setDeletionLoaded(true) })
+      .catch(() => setDeletionLoaded(true))
+    // Nombre del workspace — solo owners lo necesitan para el modal de confirmación
+    if (user?.role === 'owner' || user?.isSuperAdmin) {
+      api.get('/workspaces/current')
+        .then(({ data }) => setWorkspaceName(data.name || ''))
+        .catch(() => {})
+    }
+  }, [user?.isAdmin, user?.role, user?.isSuperAdmin])
+
+  async function handleScheduleDeletion() {
+    setDeletingWS(true)
+    setDeletionMsg({ text: '', error: false })
+    try {
+      const { data } = await api.post('/workspaces/current/deletion-request')
+      setDeletionRequest(data)
+      setShowDeleteModal(false)
+      setDeleteConfirmName('')
+    } catch (err) {
+      setDeletionMsg({ text: err.response?.data?.error || 'Error al programar la eliminación.', error: true })
+    } finally {
+      setDeletingWS(false)
+    }
+  }
+
+  async function handleCancelDeletion() {
+    setCancellingDel(true)
+    try {
+      await api.delete('/workspaces/current/deletion-request')
+      setDeletionRequest(null)
+    } catch (err) {
+      setDeletionMsg({ text: err.response?.data?.error || 'Error al cancelar.', error: true })
+    } finally {
+      setCancellingDel(false)
+    }
+  }
 
   async function handleSaveEmailFrom() {
     if (!emailFromAddress.trim()) {
@@ -404,6 +455,74 @@ export default function Preferences() {
                 </div>
               </div>
             )}
+
+            {/* ── Zona de peligro / banner de eliminación ── */}
+            {deletionLoaded && (
+              <>
+                {/* Banner activo cuando hay eliminación programada — todos los admins */}
+                {deletionRequest && !deletionRequest.cancelledAt && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-5">
+                    <div className="flex items-start gap-3">
+                      <span className="text-red-500 text-xl flex-shrink-0">⚠️</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-red-700 dark:text-red-400 mb-1">
+                          Este workspace está programado para eliminarse
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-500 mb-1">
+                          Solicitado por <strong>{deletionRequest.requestedBy?.name}</strong>.
+                          Se eliminará permanentemente el{' '}
+                          <strong>
+                            {new Date(deletionRequest.scheduledAt).toLocaleString('es-AR', {
+                              timeZone: 'America/Argentina/Buenos_Aires',
+                              day: 'numeric', month: 'long', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit',
+                            })}
+                          </strong>{' '}
+                          (hora de Argentina).
+                        </p>
+                        <p className="text-xs text-red-500 dark:text-red-600 mb-3">
+                          Una vez eliminado, no hay forma de recuperar los datos.
+                        </p>
+                        <button
+                          onClick={handleCancelDeletion}
+                          disabled={cancellingDel}
+                          className="text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-xl px-4 py-2 transition-colors disabled:opacity-50"
+                        >
+                          {cancellingDel ? 'Cancelando...' : 'Cancelar eliminación'}
+                        </button>
+                        {deletionMsg.text && (
+                          <p className="mt-2 text-xs text-red-600 dark:text-red-400">{deletionMsg.text}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sección zona de peligro — solo owners, cuando NO hay eliminación activa */}
+                {(!deletionRequest || deletionRequest.cancelledAt) && (user?.role === 'owner' || user?.isSuperAdmin) && (
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-900/50 p-6">
+                    <h2 className="text-base font-semibold text-red-600 dark:text-red-500 mb-1">Zona de peligro</h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
+                      Estas acciones son irreversibles. Procedé con cuidado.
+                    </p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Eliminar workspace</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          Elimina permanentemente este workspace y todos sus datos en 48 horas. Se notificará a todos los administradores.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => { setShowDeleteModal(true); setDeletionMsg({ text: '', error: false }) }}
+                        className="flex-shrink-0 text-sm font-medium bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2 transition-colors whitespace-nowrap"
+                      >
+                        Eliminar workspace
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </>
         )}
 
@@ -526,6 +645,58 @@ export default function Preferences() {
         )}
 
       </main>
+
+      {/* Modal de confirmación de eliminación */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-2xl">⚠️</span>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Eliminar workspace</h2>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-5">
+              <p className="text-sm text-red-700 dark:text-red-400 font-medium mb-1">Esta acción es irreversible</p>
+              <p className="text-xs text-red-600 dark:text-red-500">
+                Se eliminará permanentemente en <strong>48 horas</strong>: proyectos, tareas, miembros, insights, reportes y todos los datos del workspace. Se enviará un email a todos los administradores con la opción de cancelar.
+              </p>
+            </div>
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Para confirmar, escribí el nombre del workspace:{' '}
+                <strong className="text-gray-900 dark:text-white">{workspaceName}</strong>
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmName}
+                onChange={e => setDeleteConfirmName(e.target.value)}
+                placeholder={workspaceName}
+                className="w-full text-sm border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-red-400"
+                autoFocus
+              />
+            </div>
+            {deletionMsg.text && (
+              <p className="mb-4 text-sm bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg px-3 py-2">
+                {deletionMsg.text}
+              </p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setShowDeleteModal(false); setDeleteConfirmName(''); setDeletionMsg({ text: '', error: false }) }}
+                className="text-sm font-medium px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleScheduleDeletion}
+                disabled={deletingWS || deleteConfirmName !== (workspaceName)}
+                className="text-sm font-medium px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-40"
+              >
+                {deletingWS ? 'Programando...' : 'Confirmar eliminación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

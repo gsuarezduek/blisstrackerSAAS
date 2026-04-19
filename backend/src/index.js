@@ -57,3 +57,33 @@ cron.schedule('0 0 * * *', async () => {
   })
   console.log(count > 0 ? `[AutoPause] ${count} tarea(s) pausada(s).` : '[AutoPause] Sin tareas activas.')
 }, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: eliminar workspaces vencidos — cada 15 minutos
+let deletionRunning = false
+cron.schedule('*/15 * * * *', async () => {
+  if (deletionRunning) return
+  deletionRunning = true
+  try {
+    const prisma = require('./lib/prisma')
+    const { executeWorkspaceDeletion } = require('./controllers/workspace.controller')
+    const expired = await prisma.workspaceDeletionRequest.findMany({
+      where: {
+        scheduledAt: { lte: new Date() },
+        cancelledAt: null,
+      },
+      select: { workspaceId: true },
+    })
+    if (expired.length === 0) { deletionRunning = false; return }
+    console.log(`[WorkspaceDeletion] ${expired.length} workspace(s) a eliminar...`)
+    for (const { workspaceId } of expired) {
+      try {
+        await executeWorkspaceDeletion(workspaceId)
+        console.log(`[WorkspaceDeletion] Workspace ${workspaceId} eliminado.`)
+      } catch (err) {
+        console.error(`[WorkspaceDeletion] Error eliminando workspace ${workspaceId}:`, err.message)
+      }
+    }
+  } finally {
+    deletionRunning = false
+  }
+})

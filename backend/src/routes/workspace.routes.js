@@ -31,4 +31,8 @@ router.get('/current/invitations',       workspaceAdminOnly, c.listInvitations)
 router.post('/current/invitations',      workspaceAdminOnly, c.inviteMember)
 router.delete('/current/invitations/:id', workspaceAdminOnly, c.cancelInvitation)
 
+router.get('/current/deletion-request',    workspaceAdminOnly, c.getDeletionRequest)
+router.post('/current/deletion-request',   workspaceAdminOnly, c.scheduleDeletion)
+router.delete('/current/deletion-request', workspaceAdminOnly, c.cancelDeletion)
+
 module.exports = router

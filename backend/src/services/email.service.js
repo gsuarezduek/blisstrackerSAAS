@@ -138,4 +138,53 @@ async function sendInvitationEmail(email, inviterName, workspaceName, joinUrl) {
   if (error) throw new Error(error.message)
 }
 
-module.exports = { sendPasswordReset, sendWelcomeEmail, sendWeeklySummaryEmail, sendTestSettingsEmail, sendInvitationEmail }
+async function sendWorkspaceDeletionWarning(emails, workspaceName, requestedByName, cancelUrl, scheduledAt) {
+  const from = await getEmailFrom()
+  const date = new Date(scheduledAt).toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+
+  const { error } = await resend.emails.send({
+    from,
+    to: emails,
+    subject: `⚠️ ${workspaceName} será eliminado en 48 horas`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; padding: 32px;">
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px;">
+          <h2 style="color: #991b1b; margin: 0 0 8px;">⚠️ Solicitud de eliminación de workspace</h2>
+          <p style="color: #b91c1c; margin: 0; font-size: 14px;">
+            <strong>${requestedByName}</strong> solicitó eliminar el workspace <strong>${workspaceName}</strong>.
+          </p>
+        </div>
+
+        <p style="color: #475569; margin-bottom: 8px;">
+          Si nadie cancela esta acción, el workspace y <strong>todos sus datos</strong> serán eliminados permanentemente el:
+        </p>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 20px; margin-bottom: 24px;">
+          <p style="margin: 0; color: #1e293b; font-size: 16px; font-weight: 600;">${date} (hora de Argentina)</p>
+        </div>
+
+        <p style="color: #475569; margin-bottom: 20px;">
+          Si esto fue un error o querés cancelar la eliminación, hacé clic en el botón de abajo antes de esa fecha.
+        </p>
+        <a href="${cancelUrl}"
+           style="display: inline-block; background: #16a34a; color: white; text-decoration: none;
+                  padding: 12px 28px; border-radius: 8px; font-weight: 600; margin-bottom: 24px;">
+          Cancelar eliminación
+        </a>
+
+        <p style="color: #94a3b8; font-size: 13px;">
+          Cualquier administrador del workspace puede cancelar esta acción desde Preferencias → Globales.
+        </p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+        <p style="color: #cbd5e1; font-size: 12px;">BlissTracker</p>
+      </div>
+    `,
+  })
+
+  if (error) throw new Error(error.message)
+}
+
+module.exports = { sendPasswordReset, sendWelcomeEmail, sendWeeklySummaryEmail, sendTestSettingsEmail, sendInvitationEmail, sendWorkspaceDeletionWarning }
