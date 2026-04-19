@@ -14,27 +14,38 @@ async function getOrCreateToday(req, res, next) {
     const tz = req.workspace.timezone
     const date = todayString(tz)
 
+    const taskQuery = { include: taskInclude, orderBy: { createdAt: 'desc' } }
+    const whereKey  = { userId_workspaceId_date: { userId, workspaceId, date } }
+
     let workDay = await prisma.workDay.findUnique({
-      where: { userId_workspaceId_date: { userId, workspaceId, date } },
-      include: {
-        tasks: { include: taskInclude, orderBy: { createdAt: 'desc' } },
-      },
+      where: whereKey,
+      include: { tasks: taskQuery },
     })
 
     if (!workDay) {
-      workDay = await prisma.workDay.create({
-        data: { userId, workspaceId, date },
-        include: {
-          tasks: { include: taskInclude, orderBy: { createdAt: 'desc' } },
-        },
-      })
-    } else if (workDay.endedAt) {
+      try {
+        workDay = await prisma.workDay.create({
+          data: { userId, workspaceId, date },
+          include: { tasks: taskQuery },
+        })
+      } catch (createErr) {
+        if (createErr.code === 'P2002') {
+          // Condición de carrera: otro request creó el registro entre el findUnique y el create.
+          workDay = await prisma.workDay.findUnique({
+            where: whereKey,
+            include: { tasks: taskQuery },
+          })
+        } else {
+          throw createErr
+        }
+      }
+    }
+
+    if (workDay?.endedAt) {
       workDay = await prisma.workDay.update({
-        where: { userId_workspaceId_date: { userId, workspaceId, date } },
+        where: whereKey,
         data: { endedAt: null, startedAt: new Date() },
-        include: {
-          tasks: { include: taskInclude, orderBy: { createdAt: 'desc' } },
-        },
+        include: { tasks: taskQuery },
       })
     }
 

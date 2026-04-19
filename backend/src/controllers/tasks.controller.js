@@ -51,11 +51,18 @@ async function create(req, res, next) {
     }
 
     const date = todayString(tz)
-    let workDay = await prisma.workDay.findUnique({
-      where: { userId_workspaceId_date: { userId, workspaceId, date } },
-    })
+    const wdKey = { userId_workspaceId_date: { userId, workspaceId, date } }
+    let workDay = await prisma.workDay.findUnique({ where: wdKey })
     if (!workDay) {
-      workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
+      try {
+        workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
+      } catch (createErr) {
+        if (createErr.code === 'P2002') {
+          workDay = await prisma.workDay.findUnique({ where: wdKey })
+        } else {
+          throw createErr
+        }
+      }
     }
 
     const task = await prisma.task.create({
@@ -412,11 +419,18 @@ async function addToToday(req, res, next) {
       )
     }
 
-    let workDay = await prisma.workDay.findUnique({
-      where: { userId_workspaceId_date: { userId, workspaceId, date } },
-    })
+    const wdKey2 = { userId_workspaceId_date: { userId, workspaceId, date } }
+    let workDay = await prisma.workDay.findUnique({ where: wdKey2 })
     if (!workDay) {
-      workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
+      try {
+        workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
+      } catch (createErr) {
+        if (createErr.code === 'P2002') {
+          workDay = await prisma.workDay.findUnique({ where: wdKey2 })
+        } else {
+          throw createErr
+        }
+      }
     }
 
     const updated = await prisma.task.update({
