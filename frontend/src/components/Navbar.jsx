@@ -6,6 +6,7 @@ import useRoles from '../hooks/useRoles'
 import FeedbackButton from './FeedbackButton'
 import NotificationBell from './NotificationBell'
 import { useTheme } from '../context/ThemeContext'
+import BlissLogo from './BlissLogo'
 import api from '../api/client'
 
 // ─── Iconos reutilizables ─────────────────────────────────────────────────────
@@ -245,10 +246,9 @@ export default function Navbar() {
         <div className="px-4 py-3 flex items-center justify-between">
 
           {/* Logo */}
-          <div className="flex items-center gap-2">
-            <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-7 h-7" />
-            <span className="text-xl font-bold text-gray-900 dark:text-white">BlissTracker</span>
-          </div>
+          <Link to="/" className="flex items-center">
+            <BlissLogo variant="lockup" className="h-8 w-auto" />
+          </Link>
 
           {/* Desktop links */}
           <div className="hidden lg:flex gap-5 text-sm items-center">

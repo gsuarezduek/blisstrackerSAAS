@@ -1,16 +1,12 @@
-<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BlissTracker logo">
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BlissTracker logo — honeycomb">
   <defs>
     <linearGradient id="centerHexB" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FFB366"/>
       <stop offset="100%" stop-color="#FF8C2E"/>
     </linearGradient>
     <linearGradient id="outerHexB" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#8A4E1C"/>
-      <stop offset="100%" stop-color="#5E3512"/>
-    </linearGradient>
-    <linearGradient id="bgB" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#1F1812"/>
-      <stop offset="100%" stop-color="#140E0A"/>
+      <stop offset="0%" stop-color="#C46F29"/>
+      <stop offset="100%" stop-color="#8A4E1C"/>
     </linearGradient>
     <filter id="glowB" x="-30%" y="-30%" width="160%" height="160%">
       <feGaussianBlur stdDeviation="10" result="glow"/>
@@ -20,19 +16,30 @@
       </feMerge>
     </filter>
   </defs>
-  <rect width="512" height="512" rx="112" ry="112" fill="url(#bgB)"/>
-  <g stroke="#2A1F17" stroke-width="3">
+
+  <!-- Hexágonos exteriores (atenuados, tono medio para funcionar en claro/oscuro) -->
+  <g>
+    <!-- Arriba -->
     <polygon points="176,117.44 216,48.16 296,48.16 336,117.44 296,186.72 216,186.72" fill="url(#outerHexB)"/>
+    <!-- Arriba-derecha -->
     <polygon points="296,186.72 336,117.44 416,117.44 456,186.72 416,256 336,256" fill="url(#outerHexB)"/>
+    <!-- Abajo-derecha -->
     <polygon points="296,325.28 336,256 416,256 456,325.28 416,394.56 336,394.56" fill="url(#outerHexB)"/>
+    <!-- Abajo -->
     <polygon points="176,394.56 216,325.28 296,325.28 336,394.56 296,463.84 216,463.84" fill="url(#outerHexB)"/>
+    <!-- Abajo-izquierda -->
     <polygon points="56,325.28 96,256 176,256 216,325.28 176,394.56 96,394.56" fill="url(#outerHexB)"/>
+    <!-- Arriba-izquierda -->
     <polygon points="56,186.72 96,117.44 176,117.44 216,186.72 176,256 96,256" fill="url(#outerHexB)"/>
   </g>
+
+  <!-- Hexágono central (brillante) -->
   <polygon
     points="176,256 216,186.72 296,186.72 336,256 296,325.28 216,325.28"
     fill="url(#centerHexB)"
     filter="url(#glowB)"/>
+
+  <!-- Check grueso y redondeado -->
   <path
     d="M 205 258 L 240 295 L 305 222"
     fill="none"

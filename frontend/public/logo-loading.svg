@@ -1,20 +1,16 @@
-<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BlissTracker cargando">
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BlissTracker loading indicator">
   <defs>
     <linearGradient id="centerHexL" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FFB366"/>
       <stop offset="100%" stop-color="#FF8C2E"/>
     </linearGradient>
     <linearGradient id="outerDim" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#8A4E1C"/>
-      <stop offset="100%" stop-color="#5E3512"/>
+      <stop offset="0%" stop-color="#C46F29"/>
+      <stop offset="100%" stop-color="#8A4E1C"/>
     </linearGradient>
     <linearGradient id="outerBright" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FFB366"/>
       <stop offset="100%" stop-color="#FF8C2E"/>
-    </linearGradient>
-    <linearGradient id="bgL" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#1F1812"/>
-      <stop offset="100%" stop-color="#140E0A"/>
     </linearGradient>
     <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
       <feGaussianBlur stdDeviation="6" result="glow"/>
@@ -38,6 +34,7 @@
       animation: bliss-loading 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
       transform-origin: 256px 256px;
     }
+    /* Orden horario desde arriba */
     .glow-1 { animation-delay: 0s;    }
     .glow-2 { animation-delay: 0.13s; }
     .glow-3 { animation-delay: 0.26s; }
@@ -45,6 +42,7 @@
     .glow-5 { animation-delay: 0.52s; }
     .glow-6 { animation-delay: 0.65s; }
 
+    /* Sutil pulso del check central */
     @keyframes bliss-pulse {
       0%, 100% { opacity: 1; }
       50%      { opacity: 0.75; }
@@ -53,25 +51,30 @@
       animation: bliss-pulse 1.6s ease-in-out infinite;
     }
 
+    /* Respeto a usuarios que prefieren reducir movimiento */
     @media (prefers-reduced-motion: reduce) {
       .glow { animation: none; opacity: 0.5; }
       .center-glow { animation: none; }
     }
   ]]></style>
 
-  <rect width="512" height="512" rx="112" ry="112" fill="url(#bgL)"/>
-
-  <!-- Hexágonos exteriores base (siempre visibles) -->
-  <g stroke="#2A1F17" stroke-width="3">
+  <!-- Capa base: hexágonos exteriores atenuados (siempre visibles) -->
+  <g>
+    <!-- 1 Arriba -->
     <polygon points="176,117.44 216,48.16 296,48.16 336,117.44 296,186.72 216,186.72" fill="url(#outerDim)"/>
+    <!-- 2 Arriba-derecha -->
     <polygon points="296,186.72 336,117.44 416,117.44 456,186.72 416,256 336,256" fill="url(#outerDim)"/>
+    <!-- 3 Abajo-derecha -->
     <polygon points="296,325.28 336,256 416,256 456,325.28 416,394.56 336,394.56" fill="url(#outerDim)"/>
+    <!-- 4 Abajo -->
     <polygon points="176,394.56 216,325.28 296,325.28 336,394.56 296,463.84 216,463.84" fill="url(#outerDim)"/>
+    <!-- 5 Abajo-izquierda -->
     <polygon points="56,325.28 96,256 176,256 216,325.28 176,394.56 96,394.56" fill="url(#outerDim)"/>
+    <!-- 6 Arriba-izquierda -->
     <polygon points="56,186.72 96,117.44 176,117.44 216,186.72 176,256 96,256" fill="url(#outerDim)"/>
   </g>
 
-  <!-- Capa animada (se encienden en secuencia horaria) -->
+  <!-- Capa brillante animada (se encienden en secuencia) -->
   <g filter="url(#softGlow)">
     <polygon class="glow glow-1" points="176,117.44 216,48.16 296,48.16 336,117.44 296,186.72 216,186.72" fill="url(#outerBright)"/>
     <polygon class="glow glow-2" points="296,186.72 336,117.44 416,117.44 456,186.72 416,256 336,256" fill="url(#outerBright)"/>
@@ -81,7 +84,7 @@
     <polygon class="glow glow-6" points="56,186.72 96,117.44 176,117.44 216,186.72 176,256 96,256" fill="url(#outerBright)"/>
   </g>
 
-  <!-- Centro con check (pulso sutil) -->
+  <!-- Hexágono central con check (estable, pulso sutil) -->
   <g class="center-glow">
     <polygon
       points="176,256 216,186.72 296,186.72 336,256 296,325.28 216,325.28"
