@@ -100,7 +100,7 @@ app.use((err, req, res, next) => {
   const message = isProd && !err.isOperational
     ? 'Internal server error'
     : (err.message || 'Internal server error')
-  console.error('[error]', err.code ?? err.message)
+  console.error('[error]', err.code ?? err.message, '\n', err.stack ?? '')
   res.status(err.status || 500).json({ error: message })
 })
 

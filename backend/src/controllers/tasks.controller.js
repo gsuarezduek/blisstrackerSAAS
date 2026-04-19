@@ -65,6 +65,11 @@ async function create(req, res, next) {
       }
     }
 
+    if (!workDay) {
+      console.error('[create-task-debug] workDay is null', { userId, workspaceId, date, projectId })
+      return res.status(500).json({ error: 'No se pudo obtener la jornada laboral. Recargá la página.' })
+    }
+
     const task = await prisma.task.create({
       data: {
         description,
