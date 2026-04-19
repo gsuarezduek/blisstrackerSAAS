@@ -365,9 +365,23 @@ async function getDailyInsight(req, res, next) {
     if (existing) return res.json(existing)
 
     const data = await generateInsight(userId, workspace, member)
-    const insight = await prisma.dailyInsight.create({
-      data: { userId, workspaceId: workspace.id, date, ...data },
-    })
+    let insight
+    try {
+      insight = await prisma.dailyInsight.create({
+        data: { userId, workspaceId: workspace.id, date, ...data },
+      })
+    } catch (createErr) {
+      if (createErr.code === 'P2002') {
+        // Condición de carrera o índice legacy (userId, date) todavía presente en DB.
+        // Recuperar el registro que ya existe.
+        insight = await prisma.dailyInsight.findUnique({
+          where: { userId_workspaceId_date: { userId, workspaceId: workspace.id, date } },
+        })
+        if (!insight) throw createErr
+      } else {
+        throw createErr
+      }
+    }
     res.json(insight)
   } catch (err) {
     console.error('[DailyInsight] Error:', err.message)
@@ -405,9 +419,21 @@ async function refreshDailyInsight(req, res, next) {
     }
 
     const data = await generateInsight(userId, workspace, member)
-    const insight = await prisma.dailyInsight.create({
-      data: { userId, workspaceId: workspace.id, date, ...data },
-    })
+    let insight
+    try {
+      insight = await prisma.dailyInsight.create({
+        data: { userId, workspaceId: workspace.id, date, ...data },
+      })
+    } catch (createErr) {
+      if (createErr.code === 'P2002') {
+        insight = await prisma.dailyInsight.findUnique({
+          where: { userId_workspaceId_date: { userId, workspaceId: workspace.id, date } },
+        })
+        if (!insight) throw createErr
+      } else {
+        throw createErr
+      }
+    }
     res.json(insight)
   } catch (err) {
     console.error('[DailyInsight] Error refresh:', err.message)
