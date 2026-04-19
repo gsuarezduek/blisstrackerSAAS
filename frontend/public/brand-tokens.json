@@ -1,0 +1,250 @@
+{
+  "$schema": "https://design-tokens.org/schemas/design-tokens.schema.json",
+  "$metadata": {
+    "name": "BlissTracker Design Tokens",
+    "version": "1.0.0",
+    "description": "Fuente única de verdad para los valores de diseño de BlissTracker. Compatible con el formato Design Tokens Community Group (DTCG).",
+    "updated": "2026-04-19"
+  },
+
+  "color": {
+    "brand": {
+      "orange": {
+        "50":  { "$value": "#FFF4E8", "$type": "color" },
+        "100": { "$value": "#FFE3C4", "$type": "color" },
+        "200": { "$value": "#FFC88B", "$type": "color" },
+        "300": { "$value": "#FFAE5C", "$type": "color", "$description": "Highlight del gradiente del isotipo." },
+        "400": { "$value": "#F39138", "$type": "color" },
+        "500": { "$value": "#E67A1F", "$type": "color", "$description": "★ Naranja primario de marca." },
+        "600": { "$value": "#C46F29", "$type": "color" },
+        "700": { "$value": "#A05A1F", "$type": "color" },
+        "800": { "$value": "#7A4516", "$type": "color" },
+        "900": { "$value": "#5E3512", "$type": "color" }
+      },
+      "brown": {
+        "500": { "$value": "#3B2618", "$type": "color", "$description": "★ Marrón secundario · color del texto 'Tracker' en el wordmark sobre fondo claro." },
+        "700": { "$value": "#2A1B11", "$type": "color" }
+      },
+      "primary":  { "$value": "{color.brand.orange.500}", "$type": "color" },
+      "accent":   { "$value": "{color.brand.orange.300}", "$type": "color" },
+      "secondary": { "$value": "{color.brand.brown.500}", "$type": "color" }
+    },
+
+    "neutral": {
+      "black": { "$value": "#000000", "$type": "color" },
+      "white": { "$value": "#FFFFFF", "$type": "color" },
+      "50":    { "$value": "#FAFAFA", "$type": "color" },
+      "100":   { "$value": "#F4F4F5", "$type": "color" },
+      "200":   { "$value": "#E4E4E7", "$type": "color" },
+      "300":   { "$value": "#D4D4D8", "$type": "color" },
+      "400":   { "$value": "#A1A1AA", "$type": "color" },
+      "500":   { "$value": "#71717A", "$type": "color" },
+      "600":   { "$value": "#52525B", "$type": "color" },
+      "700":   { "$value": "#3F3F46", "$type": "color" },
+      "800":   { "$value": "#27272A", "$type": "color" },
+      "900":   { "$value": "#18181B", "$type": "color" }
+    },
+
+    "semantic": {
+      "light": {
+        "bg":            { "$value": "{color.neutral.white}", "$type": "color" },
+        "bg-subtle":     { "$value": "{color.neutral.50}", "$type": "color" },
+        "bg-muted":      { "$value": "{color.neutral.100}", "$type": "color" },
+        "surface":       { "$value": "{color.neutral.white}", "$type": "color" },
+        "surface-alt":   { "$value": "{color.neutral.50}", "$type": "color" },
+        "border":        { "$value": "{color.neutral.200}", "$type": "color" },
+        "border-strong": { "$value": "{color.neutral.300}", "$type": "color" },
+        "text":          { "$value": "{color.brand.brown.500}", "$type": "color" },
+        "text-muted":    { "$value": "{color.neutral.600}", "$type": "color" },
+        "text-subtle":   { "$value": "{color.neutral.500}", "$type": "color" },
+        "text-inverse":  { "$value": "{color.neutral.white}", "$type": "color" },
+        "link":          { "$value": "{color.brand.orange.500}", "$type": "color" },
+        "link-hover":    { "$value": "{color.brand.orange.700}", "$type": "color" },
+        "focus-ring":    { "$value": "{color.brand.orange.400}", "$type": "color" }
+      },
+      "dark": {
+        "bg":            { "$value": "{color.neutral.900}", "$type": "color" },
+        "bg-subtle":     { "$value": "{color.neutral.800}", "$type": "color" },
+        "bg-muted":      { "$value": "{color.neutral.800}", "$type": "color" },
+        "surface":       { "$value": "{color.neutral.800}", "$type": "color" },
+        "surface-alt":   { "$value": "{color.neutral.700}", "$type": "color" },
+        "border":        { "$value": "{color.neutral.700}", "$type": "color" },
+        "border-strong": { "$value": "{color.neutral.600}", "$type": "color" },
+        "text":          { "$value": "{color.neutral.100}", "$type": "color" },
+        "text-muted":    { "$value": "{color.neutral.300}", "$type": "color" },
+        "text-subtle":   { "$value": "{color.neutral.400}", "$type": "color" },
+        "text-inverse":  { "$value": "{color.neutral.900}", "$type": "color" },
+        "link":          { "$value": "{color.brand.orange.300}", "$type": "color" },
+        "link-hover":    { "$value": "{color.brand.orange.200}", "$type": "color" },
+        "focus-ring":    { "$value": "{color.brand.orange.400}", "$type": "color" }
+      },
+      "status": {
+        "success": { "$value": "#16A34A", "$type": "color" },
+        "warning": { "$value": "#F59E0B", "$type": "color" },
+        "danger":  { "$value": "#DC2626", "$type": "color" },
+        "info":    { "$value": "#2563EB", "$type": "color" }
+      }
+    },
+
+    "gradient": {
+      "brand": {
+        "$value": {
+          "type": "linear",
+          "angle": "180deg",
+          "stops": [
+            { "color": "{color.brand.orange.300}", "position": 0 },
+            { "color": "{color.brand.orange.500}", "position": 1 }
+          ]
+        },
+        "$type": "gradient",
+        "$description": "Gradiente canónico del isotipo (hexágono central)."
+      }
+    }
+  },
+
+  "typography": {
+    "fontFamily": {
+      "base":    { "$value": ["Inter", "SF Pro Display", "Segoe UI", "system-ui", "-apple-system", "BlinkMacSystemFont", "Helvetica Neue", "Arial", "sans-serif"], "$type": "fontFamily" },
+      "display": { "$value": "{typography.fontFamily.base}", "$type": "fontFamily" },
+      "mono":    { "$value": ["JetBrains Mono", "SF Mono", "Menlo", "Consolas", "Courier New", "monospace"], "$type": "fontFamily" }
+    },
+    "fontWeight": {
+      "regular":  { "$value": 400, "$type": "fontWeight" },
+      "medium":   { "$value": 500, "$type": "fontWeight" },
+      "semibold": { "$value": 600, "$type": "fontWeight" },
+      "bold":     { "$value": 700, "$type": "fontWeight" }
+    },
+    "fontSize": {
+      "xs":   { "$value": "12px", "$type": "dimension" },
+      "sm":   { "$value": "14px", "$type": "dimension" },
+      "base": { "$value": "16px", "$type": "dimension" },
+      "md":   { "$value": "18px", "$type": "dimension" },
+      "lg":   { "$value": "20px", "$type": "dimension" },
+      "xl":   { "$value": "24px", "$type": "dimension" },
+      "2xl":  { "$value": "30px", "$type": "dimension" },
+      "3xl":  { "$value": "36px", "$type": "dimension" },
+      "4xl":  { "$value": "48px", "$type": "dimension" },
+      "5xl":  { "$value": "60px", "$type": "dimension" }
+    },
+    "lineHeight": {
+      "tight":   { "$value": 1.15, "$type": "number" },
+      "snug":    { "$value": 1.35, "$type": "number" },
+      "normal":  { "$value": 1.55, "$type": "number" },
+      "relaxed": { "$value": 1.7, "$type": "number" }
+    },
+    "letterSpacing": {
+      "tighter": { "$value": "-0.02em", "$type": "dimension" },
+      "tight":   { "$value": "-0.01em", "$type": "dimension" },
+      "normal":  { "$value": "0",       "$type": "dimension" },
+      "wide":    { "$value": "0.02em",  "$type": "dimension" },
+      "wider":   { "$value": "0.05em",  "$type": "dimension" }
+    },
+    "wordmark": {
+      "fontFamily":    { "$value": "{typography.fontFamily.display}", "$type": "fontFamily" },
+      "weightBliss":   { "$value": "{typography.fontWeight.bold}", "$type": "fontWeight" },
+      "weightTracker": { "$value": "{typography.fontWeight.regular}", "$type": "fontWeight" },
+      "letterSpacing": { "$value": "-0.025em", "$type": "dimension" },
+      "colorBliss":    { "$value": "{color.brand.orange.500}", "$type": "color" },
+      "colorTrackerLight": { "$value": "{color.brand.brown.500}", "$type": "color" },
+      "colorTrackerDark":  { "$value": "{color.neutral.white}",   "$type": "color" }
+    }
+  },
+
+  "spacing": {
+    "0":  { "$value": "0px",   "$type": "dimension" },
+    "1":  { "$value": "4px",   "$type": "dimension" },
+    "2":  { "$value": "8px",   "$type": "dimension" },
+    "3":  { "$value": "12px",  "$type": "dimension" },
+    "4":  { "$value": "16px",  "$type": "dimension" },
+    "5":  { "$value": "20px",  "$type": "dimension" },
+    "6":  { "$value": "24px",  "$type": "dimension" },
+    "8":  { "$value": "32px",  "$type": "dimension" },
+    "10": { "$value": "40px",  "$type": "dimension" },
+    "12": { "$value": "48px",  "$type": "dimension" },
+    "16": { "$value": "64px",  "$type": "dimension" },
+    "20": { "$value": "80px",  "$type": "dimension" },
+    "24": { "$value": "96px",  "$type": "dimension" },
+    "32": { "$value": "128px", "$type": "dimension" }
+  },
+
+  "radius": {
+    "none": { "$value": "0",      "$type": "dimension" },
+    "xs":   { "$value": "2px",    "$type": "dimension" },
+    "sm":   { "$value": "4px",    "$type": "dimension" },
+    "md":   { "$value": "8px",    "$type": "dimension" },
+    "lg":   { "$value": "12px",   "$type": "dimension" },
+    "xl":   { "$value": "16px",   "$type": "dimension" },
+    "2xl":  { "$value": "24px",   "$type": "dimension" },
+    "full": { "$value": "9999px", "$type": "dimension" }
+  },
+
+  "shadow": {
+    "xs":  { "$value": "0 1px 2px rgba(59, 38, 24, 0.05)", "$type": "shadow" },
+    "sm":  { "$value": "0 1px 3px rgba(59, 38, 24, 0.08), 0 1px 2px rgba(59, 38, 24, 0.04)", "$type": "shadow" },
+    "md":  { "$value": "0 4px 6px rgba(59, 38, 24, 0.07), 0 2px 4px rgba(59, 38, 24, 0.04)", "$type": "shadow" },
+    "lg":  { "$value": "0 10px 15px rgba(59, 38, 24, 0.08), 0 4px 6px rgba(59, 38, 24, 0.04)", "$type": "shadow" },
+    "xl":  { "$value": "0 20px 25px rgba(59, 38, 24, 0.10), 0 8px 10px rgba(59, 38, 24, 0.05)", "$type": "shadow" },
+    "2xl": { "$value": "0 25px 50px rgba(59, 38, 24, 0.18)", "$type": "shadow" },
+    "glow-sm": { "$value": "0 0 12px rgba(230, 122, 31, 0.35)", "$type": "shadow" },
+    "glow-md": { "$value": "0 0 24px rgba(230, 122, 31, 0.45)", "$type": "shadow" },
+    "glow-lg": { "$value": "0 0 40px rgba(230, 122, 31, 0.55)", "$type": "shadow" }
+  },
+
+  "border": {
+    "width": {
+      "0": { "$value": "0",   "$type": "dimension" },
+      "1": { "$value": "1px", "$type": "dimension" },
+      "2": { "$value": "2px", "$type": "dimension" },
+      "4": { "$value": "4px", "$type": "dimension" }
+    }
+  },
+
+  "motion": {
+    "duration": {
+      "instant": { "$value": "0ms",    "$type": "duration" },
+      "fast":    { "$value": "120ms",  "$type": "duration" },
+      "base":    { "$value": "200ms",  "$type": "duration" },
+      "slow":    { "$value": "320ms",  "$type": "duration" },
+      "slower":  { "$value": "500ms",  "$type": "duration" },
+      "loading": { "$value": "1600ms", "$type": "duration", "$description": "Ciclo completo del loader de panal." }
+    },
+    "easing": {
+      "linear":     { "$value": "linear", "$type": "cubicBezier" },
+      "standard":   { "$value": [0.4, 0,    0.2, 1],    "$type": "cubicBezier" },
+      "accelerate": { "$value": [0.4, 0,    1,   1],    "$type": "cubicBezier" },
+      "decelerate": { "$value": [0,   0,    0.2, 1],    "$type": "cubicBezier" },
+      "spring":     { "$value": [0.34, 1.56, 0.64, 1],  "$type": "cubicBezier" }
+    }
+  },
+
+  "zIndex": {
+    "below":    { "$value": -1,   "$type": "number" },
+    "base":     { "$value": 0,    "$type": "number" },
+    "raised":   { "$value": 10,   "$type": "number" },
+    "dropdown": { "$value": 1000, "$type": "number" },
+    "sticky":   { "$value": 1100, "$type": "number" },
+    "overlay":  { "$value": 1200, "$type": "number" },
+    "modal":    { "$value": 1300, "$type": "number" },
+    "popover":  { "$value": 1400, "$type": "number" },
+    "toast":    { "$value": 1500, "$type": "number" },
+    "tooltip":  { "$value": 1600, "$type": "number" }
+  },
+
+  "breakpoint": {
+    "sm":  { "$value": "640px",  "$type": "dimension" },
+    "md":  { "$value": "768px",  "$type": "dimension" },
+    "lg":  { "$value": "1024px", "$type": "dimension" },
+    "xl":  { "$value": "1280px", "$type": "dimension" },
+    "2xl": { "$value": "1536px", "$type": "dimension" }
+  },
+
+  "logo": {
+    "clearSpaceRatio": { "$value": 0.25, "$type": "number", "$description": "Fracción de la altura del isotipo reservada como zona de exclusión a cada lado." },
+    "minSize": {
+      "iconDigital":    { "$value": "24px", "$type": "dimension" },
+      "iconPrint":      { "$value": "10mm", "$type": "dimension" },
+      "lockupDigital":  { "$value": "120px", "$type": "dimension" },
+      "lockupPrint":    { "$value": "25mm",  "$type": "dimension" }
+    }
+  }
+}

@@ -1,0 +1,305 @@
+/* ==========================================================================
+   BlissTracker — Design Tokens (CSS Custom Properties)
+   Versión 1.0 · 2026
+   Fuente única de verdad para colores, tipografía, espaciado y otros valores
+   de diseño. Importa este archivo en :root o en el selector raíz de tu app.
+   ========================================================================== */
+
+:root {
+  /* --------------------------------------------------------------------------
+     1. COLORES · MARCA
+     -------------------------------------------------------------------------- */
+
+  /* Naranja — color primario de marca */
+  --bt-color-orange-50:  #FFF4E8;
+  --bt-color-orange-100: #FFE3C4;
+  --bt-color-orange-200: #FFC88B;
+  --bt-color-orange-300: #FFAE5C; /* gradiente: highlight */
+  --bt-color-orange-400: #F39138;
+  --bt-color-orange-500: #E67A1F; /* ★ PRIMARIO de marca */
+  --bt-color-orange-600: #C46F29;
+  --bt-color-orange-700: #A05A1F;
+  --bt-color-orange-800: #7A4516;
+  --bt-color-orange-900: #5E3512;
+
+  --bt-color-brand-primary: var(--bt-color-orange-500);
+  --bt-color-brand-accent:  var(--bt-color-orange-300);
+
+  /* Marrón — color secundario (usado en wordmark sobre fondo claro) */
+  --bt-color-brown-500: #3B2618; /* ★ SECUNDARIO: texto "Tracker" */
+  --bt-color-brown-700: #2A1B11;
+
+  /* Gradiente canónico del isotipo */
+  --bt-gradient-brand: linear-gradient(180deg, var(--bt-color-orange-300) 0%, var(--bt-color-orange-500) 100%);
+
+  /* --------------------------------------------------------------------------
+     2. COLORES · NEUTRALES
+     -------------------------------------------------------------------------- */
+
+  --bt-color-black:   #000000;
+  --bt-color-white:   #FFFFFF;
+
+  --bt-color-neutral-50:  #FAFAFA;
+  --bt-color-neutral-100: #F4F4F5;
+  --bt-color-neutral-200: #E4E4E7;
+  --bt-color-neutral-300: #D4D4D8;
+  --bt-color-neutral-400: #A1A1AA;
+  --bt-color-neutral-500: #71717A;
+  --bt-color-neutral-600: #52525B;
+  --bt-color-neutral-700: #3F3F46;
+  --bt-color-neutral-800: #27272A;
+  --bt-color-neutral-900: #18181B;
+
+  /* --------------------------------------------------------------------------
+     3. COLORES · SEMÁNTICOS (UI)
+     -------------------------------------------------------------------------- */
+
+  /* Light mode (default) */
+  --bt-color-bg:            var(--bt-color-white);
+  --bt-color-bg-subtle:     var(--bt-color-neutral-50);
+  --bt-color-bg-muted:      var(--bt-color-neutral-100);
+  --bt-color-surface:       var(--bt-color-white);
+  --bt-color-surface-alt:   var(--bt-color-neutral-50);
+  --bt-color-border:        var(--bt-color-neutral-200);
+  --bt-color-border-strong: var(--bt-color-neutral-300);
+
+  --bt-color-text:          var(--bt-color-brown-500);
+  --bt-color-text-muted:    var(--bt-color-neutral-600);
+  --bt-color-text-subtle:   var(--bt-color-neutral-500);
+  --bt-color-text-inverse:  var(--bt-color-white);
+
+  --bt-color-link:          var(--bt-color-orange-500);
+  --bt-color-link-hover:    var(--bt-color-orange-700);
+
+  --bt-color-focus-ring:    var(--bt-color-orange-400);
+
+  /* Estados */
+  --bt-color-success: #16A34A;
+  --bt-color-warning: #F59E0B;
+  --bt-color-danger:  #DC2626;
+  --bt-color-info:    #2563EB;
+
+  /* --------------------------------------------------------------------------
+     4. TIPOGRAFÍA
+     -------------------------------------------------------------------------- */
+
+  /* Familia principal */
+  --bt-font-family-base: 'Inter', 'SF Pro Display', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --bt-font-family-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+  --bt-font-family-display: var(--bt-font-family-base); /* Inter para wordmark */
+
+  /* Pesos */
+  --bt-font-weight-regular:  400;
+  --bt-font-weight-medium:   500;
+  --bt-font-weight-semibold: 600;
+  --bt-font-weight-bold:     700;
+
+  /* Escala tipográfica (modular, base 16 · ratio ~1.25) */
+  --bt-font-size-xs:   0.75rem;   /* 12px */
+  --bt-font-size-sm:   0.875rem;  /* 14px */
+  --bt-font-size-base: 1rem;      /* 16px */
+  --bt-font-size-md:   1.125rem;  /* 18px */
+  --bt-font-size-lg:   1.25rem;   /* 20px */
+  --bt-font-size-xl:   1.5rem;    /* 24px */
+  --bt-font-size-2xl:  1.875rem;  /* 30px */
+  --bt-font-size-3xl:  2.25rem;   /* 36px */
+  --bt-font-size-4xl:  3rem;      /* 48px */
+  --bt-font-size-5xl:  3.75rem;   /* 60px */
+
+  /* Altura de línea */
+  --bt-line-height-tight:   1.15;
+  --bt-line-height-snug:    1.35;
+  --bt-line-height-normal:  1.55;
+  --bt-line-height-relaxed: 1.7;
+
+  /* Letter-spacing */
+  --bt-letter-spacing-tighter: -0.02em; /* títulos grandes */
+  --bt-letter-spacing-tight:   -0.01em;
+  --bt-letter-spacing-normal:  0;
+  --bt-letter-spacing-wide:    0.02em;
+  --bt-letter-spacing-wider:   0.05em;  /* eyebrows, caps */
+
+  /* Tokens específicos del wordmark (Variante C) */
+  --bt-wordmark-font-family: var(--bt-font-family-display);
+  --bt-wordmark-weight-bliss:   var(--bt-font-weight-bold);
+  --bt-wordmark-weight-tracker: var(--bt-font-weight-regular);
+  --bt-wordmark-letter-spacing: -0.025em;
+  --bt-wordmark-color-bliss:    var(--bt-color-orange-500);
+  --bt-wordmark-color-tracker:  var(--bt-color-brown-500);
+
+  /* --------------------------------------------------------------------------
+     5. ESPACIADO
+     Base de 4px. Escala lineal hasta 24, luego salta en t-shirt sizes.
+     -------------------------------------------------------------------------- */
+
+  --bt-space-0:   0;
+  --bt-space-1:   0.25rem;  /*  4px */
+  --bt-space-2:   0.5rem;   /*  8px */
+  --bt-space-3:   0.75rem;  /* 12px */
+  --bt-space-4:   1rem;     /* 16px */
+  --bt-space-5:   1.25rem;  /* 20px */
+  --bt-space-6:   1.5rem;   /* 24px */
+  --bt-space-8:   2rem;     /* 32px */
+  --bt-space-10:  2.5rem;   /* 40px */
+  --bt-space-12:  3rem;     /* 48px */
+  --bt-space-16:  4rem;     /* 64px */
+  --bt-space-20:  5rem;     /* 80px */
+  --bt-space-24:  6rem;     /* 96px */
+  --bt-space-32:  8rem;     /* 128px */
+
+  /* Zona de exclusión (clear space) del logo
+     Basada en la altura "x" = mitad del hexágono interior
+     Regla: x = 0.25 × altura del isotipo */
+  --bt-logo-clear-space-ratio: 0.25;
+
+  /* --------------------------------------------------------------------------
+     6. RADIOS DE BORDE
+     -------------------------------------------------------------------------- */
+
+  --bt-radius-none: 0;
+  --bt-radius-xs:   2px;
+  --bt-radius-sm:   4px;
+  --bt-radius-md:   8px;
+  --bt-radius-lg:   12px;
+  --bt-radius-xl:   16px;
+  --bt-radius-2xl:  24px;
+  --bt-radius-full: 9999px;
+
+  /* --------------------------------------------------------------------------
+     7. SOMBRAS
+     -------------------------------------------------------------------------- */
+
+  --bt-shadow-xs:  0 1px 2px rgba(59, 38, 24, 0.05);
+  --bt-shadow-sm:  0 1px 3px rgba(59, 38, 24, 0.08), 0 1px 2px rgba(59, 38, 24, 0.04);
+  --bt-shadow-md:  0 4px 6px rgba(59, 38, 24, 0.07), 0 2px 4px rgba(59, 38, 24, 0.04);
+  --bt-shadow-lg:  0 10px 15px rgba(59, 38, 24, 0.08), 0 4px 6px rgba(59, 38, 24, 0.04);
+  --bt-shadow-xl:  0 20px 25px rgba(59, 38, 24, 0.10), 0 8px 10px rgba(59, 38, 24, 0.05);
+  --bt-shadow-2xl: 0 25px 50px rgba(59, 38, 24, 0.18);
+
+  /* Glow naranja (acento de marca) */
+  --bt-shadow-glow-sm: 0 0 12px rgba(230, 122, 31, 0.35);
+  --bt-shadow-glow-md: 0 0 24px rgba(230, 122, 31, 0.45);
+  --bt-shadow-glow-lg: 0 0 40px rgba(230, 122, 31, 0.55);
+
+  /* --------------------------------------------------------------------------
+     8. BORDES
+     -------------------------------------------------------------------------- */
+
+  --bt-border-width-0: 0;
+  --bt-border-width-1: 1px;
+  --bt-border-width-2: 2px;
+  --bt-border-width-4: 4px;
+
+  /* --------------------------------------------------------------------------
+     9. MOVIMIENTO
+     -------------------------------------------------------------------------- */
+
+  --bt-duration-instant: 0ms;
+  --bt-duration-fast:    120ms;
+  --bt-duration-base:    200ms;
+  --bt-duration-slow:    320ms;
+  --bt-duration-slower:  500ms;
+  --bt-duration-loading: 1600ms; /* ciclo del loader de panal */
+
+  --bt-easing-linear:    linear;
+  --bt-easing-standard:  cubic-bezier(0.4, 0, 0.2, 1);
+  --bt-easing-accelerate: cubic-bezier(0.4, 0, 1, 1);
+  --bt-easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --bt-easing-spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* --------------------------------------------------------------------------
+     10. Z-INDEX
+     -------------------------------------------------------------------------- */
+
+  --bt-z-below:     -1;
+  --bt-z-base:       0;
+  --bt-z-raised:    10;
+  --bt-z-dropdown:  1000;
+  --bt-z-sticky:    1100;
+  --bt-z-overlay:   1200;
+  --bt-z-modal:     1300;
+  --bt-z-popover:   1400;
+  --bt-z-toast:     1500;
+  --bt-z-tooltip:   1600;
+
+  /* --------------------------------------------------------------------------
+     11. BREAKPOINTS (referencia — úsalos en media queries)
+     -------------------------------------------------------------------------- */
+
+  --bt-breakpoint-sm:  640px;
+  --bt-breakpoint-md:  768px;
+  --bt-breakpoint-lg:  1024px;
+  --bt-breakpoint-xl:  1280px;
+  --bt-breakpoint-2xl: 1536px;
+
+  /* --------------------------------------------------------------------------
+     12. TAMAÑOS MÍNIMOS DEL LOGO
+     -------------------------------------------------------------------------- */
+
+  --bt-logo-min-digital: 24px;  /* isotipo en digital */
+  --bt-logo-min-print:   10mm;  /* isotipo en impresión */
+  --bt-logo-lockup-min-digital: 120px; /* wordmark legible */
+  --bt-logo-lockup-min-print:   25mm;
+}
+
+/* ============================================================================
+   DARK MODE
+   Activá por media query del sistema o con [data-theme="dark"] en <html>.
+   ============================================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bt-color-bg:            var(--bt-color-neutral-900);
+    --bt-color-bg-subtle:     var(--bt-color-neutral-800);
+    --bt-color-bg-muted:      var(--bt-color-neutral-800);
+    --bt-color-surface:       var(--bt-color-neutral-800);
+    --bt-color-surface-alt:   var(--bt-color-neutral-700);
+    --bt-color-border:        var(--bt-color-neutral-700);
+    --bt-color-border-strong: var(--bt-color-neutral-600);
+
+    --bt-color-text:          var(--bt-color-neutral-100);
+    --bt-color-text-muted:    var(--bt-color-neutral-300);
+    --bt-color-text-subtle:   var(--bt-color-neutral-400);
+    --bt-color-text-inverse:  var(--bt-color-neutral-900);
+
+    --bt-color-link:          var(--bt-color-orange-300);
+    --bt-color-link-hover:    var(--bt-color-orange-200);
+
+    /* En dark, el wordmark "Tracker" cambia a blanco */
+    --bt-wordmark-color-tracker: var(--bt-color-white);
+  }
+}
+
+[data-theme="dark"] {
+  --bt-color-bg:            var(--bt-color-neutral-900);
+  --bt-color-bg-subtle:     var(--bt-color-neutral-800);
+  --bt-color-bg-muted:      var(--bt-color-neutral-800);
+  --bt-color-surface:       var(--bt-color-neutral-800);
+  --bt-color-surface-alt:   var(--bt-color-neutral-700);
+  --bt-color-border:        var(--bt-color-neutral-700);
+  --bt-color-border-strong: var(--bt-color-neutral-600);
+
+  --bt-color-text:          var(--bt-color-neutral-100);
+  --bt-color-text-muted:    var(--bt-color-neutral-300);
+  --bt-color-text-subtle:   var(--bt-color-neutral-400);
+  --bt-color-text-inverse:  var(--bt-color-neutral-900);
+
+  --bt-color-link:          var(--bt-color-orange-300);
+  --bt-color-link-hover:    var(--bt-color-orange-200);
+
+  --bt-wordmark-color-tracker: var(--bt-color-white);
+}
+
+/* ============================================================================
+   REDUCED MOTION
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --bt-duration-fast:    0ms;
+    --bt-duration-base:    0ms;
+    --bt-duration-slow:    0ms;
+    --bt-duration-slower:  0ms;
+    --bt-duration-loading: 0ms;
+  }
+}
