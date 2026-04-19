@@ -1,16 +1,24 @@
-# BlissTracker
+# BlissTracker SaaS
 
-Aplicación web para gestión de tareas diarias del equipo de Bliss Marketing.
+Task tracker multi-tenant para agencias. Cada cliente opera en su propio workspace en `cliente.blisstracker.app`.
+
+- **App:** https://blisstracker.app
+- **GitHub:** https://github.com/gsuarezduek/blisstrackerSAAS
+- **Backend:** Railway · **Frontend:** Vercel Pro (wildcard `*.blisstracker.app`)
+
+---
 
 ## Stack
 
-- **Backend:** Node.js + Express + Prisma + PostgreSQL
-- **Frontend:** React 18 + Vite + Tailwind CSS + React Router v6
-- **Auth:** JWT (12h), almacenado en localStorage + Google OAuth 2
-- **Email:** Resend (API HTTP — no SMTP)
-- **IA:** Anthropic Claude Haiku — insight diario, memoria de productividad y resumen semanal
-- **Tests:** Jest + Supertest (backend) · Vitest + React Testing Library (frontend)
-- **Deploy:** Railway (backend + BD) · Vercel (frontend)
+| Capa | Tecnología |
+|---|---|
+| Backend | Node.js · Express · Prisma · PostgreSQL |
+| Frontend | React 18 · Vite · Tailwind CSS · React Router v6 |
+| Auth | JWT (12h) · Google OAuth 2 |
+| AI | Claude Haiku (Anthropic) |
+| Email | Resend (HTTP API — sin SMTP) |
+| Tests | Jest + Supertest (backend) · Vitest + React Testing Library (frontend) |
+| Deploy | Railway (backend + BD) · Vercel Pro (frontend, wildcard subdomain) |
 
 ---
 
@@ -24,92 +32,106 @@ Aplicación web para gestión de tareas diarias del equipo de Bliss Marketing.
 
 ```bash
 cd backend
-cp .env.example .env
-# Editar .env con las variables requeridas (ver abajo)
+cp .env.example .env   # completar variables (ver abajo)
 npm install
-npm run db:migrate:dev     # crea las tablas
-npm run db:seed            # crea admin, roles por defecto y proyecto Bliss
-npm run dev
+npm run db:migrate:dev -- --name init
+npm run db:seed        # crea workspace "bliss" + usuario admin
+npm run dev            # puerto 3001
 ```
-
-La API corre en `http://localhost:3001`
 
 **Variables de entorno requeridas:**
 
 ```env
 DATABASE_URL=postgresql://user:pass@localhost:5432/team_tracker
-JWT_SECRET=un_string_largo_y_aleatorio
+JWT_SECRET=<string largo y aleatorio>
 RESEND_API_KEY=re_xxxxxxxxxxxx
+EMAIL_FROM=BlissTracker <noreply@blisstracker.app>
+APP_DOMAIN=blisstracker.app
 FRONTEND_URL=http://localhost:5173
 GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-**Credenciales por defecto:**
+**Credenciales tras el seed:**
 - Email: `admin@blissmkt.ar`
-- Password: `admin123` ← cambiarlo desde el panel de admin
+- Password: `admin123`
+- Workspace: `bliss`
 
 ### 2. Frontend
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev   # puerto 5173
 ```
-
-La app corre en `http://localhost:5173`
-
-**Variables de entorno:**
 
 ```env
 # frontend/.env.development
 VITE_API_URL=http://localhost:3001
 VITE_GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
-
-# frontend/.env.production
-VITE_API_URL=https://tu-backend.up.railway.app
-VITE_GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 ```
 
 ---
 
-## Tests
+## Comandos útiles
 
 ```bash
-# Backend (Jest + Supertest — sin DB real, todo mockeado)
-cd backend
-npm test               # corre todos los tests
-npm run test:watch     # modo watch mientras desarrollás
-npm run test:coverage  # con reporte de cobertura
+# Backend
+npm run dev                              # servidor con hot reload
+npm run db:migrate:dev -- --name <name> # nueva migración
+npm run db:migrate                       # aplicar migraciones (producción)
+npm run db:seed                          # seed inicial
+npx prisma studio                        # explorador visual de DB
+npm test                                 # Jest
 
-# Frontend (Vitest + React Testing Library)
-cd frontend
-npm test               # modo watch
-npm run test:run       # corre una vez
-npm run test:coverage
+# Frontend
+npm run dev        # dev server
+npm run build      # build producción
+npm run test:run   # Vitest
 ```
-
-**Cobertura actual:** 27 tests backend · 30 tests frontend
 
 ---
 
-## Deploy en producción
+## Arquitectura multi-tenant
 
-### Backend (Railway)
+Cada request al API incluye el header `X-Workspace: <slug>`. El middleware `resolveWorkspace` resuelve el slug a un `Workspace` en la DB e inyecta `req.workspace`. Los datos de cada workspace están aislados por `workspaceId` en todas las tablas relevantes.
 
-1. Crear un nuevo proyecto en Railway con servicio PostgreSQL
-2. Agregar las variables de entorno en el panel de Railway:
-   - `DATABASE_URL` (provista por Railway automáticamente)
-   - `JWT_SECRET`, `RESEND_API_KEY`, `FRONTEND_URL`
-   - `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`
-3. Railway corre `npm run db:migrate` automáticamente al deployar
-4. Ejecutar el seed manualmente una sola vez desde Railway Shell: `node prisma/seed.js`
+```
+cliente.blisstracker.app
+  → frontend extrae slug → envía X-Workspace: cliente
+  → backend resolveWorkspace → req.workspace = { id, name, slug, ... }
+  → controllers filtran por req.workspace.id
+```
 
-### Frontend (Vercel)
+El JWT incluye `{ userId, workspaceId, role, teamRole }`. Al cambiar de workspace se re-emite un nuevo JWT para ese contexto.
 
-1. Importar el repositorio en Vercel apuntando a la carpeta `/frontend`
-2. Agregar variables de entorno: `VITE_API_URL` y `VITE_GOOGLE_CLIENT_ID`
-3. El archivo `vercel.json` ya incluye las reglas de rewrite para React Router SPA
+**Roles en workspace** (`WorkspaceMember.role`):
+| Rol | Permisos |
+|-----|----------|
+| `owner` | Puede eliminar el workspace, todo lo de admin |
+| `admin` | Gestión de equipo, proyectos, configuración |
+| `member` | Acceso a sus proyectos y tareas |
+
+---
+
+## Gestión del equipo
+
+Los miembros se incorporan exclusivamente por **invitación por email**. El admin envía la invitación desde **Admin → Equipo** y el invitado recibe un link con token de 7 días.
+
+- Si el invitado ya tiene cuenta en BlissTracker (en otro workspace), acepta y se incorpora directamente.
+- Si es nuevo, completa nombre y contraseña al aceptar.
+
+Los admins pueden editar el **rol de equipo** (DESIGNER, CM, etc.) y los **permisos** (miembro/admin) de cada persona. Nunca se gestiona la contraseña desde el panel de admin.
+
+---
+
+## Registro de workspace
+
+Nuevo workspace desde `https://blisstracker.app/register`:
+1. Nombre del workspace + slug (subdominio)
+2. Datos del owner (nombre, email, contraseña)
+3. Se crea workspace en trial de 14 días
+4. El owner queda con rol `owner`
 
 ---
 
@@ -118,106 +140,68 @@ npm run test:coverage
 ```
 team-tracker/
 ├── backend/
-│   ├── jest.config.js
-│   ├── tests/
-│   │   ├── setup.js
-│   │   ├── unit/
-│   │   │   ├── auth.middleware.test.js
-│   │   │   └── assertNoActiveTask.test.js
-│   │   └── integration/
-│   │       ├── auth.test.js
-│   │       └── starTask.test.js
 │   ├── prisma/
 │   │   ├── schema.prisma        # Modelos de base de datos
-│   │   ├── migrations/          # Historial de migraciones
-│   │   └── seed.js              # Admin inicial, roles por defecto y proyecto Bliss
+│   │   ├── migrations/          # Historial de migraciones SQL
+│   │   └── seed.js              # Workspace "bliss" + usuario admin + roles
 │   └── src/
-│       ├── app.js               # Express app (sin listen, importable en tests)
-│       ├── index.js             # Punto de entrada: listen + crons viernes/sábado
+│       ├── app.js               # Express app (sin listen)
+│       ├── index.js             # Punto de entrada: listen + crons
+│       ├── middleware/
+│       │   ├── auth.js          # JWT auth
+│       │   └── workspace.js     # resolveWorkspace + workspaceAdminOnly
 │       ├── controllers/
-│       │   ├── auth.controller.js          # Login, Google OAuth, forgot/reset password
-│       │   ├── workdays.controller.js      # Jornada diaria + carry-over
-│       │   ├── tasks.controller.js         # CRUD tareas + block/unblock/star/backlog
-│       │   ├── comments.controller.js      # Comentarios en tareas + notificaciones
-│       │   ├── projects.controller.js      # Proyectos + tareas + links + historial paginado
-│       │   ├── profile.controller.js       # Perfil personal + avatar + preferencias (4 flags IA)
-│       │   ├── insights.controller.js      # Insight diario con IA: generar, refrescar, feedback
-│       │   ├── roleExpectations.controller.js  # Expectativas de rol para coaching IA
-│       │   ├── reports.controller.js       # Reportes por proyecto/usuario
-│       │   ├── realtime.controller.js      # Snapshot del equipo en tiempo real
+│       │   ├── auth.controller.js
+│       │   ├── workspace.controller.js  # CRUD workspace, invitaciones, eliminación
+│       │   ├── workdays.controller.js
+│       │   ├── tasks.controller.js
+│       │   ├── projects.controller.js
+│       │   ├── profile.controller.js
+│       │   ├── insights.controller.js
+│       │   ├── roleExpectations.controller.js
+│       │   ├── reports.controller.js
+│       │   ├── realtime.controller.js
 │       │   ├── notifications.controller.js
 │       │   ├── roles.controller.js
-│       │   ├── feedback.controller.js
-│       │   └── users.controller.js
-│       ├── middleware/
-│       │   └── auth.js           # JWT auth + adminOnly (chequea isAdmin)
-│       ├── services/
-│       │   ├── email.service.js        # Resend: reset, bienvenida, resumen semanal
-│       │   ├── weeklyReport.service.js # Resumen semanal con Claude Haiku + cron viernes 14:00
-│       │   └── insightMemory.service.js # Memoria de productividad semanal + cron sábado 00:00
+│       │   └── superadmin.controller.js  # Panel interno: stats, workspaces, email logs
 │       ├── routes/
-│       │   ├── tasks.routes.js             # Tareas + comentarios
-│       │   ├── insights.routes.js          # GET / · POST /refresh · POST /feedback
-│       │   └── roleExpectations.routes.js  # GET /mine · GET / · GET /:role · PUT /:role
-│       ├── utils/
-│       │   └── dates.js          # todayString() en timezone Buenos Aires
-│       └── lib/
-│           └── prisma.js         # Singleton PrismaClient
+│       │   ├── workspace.routes.js
+│       │   ├── superadmin.routes.js
+│       │   └── ...
+│       └── services/
+│           ├── email.service.js         # Resend + log a EmailLog
+│           ├── weeklyReport.service.js  # Cron viernes 14:00 ART
+│           └── insightMemory.service.js # Cron sábado 00:00 ART
 └── frontend/
-    ├── public/
-    │   ├── blisstracker_logo.svg # Logo principal
-    │   ├── favicon.ico / favicon-*.png / apple-touch-icon.png / logo-*.png
-    │   └── perfiles/             # Avatares PNG (bee.png, beeartist.png, etc.)
     └── src/
-        ├── tests/
-        │   ├── setup.js
-        │   ├── utils/
-        │   │   ├── format.test.js
-        │   │   └── linkify.test.jsx
-        │   └── hooks/
-        │       └── useRoles.test.js
-        ├── pages/
-        │   ├── Login2.jsx            # Login + Google OAuth + link a recuperar contraseña
-        │   ├── ForgotPassword.jsx    # Solicitar link de reset
-        │   ├── ResetPassword.jsx     # Formulario de nueva contraseña
-        │   ├── Dashboard.jsx         # Tareas del día + insight diario IA (con feedback y refresh)
-        │   ├── MyProjects.jsx        # Proyectos con pills de conteos de tareas
-        │   ├── ProjectDetail.jsx     # Tareas activas por persona + links útiles (editables por cualquier miembro) + completadas semana + archivo histórico
-        │   ├── MyReports.jsx         # Reportes personales
-        │   ├── RealTime.jsx          # Actividad del equipo en tiempo real
-        │   ├── Reports.jsx           # Reportes completos (admin)
-        │   ├── Admin.jsx             # Panel de administración (con deep linking ?tab=)
-        │   ├── Productivity.jsx      # Panel de productividad (admin, wraps ProductivityTab)
-        │   ├── RRHH.jsx              # Panel de RRHH: legajos, ingresos, mini dashboard
-        │   ├── MyProfile.jsx         # Perfil personal, avatar y datos personales
-        │   └── Preferences.jsx       # Sistema IA: insight diario, memoria, calidad, resumen semanal
-        ├── components/
-        │   ├── Navbar.jsx            # Logo + nombre + dropdown de usuario
-        │   ├── TaskCard.jsx          # Tarjeta de tarea con todas las acciones + indicador 💬 de comentarios
-        │   ├── TaskCommentsModal.jsx # Modal para ver y agregar comentarios en una tarea
-        │   ├── AddTaskModal.jsx      # Modal con combobox de proyecto + asignación
-        │   ├── NotificationBell.jsx  # Campana con panel (completadas, bloqueadas, comentarios)
-        │   ├── AvatarLightbox.jsx    # Overlay fullscreen para ver foto de perfil ampliada
-        │   ├── FeedbackButton.jsx
-        │   ├── InactivityModal.jsx
-        │   ├── UserTasksModal.jsx    # Modal de tareas de un usuario (avatar clickeable con lightbox)
-        │   └── admin/
-        │       ├── ProjectsTab.jsx         # Gestión de proyectos con buscador y links útiles
-        │       ├── TeamTab.jsx
-        │       ├── ServicesTab.jsx
-        │       ├── RolesTab.jsx
-        │       ├── FeedbackTab.jsx
-        │       └── RoleExpectationsTab.jsx # Expectativas de rol por puesto para coaching IA
-        ├── hooks/
-        │   ├── useRoles.js
-        │   └── useInactivity.js      # Detecta inactividad y pausa la tarea activa
         ├── context/
-        │   ├── AuthContext.jsx       # user, login, loginWithGoogle, logout, updateUser
+        │   ├── AuthContext.jsx     # user, login, logout, switchWorkspace
+        │   ├── WorkspaceContext.jsx # info del workspace actual (nombre, slug, plan)
         │   └── ThemeContext.jsx
-        ├── utils/
-        │   ├── format.js             # fmtMins, activeMinutes, completedDuration
-        │   └── linkify.jsx           # Convierte URLs en texto a links clickeables
-        └── api/client.js
+        ├── pages/
+        │   ├── Login2.jsx
+        │   ├── Register.jsx        # Crear nuevo workspace
+        │   ├── Join.jsx            # Aceptar invitación
+        │   ├── Dashboard.jsx
+        │   ├── MyProjects.jsx
+        │   ├── ProjectDetail.jsx
+        │   ├── MyReports.jsx
+        │   ├── RealTime.jsx
+        │   ├── Reports.jsx         # Admin
+        │   ├── Admin.jsx           # Panel admin (deep link ?tab=)
+        │   ├── Productivity.jsx    # Admin
+        │   ├── RRHH.jsx            # Admin — Recursos Humanos
+        │   ├── MyProfile.jsx
+        │   ├── Preferences.jsx
+        │   ├── Docs.jsx
+        │   └── SuperAdmin.jsx      # Panel interno (solo isSuperAdmin)
+        ├── components/
+        │   ├── Navbar.jsx          # Nav items con fuente única (links/adminSublinks/profileSections)
+        │   ├── admin/
+        │   │   ├── TeamTab.jsx     # Solo invitaciones por email
+        │   │   └── ...
+        │   └── ...
+        └── api/client.js           # Axios: inyecta JWT + X-Workspace header
 ```
 
 ---
@@ -226,282 +210,117 @@ team-tracker/
 
 | Modelo | Descripción |
 |--------|-------------|
-| `User` | Usuarios con rol, avatar, `isAdmin`, 4 preferencias IA y `vacationDays` |
-| `UserRole` | Roles dinámicos creados desde el panel de admin |
-| `UserLogin` | Registro de cada inicio de sesión: `userId`, `loginAt` (UTC), `method` (email/google) |
-| `WorkDay` | Jornada laboral por usuario por día |
-| `Task` | Tarea con estado, prioridad (starred), backlog y registro de tiempo |
-| `TaskComment` | Comentarios en tareas; notifica al dueño y a comentadores previos |
-| `Project` | Proyectos/clientes |
-| `ProjectLink` | Links útiles asociados a un proyecto (Drive, Figma, etc.) — editables por cualquier miembro |
+| `Workspace` | Tenant: slug, timezone, status (trialing/active/suspended...) |
+| `WorkspaceMember` | Membresía usuario↔workspace: role (owner/admin/member), teamRole, preferencias IA |
+| `Subscription` | Plan y facturación por workspace |
+| `User` | Cuenta global: email único, datos personales, avatar |
+| `UserRole` | Roles de equipo por workspace (ej: DESIGNER, CM) |
+| `WorkspaceInvitation` | Invitaciones por email con token de 7 días |
+| `WorkspaceDeletionRequest` | Solicitud de eliminación con 48h de gracia |
+| `WorkDay` | Jornada laboral por usuario/workspace/día |
+| `Task` | Tarea con estado, starred, backlog, sesiones de tiempo |
+| `TaskSession` | Sesiones de cronómetro por tarea |
+| `TaskComment` | Comentarios con @menciones |
+| `Project` | Proyectos/clientes del workspace |
+| `ProjectLink` | Links útiles por proyecto (Drive, Figma, etc.) |
 | `Service` | Servicios que ofrece la agencia |
-| `ProjectService` | Relación muchos-a-muchos: proyecto ↔ servicio |
-| `ProjectMember` | Relación muchos-a-muchos: proyecto ↔ usuario |
-| `Notification` | Notificaciones tipadas (COMPLETED / BLOCKED / ADDED_TO_PROJECT / TASK_COMMENT / TASK_MENTION) |
-| `Feedback` | Mensajes de sugerencias y errores del equipo |
-| `PasswordResetToken` | Tokens de un solo uso para recuperación de contraseña |
-| `DailyInsight` | Coaching IA generado diariamente por usuario (cacheado, con feedback) |
-| `UserInsightMemory` | Perfil de productividad acumulado: tendencias, fortalezas y estadísticas históricas |
-| `RoleExpectation` | Tareas recurrentes y dependencias configuradas por rol para el coaching IA |
+| `Notification` | Notificaciones tipadas (5 tipos) |
+| `DailyInsight` | Coaching IA diario cacheado por usuario |
+| `UserInsightMemory` | Perfil de productividad acumulado semanalmente |
+| `RoleExpectation` | Expectativas de rol para el coaching IA |
+| `AiTokenLog` | Registro de uso de tokens de IA por workspace |
+| `EmailLog` | Log de todos los emails enviados (tipo, estado, workspace) |
+| `UserLogin` | Historial de logins (método, timestamp) |
+| `Feedback` | Sugerencias y bugs enviados por usuarios |
+| `PasswordResetToken` | Tokens de un solo uso para reset de contraseña |
 
 ---
 
-## Backlog y foco diario
+## Navegación
 
-El Dashboard separa las tareas en dos grupos:
+### Menú de navegación — fuente única
 
-| Grupo | Descripción |
-|-------|-------------|
-| **Tareas del día** | Las que el usuario decide trabajar hoy. Son las únicas visibles en el flujo principal. |
-| **Backlog** | Depósito de tareas planificadas que no son para hoy. Se muestra contraído al final, antes de las completadas. |
+Los arrays `links`, `adminSublinks` y `profileSections` en `Navbar.jsx` son la fuente única de verdad para los ítems del navbar. Cualquier cambio ahí aplica automáticamente en **desktop** (dropdown) y **mobile** (panel hamburguesa). No hay listas duplicadas.
 
-Las tareas nuevas se crean siempre en "Tareas del día". Cualquier tarea PENDING, PAUSED o BLOCKED puede moverse al Backlog con el botón "→ Backlog". Desde el Backlog, el botón "Agregar a hoy" la vuelve al día (incluyendo carry-over de días anteriores). Solo las tareas del día pueden iniciarse.
+### Usuario común
+| Pantalla | Ruta |
+|----------|------|
+| Dashboard | `/` |
+| Mis Proyectos | `/my-projects` |
+| Detalle de proyecto | `/my-projects/:id` |
+| Mis Reportes | `/my-reports` |
+| Actividad | `/realtime` |
+| Perfil | `/profile` |
+| Preferencias | `/preferences` |
+| Docs | `/docs` |
 
-Las tareas se muestran ordenadas de más nuevas a más antiguas dentro de cada sección.
+### Administrador (más)
+| Pantalla | Ruta |
+|----------|------|
+| Reportes | `/reports` |
+| Panel Admin | `/admin?tab=` |
+| Productividad | `/admin/productivity` |
+| RRHH | `/admin/rrhh` |
 
-Las tareas completadas también están contraídas por defecto. Al expandir se ven las de hoy; con "Cargar más" se carga el historial de días anteriores de a 10, con fecha y duración.
+### Super Admin interno (solo `isSuperAdmin`)
+| Pantalla | Ruta |
+|----------|------|
+| Panel Super Admin | `/superadmin` |
 
----
-
-## Estados de una tarea
-
-| Estado | Color | Descripción |
-|--------|-------|-------------|
-| `PENDING` | Gris | Creada, sin iniciar |
-| `IN_PROGRESS` | Naranja | Activa en este momento (máximo una por usuario) |
-| `PAUSED` | Gris neutro | Pausada temporalmente; acumula tiempo trabajado |
-| `BLOCKED` | Rojo | Bloqueada por impedimento externo; requiere razón; notifica al equipo |
-| `COMPLETED` | Verde | Finalizada; notifica al equipo |
-
----
-
-## Tareas destacadas (starred)
-
-Hasta **3 tareas** pueden estar destacadas simultáneamente. La estrella es el único indicador de estado y prioridad en el TaskCard (el punto de estado fue reemplazado):
-
-| Estado | Apariencia |
-|--------|-----------|
-| Sin destacar + activa (`IN_PROGRESS`) | Estrella vacía verde, pulsando |
-| Sin destacar + otros estados | Estrella vacía gris |
-| Nivel 1 | Estrella llena verde |
-| Nivel 2 | Estrella llena amarilla |
-| Nivel 3 | Estrella llena roja |
-
-Cualquier nivel de estrella pulsa si la tarea está `IN_PROGRESS`. Las tareas destacadas aparecen en la sección **"Destacadas: Foco del día"** del Dashboard, por debajo de las tareas en curso. Si una tarea destacada pasa a `IN_PROGRESS`, se mueve a la sección "En curso".
+El panel super admin tiene sidebar de navegación con: Dashboard (stats + lista de workspaces), Feedback y Emails (log de todos los emails enviados).
 
 ---
 
-## Comentarios en tareas
+## Deploy en producción
 
-Cualquier miembro de un proyecto puede dejar comentarios en las tareas, tanto en el Dashboard (tareas propias) como en la vista de detalle del proyecto (tareas de otros). El modal de comentarios también se puede abrir haciendo click en el **título de la tarea**.
+### Backend (Railway)
 
-- Las tareas con comentarios muestran un indicador 💬 N en el TaskCard.
-- Las tareas sin comentarios muestran un 💬 tenue para invitar a comentar.
-- Al hacer click se abre `TaskCommentsModal` con el historial y un campo para agregar uno nuevo (Ctrl+Enter para enviar).
-- **@menciones:** escribir `@` muestra un dropdown con miembros del proyecto. Al seleccionar uno, se inserta `@Nombre` en el texto. Las menciones se resaltan en **púrpura** en el comentario renderizado.
-- **Notificaciones al comentar:** el dueño de la tarea y todos los comentadores previos reciben una notificación azul 💬. Los usuarios mencionados con `@` reciben una notificación **púrpura @** en su lugar (sin duplicado con la notificación de comentario).
-- **Edición de descripción:** el dueño de la tarea o un admin puede editar la descripción directamente desde el modal (ícono de lápiz, Ctrl+Enter para guardar).
+1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`
+2. Railway ejecuta `npm run db:migrate` automáticamente al deployar
+3. Seed manual una vez desde Railway Shell
+
+### Frontend (Vercel Pro)
+
+1. Root: `/frontend`
+2. Agregar `*.blisstracker.app` como Custom Domain (requiere Vercel Pro para wildcard)
+3. Variables: `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`
+4. `vercel.json` ya incluye rewrites para SPA routing
+
+### DNS (Cloudflare)
+- `A blisstracker.app → Vercel`
+- `A *.blisstracker.app → Vercel` (wildcard)
 
 ---
 
 ## Sistema de IA
 
 ### Insight diario
-
-En el Dashboard aparece una tarjeta de coaching generada por **Claude Haiku** que analiza el estado real del usuario y da recomendaciones basadas en **GTD (Getting Things Done)**. Se genera una vez por día y se cachea hasta el día siguiente. El usuario puede refrescarlo manualmente (cooldown de 1 hora).
-
-La tarjeta puede mostrar hasta 5 capas de información:
-
-| Campo | Descripción |
-|-------|-------------|
-| **Título + mensaje** | Foco del día con 2-4 oraciones concretas basadas en las tareas reales |
-| **Alerta de rol** | Tareas recurrentes esperadas para el puesto que no aparecen registradas |
-| **Alerta GTD** | Tareas con descripciones vagas + reformulación sugerida como acción concreta |
-| **Sugerencia** | Una acción inmediata y concreta para hacer ahora mismo |
-| **Feedback** | 👍 / 👎 para evaluar la calidad del coaching |
-
-El tono varía entre `warning`, `alert`, `positive` y `neutral` según el estado del día.
+Generado por Claude Haiku al abrir el Dashboard. Cacheado una vez por día. Incluye: estado real de las tareas, memoria de productividad histórica, expectativas del rol y análisis GTD. El usuario puede refrescarlo (cooldown 1h) y dar feedback 👍/👎.
 
 ### Memoria de productividad
-
-Cada **sábado a las 00:00 (Buenos Aires)** el sistema analiza las últimas 4 semanas de cada usuario y actualiza su perfil de productividad en `UserInsightMemory`:
-
-- **Tendencias** — patrones de comportamiento recurrentes
-- **Fortalezas** — qué hace bien el usuario consistentemente
-- **Áreas de atención** — dónde tiende a bloquearse o bajar el rendimiento
-- **Estadísticas** — tasa de completado, tareas/día, proyectos simultáneos
-
-Esta memoria se inyecta en el prompt del insight diario para personalizar el coaching semana a semana. Activable desde **Preferencias**.
-
-### Expectativas de rol (admin)
-
-Los administradores pueden configurar desde **Admin → Roles IA** las tareas recurrentes y dependencias de cada puesto. El insight usa esa información para detectar omisiones: si es primera semana del mes y el diseñador no registró "Informe mensual", la IA lo menciona en `alertaRol`.
-
-Cada rol puede tener:
-- **Descripción** del puesto
-- **Tareas recurrentes** con frecuencia (`diaria`, `semanal`, `mensual`, `primera semana del mes`) y detalle opcional
-- **Dependencias** — a quién entrega o de quién recibe (con descripción)
-
-### Coaching de calidad de tareas
-
-Cuando `taskQualityEnabled` está activo, el insight detecta tareas con descripciones vagas ("Trabajar en web") y sugiere reformularlas como acciones concretas según GTD ("Enviar 3 opciones de homepage para aprobación"). Activable desde **Preferencias**.
+Generada cada sábado 00:00 ART. Analiza las últimas 4 semanas: tendencias, fortalezas, áreas de atención, estadísticas. Se inyecta en el prompt del insight diario y el resumen semanal.
 
 ### Resumen semanal por email
-
-Cada **viernes a las 14:00 (Buenos Aires)** se envía un email generado por Claude Haiku a todos los usuarios con `weeklyEmailEnabled: true`. Incluye:
-
-1. Resumen de la semana (datos clave)
-2. Análisis de patrones y uso del tiempo (personalizado con la memoria histórica si está disponible)
-3. Insight principal accionable
-4. Riesgos o alertas si el comportamiento continúa
-5. 3 recomendaciones específicas
-6. Enfoque sugerido para la próxima semana
-7. Tareas de rol no registradas (si hay expectativas configuradas y hubo omisiones en la semana)
-
-El prompt incluye el perfil de productividad histórico del usuario y las expectativas de su rol, igual que el insight diario. Los usuarios se procesan secuencialmente (3 segundos entre cada uno) para no superar el límite de la API de Claude. Se puede disparar de forma inmediata desde **Preferencias → "Enviar ahora"**.
+Enviado cada viernes 14:00 ART. Incluye análisis de la semana, patrones, recomendaciones y tareas de rol omitidas. Puede dispararse manualmente desde Preferencias.
 
 ---
 
-## Preferencias de IA
+## Email logging
 
-Cada usuario controla sus features de IA desde **Preferencias**:
+Todos los emails enviados quedan registrados en `EmailLog` con: workspace, destinatario, asunto, tipo y estado (enviado/fallido). Visibles en el panel Super Admin → sección Emails.
 
-| Preferencia | Flag | Descripción |
-|-------------|------|-------------|
-| Insight diario (toggle maestro) | `dailyInsightEnabled` | Activa/desactiva todo el sistema de coaching diario |
-| Memoria de aprendizaje | `insightMemoryEnabled` | El sistema acumula el perfil de productividad del usuario |
-| Coaching de calidad | `taskQualityEnabled` | El insight detecta y sugiere mejorar tareas con descripciones vagas |
-| Resumen semanal | `weeklyEmailEnabled` | Recibe el email de análisis semanal cada viernes (independiente) |
-
-`insightMemoryEnabled` y `taskQualityEnabled` son subordinados al insight diario: desactivar el toggle maestro apaga los tres flags juntos en un solo request. En Preferencias se muestran como características incluidas (no toggles individuales), y se dimean cuando el sistema está apagado.
-
-Los administradores también ven un acceso directo a **Admin → Roles IA** para configurar las expectativas de su puesto.
-
----
-
-## Navegación por rol
-
-### Usuario común
-| Pantalla | Descripción |
-|----------|-------------|
-| Dashboard | Tareas del día + carry-over + destacadas + insight diario IA |
-| Mis Proyectos | Proyectos asignados con pills de conteos de tareas por estado |
-| Detalle de proyecto | Tareas activas por persona (título clickeable abre comentarios) + tabs: Situación / Links / Personas / Servicios + completadas esta semana + archivo histórico + navegación "Siguiente proyecto →" |
-| Mis Reportes | Historial de tareas completadas por proyecto con filtro de fechas. Permite editar la duración de cualquier tarea propia (✎). |
-| Perfil | Avatar, datos personales, cambio de contraseña |
-| Preferencias | Control de las 4 features de IA + botón de prueba del resumen semanal. Los admins ven tabs: **Globales** (configuración del sistema) y **Personales** (preferencias individuales). |
-
-### Administrador (todo lo anterior más)
-| Pantalla | Descripción |
-|----------|-------------|
-| Actividad | Monitor en vivo del equipo con fotos y estado en tiempo real |
-| Reportes | Tiempo por proyecto o por persona con detalle de tareas |
-| Administración → Panel | Proyectos (con links y buscador), equipo, servicios, roles, feedback y **Roles IA** (expectativas por puesto). Deep linking: `/admin?tab=role-ai`. |
-| Administración → Productividad | Vista de productividad del equipo |
-| Administración → RRHH | Panel de Recursos Humanos (ver abajo) |
-
-El menú de navegación agrupa las tres secciones de administración en un dropdown **"Administración"**.
-
-### Panel RRHH (`/admin/rrhh`)
-
-Panel de recursos humanos con tres niveles de información:
-
-**Mini Dashboard** (siempre visible):
-- Personas activas, antigüedad promedio, legajos incompletos
-- Próximos cumpleaños y aniversarios laborales (horizonte 30 días)
-- Distribución del equipo por roles
-- Último ingreso de cada persona
-
-**Legajos** (tab por defecto): seleccionar una persona para ver su ficha completa:
-- Horario promedio histórico de ingreso (calculado sobre todos los registros)
-- Proyectos en los que participa (con indicador activo/inactivo)
-- Días de vacaciones pendientes con botones `+` / `−` (mínimo 0)
-- Datos personales: teléfono, dirección, DNI, CUIT, alias bancario, estado civil, hijos, nivel educativo, grupo sanguíneo, obra social, contacto de emergencia
-
-**Ingresos**: historial de ingresos con filtros:
-- Atajos de fecha: Hoy · Esta semana · Semana pasada · Este mes · Mes pasado
-- Selector de rango manual + filtro por persona
-- Resultados agrupados por usuario (filas colapsables, cerradas por defecto)
-- Ordenamiento por horario promedio: ↑ Más temprano / ↓ Más tarde
+Tipos de email: `passwordReset` · `welcome` · `weeklySummary` · `testSettings` · `invitation` · `deletionWarning`
 
 ---
 
 ## Fotos de perfil
 
-Hay 15 avatares disponibles en `frontend/public/perfiles/`:
+15 avatares disponibles en `frontend/public/perfiles/`. Avatar por defecto: `2bee.png`. Validados en backend contra lista `ALLOWED_AVATARS`. Clickear en cualquier avatar abre un lightbox fullscreen.
 
-| Archivo | Descripción |
-|---------|-------------|
-| `bee.png` | Clásica (por defecto) |
-| `bee2.png` | Alternativa |
-| `babee.png` | Baby |
-| `beeartist.png` | Artista |
-| `beecoffee.png` | Coffee |
-| `beecorp.png` | Corp |
-| `beecypher.png` | Cypher |
-| `beefitness.png` | Fitness |
-| `beegamer.png` | Gamer |
-| `beehacker.png` | Hacker |
-| `beeloween.png` | Halloween |
-| `beenfluencer.png` | Influencer |
-| `beepunk.png` | Punk |
-| `beezen.png` | Zen |
-| `beezombie.png` | Zombie |
-
-Las fotos se muestran en: Navbar (dropdown), detalle de proyecto, Actividad y notificaciones. Haciendo click en cualquier foto se abre un lightbox para verla a tamaño completo.
+Avatares: `2bee.png`, `bee.png`, `bee2.png`, `babee.png`, `beeartist.png`, `beecoffee.png`, `beecorp.png`, `beecypher.png`, `beefitness.png`, `beegamer.png`, `beehacker.png`, `beeloween.png`, `beenfluencer.png`, `beepunk.png`, `beezen.png`, `beezombie.png`
 
 ---
 
-## Notificaciones
+## Documentación técnica detallada
 
-Las notificaciones se generan en cinco eventos:
-
-| Tipo | Color | Badge | Descripción |
-|------|-------|-------|-------------|
-| `COMPLETED` | Naranja (primary) | — | Un miembro completó una tarea del proyecto |
-| `BLOCKED` | Rojo | ⚠ | Un miembro bloqueó una tarea |
-| `ADDED_TO_PROJECT` | Verde | ＋ | Fuiste agregado a un proyecto |
-| `TASK_COMMENT` | Azul | 💬 | Alguien comentó en una tarea tuya o donde participaste |
-| `TASK_MENTION` | Púrpura | @ | Te mencionaron con @ en un comentario, o alguien te asignó una tarea |
-
-Cada notificación es un **link clickeable** que navega al proyecto y abre automáticamente el modal de comentarios de la tarea correspondiente. El nombre del proyecto se muestra como pill junto a la fecha.
-
-El panel incluye **6 filtros** en pills: Todas · @ · 💬 · 🔒 · ✓ · ＋. Cada filtro muestra el conteo de no-leídas de ese tipo.
-
-En mobile el panel ocupa ~95% del ancho de pantalla. Polling cada 2 minutos. Se marcan como leídas al abrir el panel.
-
----
-
-## Detección de inactividad
-
-`hooks/useInactivity.js` monitorea mouse y teclado. Si el usuario lleva **120 minutos** sin actividad con una tarea `IN_PROGRESS`:
-1. Muestra un modal de advertencia + notificación Chrome
-2. Si no responde en 10 minutos más, pausa la tarea automáticamente
-3. Al recargar la página, el modal se restaura desde `localStorage` (`autoPaused`)
-
----
-
-## Timezone
-
-Todas las fechas de jornadas se calculan en **America/Argentina/Buenos_Aires (UTC-3)**. Los timestamps de tareas se almacenan en UTC en la base de datos.
-
----
-
-## Flujo de uso diario
-
-1. El usuario inicia sesión (email/contraseña o Google OAuth)
-2. La jornada se crea automáticamente al entrar al Dashboard
-3. Si tiene tareas pendientes/pausadas/bloqueadas de días anteriores, aparecen en **"Pendientes de días anteriores"**
-4. El insight diario IA analiza el estado real y sugiere en qué enfocarse, usando el perfil de productividad acumulado y las expectativas del rol
-5. Agrega tareas con descripción y proyecto; puede asignarla a otro miembro
-6. Hace clic en **Iniciar** — solo puede tener **una tarea activa** a la vez
-7. Desde una tarea en curso puede pausar, bloquear (requiere razón) o completar
-8. Puede dejar comentarios en cualquier tarea del proyecto — puede mencionar compañeros con `@Nombre`. El dueño y otros comentadores reciben notificación; los mencionados reciben una notificación @ especial.
-9. Al completar, los demás miembros del proyecto reciben una notificación
-10. Al terminar el día, hace clic en **Finalizar jornada** — la sesión se cierra
-
----
-
-## Feedback
-
-Cualquier usuario puede enviar sugerencias o reportar errores desde el botón flotante en la esquina inferior derecha. Los mensajes llegan al panel de administración → pestaña **Feedback**.
+Ver [CLAUDE.md](./CLAUDE.md) — referencia completa de arquitectura, modelos, rutas API y convenciones para desarrollo con Claude Code.

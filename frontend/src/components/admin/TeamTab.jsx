@@ -3,138 +3,6 @@ import api from '../../api/client'
 
 const emptyInvite = { email: '', memberRole: 'member', teamRole: '' }
 
-function InvitationsSection({ roles }) {
-  const [open, setOpen]             = useState(false)
-  const [invitations, setInvitations] = useState([])
-  const [form, setForm]             = useState(emptyInvite)
-  const [loading, setLoading]       = useState(false)
-  const [error, setError]           = useState('')
-  const [success, setSuccess]       = useState('')
-
-  useEffect(() => {
-    if (open) {
-      api.get('/workspaces/current/invitations').then(r => setInvitations(r.data)).catch(() => {})
-    }
-  }, [open])
-
-  async function handleInvite(e) {
-    e.preventDefault()
-    setError('')
-    setSuccess('')
-    setLoading(true)
-    try {
-      await api.post('/workspaces/current/invitations', form)
-      setSuccess(`Invitación enviada a ${form.email}`)
-      setForm(emptyInvite)
-      const r = await api.get('/workspaces/current/invitations')
-      setInvitations(r.data)
-    } catch (err) {
-      setError(err.response?.data?.error || 'Error al enviar la invitación')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleCancel(id) {
-    await api.delete(`/workspaces/current/invitations/${id}`)
-    setInvitations(prev => prev.filter(i => i.id !== id))
-  }
-
-  return (
-    <div className="mt-6">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-          className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>
-          <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clipRule="evenodd" />
-        </svg>
-        ✉️ Invitar por email
-        {invitations.length > 0 && (
-          <span className="bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 rounded-full px-2 py-0.5 text-xs">
-            {invitations.length} pendiente{invitations.length !== 1 ? 's' : ''}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="mt-3 space-y-4">
-          {/* Formulario de invitación */}
-          <form onSubmit={handleInvite} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Email a invitar</label>
-              <input
-                required type="email" value={form.email}
-                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                placeholder="nombre@empresa.com"
-                className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol en workspace</label>
-              <select
-                value={form.memberRole}
-                onChange={e => setForm(p => ({ ...p, memberRole: e.target.value }))}
-                className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="member">Miembro</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol en equipo (opcional)</label>
-              <select
-                value={form.teamRole}
-                onChange={e => setForm(p => ({ ...p, teamRole: e.target.value }))}
-                className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">Sin rol</option>
-                {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
-              </select>
-            </div>
-            {error   && <p className="col-span-2 text-red-500 text-sm">{error}</p>}
-            {success && <p className="col-span-2 text-green-600 dark:text-green-400 text-sm">{success}</p>}
-            <div className="col-span-2">
-              <button
-                type="submit" disabled={loading}
-                className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60"
-              >
-                {loading ? 'Enviando...' : 'Enviar invitación'}
-              </button>
-            </div>
-          </form>
-
-          {/* Invitaciones pendientes */}
-          {invitations.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Invitaciones pendientes</p>
-              <div className="space-y-2">
-                {invitations.map(inv => (
-                  <div key={inv.id} className="flex items-center justify-between bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{inv.email}</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">
-                        {inv.memberRole} {inv.teamRole ? `· ${inv.teamRole}` : ''} · enviada por {inv.invitedBy}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleCancel(inv.id)}
-                      className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 const ROLE_COLORS = [
   'bg-purple-100 text-purple-700',
   'bg-pink-100 text-pink-700',
@@ -151,8 +19,6 @@ function roleColor(roleName) {
   for (const c of roleName) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff
   return ROLE_COLORS[hash % ROLE_COLORS.length]
 }
-
-const emptyForm = { name: '', email: '', password: '', role: '', isAdmin: false }
 
 const MARITAL_LABELS = {
   soltero: 'Soltero/a', casado: 'Casado/a', divorciado: 'Divorciado/a',
@@ -174,53 +40,86 @@ function DataField({ label, value }) {
 }
 
 export default function TeamTab() {
-  const [users, setUsers] = useState([])
-  const [roles, setRoles] = useState([])
-  const [form, setForm] = useState(emptyForm)
-  const [editId, setEditId] = useState(null)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [users, setUsers]           = useState([])
+  const [roles, setRoles]           = useState([])
+  const [invitations, setInvitations] = useState([])
+  const [inviteForm, setInviteForm] = useState(emptyInvite)
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteError, setInviteError]     = useState('')
+  const [inviteSuccess, setInviteSuccess] = useState('')
+  const [editId, setEditId]         = useState(null)
+  const [editForm, setEditForm]     = useState({ teamRole: '', memberRole: 'member' })
+  const [editError, setEditError]   = useState('')
+  const [editLoading, setEditLoading] = useState(false)
   const [expandedId, setExpandedId] = useState(null)
   const [showInactive, setShowInactive] = useState(false)
 
   useEffect(() => {
-    api.get('/users').then(r => setUsers(r.data))
-    api.get('/roles').then(r => {
-      setRoles(r.data)
-      setForm(p => ({ ...p, role: r.data[0]?.name || '' }))
-    })
+    api.get('/workspaces/current/members').then(r => setUsers(r.data)).catch(() => {})
+    api.get('/roles').then(r => setRoles(r.data)).catch(() => {})
+    api.get('/workspaces/current/invitations').then(r => setInvitations(r.data)).catch(() => {})
   }, [])
 
-  async function handleSubmit(e) {
+  // ── Invitaciones ──────────────────────────────────────────────────────────
+
+  async function handleInvite(e) {
     e.preventDefault()
-    setError('')
-    setLoading(true)
+    setInviteError('')
+    setInviteSuccess('')
+    setInviteLoading(true)
     try {
-      if (editId) {
-        const payload = { name: form.name, email: form.email, role: form.role, isAdmin: form.isAdmin }
-        if (form.password) payload.password = form.password
-        const { data } = await api.put(`/users/${editId}`, payload)
-        setUsers(prev => prev.map(u => u.id === data.id ? data : u))
-      } else {
-        const { data } = await api.post('/users', form)
-        setUsers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
-      }
-      setForm({ ...emptyForm, role: roles[0]?.name || '' })
-      setEditId(null)
+      await api.post('/workspaces/current/invitations', inviteForm)
+      setInviteSuccess(`Invitación enviada a ${inviteForm.email}`)
+      setInviteForm(emptyInvite)
+      const r = await api.get('/workspaces/current/invitations')
+      setInvitations(r.data)
     } catch (err) {
-      setError(err.response?.data?.error || 'Error')
+      setInviteError(err.response?.data?.error || 'Error al enviar la invitación')
     } finally {
-      setLoading(false)
+      setInviteLoading(false)
     }
   }
 
-  function startEdit(u) {
-    setEditId(u.id)
-    setForm({ name: u.name, email: u.email, password: '', role: u.role, isAdmin: u.isAdmin ?? false })
+  async function handleCancelInvitation(id) {
+    await api.delete(`/workspaces/current/invitations/${id}`)
+    setInvitations(prev => prev.filter(i => i.id !== id))
   }
 
+  // ── Editar miembro ────────────────────────────────────────────────────────
+
+  function startEdit(u) {
+    setEditId(u.id)
+    setEditForm({ teamRole: u.role || '', memberRole: u.memberRole || 'member' })
+    setEditError('')
+  }
+
+  function cancelEdit() {
+    setEditId(null)
+    setEditError('')
+  }
+
+  async function handleEditSubmit(e) {
+    e.preventDefault()
+    setEditError('')
+    setEditLoading(true)
+    try {
+      const { data } = await api.put(`/workspaces/current/members/${editId}`, {
+        teamRole: editForm.teamRole,
+        memberRole: editForm.memberRole,
+      })
+      setUsers(prev => prev.map(u => u.id === editId ? data : u))
+      setEditId(null)
+    } catch (err) {
+      setEditError(err.response?.data?.error || 'Error al guardar')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  // ── Activar / desactivar ──────────────────────────────────────────────────
+
   async function toggleActive(u) {
-    const { data } = await api.put(`/users/${u.id}`, { active: !u.active })
+    const { data } = await api.patch(`/workspaces/current/members/${u.id}/toggle-active`)
     setUsers(prev => prev.map(x => x.id === data.id ? data : x))
   }
 
@@ -228,73 +127,104 @@ export default function TeamTab() {
     return roles.find(r => r.name === roleName)?.label ?? roleName
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+
   return (
     <div>
+      {/* Header */}
       <div className="flex items-center gap-2 mb-4">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">{editId ? 'Editar miembro' : 'Equipo'}</h2>
-        {!editId && users.length > 0 && (
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Equipo</h2>
+        {users.length > 0 && (
           <span className="text-sm bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2.5 py-0.5 font-medium">
             {users.filter(u => u.active).length} miembros
           </span>
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 mb-6 grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Nombre</label>
-          <input required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-            className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Email</label>
-          <input required type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-            className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">{editId ? 'Nueva contraseña (opcional)' : 'Contraseña'}</label>
-          <input type="password" required={!editId} value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-            className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol</label>
-          <select required value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
-            className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-            {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
-          </select>
-        </div>
-        <div className="col-span-2 flex items-center justify-between py-1">
-          <div>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Administrador</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">Acceso al panel de admin, reportes y gestión del equipo</p>
+      {/* ── Invitar por email (acción principal) ─────────────────────────── */}
+      <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 mb-6">
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center gap-2">
+          ✉️ Invitar al equipo
+        </h3>
+        <form onSubmit={handleInvite} className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Email</label>
+            <input
+              required type="email" value={inviteForm.email}
+              onChange={e => setInviteForm(p => ({ ...p, email: e.target.value }))}
+              placeholder="nombre@empresa.com"
+              className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
           </div>
-          <button
-            type="button"
-            onClick={() => setForm(p => ({ ...p, isAdmin: !p.isAdmin }))}
-            className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${
-              form.isAdmin ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-            }`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
-              form.isAdmin ? 'translate-x-5' : 'translate-x-0'
-            }`} />
-          </button>
-        </div>
-        {error && <p className="col-span-2 text-red-500 text-sm">{error}</p>}
-        <div className="col-span-2 flex gap-3">
-          {editId && (
-            <button type="button" onClick={() => { setEditId(null); setForm({ ...emptyForm, role: roles[0]?.name || '' }) }}
-              className="border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-lg px-4 py-2 text-sm">Cancelar</button>
-          )}
-          <button type="submit" disabled={loading}
-            className="flex-1 bg-primary-600 hover:bg-primary-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60">
-            {loading ? 'Guardando...' : editId ? 'Actualizar' : 'Agregar al equipo'}
-          </button>
-        </div>
-      </form>
+          <div>
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Permisos</label>
+            <select
+              value={inviteForm.memberRole}
+              onChange={e => setInviteForm(p => ({ ...p, memberRole: e.target.value }))}
+              className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="member">Miembro</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol en equipo (opcional)</label>
+            <select
+              value={inviteForm.teamRole}
+              onChange={e => setInviteForm(p => ({ ...p, teamRole: e.target.value }))}
+              className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">Sin rol</option>
+              {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
+            </select>
+          </div>
+          {inviteError   && <p className="col-span-2 text-red-500 text-sm">{inviteError}</p>}
+          {inviteSuccess && <p className="col-span-2 text-green-600 dark:text-green-400 text-sm">{inviteSuccess}</p>}
+          <div className="col-span-2">
+            <button
+              type="submit" disabled={inviteLoading}
+              className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60"
+            >
+              {inviteLoading ? 'Enviando...' : 'Enviar invitación'}
+            </button>
+          </div>
+        </form>
 
+        {/* Invitaciones pendientes */}
+        {invitations.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+              Pendientes de aceptar
+            </p>
+            <div className="space-y-2">
+              {invitations.map(inv => (
+                <div key={inv.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-900/40 rounded-lg px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{inv.email}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      {inv.memberRole === 'admin' ? 'Admin' : 'Miembro'}
+                      {inv.teamRole ? ` · ${inv.teamRole}` : ''}
+                      {' · enviada por '}{inv.invitedBy}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleCancelInvitation(inv.id)}
+                    className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors ml-4 flex-shrink-0"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Lista de miembros activos ─────────────────────────────────────── */}
       <div className="space-y-2">
         {users.filter(u => u.active).map(u => {
           const isExpanded = expandedId === u.id
+          const isEditing  = editId === u.id
           const birthday = u.birthday
             ? new Date(u.birthday).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
             : null
@@ -303,8 +233,8 @@ export default function TeamTab() {
             u.bloodType || u.medicalConditions || u.healthInsurance || u.emergencyContact
 
           return (
-            <div key={u.id} className={`bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-hidden ${!u.active ? 'opacity-50' : ''}`}>
-              {/* Main row */}
+            <div key={u.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-hidden">
+              {/* Fila principal */}
               <div className="flex items-center justify-between px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{u.name}</p>
@@ -316,58 +246,91 @@ export default function TeamTab() {
                       Admin
                     </span>
                   )}
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor(u.role)}`}>
-                    {labelFor(u.role)}
-                  </span>
-                  <button onClick={() => startEdit(u)} className="text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">Editar</button>
+                  {u.role && (
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor(u.role)}`}>
+                      {labelFor(u.role)}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => isEditing ? cancelEdit() : startEdit(u)}
+                    className="text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
+                  >
+                    {isEditing ? 'Cancelar' : 'Editar'}
+                  </button>
                   <button onClick={() => toggleActive(u)} className="text-xs text-red-500 hover:text-red-700">
                     Desactivar
                   </button>
-                  {/* Expand toggle */}
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : u.id)}
                     title={isExpanded ? 'Ocultar datos personales' : 'Ver datos personales'}
                     className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition-colors p-0.5"
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                      className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                    >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                      className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
                       <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clipRule="evenodd" />
                     </svg>
                   </button>
                 </div>
               </div>
 
-              {/* Personal data panel */}
-              {isExpanded && (
+              {/* Formulario de edición inline */}
+              {isEditing && (
+                <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-4 bg-gray-50 dark:bg-gray-900/40">
+                  <form onSubmit={handleEditSubmit} className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol en equipo</label>
+                      <select
+                        value={editForm.teamRole}
+                        onChange={e => setEditForm(p => ({ ...p, teamRole: e.target.value }))}
+                        className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Sin rol</option>
+                        {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Permisos</label>
+                      <select
+                        value={editForm.memberRole}
+                        onChange={e => setEditForm(p => ({ ...p, memberRole: e.target.value }))}
+                        className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="member">Miembro</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    {editError && <p className="col-span-2 text-red-500 text-sm">{editError}</p>}
+                    <div className="col-span-2">
+                      <button
+                        type="submit" disabled={editLoading}
+                        className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60"
+                      >
+                        {editLoading ? 'Guardando...' : 'Guardar cambios'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* Panel de datos personales */}
+              {isExpanded && !isEditing && (
                 <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-4 bg-gray-50 dark:bg-gray-900/40">
                   {!hasPersonalData ? (
                     <p className="text-xs text-gray-400 dark:text-gray-500 italic">Este usuario no completó sus datos personales todavía.</p>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-
-                      {/* Contacto */}
                       <DataField label="Celular" value={u.phone} />
                       <DataField label="Fecha de nacimiento" value={birthday} />
                       <DataField label="Dirección" value={u.address} />
                       <DataField label="Contacto de emergencia" value={u.emergencyContact} />
-
-                      {/* Identidad */}
                       <DataField label="DNI" value={u.dni} />
                       <DataField label="CUIT" value={u.cuit} />
                       <DataField label="Alias CBU" value={u.alias} />
                       <DataField label="Banco" value={u.bankName} />
-
-                      {/* Personal */}
                       <DataField label="Estado civil" value={MARITAL_LABELS[u.maritalStatus] ?? u.maritalStatus} />
                       <DataField label="Hijos" value={u.children !== null ? String(u.children) : null} />
-
-                      {/* Educación */}
                       <DataField label="Nivel de estudios" value={EDUCATION_LABELS[u.educationLevel] ?? u.educationLevel} />
                       <DataField label="Título" value={u.educationTitle} />
-
-                      {/* Salud */}
                       <DataField label="Grupo sanguíneo" value={u.bloodType} />
                       <DataField label="Obra social" value={u.healthInsurance} />
                       {u.medicalConditions && (
@@ -384,20 +347,15 @@ export default function TeamTab() {
         })}
       </div>
 
-      {/* Invitar por email */}
-      <InvitationsSection roles={roles} />
-
-      {/* Historial de usuarios inactivos */}
+      {/* ── Historial de usuarios inactivos ──────────────────────────────── */}
       {users.some(u => !u.active) && (
         <div className="mt-6">
           <button
             onClick={() => setShowInactive(v => !v)}
             className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors w-full"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-              className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`}
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+              className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`}>
               <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clipRule="evenodd" />
             </svg>
             <span className="font-medium">Historial de usuarios</span>
@@ -421,13 +379,12 @@ export default function TeamTab() {
                           Admin
                         </span>
                       )}
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor(u.role)}`}>
-                        {labelFor(u.role)}
-                      </span>
-                      <button
-                        onClick={() => toggleActive(u)}
-                        className="text-xs text-green-500 hover:text-green-700"
-                      >
+                      {u.role && (
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor(u.role)}`}>
+                          {labelFor(u.role)}
+                        </span>
+                      )}
+                      <button onClick={() => toggleActive(u)} className="text-xs text-green-500 hover:text-green-700">
                         Activar
                       </button>
                     </div>
