@@ -194,11 +194,26 @@ function WorkspacePicker({ workspaces }) {
 
 function RootLogin() {
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+  const fromSlug  = new URLSearchParams(window.location.search).get('from')
+
   const [email,      setEmail]      = useState('')
   const [password,   setPassword]   = useState('')
   const [error,      setError]      = useState('')
   const [loading,    setLoading]    = useState(false)
   const [workspaces, setWorkspaces] = useState(null)
+
+  function redirect(workspaces) {
+    // Si vine desde un workspace específico y el usuario tiene acceso, ir directo
+    const target = fromSlug
+      ? workspaces.find(w => w.slug === fromSlug) ?? workspaces[0]
+      : workspaces.length === 1 ? workspaces[0] : null
+
+    if (target) {
+      window.location.href = `https://${target.slug}.${appDomain}/auth?token=${target.token}`
+    } else {
+      setWorkspaces(workspaces)
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -206,11 +221,7 @@ function RootLogin() {
     setLoading(true)
     try {
       const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, { email, password })
-      if (data.workspaces?.length === 1) {
-        window.location.href = `https://${data.workspaces[0].slug}.${appDomain}/auth?token=${data.workspaces[0].token}`
-      } else {
-        setWorkspaces(data.workspaces)
-      }
+      redirect(data.workspaces)
     } catch (err) {
       setError(err.response?.data?.error || 'Error al iniciar sesión')
     } finally {
@@ -223,11 +234,7 @@ function RootLogin() {
     setLoading(true)
     try {
       const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/google`, { credential })
-      if (data.workspaces?.length === 1) {
-        window.location.href = `https://${data.workspaces[0].slug}.${appDomain}/auth?token=${data.workspaces[0].token}`
-      } else {
-        setWorkspaces(data.workspaces)
-      }
+      redirect(data.workspaces)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo iniciar sesión con Google')
     } finally {
@@ -354,6 +361,13 @@ export default function Login2() {
 
   if (!slug) {
     return <RootLogin />
+  }
+
+  // Subdominio de workspace → redirigir al login central
+  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+  if (window.location.hostname.includes(appDomain)) {
+    window.location.replace(`https://${appDomain}/login?from=${slug}`)
+    return null
   }
 
   if (notFound) {
