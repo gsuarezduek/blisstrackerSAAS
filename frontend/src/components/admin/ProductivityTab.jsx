@@ -96,7 +96,7 @@ export default function ProductivityTab() {
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-3">
                   <img
-                    src={`/perfiles/${u.avatar ?? 'bee.png'}`}
+                    src={`/perfiles/${u.avatar ?? '2bee.png'}`}
                     alt={u.name}
                     className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-600"
                   />
@@ -177,7 +177,7 @@ export default function ProductivityTab() {
               <div key={u.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <img
-                    src={`/perfiles/${u.avatar ?? 'bee.png'}`}
+                    src={`/perfiles/${u.avatar ?? '2bee.png'}`}
                     alt={u.name}
                     className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600"
                   />

@@ -337,7 +337,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
           {comments.map(c => (
             <div key={c.id} className="flex items-start gap-3">
               <img
-                src={`/perfiles/${c.user.avatar ?? 'bee.png'}`}
+                src={`/perfiles/${c.user.avatar ?? '2bee.png'}`}
                 alt={c.user.name}
                 className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0 mt-0.5"
               />
@@ -378,7 +378,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                     className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${i === mentionIdx ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                   >
                     <img
-                      src={`/perfiles/${m.avatar ?? 'bee.png'}`}
+                      src={`/perfiles/${m.avatar ?? '2bee.png'}`}
                       alt={m.name}
                       className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
                     />

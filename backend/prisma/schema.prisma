@@ -107,7 +107,7 @@ model User {
   medicalConditions String?
   healthInsurance   String?
   emergencyContact  String?
-  avatar            String   @default("bee.png")
+  avatar            String   @default("2bee.png")
 
   // Relaciones
   workspaceMembers      WorkspaceMember[]

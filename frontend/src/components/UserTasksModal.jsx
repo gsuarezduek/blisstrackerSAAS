@@ -47,7 +47,7 @@ export default function UserTasksModal({ user, onClose }) {
           <div className="flex items-center gap-3">
             <button onClick={() => setLightbox(true)} className="flex-shrink-0 rounded-full focus:outline-none">
               <img
-                src={`/perfiles/${user.avatar || 'bee.png'}`}
+                src={`/perfiles/${user.avatar || '2bee.png'}`}
                 alt={user.name}
                 className="w-10 h-10 rounded-full object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
               />
@@ -142,7 +142,7 @@ export default function UserTasksModal({ user, onClose }) {
       </div>
       {lightbox && (
         <AvatarLightbox
-          src={`/perfiles/${user.avatar || 'bee.png'}`}
+          src={`/perfiles/${user.avatar || '2bee.png'}`}
           alt={user.name}
           onClose={() => setLightbox(false)}
         />

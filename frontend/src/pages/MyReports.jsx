@@ -41,7 +41,7 @@ export default function MyReports() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mis Reportes</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{user?.name}</p>

@@ -112,7 +112,7 @@ export default function MyProfile() {
   useEffect(() => {
     api.get('/profile').then(({ data }) => {
       setProfile(data)
-      setSelectedAvatar(data.avatar ?? 'bee.png')
+      setSelectedAvatar(data.avatar ?? '2bee.png')
       setForm({
         phone:            data.phone ?? '',
         birthday:         data.birthday ? data.birthday.slice(0, 10) : '',
@@ -255,7 +255,7 @@ export default function MyProfile() {
                   </button>
                 </div>
               ))}
-              {selectedAvatar !== (profile.avatar ?? 'bee.png') && (
+              {selectedAvatar !== (profile.avatar ?? '2bee.png') && (
                 <button
                   onClick={handleSaveAvatar}
                   disabled={avatarSaving}

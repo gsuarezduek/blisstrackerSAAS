@@ -273,7 +273,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -602,7 +602,7 @@ export default function Dashboard() {
                               </p>
                               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                 <img
-                                  src={`/perfiles/${t.user.avatar || 'bee.png'}`}
+                                  src={`/perfiles/${t.user.avatar || '2bee.png'}`}
                                   alt={t.user.name}
                                   className="w-4 h-4 rounded-full object-cover flex-shrink-0"
                                 />

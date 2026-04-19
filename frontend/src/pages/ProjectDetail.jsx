@@ -45,7 +45,7 @@ function Avatar({ user, size = 'md' }) {
   const cls = size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'
   return (
     <img
-      src={`/perfiles/${user.avatar ?? 'bee.png'}`}
+      src={`/perfiles/${user.avatar ?? '2bee.png'}`}
       alt={user.name}
       className={`${cls} rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0`}
     />

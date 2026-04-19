@@ -188,7 +188,7 @@ export default function NotificationBell() {
                     <div className="flex items-start gap-2.5">
                       <div className="relative flex-shrink-0 mt-0.5">
                         <img
-                          src={`/perfiles/${n.actor.avatar ?? 'bee.png'}`}
+                          src={`/perfiles/${n.actor.avatar ?? '2bee.png'}`}
                           alt={n.actor.name}
                           className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600"
                         />

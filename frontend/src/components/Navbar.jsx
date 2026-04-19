@@ -60,7 +60,7 @@ export default function Navbar() {
   }
 
   const isAdmin = user?.isAdmin === true
-  const avatarSrc = `/perfiles/${user?.avatar ?? 'bee.png'}`
+  const avatarSrc = `/perfiles/${user?.avatar ?? '2bee.png'}`
 
   const links = [
     { to: '/', label: 'Dashboard' },
@@ -107,7 +107,7 @@ export default function Navbar() {
           </div>
 
           {/* Desktop links */}
-          <div className="hidden md:flex gap-5 text-sm items-center">
+          <div className="hidden lg:flex gap-5 text-sm items-center">
             {links.map(l => (
               <NavLink key={l.to} {...l} />
             ))}
@@ -171,7 +171,7 @@ export default function Navbar() {
             </button>
 
             {/* User menu — desktop only */}
-            <div ref={profileRef} className="relative hidden md:block">
+            <div ref={profileRef} className="relative hidden lg:block">
               <button
                 onClick={() => setProfileOpen(o => !o)}
                 className="flex items-center gap-2.5 hover:opacity-80 transition-opacity rounded-lg px-2 py-1"
@@ -275,7 +275,7 @@ export default function Navbar() {
             {/* Hamburger — mobile only */}
             <button
               onClick={() => setMenuOpen(o => !o)}
-              className="md:hidden p-1.5 text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              className="lg:hidden p-1.5 text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
               aria-label="Menú"
             >
               {menuOpen ? (
@@ -293,7 +293,7 @@ export default function Navbar() {
 
         {/* Mobile menu */}
         {menuOpen && (
-          <div className="md:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 space-y-1">
+          <div className="lg:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 space-y-1">
             {/* User info */}
             <div className="flex items-center gap-3 pb-3 mb-2 border-b border-gray-100 dark:border-gray-700">
               <img

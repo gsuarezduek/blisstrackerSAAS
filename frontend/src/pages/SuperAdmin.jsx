@@ -147,7 +147,7 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                   {detail.members?.map(m => (
                     <div key={m.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
                       <div className="flex items-center gap-3">
-                        <img src={`/perfiles/${m.avatar || 'bee.png'}`} className="w-7 h-7 rounded-full object-cover" alt={m.name} />
+                        <img src={`/perfiles/${m.avatar || '2bee.png'}`} className="w-7 h-7 rounded-full object-cover" alt={m.name} />
                         <div>
                           <p className="text-sm font-medium text-gray-900 dark:text-white">{m.name}</p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">{m.email}</p>
