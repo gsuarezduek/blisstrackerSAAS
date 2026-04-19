@@ -3,6 +3,28 @@ import api from '../../api/client'
 
 const emptyInvite = { email: '', memberRole: 'member', teamRole: '' }
 
+function AdminToggle({ value, onChange }) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <div>
+        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Administrador del workspace</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">Acceso al panel de admin, reportes y gestión del equipo</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(value === 'admin' ? 'member' : 'admin')}
+        className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ml-4 ${
+          value === 'admin' ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+        }`}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+          value === 'admin' ? 'translate-x-5' : 'translate-x-0'
+        }`} />
+      </button>
+    </div>
+  )
+}
+
 const ROLE_COLORS = [
   'bg-purple-100 text-purple-700',
   'bg-pink-100 text-pink-700',
@@ -156,18 +178,7 @@ export default function TeamTab() {
               className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Permisos</label>
-            <select
-              value={inviteForm.memberRole}
-              onChange={e => setInviteForm(p => ({ ...p, memberRole: e.target.value }))}
-              className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="member">Miembro</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div>
+          <div className="col-span-2">
             <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol en equipo (opcional)</label>
             <select
               value={inviteForm.teamRole}
@@ -177,6 +188,12 @@ export default function TeamTab() {
               <option value="">Sin rol</option>
               {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
             </select>
+          </div>
+          <div className="col-span-2">
+            <AdminToggle
+              value={inviteForm.memberRole}
+              onChange={v => setInviteForm(p => ({ ...p, memberRole: v }))}
+            />
           </div>
           {inviteError   && <p className="col-span-2 text-red-500 text-sm">{inviteError}</p>}
           {inviteSuccess && <p className="col-span-2 text-green-600 dark:text-green-400 text-sm">{inviteSuccess}</p>}
@@ -277,7 +294,7 @@ export default function TeamTab() {
               {isEditing && (
                 <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-4 bg-gray-50 dark:bg-gray-900/40">
                   <form onSubmit={handleEditSubmit} className="grid grid-cols-2 gap-3">
-                    <div>
+                    <div className="col-span-2">
                       <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol en equipo</label>
                       <select
                         value={editForm.teamRole}
@@ -288,16 +305,11 @@ export default function TeamTab() {
                         {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
                       </select>
                     </div>
-                    <div>
-                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Permisos</label>
-                      <select
+                    <div className="col-span-2">
+                      <AdminToggle
                         value={editForm.memberRole}
-                        onChange={e => setEditForm(p => ({ ...p, memberRole: e.target.value }))}
-                        className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        <option value="member">Miembro</option>
-                        <option value="admin">Admin</option>
-                      </select>
+                        onChange={v => setEditForm(p => ({ ...p, memberRole: v }))}
+                      />
                     </div>
                     {editError && <p className="col-span-2 text-red-500 text-sm">{editError}</p>}
                     <div className="col-span-2">
