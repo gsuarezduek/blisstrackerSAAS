@@ -40,20 +40,26 @@ export default function Dashboard() {
   const [insightCooldown, setInsightCooldown] = useState(null)
   const [insightExpanded, setInsightExpanded] = useState(false)
   const [insightDismissed, setInsightDismissed] = useState(false)
+  const [workdayError, setWorkdayError] = useState(null)
 
   const loadToday = useCallback(async () => {
-    const { data } = await api.get('/workdays/today')
-    const { carryOverTasks, ...wd } = data
-    setWorkDay(wd)
-    setCarryOver(carryOverTasks ?? [])
+    setWorkdayError(null)
+    try {
+      const { data } = await api.get('/workdays/today')
+      const { carryOverTasks, ...wd } = data
+      setWorkDay(wd)
+      setCarryOver(carryOverTasks ?? [])
 
-    const storedId = localStorage.getItem('autoPaused')
-    if (storedId) {
-      const taskId = Number(storedId)
-      const allTasks = [...(wd.tasks ?? []), ...(carryOverTasks ?? [])]
-      const task = allTasks.find(t => t.id === taskId && t.status === 'PAUSED')
-      if (task) setAutoPausedTask(task)
-      else localStorage.removeItem('autoPaused')
+      const storedId = localStorage.getItem('autoPaused')
+      if (storedId) {
+        const taskId = Number(storedId)
+        const allTasks = [...(wd.tasks ?? []), ...(carryOverTasks ?? [])]
+        const task = allTasks.find(t => t.id === taskId && t.status === 'PAUSED')
+        if (task) setAutoPausedTask(task)
+        else localStorage.removeItem('autoPaused')
+      }
+    } catch (err) {
+      setWorkdayError(err.response?.data?.error || 'Error al cargar la jornada')
     }
   }, [])
 
@@ -289,6 +295,18 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Error de jornada */}
+        {workdayError && (
+          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3 flex items-start gap-3">
+            <span className="text-red-500 text-lg flex-shrink-0">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-red-700 dark:text-red-400">No se pudo cargar la jornada</p>
+              <p className="text-xs text-red-600 dark:text-red-500 mt-0.5">{workdayError}</p>
+              <button onClick={loadToday} className="text-xs text-red-700 dark:text-red-400 underline mt-1 hover:no-underline">Reintentar</button>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">

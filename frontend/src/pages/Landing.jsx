@@ -23,7 +23,7 @@ function AppMockup() {
         {/* Sidebar */}
         <div className="w-44 bg-white border-r border-gray-100 p-3 flex-shrink-0">
           <div className="flex items-center gap-2 mb-5 px-1">
-            <img src="/perfiles/2bee.png" alt="" className="w-6 h-6" />
+            <img src="/blisstracker_logo.svg" alt="" className="w-6 h-6" />
             <div className="h-2.5 w-20 bg-gray-200 rounded-full" />
           </div>
           {[true, false, false, false, false].map((active, i) => (
@@ -229,7 +229,7 @@ export default function Landing() {
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
           <div className="flex items-center gap-2">
-            <img src="/perfiles/2bee.png" alt="BlissTracker" className="w-8 h-8" />
+            <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-7 h-7" />
             <span className="font-bold text-lg text-gray-900">BlissTracker</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -567,7 +567,7 @@ export default function Landing() {
       {/* ── Final CTA ── */}
       <section className="py-24 px-4 sm:px-6 bg-gray-900 text-center">
         <div className="max-w-2xl mx-auto">
-          <div className="text-5xl mb-5">🐝</div>
+          <img src="/blisstracker_logo.svg" alt="" className="w-14 h-14 mx-auto mb-5 opacity-90" />
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4 leading-tight">
             Tu equipo puede ejecutar mejor.<br />Empezá hoy.
           </h2>
@@ -587,7 +587,7 @@ export default function Landing() {
       <footer className="py-8 px-4 sm:px-6 bg-gray-950 border-t border-gray-800">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
           <div className="flex items-center gap-2">
-            <img src="/perfiles/2bee.png" alt="" className="w-5 h-5 opacity-60" />
+            <img src="/blisstracker_logo.svg" alt="" className="w-5 h-5 opacity-60" />
             <span>BlissTracker &copy; {new Date().getFullYear()}</span>
           </div>
           <div className="flex items-center gap-6">

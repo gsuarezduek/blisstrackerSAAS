@@ -1,7 +1,8 @@
 const prisma = require('../lib/prisma')
 
 function weekMondayStr(tz) {
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
+  const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : 'America/Argentina/Buenos_Aires'
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: safeZone })
   const [y, m, d] = todayStr.split('-').map(Number)
   const today = new Date(y, m - 1, d)
   const dow = today.getDay()
