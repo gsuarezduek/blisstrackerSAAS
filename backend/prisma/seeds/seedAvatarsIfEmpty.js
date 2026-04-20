@@ -35,8 +35,8 @@ const AVATARS = [
   { filename: '36beecodelica.png',  label: 'Bee-codelica',    order: 23 },
 ]
 
-// Railway clona el repo completo, este path funciona tanto local como en producción
-const IMAGES_DIR = path.join(__dirname, '../../../frontend/public/perfiles')
+// Las imágenes están en prisma/seeds/perfiles/ para que estén disponibles en Railway
+const IMAGES_DIR = path.join(__dirname, 'perfiles')
 
 async function run() {
   const count = await prisma.avatar.count()
