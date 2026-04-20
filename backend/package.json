@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "postinstall": "prisma generate",
-    "start": "prisma generate && prisma migrate deploy && node src/index.js",
+    "start": "prisma generate && prisma migrate deploy && node prisma/seeds/seedAvatarsIfEmpty.js && node src/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
