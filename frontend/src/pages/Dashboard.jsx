@@ -8,6 +8,7 @@ import InactivityModal from '../components/InactivityModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import { useInactivity } from '../hooks/useInactivity'
 import api from '../api/client'
+import { avatarUrl } from '../utils/avatarUrl'
 import { useAuth } from '../context/AuthContext'
 
 function todayLabel() {
@@ -622,7 +623,7 @@ export default function Dashboard() {
                               </p>
                               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                 <img
-                                  src={`/perfiles/${t.user.avatar || '2bee.png'}`}
+                                  src={avatarUrl(t.user.avatar)}
                                   alt={t.user.name}
                                   className="w-4 h-4 rounded-full object-cover flex-shrink-0"
                                 />

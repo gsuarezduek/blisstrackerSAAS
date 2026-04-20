@@ -1,4 +1,6 @@
 jest.mock('../../src/lib/prisma', () => ({
+  workspace:       { findUnique: jest.fn() },
+  workspaceMember: { findUnique: jest.fn() },
   task:            { findUnique: jest.fn() },
   projectMember:   { findUnique: jest.fn() },
   taskComment:     { create: jest.fn(), findMany: jest.fn() },
@@ -10,11 +12,21 @@ const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
 const app     = require('../../src/app')
 
-const SECRET = process.env.JWT_SECRET
+const SECRET         = process.env.JWT_SECRET
+const WORKSPACE_SLUG = 'bliss'
+const WORKSPACE_ID   = 1
 
 function authHeader(userId = 1) {
-  const token = jwt.sign({ id: userId, role: 'USER', isAdmin: false, name: 'Test', email: 't@t.com' }, SECRET)
+  const token = jwt.sign(
+    { userId, workspaceId: WORKSPACE_ID, role: 'member', isSuperAdmin: false, name: 'Test', email: 't@t.com' },
+    SECRET,
+  )
   return `Bearer ${token}`
+}
+
+function mockWorkspace() {
+  prisma.workspace.findUnique.mockResolvedValue({ id: WORKSPACE_ID, slug: WORKSPACE_SLUG, status: 'active', name: 'Bliss' })
+  prisma.workspaceMember.findUnique.mockResolvedValue({ workspaceId: WORKSPACE_ID, userId: 1, role: 'member', active: true })
 }
 
 function makeTask(overrides = {}) {
@@ -38,6 +50,8 @@ function makeComment(overrides = {}) {
 // ── GET /api/tasks/:id/comments ───────────────────────────────────────────────
 
 describe('GET /api/tasks/:id/comments', () => {
+  beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
+
   it('devuelve 200 con lista de comentarios si el usuario es miembro', async () => {
     prisma.task.findUnique.mockResolvedValue(makeTask())
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
@@ -46,6 +60,7 @@ describe('GET /api/tasks/:id/comments', () => {
     const res = await request(app)
       .get('/api/tasks/10/comments')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(res.body).toHaveLength(1)
@@ -59,6 +74,7 @@ describe('GET /api/tasks/:id/comments', () => {
     const res = await request(app)
       .get('/api/tasks/10/comments')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(403)
   })
@@ -69,6 +85,7 @@ describe('GET /api/tasks/:id/comments', () => {
     const res = await request(app)
       .get('/api/tasks/10/comments')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(403)
   })
@@ -82,6 +99,8 @@ describe('GET /api/tasks/:id/comments', () => {
 // ── POST /api/tasks/:id/comments ─────────────────────────────────────────────
 
 describe('POST /api/tasks/:id/comments', () => {
+  beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
+
   it('crea el comentario y devuelve 201', async () => {
     prisma.task.findUnique.mockResolvedValue(makeTask())
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
@@ -92,6 +111,7 @@ describe('POST /api/tasks/:id/comments', () => {
     const res = await request(app)
       .post('/api/tasks/10/comments')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
       .send({ text: 'Buen trabajo' })
 
     expect(res.status).toBe(201)
@@ -99,7 +119,6 @@ describe('POST /api/tasks/:id/comments', () => {
   })
 
   it('notifica al dueño de la tarea si el comentador es distinto', async () => {
-    // userId=1 comenta en tarea de userId=2
     prisma.task.findUnique.mockResolvedValue(makeTask({ userId: 2 }))
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.create.mockResolvedValue(makeComment())
@@ -109,6 +128,7 @@ describe('POST /api/tasks/:id/comments', () => {
     await request(app)
       .post('/api/tasks/10/comments')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
       .send({ text: 'Buen trabajo' })
 
     expect(prisma.notification.createMany).toHaveBeenCalledWith(
@@ -121,7 +141,6 @@ describe('POST /api/tasks/:id/comments', () => {
   })
 
   it('no se auto-notifica cuando el comentador es el dueño de la tarea', async () => {
-    // userId=1 comenta en su propia tarea
     prisma.task.findUnique.mockResolvedValue(makeTask({ userId: 1 }))
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.create.mockResolvedValue(makeComment())
@@ -130,13 +149,13 @@ describe('POST /api/tasks/:id/comments', () => {
     await request(app)
       .post('/api/tasks/10/comments')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
       .send({ text: 'Agrego contexto' })
 
     expect(prisma.notification.createMany).not.toHaveBeenCalled()
   })
 
   it('notifica también a comentadores previos únicos (sin duplicados)', async () => {
-    // userId=1 comenta; dueño es userId=2; comentador previo es userId=3
     prisma.task.findUnique.mockResolvedValue(makeTask({ userId: 2 }))
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.create.mockResolvedValue(makeComment())
@@ -146,6 +165,7 @@ describe('POST /api/tasks/:id/comments', () => {
     await request(app)
       .post('/api/tasks/10/comments')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
       .send({ text: 'Comentario nuevo' })
 
     const call = prisma.notification.createMany.mock.calls[0][0]
@@ -162,6 +182,7 @@ describe('POST /api/tasks/:id/comments', () => {
     const res = await request(app)
       .post('/api/tasks/10/comments')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
       .send({ text: '   ' })
 
     expect(res.status).toBe(400)
@@ -174,6 +195,7 @@ describe('POST /api/tasks/:id/comments', () => {
     const res = await request(app)
       .post('/api/tasks/10/comments')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
       .send({ text: 'Hola' })
 
     expect(res.status).toBe(403)

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { avatarUrl } from '../utils/avatarUrl'
 
 /**
  * Dos modos:
@@ -9,7 +10,7 @@ export default function AvatarLightbox({ src, alt, onClose, avatars, index, onNa
   const hasNav = Array.isArray(avatars) && avatars.length > 0 && onNavigate
 
   const current = hasNav ? avatars[index] : null
-  const imgSrc  = hasNav ? `/perfiles/${current.file}` : src
+  const imgSrc  = hasNav ? avatarUrl(current.file) : src
   const imgAlt  = hasNav ? current.label : alt
 
   function prev() { onNavigate((index - 1 + avatars.length) % avatars.length) }

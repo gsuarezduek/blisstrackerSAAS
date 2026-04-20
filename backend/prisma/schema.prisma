@@ -570,3 +570,19 @@ model Announcement {
 
   @@index([active])
 }
+
+// ─── AVATARES ─────────────────────────────────────────────────────────────────
+
+model Avatar {
+  id        Int      @id @default(autoincrement())
+  filename  String   @unique
+  label     String
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  imageData Bytes
+  mimeType  String   @default("image/png")
+  createdAt DateTime @default(now())
+
+  @@index([order])
+  @@index([active])
+}

@@ -1,4 +1,10 @@
 jest.mock('../../src/lib/prisma', () => ({
+  workspace: {
+    findUnique: jest.fn(),
+  },
+  workspaceMember: {
+    findUnique: jest.fn(),
+  },
   task: {
     findUnique: jest.fn(),
     count:      jest.fn(),
@@ -11,11 +17,25 @@ const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
 const app     = require('../../src/app')
 
-const SECRET = process.env.JWT_SECRET
+const SECRET      = process.env.JWT_SECRET
+const WORKSPACE_SLUG = 'bliss'
+const WORKSPACE_ID   = 1
 
-function authHeader(userId = 1, role = 'USER') {
-  const token = jwt.sign({ id: userId, role, name: 'Test', email: 't@t.com' }, SECRET)
+function authHeader(userId = 1, role = 'member') {
+  const token = jwt.sign(
+    { userId, workspaceId: WORKSPACE_ID, role, isSuperAdmin: false, name: 'Test', email: 't@t.com' },
+    SECRET,
+  )
   return `Bearer ${token}`
+}
+
+function mockWorkspace() {
+  prisma.workspace.findUnique.mockResolvedValue({
+    id: WORKSPACE_ID, slug: WORKSPACE_SLUG, status: 'active', name: 'Bliss',
+  })
+  prisma.workspaceMember.findUnique.mockResolvedValue({
+    workspaceId: WORKSPACE_ID, userId: 1, role: 'member', active: true,
+  })
 }
 
 function makeTask(overrides = {}) {
@@ -24,11 +44,17 @@ function makeTask(overrides = {}) {
     description: 'Tarea de prueba',
     project: { id: 1, name: 'Proyecto Test' },
     createdBy: null,
+    _count: { comments: 0 },
     ...overrides,
   }
 }
 
 describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockWorkspace()
+  })
+
   it('0 → 1 cuando no hay otras tareas destacadas', async () => {
     prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 0 }))
     prisma.task.count.mockResolvedValue(0)
@@ -37,6 +63,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
     const res = await request(app)
       .patch('/api/tasks/1/star')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(res.body.starred).toBe(1)
@@ -49,6 +76,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
     const res = await request(app)
       .patch('/api/tasks/1/star')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(prisma.task.count).not.toHaveBeenCalled()
@@ -61,6 +89,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
     const res = await request(app)
       .patch('/api/tasks/1/star')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(res.body.starred).toBe(3)
@@ -73,6 +102,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
     const res = await request(app)
       .patch('/api/tasks/1/star')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(res.body.starred).toBe(0)
@@ -85,6 +115,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
     const res = await request(app)
       .patch('/api/tasks/1/star')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(409)
   })
@@ -95,6 +126,7 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
     const res = await request(app)
       .patch('/api/tasks/1/star')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(404)
   })
@@ -104,7 +136,8 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
 
     const res = await request(app)
       .patch('/api/tasks/1/star')
-      .set('Authorization', authHeader(1)) // userId = 1, pero la tarea es userId: 99
+      .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(404)
   })
@@ -112,5 +145,13 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
   it('retorna 401 sin autenticación', async () => {
     const res = await request(app).patch('/api/tasks/1/star')
     expect(res.status).toBe(401)
+  })
+
+  it('retorna 400 sin header X-Workspace', async () => {
+    const res = await request(app)
+      .patch('/api/tasks/1/star')
+      .set('Authorization', authHeader())
+    // sin X-Workspace → resolveWorkspace devuelve 400
+    expect(res.status).toBe(400)
   })
 })

@@ -1,4 +1,6 @@
 jest.mock('../../src/lib/prisma', () => ({
+  workspace:       { findUnique: jest.fn() },
+  workspaceMember: { findUnique: jest.fn() },
   task: {
     findUnique: jest.fn(),
     findFirst:  jest.fn(),
@@ -16,11 +18,21 @@ const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
 const app     = require('../../src/app')
 
-const SECRET = process.env.JWT_SECRET
+const SECRET         = process.env.JWT_SECRET
+const WORKSPACE_SLUG = 'bliss'
+const WORKSPACE_ID   = 1
 
 function authHeader(userId = 1) {
-  const token = jwt.sign({ id: userId, role: 'USER', name: 'Test', email: 't@t.com' }, SECRET)
+  const token = jwt.sign(
+    { userId, workspaceId: WORKSPACE_ID, role: 'member', isSuperAdmin: false, name: 'Test', email: 't@t.com' },
+    SECRET,
+  )
   return `Bearer ${token}`
+}
+
+function mockWorkspace() {
+  prisma.workspace.findUnique.mockResolvedValue({ id: WORKSPACE_ID, slug: WORKSPACE_SLUG, status: 'active', name: 'Bliss' })
+  prisma.workspaceMember.findUnique.mockResolvedValue({ workspaceId: WORKSPACE_ID, userId: 1, role: 'member', active: true })
 }
 
 function makeTask(overrides = {}) {
@@ -29,6 +41,7 @@ function makeTask(overrides = {}) {
     description: 'Tarea de prueba',
     project: { id: 1, name: 'Proyecto Test' },
     createdBy: null,
+    _count: { comments: 0 },
     workDay: { date: '2026-04-05' },
     ...overrides,
   }
@@ -37,6 +50,8 @@ function makeTask(overrides = {}) {
 // ─── move-to-backlog ──────────────────────────────────────────────────────────
 
 describe('PATCH /api/tasks/:id/move-to-backlog', () => {
+  beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
+
   it('mueve una tarea PENDING al backlog', async () => {
     prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'PENDING' }))
     prisma.task.update.mockResolvedValue(makeTask({ isBacklog: true }))
@@ -44,6 +59,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(prisma.task.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -58,6 +74,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
   })
@@ -69,6 +86,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
   })
@@ -79,6 +97,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(400)
     expect(prisma.task.update).not.toHaveBeenCalled()
@@ -90,6 +109,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(400)
     expect(prisma.task.update).not.toHaveBeenCalled()
@@ -101,6 +121,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(404)
   })
@@ -111,6 +132,7 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
       .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(404)
   })
@@ -127,6 +149,8 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
   const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
   const workDayToday = { id: 10, userId: 1, date: TODAY }
 
+  beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
+
   it('mueve una tarea de backlog al día de hoy', async () => {
     prisma.task.findUnique.mockResolvedValue(makeTask({ isBacklog: true, workDay: { date: TODAY } }))
     prisma.workDay.findUnique.mockResolvedValue(workDayToday)
@@ -135,6 +159,7 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
     const res = await request(app)
       .patch('/api/tasks/1/add-to-today')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(prisma.task.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -151,6 +176,7 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
     const res = await request(app)
       .patch('/api/tasks/1/add-to-today')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(prisma.workDay.create).toHaveBeenCalled()
@@ -162,6 +188,7 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
     const res = await request(app)
       .patch('/api/tasks/1/add-to-today')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(400)
     expect(prisma.task.update).not.toHaveBeenCalled()
@@ -173,6 +200,7 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
     const res = await request(app)
       .patch('/api/tasks/1/add-to-today')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(404)
   })
@@ -186,6 +214,8 @@ describe('PATCH /api/tasks/:id/add-to-today', () => {
 // ─── start bloqueado en backlog ───────────────────────────────────────────────
 
 describe('PATCH /api/tasks/:id/start — bloqueado en backlog', () => {
+  beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
+
   it('retorna 400 si la tarea está en el backlog', async () => {
     prisma.task.findFirst.mockResolvedValue(null)  // assertNoActiveTask: sin tarea activa
     prisma.task.findUnique.mockResolvedValue(makeTask({ isBacklog: true }))
@@ -193,6 +223,7 @@ describe('PATCH /api/tasks/:id/start — bloqueado en backlog', () => {
     const res = await request(app)
       .patch('/api/tasks/1/start')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(400)
   })
@@ -204,15 +235,17 @@ describe('GET /api/tasks/completed', () => {
   function makeCompleted(overrides = {}) {
     return {
       id: 1, description: 'Tarea completada', status: 'COMPLETED',
-      completedAt: new Date().toISOString(),
-      startedAt:   new Date(Date.now() - 3600000).toISOString(),
+      completedAt:  new Date().toISOString(),
+      startedAt:    new Date(Date.now() - 3600000).toISOString(),
       pausedMinutes: 0,
       minutesOverride: null,
-      project: { id: 1, name: 'Proyecto Test' },
-      workDay: { date: '2026-04-05' },
+      project:  { id: 1, name: 'Proyecto Test' },
+      workDay:  { date: '2026-04-05' },
       ...overrides,
     }
   }
+
+  beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
 
   it('devuelve las primeras 10 tareas con hasMore=false cuando hay menos de 11', async () => {
     const tasks = Array.from({ length: 5 }, (_, i) => makeCompleted({ id: i + 1 }))
@@ -221,6 +254,7 @@ describe('GET /api/tasks/completed', () => {
     const res = await request(app)
       .get('/api/tasks/completed')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(res.body.tasks).toHaveLength(5)
@@ -228,13 +262,13 @@ describe('GET /api/tasks/completed', () => {
   })
 
   it('devuelve hasMore=true cuando hay más de 10 resultados', async () => {
-    // La query pide take+1 (11) para detectar si hay más
     const tasks = Array.from({ length: 11 }, (_, i) => makeCompleted({ id: i + 1 }))
     prisma.task.findMany.mockResolvedValue(tasks)
 
     const res = await request(app)
       .get('/api/tasks/completed')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(res.status).toBe(200)
     expect(res.body.tasks).toHaveLength(10)
@@ -247,10 +281,11 @@ describe('GET /api/tasks/completed', () => {
     await request(app)
       .get('/api/tasks/completed?skip=0&before=2026-04-05')
       .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
 
     expect(prisma.task.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        workDay: { date: { lt: '2026-04-05' } },
+        workDay: expect.objectContaining({ date: { lt: '2026-04-05' } }),
       }),
     }))
   })

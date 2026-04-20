@@ -1,8 +1,15 @@
 const express = require('express')
-const router = express.Router()
+const multer  = require('multer')
+const router  = express.Router()
 const { auth } = require('../middleware/auth')
-const c = require('../controllers/superadmin.controller')
+const c   = require('../controllers/superadmin.controller')
 const ann = require('../controllers/announcements.controller')
+const av  = require('../controllers/avatars.controller')
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 2 * 1024 * 1024 }, // 2MB
+})
 
 function superAdminOnly(req, res, next) {
   if (!req.user?.isSuperAdmin) {
@@ -29,5 +36,13 @@ router.post('/announcements',             ann.create)
 router.patch('/announcements/:id',        ann.update)
 router.patch('/announcements/:id/toggle', ann.toggle)
 router.delete('/announcements/:id',       ann.remove)
+
+// Avatares
+router.get('/avatars',                      av.listAll)
+router.post('/avatars',                     upload.single('image'), av.upload)
+router.patch('/avatars/reorder',            av.reorder)
+router.patch('/avatars/:id',                av.update)
+router.patch('/avatars/:id/toggle',         av.toggle)
+router.delete('/avatars/:id',               av.remove)
 
 module.exports = router

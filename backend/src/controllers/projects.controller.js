@@ -270,6 +270,7 @@ async function projectTasks(req, res, next) {
       byUser: Object.values(byUser),
       completedThisWeek: completedThisWeek.map(t => ({
         id: t.id, description: t.description, completedAt: t.completedAt, user: t.user,
+        startedAt: t.startedAt, pausedMinutes: t.pausedMinutes,
       })),
       activeCount,
       activeLimit: ACTIVE_LIMIT,

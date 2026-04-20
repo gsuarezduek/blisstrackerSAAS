@@ -5,32 +5,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
-
-const AVATARS = [
-  { file: '1babee.png',        label: 'Baby Bee' },
-  { file: '2bee.png',          label: 'Bee' },
-  { file: '10beemate.png',     label: 'Bee Mate' },
-  { file: '11beeartist.png',   label: 'Bee Artista' },
-  { file: '12beecoffee.png',   label: 'Bee Coffee' },
-  { file: '13beecorp.png',     label: 'Bee Corp' },
-  { file: '14beefitness.png',  label: 'Bee Fitness' },
-  { file: '15futbee.png',      label: 'Fut Bee' },
-  { file: '16beeloween.png',   label: 'Bee-loween' },
-  { file: '17beepunk.png',     label: 'Bee Punk' },
-  { file: '18golfbee.png',     label: 'Golf Bee' },
-  { file: '19beenfluencer.png',label: 'Bee-nfluencer' },
-  { file: '20beecypher.png',   label: 'Bee Cypher' },
-  { file: '21beegamer.png',    label: 'Bee Gamer' },
-  { file: '22beehacker.png',   label: 'Bee Hacker' },
-  { file: '23beeJ.png',        label: 'Bee J' },
-  { file: '30harleybee.png',   label: 'Harley Bee' },
-  { file: '31beezen.png',      label: 'Bee Zen' },
-  { file: '32beezombie.png',   label: 'Bee Zombie' },
-  { file: '33darthbee.png',    label: 'Darth Bee' },
-  { file: '34beeBorg.png',     label: 'Bee Borg' },
-  { file: '35beempire.png',    label: 'Bee-mpire' },
-  { file: '36beecodelica.png', label: 'Bee-codelica' },
-]
+import { avatarUrl } from '../utils/avatarUrl'
 
 function Field({ label, children }) {
   return (
@@ -213,6 +188,7 @@ export default function MyProfile() {
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMsg, setPwMsg] = useState({ text: '', error: false })
 
+  const [avatars, setAvatars] = useState([])  // lista desde API: [{ id, filename, label }]
   const [avatarSaving, setAvatarSaving] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(null)
   const [lightboxIndex, setLightboxIndex] = useState(null) // null = cerrado
@@ -222,9 +198,13 @@ export default function MyProfile() {
   const [vacRequestOpen, setVacRequestOpen] = useState(false)
 
   function openLightbox(file) {
-    const idx = AVATARS.findIndex(a => a.file === file)
+    const idx = avatars.findIndex(a => a.filename === file)
     setLightboxIndex(idx >= 0 ? idx : 0)
   }
+
+  useEffect(() => {
+    api.get('/avatars').then(({ data }) => setAvatars(data)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     api.get('/vacation/my').then(r => setVacData(r.data)).catch(() => {})
@@ -330,7 +310,7 @@ export default function MyProfile() {
           <div className="flex items-center gap-5 mb-5">
             <button onClick={() => openLightbox(profile.avatar ?? '2bee.png')} className="flex-shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
               <img
-                src={`/perfiles/${profile.avatar ?? '2bee.png'}`}
+                src={avatarUrl(profile.avatar)}
                 alt="avatar"
                 className="w-24 h-24 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 hover:opacity-90 transition-opacity cursor-zoom-in"
               />
@@ -347,19 +327,19 @@ export default function MyProfile() {
           <div>
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">Foto de perfil</p>
             <div className="flex items-end gap-3 flex-wrap">
-              {AVATARS.map((a, i) => (
-                <div key={a.file} className="relative group">
+              {avatars.map((a, i) => (
+                <div key={a.filename} className="relative group">
                   <button
-                    onClick={() => setSelectedAvatar(a.file)}
+                    onClick={() => setSelectedAvatar(a.filename)}
                     title={a.label}
                     className={`rounded-full transition-all ${
-                      selectedAvatar === a.file
+                      selectedAvatar === a.filename
                         ? 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-800'
                         : 'opacity-60 hover:opacity-90'
                     }`}
                   >
                     <img
-                      src={`/perfiles/${a.file}`}
+                      src={avatarUrl(a.filename)}
                       alt={a.label}
                       className="w-12 h-12 rounded-full object-cover"
                     />
@@ -376,7 +356,7 @@ export default function MyProfile() {
                   </button>
                 </div>
               ))}
-              {selectedAvatar !== (profile.avatar ?? '2bee.png') && (
+              {selectedAvatar && selectedAvatar !== (profile.avatar ?? '2bee.png') && (
                 <button
                   onClick={handleSaveAvatar}
                   disabled={avatarSaving}
@@ -665,7 +645,7 @@ export default function MyProfile() {
 
       {lightboxIndex !== null && (
         <AvatarLightbox
-          avatars={AVATARS}
+          avatars={avatars.map(a => ({ file: a.filename, label: a.label }))}
           index={lightboxIndex}
           onNavigate={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}

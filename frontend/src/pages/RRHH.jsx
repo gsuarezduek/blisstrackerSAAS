@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
+import { avatarUrl } from '../utils/avatarUrl'
 import LoadingSpinner from '../components/LoadingSpinner'
 import useRoles from '../hooks/useRoles'
 
@@ -222,7 +223,7 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
             : <div className="space-y-2">
                 {upcomingBirthdays.map(u => (
                   <div key={u.id} className="flex items-center gap-2.5">
-                    <img src={`/perfiles/${u.avatar || '2bee.png'}`} alt={u.name}
+                    <img src={avatarUrl(u.avatar)} alt={u.name}
                       className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{u.name}</p>
@@ -249,7 +250,7 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
             : <div className="space-y-2">
                 {upcomingAnniversaries.map(u => (
                   <div key={u.id} className="flex items-center gap-2.5">
-                    <img src={`/perfiles/${u.avatar || '2bee.png'}`} alt={u.name}
+                    <img src={avatarUrl(u.avatar)} alt={u.name}
                       className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{u.name}</p>
@@ -302,7 +303,7 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
           <div className="space-y-2">
             {lastLoginRows.slice(0, 10).map(u => (
               <div key={u.id} className="flex items-center gap-2.5">
-                <img src={`/perfiles/${u.avatar || '2bee.png'}`} alt={u.name}
+                <img src={avatarUrl(u.avatar)} alt={u.name}
                   className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
                 <p className="text-sm text-gray-700 dark:text-gray-300 flex-1 truncate">{u.name}</p>
                 <span className={`text-xs flex-shrink-0 font-medium ${
@@ -509,7 +510,7 @@ function TabIngresos({ users }) {
             onClick={() => toggleExpanded(user.id)}
             className="w-full bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
           >
-            <img src={`/perfiles/${user.avatar || '2bee.png'}`} alt={user.name}
+            <img src={avatarUrl(user.avatar)} alt={user.name}
               className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0" />
             <div className="flex-1 min-w-0 text-left">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">{user.name}</p>
@@ -746,7 +747,7 @@ function TabLegajos({ users, onVacationUpdate }) {
         <div className="space-y-4">
           {/* Header */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-6 py-5 flex items-center gap-4">
-            <img src={`/perfiles/${selected.avatar || '2bee.png'}`} alt={selected.name}
+            <img src={avatarUrl(selected.avatar)} alt={selected.name}
               className="w-14 h-14 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 flex-shrink-0" />
             <div>
               <p className="text-lg font-bold text-gray-900 dark:text-white">{selected.name}</p>
@@ -1026,7 +1027,7 @@ function TabVacaciones() {
                   return (
                     <div key={req.id}
                       className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4 flex items-start gap-4">
-                      <img src={`/perfiles/${req.user.avatar || '2bee.png'}`} alt={req.user.name}
+                      <img src={avatarUrl(req.user.avatar)} alt={req.user.name}
                         className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-gray-100 dark:border-gray-600 mt-0.5" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-0.5">

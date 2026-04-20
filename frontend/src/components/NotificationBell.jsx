@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
+import { avatarUrl } from '../utils/avatarUrl'
 
 const FILTERS = [
   { key: 'all',              label: 'Todas',       types: null },
@@ -192,7 +193,7 @@ export default function NotificationBell() {
                     <div className="flex items-start gap-2.5">
                       <div className="relative flex-shrink-0 mt-0.5">
                         <img
-                          src={`/perfiles/${n.actor.avatar ?? '2bee.png'}`}
+                          src={avatarUrl(n.actor.avatar)}
                           alt={n.actor.name}
                           className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600"
                         />

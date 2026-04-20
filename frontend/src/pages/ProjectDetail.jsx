@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { linkify } from '../utils/linkify'
+import { fmtMins, completedDuration } from '../utils/format'
 import api from '../api/client'
 import useRoles from '../hooks/useRoles'
 import UserTasksModal from '../components/UserTasksModal'
@@ -10,6 +11,7 @@ import AddTaskModal from '../components/AddTaskModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import ProjectSituation from '../components/ProjectSituation'
 import { useAuth } from '../context/AuthContext'
+import { avatarUrl } from '../utils/avatarUrl'
 
 const STATUS_LABEL = {
   BLOCKED:     'Bloqueada',
@@ -46,7 +48,7 @@ function Avatar({ user, size = 'md' }) {
   const cls = size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'
   return (
     <img
-      src={`/perfiles/${user.avatar ?? '2bee.png'}`}
+      src={avatarUrl(user.avatar)}
       alt={user.name}
       className={`${cls} rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0`}
     />
@@ -632,30 +634,49 @@ export default function ProjectDetail() {
             )}
 
             {/* Completadas esta semana */}
-            {data.completedThisWeek?.length > 0 && (
-              <div className="mb-8">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Completadas esta semana</span>
-                  <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">
-                    {data.completedThisWeek.length}
-                  </span>
+            {data.completedThisWeek?.length > 0 && (() => {
+              const totalMins = data.completedThisWeek.reduce((acc, t) => {
+                if (!t.startedAt || !t.completedAt) return acc
+                return acc + Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+              }, 0)
+              return (
+                <div className="mb-8">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Completadas esta semana</span>
+                    <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">
+                      {data.completedThisWeek.length}
+                    </span>
+                    {totalMins > 0 && (
+                      <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
+                        ⏱ {fmtMins(totalMins)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+                    {data.completedThisWeek.map(task => {
+                      const dur = completedDuration(task)
+                      return (
+                        <div key={task.id} className="flex items-start gap-3 px-4 py-3">
+                          <Avatar user={task.user} size="sm" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{linkify(task.description)}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                              {task.user.name} · {fmtDate(task.completedAt, data?.project?.timezone)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                            {dur && (
+                              <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{dur}</span>
+                            )}
+                            <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-semibold">✓</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
-                  {data.completedThisWeek.map(task => (
-                    <div key={task.id} className="flex items-start gap-3 px-4 py-3">
-                      <Avatar user={task.user} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{linkify(task.description)}</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                          {task.user.name} · {fmtDate(task.completedAt, data?.project?.timezone)}
-                        </p>
-                      </div>
-                      <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-semibold flex-shrink-0 mt-0.5">✓</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Archivo histórico */}
             <div className="mb-8">

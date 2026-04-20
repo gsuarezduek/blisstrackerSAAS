@@ -9,6 +9,7 @@ import { useTheme } from '../context/ThemeContext'
 import BlissLogo from './BlissLogo'
 import AnnouncementBanner from './AnnouncementBanner'
 import api from '../api/client'
+import { avatarUrl } from '../utils/avatarUrl'
 
 // ─── Iconos reutilizables ─────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ export default function Navbar() {
   function closeMenu() { setMenuOpen(false) }
 
   const isAdmin   = user?.isAdmin === true
-  const avatarSrc = `/perfiles/${user?.avatar ?? '2bee.png'}`
+  const avatarSrc = avatarUrl(user?.avatar)
 
   // ── Links de navegación principal ────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.

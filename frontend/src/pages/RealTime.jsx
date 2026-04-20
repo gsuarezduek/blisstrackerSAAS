@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { linkify } from '../utils/linkify'
 import api from '../api/client'
+import { avatarUrl } from '../utils/avatarUrl'
 import useRoles from '../hooks/useRoles'
 import UserTasksModal from '../components/UserTasksModal'
 import { fmtMins } from '../utils/format'
@@ -48,7 +49,7 @@ function elapsed(startedAt, now) {
 function Avatar({ user }) {
   return (
     <img
-      src={`/perfiles/${user.avatar ?? '2bee.png'}`}
+      src={avatarUrl(user.avatar)}
       alt={user.name}
       className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
     />

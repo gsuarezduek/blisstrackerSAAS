@@ -14,7 +14,7 @@ function makeRes() {
 
 describe('auth middleware', () => {
   it('llama next() y setea req.user con un token válido', () => {
-    const payload = { id: 1, role: 'USER', name: 'Ana', email: 'ana@test.com' }
+    const payload = { userId: 1, workspaceId: 1, role: 'member', isSuperAdmin: false, name: 'Ana', email: 'ana@test.com' }
     const token = jwt.sign(payload, SECRET)
 
     const req  = { headers: { authorization: `Bearer ${token}` } }
@@ -24,8 +24,9 @@ describe('auth middleware', () => {
     auth(req, res, next)
 
     expect(next).toHaveBeenCalledTimes(1)
-    expect(req.user.id).toBe(1)
-    expect(req.user.role).toBe('USER')
+    expect(req.user.userId).toBe(1)
+    expect(req.user.workspaceId).toBe(1)
+    expect(req.user.role).toBe('member')
   })
 
   it('retorna 401 si no hay header Authorization', () => {
@@ -62,7 +63,7 @@ describe('auth middleware', () => {
   })
 
   it('retorna 401 con token expirado', () => {
-    const token = jwt.sign({ id: 1 }, SECRET, { expiresIn: '0s' })
+    const token = jwt.sign({ userId: 1, workspaceId: 1 }, SECRET, { expiresIn: '0s' })
 
     const req  = { headers: { authorization: `Bearer ${token}` } }
     const res  = makeRes()
@@ -78,8 +79,8 @@ describe('auth middleware', () => {
 // ── adminOnly ─────────────────────────────────────────────────────────────────
 
 describe('adminOnly middleware', () => {
-  it('llama next() si el usuario tiene isAdmin = true', () => {
-    const req  = { user: { role: 'DESIGNER', isAdmin: true } }
+  it('llama next() si workspaceMember.role es "admin"', () => {
+    const req  = { user: { isSuperAdmin: false }, workspaceMember: { role: 'admin' } }
     const res  = makeRes()
     const next = jest.fn()
 
@@ -88,8 +89,18 @@ describe('adminOnly middleware', () => {
     expect(next).toHaveBeenCalledTimes(1)
   })
 
-  it('retorna 403 si isAdmin es false aunque el role sea cualquier string', () => {
-    const req  = { user: { role: 'DESIGNER', isAdmin: false } }
+  it('llama next() si workspaceMember.role es "owner"', () => {
+    const req  = { user: { isSuperAdmin: false }, workspaceMember: { role: 'owner' } }
+    const res  = makeRes()
+    const next = jest.fn()
+
+    adminOnly(req, res, next)
+
+    expect(next).toHaveBeenCalledTimes(1)
+  })
+
+  it('retorna 403 si workspaceMember.role es "member"', () => {
+    const req  = { user: { isSuperAdmin: false }, workspaceMember: { role: 'member' } }
     const res  = makeRes()
     const next = jest.fn()
 
@@ -99,8 +110,8 @@ describe('adminOnly middleware', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('retorna 403 si req.user no está seteado', () => {
-    const req  = {}
+  it('retorna 403 si no hay workspaceMember', () => {
+    const req  = { user: { isSuperAdmin: false } }
     const res  = makeRes()
     const next = jest.fn()
 
@@ -108,5 +119,15 @@ describe('adminOnly middleware', () => {
 
     expect(res.status).toHaveBeenCalledWith(403)
     expect(next).not.toHaveBeenCalled()
+  })
+
+  it('bypassa la verificación si user.isSuperAdmin es true', () => {
+    const req  = { user: { isSuperAdmin: true } }
+    const res  = makeRes()
+    const next = jest.fn()
+
+    adminOnly(req, res, next)
+
+    expect(next).toHaveBeenCalledTimes(1)
   })
 })
