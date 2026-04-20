@@ -7,6 +7,7 @@ import FeedbackButton from './FeedbackButton'
 import NotificationBell from './NotificationBell'
 import { useTheme } from '../context/ThemeContext'
 import BlissLogo from './BlissLogo'
+import AnnouncementBanner from './AnnouncementBanner'
 import api from '../api/client'
 
 // ─── Iconos reutilizables ─────────────────────────────────────────────────────
@@ -243,6 +244,7 @@ export default function Navbar() {
     <>
       <FeedbackButton />
       <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        {user && <AnnouncementBanner />}
         <div className="px-4 py-3 flex items-center justify-between">
 
           {/* Logo */}
