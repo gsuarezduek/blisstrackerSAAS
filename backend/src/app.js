@@ -30,7 +30,9 @@ const superadminRoutes        = require('./routes/superadmin.routes')
 
 const app = express()
 
-app.use(helmet())
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // permite cargar imágenes cross-origin (avatares)
+}))
 
 // CORS: acepta cualquier subdominio de blisstracker.app + localhost en dev
 const APP_DOMAIN = process.env.APP_DOMAIN || 'blisstracker.app'
