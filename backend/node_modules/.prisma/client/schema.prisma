@@ -354,6 +354,8 @@ enum NotificationType {
   ADDED_TO_PROJECT
   TASK_COMMENT
   TASK_MENTION
+  VACATION_REQUEST
+  VACATION_REVIEWED
 }
 
 model Notification {
@@ -366,8 +368,8 @@ model Notification {
   workspace   Workspace        @relation(fields: [workspaceId], references: [id])
   taskId      Int?
   task        Task?            @relation(fields: [taskId], references: [id])
-  projectId   Int
-  project     Project          @relation(fields: [projectId], references: [id])
+  projectId   Int?
+  project     Project?         @relation(fields: [projectId], references: [id])
   type        NotificationType @default(COMPLETED)
   message     String
   read        Boolean          @default(false)

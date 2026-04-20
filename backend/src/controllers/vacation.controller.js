@@ -1,11 +1,11 @@
 const prisma = require('../lib/prisma')
+const { sendVacationRequestEmail, sendVacationReviewEmail } = require('../services/email.service')
 
 // ─── ADMIN ────────────────────────────────────────────────────────────────────
 
 /**
  * PATCH /api/vacation/admin/adjust/:userId
  * Body: { newDays, description }
- * Establece la cantidad exacta de días y guarda el ajuste en el historial.
  */
 async function adjustVacationDays(req, res, next) {
   try {
@@ -33,14 +33,7 @@ async function adjustVacationDays(req, res, next) {
         select: { userId: true, vacationDays: true },
       }),
       prisma.vacationAdjustment.create({
-        data: {
-          workspaceId,
-          userId,
-          adminId,
-          prevDays:    member.vacationDays,
-          newDays,
-          description: description.trim(),
-        },
+        data: { workspaceId, userId, adminId, prevDays: member.vacationDays, newDays, description: description.trim() },
       }),
     ])
 
@@ -50,7 +43,6 @@ async function adjustVacationDays(req, res, next) {
 
 /**
  * GET /api/vacation/admin/adjustments/:userId
- * Historial de ajustes para un usuario en el workspace.
  */
 async function getAdjustmentHistory(req, res, next) {
   try {
@@ -61,25 +53,20 @@ async function getAdjustmentHistory(req, res, next) {
       where: { workspaceId, userId },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      include: {
-        admin: { select: { id: true, name: true, avatar: true } },
-      },
+      include: { admin: { select: { id: true, name: true, avatar: true } } },
     })
-
     res.json(adjustments)
   } catch (err) { next(err) }
 }
 
 /**
  * GET /api/vacation/admin/requests
- * Lista solicitudes del workspace (todas o filtradas por status).
  * Query: ?status=pending|approved|rejected
  */
 async function listRequests(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const { status }  = req.query
-
     const where = { workspaceId }
     if (status) where.status = status
 
@@ -91,15 +78,14 @@ async function listRequests(req, res, next) {
         reviewedBy: { select: { id: true, name: true } },
       },
     })
-
     res.json(requests)
   } catch (err) { next(err) }
 }
 
 /**
  * PATCH /api/vacation/admin/requests/:id
- * Aprobar o rechazar una solicitud.
  * Body: { status: 'approved'|'rejected', reviewNote? }
+ * → email al usuario + notificación VACATION_REVIEWED
  */
 async function reviewRequest(req, res, next) {
   try {
@@ -114,11 +100,14 @@ async function reviewRequest(req, res, next) {
 
     const request = await prisma.vacationRequest.findFirst({
       where: { id, workspaceId },
+      include: { user: { select: { id: true, name: true, email: true } } },
     })
     if (!request) return res.status(404).json({ error: 'Solicitud no encontrada' })
     if (request.status !== 'pending') {
       return res.status(409).json({ error: 'La solicitud ya fue revisada' })
     }
+
+    const workspace = req.workspace
 
     const updated = await prisma.vacationRequest.update({
       where: { id },
@@ -128,7 +117,33 @@ async function reviewRequest(req, res, next) {
         reviewedAt:   new Date(),
         reviewNote:   reviewNote?.trim() || null,
       },
+      include: {
+        user:       { select: { id: true, name: true, avatar: true } },
+        reviewedBy: { select: { id: true, name: true } },
+      },
     })
+
+    // Notificación in-app al usuario
+    prisma.notification.create({
+      data: {
+        workspaceId,
+        userId:  request.user.id,
+        actorId: adminId,
+        type:    'VACATION_REVIEWED',
+        message: status === 'approved'
+          ? `Tu solicitud de licencia (${request.startDate}${request.startDate !== request.endDate ? ' → ' + request.endDate : ''}) fue aprobada.`
+          : `Tu solicitud de licencia (${request.startDate}${request.startDate !== request.endDate ? ' → ' + request.endDate : ''}) fue rechazada.${reviewNote ? ' Nota: ' + reviewNote.trim() : ''}`,
+      },
+    }).catch(() => {})
+
+    // Email al usuario
+    sendVacationReviewEmail(
+      request.user.email,
+      request.user.name,
+      workspace.name,
+      { ...request, status, reviewNote: reviewNote?.trim() || null },
+      workspaceId,
+    ).catch(() => {})
 
     res.json(updated)
   } catch (err) { next(err) }
@@ -138,7 +153,6 @@ async function reviewRequest(req, res, next) {
 
 /**
  * GET /api/vacation/my
- * Días disponibles + historial de ajustes + solicitudes del usuario.
  */
 async function getMyVacation(req, res, next) {
   try {
@@ -154,16 +168,12 @@ async function getMyVacation(req, res, next) {
         where: { workspaceId, userId },
         orderBy: { createdAt: 'desc' },
         take: 20,
-        include: {
-          admin: { select: { id: true, name: true } },
-        },
+        include: { admin: { select: { id: true, name: true } } },
       }),
       prisma.vacationRequest.findMany({
         where: { workspaceId, userId },
         orderBy: { createdAt: 'desc' },
-        include: {
-          reviewedBy: { select: { id: true, name: true } },
-        },
+        include: { reviewedBy: { select: { id: true, name: true } } },
       }),
     ])
 
@@ -177,8 +187,8 @@ async function getMyVacation(req, res, next) {
 
 /**
  * POST /api/vacation/my/request
- * Crear una solicitud de licencia.
  * Body: { startDate, endDate, type, observation? }
+ * → email a los admins + notificaciones VACATION_REQUEST a cada admin
  */
 async function createRequest(req, res, next) {
   try {
@@ -199,15 +209,42 @@ async function createRequest(req, res, next) {
     }
 
     const request = await prisma.vacationRequest.create({
-      data: {
-        workspaceId,
-        userId,
-        startDate,
-        endDate,
-        type,
-        observation: observation?.trim() || null,
-      },
+      data: { workspaceId, userId, startDate, endDate, type, observation: observation?.trim() || null },
     })
+
+    // Obtener usuario solicitante y admins del workspace en paralelo
+    const [requester, adminMembers] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
+      prisma.workspaceMember.findMany({
+        where: { workspaceId, role: { in: ['admin', 'owner'] }, active: true, userId: { not: userId } },
+        include: { user: { select: { id: true, email: true } } },
+      }),
+    ])
+
+    const workspace = req.workspace
+
+    // Notificaciones in-app a cada admin
+    if (adminMembers.length > 0) {
+      prisma.notification.createMany({
+        data: adminMembers.map(m => ({
+          workspaceId,
+          userId:  m.user.id,
+          actorId: userId,
+          type:    'VACATION_REQUEST',
+          message: `${requester.name} solicitó días de licencia (${type}) del ${startDate}${startDate !== endDate ? ' al ' + endDate : ''}.`,
+        })),
+      }).catch(() => {})
+
+      // Email a los admins
+      const adminEmails = adminMembers.map(m => m.user.email)
+      sendVacationRequestEmail(
+        adminEmails,
+        requester.name,
+        workspace.name,
+        { startDate, endDate, type, observation: observation?.trim() || null },
+        workspaceId,
+      ).catch(() => {})
+    }
 
     res.status(201).json(request)
   } catch (err) { next(err) }

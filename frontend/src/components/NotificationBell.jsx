@@ -9,6 +9,7 @@ const FILTERS = [
   { key: 'BLOCKED',          label: '🔒',          types: ['BLOCKED'] },
   { key: 'COMPLETED',        label: '✓',           types: ['COMPLETED'] },
   { key: 'ADDED_TO_PROJECT', label: '＋',          types: ['ADDED_TO_PROJECT'] },
+  { key: 'VACATION',         label: '🏖️',          types: ['VACATION_REQUEST', 'VACATION_REVIEWED'] },
 ]
 
 function timeAgo(dateStr) {
@@ -152,6 +153,7 @@ export default function NotificationBell() {
                 const isAddedProject = n.type === 'ADDED_TO_PROJECT'
                 const isComment      = n.type === 'TASK_COMMENT'
                 const isMention      = n.type === 'TASK_MENTION'
+                const isVacation     = n.type === 'VACATION_REQUEST' || n.type === 'VACATION_REVIEWED'
 
                 const bgClass = isBlocked
                   ? (!n.read ? 'bg-red-100 dark:bg-red-900/40'      : 'bg-red-50 dark:bg-red-900/20')
@@ -161,9 +163,11 @@ export default function NotificationBell() {
                       ? (!n.read ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-blue-50 dark:bg-blue-900/20')
                       : isMention
                         ? (!n.read ? 'bg-purple-100 dark:bg-purple-900/40' : 'bg-purple-50 dark:bg-purple-900/20')
-                        : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
+                        : isVacation
+                          ? (!n.read ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-gray-800')
+                          : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
 
-                const dotClass = isBlocked ? 'bg-red-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : isMention ? 'bg-purple-500' : 'bg-primary-500'
+                const dotClass = isBlocked ? 'bg-red-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : isMention ? 'bg-purple-500' : isVacation ? 'bg-amber-500' : 'bg-primary-500'
                 const textClass = isBlocked
                   ? 'text-red-800 dark:text-red-200'
                   : isAddedProject
@@ -203,6 +207,9 @@ export default function NotificationBell() {
                         )}
                         {isMention && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-[8px] leading-none">@</span>
+                        )}
+                        {isVacation && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🏖</span>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
