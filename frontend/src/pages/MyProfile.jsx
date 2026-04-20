@@ -88,6 +88,118 @@ const BLOOD_OPTIONS = [
   'A+','A-','B+','B-','AB+','AB-','O+','O-'
 ].map(v => ({ value: v, label: v }))
 
+const LEAVE_TYPES = [
+  { value: 'vacaciones',  label: '🏖️ Vacaciones' },
+  { value: 'estudio',     label: '📚 Estudio / examen' },
+  { value: 'maternidad',  label: '🤱 Maternidad' },
+  { value: 'paternidad',  label: '👶 Paternidad' },
+  { value: 'enfermedad',  label: '🏥 Enfermedad / salud' },
+  { value: 'duelo',       label: '🕯️ Duelo familiar' },
+  { value: 'mudanza',     label: '📦 Mudanza' },
+  { value: 'otro',        label: '📝 Otro' },
+]
+
+const STATUS_LABELS = { pending: 'Pendiente', approved: 'Aprobada', rejected: 'Rechazada' }
+const STATUS_COLORS = {
+  pending:  'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  approved: 'bg-green-100  text-green-700  dark:bg-green-900/30  dark:text-green-400',
+  rejected: 'bg-red-100    text-red-700    dark:bg-red-900/30    dark:text-red-400',
+}
+
+function VacationRequestModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({ startDate: '', endDate: '', type: '', observation: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState('')
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!form.type) { setError('Seleccioná el tipo de licencia'); return }
+    if (form.startDate > form.endDate) { setError('La fecha de inicio debe ser anterior a la de fin'); return }
+    setSaving(true); setError('')
+    try {
+      const { data } = await api.post('/vacation/my/request', form)
+      onCreated(data)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al enviar la solicitud')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <p className="font-semibold text-gray-900 dark:text-white">Solicitar días</p>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          {/* Tipo */}
+          <div>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
+              Tipo de licencia <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={form.type} required
+              onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">— Seleccionar —</option>
+              {LEAVE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+
+          {/* Fechas */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
+                Desde <span className="text-red-500">*</span>
+              </label>
+              <input type="date" required value={form.startDate}
+                onChange={e => setForm(p => ({ ...p, startDate: e.target.value }))}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
+                Hasta <span className="text-red-500">*</span>
+              </label>
+              <input type="date" required value={form.endDate}
+                min={form.startDate}
+                onChange={e => setForm(p => ({ ...p, endDate: e.target.value }))}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+
+          {/* Observación */}
+          <div>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Observación (opcional)</label>
+            <textarea
+              rows={3} value={form.observation}
+              onChange={e => setForm(p => ({ ...p, observation: e.target.value }))}
+              placeholder="Algún detalle adicional para el equipo…"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+
+          <div className="flex items-center justify-end gap-3 pt-1">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">Cancelar</button>
+            <button type="submit" disabled={saving}
+              className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Enviando…' : 'Enviar solicitud'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function MyProfile() {
   const { user, updateUser } = useAuth()
   const { labelFor } = useRoles()
@@ -105,10 +217,18 @@ export default function MyProfile() {
   const [selectedAvatar, setSelectedAvatar] = useState(null)
   const [lightboxIndex, setLightboxIndex] = useState(null) // null = cerrado
 
+  const [vacData, setVacData]           = useState(null)   // { vacationDays, adjustments, requests }
+  const [vacHistoryOpen, setVacHistoryOpen] = useState(false)
+  const [vacRequestOpen, setVacRequestOpen] = useState(false)
+
   function openLightbox(file) {
     const idx = AVATARS.findIndex(a => a.file === file)
     setLightboxIndex(idx >= 0 ? idx : 0)
   }
+
+  useEffect(() => {
+    api.get('/vacation/my').then(r => setVacData(r.data)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     api.get('/profile').then(({ data }) => {
@@ -268,6 +388,105 @@ export default function MyProfile() {
             </div>
           </div>
         </div>
+
+        {/* Vacaciones */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">🏖️ Vacaciones</h2>
+            <button
+              onClick={() => setVacRequestOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              Solicitar días
+            </button>
+          </div>
+
+          {/* Días disponibles */}
+          <div className="flex items-center gap-6 mb-4">
+            <div className="text-center">
+              <p className="text-4xl font-bold text-primary-600 dark:text-primary-400">
+                {vacData?.vacationDays ?? '—'}
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">días disponibles</p>
+            </div>
+            <button
+              onClick={() => setVacHistoryOpen(v => !v)}
+              className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium flex items-center gap-1"
+            >
+              {vacHistoryOpen ? '▲' : '▼'} Ver historial de cambios
+              {vacData?.adjustments && <span className="text-gray-400">({vacData.adjustments.length})</span>}
+            </button>
+          </div>
+
+          {/* Historial de ajustes */}
+          {vacHistoryOpen && (
+            <div className="mb-4 max-h-48 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+              {!vacData?.adjustments?.length
+                ? <p className="text-xs text-gray-400 text-center py-4">Sin historial de cambios</p>
+                : vacData.adjustments.map(adj => (
+                    <div key={adj.id} className="flex items-start gap-3 px-4 py-3 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-700 dark:text-gray-200">{adj.description}</p>
+                        <p className="text-gray-400 dark:text-gray-500 mt-0.5">
+                          {new Date(adj.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <span className={`flex-shrink-0 font-bold ${adj.newDays >= adj.prevDays ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                        {adj.prevDays} → {adj.newDays}
+                      </span>
+                    </div>
+                  ))
+              }
+            </div>
+          )}
+
+          {/* Solicitudes */}
+          {vacData?.requests?.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Mis solicitudes</p>
+              <div className="space-y-2">
+                {vacData.requests.map(req => {
+                  const typeLabel = LEAVE_TYPES.find(t => t.value === req.type)?.label ?? req.type
+                  return (
+                    <div key={req.id} className="flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{typeLabel}</span>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[req.status]}`}>
+                            {STATUS_LABELS[req.status]}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          {req.startDate === req.endDate
+                            ? new Date(req.startDate + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
+                            : `${new Date(req.startDate + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} → ${new Date(req.endDate + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                          }
+                        </p>
+                        {req.observation && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 italic">{req.observation}</p>}
+                        {req.reviewNote && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Nota: {req.reviewNote}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {vacRequestOpen && (
+          <VacationRequestModal
+            onClose={() => setVacRequestOpen(false)}
+            onCreated={req => {
+              setVacData(prev => prev ? ({ ...prev, requests: [req, ...(prev.requests ?? [])] }) : prev)
+              setVacRequestOpen(false)
+            }}
+          />
+        )}
 
         {/* Change password */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
