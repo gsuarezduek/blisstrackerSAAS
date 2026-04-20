@@ -23,10 +23,11 @@ export default function AuthCallback() {
 
     localStorage.setItem('token', token)
 
-    // Obtener datos frescos del usuario
+    // Obtener datos frescos del usuario y registrar el ingreso
     api.get('/auth/me')
       .then(r => {
         loginWithToken(token, r.data)
+        api.post('/auth/record-login').catch(() => {})
         navigate('/', { replace: true })
       })
       .catch(() => {

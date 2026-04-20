@@ -278,7 +278,31 @@ async function switchWorkspace(req, res, next) {
       return res.status(403).json({ error: 'No sos miembro de este workspace' })
     }
 
+    prisma.userLogin.create({
+      data: { userId: user.id, workspaceId: workspace.id, method: 'switch' },
+    }).catch(() => {})
+
     res.json({ token: signToken(user, member, workspace), slug: targetSlug })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * POST /api/auth/record-login
+ * Registra un ingreso para el workspace actual.
+ * Usado por AuthCallback después de aterrizar con token pre-firmado.
+ */
+async function recordLogin(req, res, next) {
+  try {
+    await prisma.userLogin.create({
+      data: {
+        userId:      req.user.userId,
+        workspaceId: req.workspace.id,
+        method:      'token',
+      },
+    })
+    res.json({ ok: true })
   } catch (err) {
     next(err)
   }
@@ -288,4 +312,4 @@ function logout(req, res) {
   res.json({ ok: true })
 }
 
-module.exports = { login, me, forgotPassword, resetPassword, googleLogin, switchWorkspace, logout }
+module.exports = { login, me, forgotPassword, resetPassword, googleLogin, switchWorkspace, recordLogin, logout }

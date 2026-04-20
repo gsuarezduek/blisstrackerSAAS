@@ -1,5 +1,5 @@
 const router = require('express').Router()
-const { login, me, forgotPassword, resetPassword, googleLogin, switchWorkspace, logout } = require('../controllers/auth.controller')
+const { login, me, forgotPassword, resetPassword, googleLogin, switchWorkspace, recordLogin, logout } = require('../controllers/auth.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const prisma = require('../lib/prisma')
@@ -19,7 +19,8 @@ router.get('/check-email', async (req, res) => {
 })
 
 // /me y /logout necesitan contexto de workspace para devolver datos del miembro
-router.get('/me',      auth, resolveWorkspace, me)
-router.post('/logout', auth, logout)
+router.get('/me',             auth, resolveWorkspace, me)
+router.post('/record-login',  auth, resolveWorkspace, recordLogin)
+router.post('/logout',        auth, logout)
 
 module.exports = router
