@@ -3,6 +3,7 @@ const prisma = require('../lib/prisma')
 
 // Campos personales globales del User (no dependen del workspace)
 const PERSONAL_FIELDS = [
+  'name',
   'phone', 'birthday', 'address', 'dni', 'cuit', 'alias', 'bankName',
   'maritalStatus', 'children', 'educationLevel', 'educationTitle',
   'bloodType', 'medicalConditions', 'healthInsurance', 'emergencyContact',
@@ -52,10 +53,16 @@ async function getProfile(req, res, next) {
  */
 async function updateProfile(req, res, next) {
   try {
+    if ('name' in req.body && !req.body.name?.trim()) {
+      return res.status(400).json({ error: 'El nombre no puede estar vacío' })
+    }
+
     const data = {}
     for (const field of PERSONAL_FIELDS) {
       if (field in req.body) {
-        if (field === 'birthday') {
+        if (field === 'name') {
+          data.name = req.body.name.trim()
+        } else if (field === 'birthday') {
           data.birthday = req.body.birthday ? new Date(req.body.birthday) : null
         } else if (field === 'children') {
           data.children = req.body.children !== '' && req.body.children !== null

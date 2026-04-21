@@ -209,6 +209,11 @@ export default function MyProfile() {
   const [selectedAvatar, setSelectedAvatar] = useState(null)
   const [lightboxIndex, setLightboxIndex] = useState(null) // null = cerrado
 
+  const [editingName, setEditingName] = useState(false)
+  const [nameValue, setNameValue]     = useState('')
+  const [nameSaving, setNameSaving]   = useState(false)
+  const [nameError, setNameError]     = useState('')
+
   const [vacData, setVacData]           = useState(null)   // { vacationDays, adjustments, requests }
   const [vacHistoryOpen, setVacHistoryOpen] = useState(false)
   const [vacRequestOpen, setVacRequestOpen] = useState(false)
@@ -252,6 +257,26 @@ export default function MyProfile() {
 
   function set(field) {
     return val => setForm(prev => ({ ...prev, [field]: val }))
+  }
+
+  function startEditName() {
+    setNameValue(profile.name)
+    setNameError('')
+    setEditingName(true)
+  }
+
+  async function handleSaveName() {
+    if (!nameValue.trim()) { setNameError('El nombre no puede estar vacío'); return }
+    if (nameValue.trim() === profile.name) { setEditingName(false); return }
+    setNameSaving(true); setNameError('')
+    try {
+      const { data } = await api.patch('/profile', { name: nameValue.trim() })
+      setProfile(prev => ({ ...prev, name: data.name }))
+      updateUser({ name: data.name })
+      setEditingName(false)
+    } catch (err) {
+      setNameError(err.response?.data?.error || 'Error al guardar')
+    } finally { setNameSaving(false) }
   }
 
   async function handleSaveAvatar() {
@@ -332,8 +357,39 @@ export default function MyProfile() {
               />
             </button>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">{profile.name}</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{labelFor(profile.role)}</p>
+              {/* Nombre editable */}
+              {editingName ? (
+                <div className="flex items-center gap-2 mb-1">
+                  <input
+                    autoFocus
+                    value={nameValue}
+                    onChange={e => setNameValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingName(false) }}
+                    className="text-xl font-bold bg-transparent border-b-2 border-primary-500 text-gray-900 dark:text-white focus:outline-none w-48"
+                  />
+                  <button onClick={handleSaveName} disabled={nameSaving}
+                    className="text-primary-600 hover:text-primary-700 disabled:opacity-50 transition-colors"
+                    title="Guardar">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  </button>
+                  <button onClick={() => setEditingName(false)}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                    title="Cancelar">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 mb-1">
+                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">{profile.name}</h1>
+                  <button onClick={startEditName}
+                    className="text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 transition-colors"
+                    title="Editar nombre">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-1.414.93l-3.536.707.707-3.536A4 4 0 019 13z" /></svg>
+                  </button>
+                </div>
+              )}
+              {nameError && <p className="text-xs text-red-500 mb-1">{nameError}</p>}
+              <p className="text-sm text-gray-500 dark:text-gray-400">{labelFor(profile.role)}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">En Bliss desde el {joinDate}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500">{profile.email}</p>
             </div>
