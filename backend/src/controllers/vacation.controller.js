@@ -208,6 +208,13 @@ async function createRequest(req, res, next) {
       return res.status(400).json({ error: 'La fecha de inicio debe ser anterior a la de fin' })
     }
 
+    // Mínimo 48hs de anticipación
+    const minDate = new Date(Date.now() + 48 * 60 * 60 * 1000)
+    const minDateStr = minDate.toLocaleDateString('en-CA') // YYYY-MM-DD
+    if (startDate < minDateStr) {
+      return res.status(400).json({ error: 'La fecha de inicio debe ser con al menos 48 horas de anticipación' })
+    }
+
     const request = await prisma.vacationRequest.create({
       data: { workspaceId, userId, startDate, endDate, type, observation: observation?.trim() || null },
     })

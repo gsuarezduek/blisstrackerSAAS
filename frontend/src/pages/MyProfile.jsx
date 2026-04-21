@@ -81,14 +81,23 @@ const STATUS_COLORS = {
   rejected: 'bg-red-100    text-red-700    dark:bg-red-900/30    dark:text-red-400',
 }
 
+// Fecha mínima: 48 horas desde ahora (en formato YYYY-MM-DD local)
+function minStartDate() {
+  const d = new Date(Date.now() + 48 * 60 * 60 * 1000)
+  return d.toLocaleDateString('en-CA') // 'en-CA' produce YYYY-MM-DD
+}
+
 function VacationRequestModal({ onClose, onCreated }) {
   const [form, setForm] = useState({ startDate: '', endDate: '', type: '', observation: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
+  const minDate = minStartDate()
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.type) { setError('Seleccioná el tipo de licencia'); return }
+    if (form.startDate < minDate) { setError('La fecha de inicio debe ser con al menos 48 hs de anticipación'); return }
     if (form.startDate > form.endDate) { setError('La fecha de inicio debe ser anterior a la de fin'); return }
     setSaving(true); setError('')
     try {
@@ -125,6 +134,12 @@ function VacationRequestModal({ onClose, onCreated }) {
             </select>
           </div>
 
+          {/* Nota 48hs */}
+          <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg px-3 py-2.5">
+            <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+            <p className="text-xs text-amber-700 dark:text-amber-400">Las solicitudes requieren un mínimo de <strong>48 horas de anticipación</strong>.</p>
+          </div>
+
           {/* Fechas */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -132,6 +147,7 @@ function VacationRequestModal({ onClose, onCreated }) {
                 Desde <span className="text-red-500">*</span>
               </label>
               <input type="date" required value={form.startDate}
+                min={minDate}
                 onChange={e => setForm(p => ({ ...p, startDate: e.target.value }))}
                 className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
