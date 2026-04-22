@@ -188,12 +188,19 @@ Incluí entre 3 y 8 findings priorizados por impacto real en GEO, y entre 3 y 6 
 
 // ─── Main analysis function ───────────────────────────────────────────────────
 
+async function setStep(auditId, step) {
+  await prisma.geoAudit.update({
+    where: { id: auditId },
+    data:  { errorMsg: step },
+  }).catch(() => {})
+}
+
 async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
   try {
     // 1. Mark as running
     await prisma.geoAudit.update({
       where: { id: auditId },
-      data:  { status: 'running' },
+      data:  { status: 'running', errorMsg: 'Conectando con el sitio…' },
     })
 
     // 2. Fetch page + robots.txt in parallel
@@ -204,10 +211,12 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
     ])
 
     // 3. Extract structured data
+    await setStep(auditId, 'Extrayendo contenido y estructura…')
     const pageData   = extractPageData(html, url)
     const robotsData = analyzeRobots(robotsTxt)
 
     // 4. Call Claude
+    await setStep(auditId, 'Analizando con IA (esto puede tardar unos segundos)…')
     const message = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 2000,
@@ -218,13 +227,18 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
     // 5. Log tokens
     await logTokens('geoAudit', userId, message.usage, workspaceId)
 
-    // 6. Parse response
-    const raw  = message.content[0].text.trim()
+    // 6. Parse response — strip markdown fences if Claude los agrega
+    const raw = message.content[0].text
+      .trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '')
+      .trim()
     const result = JSON.parse(raw)
 
     const { score, components, findings, recommendations } = result
 
     // 7. Save completed result
+    await setStep(auditId, 'Guardando resultados…')
     await prisma.geoAudit.update({
       where: { id: auditId },
       data: {
@@ -240,6 +254,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
         recommendations: JSON.stringify(recommendations ?? []),
         rawData:        raw,
         tokensUsed:     (message.usage.input_tokens ?? 0) + (message.usage.output_tokens ?? 0),
+        errorMsg:       null,
       },
     })
   } catch (err) {

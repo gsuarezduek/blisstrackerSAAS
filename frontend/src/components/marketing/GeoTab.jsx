@@ -236,9 +236,34 @@ export default function GeoTab() {
           </div>
 
           {running && (
-            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl text-sm text-blue-700 dark:text-blue-400 flex items-center gap-2">
-              <span className="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-              Analizando el sitio con IA… esto puede tomar unos segundos.
+            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-blue-700 dark:text-blue-400">
+                <span className="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                {activeAudit?.errorMsg || 'Iniciando análisis…'}
+              </div>
+              <div className="flex gap-1">
+                {['Conectando', 'Extrayendo', 'Analizando con IA', 'Guardando'].map((step, i) => {
+                  const msg = activeAudit?.errorMsg ?? ''
+                  const active = i === 0 ? msg.includes('Conectando')
+                    : i === 1 ? msg.includes('Extrayendo')
+                    : i === 2 ? msg.includes('Analizando')
+                    : msg.includes('Guardando')
+                  const done = i === 0 ? !msg.includes('Conectando')
+                    : i === 1 ? (msg.includes('Analizando') || msg.includes('Guardando'))
+                    : i === 2 ? msg.includes('Guardando')
+                    : false
+                  return (
+                    <div key={i} className={`h-1 flex-1 rounded-full transition-colors duration-500 ${
+                      done   ? 'bg-blue-400 dark:bg-blue-500' :
+                      active ? 'bg-blue-300 dark:bg-blue-600 animate-pulse' :
+                               'bg-blue-100 dark:bg-blue-900/40'
+                    }`} />
+                  )
+                })}
+              </div>
+              <p className="text-xs text-blue-500 dark:text-blue-500">
+                Podés cerrar esta pestaña — el análisis continúa en segundo plano.
+              </p>
             </div>
           )}
 

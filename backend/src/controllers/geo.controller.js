@@ -22,10 +22,14 @@ async function runAudit(req, res, next) {
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
     if (!project.websiteUrl) return res.status(400).json({ error: 'El proyecto no tiene una URL configurada' })
 
-    // Validar URL
+    // Validar URL — agregar https:// si no tiene protocolo
     let url
-    try { url = new URL(project.websiteUrl).href }
-    catch { return res.status(400).json({ error: 'La URL del proyecto no es válida' }) }
+    try {
+      const raw = /^https?:\/\//i.test(project.websiteUrl)
+        ? project.websiteUrl
+        : 'https://' + project.websiteUrl
+      url = new URL(raw).href
+    } catch { return res.status(400).json({ error: 'La URL del proyecto no es válida' }) }
 
     // Crear el registro de audit
     const audit = await prisma.geoAudit.create({
@@ -35,7 +39,7 @@ async function runAudit(req, res, next) {
     // Correr el análisis de forma async (no bloquea el response)
     setImmediate(() => runGeoAnalysis(audit.id, workspaceId, project.id, url, userId))
 
-    res.status(201).json(audit)
+    res.status(201).json({ auditId: audit.id, ...audit })
   } catch (err) { next(err) }
 }
 
@@ -57,7 +61,7 @@ async function listAudits(req, res, next) {
       take:    limit,
       select: {
         id: true, projectId: true, url: true, status: true,
-        score: true, createdAt: true, updatedAt: true,
+        score: true, errorMsg: true, createdAt: true, updatedAt: true,
         project: { select: { name: true } },
       },
     })
