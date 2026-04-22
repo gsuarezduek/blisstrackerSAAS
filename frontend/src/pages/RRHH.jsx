@@ -724,7 +724,7 @@ function TabLegajos({ users, onVacationUpdate }) {
 
   function fmtBirthday(iso) {
     if (!iso) return null
-    return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ })
+    return new Date(iso.slice(0, 10) + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
   }
 
   const hasPersonalData = selected &&
