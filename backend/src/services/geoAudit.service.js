@@ -24,6 +24,13 @@ async function fetchRobotsTxt(origin) {
   } catch { return '' }
 }
 
+async function fetchLlmsTxt(origin) {
+  try {
+    const res = await axios.get(`${origin}/llms.txt`, { timeout: 8000 })
+    return { exists: true, content: res.data?.slice(0, 3000) ?? '' }
+  } catch { return { exists: false, content: '' } }
+}
+
 function extractPageData(html, url) {
   const $ = cheerio.load(html)
   const origin = new URL(url).origin
@@ -126,7 +133,7 @@ Analizás el contenido de una página web y devolvés un análisis estructurado 
 
 IMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin bloques de código. Solo el objeto JSON.`
 
-function buildPrompt(url, pageData, robotsData) {
+function buildPrompt(url, pageData, robotsData, llmsData) {
   return `Analizá el siguiente sitio web para GEO y devolvé un JSON con este formato exacto:
 
 {
@@ -179,6 +186,9 @@ ROBOTS.TXT: ${robotsData.hasRobotsTxt ? 'presente' : 'no encontrado'}
 Crawlers IA bloqueados (${robotsData.blocked.length}): ${robotsData.blocked.map(c => c.name).join(', ') || 'ninguno'}
 Crawlers IA permitidos (${robotsData.allowed.length}): ${robotsData.allowed.map(c => c.name).join(', ')}
 
+LLMS.TXT: ${llmsData.exists ? 'presente' : 'no encontrado — el sitio no tiene este archivo'}
+${llmsData.exists ? `Contenido:\n${llmsData.content}` : 'Nota: llms.txt es un estándar emergente que ayuda a los LLMs a entender y citar mejor el sitio. Su ausencia es un hallazgo relevante para el componente de Plataformas IA.'}
+
 LINKS INTERNOS: ${pageData.internalLinks.length} | EXTERNOS: ${pageData.externalLinks.length}
 
 PESOS para el score global (citability=25%, brandAuthority=20%, eeat=20%, technical=15%, schema=10%, platforms=10%)
@@ -203,11 +213,12 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
       data:  { status: 'running', errorMsg: 'Conectando con el sitio…' },
     })
 
-    // 2. Fetch page + robots.txt in parallel
+    // 2. Fetch page + robots.txt + llms.txt in parallel
     const origin = new URL(url).origin
-    const [html, robotsTxt] = await Promise.all([
+    const [html, robotsTxt, llmsData] = await Promise.all([
       fetchPage(url),
       fetchRobotsTxt(origin),
+      fetchLlmsTxt(origin),
     ])
 
     // 3. Extract structured data
@@ -221,7 +232,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 2000,
       system:     SYSTEM_PROMPT,
-      messages:   [{ role: 'user', content: buildPrompt(url, pageData, robotsData) }],
+      messages:   [{ role: 'user', content: buildPrompt(url, pageData, robotsData, llmsData) }],
     })
 
     // 5. Log tokens

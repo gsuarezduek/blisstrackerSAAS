@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
+import { useAuth } from '../../context/AuthContext'
 
 const COMPONENTS_META = [
   { key: 'citability',     icon: '🧠', label: 'Citabilidad IA',     desc: 'Qué tan probable es que la IA cite tu sitio' },
@@ -73,6 +74,94 @@ function ComponentCard({ meta, score }) {
   )
 }
 
+function CreateTaskModal({ title, projectId, projectName, onClose }) {
+  const { user } = useAuth()
+  const [description, setDescription] = useState(title)
+  const [members, setMembers]         = useState([])
+  const [assigneeId, setAssigneeId]   = useState('')
+  const [saving, setSaving]           = useState(false)
+  const [done, setDone]               = useState(false)
+
+  useEffect(() => {
+    api.get(`/projects/${projectId}/members`)
+      .then(r => {
+        setMembers(r.data)
+        setAssigneeId(String(user?.id ?? ''))
+      })
+      .catch(() => {})
+  }, [projectId, user])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!description.trim()) return
+    setSaving(true)
+    try {
+      const body = { description: description.trim(), projectId: String(projectId) }
+      if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
+      await api.post('/tasks', body)
+      setDone(true)
+      setTimeout(onClose, 1200)
+    } catch {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Crear tarea</h2>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Proyecto: <span className="font-medium text-gray-600 dark:text-gray-300">{projectName}</span></p>
+
+        {done ? (
+          <div className="flex flex-col items-center py-6 gap-2">
+            <span className="text-3xl">✅</span>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
+              <textarea
+                autoFocus
+                rows={3}
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+              />
+            </div>
+            {members.length > 1 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asignar a</label>
+                <select
+                  value={assigneeId}
+                  onChange={e => setAssigneeId(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {members.map(m => (
+                    <option key={m.user.id} value={String(m.user.id)}>
+                      {m.user.name}{String(m.user.id) === String(user?.id) ? ' (yo)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose}
+                className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                Cancelar
+              </button>
+              <button type="submit" disabled={saving || !description.trim()}
+                className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+                {saving ? 'Guardando…' : 'Crear tarea'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function GeoTab() {
   const [projects, setProjects]     = useState([])
   const [projectId, setProjectId]   = useState('')
@@ -81,6 +170,7 @@ export default function GeoTab() {
   const [running, setRunning]       = useState(false)
   const [error, setError]           = useState('')
   const [loadingAudits, setLoadingAudits] = useState(false)
+  const [taskModal, setTaskModal]   = useState(null) // { title }
   const pollRef = useRef(null)
 
   // Cargar proyectos del workspace
@@ -338,16 +428,23 @@ export default function GeoTab() {
               </h3>
               <div className="space-y-3">
                 {sortedFindings.map((f, i) => (
-                  <div key={i} className="flex gap-3">
-                    <span className={`mt-0.5 px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 h-fit ${SEVERITY_COLORS[f.severity] ?? SEVERITY_COLORS.low}`}>
+                  <div key={i} className="flex gap-3 items-start">
+                    <span className={`mt-0.5 px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${SEVERITY_COLORS[f.severity] ?? SEVERITY_COLORS.low}`}>
                       {SEVERITY_LABELS[f.severity] ?? f.severity}
                     </span>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{f.title}</p>
                       {f.description && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{f.description}</p>
                       )}
                     </div>
+                    <button
+                      onClick={() => setTaskModal({ title: f.title })}
+                      className="flex-shrink-0 text-xs text-primary-600 dark:text-primary-400 hover:underline mt-0.5"
+                      title="Crear tarea a partir de este hallazgo"
+                    >
+                      + Tarea
+                    </button>
                   </div>
                 ))}
               </div>
@@ -362,16 +459,23 @@ export default function GeoTab() {
               </h3>
               <div className="space-y-3">
                 {recommendations.map((r, i) => (
-                  <div key={i} className="flex gap-3">
-                    <span className={`mt-0.5 px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 h-fit ${SEVERITY_COLORS[r.priority] ?? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
+                  <div key={i} className="flex gap-3 items-start">
+                    <span className={`mt-0.5 px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${SEVERITY_COLORS[r.priority] ?? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
                       {SEVERITY_LABELS[r.priority] ?? r.priority}
                     </span>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{r.action}</p>
                       {r.impact && (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{r.impact}</p>
                       )}
                     </div>
+                    <button
+                      onClick={() => setTaskModal({ title: r.action })}
+                      className="flex-shrink-0 text-xs text-primary-600 dark:text-primary-400 hover:underline mt-0.5"
+                      title="Crear tarea a partir de esta recomendación"
+                    >
+                      + Tarea
+                    </button>
                   </div>
                 ))}
               </div>
@@ -423,6 +527,15 @@ export default function GeoTab() {
       )}
 
       {/* Estado vacío */}
+      {taskModal && selectedProject && (
+        <CreateTaskModal
+          title={taskModal.title}
+          projectId={selectedProject.id}
+          projectName={selectedProject.name}
+          onClose={() => setTaskModal(null)}
+        />
+      )}
+
       {!projectId && projects.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
           <div className="text-4xl mb-3">🤖</div>
