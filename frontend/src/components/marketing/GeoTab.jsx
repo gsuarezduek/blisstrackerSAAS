@@ -138,8 +138,8 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
                   className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   {members.map(m => (
-                    <option key={m.user.id} value={String(m.user.id)}>
-                      {m.user.name}{String(m.user.id) === String(user?.id) ? ' (yo)' : ''}
+                    <option key={m.id} value={String(m.id)}>
+                      {m.name}{String(m.id) === String(user?.id) ? ' (yo)' : ''}
                     </option>
                   ))}
                 </select>
