@@ -240,6 +240,7 @@ export default function ProjectsTab() {
       name:       project.name,
       serviceIds: project.services.map(ps => ps.service.id),
       links:      (project.links ?? []).map(l => ({ label: l.label, url: l.url })),
+      websiteUrl: project.websiteUrl ?? '',
     })
   }
 
@@ -262,6 +263,7 @@ export default function ProjectsTab() {
     try {
       const body = { serviceIds: edit.serviceIds }
       if (edit.name.trim() !== project.name) body.name = edit.name.trim()
+      if ((edit.websiteUrl ?? '') !== (project.websiteUrl ?? '')) body.websiteUrl = edit.websiteUrl.trim()
       const { data } = await api.put(`/projects/${project.id}`, body)
 
       // Save links separately
@@ -360,6 +362,17 @@ export default function ProjectsTab() {
                         onChange={e => setEdit(prev => ({ ...prev, name: e.target.value }))}
                         className="w-full border border-primary-400 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Sitio web</p>
+                        <input
+                          type="url"
+                          value={edit.websiteUrl}
+                          onChange={e => setEdit(prev => ({ ...prev, websiteUrl: e.target.value }))}
+                          placeholder="https://ejemplo.com"
+                          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Usado para análisis GEO y otras funciones de Marketing</p>
+                      </div>
                       <div>
                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Servicios asociados</p>
                         <ServiceCheckboxList

@@ -50,6 +50,7 @@ import Preferences from './pages/Preferences'
 import Docs from './pages/Docs'
 import SuperAdmin from './pages/SuperAdmin'
 import JoinWorkspace from './pages/JoinWorkspace'
+import Marketing from './pages/Marketing'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -104,7 +105,8 @@ export default function App() {
           <Route path="/profile"      element={<PrivateRoute><MyProfile    /></PrivateRoute>} />
           <Route path="/preferences"  element={<PrivateRoute><Preferences  /></PrivateRoute>} />
           <Route path="/docs"         element={<PrivateRoute><Docs         /></PrivateRoute>} />
-          <Route path="/realtime" element={<PrivateRoute><RealTime /></PrivateRoute>} />
+          <Route path="/realtime"   element={<PrivateRoute><RealTime  /></PrivateRoute>} />
+          <Route path="/marketing"  element={<PrivateRoute><Marketing /></PrivateRoute>} />
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
           <Route path="/superadmin" element={<SuperAdminRoute><SuperAdmin /></SuperAdminRoute>} />
           <Route path="/admin"              element={<AdminRoute><Admin        /></AdminRoute>} />

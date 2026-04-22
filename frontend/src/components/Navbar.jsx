@@ -116,6 +116,7 @@ export default function Navbar() {
     ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
     { to: '/realtime', label: 'Actividad', dot: true },
     ...(isAdmin ? [{ to: '/reports', label: 'Reportes' }] : []),
+    { to: '/marketing', label: 'Marketing' },
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────

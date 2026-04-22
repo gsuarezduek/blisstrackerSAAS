@@ -38,6 +38,7 @@ model Workspace {
   emailLogs            EmailLog[]
   vacationAdjustments  VacationAdjustment[]
   vacationRequests     VacationRequest[]
+  geoAudits            GeoAudit[]
 
   @@index([slug])
 }
@@ -202,6 +203,7 @@ model Project {
   situationEnabled Boolean @default(true)
   emailFrom           String?
   aiWeeklyTokenLimit  Int     @default(500000)
+  websiteUrl          String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -210,6 +212,7 @@ model Project {
   members       ProjectMember[]
   notifications Notification[]
   links         ProjectLink[]
+  geoAudits     GeoAudit[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -569,6 +572,36 @@ model Announcement {
   updatedAt          DateTime  @updatedAt
 
   @@index([active])
+}
+
+// ─── MARKETING / GEO ─────────────────────────────────────────────────────────
+
+model GeoAudit {
+  id             Int      @id @default(autoincrement())
+  workspaceId    Int
+  projectId      Int
+  url            String
+  status         String   @default("pending") // pending | running | completed | failed
+  score          Int?
+  citability     Int?
+  brandAuthority Int?
+  eeat           Int?
+  technical      Int?
+  schema         Int?
+  platforms      Int?
+  findings       String   @default("[]")       // JSON: [{severity, component, title, description}]
+  recommendations String  @default("[]")       // JSON: [{priority, action, impact}]
+  rawData        String?
+  errorMsg       String?
+  tokensUsed     Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([projectId])
 }
 
 // ─── FEATURE FLAGS ───────────────────────────────────────────────────────────
