@@ -94,6 +94,13 @@ export default function GeoTab() {
 
   const selectedProject = projects.find(p => String(p.id) === projectId)
 
+  async function loadAuditDetail(id) {
+    try {
+      const r = await api.get(`/marketing/geo/audits/${id}`)
+      setActive(r.data)
+    } catch {}
+  }
+
   // Cargar historial cuando cambia el proyecto
   const loadAudits = useCallback((pid) => {
     if (!pid) return
@@ -101,14 +108,13 @@ export default function GeoTab() {
     api.get(`/marketing/geo/audits?projectId=${pid}`)
       .then(r => {
         setAudits(r.data)
-        // Si el más reciente está running, ponerlo como activo y empezar poll
         const latest = r.data[0]
         if (latest?.status === 'running') {
           setActive(latest)
           setRunning(true)
           startPolling(latest.id)
         } else if (latest?.status === 'completed') {
-          setActive(latest)
+          loadAuditDetail(latest.id)
         }
       })
       .catch(() => {})
@@ -166,8 +172,13 @@ export default function GeoTab() {
     }
   }
 
-  const findings       = activeAudit?.findings       ? JSON.parse(activeAudit.findings)       : []
-  const recommendations = activeAudit?.recommendations ? JSON.parse(activeAudit.recommendations) : []
+  function parseField(val) {
+    if (!val) return []
+    if (Array.isArray(val)) return val
+    try { return JSON.parse(val) } catch { return [] }
+  }
+  const findings        = parseField(activeAudit?.findings)
+  const recommendations = parseField(activeAudit?.recommendations)
   const sortedFindings = [...findings].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9))
 
   const noUrl = selectedProject && !selectedProject.websiteUrl
@@ -382,7 +393,7 @@ export default function GeoTab() {
               {audits.map(a => (
                 <div
                   key={a.id}
-                  onClick={() => a.status === 'completed' && setActive(a)}
+                  onClick={() => a.status === 'completed' && loadAuditDetail(a.id)}
                   className={`py-3 flex items-center justify-between gap-4 ${
                     a.status === 'completed' ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 rounded-lg px-2 -mx-2' : ''
                   }`}
