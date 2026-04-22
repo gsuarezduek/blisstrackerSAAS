@@ -76,7 +76,7 @@ function ComponentCard({ meta, score }) {
 
 function CreateTaskModal({ title, projectId, projectName, onClose }) {
   const { user } = useAuth()
-  const [description, setDescription] = useState(title)
+  const [description, setDescription] = useState(`GEO - ${title}`)
   const [members, setMembers]         = useState([])
   const [assigneeId, setAssigneeId]   = useState('')
   const [saving, setSaving]           = useState(false)
@@ -267,9 +267,8 @@ export default function GeoTab() {
     if (Array.isArray(val)) return val
     try { return JSON.parse(val) } catch { return [] }
   }
-  const findings        = parseField(activeAudit?.findings)
-  const recommendations = parseField(activeAudit?.recommendations)
-  const sortedFindings = [...findings].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9))
+  const items = parseField(activeAudit?.findings)
+  const sortedFindings = [...items].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9))
 
   const noUrl = selectedProject && !selectedProject.websiteUrl
 
@@ -420,13 +419,13 @@ export default function GeoTab() {
             </div>
           </div>
 
-          {/* Hallazgos */}
+          {/* Items unificados */}
           {sortedFindings.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-                Hallazgos ({sortedFindings.length})
+                Análisis detallado ({sortedFindings.length})
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {sortedFindings.map((f, i) => (
                   <div key={i} className="flex gap-3 items-start">
                     <span className={`mt-0.5 px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${SEVERITY_COLORS[f.severity] ?? SEVERITY_COLORS.low}`}>
@@ -435,44 +434,22 @@ export default function GeoTab() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{f.title}</p>
                       {f.description && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{f.description}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{f.description}</p>
+                      )}
+                      {f.action && (
+                        <div className="mt-2 flex items-start gap-1.5">
+                          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex-shrink-0">→</span>
+                          <p className="text-xs text-emerald-700 dark:text-emerald-300">{f.action}</p>
+                        </div>
+                      )}
+                      {f.impact && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 italic">{f.impact}</p>
                       )}
                     </div>
                     <button
-                      onClick={() => setTaskModal({ title: f.title })}
+                      onClick={() => setTaskModal({ title: f.action || f.title })}
                       className="flex-shrink-0 text-xs text-primary-600 dark:text-primary-400 hover:underline mt-0.5"
-                      title="Crear tarea a partir de este hallazgo"
-                    >
-                      + Tarea
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Recomendaciones */}
-          {recommendations.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-                Recomendaciones ({recommendations.length})
-              </h3>
-              <div className="space-y-3">
-                {recommendations.map((r, i) => (
-                  <div key={i} className="flex gap-3 items-start">
-                    <span className={`mt-0.5 px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${SEVERITY_COLORS[r.priority] ?? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
-                      {SEVERITY_LABELS[r.priority] ?? r.priority}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{r.action}</p>
-                      {r.impact && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{r.impact}</p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => setTaskModal({ title: r.action })}
-                      className="flex-shrink-0 text-xs text-primary-600 dark:text-primary-400 hover:underline mt-0.5"
-                      title="Crear tarea a partir de esta recomendación"
+                      title="Crear tarea a partir de este ítem"
                     >
                       + Tarea
                     </button>

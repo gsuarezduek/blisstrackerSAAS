@@ -146,18 +146,13 @@ function buildPrompt(url, pageData, robotsData, llmsData) {
     "schema": <0-100, marcado estructurado JSON-LD>,
     "platforms": <0-100, preparación para plataformas IA específicas>
   },
-  "findings": [
+  "items": [
     {
       "severity": "high" | "medium" | "low",
       "component": "citability" | "brandAuthority" | "eeat" | "technical" | "schema" | "platforms",
       "title": "<título corto del problema>",
-      "description": "<descripción concreta de qué está mal y por qué importa para GEO>"
-    }
-  ],
-  "recommendations": [
-    {
-      "priority": "high" | "medium" | "low",
-      "action": "<acción concreta y específica a tomar>",
+      "description": "<qué está mal y por qué importa para GEO>",
+      "action": "<acción concreta a tomar para resolverlo>",
       "impact": "<qué mejora conseguiría esta acción en términos de visibilidad IA>"
     }
   ]
@@ -193,7 +188,7 @@ LINKS INTERNOS: ${pageData.internalLinks.length} | EXTERNOS: ${pageData.external
 
 PESOS para el score global (citability=25%, brandAuthority=20%, eeat=20%, technical=15%, schema=10%, platforms=10%)
 
-Incluí entre 3 y 8 findings priorizados por impacto real en GEO, y entre 3 y 6 recomendaciones concretas.`
+Incluí entre 5 y 10 items priorizados por impacto real en GEO, ordenados de mayor a menor severidad. Cada item combina el problema detectado con la acción concreta para resolverlo.`
 }
 
 // ─── Main analysis function ───────────────────────────────────────────────────
@@ -246,7 +241,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
       .trim()
     const result = JSON.parse(raw)
 
-    const { score, components, findings, recommendations } = result
+    const { score, components, items } = result
 
     // 7. Save completed result
     await setStep(auditId, 'Guardando resultados…')
@@ -261,8 +256,8 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
         technical:      Number(components.technical),
         schema:         Number(components.schema),
         platforms:      Number(components.platforms),
-        findings:       JSON.stringify(findings ?? []),
-        recommendations: JSON.stringify(recommendations ?? []),
+        findings:       JSON.stringify(items ?? []),
+        recommendations: JSON.stringify([]),
         rawData:        raw,
         tokensUsed:     (message.usage.input_tokens ?? 0) + (message.usage.output_tokens ?? 0),
         errorMsg:       null,
