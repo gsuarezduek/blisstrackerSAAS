@@ -26,7 +26,8 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: TZ })
 }
 function fmtDateShort(iso) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', timeZone: TZ })
+  // Usar T12:00:00 para evitar que UTC midnight se desplace al día anterior en UTC-3
+  return new Date(iso.slice(0, 10) + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 }
 function minutesFromMidnight(iso) {
   const d = new Date(iso)
@@ -136,7 +137,7 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
     activeUsers
       .filter(u => u.birthday)
       .map(u => {
-        const b = new Date(u.birthday)
+        const b = new Date(u.birthday.slice(0, 10) + 'T12:00:00')
         const days = daysUntilNextOccurrence(b.getMonth(), b.getDate())
         return { ...u, days }
       })
@@ -175,18 +176,20 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
 
   function daysSince(iso) {
     if (!iso) return null
-    const diff = Math.floor((today - new Date(iso)) / 86400000)
-    if (diff === 0) return 'hoy'
+    // Comparar fechas como strings en TZ para evitar errores por UTC offset
+    const loginDateStr = new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ })
+    if (loginDateStr === todayBA_str) return 'hoy'
+    const diff = Math.round((todayBA() - new Date(loginDateStr + 'T12:00:00')) / 86400000)
+    if (diff <= 0) return 'hoy'
     if (diff === 1) return 'ayer'
     return `hace ${diff} días`
   }
 
+  const todayBA_str = todayStr()
   const maxRole = roleDistrib[0]?.[1] || 1
 
   // Promedio global de horario de ingreso (calculado server-side con primer ingreso del día)
   const globalAvgLoginTime = dashStats.avgFirstLoginTime ?? null
-
-  const todayBA_str = todayStr()
   const loggedInToday = activeUsers.filter(u => {
     const last = lastLoginsMap[u.id]
     return last && new Date(last).toLocaleDateString('en-CA', { timeZone: TZ }) === todayBA_str
@@ -295,30 +298,32 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
           </div>
         </div>
 
-        {/* Último ingreso */}
+        {/* Última conexión */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-            🕐 Último ingreso
+            🟢 Última conexión
           </p>
           <div className="space-y-2">
-            {lastLoginRows.slice(0, 10).map(u => (
+            {lastLoginRows.slice(0, 10).map(u => {
+              const since = u.lastLogin ? daysSince(u.lastLogin) : null
+              return (
               <div key={u.id} className="flex items-center gap-2.5">
                 <img src={avatarUrl(u.avatar)} alt={u.name}
                   className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
                 <p className="text-sm text-gray-700 dark:text-gray-300 flex-1 truncate">{u.name}</p>
                 <span className={`text-xs flex-shrink-0 font-medium ${
-                  !u.lastLogin ? 'text-gray-300 dark:text-gray-600' :
-                  daysSince(u.lastLogin) === 'hoy' || daysSince(u.lastLogin) === 'ayer'
+                  !since ? 'text-gray-300 dark:text-gray-600' :
+                  since === 'hoy' || since === 'ayer'
                     ? 'text-green-600 dark:text-green-400'
                     : 'text-gray-400 dark:text-gray-500'
                 }`}>
-                  {u.lastLogin ? daysSince(u.lastLogin) : 'Sin registros'}
+                  {since ?? 'Sin registros'}
                 </span>
               </div>
-            ))}
+            )})}
             {lastLoginRows.length > 10 && (
               <p className="text-xs text-gray-400 dark:text-gray-500 pt-1">
-                +{lastLoginRows.length - 10} más — ver en Legajos
+                +{lastLoginRows.length - 10} más — ver en Ingresos
               </p>
             )}
           </div>

@@ -42,24 +42,6 @@ function roleColor(roleName) {
   return ROLE_COLORS[hash % ROLE_COLORS.length]
 }
 
-const MARITAL_LABELS = {
-  soltero: 'Soltero/a', casado: 'Casado/a', divorciado: 'Divorciado/a',
-  viudo: 'Viudo/a', union_convivencial: 'Unión convivencial',
-}
-const EDUCATION_LABELS = {
-  primario: 'Primario', secundario: 'Secundario', terciario: 'Terciario',
-  universitario: 'Universitario', posgrado: 'Posgrado',
-}
-
-function DataField({ label, value }) {
-  if (!value && value !== 0) return null
-  return (
-    <div>
-      <p className="text-xs text-gray-400 dark:text-gray-500">{label}</p>
-      <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">{value}</p>
-    </div>
-  )
-}
 
 export default function TeamTab() {
   const [users, setUsers]           = useState([])
@@ -73,7 +55,6 @@ export default function TeamTab() {
   const [editForm, setEditForm]     = useState({ teamRole: '', memberRole: 'member' })
   const [editError, setEditError]   = useState('')
   const [editLoading, setEditLoading] = useState(false)
-  const [expandedId, setExpandedId] = useState(null)
   const [showInactive, setShowInactive] = useState(false)
 
   useEffect(() => {
@@ -240,14 +221,7 @@ export default function TeamTab() {
       {/* ── Lista de miembros activos ─────────────────────────────────────── */}
       <div className="space-y-2">
         {users.filter(u => u.active).map(u => {
-          const isExpanded = expandedId === u.id
-          const isEditing  = editId === u.id
-          const birthday = u.birthday
-            ? new Date(u.birthday).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
-            : null
-          const hasPersonalData = u.phone || u.birthday || u.address || u.dni || u.cuit || u.alias || u.bankName ||
-            u.maritalStatus || u.children !== null || u.educationLevel || u.educationTitle ||
-            u.bloodType || u.medicalConditions || u.healthInsurance || u.emergencyContact
+          const isEditing = editId === u.id
 
           return (
             <div key={u.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-hidden">
@@ -276,16 +250,6 @@ export default function TeamTab() {
                   </button>
                   <button onClick={() => toggleActive(u)} className="text-xs text-red-500 hover:text-red-700">
                     Desactivar
-                  </button>
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : u.id)}
-                    title={isExpanded ? 'Ocultar datos personales' : 'Ver datos personales'}
-                    className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition-colors p-0.5"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                      className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}>
-                      <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clipRule="evenodd" />
-                    </svg>
                   </button>
                 </div>
               </div>
@@ -324,36 +288,6 @@ export default function TeamTab() {
                 </div>
               )}
 
-              {/* Panel de datos personales */}
-              {isExpanded && !isEditing && (
-                <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-4 bg-gray-50 dark:bg-gray-900/40">
-                  {!hasPersonalData ? (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 italic">Este usuario no completó sus datos personales todavía.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-                      <DataField label="Celular" value={u.phone} />
-                      <DataField label="Fecha de nacimiento" value={birthday} />
-                      <DataField label="Dirección" value={u.address} />
-                      <DataField label="Contacto de emergencia" value={u.emergencyContact} />
-                      <DataField label="DNI" value={u.dni} />
-                      <DataField label="CUIT" value={u.cuit} />
-                      <DataField label="Alias CBU" value={u.alias} />
-                      <DataField label="Banco" value={u.bankName} />
-                      <DataField label="Estado civil" value={MARITAL_LABELS[u.maritalStatus] ?? u.maritalStatus} />
-                      <DataField label="Hijos" value={u.children !== null ? String(u.children) : null} />
-                      <DataField label="Nivel de estudios" value={EDUCATION_LABELS[u.educationLevel] ?? u.educationLevel} />
-                      <DataField label="Título" value={u.educationTitle} />
-                      <DataField label="Grupo sanguíneo" value={u.bloodType} />
-                      <DataField label="Obra social" value={u.healthInsurance} />
-                      {u.medicalConditions && (
-                        <div className="col-span-2 sm:col-span-3">
-                          <DataField label="Enfermedades / Alergias" value={u.medicalConditions} />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )
         })}

@@ -1627,6 +1627,206 @@ function SectionAvatars() {
   )
 }
 
+// ─── Section: Feature Flags ───────────────────────────────────────────────────
+
+function SectionFeatureFlags() {
+  const [flags, setFlags]         = useState([])
+  const [workspaces, setWorkspaces] = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [newForm, setNewForm]     = useState({ key: '', name: '', description: '' })
+  const [creating, setCreating]   = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [showCreate, setShowCreate]   = useState(false)
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/superadmin/feature-flags'),
+      api.get('/superadmin/workspaces'),
+    ]).then(([ff, ws]) => {
+      setFlags(ff.data)
+      setWorkspaces(ws.data)
+    }).finally(() => setLoading(false))
+  }, [])
+
+  async function handleCreate(e) {
+    e.preventDefault()
+    setCreateError('')
+    setCreating(true)
+    try {
+      const { data } = await api.post('/superadmin/feature-flags', newForm)
+      setFlags(prev => [...prev, data].sort((a, b) => a.key.localeCompare(b.key)))
+      setNewForm({ key: '', name: '', description: '' })
+      setShowCreate(false)
+    } catch (err) {
+      setCreateError(err.response?.data?.error || 'Error al crear')
+    } finally { setCreating(false) }
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('¿Eliminar este feature flag?')) return
+    await api.delete(`/superadmin/feature-flags/${id}`)
+    setFlags(prev => prev.filter(f => f.id !== id))
+  }
+
+  async function toggleGlobal(flag) {
+    const { data } = await api.patch(`/superadmin/feature-flags/${flag.id}`, {
+      enabledGlobally: !flag.enabledGlobally,
+      // Si se activa globalmente, limpiar la lista de workspaces específicos
+      ...(!flag.enabledGlobally ? { enabledWorkspaceIds: [] } : {}),
+    })
+    setFlags(prev => prev.map(f => f.id === data.id ? data : f))
+  }
+
+  async function toggleWorkspace(flag, wsId) {
+    const ids = flag.enabledWorkspaceIds.includes(wsId)
+      ? flag.enabledWorkspaceIds.filter(id => id !== wsId)
+      : [...flag.enabledWorkspaceIds, wsId]
+    const { data } = await api.patch(`/superadmin/feature-flags/${flag.id}`, { enabledWorkspaceIds: ids })
+    setFlags(prev => prev.map(f => f.id === data.id ? data : f))
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Feature Flags</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Activá o desactivá funcionalidades por workspace o globalmente.</p>
+        </div>
+        <button
+          onClick={() => setShowCreate(v => !v)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          Nuevo flag
+        </button>
+      </div>
+
+      {/* Formulario de creación */}
+      {showCreate && (
+        <form onSubmit={handleCreate} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 mb-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Nuevo Feature Flag</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Key <span className="text-red-500">*</span></label>
+              <input
+                required value={newForm.key}
+                onChange={e => setNewForm(p => ({ ...p, key: e.target.value.toLowerCase().replace(/\s+/g, '_') }))}
+                placeholder="ej: vacation_requests"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Nombre <span className="text-red-500">*</span></label>
+              <input
+                required value={newForm.name}
+                onChange={e => setNewForm(p => ({ ...p, name: e.target.value }))}
+                placeholder="ej: Solicitud de vacaciones"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Descripción</label>
+            <input
+              value={newForm.description}
+              onChange={e => setNewForm(p => ({ ...p, description: e.target.value }))}
+              placeholder="Qué hace esta funcionalidad…"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          {createError && <p className="text-sm text-red-500">{createError}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">Cancelar</button>
+            <button type="submit" disabled={creating} className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
+              {creating ? 'Creando…' : 'Crear'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Lista de flags */}
+      {flags.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-8 text-center">
+          <p className="text-gray-400 dark:text-gray-500 text-sm">No hay feature flags todavía.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {flags.map(flag => (
+            <div key={flag.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4">
+              {/* Header del flag */}
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded">{flag.key}</span>
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{flag.name}</span>
+                    {flag.enabledGlobally && (
+                      <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">Global</span>
+                    )}
+                    {!flag.enabledGlobally && flag.enabledWorkspaceIds.length > 0 && (
+                      <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
+                        {flag.enabledWorkspaceIds.length} workspace{flag.enabledWorkspaceIds.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {!flag.enabledGlobally && flag.enabledWorkspaceIds.length === 0 && (
+                      <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 px-2 py-0.5 rounded-full">Desactivado</span>
+                    )}
+                  </div>
+                  {flag.description && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{flag.description}</p>}
+                </div>
+                <button onClick={() => handleDelete(flag.id)} className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0" title="Eliminar">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+              </div>
+
+              {/* Toggle global */}
+              <div className="flex items-center justify-between py-2 border-t border-gray-100 dark:border-gray-700">
+                <div>
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Activar para todos los workspaces</p>
+                  {flag.enabledGlobally && <p className="text-xs text-gray-400 dark:text-gray-500">Desactiva el control por workspace</p>}
+                </div>
+                <button
+                  onClick={() => toggleGlobal(flag)}
+                  className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ml-4 ${flag.enabledGlobally ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${flag.enabledGlobally ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* Control por workspace (solo si no es global) */}
+              {!flag.enabledGlobally && (
+                <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Acceso por workspace</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {workspaces.map(ws => {
+                      const active = flag.enabledWorkspaceIds.includes(ws.id)
+                      return (
+                        <button
+                          key={ws.id}
+                          onClick={() => toggleWorkspace(flag, ws.id)}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left ${
+                            active
+                              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 border border-primary-300 dark:border-primary-700'
+                              : 'bg-gray-50 dark:bg-gray-900/40 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${active ? 'bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                          <span className="truncate">{ws.slug}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Sidebar nav items ────────────────────────────────────────────────────────
 
 const NAV_GROUPS = [
@@ -1758,7 +1958,7 @@ const NAV_GROUPS = [
       {
         id: 'feature-flags',
         label: 'Feature Flags',
-        implemented: false,
+        implemented: true,
         description: 'Activar o desactivar funcionalidades de la app por workspace, plan o globalmente. Útil para rollouts graduales y acceso anticipado a nuevas features.',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -1840,6 +2040,7 @@ export default function SuperAdmin() {
     if (section === 'emails')        return <SectionEmails />
     if (section === 'announcements') return <SectionAnnouncements workspaces={workspaces} />
     if (section === 'avatars')       return <SectionAvatars />
+    if (section === 'feature-flags') return <SectionFeatureFlags />
     if (section === 'brand')         return <SectionBrandManual />
 
     // Not yet implemented

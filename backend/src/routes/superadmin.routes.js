@@ -5,6 +5,7 @@ const { auth } = require('../middleware/auth')
 const c   = require('../controllers/superadmin.controller')
 const ann = require('../controllers/announcements.controller')
 const av  = require('../controllers/avatars.controller')
+const ff  = require('../controllers/featureFlags.controller')
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -36,6 +37,12 @@ router.post('/announcements',             ann.create)
 router.patch('/announcements/:id',        ann.update)
 router.patch('/announcements/:id/toggle', ann.toggle)
 router.delete('/announcements/:id',       ann.remove)
+
+// Feature Flags
+router.get('/feature-flags',         ff.list)
+router.post('/feature-flags',        ff.create)
+router.patch('/feature-flags/:id',   ff.update)
+router.delete('/feature-flags/:id',  ff.remove)
 
 // Avatares
 router.get('/avatars',                      av.listAll)
