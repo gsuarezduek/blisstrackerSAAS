@@ -17,7 +17,7 @@ async function getAnalyticsData(req, res, next) {
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, workspaceId },
-      select: { id: true },
+      select: { id: true, name: true, websiteUrl: true },
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
@@ -44,7 +44,7 @@ async function getAnalyticsData(req, res, next) {
     }
 
     const data = await fetchGA4Report(integration, dateRange)
-    res.json(data)
+    res.json({ ...data, projectName: project.name, websiteUrl: project.websiteUrl })
   } catch (err) {
     // Marcar como error si el token fue revocado por el usuario en Google
     if (

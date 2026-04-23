@@ -31,7 +31,7 @@ async function fetchGA4Report(integration, dateRange = '30daysAgo') {
   const property = integration.propertyId // e.g. "properties/123456789"
   if (!property) throw new Error('propertyId no configurado para esta integración')
 
-  const [overviewRes, topPagesRes, channelsRes] = await Promise.all([
+  const [overviewRes, topPagesRes, channelsRes, devicesRes, conversionsRes] = await Promise.all([
     analyticsClient.runReport({
       property,
       dateRanges: [{ startDate: dateRange, endDate: 'today' }],
@@ -59,15 +59,41 @@ async function fetchGA4Report(integration, dateRange = '30daysAgo') {
       metrics:    [{ name: 'sessions' }, { name: 'activeUsers' }],
       orderBys:   [{ metric: { metricName: 'sessions' }, desc: true }],
     }),
+    analyticsClient.runReport({
+      property,
+      dateRanges: [{ startDate: dateRange, endDate: 'today' }],
+      dimensions: [{ name: 'deviceCategory' }],
+      metrics:    [{ name: 'sessions' }, { name: 'activeUsers' }],
+      orderBys:   [{ metric: { metricName: 'sessions' }, desc: true }],
+    }),
+    // Desglose de conversiones (key events) por nombre de evento
+    analyticsClient.runReport({
+      property,
+      dateRanges: [{ startDate: dateRange, endDate: 'today' }],
+      dimensions: [{ name: 'eventName' }],
+      metrics:    [{ name: 'conversions' }, { name: 'sessionKeyEventRate' }],
+      orderBys:   [{ metric: { metricName: 'conversions' }, desc: true }],
+      metricFilter: {
+        filter: {
+          fieldName: 'conversions',
+          numericFilter: {
+            operation: 'GREATER_THAN',
+            value: { int64Value: '0' },
+          },
+        },
+      },
+    }).catch(() => ({ rows: [] })), // algunos properties no tienen este metric — ignorar error
   ])
 
   const result = {
-    overview:   parseOverview(overviewRes[0]),
-    topPages:   parseTopPages(topPagesRes[0]),
-    channels:   parseChannels(channelsRes[0]),
-    propertyId: property,
+    overview:     parseOverview(overviewRes[0]),
+    topPages:     parseTopPages(topPagesRes[0]),
+    channels:     parseChannels(channelsRes[0]),
+    devices:      parseChannels(devicesRes[0]),
+    conversions:  parseConversions(conversionsRes),
+    propertyId:   property,
     dateRange,
-    fetchedAt:  new Date().toISOString(),
+    fetchedAt:    new Date().toISOString(),
   }
 
   CACHE.set(cacheKey, { data: result, fetchedAt: Date.now() })
@@ -98,6 +124,22 @@ function parseChannels(response) {
     sessions: parseInt(row.metricValues[0].value, 10) || 0,
     users:    parseInt(row.metricValues[1].value, 10) || 0,
   }))
+}
+
+function parseConversions(response) {
+  // response puede ser el objeto de la API o { rows: [] } si falló
+  const rows = response?.rows ?? response?.[0]?.rows ?? []
+  const events = rows.map(row => ({
+    eventName:       row.dimensionValues?.[0]?.value ?? '',
+    conversions:     parseInt(row.metricValues?.[0]?.value, 10) || 0,
+    conversionRate:  parseFloat(row.metricValues?.[1]?.value) || 0,
+  })).filter(e => e.eventName && e.conversions > 0)
+
+  return {
+    total:          events.reduce((s, e) => s + e.conversions, 0),
+    events,
+    hasConversions: events.length > 0,
+  }
 }
 
 /**

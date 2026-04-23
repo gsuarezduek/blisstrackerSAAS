@@ -2,16 +2,17 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
-import GeoTab      from '../components/marketing/GeoTab'
-import InformesTab  from '../components/marketing/InformesTab'
+import GeoTab   from '../components/marketing/GeoTab'
+import WebTab   from '../components/marketing/WebTab'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 
 const TABS = [
   { id: 'geo',        label: '🤖 GEO' },
+  { id: 'web',        label: '🌐 Web' },
   { id: 'seo',        label: '🔍 SEO',        soon: true },
   { id: 'anuncios',   label: '📣 Anuncios',    soon: true },
   { id: 'contenidos', label: '✍️ Contenidos',  soon: true },
-  { id: 'informes',   label: '📊 Informes' },
+  { id: 'informes',   label: '📊 Informes',    soon: true },
 ]
 const VALID_TABS = new Set(TABS.map(t => t.id))
 
@@ -102,10 +103,11 @@ export default function Marketing() {
 
             {/* Content */}
             {tab === 'geo'        && <GeoTab />}
+            {tab === 'web'        && <WebTab />}
             {tab === 'seo'        && <ComingSoon label="SEO" />}
             {tab === 'anuncios'   && <ComingSoon label="Anuncios" />}
             {tab === 'contenidos' && <ComingSoon label="Contenidos" />}
-            {tab === 'informes'   && <InformesTab />}
+            {tab === 'informes'   && <ComingSoon label="Informes" />}
           </>
         )}
       </main>
