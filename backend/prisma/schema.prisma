@@ -42,6 +42,7 @@ model Workspace {
   integrations         ProjectIntegration[]
   analyticsSnapshots   AnalyticsSnapshot[]
   analyticsInsights    AnalyticsInsight[]
+  pageSpeedResults     PageSpeedResult[]
 
   @@index([slug])
 }
@@ -220,6 +221,7 @@ model Project {
   integrations       ProjectIntegration[]
   analyticsSnapshots AnalyticsSnapshot[]
   analyticsInsights  AnalyticsInsight[]
+  pageSpeedResults   PageSpeedResult[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -726,6 +728,37 @@ model AnalyticsInsight {
   project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
 
   @@unique([projectId, month])
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+// ─── PAGESPEED RESULTS ────────────────────────────────────────────────────────
+
+model PageSpeedResult {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  url         String
+  strategy    String   @default("mobile")  // "mobile" | "desktop"
+  status      String   @default("running") // "running" | "done" | "error"
+
+  performanceScore Int?   // 0-100
+
+  // JSON: { lcp, fcp, tbt, cls, si, ttfb } con { displayValue, numericValue, score, rating }
+  metrics      String  @default("{}")
+
+  // JSON: [{ id, title, description, savingsMs, score }]
+  opportunities String @default("[]")
+
+  // JSON: [{ id, title, description, score }]
+  diagnostics   String @default("[]")
+
+  errorMsg    String?
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+
   @@index([workspaceId])
   @@index([projectId])
 }

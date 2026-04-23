@@ -6,6 +6,7 @@ const geo               = require('../controllers/geo.controller')
 const integrations      = require('../controllers/integrations.controller')
 const analytics         = require('../controllers/analytics.controller')
 const analyticsSnapshot = require('../controllers/analyticsSnapshot.controller')
+const pageSpeed         = require('../controllers/pageSpeed.controller')
 
 // ─── SIN AUTH — El callback de Google no lleva Authorization header ───────────
 router.get('/integrations/google/callback', integrations.handleCallback)
@@ -34,5 +35,10 @@ router.get('/projects/:id/snapshots',             analyticsSnapshot.getSnapshot)
 router.post('/projects/:id/snapshots',            analyticsSnapshot.saveSnapshot)
 router.get('/projects/:id/insights/:month',       analyticsSnapshot.getInsight)
 router.post('/projects/:id/insights/:month',      analyticsSnapshot.createInsight)
+
+// PageSpeed Insights
+router.post('/projects/:id/pagespeed',            pageSpeed.runAnalysis)
+router.get('/projects/:id/pagespeed',             pageSpeed.listResults)
+router.get('/projects/:id/pagespeed/:resultId',   pageSpeed.getResult)
 
 module.exports = router
