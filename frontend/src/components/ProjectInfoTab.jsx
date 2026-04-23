@@ -63,66 +63,38 @@ export default function ProjectInfoTab({ project, onSave }) {
         `/marketing/integrations/google/auth-url?projectId=${project.id}&type=${type}`
       )
 
-      // Limpiar resultado previo en localStorage
+      // Limpiar resultado previo
       localStorage.removeItem('__ga_oauth_result')
 
-      const popup = window.open(data.url, 'google_oauth', 'width=520,height=660,left=200,top=80')
+      window.open(data.url, 'google_oauth', 'width=520,height=660,left=200,top=80')
 
-      function processResult(result) {
-        setIntegLoading(prev => ({ ...prev, [type]: false }))
-        if (result.success) {
-          api.get(`/marketing/projects/${project.id}/integrations`)
-            .then(r => setIntegrations(r.data))
-            .catch(() => {})
-        }
-        if (popup && !popup.closed) popup.close()
-      }
+      // Polling directo de localStorage — funciona aunque COOP separe los browsing context groups
+      // No depende de popup.closed, window.opener ni storage events
+      const TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos máximo
+      const startedAt  = Date.now()
 
-      // Canal 1: postMessage (funciona si window.opener no fue anulado por COOP)
-      function handleMessage(event) {
-        if (event.data?.type !== 'GOOGLE_INTEGRATION_RESULT') return
-        cleanup()
-        processResult(event.data)
-      }
-      window.addEventListener('message', handleMessage)
-
-      // Canal 2: localStorage (funciona aunque window.opener sea null por navegación cross-origin)
-      function handleStorage(e) {
-        if (e.key !== '__ga_oauth_result') return
-        try {
-          const result = JSON.parse(e.newValue)
-          if (!result) return
+      const poll = setInterval(() => {
+        const stored = localStorage.getItem('__ga_oauth_result')
+        if (stored) {
+          clearInterval(poll)
           localStorage.removeItem('__ga_oauth_result')
-          cleanup()
-          processResult(result)
-        } catch { /* ignorar */ }
-      }
-      window.addEventListener('storage', handleStorage)
-
-      function cleanup() {
-        clearInterval(pollClose)
-        window.removeEventListener('message', handleMessage)
-        window.removeEventListener('storage', handleStorage)
-      }
-
-      // Limpiar si el usuario cierra el popup manualmente
-      const pollClose = setInterval(() => {
-        if (popup?.closed) {
-          // Verificar si hay resultado pendiente en localStorage
-          const stored = localStorage.getItem('__ga_oauth_result')
-          if (stored) {
-            try {
-              const result = JSON.parse(stored)
-              localStorage.removeItem('__ga_oauth_result')
-              cleanup()
-              processResult(result)
-              return
-            } catch { /* ignorar */ }
-          }
-          cleanup()
+          try {
+            const result = JSON.parse(stored)
+            setIntegLoading(prev => ({ ...prev, [type]: false }))
+            if (result.success) {
+              api.get(`/marketing/projects/${project.id}/integrations`)
+                .then(r => setIntegrations(r.data))
+                .catch(() => {})
+            }
+          } catch { /* ignorar JSON inválido */ }
+          return
+        }
+        // Timeout: limpiar si el usuario nunca completó el flujo
+        if (Date.now() - startedAt > TIMEOUT_MS) {
+          clearInterval(poll)
           setIntegLoading(prev => ({ ...prev, [type]: false }))
         }
-      }, 500)
+      }, 600)
     } catch {
       setIntegLoading(prev => ({ ...prev, [type]: false }))
     }

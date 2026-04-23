@@ -3,8 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 
 /**
  * Página puente para el callback OAuth de integraciones Google.
- * Google redirige aquí desde el backend. Esta página hace postMessage
- * al opener (la ventana que abrió el popup) y se cierra sola.
+ * Google redirige aquí desde el backend. Escribe el resultado en localStorage
+ * (el padre hace polling) y se cierra sola.
  */
 export default function OAuthResult() {
   const [searchParams] = useSearchParams()
@@ -14,27 +14,17 @@ export default function OAuthResult() {
     const error   = searchParams.get('error')
     const type    = searchParams.get('type')
 
-    // Guardar resultado en localStorage para que el opener lo lea
-    // (postMessage falla cuando window.opener es null por COOP cross-origin)
+    // Escribir resultado — el padre (ProjectInfoTab) hace polling cada 600ms
     try {
       localStorage.setItem('__ga_oauth_result', JSON.stringify({
         success, error, integrationType: type, ts: Date.now(),
       }))
     } catch { /* localStorage no disponible */ }
 
-    // También intentar postMessage por si el opener sigue disponible
-    if (window.opener) {
-      try {
-        window.opener.postMessage(
-          { type: 'GOOGLE_INTEGRATION_RESULT', success, error, integrationType: type },
-          '*',
-        )
-      } catch { /* ignorar */ }
-    }
-
+    // Cerrar el popup
     window.close()
-    // Si window.close() no funciona (el browser lo bloquea), redirigir
-    setTimeout(() => { window.location.href = '/' }, 500)
+    // Fallback si window.close() no funciona (el browser lo bloquea)
+    setTimeout(() => { window.location.href = '/' }, 800)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
