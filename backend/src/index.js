@@ -17,12 +17,14 @@ app.listen(PORT, async () => {
 })
 
 const cron = require('node-cron')
-const { sendAllWeeklyReports } = require('./services/weeklyReport.service')
-const { updateAllMemories }    = require('./services/insightMemory.service')
+const { sendAllWeeklyReports }          = require('./services/weeklyReport.service')
+const { updateAllMemories }             = require('./services/insightMemory.service')
+const { saveAllPreviousMonthSnapshots } = require('./services/analyticsSnapshot.service')
 
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
-let weeklyReportRunning = false
-let insightMemoryRunning = false
+let weeklyReportRunning    = false
+let insightMemoryRunning   = false
+let analyticsSnapshotRunning = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -40,6 +42,15 @@ cron.schedule('0 0 * * 6', async () => {
   console.log('[InsightMemory] Iniciando actualización semanal (sábado 00:00 ART)...')
   try { await updateAllMemories() }
   finally { insightMemoryRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: guardar snapshot del mes anterior — 1° de cada mes a las 02:00 ART
+cron.schedule('0 2 1 * *', async () => {
+  if (analyticsSnapshotRunning) { console.log('[AnalyticsSnapshot] Ya en ejecución, se omite.'); return }
+  analyticsSnapshotRunning = true
+  console.log('[AnalyticsSnapshot] Iniciando guardado mensual automático...')
+  try { await saveAllPreviousMonthSnapshots() }
+  finally { analyticsSnapshotRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: limpiar notificaciones antiguas — domingos 03:00 hora Buenos Aires

@@ -40,6 +40,8 @@ model Workspace {
   vacationRequests     VacationRequest[]
   geoAudits            GeoAudit[]
   integrations         ProjectIntegration[]
+  analyticsSnapshots   AnalyticsSnapshot[]
+  analyticsInsights    AnalyticsInsight[]
 
   @@index([slug])
 }
@@ -214,8 +216,10 @@ model Project {
   members       ProjectMember[]
   notifications Notification[]
   links         ProjectLink[]
-  geoAudits     GeoAudit[]
-  integrations  ProjectIntegration[]
+  geoAudits          GeoAudit[]
+  integrations       ProjectIntegration[]
+  analyticsSnapshots AnalyticsSnapshot[]
+  analyticsInsights  AnalyticsInsight[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -678,4 +682,50 @@ model LegalDocument {
   content   String   @default("")
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
+}
+
+// ─── ANALYTICS SNAPSHOTS ──────────────────────────────────────────────────────
+
+model AnalyticsSnapshot {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  month       String   // "2026-04" (YYYY-MM)
+
+  sessions    Int      @default(0)
+  activeUsers Int      @default(0)
+  newUsers    Int      @default(0)
+  pageviews   Int      @default(0)
+  bounceRate  Float    @default(0)
+  avgDuration Float    @default(0)   // segundos
+  conversions Int      @default(0)
+  topChannels String   @default("[]") // JSON: [{channel, sessions, users}]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+
+  @@unique([projectId, month])
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+model AnalyticsInsight {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  month       String   // "2026-04"
+
+  // JSON: { titulo, resumen, tendencias: [{metrica, delta, positivo}], recomendaciones: [string] }
+  content     String
+  generatedAt DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+
+  @@unique([projectId, month])
+  @@index([workspaceId])
+  @@index([projectId])
 }

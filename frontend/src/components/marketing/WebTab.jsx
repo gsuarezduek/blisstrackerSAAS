@@ -73,7 +73,8 @@ function pct(value, total) {
   return Math.round((value / total) * 100)
 }
 
-function MetricCard({ label, value, icon, sub, highlight }) {
+function MetricCard({ label, value, icon, sub, highlight, delta, deltaPositivo }) {
+  const hasDelta = delta != null && delta !== 0
   return (
     <div className={`rounded-xl p-4 ${highlight
       ? 'bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800'
@@ -89,7 +90,14 @@ function MetricCard({ label, value, icon, sub, highlight }) {
       >
         {value ?? '—'}
       </p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      <div className="flex items-center gap-2 mt-1">
+        {sub && <p className="text-xs text-gray-400">{sub}</p>}
+        {hasDelta && (
+          <span className={`text-xs font-medium ${deltaColor(delta, deltaPositivo)}`}>
+            {deltaIcon(delta, deltaPositivo)} {Math.abs(delta)}%
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -236,18 +244,52 @@ function ConversionsBlock({ conversions, sessions }) {
   )
 }
 
+function currentMonthStr() {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+}
+function prevMonthStr(month) {
+  const [y, m] = month.split('-').map(Number)
+  const pm = m === 1 ? 12 : m - 1
+  const py = m === 1 ? y - 1 : y
+  return `${py}-${String(pm).padStart(2, '0')}`
+}
+// Mes que representa la selección actual (solo para opciones mensuales)
+function getActiveMonth(preset) {
+  if (preset === 'thisMonth') return currentMonthStr()
+  if (preset === 'lastMonth') return prevMonthStr(currentMonthStr())
+  return null
+}
+function deltaColor(delta, positivo) {
+  if (delta == null) return 'text-gray-400'
+  return positivo ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'
+}
+function deltaIcon(delta, positivo) {
+  if (delta == null || delta === 0) return '—'
+  const up = delta > 0
+  return up ? '▲' : '▼'
+}
+
 export default function WebTab() {
   const [projects,     setProjects]     = useState([])
   const [projectId,    setProjectId]    = useState('')
   const [rangePreset,  setRangePreset]  = useState('thisMonth')
   const [customStart,  setCustomStart]  = useState(todayStr())
   const [customEnd,    setCustomEnd]    = useState(todayStr())
-  // Para rango personalizado: solo disparar fetch al hacer click en Aplicar
   const [appliedRange, setAppliedRange] = useState({ preset: 'thisMonth', start: '', end: '' })
   const [analytics,    setAnalytics]    = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [errorStatus,  setErrorStatus]  = useState(null)
   const [error,        setError]        = useState('')
+
+  // Snapshot del mes anterior (para deltas)
+  const [prevSnap,     setPrevSnap]     = useState(null)
+
+  // Insight IA
+  const [insight,      setInsight]      = useState(null)
+  const [insightLoading, setInsightLoading] = useState(false)
+  const [savingSnap,   setSavingSnap]   = useState(false)
+  const [snapSaved,    setSnapSaved]    = useState(false)
 
   useEffect(() => {
     api.get('/projects').then(r => {
@@ -256,12 +298,9 @@ export default function WebTab() {
     }).catch(() => {})
   }, [])
 
-  // Cuando cambia el preset (no custom), aplicar automáticamente
   function handlePresetChange(val) {
     setRangePreset(val)
-    if (val !== 'custom') {
-      setAppliedRange({ preset: val, start: '', end: '' })
-    }
+    if (val !== 'custom') setAppliedRange({ preset: val, start: '', end: '' })
   }
 
   function handleApplyCustom() {
@@ -269,34 +308,98 @@ export default function WebTab() {
     setAppliedRange({ preset: 'custom', start: customStart, end: customEnd })
   }
 
+  // Fetch principal: analytics en tiempo real
   useEffect(() => {
     if (!projectId) return
-    const { startDate, endDate } = getDateParams(
-      appliedRange.preset,
-      appliedRange.start,
-      appliedRange.end,
-    )
+    const { startDate, endDate } = getDateParams(appliedRange.preset, appliedRange.start, appliedRange.end)
     setLoading(true)
     setError('')
     setErrorStatus(null)
     setAnalytics(null)
+    setPrevSnap(null)
+    setInsight(null)
+    setSnapSaved(false)
 
     api.get(`/marketing/projects/${projectId}/analytics?startDate=${startDate}&endDate=${endDate}`)
       .then(r => setAnalytics(r.data))
       .catch(e => {
         const status = e.response?.status
         const body   = e.response?.data
-        if (status === 404)                        setErrorStatus('no_integration')
-        else if (body?.status === 'no_property')   setErrorStatus('no_property')
+        if (status === 404)                                              setErrorStatus('no_integration')
+        else if (body?.status === 'no_property')                        setErrorStatus('no_property')
         else if (body?.status === 'revoked' || body?.status === 'error') setErrorStatus('revoked')
         else setError(body?.error || 'Error al cargar datos')
       })
       .finally(() => setLoading(false))
   }, [projectId, appliedRange])
 
+  // Cuando hay analytics y el período es mensual: cargar snapshot anterior + insight
+  useEffect(() => {
+    if (!analytics || !projectId) return
+    const activeMonth = getActiveMonth(appliedRange.preset)
+    if (!activeMonth) return
+
+    const compMonth = prevMonthStr(activeMonth)
+
+    // Snapshot del mes anterior para deltas
+    api.get(`/marketing/projects/${projectId}/snapshots?month=${compMonth}`)
+      .then(r => setPrevSnap(r.data))
+      .catch(() => setPrevSnap(null))
+
+    // Insight IA existente
+    api.get(`/marketing/projects/${projectId}/insights/${activeMonth}`)
+      .then(r => setInsight(r.data))
+      .catch(() => setInsight(null))
+  }, [analytics, projectId, appliedRange])
+
+  async function handleSaveSnapshot() {
+    const activeMonth = getActiveMonth(appliedRange.preset)
+    if (!activeMonth || !projectId) return
+    setSavingSnap(true)
+    try {
+      await api.post(`/marketing/projects/${projectId}/snapshots`, { month: activeMonth })
+      setSnapSaved(true)
+      setTimeout(() => setSnapSaved(false), 3000)
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error al guardar snapshot')
+    } finally {
+      setSavingSnap(false)
+    }
+  }
+
+  async function handleGenerateInsight() {
+    const activeMonth = getActiveMonth(appliedRange.preset)
+    if (!activeMonth || !projectId) return
+    setInsightLoading(true)
+    try {
+      const { data } = await api.post(`/marketing/projects/${projectId}/insights/${activeMonth}`)
+      setInsight(data)
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error al generar insight')
+    } finally {
+      setInsightLoading(false)
+    }
+  }
+
   const ov            = analytics?.overview ?? {}
   const totalSessions = analytics?.channels?.reduce((s, c) => s + c.sessions, 0) || 0
   const dateLabel     = formatDateLabel(appliedRange.preset, appliedRange.start, appliedRange.end)
+  const activeMonth   = getActiveMonth(appliedRange.preset)
+  const isMonthly     = !!activeMonth
+
+  // Deltas vs snapshot del mes anterior
+  function snapDelta(curr, prevVal) {
+    if (prevVal == null || prevVal === 0 || curr == null) return null
+    return Math.round(((curr - prevVal) / prevVal) * 100)
+  }
+  const deltas = prevSnap ? {
+    sessions:    snapDelta(ov.sessions,              prevSnap.sessions),
+    activeUsers: snapDelta(ov.activeUsers,            prevSnap.activeUsers),
+    newUsers:    snapDelta(ov.newUsers,               prevSnap.newUsers),
+    pageviews:   snapDelta(ov.screenPageViews,        prevSnap.pageviews),
+    bounceRate:  snapDelta(ov.bounceRate,             prevSnap.bounceRate),
+    avgDuration: snapDelta(ov.averageSessionDuration, prevSnap.avgDuration),
+  } : {}
 
   return (
     <div className="space-y-5">
@@ -440,40 +543,57 @@ export default function WebTab() {
         <>
           {/* Métricas principales */}
           <div>
-            <SectionTitle>Resumen · {dateLabel}</SectionTitle>
+            <div className="flex items-center justify-between mb-3">
+              <SectionTitle>Resumen · {dateLabel}</SectionTitle>
+              {prevSnap && (
+                <span className="text-xs text-gray-400">vs mes anterior</span>
+              )}
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <MetricCard
                 label="Sesiones"
                 value={fmt(ov.sessions)}
                 icon="📈"
                 highlight
+                delta={deltas.sessions}
+                deltaPositivo={deltas.sessions >= 0}
               />
               <MetricCard
                 label="Usuarios activos"
                 value={fmt(ov.activeUsers)}
                 icon="👥"
+                delta={deltas.activeUsers}
+                deltaPositivo={deltas.activeUsers >= 0}
               />
               <MetricCard
                 label="Nuevos usuarios"
                 value={fmt(ov.newUsers)}
                 icon="✨"
                 sub={ov.sessions ? `${pct(ov.newUsers, ov.sessions)}% del total` : undefined}
+                delta={deltas.newUsers}
+                deltaPositivo={deltas.newUsers >= 0}
               />
               <MetricCard
                 label="Páginas vistas"
                 value={fmt(ov.screenPageViews)}
                 icon="📄"
                 sub={ov.sessions ? `${fmt(ov.screenPageViews / ov.sessions, 1)} por sesión` : undefined}
+                delta={deltas.pageviews}
+                deltaPositivo={deltas.pageviews >= 0}
               />
               <MetricCard
                 label="Tasa de rebote"
                 value={ov.bounceRate != null ? `${fmt(ov.bounceRate * 100, 1)}%` : '—'}
                 icon="↩️"
+                delta={deltas.bounceRate}
+                deltaPositivo={deltas.bounceRate <= 0}
               />
               <MetricCard
                 label="Duración media"
                 value={fmtDuration(ov.averageSessionDuration)}
                 icon="⏱️"
+                delta={deltas.avgDuration}
+                deltaPositivo={deltas.avgDuration >= 0}
               />
             </div>
           </div>
@@ -589,6 +709,111 @@ export default function WebTab() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* Snapshot + Insight IA — solo para períodos mensuales */}
+          {isMonthly && (
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    Análisis IA · {dateLabel}
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Guardá un snapshot del período y generá un análisis mensual con IA.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={handleSaveSnapshot}
+                    disabled={savingSnap}
+                    className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 rounded-lg transition-colors"
+                  >
+                    {savingSnap ? 'Guardando…' : snapSaved ? '✓ Guardado' : '💾 Guardar snapshot'}
+                  </button>
+                  <button
+                    onClick={handleGenerateInsight}
+                    disabled={insightLoading}
+                    className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white font-medium rounded-lg transition-colors"
+                  >
+                    {insightLoading ? 'Analizando…' : insight ? '🔄 Regenerar' : '✨ Analizar con IA'}
+                  </button>
+                </div>
+              </div>
+
+              {insightLoading && (
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                  Generando análisis con IA…
+                </div>
+              )}
+
+              {insight && !insightLoading && (
+                <div className="space-y-4">
+                  {/* Título y resumen */}
+                  <div>
+                    <p className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-1">
+                      {insight.content?.titulo}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                      {insight.content?.resumen}
+                    </p>
+                  </div>
+
+                  {/* Tendencias */}
+                  {insight.content?.tendencias?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                        Tendencias
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {insight.content.tendencias.map((t, i) => (
+                          <span
+                            key={i}
+                            className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium
+                              ${t.positivo
+                                ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                              }`}
+                          >
+                            {t.delta != null ? (t.delta > 0 ? '▲' : '▼') : '–'}
+                            {t.metrica}
+                            {t.delta != null && ` ${Math.abs(t.delta)}%`}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recomendaciones */}
+                  {insight.content?.recomendaciones?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                        Recomendaciones
+                      </p>
+                      <ul className="space-y-1.5">
+                        {insight.content.recomendaciones.map((rec, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                            <span className="text-primary-500 mt-0.5 flex-shrink-0">→</span>
+                            {rec}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-gray-400">
+                    Generado: {new Date(insight.generatedAt).toLocaleString('es-AR')}
+                  </p>
+                </div>
+              )}
+
+              {!insight && !insightLoading && (
+                <p className="text-xs text-gray-400">
+                  Guardá un snapshot del período actual y hacé click en "Analizar con IA" para obtener un resumen inteligente con comparaciones y recomendaciones.
+                </p>
+              )}
             </div>
           )}
 
