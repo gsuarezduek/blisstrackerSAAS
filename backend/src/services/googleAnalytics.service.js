@@ -28,8 +28,10 @@ async function fetchGA4Report(integration, dateRange = '30daysAgo') {
 
   const analyticsClient = new BetaAnalyticsDataClient({ authClient: oauth2Client })
 
-  const property = integration.propertyId // e.g. "properties/123456789"
-  if (!property) throw new Error('propertyId no configurado para esta integración')
+  // Normalizar: aceptar "349398319" o "properties/349398319"
+  const raw = integration.propertyId
+  if (!raw) throw new Error('propertyId no configurado para esta integración')
+  const property = raw.startsWith('properties/') ? raw : `properties/${raw}`
 
   const [overviewRes, topPagesRes, channelsRes, devicesRes, conversionsRes] = await Promise.all([
     analyticsClient.runReport({

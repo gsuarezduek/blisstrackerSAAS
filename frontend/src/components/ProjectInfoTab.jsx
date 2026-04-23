@@ -304,7 +304,7 @@ export default function ProjectInfoTab({ project, onSave }) {
                           type="text"
                           value={propertyInput[integ.key] ?? ''}
                           onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
-                          placeholder="properties/123456789"
+                          placeholder="349398319  (solo el número)"
                           className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                         <button
