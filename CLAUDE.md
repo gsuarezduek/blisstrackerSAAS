@@ -374,3 +374,32 @@ frontend/
 - **Backend CORS:** `app.js` allows `*.blisstracker.app` via regex — do not hardcode a single origin.
 - **Stripe webhook:** must point to `https://<railway-backend-url>/api/billing/webhook`. Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`. Accepts all events — unhandled ones are silently ignored.
 - **`bliss` workspace:** permanently exempt from billing. Set `status = 'active'` via SuperAdmin → Workspaces. No Stripe subscription ever created; cron and webhooks never affect it.
+
+### Google Cloud APIs habilitadas
+
+Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`).
+
+| API | Uso actual | Autenticación |
+|-----|-----------|---------------|
+| **Google Analytics Data API** | Marketing → Informes: métricas GA4 por proyecto | OAuth (refresh token por proyecto) |
+| **Google Analytics Admin API** | Futuro: listar properties disponibles (evitar tipear Property ID a mano) | OAuth |
+| **Google Analytics API** | Legacy / fallback UA — habilitada por si acaso | OAuth |
+| **Google Search Console API** | Futuro: tab SEO — impresiones, clicks, posición | OAuth |
+| **PageSpeed Insights API** | Futuro: tab SEO — Core Web Vitals, performance score | API Key (sin OAuth) |
+| **YouTube Analytics API** | Futuro: métricas de canal YouTube por proyecto | OAuth |
+| **Business Profile Performance API** | Futuro: métricas de Google My Business | OAuth |
+
+**Redirect URI registrada en Cloud Console:**
+- `https://api.blisstracker.app/api/marketing/integrations/google/callback` (producción)
+- `http://localhost:3001/api/marketing/integrations/google/callback` (desarrollo)
+
+**OAuth Consent Screen scopes habilitados:**
+- `https://www.googleapis.com/auth/analytics.readonly`
+- Agregar `https://www.googleapis.com/auth/adwords` cuando el Developer Token de Google Ads sea aprobado
+
+**Env vars de integraciones (Railway):**
+```
+GOOGLE_CLIENT_SECRET=...        # client secret del OAuth app de Google Cloud
+ENCRYPTION_KEY=<64 chars hex>   # AES-256-GCM key para cifrar tokens en DB
+BACKEND_URL=https://api.blisstracker.app
+```

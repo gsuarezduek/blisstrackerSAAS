@@ -1,10 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../api/client'
 
 const CONNECTIONS = [
   { key: 'instagram', label: 'Instagram', placeholder: 'https://instagram.com/usuario',    icon: '📸' },
   { key: 'tiktok',    label: 'TikTok',    placeholder: 'https://tiktok.com/@usuario',      icon: '🎵' },
   { key: 'linkedin',  label: 'LinkedIn',  placeholder: 'https://linkedin.com/company/...', icon: '💼' },
+  { key: 'youtube',   label: 'YouTube',   placeholder: 'https://youtube.com/@canal',       icon: '▶️' },
+]
+
+const GOOGLE_INTEGRATIONS = [
+  {
+    key:   'google_analytics',
+    label: 'Google Analytics (GA4)',
+    icon:  '📊',
+    desc:  'Ver sesiones, usuarios y páginas en Marketing → Informes',
+  },
+  {
+    key:        'google_ads',
+    label:      'Google Ads',
+    icon:       '📣',
+    desc:       'Ver impresiones, clics y conversiones',
+    comingSoon: true,
+  },
 ]
 
 function parseConnections(raw) {
@@ -21,6 +38,86 @@ export default function ProjectInfoTab({ project, onSave }) {
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
   const [error, setError]           = useState('')
+
+  // Integraciones Google
+  const [integrations,  setIntegrations]  = useState([])
+  const [integLoading,  setIntegLoading]  = useState({})
+  const [propertyInput, setPropertyInput] = useState({})
+  const [propSaving,    setPropSaving]    = useState({})
+
+  // Cargar integraciones del proyecto
+  useEffect(() => {
+    api.get(`/marketing/projects/${project.id}/integrations`)
+      .then(r => setIntegrations(r.data))
+      .catch(() => {})
+  }, [project.id])
+
+  function getIntegration(type) {
+    return integrations.find(i => i.type === type)
+  }
+
+  async function handleConnect(type) {
+    setIntegLoading(prev => ({ ...prev, [type]: true }))
+    try {
+      const { data } = await api.get(
+        `/marketing/integrations/google/auth-url?projectId=${project.id}&type=${type}`
+      )
+
+      const popup = window.open(data.url, 'google_oauth', 'width=520,height=660,left=200,top=80')
+
+      function handleMessage(event) {
+        if (event.origin !== window.location.origin) return
+        if (event.data?.type !== 'GOOGLE_INTEGRATION_RESULT') return
+        window.removeEventListener('message', handleMessage)
+        setIntegLoading(prev => ({ ...prev, [type]: false }))
+        if (event.data.success) {
+          // Recargar integraciones
+          api.get(`/marketing/projects/${project.id}/integrations`)
+            .then(r => setIntegrations(r.data))
+            .catch(() => {})
+        }
+        if (popup && !popup.closed) popup.close()
+      }
+      window.addEventListener('message', handleMessage)
+
+      // Limpiar si el usuario cierra el popup manualmente
+      const pollClose = setInterval(() => {
+        if (popup?.closed) {
+          clearInterval(pollClose)
+          window.removeEventListener('message', handleMessage)
+          setIntegLoading(prev => ({ ...prev, [type]: false }))
+        }
+      }, 500)
+    } catch {
+      setIntegLoading(prev => ({ ...prev, [type]: false }))
+    }
+  }
+
+  async function handleDisconnect(type) {
+    setIntegLoading(prev => ({ ...prev, [type]: true }))
+    try {
+      await api.delete(`/marketing/projects/${project.id}/integrations/${type}`)
+      setIntegrations(prev => prev.filter(i => i.type !== type))
+    } finally {
+      setIntegLoading(prev => ({ ...prev, [type]: false }))
+    }
+  }
+
+  async function handleSavePropertyId(type) {
+    const val = propertyInput[type]?.trim()
+    if (!val) return
+    setPropSaving(prev => ({ ...prev, [type]: true }))
+    try {
+      const { data } = await api.patch(
+        `/marketing/projects/${project.id}/integrations/${type}`,
+        { propertyId: val }
+      )
+      setIntegrations(prev => prev.map(i => i.type === type ? { ...i, ...data } : i))
+      setPropertyInput(prev => ({ ...prev, [type]: '' }))
+    } finally {
+      setPropSaving(prev => ({ ...prev, [type]: false }))
+    }
+  }
 
   function isDirty() {
     if (websiteUrl.trim() !== (project.websiteUrl ?? '')) return true
@@ -46,7 +143,7 @@ export default function ProjectInfoTab({ project, onSave }) {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 space-y-5">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 space-y-6">
 
       {/* Sitio web */}
       <div>
@@ -63,10 +160,10 @@ export default function ProjectInfoTab({ project, onSave }) {
         <p className="text-xs text-gray-400 mt-1">Usado para análisis GEO en la sección Marketing</p>
       </div>
 
-      {/* Redes y conexiones */}
+      {/* Redes sociales */}
       <div>
         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-          Redes y conexiones
+          Redes sociales
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {CONNECTIONS.map(c => (
@@ -88,7 +185,7 @@ export default function ProjectInfoTab({ project, onSave }) {
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <div className="flex items-center gap-3 pt-1">
+      <div className="flex items-center gap-3">
         <button
           onClick={handleSave}
           disabled={saving || !isDirty()}
@@ -98,6 +195,134 @@ export default function ProjectInfoTab({ project, onSave }) {
         </button>
         {saved && <span className="text-sm text-emerald-500">Los cambios se guardaron correctamente</span>}
       </div>
+
+      {/* Integraciones Google */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-5">
+        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+          Integraciones Google
+        </p>
+        <div className="space-y-3">
+          {GOOGLE_INTEGRATIONS.map(integ => {
+            const connected = getIntegration(integ.key)
+            const isLoading = integLoading[integ.key]
+            const hasError  = connected?.status === 'error'
+
+            return (
+              <div
+                key={integ.key}
+                className="border border-gray-200 dark:border-gray-600 rounded-xl p-4 space-y-3"
+              >
+                {/* Cabecera */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-xl flex-shrink-0">{integ.icon}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{integ.label}</p>
+                      <p className="text-xs text-gray-400 truncate">{integ.desc}</p>
+                    </div>
+                  </div>
+
+                  {integ.comingSoon ? (
+                    <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-1 rounded-full flex-shrink-0">
+                      próximamente
+                    </span>
+                  ) : connected ? (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {hasError ? (
+                        <span className="text-xs text-red-500 font-medium flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                          Error
+                        </span>
+                      ) : (
+                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                          Conectado
+                        </span>
+                      )}
+                      <button
+                        onClick={() => handleDisconnect(integ.key)}
+                        disabled={isLoading}
+                        className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
+                      >
+                        {isLoading ? '…' : 'Desconectar'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleConnect(integ.key)}
+                      disabled={isLoading}
+                      className="px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg transition-colors flex-shrink-0"
+                    >
+                      {isLoading ? 'Conectando…' : 'Conectar'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Property ID para GA4: mostrar si está conectado */}
+                {connected && integ.key === 'google_analytics' && (
+                  <div>
+                    {connected.propertyId ? (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-400">
+                          Property ID:{' '}
+                          <span className="font-mono text-gray-600 dark:text-gray-300">
+                            {connected.propertyId}
+                          </span>
+                        </p>
+                        <button
+                          onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.propertyId }))}
+                          className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
+                        >
+                          Cambiar
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Ingresá el GA4 Property ID para ver los datos
+                      </p>
+                    )}
+
+                    {/* Input para ingresar/cambiar el Property ID */}
+                    {(propertyInput[integ.key] !== undefined || !connected.propertyId) && (
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          type="text"
+                          value={propertyInput[integ.key] ?? ''}
+                          onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
+                          placeholder="properties/123456789"
+                          className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        <button
+                          onClick={() => handleSavePropertyId(integ.key)}
+                          disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
+                          className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                        >
+                          {propSaving[integ.key] ? '…' : 'Guardar'}
+                        </button>
+                        {connected.propertyId && (
+                          <button
+                            onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
+                            className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {hasError && (
+                      <p className="text-xs text-red-500 mt-1">
+                        El token fue revocado. Desconectá y volvé a conectar.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
     </div>
   )
 }

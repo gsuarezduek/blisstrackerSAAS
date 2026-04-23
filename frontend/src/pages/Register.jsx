@@ -21,6 +21,7 @@ export default function Register() {
   const [error,         setError]         = useState('')
   const [loading,       setLoading]       = useState(false)
   const [emailExists,   setEmailExists]   = useState(false)
+  const [acceptedTerms, setAcceptedTerms] = useState(true)
   const navigate = useNavigate()
 
   // Detectar si el email ya tiene cuenta (con debounce)
@@ -168,6 +169,36 @@ export default function Register() {
             )}
           </div>
 
+          {/* Aceptar términos */}
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={e => setAcceptedTerms(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer flex-shrink-0"
+            />
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              Acepto las{' '}
+              <a
+                href="/condiciones"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary-600 hover:text-primary-700 underline underline-offset-2"
+              >
+                condiciones de uso
+              </a>
+              {' '}y la{' '}
+              <a
+                href="/privacidad"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary-600 hover:text-primary-700 underline underline-offset-2"
+              >
+                política de privacidad
+              </a>
+            </span>
+          </label>
+
           {error && (
             <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-xl px-4 py-3">
               {error}
@@ -176,7 +207,7 @@ export default function Register() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !acceptedTerms}
             className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl px-4 py-2.5 transition-colors"
           >
             {loading ? 'Creando workspace...' : 'Crear workspace'}

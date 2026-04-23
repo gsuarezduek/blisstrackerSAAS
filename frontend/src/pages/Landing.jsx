@@ -594,6 +594,10 @@ export default function Landing() {
             <span>BlissTracker &copy; {new Date().getFullYear()}</span>
           </div>
           <div className="flex items-center gap-6">
+            <Link to="/condiciones" className="hover:text-gray-300 transition-colors">Condiciones de uso</Link>
+            <Link to="/privacidad"  className="hover:text-gray-300 transition-colors">Política de privacidad</Link>
+          </div>
+          <div className="flex items-center gap-6">
             <Link to="/login"    className="hover:text-gray-300 transition-colors">Iniciar sesión</Link>
             <Link to="/register" className="hover:text-gray-300 transition-colors">Crear cuenta</Link>
           </div>

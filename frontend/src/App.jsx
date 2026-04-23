@@ -50,8 +50,10 @@ import Preferences from './pages/Preferences'
 import Docs from './pages/Docs'
 import SuperAdmin from './pages/SuperAdmin'
 import JoinWorkspace from './pages/JoinWorkspace'
-import Marketing from './pages/Marketing'
-import Billing  from './pages/Billing'
+import Marketing   from './pages/Marketing'
+import Billing     from './pages/Billing'
+import OAuthResult from './pages/OAuthResult'
+import LegalPage   from './pages/TermsPage'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -94,8 +96,11 @@ export default function App() {
         <Routes>
           <Route path="/login"    element={<Login2     />} />
           <Route path="/register" element={<Register   />} />
-          <Route path="/oauth"    element={<OAuthPopup    />} />
-          <Route path="/auth"     element={<AuthCallback  />} />
+          <Route path="/oauth"        element={<OAuthPopup    />} />
+          <Route path="/auth"         element={<AuthCallback  />} />
+          <Route path="/oauth-result" element={<OAuthResult   />} />
+          <Route path="/condiciones"  element={<LegalPage docKey="terms_of_service" />} />
+          <Route path="/privacidad"   element={<LegalPage docKey="privacy_policy"   />} />
           <Route path="/join"     element={<JoinWorkspace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />

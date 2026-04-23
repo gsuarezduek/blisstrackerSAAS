@@ -2,10 +2,11 @@ const express = require('express')
 const multer  = require('multer')
 const router  = express.Router()
 const { auth } = require('../middleware/auth')
-const c   = require('../controllers/superadmin.controller')
-const ann = require('../controllers/announcements.controller')
-const av  = require('../controllers/avatars.controller')
-const ff  = require('../controllers/featureFlags.controller')
+const c     = require('../controllers/superadmin.controller')
+const ann   = require('../controllers/announcements.controller')
+const av    = require('../controllers/avatars.controller')
+const ff    = require('../controllers/featureFlags.controller')
+const legal = require('../controllers/legal.controller')
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -45,6 +46,10 @@ router.get('/feature-flags',         ff.list)
 router.post('/feature-flags',        ff.create)
 router.patch('/feature-flags/:id',   ff.update)
 router.delete('/feature-flags/:id',  ff.remove)
+
+// Documentos legales
+router.get('/legal/:key',  legal.getDocument)
+router.put('/legal/:key',  legal.upsertDocument)
 
 // Avatares
 router.get('/avatars',                      av.listAll)
