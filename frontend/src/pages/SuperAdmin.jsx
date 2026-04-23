@@ -130,19 +130,97 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
             <LoadingSpinner size="sm" className="py-8" />
           ) : detail ? (
             <>
+              {/* Métricas rápidas */}
               <div className="grid grid-cols-3 gap-3">
                 <StatCard label="Miembros activos" value={detail.members?.filter(m => m.active).length ?? 0} />
                 <StatCard label="Proyectos" value={detail.projects?.length ?? 0} />
                 <StatCard label="Tokens AI" value={totalTokens.toLocaleString()} sub="total acumulado" />
               </div>
-              {detail.trialEndsAt && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 text-sm">
-                  <span className="font-medium text-blue-700 dark:text-blue-300">Trial:</span>
-                  <span className="text-blue-600 dark:text-blue-400 ml-2">
-                    vence {new Date(detail.trialEndsAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </span>
+
+              {/* Suscripción / Billing */}
+              <div className="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Suscripción</h3>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={detail.status} />
+                    {detail.stripeCustomerId && (
+                      <a
+                        href={`https://dashboard.stripe.com/customers/${detail.stripeCustomerId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+                        title="Ver customer en Stripe"
+                      >
+                        Stripe ↗
+                      </a>
+                    )}
+                  </div>
                 </div>
-              )}
+
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  {/* Trial — solo cuando está en trialing */}
+                  {detail.status === 'trialing' && detail.trialEndsAt && (
+                    <>
+                      <span className="text-gray-500 dark:text-gray-400">Vencimiento del trial</span>
+                      <span className="font-medium text-gray-800 dark:text-gray-200">
+                        {new Date(detail.trialEndsAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                    </>
+                  )}
+
+                  {/* Suscripción activa */}
+                  {detail.subscription && (
+                    <>
+                      <span className="text-gray-500 dark:text-gray-400">Seats facturados</span>
+                      <span className="font-medium text-gray-800 dark:text-gray-200">{detail.subscription.seats}</span>
+
+                      {detail.subscription.periodEnd && (
+                        <>
+                          <span className="text-gray-500 dark:text-gray-400">
+                            {detail.status === 'active' ? 'Próxima facturación' : 'Vencimiento'}
+                          </span>
+                          <span className="font-medium text-gray-800 dark:text-gray-200">
+                            {new Date(detail.subscription.periodEnd).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </span>
+                        </>
+                      )}
+
+                      {detail.subscription.stripeSubId && (
+                        <>
+                          <span className="text-gray-500 dark:text-gray-400">Suscripción Stripe</span>
+                          <a
+                            href={`https://dashboard.stripe.com/subscriptions/${detail.subscription.stripeSubId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-mono text-primary-600 dark:text-primary-400 hover:underline truncate"
+                            title={detail.subscription.stripeSubId}
+                          >
+                            {detail.subscription.stripeSubId}
+                          </a>
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {/* Sin suscripción ni trial info */}
+                  {!detail.subscription && detail.status !== 'trialing' && (
+                    <>
+                      <span className="text-gray-500 dark:text-gray-400">Sin suscripción</span>
+                      <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Info adicional del workspace */}
+                <div className="pt-2 border-t border-gray-200 dark:border-gray-600 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
+                  <span>Timezone: <span className="text-gray-600 dark:text-gray-300">{detail.timezone}</span></span>
+                  <span>Creado: <span className="text-gray-600 dark:text-gray-300">
+                    {new Date(detail.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span></span>
+                </div>
+              </div>
+
+              {/* Miembros */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Miembros ({detail.members?.length ?? 0})</h3>
                 <div className="space-y-2">
@@ -168,6 +246,8 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                   ))}
                 </div>
               </div>
+
+              {/* Proyectos */}
               {detail.projects?.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Proyectos ({detail.projects.length})</h3>
@@ -176,6 +256,26 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                       <span key={p.id} className={`text-xs px-3 py-1 rounded-full ${
                         p.active ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-500'
                       }`}>{p.name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Uso de tokens por servicio */}
+              {detail.tokenStats?.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Uso de IA por servicio</h3>
+                  <div className="space-y-1.5">
+                    {detail.tokenStats.map(s => (
+                      <div key={s.service} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-xs">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">{s.service}</span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          {((s._sum.inputTokens || 0) + (s._sum.outputTokens || 0)).toLocaleString()} tokens
+                          <span className="ml-2 text-gray-400">
+                            ({(s._sum.inputTokens || 0).toLocaleString()} in / {(s._sum.outputTokens || 0).toLocaleString()} out)
+                          </span>
+                        </span>
+                      </div>
                     ))}
                   </div>
                 </div>
