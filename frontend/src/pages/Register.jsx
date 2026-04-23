@@ -57,6 +57,15 @@ export default function Register() {
     setLoading(true)
     try {
       await api.post('/workspaces', { workspaceName, slug, ownerName, ownerEmail, ownerPassword })
+
+      // Conversión GA4: registro de workspace
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', 'sign_up', {
+          method:         'email',
+          workspace_slug: slug,
+        })
+      }
+
       const domain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
       // Redirigir al subdominio recién creado
       if (window.location.hostname.includes(domain)) {

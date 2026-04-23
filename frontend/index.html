@@ -17,6 +17,23 @@
     <!-- PWA / Android -->
     <link rel="icon" type="image/png" sizes="192x192" href="/logo-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/logo-512.png" />
+    <!-- Google Analytics — solo en el dominio raíz (landing), no en workspaces -->
+    <script>
+      (function() {
+        var host = window.location.hostname;
+        var isLanding = host === 'blisstracker.app' || host === 'www.blisstracker.app';
+        if (!isLanding) return;
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-4QGEYVGY43';
+        document.head.appendChild(s);
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){ window.dataLayer.push(arguments); }
+        window.gtag = gtag;
+        gtag('js', new Date());
+        gtag('config', 'G-4QGEYVGY43');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
