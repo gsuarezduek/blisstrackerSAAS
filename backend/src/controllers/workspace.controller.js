@@ -3,6 +3,7 @@ const crypto = require('crypto')
 const prisma = require('../lib/prisma')
 const stripe  = require('../lib/stripe')
 const { sendWelcomeEmail, sendInvitationEmail, sendWorkspaceDeletionWarning } = require('../services/email.service')
+const { syncSeatsToStripe } = require('./billing.controller')
 
 const MEMBER_SELECT = {
   userId: true,
@@ -246,6 +247,9 @@ async function toggleMemberActive(req, res, next) {
     const updated = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
     })
+
+    // Sincronizar cantidad de seats en Stripe (fire-and-forget)
+    syncSeatsToStripe(workspaceId).catch(() => {})
 
     res.json({
       ...user,
@@ -537,6 +541,9 @@ async function joinWorkspace(req, res, next) {
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     )
+
+    // Sincronizar seats en Stripe (fire-and-forget)
+    syncSeatsToStripe(workspaceId).catch(() => {})
 
     res.json({
       token:  jwtToken,

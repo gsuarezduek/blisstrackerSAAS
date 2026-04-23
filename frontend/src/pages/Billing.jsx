@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
@@ -18,9 +18,24 @@ function StatusBadge({ status }) {
   return <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cls}`}>{label}</span>
 }
 
+function InvoiceStatusBadge({ status }) {
+  const map = {
+    paid:           { label: 'Pagado',    cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+    open:           { label: 'Pendiente', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+    void:           { label: 'Anulado',   cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
+    uncollectible:  { label: 'Incobrable',cls: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300' },
+  }
+  const { label, cls } = map[status] ?? { label: status, cls: 'bg-gray-100 text-gray-500' }
+  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
+}
+
 function fmtDate(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function fmtMoney(amount, currency = 'USD') {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -29,20 +44,41 @@ export default function Billing() {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
 
-  const [billing, setBilling]     = useState(null)
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState('')
+  const [billing, setBilling]         = useState(null)
+  const [invoices, setInvoices]       = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [syncing, setSyncing]         = useState(false)
+  const [error, setError]             = useState('')
   const [redirecting, setRedirecting] = useState(false)
 
-  const justSucceeded  = searchParams.get('success') === '1'
-  const justCancelled  = searchParams.get('cancelled') === '1'
+  const justSucceeded = searchParams.get('success') === '1'
+  const justCancelled = searchParams.get('cancelled') === '1'
+
+  const loadBilling = useCallback(() =>
+    api.get('/billing/status').then(r => setBilling(r.data)), [])
+
+  const loadInvoices = useCallback(() =>
+    api.get('/billing/invoices').then(r => setInvoices(r.data)).catch(() => {}), [])
 
   useEffect(() => {
-    api.get('/billing/status')
-      .then(r => setBilling(r.data))
-      .catch(() => setError('No se pudo cargar la información de facturación'))
-      .finally(() => setLoading(false))
-  }, [])
+    const init = async () => {
+      try {
+        // Si viene de un checkout exitoso, primero sincronizar con Stripe
+        if (justSucceeded) {
+          setSyncing(true)
+          try { await api.post('/billing/sync') } catch (_) {}
+          setSyncing(false)
+        }
+        await loadBilling()
+        await loadInvoices()
+      } catch {
+        setError('No se pudo cargar la información de facturación')
+      } finally {
+        setLoading(false)
+      }
+    }
+    init()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleUpgrade() {
     setRedirecting(true)
@@ -68,10 +104,11 @@ export default function Billing() {
     }
   }
 
-  if (loading) {
+  if (loading || syncing) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex flex-col justify-center items-center min-h-screen gap-3">
         <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        {syncing && <p className="text-sm text-gray-500 dark:text-gray-400">Sincronizando suscripción…</p>}
       </div>
     )
   }
@@ -83,182 +120,231 @@ export default function Billing() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-    <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
+      <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
 
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Facturación</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Gestioná tu plan y suscripción de BlissTracker.
-        </p>
-      </div>
-
-      {/* Banner de retorno desde Stripe */}
-      {justSucceeded && (
-        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-xl px-4 py-3 text-sm text-green-700 dark:text-green-300 font-medium">
-          ¡Suscripción activada correctamente! Gracias por confiar en BlissTracker.
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Facturación</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Gestioná tu plan y suscripción de BlissTracker.
+          </p>
         </div>
-      )}
-      {justCancelled && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-          Proceso de pago cancelado. Tu trial sigue activo hasta su vencimiento.
-        </div>
-      )}
 
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl px-4 py-3 text-sm text-red-700 dark:text-red-300">
-          {error}
-        </div>
-      )}
-
-      {/* Tarjeta de estado */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 space-y-5">
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-              Estado del plan
-            </p>
-            <div className="flex items-center gap-3">
-              <p className="text-lg font-bold text-gray-900 dark:text-white">Pro</p>
-              {billing && <StatusBadge status={status} />}
-            </div>
+        {/* Banners de retorno desde Stripe */}
+        {justSucceeded && (
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-xl px-4 py-3 text-sm text-green-700 dark:text-green-300 font-medium">
+            ¡Suscripción activada correctamente! Gracias por confiar en BlissTracker.
           </div>
-          {billing && (
-            <div className="text-right">
-              <p className="text-xs text-gray-400 dark:text-gray-500">Seats activos</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">{billing.seats}</p>
+        )}
+        {justCancelled && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+            Proceso de pago cancelado. Tu trial sigue activo hasta su vencimiento.
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            {error}
+          </div>
+        )}
+
+        {/* Tarjeta de estado */}
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 space-y-5">
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                Estado del plan
+              </p>
+              <div className="flex items-center gap-3">
+                <p className="text-lg font-bold text-gray-900 dark:text-white">Pro</p>
+                {billing && <StatusBadge status={status} />}
+              </div>
             </div>
+            {billing && (
+              <div className="text-right">
+                <p className="text-xs text-gray-400 dark:text-gray-500">Seats activos</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{billing.seats}</p>
+              </div>
+            )}
+          </div>
+
+          <hr className="border-gray-100 dark:border-gray-700" />
+
+          {/* Trial info */}
+          {status === 'trialing' && (
+            <div className="space-y-1">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                <span className="font-semibold">Período de prueba gratuito</span> — incluye todas las funcionalidades Pro.
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Vence el{' '}
+                <span className="font-medium text-gray-700 dark:text-gray-200">
+                  {fmtDate(billing?.trialEndsAt)}
+                </span>
+                {billing?.trialDaysLeft != null && (
+                  <span className={`ml-1 font-semibold ${billing.trialDaysLeft <= 3 ? 'text-red-500' : billing.trialDaysLeft <= 7 ? 'text-amber-500' : 'text-gray-700 dark:text-gray-200'}`}>
+                    ({billing.trialDaysLeft === 0 ? 'vence hoy' : `${billing.trialDaysLeft} día${billing.trialDaysLeft !== 1 ? 's' : ''} restante${billing.trialDaysLeft !== 1 ? 's' : ''}`})
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
+
+          {/* Suscripción activa */}
+          {status === 'active' && sub && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-gray-400 dark:text-gray-500">Próxima facturación</p>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{fmtDate(sub.periodEnd)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 dark:text-gray-500">Período actual</p>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  {fmtDate(sub.periodStart)} → {fmtDate(sub.periodEnd)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Pago pendiente */}
+          {status === 'past_due' && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+              Hay un pago pendiente en tu cuenta. Regularizá tu método de pago para evitar la suspensión del workspace.
+            </div>
+          )}
+
+          {/* Cancelado/Suspendido */}
+          {(status === 'suspended' || status === 'cancelled') && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-4 py-3 text-sm text-red-700 dark:text-red-300">
+              Tu suscripción está inactiva. Renovála para recuperar el acceso completo.
+            </div>
+          )}
+
+          {/* Acciones */}
+          {isAdmin && (
+            <div className="flex flex-wrap gap-3 pt-1">
+              {(status === 'trialing' || status === 'past_due' || status === 'cancelled') && (
+                <button
+                  onClick={handleUpgrade}
+                  disabled={redirecting}
+                  className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
+                >
+                  {redirecting ? 'Redirigiendo…' : status === 'trialing' ? 'Suscribirse ahora' : 'Reactivar suscripción'}
+                </button>
+              )}
+
+              {(status === 'active' || status === 'past_due') && sub?.stripeSubId && (
+                <button
+                  onClick={handlePortal}
+                  disabled={redirecting}
+                  className="px-5 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 disabled:opacity-50 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-xl transition-colors"
+                >
+                  {redirecting ? 'Redirigiendo…' : 'Gestionar suscripción'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Mensaje para no-admins */}
+          {!isAdmin && (status === 'trialing' || status === 'past_due') && (
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Solo los administradores del workspace pueden gestionar la suscripción.
+            </p>
           )}
         </div>
 
-        <hr className="border-gray-100 dark:border-gray-700" />
-
-        {/* Trial info */}
-        {status === 'trialing' && (
-          <div className="space-y-1">
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              <span className="font-semibold">Período de prueba gratuito</span> — incluye todas las funcionalidades Pro.
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Vence el{' '}
-              <span className="font-medium text-gray-700 dark:text-gray-200">
-                {fmtDate(billing?.trialEndsAt)}
-              </span>
-              {billing?.trialDaysLeft != null && (
-                <span className={` ml-1 font-semibold ${billing.trialDaysLeft <= 3 ? 'text-red-500' : billing.trialDaysLeft <= 7 ? 'text-amber-500' : 'text-gray-700 dark:text-gray-200'}`}>
-                  ({billing.trialDaysLeft === 0 ? 'vence hoy' : `${billing.trialDaysLeft} día${billing.trialDaysLeft !== 1 ? 's' : ''} restante${billing.trialDaysLeft !== 1 ? 's' : ''}`})
-                </span>
-              )}
-            </p>
-          </div>
-        )}
-
-        {/* Suscripción activa */}
-        {status === 'active' && sub && (
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-gray-400 dark:text-gray-500">Próxima facturación</p>
-              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{fmtDate(sub.periodEnd)}</p>
+        {/* Historial de pagos */}
+        {isAdmin && invoices.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-4">Historial de pagos</p>
+            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+              {invoices.map(inv => (
+                <div key={inv.id} className="flex items-center justify-between py-3 gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        {fmtMoney(inv.amount, inv.currency)}
+                      </span>
+                      <InvoiceStatusBadge status={inv.status} />
+                    </div>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      {fmtDate(inv.date)}
+                      {inv.periodStart && inv.periodEnd && (
+                        <span className="ml-2 text-gray-300 dark:text-gray-600">
+                          · {fmtDate(inv.periodStart)} → {fmtDate(inv.periodEnd)}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    {inv.pdfUrl && (
+                      <a
+                        href={inv.pdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+                      >
+                        PDF
+                      </a>
+                    )}
+                    {inv.hostedUrl && (
+                      <a
+                        href={inv.hostedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-gray-400 dark:text-gray-500 hover:underline"
+                      >
+                        Ver
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <p className="text-xs text-gray-400 dark:text-gray-500">Período actual</p>
-              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                {fmtDate(sub.periodStart)} → {fmtDate(sub.periodEnd)}
-              </p>
+          </div>
+        )}
+
+        {/* Precios — solo si no está activo */}
+        {status !== 'active' && (
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-4">Plan Pro · Precio por persona</p>
+            <div className="flex flex-col sm:flex-row gap-4 mb-5">
+              <div className="flex-1 bg-gray-50 dark:bg-gray-700/50 rounded-xl px-4 py-3">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">1–19 usuarios</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">$3</span>
+                  <span className="text-sm text-gray-400">USD / seat / mes</span>
+                </div>
+              </div>
+              <div className="flex-1 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl px-4 py-3">
+                <p className="text-xs text-primary-500 dark:text-primary-400 mb-1 font-medium">20+ usuarios</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-gray-900 dark:text-white">$2</span>
+                  <span className="text-sm text-gray-400">USD / seat / mes</span>
+                </div>
+              </div>
             </div>
+            <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+              {[
+                'Proyectos y tareas ilimitadas',
+                'Reportes e insights con IA',
+                'Marketing GEO y más módulos',
+                'Invitaciones a miembros del equipo',
+                'Soporte prioritario',
+              ].map(f => (
+                <li key={f} className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  {f}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
-        {/* Pago pendiente */}
-        {status === 'past_due' && (
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            Hay un pago pendiente en tu cuenta. Regularizá tu método de pago para evitar la suspensión del workspace.
-          </div>
-        )}
-
-        {/* Cancelado/Suspendido */}
-        {(status === 'suspended' || status === 'cancelled') && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-4 py-3 text-sm text-red-700 dark:text-red-300">
-            Tu suscripción está inactiva. Renovála para recuperar el acceso completo.
-          </div>
-        )}
-
-        {/* Acciones */}
-        {isAdmin && (
-          <div className="flex flex-wrap gap-3 pt-1">
-            {/* Upgrade: trial, past_due o cancelled sin sub activa */}
-            {(status === 'trialing' || status === 'past_due' || status === 'cancelled') && (
-              <button
-                onClick={handleUpgrade}
-                disabled={redirecting}
-                className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
-              >
-                {redirecting ? 'Redirigiendo…' : status === 'trialing' ? 'Suscribirse ahora' : 'Reactivar suscripción'}
-              </button>
-            )}
-
-            {/* Portal: tiene stripeCustomerId (ya pasó por Checkout al menos 1 vez) */}
-            {(status === 'active' || status === 'past_due') && sub?.stripeSubId && (
-              <button
-                onClick={handlePortal}
-                disabled={redirecting}
-                className="px-5 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 disabled:opacity-50 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-xl transition-colors"
-              >
-                {redirecting ? 'Redirigiendo…' : 'Gestionar suscripción'}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Mensaje para no-owners */}
-        {!isAdmin && (status === 'trialing' || status === 'past_due') && (
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            Solo el owner del workspace puede gestionar la suscripción.
-          </p>
-        )}
       </div>
-
-      {/* Precios */}
-      {status !== 'active' && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-4">Plan Pro · Precio por persona</p>
-          <div className="flex flex-col sm:flex-row gap-4 mb-5">
-            <div className="flex-1 bg-gray-50 dark:bg-gray-700/50 rounded-xl px-4 py-3">
-              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">1–19 usuarios</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-gray-900 dark:text-white">$3</span>
-                <span className="text-sm text-gray-400">USD / seat / mes</span>
-              </div>
-            </div>
-            <div className="flex-1 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl px-4 py-3">
-              <p className="text-xs text-primary-500 dark:text-primary-400 mb-1 font-medium">20+ usuarios</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-gray-900 dark:text-white">$2</span>
-                <span className="text-sm text-gray-400">USD / seat / mes</span>
-              </div>
-            </div>
-          </div>
-          <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
-            {[
-              'Proyectos y tareas ilimitadas',
-              'Reportes e insights con IA',
-              'Marketing GEO y más módulos',
-              'Invitaciones a miembros del equipo',
-              'Soporte prioritario',
-            ].map(f => (
-              <li key={f} className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
-                {f}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-    </div>
     </div>
   )
 }

@@ -360,6 +360,81 @@ async function sendVacationReviewEmail(userEmail, userName, workspaceName, reque
   }
 }
 
+/**
+ * Notifica al owner y admins del workspace que el pago fue exitoso.
+ * @param {string[]} emails
+ * @param {string}   workspaceName
+ * @param {number}   seats
+ * @param {Date|null} periodEnd
+ * @param {number}   workspaceId
+ */
+async function sendPaymentSuccessEmail(emails, workspaceName, seats, periodEnd, workspaceId) {
+  const from    = await getEmailFrom(workspaceId)
+  const subject = `¡Suscripción activada! — ${workspaceName}`
+  const dateStr = periodEnd
+    ? new Date(periodEnd).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: emails,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">¡Pago recibido!</h2>
+          <p style="color:#475569;margin:0 0 20px;">
+            La suscripción de <strong>${workspaceName}</strong> está activa. Gracias por confiar en BlissTracker.
+          </p>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 6px;color:#166534;font-weight:600;">Plan Pro</p>
+            <p style="margin:0 0 4px;color:#166534;font-size:14px;">Seats activos: <strong>${seats}</strong></p>
+            ${dateStr ? `<p style="margin:0;color:#166534;font-size:14px;">Próxima facturación: <strong>${dateStr}</strong></p>` : ''}
+          </div>
+          <p style="color:#94a3b8;font-size:13px;margin:0;">Podés gestionar tu suscripción desde <strong>Facturación</strong> en BlissTracker.</p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'paymentSuccess', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'paymentSuccess', status: 'failed', errorMsg: err.message })
+  }
+}
+
+/**
+ * Notifica al owner y admins que hubo un fallo de pago.
+ * @param {string[]} emails
+ * @param {string}   workspaceName
+ * @param {number}   workspaceId
+ */
+async function sendPaymentFailedEmail(emails, workspaceName, workspaceId) {
+  const from    = await getEmailFrom(workspaceId)
+  const subject = `Problema con el pago — ${workspaceName}`
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: emails,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#991b1b;margin:0 0 12px;font-size:20px;">Fallo en el pago</h2>
+          <p style="color:#475569;margin:0 0 20px;">
+            No pudimos procesar el pago de la suscripción de <strong>${workspaceName}</strong>.
+            Regularizá tu método de pago para evitar la suspensión del workspace.
+          </p>
+          <p style="color:#94a3b8;font-size:13px;margin:0;">
+            Podés actualizar tu método de pago desde <strong>Facturación → Gestionar suscripción</strong>.
+          </p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'paymentFailed', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'paymentFailed', status: 'failed', errorMsg: err.message })
+  }
+}
+
 module.exports = {
   sendPasswordReset,
   sendWelcomeEmail,
@@ -369,4 +444,6 @@ module.exports = {
   sendWorkspaceDeletionWarning,
   sendVacationRequestEmail,
   sendVacationReviewEmail,
+  sendPaymentSuccessEmail,
+  sendPaymentFailedEmail,
 }

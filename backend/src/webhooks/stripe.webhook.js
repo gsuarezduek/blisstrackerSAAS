@@ -1,5 +1,15 @@
 const prisma = require('../lib/prisma')
 const stripe  = require('../lib/stripe')
+const { sendPaymentSuccessEmail, sendPaymentFailedEmail } = require('../services/email.service')
+
+// Devuelve los emails de todos los owners y admins activos del workspace
+async function getAdminEmails(workspaceId) {
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId, active: true, role: { in: ['owner', 'admin'] } },
+    include: { user: { select: { email: true } } },
+  })
+  return members.map(m => m.user.email).filter(Boolean)
+}
 
 /**
  * POST /api/billing/webhook
@@ -39,6 +49,10 @@ async function handleWebhook(req, res) {
         const stripeSubId = String(session.subscription)
         const stripeSub   = await stripe.subscriptions.retrieve(stripeSubId)
 
+        const seats     = stripeSub.items.data[0]?.quantity ?? 1
+        const periodEnd = stripeSub.current_period_end
+          ? new Date(stripeSub.current_period_end * 1000) : null
+
         await prisma.$transaction([
           prisma.workspace.update({
             where: { id: workspaceId },
@@ -49,25 +63,31 @@ async function handleWebhook(req, res) {
             update: {
               stripeSubId,
               status:      'active',
-              seats:       stripeSub.items.data[0]?.quantity ?? 1,
+              seats,
               periodStart: stripeSub.current_period_start
                 ? new Date(stripeSub.current_period_start * 1000) : null,
-              periodEnd:   stripeSub.current_period_end
-                ? new Date(stripeSub.current_period_end   * 1000) : null,
+              periodEnd,
             },
             create: {
               workspaceId,
               stripeSubId,
               status:      'active',
               planName:    'pro',
-              seats:       stripeSub.items.data[0]?.quantity ?? 1,
+              seats,
               periodStart: stripeSub.current_period_start
                 ? new Date(stripeSub.current_period_start * 1000) : null,
-              periodEnd:   stripeSub.current_period_end
-                ? new Date(stripeSub.current_period_end   * 1000) : null,
+              periodEnd,
             },
           }),
         ])
+
+        // Notificar por email a los owners/admins del workspace
+        const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } })
+        const adminEmails = await getAdminEmails(workspaceId)
+        if (adminEmails.length) {
+          sendPaymentSuccessEmail(adminEmails, workspace?.name ?? '', seats, periodEnd, workspaceId)
+            .catch(err => console.error('[Webhook] Error enviando email de pago:', err.message))
+        }
         break
       }
 
@@ -150,6 +170,14 @@ async function handleWebhook(req, res) {
         if (!workspaceId) break
 
         await prisma.workspace.update({ where: { id: workspaceId }, data: { status: 'past_due' } })
+
+        // Notificar a los owners/admins
+        const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } })
+        const adminEmails = await getAdminEmails(workspaceId)
+        if (adminEmails.length) {
+          sendPaymentFailedEmail(adminEmails, workspace?.name ?? '', workspaceId)
+            .catch(err => console.error('[Webhook] Error enviando email de fallo de pago:', err.message))
+        }
         break
       }
 
