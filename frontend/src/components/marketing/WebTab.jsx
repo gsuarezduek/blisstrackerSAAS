@@ -140,11 +140,6 @@ function ConversionsBlock({ conversions, sessions }) {
                   <span className="font-mono text-gray-700 dark:text-gray-300">{ev.eventName}</span>
                   <span className="text-gray-500 tabular-nums">
                     {fmt(ev.conversions)}
-                    {ev.conversionRate > 0 && (
-                      <span className="ml-1.5 text-gray-400">
-                        · {fmt(ev.conversionRate * 100, 2)}%
-                      </span>
-                    )}
                   </span>
                 </div>
                 <div className="h-1.5 bg-green-100 dark:bg-green-900/40 rounded-full overflow-hidden">

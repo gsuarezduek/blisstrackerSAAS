@@ -67,22 +67,17 @@ async function fetchGA4Report(integration, dateRange = '30daysAgo') {
       orderBys:   [{ metric: { metricName: 'sessions' }, desc: true }],
     }),
     // Desglose de conversiones (key events) por nombre de evento
+    // Nota: no usamos sessionKeyEventRate porque no todos los properties lo soportan
     analyticsClient.runReport({
       property,
       dateRanges: [{ startDate: dateRange, endDate: 'today' }],
       dimensions: [{ name: 'eventName' }],
-      metrics:    [{ name: 'conversions' }, { name: 'sessionKeyEventRate' }],
+      metrics:    [{ name: 'conversions' }],
       orderBys:   [{ metric: { metricName: 'conversions' }, desc: true }],
-      metricFilter: {
-        filter: {
-          fieldName: 'conversions',
-          numericFilter: {
-            operation: 'GREATER_THAN',
-            value: { int64Value: '0' },
-          },
-        },
-      },
-    }).catch(() => ({ rows: [] })), // algunos properties no tienen este metric — ignorar error
+    }).catch(err => {
+      console.warn('[GA4] conversions query failed (ignorado):', err.message)
+      return [{ rows: [] }]
+    }),
   ])
 
   const result = {
@@ -127,13 +122,14 @@ function parseChannels(response) {
 }
 
 function parseConversions(response) {
-  // response puede ser el objeto de la API o { rows: [] } si falló
-  const rows = response?.rows ?? response?.[0]?.rows ?? []
-  const events = rows.map(row => ({
-    eventName:       row.dimensionValues?.[0]?.value ?? '',
-    conversions:     parseInt(row.metricValues?.[0]?.value, 10) || 0,
-    conversionRate:  parseFloat(row.metricValues?.[1]?.value) || 0,
-  })).filter(e => e.eventName && e.conversions > 0)
+  // La API devuelve [report, metadata, status]; el catch devuelve [{ rows: [] }]
+  const rows = response?.[0]?.rows ?? []
+  const events = rows
+    .map(row => ({
+      eventName:   row.dimensionValues?.[0]?.value ?? '',
+      conversions: parseInt(row.metricValues?.[0]?.value, 10) || 0,
+    }))
+    .filter(e => e.eventName && e.conversions > 0)
 
   return {
     total:          events.reduce((s, e) => s + e.conversions, 0),

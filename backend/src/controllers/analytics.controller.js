@@ -46,6 +46,7 @@ async function getAnalyticsData(req, res, next) {
     const data = await fetchGA4Report(integration, dateRange)
     res.json({ ...data, projectName: project.name, websiteUrl: project.websiteUrl })
   } catch (err) {
+    console.error('[analytics.getAnalyticsData] error:', err.code ?? '', err.message)
     // Marcar como error si el token fue revocado por el usuario en Google
     if (
       err.message?.includes('invalid_grant') ||
