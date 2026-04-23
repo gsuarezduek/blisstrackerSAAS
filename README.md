@@ -16,6 +16,7 @@ Task tracker multi-tenant para agencias. Cada cliente opera en su propio workspa
 | Frontend | React 18 · Vite · Tailwind CSS · React Router v6 |
 | Auth | JWT (12h) · Google OAuth 2 |
 | AI | Claude Haiku (Anthropic) |
+| Billing | Stripe (Checkout + Customer Portal + Webhooks) |
 | Email | Resend (HTTP API — sin SMTP) |
 | Tests | Jest + Supertest (backend) · Vitest + React Testing Library (frontend) |
 | Deploy | Railway (backend + BD) · Vercel Pro (frontend, wildcard subdomain) |
@@ -50,6 +51,9 @@ APP_DOMAIN=blisstracker.app
 FRONTEND_URL=http://localhost:5173
 GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 ANTHROPIC_API_KEY=sk-ant-...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_ID=price_...
 ```
 
 **Credenciales tras el seed:**
@@ -132,6 +136,18 @@ Nuevo workspace desde `https://blisstracker.app/register`:
 2. Datos del owner (nombre, email, contraseña)
 3. Se crea workspace en trial de 14 días
 4. El owner queda con rol `owner`
+5. Se crea un Stripe Customer de forma asíncrona (no bloquea el registro)
+
+---
+
+## Facturación (Billing)
+
+- **Trial:** 14 días gratuitos con acceso completo. Cron diario a las 03:00 ART marca como `past_due` los trials vencidos.
+- **Upgrade:** admin/owner ve botón "Suscribirse ahora" en `/billing`. Redirige a Stripe Checkout. Al completar, webhook actualiza `status → active`.
+- **Gestión:** link "Gestionar suscripción" abre el Customer Portal de Stripe (facturas, método de pago, cancelación).
+- **Banner:** `TrialBanner` aparece en el navbar cuando quedan ≤ 7 días de trial o hay un pago pendiente.
+- **`bliss` workspace:** exento de billing, siempre `status = active`. No pasa por Stripe.
+- **Webhook URL:** `https://<railway-url>/api/billing/webhook`
 
 ---
 
@@ -150,6 +166,8 @@ team-tracker/
 │       ├── middleware/
 │       │   ├── auth.js          # JWT auth
 │       │   └── workspace.js     # resolveWorkspace + workspaceAdminOnly
+│       ├── config/
+│       │   └── featureFlags.js          # Catálogo de flags — agregar aquí, se auto-crean en DB
 │       ├── controllers/
 │       │   ├── auth.controller.js
 │       │   ├── workspace.controller.js  # CRUD workspace, invitaciones, eliminación
@@ -163,45 +181,60 @@ team-tracker/
 │       │   ├── realtime.controller.js
 │       │   ├── notifications.controller.js
 │       │   ├── roles.controller.js
-│       │   └── superadmin.controller.js  # Panel interno: stats, workspaces, email logs
+│       │   ├── billing.controller.js    # getStatus, createCheckout, createPortal
+│       │   ├── geo.controller.js        # runAudit, listAudits, getAudit
+│       │   └── superadmin.controller.js  # stats, workspaces, billing overview, email logs
 │       ├── routes/
 │       │   ├── workspace.routes.js
+│       │   ├── billing.routes.js
+│       │   ├── marketing.routes.js
 │       │   ├── superadmin.routes.js
 │       │   └── ...
+│       ├── webhooks/
+│       │   └── stripe.webhook.js        # maneja eventos Stripe (raw body)
 │       └── services/
 │           ├── email.service.js         # Resend + log a EmailLog
 │           ├── weeklyReport.service.js  # Cron viernes 14:00 ART
-│           └── insightMemory.service.js # Cron sábado 00:00 ART
+│           ├── insightMemory.service.js # Cron sábado 00:00 ART
+│           └── geoAudit.service.js      # Fetch + cheerio + Claude → GeoAudit
 └── frontend/
     └── src/
         ├── context/
-        │   ├── AuthContext.jsx     # user, login, logout, switchWorkspace
-        │   ├── WorkspaceContext.jsx # info del workspace actual (nombre, slug, plan)
+        │   ├── AuthContext.jsx      # user, login, logout, switchWorkspace
+        │   ├── WorkspaceContext.jsx # workspace actual + trialDaysLeft + isSubscriptionActive
         │   └── ThemeContext.jsx
+        ├── hooks/
+        │   └── useFeatureFlag.js    # hook con cache en memoria por sesión
         ├── pages/
         │   ├── Login2.jsx
-        │   ├── Register.jsx        # Crear nuevo workspace
-        │   ├── Join.jsx            # Aceptar invitación
+        │   ├── Register.jsx         # Crear nuevo workspace
+        │   ├── Join.jsx             # Aceptar invitación
         │   ├── Dashboard.jsx
         │   ├── MyProjects.jsx
-        │   ├── ProjectDetail.jsx
+        │   ├── ProjectDetail.jsx    # Tab "Info" con websiteUrl + redes sociales
         │   ├── MyReports.jsx
         │   ├── RealTime.jsx
-        │   ├── Reports.jsx         # Admin
-        │   ├── Admin.jsx           # Panel admin (deep link ?tab=)
-        │   ├── Productivity.jsx    # Admin
-        │   ├── RRHH.jsx            # Admin — Recursos Humanos
+        │   ├── Marketing.jsx        # Tab GEO operativo; SEO/Anuncios/etc. Próximamente
+        │   ├── Billing.jsx          # Estado trial/plan, upgrade, portal Stripe
+        │   ├── Reports.jsx          # Admin
+        │   ├── Admin.jsx            # Panel admin (deep link ?tab=)
+        │   ├── Productivity.jsx     # Admin
+        │   ├── RRHH.jsx             # Admin — Recursos Humanos
         │   ├── MyProfile.jsx
         │   ├── Preferences.jsx
         │   ├── Docs.jsx
-        │   └── SuperAdmin.jsx      # Panel interno (solo isSuperAdmin)
+        │   └── SuperAdmin.jsx       # Panel interno (solo isSuperAdmin)
         ├── components/
-        │   ├── Navbar.jsx          # Nav items con fuente única (links/adminSublinks/profileSections)
+        │   ├── Navbar.jsx           # Nav items con fuente única (links/adminSublinks/profileSections)
+        │   ├── TrialBanner.jsx      # Banner trial ≤7d o past_due
+        │   ├── ProjectInfoTab.jsx   # websiteUrl + conexiones sociales del proyecto
+        │   ├── marketing/
+        │   │   └── GeoTab.jsx       # Selector proyecto, audit panel, score, items, historial
         │   ├── admin/
-        │   │   ├── TeamTab.jsx     # Solo invitaciones por email
+        │   │   ├── TeamTab.jsx      # Solo invitaciones por email
         │   │   └── ...
         │   └── ...
-        └── api/client.js           # Axios: inyecta JWT + X-Workspace header
+        └── api/client.js            # Axios: inyecta JWT + X-Workspace header
 ```
 
 ---
@@ -210,20 +243,22 @@ team-tracker/
 
 | Modelo | Descripción |
 |--------|-------------|
-| `Workspace` | Tenant: slug, timezone, status (trialing/active/suspended...) |
+| `Workspace` | Tenant: slug, timezone, status (trialing/active/past_due/suspended/cancelled), stripeCustomerId |
 | `WorkspaceMember` | Membresía usuario↔workspace: role (owner/admin/member), teamRole, preferencias IA |
-| `Subscription` | Plan y facturación por workspace |
+| `Subscription` | Plan y facturación por workspace: stripeSubId, seats, periodStart/End |
 | `User` | Cuenta global: email único, datos personales, avatar |
 | `UserRole` | Roles de equipo por workspace (ej: DESIGNER, CM) |
 | `WorkspaceInvitation` | Invitaciones por email con token de 7 días |
 | `WorkspaceDeletionRequest` | Solicitud de eliminación con 48h de gracia |
+| `FeatureFlag` | Flags de funcionalidad: enabledGlobally o por lista de workspaceIds |
 | `WorkDay` | Jornada laboral por usuario/workspace/día |
 | `Task` | Tarea con estado, starred, backlog, sesiones de tiempo |
 | `TaskSession` | Sesiones de cronómetro por tarea |
 | `TaskComment` | Comentarios con @menciones |
-| `Project` | Proyectos/clientes del workspace |
+| `Project` | Proyectos/clientes: websiteUrl (GEO), connections (JSON redes sociales) |
 | `ProjectLink` | Links útiles por proyecto (Drive, Figma, etc.) |
-| `Service` | Servicios que ofrece la agencia |
+| `GeoAudit` | Análisis GEO por proyecto: score, 6 componentes, items, señales negativas |
+| `Service` | Servicios que ofrece la agencia (únicos por workspace) |
 | `Notification` | Notificaciones tipadas (5 tipos) |
 | `DailyInsight` | Coaching IA diario cacheado por usuario |
 | `UserInsightMemory` | Perfil de productividad acumulado semanalmente |
@@ -250,8 +285,10 @@ Los arrays `links`, `adminSublinks` y `profileSections` en `Navbar.jsx` son la f
 | Detalle de proyecto | `/my-projects/:id` |
 | Mis Reportes | `/my-reports` |
 | Actividad | `/realtime` |
+| Marketing (GEO) | `/marketing` — requiere feature flag `marketing` |
 | Perfil | `/profile` |
 | Preferencias | `/preferences` |
+| Facturación | `/billing` |
 | Docs | `/docs` |
 
 ### Administrador (más)
@@ -267,7 +304,7 @@ Los arrays `links`, `adminSublinks` y `profileSections` en `Navbar.jsx` son la f
 |----------|------|
 | Panel Super Admin | `/superadmin` |
 
-El panel super admin tiene sidebar de navegación con: Dashboard (stats + lista de workspaces), Feedback y Emails (log de todos los emails enviados).
+El panel super admin tiene sidebar con: Dashboard (stats + workspaces), **Billing** (MRR/ARR + tabla de suscripciones), Feedback, Emails, Announcements, Avatares, Feature Flags.
 
 ---
 
@@ -275,7 +312,7 @@ El panel super admin tiene sidebar de navegación con: Dashboard (stats + lista 
 
 ### Backend (Railway)
 
-1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`
+1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`
 2. Railway ejecuta `npm run db:migrate` automáticamente al deployar
 3. Seed manual una vez desde Railway Shell
 
@@ -289,6 +326,20 @@ El panel super admin tiene sidebar de navegación con: Dashboard (stats + lista 
 ### DNS (Cloudflare)
 - `A blisstracker.app → Vercel`
 - `A *.blisstracker.app → Vercel` (wildcard)
+
+---
+
+## Marketing — GEO Audit
+
+El módulo GEO (Generative Engine Optimization) analiza qué tan bien posicionado está el sitio de un proyecto para aparecer en respuestas de ChatGPT, Perplexity, Claude y Google AI Overviews.
+
+- **Configuración:** el owner/admin carga la URL del sitio en la pestaña **Info** del proyecto.
+- **Análisis:** backend hace fetch del sitio con axios + cheerio, verifica robots.txt (23 crawlers: citation, training y broad), llms.txt, JSON-LD schema, luego llama a Claude para scoring.
+- **Score:** 0–100 con 4 bandas (Crítico 0–35 / Base 36–67 / Bueno 68–85 / Excelente 86–100).
+- **6 componentes:** Citabilidad IA, Autoridad de Marca, E-E-A-T, Técnico, Schema, Plataformas IA.
+- **Items unificados:** lista de hallazgos + señales negativas con severidad/prioridad.
+- **Crear tarea:** desde cualquier item se puede crear una tarea en el proyecto con prefijo "GEO - ".
+- **Feature flag:** requiere `marketing` activado en SuperAdmin → Feature Flags.
 
 ---
 

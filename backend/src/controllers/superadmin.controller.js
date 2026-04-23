@@ -244,8 +244,22 @@ async function listEmailLogs(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Precio por seat en USD/mes — ajustar si cambia el plan
-const SEAT_PRICE_USD = 10
+// Pricing por volumen — debe coincidir con lo configurado en Stripe
+const PRICING_TIERS = [
+  { upTo: 19, pricePerSeat: 3 },   // 1–19 seats: $3/seat
+  { upTo: Infinity, pricePerSeat: 2 }, // 20+ seats: $2/seat
+]
+
+function calcMrr(seats) {
+  if (seats <= 0) return 0
+  const tier = PRICING_TIERS.find(t => seats <= t.upTo)
+  return seats * tier.pricePerSeat
+}
+
+function priceLabel(seats) {
+  const tier = PRICING_TIERS.find(t => seats <= t.upTo)
+  return tier ? `$${tier.pricePerSeat}` : `$${PRICING_TIERS.at(-1).pricePerSeat}`
+}
 
 /**
  * GET /api/superadmin/billing
@@ -266,7 +280,7 @@ async function getBillingOverview(req, res, next) {
     const rows = workspaces.map(w => {
       const seats = w._count.members
       const isActive = w.status === 'active'
-      const mrr = isActive ? seats * SEAT_PRICE_USD : 0
+      const mrr = isActive ? calcMrr(seats) : 0
 
       let trialDaysLeft = null
       if (w.status === 'trialing' && w.trialEndsAt) {
@@ -289,6 +303,7 @@ async function getBillingOverview(req, res, next) {
           planName:    w.subscription.planName,
         } : null,
         mrr,
+      pricePerSeat: isActive ? priceLabel(seats) : null,
       }
     })
 
@@ -298,8 +313,11 @@ async function getBillingOverview(req, res, next) {
 
     res.json({
       mrr,
-      arr:             mrr * 12,
-      seatPriceUsd:    SEAT_PRICE_USD,
+      arr:          mrr * 12,
+      pricingTiers: PRICING_TIERS.map(t => ({
+        upTo:         t.upTo === Infinity ? null : t.upTo,
+        pricePerSeat: t.pricePerSeat,
+      })),
       activeCount:     rows.filter(w => w.status === 'active').length,
       trialingCount:   rows.filter(w => w.status === 'trialing').length,
       pastDueCount:    rows.filter(w => w.status === 'past_due').length,

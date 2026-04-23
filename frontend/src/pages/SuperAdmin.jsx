@@ -1693,7 +1693,13 @@ function SectionBilling() {
       <div>
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">Billing</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-          Resumen de suscripciones, trials y facturación estimada. Precio base: ${data.seatPriceUsd} USD/seat/mes.
+          Resumen de suscripciones, trials y facturación estimada.{' '}
+          {data.pricingTiers?.map((t, i) => (
+            <span key={i} className="font-medium text-gray-600 dark:text-gray-300">
+              {i > 0 && ' · '}
+              ${t.pricePerSeat}/seat {t.upTo ? `(1–${t.upTo})` : `(${data.pricingTiers[i-1]?.upTo + 1}+)`}
+            </span>
+          ))}
         </p>
       </div>
 
@@ -1757,7 +1763,9 @@ function SectionBilling() {
                   </td>
                   <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{w.seats}</td>
                   <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-gray-200">
-                    {w.mrr > 0 ? `$${w.mrr}` : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                    {w.mrr > 0
+                      ? <span title={`${w.pricePerSeat}/seat`}>${w.mrr}</span>
+                      : <span className="text-gray-300 dark:text-gray-600">—</span>}
                   </td>
                   <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
                     {w.status === 'trialing'

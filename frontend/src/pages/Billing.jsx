@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import Navbar from '../components/Navbar'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,8 @@ export default function Billing() {
   const sub     = billing?.subscription
 
   return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navbar />
     <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
 
       {/* Header */}
@@ -219,12 +222,24 @@ export default function Billing() {
       {/* Precios */}
       {status !== 'active' && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Plan Pro · Precio por persona</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-gray-900 dark:text-white">$10</span>
-            <span className="text-sm text-gray-400">USD / seat / mes</span>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-4">Plan Pro · Precio por persona</p>
+          <div className="flex flex-col sm:flex-row gap-4 mb-5">
+            <div className="flex-1 bg-gray-50 dark:bg-gray-700/50 rounded-xl px-4 py-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">1–19 usuarios</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-gray-900 dark:text-white">$3</span>
+                <span className="text-sm text-gray-400">USD / seat / mes</span>
+              </div>
+            </div>
+            <div className="flex-1 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl px-4 py-3">
+              <p className="text-xs text-primary-500 dark:text-primary-400 mb-1 font-medium">20+ usuarios</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-gray-900 dark:text-white">$2</span>
+                <span className="text-sm text-gray-400">USD / seat / mes</span>
+              </div>
+            </div>
           </div>
-          <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300">
+          <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
             {[
               'Proyectos y tareas ilimitadas',
               'Reportes e insights con IA',
@@ -243,6 +258,7 @@ export default function Billing() {
         </div>
       )}
 
+    </div>
     </div>
   )
 }

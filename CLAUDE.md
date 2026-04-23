@@ -48,6 +48,9 @@ APP_DOMAIN=blisstracker.app
 FRONTEND_URL=http://localhost:5173
 GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 ANTHROPIC_API_KEY=sk-ant-...
+STRIPE_SECRET_KEY=sk_live_...          # o sk_test_... en desarrollo
+STRIPE_WEBHOOK_SECRET=whsec_...        # secret del webhook en Stripe Dashboard
+STRIPE_PRICE_ID=price_...             # ID del precio por seat/mes en Stripe
 ```
 
 **frontend/.env.development**
@@ -84,11 +87,14 @@ Full-stack SaaS task tracker. Multi-tenant: each workspace is a separate subdoma
 - All dates for workday logic use `America/Argentina/Buenos_Aires` (UTC-3). Task timestamps are stored in UTC.
 - **Email** is sent via Resend HTTP API (`src/services/email.service.js`) — not SMTP. Every send (success or failure) is logged to `EmailLog`. Each email function accepts an optional `workspaceId` as last parameter for the log.
 - **Prisma singleton** at `src/lib/prisma.js` — all controllers import from here.
+- **Stripe singleton** at `src/lib/stripe.js` — returns `null` if `STRIPE_SECRET_KEY` is missing; all billing code checks for null before calling Stripe.
 - **Prisma error helper** at `src/lib/prismaError.js` — `handlePrismaError(err, res)` maps P2025→404, P2002→409, P2003→400.
 - **Shared utilities:** `src/utils/dates.js` exports `todayString()` (Buenos Aires timezone).
 - **Shared task include:** `tasks.controller.js` and `workdays.controller.js` each define a `taskInclude` constant (`{ project, createdBy, _count: { comments } }`) used in all task queries.
 - **Weekly AI report** at `src/services/weeklyReport.service.js` — generates productivity analysis with Claude Haiku, sent every Friday at 14:00 ART via `node-cron`. Sequential processing with 3s delay between users.
 - **Insight memory** at `src/services/insightMemory.service.js` — weekly learning profile per user (tendencias, fortalezas, areasDeAtencion, estadisticas) using Claude Haiku. Updated every Saturday at 00:00 ART.
+- **GEO audit** at `src/services/geoAudit.service.js` — fetches URL with axios + cheerio, analyzes with Claude (claude-haiku), stores result in `GeoAudit`. Async: controller returns auditId immediately, analysis runs via `setImmediate`. Progress tracked via `errorMsg` field during `running` status. Score 0–100 with 4 bands (Crítico/Base/Bueno/Excelente). Checks 23 AI crawlers (citation vs training), llms.txt, robots.txt, JSON-LD schema.
+- **Feature flag catalog** at `src/config/featureFlags.js` — array of `{ key, name, description }`. On server start, all flags are upserted to DB automatically. Never create flags manually from SuperAdmin UI — define them in code.
 
 ### Frontend (`frontend/src/`)
 - **React 18 + Vite + Tailwind CSS + React Router v6.**
@@ -96,7 +102,7 @@ Full-stack SaaS task tracker. Multi-tenant: each workspace is a separate subdoma
 - **Tests:** Vitest + React Testing Library. Test config in `vite.config.js` (`test` block). All tests in `src/tests/`.
 - `api/client.js` — Axios instance: reads `VITE_API_URL`, injects JWT from `localStorage`, injects `X-Workspace: <slug>` header (derived from `window.location.hostname`), redirects to `/login` on 401.
 - `context/AuthContext.jsx` — global auth state; validates token on mount via `GET /auth/me`. Exposes `updateUser()` and `switchWorkspace(slug)` (re-issues JWT for the target workspace).
-- `context/WorkspaceContext.jsx` — workspace info (name, slug, status, subscription). Loaded from `GET /api/workspaces/current`.
+- `context/WorkspaceContext.jsx` — workspace info (name, slug, status, subscription). Loaded from `GET /api/workspaces/current`. Exposes `trialDaysLeft` (derived from `trialEndsAt`) and `isSubscriptionActive`.
 - `context/ThemeContext.jsx` — dark mode toggle persisted to `localStorage`.
 - `hooks/useRoles.js` — fetches `UserRole` list for label lookups. Module-level cache (once per session).
 - `hooks/useInactivity.js` — tracks mouse/keyboard activity; auto-pauses after 120+10 min idle on an IN_PROGRESS task.
@@ -105,9 +111,9 @@ Full-stack SaaS task tracker. Multi-tenant: each workspace is a separate subdoma
 
 ### Navbar — single source of truth
 `Navbar.jsx` defines three arrays that are the single source of truth for both desktop and mobile navigation. Adding an item to any of these automatically appears in both views without duplication:
-- `links` — main nav links (Dashboard, Proyectos, etc.)
+- `links` — main nav links (Dashboard, Proyectos, etc.). "Marketing" is conditional on `useFeatureFlag('marketing')`.
 - `adminSublinks` — items under the "Administración" dropdown
-- `profileSections` — items in the user profile menu (Perfil, Docs, Preferencias, Super Admin, workspace switcher, logout). Rendered by `renderProfileSections(onClose)` which is called both for the desktop dropdown and the mobile panel.
+- `profileSections` — items in the user profile menu (Perfil, Docs, Preferencias, Facturación, Super Admin, workspace switcher, logout). "Facturación" visible only for `isAdmin` (admin/owner). Rendered by `renderProfileSections(onClose)` which is called both for the desktop dropdown and the mobile panel.
 
 ### Key domain concepts
 
@@ -136,6 +142,14 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 **Notifications:** `NotificationType` enum: `COMPLETED` / `BLOCKED` / `ADDED_TO_PROJECT` / `TASK_COMMENT` / `TASK_MENTION`. Bell panel has 6 filter pills. Each notification is a clickable link that auto-opens `TaskCommentsModal`.
 
 **Project links:** Stored in `ProjectLink`. Any project member can add/delete. `PUT /api/projects/:id/links` replaces all links atomically.
+
+**Project info (websiteUrl + connections):** `Project.websiteUrl String?` used for GEO analysis. `Project.connections String @default("{}")` — JSON with keys `instagram`, `facebook`, `linkedin`, `twitter`, `tiktok`, `youtube`. Managed from the **Info** tab in `ProjectDetail.jsx` via `ProjectInfoTab.jsx`. Admins no longer manage URL/links from the Admin panel.
+
+**Billing:** Workspace has `status` (`trialing` | `active` | `past_due` | `suspended` | `cancelled`) and `trialEndsAt`. Trial = 14 days from registration. A cron runs at 03:00 ART daily to mark expired trials as `past_due`. Stripe integration: Customer created async on workspace registration; Checkout session creates the Stripe subscription; webhooks sync status back to DB. `Subscription` model stores `stripeSubId`, `seats`, `periodStart/End`. Billing actions (Checkout + Portal) require `admin` or `owner` role. `TrialBanner` component shows in Navbar when `trialDaysLeft <= 7` or `status === 'past_due'`. The `bliss` workspace is exempt — set `status = 'active'` manually via SuperAdmin; no Stripe subscription is ever created for it.
+
+**Feature flags:** Defined in `src/config/featureFlags.js`. Auto-upserted on server startup. SuperAdmin manages which workspaces have access (enabledGlobally or per-workspace list). Frontend uses `useFeatureFlag(key)` hook — cached in memory per session. Never create flags manually from the UI.
+
+**GEO Audit (Marketing):** `GeoAudit` model stores per-project AI analysis results. Score 0–100, 6 components (citability, brandAuthority, eeat, technical, schema, platforms), unified items list, negative signals. Async pattern: `POST /api/marketing/geo/audit` creates record with `status: 'running'` and returns `auditId` immediately; frontend polls `GET /api/marketing/geo/audits/:id` every 3s. Progress steps stored in `errorMsg` during running, cleared on completion. Tasks can be created directly from audit items with "GEO - " prefix.
 
 **Roles:** `WorkspaceMember.teamRole` is a plain `String` referencing `UserRole.name`. Admin access is `WorkspaceMember.role === 'admin' | 'owner'`, fully decoupled from team role.
 
@@ -166,10 +180,14 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 - **Legajos tab** — per-person view: avg login time, projects, vacation days (±1 buttons), personal data grid.
 - **Ingresos tab** — date range filter + person filter, login history grouped by user, sort by avg time.
 
-**Super Admin panel (`/superadmin`):** Internal panel for the BlissTracker team (requires `User.isSuperAdmin`). Sidebar navigation with three sections:
+**Super Admin panel (`/superadmin`):** Internal panel for the BlissTracker team (requires `User.isSuperAdmin`). Sidebar navigation:
 - **Dashboard** — global stats (workspaces, users, AI tokens) + workspace list with search + status management + impersonation.
+- **Billing** — MRR, ARR, conteos por estado (activos/trial/past_due), tabla de todos los workspaces con filtros. Precio base `$10 USD/seat/mes` hardcodeado en `superadmin.controller.js`.
 - **Feedback** — all feedback from all workspaces with read/unread filtering.
 - **Emails** — full `EmailLog` history with type/status filters and pagination.
+- **Announcements** — banners globales visibles en la app.
+- **Avatares** — gestión de fotos de perfil disponibles.
+- **Feature Flags** — toggle de flags por workspace o globalmente. Los flags se definen en código, no se crean desde la UI.
 
 **Email logging:** All emails (sent or failed) are written to `EmailLog` with: workspaceId?, to, subject, type, status, errorMsg?, createdAt. The `email.service.js` wraps every send in try/catch and logs both outcomes. Visible in the Super Admin panel → Emails section.
 
@@ -187,7 +205,7 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 - When a model has two relations to the same model, named relations are required (e.g. `Task.createdBy` / `Task.user` both pointing to `User`).
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_workspace_deletion_request`, `add_email_log`, `update_default_avatar`.
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_workspace_deletion_request`, `add_email_log`, `update_default_avatar`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `fix_service_unique_index` (drops global Service_name_key), `add_project_connections` (Project.connections JSON).
 - `TaskComment.content` is the text field (not `text`). The `parentId` self-relation exists for future threading but is not used by the UI yet.
 
 ### API routes summary
@@ -243,6 +261,7 @@ GET    /api/tasks/:id/comments
 POST   /api/tasks/:id/comments
 
 GET    /api/projects
+PUT    /api/projects/:id                 # admin: editar nombre, websiteUrl, connections, serviceIds, memberIds
 GET    /api/projects/:id/members
 GET    /api/projects/:id/tasks
 GET    /api/projects/:id/completed       # ?skip=N
@@ -273,8 +292,20 @@ GET    /api/role-expectations
 GET    /api/role-expectations/:roleName
 PUT    /api/role-expectations/:roleName
 
+# Marketing / GEO (requiere feature flag 'marketing')
+POST   /api/marketing/geo/audit          # dispara audit async, devuelve { auditId }
+GET    /api/marketing/geo/audits         # lista audits del workspace (?projectId=)
+GET    /api/marketing/geo/audits/:id     # detalle completo de un audit
+
+# Billing
+GET    /api/billing/status               # estado trial/suscripción del workspace
+POST   /api/billing/checkout             # crea Stripe Checkout session (admin/owner)
+POST   /api/billing/portal               # abre Stripe Customer Portal (admin/owner)
+POST   /api/billing/webhook              # webhook Stripe (raw body, no auth)
+
 # Super Admin (requiere isSuperAdmin)
 GET    /api/superadmin/stats
+GET    /api/superadmin/billing           # MRR, ARR, tabla de todos los workspaces
 GET    /api/superadmin/workspaces
 GET    /api/superadmin/workspaces/:id
 PATCH  /api/superadmin/workspaces/:id/status
@@ -282,6 +313,11 @@ POST   /api/superadmin/impersonate
 GET    /api/superadmin/feedback
 PUT    /api/superadmin/feedback/:id/read
 GET    /api/superadmin/email-logs
+GET    /api/superadmin/feature-flags
+POST   /api/superadmin/feature-flags
+PATCH  /api/superadmin/feature-flags/:id
+DELETE /api/superadmin/feature-flags/:id
+GET    /api/feature-flags/:key           # check flag para workspace actual (autenticado)
 ```
 
 ### Frontend routes
@@ -299,6 +335,8 @@ GET    /api/superadmin/email-logs
 /preferences      → Preferences.jsx      (PrivateRoute)
 /realtime         → RealTime.jsx         (PrivateRoute)
 /docs             → Docs.jsx             (PrivateRoute)
+/marketing        → Marketing.jsx        (PrivateRoute) — tab GEO operativo; resto "Próximamente"
+/billing          → Billing.jsx          (PrivateRoute) — visible para todos; acciones solo admin/owner
 /reports             → Reports.jsx          (AdminRoute)
 /admin               → Admin.jsx            (AdminRoute)  — ?tab= query param
 /admin/productivity  → Productivity.jsx     (AdminRoute)
@@ -330,7 +368,9 @@ frontend/
 ```
 
 ### Deploy
-- **Backend:** Railway (auto-runs `npm run db:migrate` on deploy; seed must be run manually once). Required env vars: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`.
+- **Backend:** Railway (auto-runs `npm run db:migrate` on deploy; seed must be run manually once). Required env vars: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`.
 - **Frontend:** Vercel Pro (root: `/frontend`; `vercel.json` rewrites all paths to `index.html`). Add `*.blisstracker.app` as Custom Domain. Required env vars: `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`.
 - **DNS (Cloudflare):** `A blisstracker.app → Vercel` + `A *.blisstracker.app → Vercel` (wildcard requires Vercel Pro).
 - **Backend CORS:** `app.js` allows `*.blisstracker.app` via regex — do not hardcode a single origin.
+- **Stripe webhook:** must point to `https://<railway-backend-url>/api/billing/webhook`. Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`. Accepts all events — unhandled ones are silently ignored.
+- **`bliss` workspace:** permanently exempt from billing. Set `status = 'active'` via SuperAdmin → Workspaces. No Stripe subscription ever created; cron and webhooks never affect it.
