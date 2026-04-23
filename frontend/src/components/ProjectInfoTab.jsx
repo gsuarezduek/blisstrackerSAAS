@@ -63,16 +63,25 @@ export default function ProjectInfoTab({ project, onSave }) {
         `/marketing/integrations/google/auth-url?projectId=${project.id}&type=${type}`
       )
 
-      // Limpiar resultado previo
-      localStorage.removeItem('__ga_oauth_result')
+      // Si el workspace ya tiene tokens de otro proyecto, reutilizarlos sin pasar por OAuth
+      if (data.hasExistingTokens) {
+        const r = await api.post(
+          `/marketing/projects/${project.id}/integrations/connect-existing?type=${type}`
+        )
+        setIntegrations(prev => {
+          const others = prev.filter(i => i.type !== type)
+          return [...others, r.data]
+        })
+        setIntegLoading(prev => ({ ...prev, [type]: false }))
+        return
+      }
 
+      // Primera vez: flujo OAuth con popup
+      localStorage.removeItem('__ga_oauth_result')
       window.open(data.url, 'google_oauth', 'width=520,height=660,left=200,top=80')
 
-      // Polling directo de localStorage — funciona aunque COOP separe los browsing context groups
-      // No depende de popup.closed, window.opener ni storage events
-      const TIMEOUT_MS = 5 * 60 * 1000 // 5 minutos máximo
+      const TIMEOUT_MS = 5 * 60 * 1000
       const startedAt  = Date.now()
-
       const poll = setInterval(() => {
         const stored = localStorage.getItem('__ga_oauth_result')
         if (stored) {
@@ -89,7 +98,6 @@ export default function ProjectInfoTab({ project, onSave }) {
           } catch { /* ignorar JSON inválido */ }
           return
         }
-        // Timeout: limpiar si el usuario nunca completó el flujo
         if (Date.now() - startedAt > TIMEOUT_MS) {
           clearInterval(poll)
           setIntegLoading(prev => ({ ...prev, [type]: false }))

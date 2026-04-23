@@ -59,7 +59,78 @@ async function getAuthUrl(req, res, next) {
       prompt:      'consent', // fuerza refresh_token siempre
     })
 
-    res.json({ url })
+    // Verificar si el workspace ya tiene tokens de una integración anterior
+    const existing = await prisma.projectIntegration.findFirst({
+      where: {
+        workspaceId: req.workspace.id,
+        type,
+        status: 'active',
+        refreshToken: { not: null },
+        NOT: { projectId: Number(projectId) },
+      },
+      select: { id: true },
+    })
+
+    res.json({ url, hasExistingTokens: !!existing })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/integrations/connect-existing?type=google_analytics
+ * Reutiliza tokens de una integración existente en el workspace (mismo tipo).
+ * El usuario no necesita pasar por OAuth de nuevo.
+ */
+async function connectExisting(req, res, next) {
+  try {
+    const projectId = Number(req.params.id)
+    const { type }  = req.query
+    if (!SCOPES[type]) return res.status(400).json({ error: 'type inválido' })
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId: req.workspace.id },
+      select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    // Buscar tokens existentes en el workspace
+    const source = await prisma.projectIntegration.findFirst({
+      where: {
+        workspaceId: req.workspace.id,
+        type,
+        status: 'active',
+        refreshToken: { not: null },
+        NOT: { projectId },
+      },
+    })
+    if (!source) return res.status(404).json({ error: 'No hay tokens previos en este workspace' })
+
+    const integration = await prisma.projectIntegration.upsert({
+      where:  { projectId_type: { projectId, type } },
+      update: {
+        status:       'active',
+        accessToken:  source.accessToken,
+        refreshToken: source.refreshToken,
+        expiresAt:    source.expiresAt,
+        scopes:       source.scopes,
+        connectedById: req.user.userId,
+        connectedAt:  new Date(),
+      },
+      create: {
+        projectId,
+        workspaceId: req.workspace.id,
+        type,
+        status:       'active',
+        accessToken:  source.accessToken,
+        refreshToken: source.refreshToken,
+        expiresAt:    source.expiresAt,
+        scopes:       source.scopes,
+        connectedById: req.user.userId,
+        connectedAt:  new Date(),
+      },
+      select: { type: true, status: true, propertyId: true, customerId: true, scopes: true, connectedAt: true },
+    })
+
+    res.json(integration)
   } catch (err) { next(err) }
 }
 
@@ -236,4 +307,4 @@ async function disconnect(req, res, next) {
   }
 }
 
-module.exports = { getAuthUrl, handleCallback, listIntegrations, updateIntegration, disconnect }
+module.exports = { getAuthUrl, handleCallback, connectExisting, listIntegrations, updateIntegration, disconnect }

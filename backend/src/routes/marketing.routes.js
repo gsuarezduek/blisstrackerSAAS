@@ -18,10 +18,11 @@ router.get('/geo/audits',      geo.listAudits)
 router.get('/geo/audits/:id',  geo.getAudit)
 
 // Integraciones: OAuth + gestión
-router.get('/integrations/google/auth-url',           integrations.getAuthUrl)
-router.get('/projects/:id/integrations',              integrations.listIntegrations)
-router.patch('/projects/:id/integrations/:type',      integrations.updateIntegration)
-router.delete('/projects/:id/integrations/:type',     integrations.disconnect)
+router.get('/integrations/google/auth-url',                    integrations.getAuthUrl)
+router.post('/projects/:id/integrations/connect-existing',    integrations.connectExisting)
+router.get('/projects/:id/integrations',                      integrations.listIntegrations)
+router.patch('/projects/:id/integrations/:type',              integrations.updateIntegration)
+router.delete('/projects/:id/integrations/:type',             integrations.disconnect)
 
 // Datos de integraciones
 router.get('/projects/:id/analytics',                 analytics.getAnalyticsData)
