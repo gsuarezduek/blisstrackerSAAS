@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 const prisma = require('../lib/prisma')
+const stripe  = require('../lib/stripe')
 const { sendWelcomeEmail, sendInvitationEmail, sendWorkspaceDeletionWarning } = require('../services/email.service')
 
 const MEMBER_SELECT = {
@@ -333,6 +334,20 @@ async function createWorkspace(req, res, next) {
     })
 
     sendWelcomeEmail(ownerEmail, ownerName, result.workspace.id).catch(() => {})
+
+    // Crear Stripe Customer de forma asíncrona (no bloquea el registro si Stripe falla)
+    if (stripe) {
+      stripe.customers.create({
+        name:  workspaceName,
+        email: ownerEmail,
+        metadata: { workspaceId: String(result.workspace.id), slug },
+      }).then(customer =>
+        prisma.workspace.update({
+          where: { id: result.workspace.id },
+          data:  { stripeCustomerId: customer.id },
+        })
+      ).catch(err => console.error('[Stripe] Error creando customer:', err.message))
+    }
 
     res.status(201).json({
       workspace: { id: result.workspace.id, name: result.workspace.name, slug: result.workspace.slug },

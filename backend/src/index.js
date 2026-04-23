@@ -71,6 +71,21 @@ cron.schedule('0 0 * * *', async () => {
   console.log(count > 0 ? `[AutoPause] ${count} tarea(s) pausada(s).` : '[AutoPause] Sin tareas activas.')
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
+// Cron: marcar trials expirados como past_due — diariamente a las 03:00 ART
+cron.schedule('0 3 * * *', async () => {
+  const expired = await prisma.workspace.findMany({
+    where: { status: 'trialing', trialEndsAt: { lt: new Date() } },
+    select: { id: true },
+  })
+  if (expired.length === 0) return
+  const ids = expired.map(w => w.id)
+  const { count } = await prisma.workspace.updateMany({
+    where: { id: { in: ids } },
+    data:  { status: 'past_due' },
+  })
+  console.log(`[TrialExpiry] ${count} workspace(s) marcado(s) como past_due.`)
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
 // Cron: eliminar workspaces vencidos — cada 15 minutos
 let deletionRunning = false
 cron.schedule('*/15 * * * *', async () => {

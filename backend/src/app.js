@@ -28,7 +28,9 @@ const announcementsRoutes     = require('./routes/announcements.routes')
 const avatarsRoutes           = require('./routes/avatars.routes')
 const featureFlagsRoutes      = require('./routes/featureFlags.routes')
 const marketingRoutes         = require('./routes/marketing.routes')
+const billingRoutes           = require('./routes/billing.routes')
 const superadminRoutes        = require('./routes/superadmin.routes')
+const { handleWebhook }       = require('./webhooks/stripe.webhook')
 
 const app = express()
 
@@ -55,6 +57,9 @@ app.use(cors({
   },
   credentials: true,
 }))
+
+// El webhook de Stripe necesita el body RAW — debe montarse ANTES de express.json()
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleWebhook)
 
 app.use(express.json({ limit: '100kb' }))
 app.set('trust proxy', 1)
@@ -99,6 +104,7 @@ app.use('/api/announcements',     announcementsRoutes)
 app.use('/api/avatars',           avatarsRoutes)
 app.use('/api/feature-flags',    featureFlagsRoutes)
 app.use('/api/marketing',        marketingRoutes)
+app.use('/api/billing',          billingRoutes)
 app.use('/api/superadmin',        superadminRoutes)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))

@@ -9,6 +9,7 @@ import NotificationBell from './NotificationBell'
 import { useTheme } from '../context/ThemeContext'
 import BlissLogo from './BlissLogo'
 import AnnouncementBanner from './AnnouncementBanner'
+import TrialBanner from './TrialBanner'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 
@@ -46,6 +47,13 @@ function IcoWorkspace() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
       <path fillRule="evenodd" d="M8.25 6.75a3.75 3.75 0 117.5 0 3.75 3.75 0 01-7.5 0zM15.75 9.75a3 3 0 116 0 3 3 0 01-6 0zM2.25 9.75a3 3 0 116 0 3 3 0 01-6 0zM6.31 15.117A6.745 6.745 0 0112 12a6.745 6.745 0 016.709 7.498.75.75 0 01-.372.568A12.696 12.696 0 0112 21.75c-2.305 0-4.47-.612-6.337-1.684a.75.75 0 01-.372-.568 6.787 6.787 0 011.019-4.38z" clipRule="evenodd" />
+    </svg>
+  )
+}
+function IcoCreditCard() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
+      <path d="M4.5 3.75a3 3 0 00-3 3v.75h21v-.75a3 3 0 00-3-3h-15zM22.5 9.75h-21v7.5a3 3 0 003 3h15a3 3 0 003-3v-7.5zm-18 3.75a.75.75 0 01.75-.75h6a.75.75 0 010 1.5h-6a.75.75 0 01-.75-.75zm.75 2.25a.75.75 0 000 1.5h3a.75.75 0 000-1.5h-3z" />
     </svg>
   )
 }
@@ -107,6 +115,7 @@ export default function Navbar() {
   function closeMenu() { setMenuOpen(false) }
 
   const isAdmin   = user?.isAdmin === true
+  const isOwner   = user?.role === 'owner'
   const avatarSrc = avatarUrl(user?.avatar)
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
 
@@ -140,6 +149,7 @@ export default function Navbar() {
         { key: 'profile',     to: '/profile',     label: 'Perfil',        icon: <IcoUser /> },
         { key: 'docs',        to: '/docs',         label: 'Docs',          icon: <IcoBook /> },
         { key: 'preferences', to: '/preferences',  label: 'Preferencias',  icon: <IcoCog /> },
+        ...(isOwner ? [{ key: 'billing', to: '/billing', label: 'Facturación', icon: <IcoCreditCard /> }] : []),
       ],
     },
     ...(user?.isSuperAdmin ? [{
@@ -249,6 +259,7 @@ export default function Navbar() {
       <FeedbackButton />
       <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         {user && <AnnouncementBanner />}
+        {user && <TrialBanner />}
         <div className="px-4 py-3 flex items-center justify-between">
 
           {/* Logo */}

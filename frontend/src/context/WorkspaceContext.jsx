@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo } from 'react'
 import api, { getWorkspaceSlug } from '../api/client'
 
 const WorkspaceContext = createContext(null)
@@ -35,8 +35,28 @@ export function WorkspaceProvider({ children }) {
       .catch(() => {})
   }
 
+  // Derivados de billing — disponibles globalmente para TrialBanner y otros
+  const trialDaysLeft = useMemo(() => {
+    if (!workspace?.trialEndsAt || workspace.status !== 'trialing') return null
+    const msLeft = new Date(workspace.trialEndsAt) - new Date()
+    return Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)))
+  }, [workspace?.trialEndsAt, workspace?.status])
+
+  const isSubscriptionActive = workspace?.status === 'active'
+
+  // Enriquecer el objeto workspace con los derivados (para que TrialBanner pueda usarlos directamente)
+  const enrichedWorkspace = workspace
+    ? { ...workspace, trialDaysLeft, isSubscriptionActive }
+    : null
+
   return (
-    <WorkspaceContext.Provider value={{ workspace, loading, notFound, suspended, slug, refreshWorkspace }}>
+    <WorkspaceContext.Provider value={{
+      workspace: enrichedWorkspace,
+      loading, notFound, suspended, slug,
+      refreshWorkspace,
+      trialDaysLeft,
+      isSubscriptionActive,
+    }}>
       {children}
     </WorkspaceContext.Provider>
   )
