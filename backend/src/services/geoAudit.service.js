@@ -66,7 +66,7 @@ function extractPageData(html, url) {
   const wordCount = $('body').text().replace(/\s+/g, ' ').trim().split(' ').length
 
   $('script, style, nav, footer, header, aside, noscript').remove()
-  const bodyText = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 8000)
+  const bodyText = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 4000)
 
   // JSON-LD schemas
   const schemas = []
@@ -340,7 +340,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
     await setStep(auditId, 'Analizando con IA (esto puede tardar unos segundos)…')
     const message = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 2500,
+      max_tokens: 4096,
       system:     SYSTEM_PROMPT,
       messages:   [{ role: 'user', content: buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery) }],
     })

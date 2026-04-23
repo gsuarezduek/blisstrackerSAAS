@@ -239,38 +239,15 @@ export default function ProjectsTab() {
     setEdit({
       name:       project.name,
       serviceIds: project.services.map(ps => ps.service.id),
-      links:      (project.links ?? []).map(l => ({ label: l.label, url: l.url })),
-      websiteUrl: project.websiteUrl ?? '',
     })
-  }
-
-  function addLink() {
-    setEdit(prev => ({ ...prev, links: [...prev.links, { label: '', url: '' }] }))
-  }
-
-  function updateLink(i, field, value) {
-    setEdit(prev => {
-      const links = prev.links.map((l, idx) => idx === i ? { ...l, [field]: value } : l)
-      return { ...prev, links }
-    })
-  }
-
-  function removeLink(i) {
-    setEdit(prev => ({ ...prev, links: prev.links.filter((_, idx) => idx !== i) }))
   }
 
   async function handleSaveEdit(project) {
     try {
       const body = { serviceIds: edit.serviceIds }
       if (edit.name.trim() !== project.name) body.name = edit.name.trim()
-      if ((edit.websiteUrl ?? '') !== (project.websiteUrl ?? '')) body.websiteUrl = edit.websiteUrl.trim()
       const { data } = await api.put(`/projects/${project.id}`, body)
-
-      // Save links separately
-      const validLinks = edit.links.filter(l => l.label.trim() && l.url.trim())
-      const { data: withLinks } = await api.put(`/projects/${project.id}/links`, { links: validLinks })
-
-      setProjects(prev => prev.map(p => p.id === withLinks.id ? withLinks : p).sort((a, b) => a.name.localeCompare(b.name)))
+      setProjects(prev => prev.map(p => p.id === data.id ? data : p).sort((a, b) => a.name.localeCompare(b.name)))
       setEditingId(null)
     } catch (err) {
       setError(err.response?.data?.error || 'Error al actualizar proyecto')
@@ -363,57 +340,12 @@ export default function ProjectsTab() {
                         className="w-full border border-primary-400 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                       <div>
-                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Sitio web</p>
-                        <input
-                          type="url"
-                          value={edit.websiteUrl}
-                          onChange={e => setEdit(prev => ({ ...prev, websiteUrl: e.target.value }))}
-                          placeholder="https://ejemplo.com"
-                          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Usado para análisis GEO y otras funciones de Marketing</p>
-                      </div>
-                      <div>
                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Servicios asociados</p>
                         <ServiceCheckboxList
                           allServices={allServices}
                           selectedIds={edit.serviceIds}
                           onChange={ids => setEdit(prev => ({ ...prev, serviceIds: ids }))}
                         />
-                      </div>
-
-                      {/* Links útiles */}
-                      <div>
-                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Links útiles</p>
-                        <div className="space-y-2">
-                          {edit.links.map((link, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <input
-                                value={link.label}
-                                onChange={e => updateLink(i, 'label', e.target.value)}
-                                placeholder="Descripción (ej: Drive)"
-                                className="w-36 flex-shrink-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              />
-                              <input
-                                value={link.url}
-                                onChange={e => updateLink(i, 'url', e.target.value)}
-                                placeholder="https://..."
-                                className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              />
-                              <button
-                                onClick={() => removeLink(i)}
-                                className="text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors flex-shrink-0"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-                                </svg>
-                              </button>
-                            </div>
-                          ))}
-                          <button onClick={addLink} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium">
-                            + Agregar link
-                          </button>
-                        </div>
                       </div>
 
                       <div className="flex gap-2 pt-1">
@@ -477,25 +409,6 @@ export default function ProjectsTab() {
                         </div>
                       )}
 
-                      {/* Links */}
-                      {p.links?.length > 0 && (
-                        <div>
-                          <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-1.5">Links</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {p.links.map(l => (
-                              <a
-                                key={l.id}
-                                href={l.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 border border-primary-100 dark:border-primary-800 rounded-full px-2.5 py-0.5 transition-colors"
-                              >
-                                🔗 {l.label}
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>

@@ -204,6 +204,7 @@ model Project {
   emailFrom           String?
   aiWeeklyTokenLimit  Int     @default(500000)
   websiteUrl          String?
+  connections         String   @default("{}")  // JSON: { instagram, facebook, ... }
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

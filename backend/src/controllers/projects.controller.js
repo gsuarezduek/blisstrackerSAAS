@@ -149,11 +149,12 @@ async function update(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const { id } = req.params
-    const { name, active, serviceIds, memberIds, websiteUrl } = req.body
+    const { name, active, serviceIds, memberIds, websiteUrl, connections } = req.body
     const data = {}
-    if (name       !== undefined) data.name       = name
-    if (active     !== undefined) data.active     = active
-    if (websiteUrl !== undefined) data.websiteUrl = websiteUrl || null
+    if (name        !== undefined) data.name       = name
+    if (active      !== undefined) data.active     = active
+    if (websiteUrl  !== undefined) data.websiteUrl = websiteUrl || null
+    if (connections !== undefined) data.connections = typeof connections === 'string' ? connections : JSON.stringify(connections)
 
     if (serviceIds !== undefined) {
       await prisma.projectService.deleteMany({ where: { projectId: Number(id) } })

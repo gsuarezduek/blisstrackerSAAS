@@ -10,6 +10,7 @@ import UserTasksModal from '../components/UserTasksModal'
 import AddTaskModal from '../components/AddTaskModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import ProjectSituation from '../components/ProjectSituation'
+import ProjectInfoTab from '../components/ProjectInfoTab'
 import { useAuth } from '../context/AuthContext'
 import { avatarUrl } from '../utils/avatarUrl'
 
@@ -298,6 +299,7 @@ export default function ProjectDetail() {
                   {data.project.linksEnabled !== false && <option value="links">Links útiles</option>}
                   <option value="personas">Equipo</option>
                   {data.project.services?.length > 0 && <option value="servicios">Servicios</option>}
+                  <option value="info">Info</option>
                 </select>
                 {/* Desktop */}
                 <div className="hidden sm:flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
@@ -331,6 +333,12 @@ export default function ProjectDetail() {
                       Servicios
                     </button>
                   )}
+                  <button
+                    onClick={() => setInfoTab('info')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'info' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                  >
+                    Info
+                  </button>
                 </div>
               </div>
 
@@ -466,6 +474,11 @@ export default function ProjectDetail() {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {/* Tab: Info */}
+              {infoTab === 'info' && (
+                <ProjectInfoTab project={data.project} onSave={updated => setData(prev => ({ ...prev, project: { ...prev.project, ...updated } }))} />
               )}
             </div>
 
