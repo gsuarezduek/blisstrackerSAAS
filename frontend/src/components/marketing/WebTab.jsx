@@ -383,10 +383,12 @@ const METRIC_LABELS = {
   ttfb: { label: 'TTFB', title: 'Time to First Byte' },
 }
 
-function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, history, running, onRun }) {
-  const metrics      = result?.metrics       ?? {}
+function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, history, running, onRun, projectId, projectName }) {
+  const metrics       = result?.metrics       ?? {}
   const opportunities = result?.opportunities ?? []
-  const score        = result?.performanceScore
+  const diagnostics   = result?.diagnostics   ?? []
+  const score         = result?.performanceScore
+  const [taskModal, setTaskModal] = useState(null)
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-5">
@@ -499,29 +501,69 @@ function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, hist
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Crítico</span>
           </div>
 
-          {/* Oportunidades */}
-          {opportunities.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                Oportunidades de mejora
-              </p>
-              <div className="space-y-2">
-                {opportunities.map((op, i) => (
-                  <div key={i} className="flex items-start justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{op.title}</p>
-                      {op.description && (
-                        <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{op.description}</p>
-                      )}
-                    </div>
-                    {op.savingsMs > 0 && (
-                      <span className="flex-shrink-0 text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
-                        ~{op.savingsMs >= 1000 ? `${(op.savingsMs / 1000).toFixed(1)}s` : `${op.savingsMs}ms`}
-                      </span>
-                    )}
+          {/* Oportunidades + Diagnósticos */}
+          {(opportunities.length > 0 || diagnostics.length > 0) && (
+            <div className="space-y-4">
+              {opportunities.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                    Oportunidades de mejora
+                  </p>
+                  <div className="space-y-2">
+                    {opportunities.map((op, i) => (
+                      <div key={i} className="flex items-start justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{op.title}</p>
+                          {op.description && (
+                            <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{op.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {op.savingsMs > 0 && (
+                            <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
+                              ~{op.savingsMs >= 1000 ? `${(op.savingsMs / 1000).toFixed(1)}s` : `${op.savingsMs}ms`}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => setTaskModal({ title: op.title })}
+                            title="Crear tarea"
+                            className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
+                          >
+                            + tarea
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+
+              {diagnostics.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                    Diagnósticos
+                  </p>
+                  <div className="space-y-2">
+                    {diagnostics.map((d, i) => (
+                      <div key={i} className="flex items-start justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{d.title}</p>
+                          {d.description && (
+                            <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{d.description}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => setTaskModal({ title: d.title })}
+                          title="Crear tarea"
+                          className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
+                        >
+                          + tarea
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -539,6 +581,15 @@ function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, hist
         <p className="text-xs text-gray-400">
           Hacé click en "Analizar" para obtener el score de performance, métricas Core Web Vitals y oportunidades de mejora de {websiteUrl || 'la URL del proyecto'}.
         </p>
+      )}
+
+      {taskModal && (
+        <CreateTaskModal
+          title={taskModal.title}
+          projectId={projectId}
+          projectName={projectName}
+          onClose={() => setTaskModal(null)}
+        />
       )}
     </div>
   )
@@ -1130,7 +1181,7 @@ export default function WebTab() {
                       </p>
                       <ul className="space-y-1.5">
                         {insight.content.recomendaciones.map((rec, i) => (
-                          <li key={i} className="flex items-start justify-between gap-2 group">
+                          <li key={i} className="flex items-start justify-between gap-2">
                             <span className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
                               <span className="text-primary-500 mt-0.5 flex-shrink-0">→</span>
                               {rec}
@@ -1138,7 +1189,7 @@ export default function WebTab() {
                             <button
                               onClick={() => setTaskModal({ title: rec })}
                               title="Crear tarea a partir de esta recomendación"
-                              className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
+                              className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
                             >
                               + tarea
                             </button>
@@ -1182,6 +1233,8 @@ export default function WebTab() {
           history={psHistory}
           running={psRunning}
           onRun={handleRunPageSpeed}
+          projectId={projectId}
+          projectName={analytics?.projectName ?? ''}
         />
       )}
 

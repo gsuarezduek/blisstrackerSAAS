@@ -41,7 +41,7 @@ function parseResult(data) {
     ttfb: parseAudit(audits, 'server-response-time'),
   }
 
-  // Oportunidades: audits con tipo 'opportunity' y score < 1
+  // Oportunidades: audits tipo 'opportunity' con mejoras estimadas (con ahorros en ms primero)
   const opportunities = Object.values(audits)
     .filter(a =>
       a.details?.type === 'opportunity' &&
@@ -50,16 +50,16 @@ function parseResult(data) {
       a.score < 1
     )
     .sort((a, b) => (b.details?.overallSavingsMs ?? 0) - (a.details?.overallSavingsMs ?? 0))
-    .slice(0, 8)
     .map(a => ({
       id:          a.id,
       title:       a.title,
       description: a.description,
       savingsMs:   Math.round(a.details?.overallSavingsMs ?? 0),
       score:       a.score,
+      type:        'opportunity',
     }))
 
-  // Diagnósticos: audits fallidos que no son oportunidades
+  // Diagnósticos: audits fallidos que no son oportunidades (igualmente accionables)
   const diagnostics = Object.values(audits)
     .filter(a =>
       a.details?.type === 'table' &&
@@ -67,12 +67,12 @@ function parseResult(data) {
       a.score !== undefined &&
       a.score < 1
     )
-    .slice(0, 6)
     .map(a => ({
       id:          a.id,
       title:       a.title,
       description: a.description,
       score:       a.score,
+      type:        'diagnostic',
     }))
 
   return { performanceScore, metrics, opportunities, diagnostics }
@@ -92,7 +92,7 @@ async function runPageSpeedAnalysis(url, strategy = 'mobile') {
 
   try {
     const { data } = await axios.get(PAGESPEED_API, {
-      params:  { url, strategy, key: apiKey, category: 'performance' },
+      params:  { url, strategy, key: apiKey, category: 'performance', locale: 'es' },
       timeout: 90_000,
     })
     return parseResult(data)
@@ -108,4 +108,51 @@ async function runPageSpeedAnalysis(url, strategy = 'mobile') {
   }
 }
 
-module.exports = { runPageSpeedAnalysis }
+/**
+ * Cron mensual: corre ambas estrategias (mobile + desktop) para todos los
+ * proyectos con websiteUrl configurada. Se ejecuta el 1° de cada mes.
+ */
+async function runAllMonthlyPageSpeed() {
+  const prisma = require('../lib/prisma')
+
+  const projects = await prisma.project.findMany({
+    where:  { websiteUrl: { not: null }, active: true },
+    select: { id: true, workspaceId: true, websiteUrl: true, name: true },
+  })
+
+  console.log(`[PageSpeed] Análisis mensual automático: ${projects.length} proyecto(s)`)
+  let ok = 0, fail = 0
+
+  for (const p of projects) {
+    const url = /^https?:\/\//i.test(p.websiteUrl) ? p.websiteUrl : `https://${p.websiteUrl}`
+
+    for (const strategy of ['mobile', 'desktop']) {
+      try {
+        const result = await runPageSpeedAnalysis(url, strategy)
+        await prisma.pageSpeedResult.create({
+          data: {
+            workspaceId:      p.workspaceId,
+            projectId:        p.id,
+            url,
+            strategy,
+            status:           'done',
+            performanceScore: result.performanceScore,
+            metrics:          JSON.stringify(result.metrics),
+            opportunities:    JSON.stringify(result.opportunities),
+            diagnostics:      JSON.stringify(result.diagnostics),
+          },
+        })
+        ok++
+      } catch (err) {
+        console.error(`[PageSpeed] Error en "${p.name}" (${strategy}):`, err.message)
+        fail++
+      }
+      // Pausa entre llamadas para no saturar la cuota
+      await new Promise(r => setTimeout(r, 2000))
+    }
+  }
+
+  console.log(`[PageSpeed] Mensual completado: ${ok} OK, ${fail} errores.`)
+}
+
+module.exports = { runPageSpeedAnalysis, runAllMonthlyPageSpeed }

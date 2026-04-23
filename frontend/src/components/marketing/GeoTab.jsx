@@ -477,10 +477,10 @@ export default function GeoTab() {
                     </div>
                     <button
                       onClick={() => setTaskModal({ title: f.action || f.title })}
-                      className="flex-shrink-0 text-xs text-primary-600 dark:text-primary-400 hover:underline mt-0.5"
                       title="Crear tarea a partir de este ítem"
+                      className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
                     >
-                      + Tarea
+                      + tarea
                     </button>
                   </div>
                 ))}

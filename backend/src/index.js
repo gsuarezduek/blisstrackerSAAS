@@ -20,11 +20,13 @@ const cron = require('node-cron')
 const { sendAllWeeklyReports }          = require('./services/weeklyReport.service')
 const { updateAllMemories }             = require('./services/insightMemory.service')
 const { saveAllPreviousMonthSnapshots } = require('./services/analyticsSnapshot.service')
+const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service')
 
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
 let weeklyReportRunning    = false
 let insightMemoryRunning   = false
 let analyticsSnapshotRunning = false
+let pageSpeedMonthlyRunning  = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -42,6 +44,15 @@ cron.schedule('0 0 * * 6', async () => {
   console.log('[InsightMemory] Iniciando actualización semanal (sábado 00:00 ART)...')
   try { await updateAllMemories() }
   finally { insightMemoryRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: PageSpeed mensual — 1° de cada mes a las 03:30 ART (después del snapshot de analytics)
+cron.schedule('30 3 1 * *', async () => {
+  if (pageSpeedMonthlyRunning) { console.log('[PageSpeed] Ya en ejecución, se omite.'); return }
+  pageSpeedMonthlyRunning = true
+  console.log('[PageSpeed] Iniciando análisis mensual automático...')
+  try { await runAllMonthlyPageSpeed() }
+  finally { pageSpeedMonthlyRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: guardar snapshot del mes anterior — 1° de cada mes a las 02:00 ART
