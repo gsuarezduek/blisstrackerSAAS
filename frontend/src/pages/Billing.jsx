@@ -75,7 +75,7 @@ export default function Billing() {
     )
   }
 
-  const isOwner = billing?.isOwner
+  const isAdmin = billing?.isAdmin
   const status  = billing?.status
   const sub     = billing?.subscription
 
@@ -182,7 +182,7 @@ export default function Billing() {
         )}
 
         {/* Acciones */}
-        {isOwner && (
+        {isAdmin && (
           <div className="flex flex-wrap gap-3 pt-1">
             {/* Upgrade: trial, past_due o cancelled sin sub activa */}
             {(status === 'trialing' || status === 'past_due' || status === 'cancelled') && (
@@ -209,7 +209,7 @@ export default function Billing() {
         )}
 
         {/* Mensaje para no-owners */}
-        {!isOwner && (status === 'trialing' || status === 'past_due') && (
+        {!isAdmin && (status === 'trialing' || status === 'past_due') && (
           <p className="text-xs text-gray-400 dark:text-gray-500">
             Solo el owner del workspace puede gestionar la suscripción.
           </p>

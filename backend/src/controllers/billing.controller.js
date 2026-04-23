@@ -9,9 +9,10 @@ function stripeRequired(res) {
   return false
 }
 
-function ownerOnly(req, res) {
-  if (req.workspaceMember?.role !== 'owner') {
-    res.status(403).json({ error: 'Solo el owner puede gestionar la suscripción' })
+function adminOrOwnerOnly(req, res) {
+  const role = req.workspaceMember?.role
+  if (role !== 'owner' && role !== 'admin') {
+    res.status(403).json({ error: 'Se requieren permisos de administrador para gestionar la suscripción' })
     return true
   }
   return false
@@ -42,7 +43,7 @@ async function getStatus(req, res, next) {
       trialDaysLeft,
       seats,
       subscription: sub,
-      isOwner:      req.workspaceMember?.role === 'owner',
+      isAdmin:      req.workspaceMember?.role === 'owner' || req.workspaceMember?.role === 'admin',
     })
   } catch (err) { next(err) }
 }
@@ -54,7 +55,7 @@ async function getStatus(req, res, next) {
  */
 async function createCheckout(req, res, next) {
   if (stripeRequired(res)) return
-  if (ownerOnly(req, res)) return
+  if (adminOrOwnerOnly(req, res)) return
   try {
     const workspace = req.workspace
     const seats = await prisma.workspaceMember.count({
@@ -103,7 +104,7 @@ async function createCheckout(req, res, next) {
  */
 async function createPortal(req, res, next) {
   if (stripeRequired(res)) return
-  if (ownerOnly(req, res)) return
+  if (adminOrOwnerOnly(req, res)) return
   try {
     const workspace = req.workspace
 

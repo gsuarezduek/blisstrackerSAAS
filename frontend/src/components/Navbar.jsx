@@ -115,7 +115,6 @@ export default function Navbar() {
   function closeMenu() { setMenuOpen(false) }
 
   const isAdmin   = user?.isAdmin === true
-  const isOwner   = user?.role === 'owner'
   const avatarSrc = avatarUrl(user?.avatar)
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
 
@@ -149,7 +148,7 @@ export default function Navbar() {
         { key: 'profile',     to: '/profile',     label: 'Perfil',        icon: <IcoUser /> },
         { key: 'docs',        to: '/docs',         label: 'Docs',          icon: <IcoBook /> },
         { key: 'preferences', to: '/preferences',  label: 'Preferencias',  icon: <IcoCog /> },
-        ...(isOwner ? [{ key: 'billing', to: '/billing', label: 'Facturación', icon: <IcoCreditCard /> }] : []),
+        ...(isAdmin ? [{ key: 'billing', to: '/billing', label: 'Facturación', icon: <IcoCreditCard /> }] : []),
       ],
     },
     ...(user?.isSuperAdmin ? [{
