@@ -220,6 +220,7 @@ async function projectTasks(req, res, next) {
       select: {
         id: true, name: true, createdAt: true, situation: true,
         timezone: true, linksEnabled: true, situationEnabled: true,
+        websiteUrl: true, connections: true,
         links:    { orderBy: { createdAt: 'asc' } },
         services: { include: { service: true }, orderBy: { service: { name: 'asc' } } },
         members:  {

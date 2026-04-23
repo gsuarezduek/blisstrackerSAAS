@@ -2,12 +2,9 @@ import { useState } from 'react'
 import api from '../api/client'
 
 const CONNECTIONS = [
-  { key: 'instagram', label: 'Instagram',  placeholder: 'https://instagram.com/usuario', icon: '📸' },
-  { key: 'facebook',  label: 'Facebook',   placeholder: 'https://facebook.com/pagina',   icon: '👥' },
-  { key: 'linkedin',  label: 'LinkedIn',   placeholder: 'https://linkedin.com/company/...',icon: '💼' },
-  { key: 'twitter',   label: 'X / Twitter',placeholder: 'https://x.com/usuario',         icon: '🐦' },
-  { key: 'tiktok',    label: 'TikTok',     placeholder: 'https://tiktok.com/@usuario',    icon: '🎵' },
-  { key: 'youtube',   label: 'YouTube',    placeholder: 'https://youtube.com/@canal',     icon: '▶️' },
+  { key: 'instagram', label: 'Instagram', placeholder: 'https://instagram.com/usuario',    icon: '📸' },
+  { key: 'tiktok',    label: 'TikTok',    placeholder: 'https://tiktok.com/@usuario',      icon: '🎵' },
+  { key: 'linkedin',  label: 'LinkedIn',  placeholder: 'https://linkedin.com/company/...', icon: '💼' },
 ]
 
 function parseConnections(raw) {
