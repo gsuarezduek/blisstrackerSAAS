@@ -244,4 +244,70 @@ async function listEmailLogs(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs }
+// Precio por seat en USD/mes — ajustar si cambia el plan
+const SEAT_PRICE_USD = 10
+
+/**
+ * GET /api/superadmin/billing
+ * Resumen global de facturación: MRR, ARR, conteos por estado, tabla de workspaces.
+ */
+async function getBillingOverview(req, res, next) {
+  try {
+    const workspaces = await prisma.workspace.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        subscription: true,
+        _count: { select: { members: { where: { active: true } } } },
+      },
+    })
+
+    const now = new Date()
+
+    const rows = workspaces.map(w => {
+      const seats = w._count.members
+      const isActive = w.status === 'active'
+      const mrr = isActive ? seats * SEAT_PRICE_USD : 0
+
+      let trialDaysLeft = null
+      if (w.status === 'trialing' && w.trialEndsAt) {
+        const ms = new Date(w.trialEndsAt) - now
+        trialDaysLeft = Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)))
+      }
+
+      return {
+        id:           w.id,
+        name:         w.name,
+        slug:         w.slug,
+        status:       w.status,
+        seats,
+        trialEndsAt:  w.trialEndsAt,
+        trialDaysLeft,
+        createdAt:    w.createdAt,
+        subscription: w.subscription ? {
+          stripeSubId: w.subscription.stripeSubId,
+          periodEnd:   w.subscription.periodEnd,
+          planName:    w.subscription.planName,
+        } : null,
+        mrr,
+      }
+    })
+
+    const activeRows   = rows.filter(w => w.status === 'active')
+    const mrr          = activeRows.reduce((sum, w) => sum + w.mrr, 0)
+    const trialingSoon = rows.filter(w => w.status === 'trialing' && w.trialDaysLeft != null && w.trialDaysLeft <= 7)
+
+    res.json({
+      mrr,
+      arr:             mrr * 12,
+      seatPriceUsd:    SEAT_PRICE_USD,
+      activeCount:     rows.filter(w => w.status === 'active').length,
+      trialingCount:   rows.filter(w => w.status === 'trialing').length,
+      pastDueCount:    rows.filter(w => w.status === 'past_due').length,
+      cancelledCount:  rows.filter(w => w.status === 'cancelled' || w.status === 'suspended').length,
+      trialingSoon:    trialingSoon.length,
+      workspaces:      rows,
+    })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview }
