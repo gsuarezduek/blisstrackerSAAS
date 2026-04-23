@@ -1,7 +1,20 @@
 const app = require('./app')
+const prisma = require('./lib/prisma')
+const { FEATURE_FLAGS } = require('./config/featureFlags')
 
 const PORT = process.env.PORT || 3001
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
+app.listen(PORT, async () => {
+  console.log(`Server running on port ${PORT}`)
+  // Sincronizar catálogo de feature flags — upsert para que siempre existan en DB
+  for (const { key, name, description } of FEATURE_FLAGS) {
+    await prisma.featureFlag.upsert({
+      where:  { key },
+      update: { name, description },
+      create: { key, name, description },
+    }).catch(err => console.error(`[FeatureFlags] Error sync '${key}':`, err.message))
+  }
+  console.log(`[FeatureFlags] ${FEATURE_FLAGS.length} flag(s) sincronizado(s).`)
+})
 
 const cron = require('node-cron')
 const { sendAllWeeklyReports } = require('./services/weeklyReport.service')

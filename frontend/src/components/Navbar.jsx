@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation, useMatch } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import useRoles from '../hooks/useRoles'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import FeedbackButton from './FeedbackButton'
 import NotificationBell from './NotificationBell'
 import { useTheme } from '../context/ThemeContext'
@@ -107,6 +108,7 @@ export default function Navbar() {
 
   const isAdmin   = user?.isAdmin === true
   const avatarSrc = avatarUrl(user?.avatar)
+  const { enabled: marketingEnabled } = useFeatureFlag('marketing')
 
   // ── Links de navegación principal ────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
@@ -116,7 +118,7 @@ export default function Navbar() {
     ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
     { to: '/realtime', label: 'Actividad', dot: true },
     ...(isAdmin ? [{ to: '/reports', label: 'Reportes' }] : []),
-    { to: '/marketing', label: 'Marketing' },
+    ...(marketingEnabled ? [{ to: '/marketing', label: 'Marketing' }] : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────

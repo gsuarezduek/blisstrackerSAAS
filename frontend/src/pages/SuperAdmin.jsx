@@ -1633,10 +1633,6 @@ function SectionFeatureFlags() {
   const [flags, setFlags]         = useState([])
   const [workspaces, setWorkspaces] = useState([])
   const [loading, setLoading]     = useState(true)
-  const [newForm, setNewForm]     = useState({ key: '', name: '', description: '' })
-  const [creating, setCreating]   = useState(false)
-  const [createError, setCreateError] = useState('')
-  const [showCreate, setShowCreate]   = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -1647,26 +1643,6 @@ function SectionFeatureFlags() {
       setWorkspaces(ws.data)
     }).finally(() => setLoading(false))
   }, [])
-
-  async function handleCreate(e) {
-    e.preventDefault()
-    setCreateError('')
-    setCreating(true)
-    try {
-      const { data } = await api.post('/superadmin/feature-flags', newForm)
-      setFlags(prev => [...prev, data].sort((a, b) => a.key.localeCompare(b.key)))
-      setNewForm({ key: '', name: '', description: '' })
-      setShowCreate(false)
-    } catch (err) {
-      setCreateError(err.response?.data?.error || 'Error al crear')
-    } finally { setCreating(false) }
-  }
-
-  async function handleDelete(id) {
-    if (!confirm('¿Eliminar este feature flag?')) return
-    await api.delete(`/superadmin/feature-flags/${id}`)
-    setFlags(prev => prev.filter(f => f.id !== id))
-  }
 
   async function toggleGlobal(flag) {
     const { data } = await api.patch(`/superadmin/feature-flags/${flag.id}`, {
@@ -1689,67 +1665,18 @@ function SectionFeatureFlags() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Feature Flags</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Activá o desactivá funcionalidades por workspace o globalmente.</p>
-        </div>
-        <button
-          onClick={() => setShowCreate(v => !v)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          Nuevo flag
-        </button>
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Feature Flags</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Activá o desactivá funcionalidades por workspace o globalmente.</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 inline-block">
+          Los flags se definen en el código del servidor — aparecen aquí automáticamente al deployar.
+        </p>
       </div>
-
-      {/* Formulario de creación */}
-      {showCreate && (
-        <form onSubmit={handleCreate} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-4 mb-4 space-y-3">
-          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Nuevo Feature Flag</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Key <span className="text-red-500">*</span></label>
-              <input
-                required value={newForm.key}
-                onChange={e => setNewForm(p => ({ ...p, key: e.target.value.toLowerCase().replace(/\s+/g, '_') }))}
-                placeholder="ej: vacation_requests"
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Nombre <span className="text-red-500">*</span></label>
-              <input
-                required value={newForm.name}
-                onChange={e => setNewForm(p => ({ ...p, name: e.target.value }))}
-                placeholder="ej: Solicitud de vacaciones"
-                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Descripción</label>
-            <input
-              value={newForm.description}
-              onChange={e => setNewForm(p => ({ ...p, description: e.target.value }))}
-              placeholder="Qué hace esta funcionalidad…"
-              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          {createError && <p className="text-sm text-red-500">{createError}</p>}
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">Cancelar</button>
-            <button type="submit" disabled={creating} className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-              {creating ? 'Creando…' : 'Crear'}
-            </button>
-          </div>
-        </form>
-      )}
 
       {/* Lista de flags */}
       {flags.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-8 text-center">
-          <p className="text-gray-400 dark:text-gray-500 text-sm">No hay feature flags todavía.</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm">No hay feature flags definidos todavía.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -1775,9 +1702,6 @@ function SectionFeatureFlags() {
                   </div>
                   {flag.description && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{flag.description}</p>}
                 </div>
-                <button onClick={() => handleDelete(flag.id)} className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0" title="Eliminar">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>
               </div>
 
               {/* Toggle global */}
