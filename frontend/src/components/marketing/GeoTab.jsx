@@ -19,25 +19,35 @@ const SEVERITY_COLORS = {
   low:    'bg-blue-100   dark:bg-blue-900/30  text-blue-700   dark:text-blue-400',
 }
 
+// Bandas basadas en investigación Princeton KDD 2024
+function scoreBand(score) {
+  if (score == null) return null
+  if (score >= 86) return { label: 'Excelente', color: 'emerald' }
+  if (score >= 68) return { label: 'Bueno',     color: 'green'   }
+  if (score >= 36) return { label: 'Base',       color: 'amber'   }
+  return                  { label: 'Crítico',    color: 'red'     }
+}
+
 function scoreColor(score) {
-  if (score == null) return 'text-gray-400'
-  if (score >= 70) return 'text-emerald-500'
-  if (score >= 40) return 'text-amber-500'
-  return 'text-red-500'
+  const band = scoreBand(score)
+  if (!band) return 'text-gray-400'
+  return { emerald: 'text-emerald-500', green: 'text-green-500', amber: 'text-amber-500', red: 'text-red-500' }[band.color]
 }
 
 function scoreRing(score) {
-  if (score == null) return 'border-gray-200 dark:border-gray-700'
-  if (score >= 70) return 'border-emerald-400'
-  if (score >= 40) return 'border-amber-400'
-  return 'border-red-400'
+  const band = scoreBand(score)
+  if (!band) return 'border-gray-200 dark:border-gray-700'
+  return { emerald: 'border-emerald-400', green: 'border-green-400', amber: 'border-amber-400', red: 'border-red-400' }[band.color]
 }
 
 function scoreLabel(score) {
-  if (score == null) return ''
-  if (score >= 70) return 'Bueno'
-  if (score >= 40) return 'Mejorable'
-  return 'Crítico'
+  return scoreBand(score)?.label ?? ''
+}
+
+function scoreBarColor(score) {
+  const band = scoreBand(score)
+  if (!band) return 'bg-gray-300'
+  return { emerald: 'bg-emerald-400', green: 'bg-green-400', amber: 'bg-amber-400', red: 'bg-red-400' }[band.color]
 }
 
 function fmtDate(iso) {
@@ -63,9 +73,7 @@ function ComponentCard({ meta, score }) {
       {score != null && (
         <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5">
           <div
-            className={`h-1.5 rounded-full transition-all duration-700 ${
-              score >= 70 ? 'bg-emerald-400' : score >= 40 ? 'bg-amber-400' : 'bg-red-400'
-            }`}
+            className={`h-1.5 rounded-full transition-all duration-700 ${scoreBarColor(score)}`}
             style={{ width: `${score}%` }}
           />
         </div>
@@ -268,6 +276,7 @@ export default function GeoTab() {
     try { return JSON.parse(val) } catch { return [] }
   }
   const items = parseField(activeAudit?.findings)
+  const negativeSignals = parseField(activeAudit?.recommendations)
   const sortedFindings = [...items].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9))
 
   const noUrl = selectedProject && !selectedProject.websiteUrl
@@ -418,6 +427,26 @@ export default function GeoTab() {
               ))}
             </div>
           </div>
+
+          {/* Señales negativas */}
+          {negativeSignals.length > 0 && (
+            <div className="bg-red-50 dark:bg-red-900/10 rounded-2xl border border-red-200 dark:border-red-800/50 p-5">
+              <h3 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-3 flex items-center gap-2">
+                ⚠️ Señales negativas ({negativeSignals.length})
+                <span className="text-xs font-normal text-red-500 dark:text-red-500">— reducen la citabilidad en IA</span>
+              </h3>
+              <div className="space-y-3">
+                {negativeSignals.map((s, i) => (
+                  <div key={i}>
+                    <p className="text-sm font-medium text-red-800 dark:text-red-300">{s.title}</p>
+                    {s.description && (
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{s.description}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Items unificados */}
           {sortedFindings.length > 0 && (
