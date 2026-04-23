@@ -63,28 +63,63 @@ export default function ProjectInfoTab({ project, onSave }) {
         `/marketing/integrations/google/auth-url?projectId=${project.id}&type=${type}`
       )
 
+      // Limpiar resultado previo en localStorage
+      localStorage.removeItem('__ga_oauth_result')
+
       const popup = window.open(data.url, 'google_oauth', 'width=520,height=660,left=200,top=80')
 
-      function handleMessage(event) {
-        if (event.origin !== window.location.origin) return
-        if (event.data?.type !== 'GOOGLE_INTEGRATION_RESULT') return
-        window.removeEventListener('message', handleMessage)
+      function processResult(result) {
         setIntegLoading(prev => ({ ...prev, [type]: false }))
-        if (event.data.success) {
-          // Recargar integraciones
+        if (result.success) {
           api.get(`/marketing/projects/${project.id}/integrations`)
             .then(r => setIntegrations(r.data))
             .catch(() => {})
         }
         if (popup && !popup.closed) popup.close()
       }
+
+      // Canal 1: postMessage (funciona si window.opener no fue anulado por COOP)
+      function handleMessage(event) {
+        if (event.data?.type !== 'GOOGLE_INTEGRATION_RESULT') return
+        cleanup()
+        processResult(event.data)
+      }
       window.addEventListener('message', handleMessage)
+
+      // Canal 2: localStorage (funciona aunque window.opener sea null por navegación cross-origin)
+      function handleStorage(e) {
+        if (e.key !== '__ga_oauth_result') return
+        try {
+          const result = JSON.parse(e.newValue)
+          if (!result) return
+          localStorage.removeItem('__ga_oauth_result')
+          cleanup()
+          processResult(result)
+        } catch { /* ignorar */ }
+      }
+      window.addEventListener('storage', handleStorage)
+
+      function cleanup() {
+        clearInterval(pollClose)
+        window.removeEventListener('message', handleMessage)
+        window.removeEventListener('storage', handleStorage)
+      }
 
       // Limpiar si el usuario cierra el popup manualmente
       const pollClose = setInterval(() => {
         if (popup?.closed) {
-          clearInterval(pollClose)
-          window.removeEventListener('message', handleMessage)
+          // Verificar si hay resultado pendiente en localStorage
+          const stored = localStorage.getItem('__ga_oauth_result')
+          if (stored) {
+            try {
+              const result = JSON.parse(stored)
+              localStorage.removeItem('__ga_oauth_result')
+              cleanup()
+              processResult(result)
+              return
+            } catch { /* ignorar */ }
+          }
+          cleanup()
           setIntegLoading(prev => ({ ...prev, [type]: false }))
         }
       }, 500)

@@ -14,16 +14,27 @@ export default function OAuthResult() {
     const error   = searchParams.get('error')
     const type    = searchParams.get('type')
 
+    // Guardar resultado en localStorage para que el opener lo lea
+    // (postMessage falla cuando window.opener es null por COOP cross-origin)
+    try {
+      localStorage.setItem('__ga_oauth_result', JSON.stringify({
+        success, error, integrationType: type, ts: Date.now(),
+      }))
+    } catch { /* localStorage no disponible */ }
+
+    // También intentar postMessage por si el opener sigue disponible
     if (window.opener) {
-      window.opener.postMessage(
-        { type: 'GOOGLE_INTEGRATION_RESULT', success, error, integrationType: type },
-        window.location.origin,
-      )
-      window.close()
-    } else {
-      // Si se abrió como tab normal (no popup), redirigir a proyectos
-      window.location.href = '/'
+      try {
+        window.opener.postMessage(
+          { type: 'GOOGLE_INTEGRATION_RESULT', success, error, integrationType: type },
+          '*',
+        )
+      } catch { /* ignorar */ }
     }
+
+    window.close()
+    // Si window.close() no funciona (el browser lo bloquea), redirigir
+    setTimeout(() => { window.location.href = '/' }, 500)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
