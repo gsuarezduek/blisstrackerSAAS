@@ -121,7 +121,18 @@ async function handleCallback(req, res, next) {
 
     res.redirect(`${frontendBase}/oauth-result?success=true&type=${encodeURIComponent(type)}`)
   } catch (err) {
-    const frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173'
+    console.error('[integrations.callback] error:', err.message)
+    // Intentar redirigir al workspace si tenemos el slug del state
+    let frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173'
+    try {
+      const payload = jwt.decode(req.query.state)
+      if (payload?.slug) {
+        const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
+        frontendBase = process.env.NODE_ENV === 'production'
+          ? `https://${payload.slug}.${appDomain}`
+          : frontendBase
+      }
+    } catch { /* ignorar */ }
     res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(err.message)}`)
   }
 }
