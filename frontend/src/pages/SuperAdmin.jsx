@@ -1648,9 +1648,13 @@ function fmtBillingDate(iso) {
 }
 
 function SectionBilling() {
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter]   = useState('all') // all | active | trialing | past_due | attention
+  const [data, setData]             = useState(null)
+  const [loading, setLoading]       = useState(true)
+  const [filter, setFilter]         = useState('all') // all | active | trialing | past_due | attention
+  const [payments, setPayments]     = useState([])
+  const [pLoading, setPLoading]     = useState(true)
+  const [pHasMore, setPHasMore]     = useState(false)
+  const [pCursor, setPCursor]       = useState(null)  // id del último item para paginación
 
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
 
@@ -1658,7 +1662,23 @@ function SectionBilling() {
     api.get('/superadmin/billing')
       .then(r => setData(r.data))
       .finally(() => setLoading(false))
+
+    api.get('/superadmin/payments?limit=25')
+      .then(r => {
+        setPayments(r.data.payments)
+        setPHasMore(r.data.has_more)
+        if (r.data.payments.length) setPCursor(r.data.payments.at(-1).id)
+      })
+      .finally(() => setPLoading(false))
   }, [])
+
+  async function loadMorePayments() {
+    if (!pCursor) return
+    const r = await api.get(`/superadmin/payments?limit=25&starting_after=${pCursor}`)
+    setPayments(prev => [...prev, ...r.data.payments])
+    setPHasMore(r.data.has_more)
+    if (r.data.payments.length) setPCursor(r.data.payments.at(-1).id)
+  }
 
   if (loading) return <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
   if (!data)   return <p className="text-sm text-red-500">Error cargando datos de billing.</p>
@@ -1731,7 +1751,7 @@ function SectionBilling() {
         ))}
       </div>
 
-      {/* Tabla */}
+      {/* Tabla de workspaces */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
         {filtered.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">No hay workspaces en este filtro.</p>
@@ -1777,6 +1797,106 @@ function SectionBilling() {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      {/* ── Pagos recibidos ─────────────────────────────────────────────── */}
+      <div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Pagos recibidos</h3>
+
+        {pLoading ? (
+          <div className="flex justify-center py-8">
+            <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : payments.length === 0 ? (
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-8 text-center text-sm text-gray-400">
+            No hay pagos registrados todavía.
+          </div>
+        ) : (
+          <>
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Fecha</th>
+                    <th className="px-4 py-3 text-left">Workspace</th>
+                    <th className="px-4 py-3 text-right">Monto</th>
+                    <th className="px-4 py-3 text-left">Período</th>
+                    <th className="px-4 py-3 text-center">Factura</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {payments.map(p => (
+                    <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                        {fmtBillingDate(p.date)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {p.workspace ? (
+                          <>
+                            <p className="font-medium text-gray-800 dark:text-gray-200">{p.workspace.name}</p>
+                            <p className="text-xs text-gray-400">{p.workspace.slug}.{appDomain}</p>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400">{p.customerEmail || p.id}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-green-600 dark:text-green-400 whitespace-nowrap">
+                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: p.currency }).format(p.amount)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                        {p.periodStart && p.periodEnd
+                          ? `${fmtBillingDate(p.periodStart)} → ${fmtBillingDate(p.periodEnd)}`
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-3">
+                          {p.pdfUrl && (
+                            <a
+                              href={p.pdfUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline"
+                              title="Descargar PDF"
+                            >
+                              PDF
+                            </a>
+                          )}
+                          {p.hostedUrl && (
+                            <a
+                              href={p.hostedUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:underline"
+                              title="Ver en Stripe"
+                            >
+                              Ver
+                            </a>
+                          )}
+                          {p.number && (
+                            <span className="text-xs text-gray-300 dark:text-gray-600 font-mono">
+                              {p.number}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {pHasMore && (
+              <div className="flex justify-center mt-3">
+                <button
+                  onClick={loadMorePayments}
+                  className="text-sm text-primary-600 dark:text-primary-400 hover:underline font-medium"
+                >
+                  Cargar más pagos
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

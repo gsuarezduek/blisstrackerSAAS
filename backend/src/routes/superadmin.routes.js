@@ -24,6 +24,7 @@ router.use(superAdminOnly)
 
 router.get('/stats',                    c.getStats)
 router.get('/billing',                  c.getBillingOverview)
+router.get('/payments',                 c.listPayments)
 router.get('/workspaces',               c.listWorkspaces)
 router.get('/workspaces/:id',           c.getWorkspace)
 router.patch('/workspaces/:id/status',  c.updateWorkspaceStatus)
