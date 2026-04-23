@@ -358,9 +358,33 @@ async function createWorkspace(req, res, next) {
       user: { id: result.owner.id, name: result.owner.name, email: result.owner.email },
     })
   } catch (err) {
-    if (err.code === 'P2002') return res.status(409).json({ error: 'El slug o email ya está en uso' })
+    console.error('[createWorkspace] error:', err.message, err.meta ?? '')
+    if (err.code === 'P2002') {
+      const target = err.meta?.target ?? []
+      const fields = Array.isArray(target) ? target : [target]
+      if (fields.some(f => String(f).includes('slug'))) {
+        return res.status(409).json({ error: 'El subdominio ya está en uso. Elegí otro.', field: 'slug' })
+      }
+      if (fields.some(f => String(f).includes('email'))) {
+        return res.status(409).json({ error: 'El email ya tiene una cuenta asociada.', field: 'email' })
+      }
+      return res.status(409).json({ error: 'El subdominio o email ya está en uso.', field: 'unknown' })
+    }
     next(err)
   }
+}
+
+/**
+ * GET /api/workspaces/check-slug?slug=mi-empresa
+ * Verifica en tiempo real si un slug está disponible.
+ */
+async function checkSlug(req, res) {
+  const { slug } = req.query
+  if (!slug || !/^[a-z0-9-]{2,30}$/.test(slug)) {
+    return res.json({ available: false, reason: 'format' })
+  }
+  const existing = await prisma.workspace.findUnique({ where: { slug }, select: { id: true } })
+  res.json({ available: !existing })
 }
 
 /**
@@ -767,7 +791,7 @@ async function executeWorkspaceDeletion(workspaceId) {
 
 module.exports = {
   getMine, getCurrent, updateCurrent, listMembers, addMember, updateMember, toggleMemberActive,
-  createWorkspace, getInfo,
+  createWorkspace, checkSlug, getInfo,
   inviteMember, getInvitation, joinWorkspace, listInvitations, cancelInvitation,
   getDeletionRequest, scheduleDeletion, cancelDeletion, executeWorkspaceDeletion,
 }

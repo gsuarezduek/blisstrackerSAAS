@@ -5,8 +5,9 @@ const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspac
 const c = require('../controllers/workspace.controller')
 
 // Rutas públicas (sin auth)
-router.post('/',    c.createWorkspace)
-router.get('/info', c.getInfo)
+router.post('/',          c.createWorkspace)
+router.get('/check-slug', c.checkSlug)
+router.get('/info',       c.getInfo)
 
 // Rutas públicas de invitaciones
 router.get('/invitations/:token', c.getInvitation)
