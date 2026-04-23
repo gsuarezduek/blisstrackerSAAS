@@ -90,12 +90,22 @@ async function runPageSpeedAnalysis(url, strategy = 'mobile') {
   const apiKey = process.env.PAGESPEED_API_KEY
   if (!apiKey) throw new Error('PAGESPEED_API_KEY no configurada en el entorno')
 
-  const { data } = await axios.get(PAGESPEED_API, {
-    params:  { url, strategy, key: apiKey, category: 'performance' },
-    timeout: 90_000,
-  })
-
-  return parseResult(data)
+  try {
+    const { data } = await axios.get(PAGESPEED_API, {
+      params:  { url, strategy, key: apiKey, category: 'performance' },
+      timeout: 90_000,
+    })
+    return parseResult(data)
+  } catch (err) {
+    // Extraer el mensaje real de Google si viene en el body
+    const googleMsg = err.response?.data?.error?.message
+    const status    = err.response?.status
+    console.error('[PageSpeed] Error de API:', status, googleMsg ?? err.message)
+    if (err.response?.data) {
+      console.error('[PageSpeed] Body:', JSON.stringify(err.response.data).slice(0, 500))
+    }
+    throw new Error(googleMsg ?? err.message)
+  }
 }
 
 module.exports = { runPageSpeedAnalysis }

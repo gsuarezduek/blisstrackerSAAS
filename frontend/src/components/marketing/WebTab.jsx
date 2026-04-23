@@ -1,5 +1,90 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import { useAuth } from '../../context/AuthContext'
+
+function CreateTaskModal({ title, projectId, projectName, onClose }) {
+  const { user } = useAuth()
+  const [description, setDescription] = useState(`Analytics - ${title}`)
+  const [members,     setMembers]     = useState([])
+  const [assigneeId,  setAssigneeId]  = useState('')
+  const [saving,      setSaving]      = useState(false)
+  const [done,        setDone]        = useState(false)
+
+  useEffect(() => {
+    api.get(`/projects/${projectId}/members`)
+      .then(r => { setMembers(r.data); setAssigneeId(String(user?.id ?? '')) })
+      .catch(() => {})
+  }, [projectId, user])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!description.trim()) return
+    setSaving(true)
+    try {
+      const body = { description: description.trim(), projectId: String(projectId) }
+      if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
+      await api.post('/tasks', body)
+      setDone(true)
+      setTimeout(onClose, 1200)
+    } catch { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Crear tarea</h2>
+        <p className="text-xs text-gray-400 mb-4">
+          Proyecto: <span className="font-medium text-gray-600 dark:text-gray-300">{projectName}</span>
+        </p>
+        {done ? (
+          <div className="flex flex-col items-center py-6 gap-2">
+            <span className="text-3xl">✅</span>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
+              <textarea
+                autoFocus
+                rows={3}
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+              />
+            </div>
+            {members.length > 1 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asignar a</label>
+                <select
+                  value={assigneeId}
+                  onChange={e => setAssigneeId(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {members.map(m => (
+                    <option key={m.id} value={String(m.id)}>
+                      {m.name}{String(m.id) === String(user?.id) ? ' (yo)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose}
+                className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                Cancelar
+              </button>
+              <button type="submit" disabled={saving || !description.trim()}
+                className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+                {saving ? 'Guardando…' : 'Crear tarea'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
 
 const PRESET_RANGES = [
   { value: 'thisMonth',  label: 'Este mes' },
@@ -479,6 +564,9 @@ export default function WebTab() {
   const [insightLoading, setInsightLoading] = useState(false)
   const [savingSnap,   setSavingSnap]   = useState(false)
   const [snapSaved,    setSnapSaved]    = useState(false)
+
+  // Modal crear tarea desde recomendación IA
+  const [taskModal,    setTaskModal]    = useState(null) // { title }
 
   // PageSpeed
   const [psStrategy,   setPsStrategy]   = useState('mobile')
@@ -1042,9 +1130,18 @@ export default function WebTab() {
                       </p>
                       <ul className="space-y-1.5">
                         {insight.content.recomendaciones.map((rec, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                            <span className="text-primary-500 mt-0.5 flex-shrink-0">→</span>
-                            {rec}
+                          <li key={i} className="flex items-start justify-between gap-2 group">
+                            <span className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                              <span className="text-primary-500 mt-0.5 flex-shrink-0">→</span>
+                              {rec}
+                            </span>
+                            <button
+                              onClick={() => setTaskModal({ title: rec })}
+                              title="Crear tarea a partir de esta recomendación"
+                              className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
+                            >
+                              + tarea
+                            </button>
                           </li>
                         ))}
                       </ul>
@@ -1085,6 +1182,16 @@ export default function WebTab() {
           history={psHistory}
           running={psRunning}
           onRun={handleRunPageSpeed}
+        />
+      )}
+
+      {/* Modal crear tarea desde recomendación IA */}
+      {taskModal && (
+        <CreateTaskModal
+          title={taskModal.title}
+          projectId={projectId}
+          projectName={analytics?.projectName ?? ''}
+          onClose={() => setTaskModal(null)}
         />
       )}
     </div>

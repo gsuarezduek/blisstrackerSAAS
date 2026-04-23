@@ -160,8 +160,8 @@ Incluí las ${tendencias.length > 0 ? tendencias.length : '3-5'} tendencias prin
     workspaceId,
     service:      'analyticsInsight',
     model:        'claude-haiku-4-5-20251001',
-    inputTokens:  response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
+    inputTokens:  response.usage?.input_tokens  ?? 0,
+    outputTokens: response.usage?.output_tokens ?? 0,
   }).catch(() => {})
 
   const parsed = parseAIJson(response.content[0].text)
