@@ -1,19 +1,35 @@
 const prisma = require('../lib/prisma')
 const { fetchGA4Report } = require('../services/googleAnalytics.service')
 
-const VALID_DATE_RANGES = new Set(['7daysAgo', '30daysAgo', '90daysAgo'])
+// Acepta 'NdaysAgo', 'today', 'yesterday' o 'YYYY-MM-DD'
+const VALID_GA4_DATE = /^(\d{4}-\d{2}-\d{2}|\d+daysAgo|today|yesterday)$/
+
+function parseDateParam(val, fallback) {
+  if (val && VALID_GA4_DATE.test(val.trim())) return val.trim()
+  return fallback
+}
 
 /**
- * GET /api/marketing/projects/:id/analytics?dateRange=30daysAgo
- * Devuelve métricas de Google Analytics (GA4) para el proyecto.
+ * GET /api/marketing/projects/:id/analytics?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ * También acepta ?dateRange=NdaysAgo para compatibilidad.
  */
 async function getAnalyticsData(req, res, next) {
   try {
     const projectId   = Number(req.params.id)
     const workspaceId = req.workspace.id
-    const dateRange   = VALID_DATE_RANGES.has(req.query.dateRange)
-      ? req.query.dateRange
-      : '30daysAgo'
+
+    // Soporte para startDate/endDate explícitos o el viejo dateRange
+    let startDate, endDate
+    if (req.query.startDate || req.query.endDate) {
+      startDate = parseDateParam(req.query.startDate, '30daysAgo')
+      endDate   = parseDateParam(req.query.endDate,   'today')
+    } else {
+      const legacy = ['7daysAgo', '30daysAgo', '90daysAgo'].includes(req.query.dateRange)
+        ? req.query.dateRange
+        : '30daysAgo'
+      startDate = legacy
+      endDate   = 'today'
+    }
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, workspaceId },
@@ -43,7 +59,7 @@ async function getAnalyticsData(req, res, next) {
       })
     }
 
-    const data = await fetchGA4Report(integration, dateRange)
+    const data = await fetchGA4Report(integration, startDate, endDate)
     res.json({ ...data, projectName: project.name, websiteUrl: project.websiteUrl })
   } catch (err) {
     console.error('[analytics.getAnalyticsData] error:', err.code ?? '', err.message)

@@ -1,11 +1,55 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 
-const DATE_RANGES = [
-  { value: '7daysAgo',  label: 'Últimos 7 días' },
-  { value: '30daysAgo', label: 'Últimos 30 días' },
-  { value: '90daysAgo', label: 'Últimos 90 días' },
+const PRESET_RANGES = [
+  { value: 'thisMonth',  label: 'Este mes' },
+  { value: 'lastMonth',  label: 'Mes anterior' },
+  { value: '90daysAgo',  label: 'Últimos 90 días' },
+  { value: 'custom',     label: 'Personalizado' },
 ]
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function getDateParams(range, customStart, customEnd) {
+  const now       = new Date()
+  const year      = now.getFullYear()
+  const month     = now.getMonth() // 0-indexed
+
+  if (range === 'thisMonth') {
+    const start = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    return { startDate: start, endDate: todayStr() }
+  }
+  if (range === 'lastMonth') {
+    const lm     = month === 0 ? 11 : month - 1
+    const lmYear = month === 0 ? year - 1 : year
+    const lastDay = new Date(lmYear, lm + 1, 0).getDate()
+    const pad = n => String(n).padStart(2, '0')
+    return {
+      startDate: `${lmYear}-${pad(lm + 1)}-01`,
+      endDate:   `${lmYear}-${pad(lm + 1)}-${pad(lastDay)}`,
+    }
+  }
+  if (range === '90daysAgo') {
+    return { startDate: '90daysAgo', endDate: 'today' }
+  }
+  // custom
+  return { startDate: customStart || todayStr(), endDate: customEnd || todayStr() }
+}
+
+function formatDateLabel(range, customStart, customEnd) {
+  const { startDate, endDate } = getDateParams(range, customStart, customEnd)
+  if (range === 'thisMonth')  return 'Este mes'
+  if (range === 'lastMonth')  return 'Mes anterior'
+  if (range === '90daysAgo')  return 'Últimos 90 días'
+  const fmt = d => {
+    if (!d || d === 'today' || d === 'yesterday') return d
+    const [y, m, dd] = d.split('-')
+    return `${dd}/${m}/${y}`
+  }
+  return `${fmt(startDate)} → ${fmt(endDate)}`
+}
 
 const DEVICE_ICONS = { desktop: '🖥️', mobile: '📱', tablet: '📲' }
 const CHANNEL_COLORS = [
@@ -193,13 +237,17 @@ function ConversionsBlock({ conversions, sessions }) {
 }
 
 export default function WebTab() {
-  const [projects,    setProjects]    = useState([])
-  const [projectId,   setProjectId]   = useState('')
-  const [dateRange,   setDateRange]   = useState('30daysAgo')
-  const [analytics,   setAnalytics]   = useState(null)
-  const [loading,     setLoading]     = useState(false)
-  const [errorStatus, setErrorStatus] = useState(null)
-  const [error,       setError]       = useState('')
+  const [projects,     setProjects]     = useState([])
+  const [projectId,    setProjectId]    = useState('')
+  const [rangePreset,  setRangePreset]  = useState('thisMonth')
+  const [customStart,  setCustomStart]  = useState(todayStr())
+  const [customEnd,    setCustomEnd]    = useState(todayStr())
+  // Para rango personalizado: solo disparar fetch al hacer click en Aplicar
+  const [appliedRange, setAppliedRange] = useState({ preset: 'thisMonth', start: '', end: '' })
+  const [analytics,    setAnalytics]    = useState(null)
+  const [loading,      setLoading]      = useState(false)
+  const [errorStatus,  setErrorStatus]  = useState(null)
+  const [error,        setError]        = useState('')
 
   useEffect(() => {
     api.get('/projects').then(r => {
@@ -208,14 +256,32 @@ export default function WebTab() {
     }).catch(() => {})
   }, [])
 
+  // Cuando cambia el preset (no custom), aplicar automáticamente
+  function handlePresetChange(val) {
+    setRangePreset(val)
+    if (val !== 'custom') {
+      setAppliedRange({ preset: val, start: '', end: '' })
+    }
+  }
+
+  function handleApplyCustom() {
+    if (!customStart || !customEnd || customStart > customEnd) return
+    setAppliedRange({ preset: 'custom', start: customStart, end: customEnd })
+  }
+
   useEffect(() => {
     if (!projectId) return
+    const { startDate, endDate } = getDateParams(
+      appliedRange.preset,
+      appliedRange.start,
+      appliedRange.end,
+    )
     setLoading(true)
     setError('')
     setErrorStatus(null)
     setAnalytics(null)
 
-    api.get(`/marketing/projects/${projectId}/analytics?dateRange=${dateRange}`)
+    api.get(`/marketing/projects/${projectId}/analytics?startDate=${startDate}&endDate=${endDate}`)
       .then(r => setAnalytics(r.data))
       .catch(e => {
         const status = e.response?.status
@@ -226,11 +292,11 @@ export default function WebTab() {
         else setError(body?.error || 'Error al cargar datos')
       })
       .finally(() => setLoading(false))
-  }, [projectId, dateRange])
+  }, [projectId, appliedRange])
 
-  const ov           = analytics?.overview ?? {}
+  const ov            = analytics?.overview ?? {}
   const totalSessions = analytics?.channels?.reduce((s, c) => s + c.sessions, 0) || 0
-  const dateLabel    = DATE_RANGES.find(d => d.value === dateRange)?.label
+  const dateLabel     = formatDateLabel(appliedRange.preset, appliedRange.start, appliedRange.end)
 
   return (
     <div className="space-y-5">
@@ -251,23 +317,63 @@ export default function WebTab() {
             ))}
           </select>
         </div>
-        <div className="w-[180px]">
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-            Período
-          </label>
-          <select
-            value={dateRange}
-            onChange={e => setDateRange(e.target.value)}
-            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            {DATE_RANGES.map(d => (
-              <option key={d.value} value={d.value}>{d.label}</option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="w-[180px]">
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+              Período
+            </label>
+            <select
+              value={rangePreset}
+              onChange={e => handlePresetChange(e.target.value)}
+              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {PRESET_RANGES.map(d => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Inputs de fecha personalizada */}
+          {rangePreset === 'custom' && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+                  Desde
+                </label>
+                <input
+                  type="date"
+                  value={customStart}
+                  max={customEnd || todayStr()}
+                  onChange={e => setCustomStart(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
+                  Hasta
+                </label>
+                <input
+                  type="date"
+                  value={customEnd}
+                  min={customStart}
+                  max={todayStr()}
+                  onChange={e => setCustomEnd(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <button
+                onClick={handleApplyCustom}
+                disabled={!customStart || !customEnd || customStart > customEnd}
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                Aplicar
+              </button>
+            </>
+          )}
         </div>
         {analytics?.websiteUrl && (
           <a
-            href={analytics.websiteUrl}
+            href={/^https?:\/\//i.test(analytics.websiteUrl) ? analytics.websiteUrl : `https://${analytics.websiteUrl}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400 hover:underline pb-2"

@@ -10,11 +10,12 @@ const CACHE_TTL = 30 * 60 * 1000 // 30 minutos
  * Fetches overview + top pages + canales de tráfico desde GA4.
  *
  * @param {object} integration — registro de ProjectIntegration
- * @param {string} dateRange   — '7daysAgo' | '30daysAgo' | '90daysAgo'
+ * @param {string} startDate   — 'NdaysAgo' | 'YYYY-MM-DD'
+ * @param {string} endDate     — 'today' | 'YYYY-MM-DD'
  * @returns {Promise<object>}
  */
-async function fetchGA4Report(integration, dateRange = '30daysAgo') {
-  const cacheKey = `ga4:${integration.id}:${dateRange}`
+async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 'today') {
+  const cacheKey = `ga4:${integration.id}:${startDate}:${endDate}`
   const cached   = CACHE.get(cacheKey)
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
     return cached.data
@@ -36,7 +37,7 @@ async function fetchGA4Report(integration, dateRange = '30daysAgo') {
   const [overviewRes, topPagesRes, channelsRes, devicesRes, conversionsRes] = await Promise.all([
     analyticsClient.runReport({
       property,
-      dateRanges: [{ startDate: dateRange, endDate: 'today' }],
+      dateRanges: [{ startDate, endDate }],
       metrics: [
         { name: 'sessions' },
         { name: 'activeUsers' },
@@ -48,7 +49,7 @@ async function fetchGA4Report(integration, dateRange = '30daysAgo') {
     }),
     analyticsClient.runReport({
       property,
-      dateRanges: [{ startDate: dateRange, endDate: 'today' }],
+      dateRanges: [{ startDate, endDate }],
       dimensions: [{ name: 'pagePath' }, { name: 'pageTitle' }],
       metrics:    [{ name: 'screenPageViews' }, { name: 'sessions' }],
       orderBys:   [{ metric: { metricName: 'screenPageViews' }, desc: true }],
@@ -56,14 +57,14 @@ async function fetchGA4Report(integration, dateRange = '30daysAgo') {
     }),
     analyticsClient.runReport({
       property,
-      dateRanges: [{ startDate: dateRange, endDate: 'today' }],
+      dateRanges: [{ startDate, endDate }],
       dimensions: [{ name: 'sessionDefaultChannelGroup' }],
       metrics:    [{ name: 'sessions' }, { name: 'activeUsers' }],
       orderBys:   [{ metric: { metricName: 'sessions' }, desc: true }],
     }),
     analyticsClient.runReport({
       property,
-      dateRanges: [{ startDate: dateRange, endDate: 'today' }],
+      dateRanges: [{ startDate, endDate }],
       dimensions: [{ name: 'deviceCategory' }],
       metrics:    [{ name: 'sessions' }, { name: 'activeUsers' }],
       orderBys:   [{ metric: { metricName: 'sessions' }, desc: true }],
@@ -72,7 +73,7 @@ async function fetchGA4Report(integration, dateRange = '30daysAgo') {
     // Nota: no usamos sessionKeyEventRate porque no todos los properties lo soportan
     analyticsClient.runReport({
       property,
-      dateRanges: [{ startDate: dateRange, endDate: 'today' }],
+      dateRanges: [{ startDate, endDate }],
       dimensions: [{ name: 'eventName' }],
       metrics:    [{ name: 'conversions' }],
       orderBys:   [{ metric: { metricName: 'conversions' }, desc: true }],
@@ -89,7 +90,8 @@ async function fetchGA4Report(integration, dateRange = '30daysAgo') {
     devices:      parseChannels(devicesRes[0]),
     conversions:  parseConversions(conversionsRes),
     propertyId:   property,
-    dateRange,
+    startDate,
+    endDate,
     fetchedAt:    new Date().toISOString(),
   }
 
