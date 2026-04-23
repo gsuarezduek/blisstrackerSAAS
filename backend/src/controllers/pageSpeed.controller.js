@@ -23,8 +23,13 @@ async function runAnalysis(req, res) {
   if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
   if (!project.websiteUrl) return res.status(400).json({ error: 'El proyecto no tiene URL configurada. Agregala en la tab Info.' })
 
+  // PageSpeed requiere URL con protocolo
+  const url = /^https?:\/\//i.test(project.websiteUrl)
+    ? project.websiteUrl
+    : `https://${project.websiteUrl}`
+
   const record = await prisma.pageSpeedResult.create({
-    data: { workspaceId: req.workspace.id, projectId, url: project.websiteUrl, strategy, status: 'running' },
+    data: { workspaceId: req.workspace.id, projectId, url, strategy, status: 'running' },
   })
 
   res.json({ resultId: record.id })
@@ -32,7 +37,7 @@ async function runAnalysis(req, res) {
   // Análisis async — no bloquea la respuesta
   setImmediate(async () => {
     try {
-      const result = await runPageSpeedAnalysis(project.websiteUrl, strategy)
+      const result = await runPageSpeedAnalysis(url, strategy)
       await prisma.pageSpeedResult.update({
         where: { id: record.id },
         data: {
