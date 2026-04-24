@@ -12,8 +12,8 @@ function getWorkspaceSlug() {
   const escapedDomain = appDomain.replace(/\./g, '\\.')
   const match = hostname.match(new RegExp(`^([a-z0-9-]+)\\.${escapedDomain}$`))
   if (match && !RESERVED_SLUGS.includes(match[1])) return match[1]
-  // Fallback para desarrollo local
-  return import.meta.env.VITE_WORKSPACE_SLUG || ''
+  // En desarrollo: workspace elegido en el último login tiene prioridad sobre el env var
+  return localStorage.getItem('workspaceSlug') || import.meta.env.VITE_WORKSPACE_SLUG || ''
 }
 
 const api = axios.create({

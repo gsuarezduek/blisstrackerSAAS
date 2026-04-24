@@ -20,17 +20,37 @@ async function snapshot(req, res, next) {
 
     // Obtener teamRole para cada usuario desde WorkspaceMember
     const memberMap = {}
+    const carryOverByUser = {}
     if (workDays.length > 0) {
       const userIds = workDays.map(wd => wd.userId)
-      const members = await prisma.workspaceMember.findMany({
-        where: { workspaceId, userId: { in: userIds } },
-        select: { userId: true, teamRole: true },
-      })
+      const [members, carryOverTasks] = await Promise.all([
+        prisma.workspaceMember.findMany({
+          where: { workspaceId, userId: { in: userIds } },
+          select: { userId: true, teamRole: true },
+        }),
+        // Tareas de días anteriores aún activas (carryover): el realtime
+        // controller solo ve workDay.tasks de hoy, por lo que sin esta
+        // consulta las tareas iniciadas ayer y aún en curso quedan invisibles.
+        prisma.task.findMany({
+          where: {
+            userId: { in: userIds },
+            status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
+            workDay: { date: { lt: date }, workspaceId },
+          },
+          include: { project: true },
+        }),
+      ])
       for (const m of members) memberMap[m.userId] = m.teamRole
+      for (const t of carryOverTasks) {
+        if (!carryOverByUser[t.userId]) carryOverByUser[t.userId] = []
+        carryOverByUser[t.userId].push(t)
+      }
     }
 
     const result = workDays.map(wd => {
-      const inProgressTask = wd.tasks.find(t => t.status === 'IN_PROGRESS') ?? null
+      const carryOver = carryOverByUser[wd.userId] ?? []
+      const allTasks  = [...wd.tasks, ...carryOver]
+      const inProgressTask = allTasks.find(t => t.status === 'IN_PROGRESS') ?? null
       const completedCount = wd.tasks.filter(t => t.status === 'COMPLETED').length
       const totalMins = wd.tasks
         .filter(t => t.status === 'COMPLETED' && t.startedAt && t.completedAt)
@@ -41,10 +61,10 @@ async function snapshot(req, res, next) {
         workDay: { id: wd.id, startedAt: wd.startedAt, endedAt: wd.endedAt },
         currentTask: inProgressTask,
         stats: {
-          total: wd.tasks.length,
+          total: allTasks.length,
           completed: completedCount,
-          pending: wd.tasks.filter(t => t.status === 'PENDING').length,
-          blocked: wd.tasks.filter(t => t.status === 'BLOCKED').length,
+          pending: allTasks.filter(t => t.status === 'PENDING').length,
+          blocked: allTasks.filter(t => t.status === 'BLOCKED').length,
           totalMinutes: totalMins,
         },
       }

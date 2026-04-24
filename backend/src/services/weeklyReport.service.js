@@ -326,38 +326,36 @@ Esta semana: ${completedTasks.length} tareas, ${fmtMins(totalMinutes)} registrad
   try {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: `Sos un coach de productividad que aplica la metodología GTD. Analizás datos reales de trabajo y devolvés ÚNICAMENTE un objeto JSON válido (sin markdown, sin bloques de código, sin texto extra antes o después) con exactamente estas claves:
-- resumen: string (2-3 oraciones con lo más relevante de la semana)
-- quePasoRealmente: string (análisis de patrones, foco, uso del tiempo, 3-5 oraciones; si hay PERFIL DE PRODUCTIVIDAD HISTÓRICO, usalo para contextualizar — por ejemplo si esta semana fue mejor o peor que el patrón habitual)
-- insightPrincipal: string (UNA conclusión concreta y útil, 1-2 oraciones; personalizala con el historial si está disponible)
-- riesgos: string (posibles problemas si este comportamiento continúa, 2-3 oraciones)
-- recomendaciones: array de exactamente 3 strings (acciones concretas y específicas para la próxima semana)
-- enfoqueProximaSemana: string (qué priorizar la próxima semana, 2-3 oraciones)
+- analisis: string (4-6 oraciones que integran: qué pasó esta semana, patrones de foco y uso del tiempo, y la conclusión más valiosa; si hay PERFIL DE PRODUCTIVIDAD HISTÓRICO, usalo para contextualizar si esta semana fue mejor o peor que el patrón habitual)
+- proxSemana: string (2-3 oraciones concretas sobre qué priorizar la próxima semana y por qué; mencioná riesgos solo si son relevantes)
+- recomendaciones: array de exactamente 3 strings (acciones concretas y específicas, no genéricas)
 - omisionesRol: string o null — analizá el perfil completo del rol si está disponible:
   · TAREAS RECURRENTES: ¿hay tareas semanales o mensuales que no aparecen en las completadas esta semana?
   · RESULTADOS ESPERADOS: si los resultados son cuantitativos (ej: "6 Reels por cuenta mensualmente"), ¿el volumen completado esta semana es compatible con cumplirlos al cierre del mes?
-  · RESPONSABILIDADES OPERATIVAS: ¿hay alguna categoría de responsabilidad del rol completamente ausente en las tareas de esta semana?
+  · RESPONSABILIDADES OPERATIVAS: ¿hay alguna categoría de responsabilidad del rol completamente ausente?
   Si encontrás omisiones concretas, mencionálas con datos específicos (ej: "Completaste 2 Reels esta semana, necesitás 4 más para llegar a las 6 del mes"). null si no hay perfil de rol configurado o no hay omisiones relevantes.
 
-Escribís en español rioplatense, forma clara, directa y ligeramente crítica cuando aporta valor. Nunca inventás información que no esté en los datos. Si no hay suficiente información para una sección, lo decís brevemente. Escribís como un humano, no como un robot. Evitás frases genéricas.`,
+Escribís en español rioplatense, forma clara, directa y ligeramente crítica cuando aporta valor. Nunca inventás información que no esté en los datos. Escribís como un humano, no como un robot. Evitás frases genéricas.`,
       messages: [{ role: 'user', content: userPrompt }],
     }, { timeout: AI_TIMEOUT_MS })
     logTokens('weeklyReport', user.id, msg.usage, user.workspaceId)
 
     let parsed
     try { parsed = parseAIJson(msg.content[0].text) }
-    catch { throw new Error('Respuesta de IA inválida') }
+    catch {
+      console.error('[WeeklyReport] Respuesta cruda de Claude:', msg.content[0]?.text?.slice(0, 500))
+      console.error('[WeeklyReport] stop_reason:', msg.stop_reason)
+      throw new Error('Respuesta de IA inválida')
+    }
     return parsed
   } catch (err) {
     console.error('[WeeklyReport] Error generando análisis con Claude:', err.message)
     return {
-      resumen: `Esta semana ${user.name} completó ${completedTasks.length} tarea${completedTasks.length !== 1 ? 's' : ''} y registró ${fmtMins(totalMinutes)} de trabajo.`,
-      quePasoRealmente: 'No fue posible generar el análisis detallado esta semana.',
-      insightPrincipal: 'Revisá los datos de tu semana en el tracker para obtener más contexto.',
-      riesgos: 'Sin análisis disponible.',
+      analisis: `Esta semana ${user.name} completó ${completedTasks.length} tarea${completedTasks.length !== 1 ? 's' : ''} y registró ${fmtMins(totalMinutes)} de trabajo. No fue posible generar el análisis detallado esta semana.`,
+      proxSemana: 'Continuá con las tareas pendientes y definí prioridades claras para la próxima semana.',
       recomendaciones: ['Revisá tus tareas pendientes', 'Priorizá según impacto', 'Definí objetivos claros para la próxima semana'],
-      enfoqueProximaSemana: 'Continuá con las tareas pendientes y definí prioridades claras.',
       omisionesRol: null,
     }
   }
@@ -396,8 +394,8 @@ function buildWeeklyEmailHtml(user, data, analysis) {
   }).join('')
 
   const recoItems = (analysis.recomendaciones || []).map((r, i) => `
-    <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
-      <span style="background: #4f46e5; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0;">${i + 1}</span>
+    <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px;">
+      <span style="background: #E67A1F; color: white; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; margin-top: 2px;">${i + 1}</span>
       <p style="margin: 0; color: #334155; font-size: 14px; line-height: 1.6;">${r}</p>
     </div>`).join('')
 
@@ -448,40 +446,17 @@ function buildWeeklyEmailHtml(user, data, analysis) {
     </div>
   </div>
 
-  <!-- 1. Resumen -->
+  <!-- 1. Análisis de la semana -->
   <div style="background: white; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #e2e8f0;">
-    <h2 style="color: #1e293b; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">📋 Resumen de la semana</h2>
-    <p style="color: #475569; font-size: 14px; line-height: 1.7; margin: 0;">${analysis.resumen}</p>
+    <h2 style="color: #1e293b; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">🔍 Análisis de la semana</h2>
+    <p style="color: #475569; font-size: 14px; line-height: 1.8; margin: 0;">${analysis.analisis}</p>
   </div>
 
-  <!-- 2. Qué pasó realmente -->
-  <div style="background: white; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #e2e8f0;">
-    <h2 style="color: #1e293b; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">🔍 Qué pasó realmente</h2>
-    <p style="color: #475569; font-size: 14px; line-height: 1.7; margin: 0;">${analysis.quePasoRealmente}</p>
-  </div>
-
-  <!-- 3. Insight principal -->
-  <div style="background: #eff6ff; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #bfdbfe;">
-    <h2 style="color: #1e40af; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">💡 Insight principal</h2>
-    <p style="color: #1e3a8a; font-size: 15px; line-height: 1.7; margin: 0; font-weight: 500;">${analysis.insightPrincipal}</p>
-  </div>
-
-  <!-- 4. Riesgos -->
-  <div style="background: #fff7ed; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #fed7aa;">
-    <h2 style="color: #c2410c; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">⚠️ Riesgos o alertas</h2>
-    <p style="color: #7c2d12; font-size: 14px; line-height: 1.7; margin: 0;">${analysis.riesgos}</p>
-  </div>
-
-  <!-- 5. Recomendaciones -->
-  <div style="background: white; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #e2e8f0;">
-    <h2 style="color: #1e293b; font-size: 16px; font-weight: 700; margin: 0 0 16px 0;">✅ Recomendaciones accionables</h2>
-    ${recoItems}
-  </div>
-
-  <!-- 6. Enfoque próxima semana -->
+  <!-- 2. Próxima semana -->
   <div style="background: #f0fdf4; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #bbf7d0;">
-    <h2 style="color: #166534; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">🎯 Enfoque para la próxima semana</h2>
-    <p style="color: #14532d; font-size: 14px; line-height: 1.7; margin: 0;">${analysis.enfoqueProximaSemana}</p>
+    <h2 style="color: #166534; font-size: 16px; font-weight: 700; margin: 0 0 12px 0;">🎯 Para la próxima semana</h2>
+    <p style="color: #14532d; font-size: 14px; line-height: 1.8; margin: 0 0 16px 0;">${analysis.proxSemana}</p>
+    ${recoItems}
   </div>
 
   ${byProject.length > 0 ? `

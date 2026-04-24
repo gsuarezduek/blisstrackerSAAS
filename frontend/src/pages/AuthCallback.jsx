@@ -18,7 +18,11 @@ export default function AuthCallback() {
     const token = searchParams.get('token')
     if (!token) { navigate('/login', { replace: true }); return }
 
-    // Limpiar el token de la URL antes de guardarlo
+    // En desarrollo, el workspace elegido viene como ?ws=slug
+    const ws = searchParams.get('ws')
+    if (ws) localStorage.setItem('workspaceSlug', ws)
+
+    // Limpiar la URL antes de continuar
     window.history.replaceState({}, '', '/auth')
 
     localStorage.setItem('token', token)

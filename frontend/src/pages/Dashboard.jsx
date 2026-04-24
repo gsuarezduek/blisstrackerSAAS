@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [carryOver, setCarryOver] = useState([])
   const [delegated, setDelegated] = useState([])
   const [delegatedOpen, setDelegatedOpen] = useState(false)
+  const [delegatedFilter, setDelegatedFilter] = useState('ALL')
   const [backlogOpen,       setBacklogOpen]       = useState(false)
   const [completedOpen,     setCompletedOpen]     = useState(false)
   const [completedHistory,  setCompletedHistory]  = useState([])
@@ -209,6 +210,21 @@ export default function Dashboard() {
     }
     return Object.values(map)
   }, [delegated])
+
+  // Estados presentes en delegadas (para los pills de filtro)
+  const delegatedStatuses = useMemo(() => {
+    const order = ['ALL', 'PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED', 'COMPLETED']
+    const present = new Set(delegated.map(t => t.status))
+    return order.filter(s => s === 'ALL' || present.has(s))
+  }, [delegated])
+
+  // Delegadas filtradas por estado
+  const filteredDelegatedByProject = useMemo(() => {
+    if (delegatedFilter === 'ALL') return delegatedByProject
+    return delegatedByProject
+      .map(g => ({ ...g, tasks: g.tasks.filter(t => t.status === delegatedFilter) }))
+      .filter(g => g.tasks.length > 0)
+  }, [delegatedByProject, delegatedFilter])
   const hasActiveTask = !!activeTask
 
   // Inactivity detection
@@ -592,7 +608,33 @@ export default function Dashboard() {
 
             {delegatedOpen && (
               <div className="mt-2 space-y-4">
-                {delegatedByProject.map(({ project, tasks }) => (
+                {/* Pills de filtro por estado */}
+                {delegatedStatuses.length > 2 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {delegatedStatuses.map(s => {
+                      const label = { ALL: 'Todas', PENDING: 'Pendiente', IN_PROGRESS: 'En curso', PAUSED: 'Pausada', BLOCKED: 'Bloqueada', COMPLETED: 'Completada' }[s]
+                      const active = delegatedFilter === s
+                      const color = active ? {
+                        ALL:         'bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900',
+                        PENDING:     'bg-gray-500 text-white',
+                        IN_PROGRESS: 'bg-primary-600 text-white',
+                        PAUSED:      'bg-gray-500 text-white',
+                        BLOCKED:     'bg-red-600 text-white',
+                        COMPLETED:   'bg-green-600 text-white',
+                      }[s] : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => setDelegatedFilter(s)}
+                          className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${color}`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {filteredDelegatedByProject.map(({ project, tasks }) => (
                   <div key={project.id}>
                     <p className="text-xs font-medium text-primary-600 dark:text-primary-400 mb-1.5 px-1">{project.name}</p>
                     <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">

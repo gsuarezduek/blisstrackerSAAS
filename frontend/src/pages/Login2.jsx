@@ -19,6 +19,16 @@ function isRealWorkspaceSubdomain() {
 
 // ── Selector de workspace post-login ──────────────────────────────────────────
 
+function workspaceUrl(slug, token) {
+  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+  // En producción: subdominio real. En localhost: misma pestaña con ?ws= para conservar el slug.
+  const isLocal = !window.location.hostname.match(
+    new RegExp(`\\.${appDomain.replace(/\./g, '\\.')}$`)
+  )
+  if (isLocal) return `/auth?token=${token}&ws=${slug}`
+  return `https://${slug}.${appDomain}/auth?token=${token}`
+}
+
 function WorkspacePicker({ workspaces }) {
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
   return (
@@ -33,7 +43,7 @@ function WorkspacePicker({ workspaces }) {
           {workspaces.map(ws => (
             <a
               key={ws.slug}
-              href={`https://${ws.slug}.${appDomain}/auth?token=${ws.token}`}
+              href={workspaceUrl(ws.slug, ws.token)}
               className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors group"
             >
               <div>
