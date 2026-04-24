@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import GeoTab from '../components/marketing/GeoTab'
 import WebTab from '../components/marketing/WebTab'
+import SeoTab from '../components/marketing/SeoTab'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 
 const NAV = [
@@ -11,7 +12,7 @@ const NAV = [
     label: '🤖 GEO / SEO',
     subs: [
       { id: 'geo', label: '🤖 GEO' },
-      { id: 'seo', label: '🔍 SEO', soon: true },
+      { id: 'seo', label: '🔍 SEO' },
     ],
   },
   {
@@ -116,6 +117,7 @@ export default function Marketing() {
     if (activeSub?.soon)                               return <ComingSoon label={activeSub.label} />
 
     if (tab === 'geo-seo' && sub === 'geo') return <GeoTab />
+    if (tab === 'geo-seo' && sub === 'seo') return <SeoTab />
     if (tab === 'web')                      return <WebTab subtab={sub} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />

@@ -13,7 +13,13 @@ const GOOGLE_INTEGRATIONS = [
     key:   'google_analytics',
     label: 'Google Analytics (GA4)',
     icon:  '📊',
-    desc:  'Ver sesiones, usuarios y páginas en Marketing → Informes',
+    desc:  'Ver sesiones, usuarios y páginas en Marketing → Web',
+  },
+  {
+    key:   'google_search_console',
+    label: 'Google Search Console',
+    icon:  '🔍',
+    desc:  'Ver clicks, impresiones y palabras clave en Marketing → SEO',
   },
   {
     key:        'google_ads',
@@ -273,7 +279,7 @@ export default function ProjectInfoTab({ project, onSave }) {
                   )}
                 </div>
 
-                {/* Property ID para GA4: mostrar si está conectado */}
+                {/* Property ID para GA4 */}
                 {connected && integ.key === 'google_analytics' && (
                   <div>
                     {connected.propertyId ? (
@@ -296,8 +302,6 @@ export default function ProjectInfoTab({ project, onSave }) {
                         Ingresá el GA4 Property ID para ver los datos
                       </p>
                     )}
-
-                    {/* Input para ingresar/cambiar el Property ID */}
                     {(propertyInput[integ.key] !== undefined || !connected.propertyId) && (
                       <div className="flex gap-2 mt-2">
                         <input
@@ -324,7 +328,74 @@ export default function ProjectInfoTab({ project, onSave }) {
                         )}
                       </div>
                     )}
+                    {hasError && (
+                      <p className="text-xs text-red-500 mt-1">
+                        El token fue revocado. Desconectá y volvé a conectar.
+                      </p>
+                    )}
+                  </div>
+                )}
 
+                {/* Site URL para Search Console (opcional; por defecto usa websiteUrl del proyecto) */}
+                {connected && integ.key === 'google_search_console' && (
+                  <div>
+                    {connected.propertyId ? (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-400">
+                          Site URL:{' '}
+                          <span className="font-mono text-gray-600 dark:text-gray-300 break-all">
+                            {connected.propertyId}
+                          </span>
+                        </p>
+                        <button
+                          onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.propertyId }))}
+                          className="text-xs text-gray-400 hover:text-primary-500 transition-colors ml-2 flex-shrink-0"
+                        >
+                          Cambiar
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400">
+                        Site URL: se usa la URL del sitio del proyecto
+                        {project.websiteUrl && (
+                          <span className="font-mono ml-1 text-gray-500 dark:text-gray-400">
+                            ({project.websiteUrl})
+                          </span>
+                        )}
+                      </p>
+                    )}
+                    {propertyInput[integ.key] !== undefined && (
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          type="text"
+                          value={propertyInput[integ.key] ?? ''}
+                          onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
+                          placeholder="https://ejemplo.com/ o sc-domain:ejemplo.com"
+                          className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        <button
+                          onClick={() => handleSavePropertyId(integ.key)}
+                          disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
+                          className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                        >
+                          {propSaving[integ.key] ? '…' : 'Guardar'}
+                        </button>
+                        <button
+                          onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
+                          className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
+                    {!connected.propertyId && propertyInput[integ.key] === undefined && (
+                      <button
+                        onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: '' }))}
+                        className="text-xs text-primary-500 hover:text-primary-600 mt-1 transition-colors"
+                      >
+                        Usar una URL diferente
+                      </button>
+                    )}
                     {hasError && (
                       <p className="text-xs text-red-500 mt-1">
                         El token fue revocado. Desconectá y volvé a conectar.

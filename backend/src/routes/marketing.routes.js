@@ -5,6 +5,7 @@ const { resolveWorkspace } = require('../middleware/workspace')
 const geo               = require('../controllers/geo.controller')
 const integrations      = require('../controllers/integrations.controller')
 const analytics         = require('../controllers/analytics.controller')
+const searchConsole     = require('../controllers/searchConsole.controller')
 const analyticsSnapshot = require('../controllers/analyticsSnapshot.controller')
 const pageSpeed         = require('../controllers/pageSpeed.controller')
 
@@ -27,8 +28,9 @@ router.patch('/projects/:id/integrations/:type',              integrations.updat
 router.delete('/projects/:id/integrations/:type',             integrations.disconnect)
 
 // Datos en tiempo real de integraciones
-router.get('/projects/:id/analytics', analytics.getAnalyticsData)
-router.get('/projects/:id/ads',       analytics.getAdsData)
+router.get('/projects/:id/analytics',       analytics.getAnalyticsData)
+router.get('/projects/:id/ads',             analytics.getAdsData)
+router.get('/projects/:id/search-console',  searchConsole.getSearchConsoleData)
 
 // Snapshots mensuales + Insights IA
 router.get('/projects/:id/snapshots',             analyticsSnapshot.getSnapshot)

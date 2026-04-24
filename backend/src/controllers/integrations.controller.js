@@ -4,8 +4,9 @@ const prisma               = require('../lib/prisma')
 const { encrypt, decrypt } = require('../lib/encryption')
 
 const SCOPES = {
-  google_analytics: ['https://www.googleapis.com/auth/analytics.readonly'],
-  google_ads:       ['https://www.googleapis.com/auth/adwords'],
+  google_analytics:      ['https://www.googleapis.com/auth/analytics.readonly'],
+  google_ads:            ['https://www.googleapis.com/auth/adwords'],
+  google_search_console: ['https://www.googleapis.com/auth/webmasters.readonly'],
 }
 
 function buildRedirectUri() {
@@ -29,7 +30,7 @@ async function getAuthUrl(req, res, next) {
   try {
     const { projectId, type } = req.query
     if (!projectId || !SCOPES[type]) {
-      return res.status(400).json({ error: 'projectId y type (google_analytics | google_ads) requeridos' })
+      return res.status(400).json({ error: 'projectId y type (google_analytics | google_ads | google_search_console) requeridos' })
     }
 
     const project = await prisma.project.findFirst({
