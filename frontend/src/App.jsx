@@ -77,11 +77,17 @@ function SuperAdminRoute({ children }) {
   return children
 }
 
-// En el dominio raíz (sin slug de workspace) muestra la landing.
-// En un subdominio de workspace, muestra la app normal.
+// Devuelve true solo si el hostname es un subdominio real del app domain
+// (p.ej. bliss.blisstracker.app). localhost, blisstracker.app, y cualquier
+// otro origen van a Landing aunque VITE_WORKSPACE_SLUG esté definido.
+function isWorkspaceSubdomain() {
+  const hostname  = window.location.hostname
+  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+  return new RegExp(`^[a-z0-9-]+\\.${appDomain.replace(/\./g, '\\.')}$`).test(hostname)
+}
+
 function RootPage() {
-  const slug = getWorkspaceSlug()
-  if (!slug) return <Landing />
+  if (!isWorkspaceSubdomain()) return <Landing />
   return <PrivateRoute><Dashboard /></PrivateRoute>
 }
 

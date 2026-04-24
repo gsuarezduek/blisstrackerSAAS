@@ -47,10 +47,14 @@ EMAIL_FROM=BlissTracker <noreply@blisstracker.app>
 APP_DOMAIN=blisstracker.app
 FRONTEND_URL=http://localhost:5173
 GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=...              # client secret del OAuth app de Google Cloud
 ANTHROPIC_API_KEY=sk-ant-...
 STRIPE_SECRET_KEY=sk_live_...          # o sk_test_... en desarrollo
 STRIPE_WEBHOOK_SECRET=whsec_...        # secret del webhook en Stripe Dashboard
 STRIPE_PRICE_ID=price_...             # ID del precio por seat/mes en Stripe
+ENCRYPTION_KEY=<64 chars hex>         # AES-256-GCM key para cifrar tokens OAuth en DB (node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+BACKEND_URL=https://api.blisstracker.app  # URL pública del backend (para construir redirect URI de OAuth)
+PAGESPEED_API_KEY=...                 # Google Cloud API Key con acceso a PageSpeed Insights API
 ```
 
 **frontend/.env.development**
@@ -205,7 +209,7 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 - When a model has two relations to the same model, named relations are required (e.g. `Task.createdBy` / `Task.user` both pointing to `User`).
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_workspace_deletion_request`, `add_email_log`, `update_default_avatar`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `fix_service_unique_index` (drops global Service_name_key), `add_project_connections` (Project.connections JSON).
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_workspace_deletion_request`, `add_email_log`, `update_default_avatar`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `fix_service_unique_index` (drops global Service_name_key), `add_project_connections` (Project.connections JSON), `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique` (drops residual global Project_name_key), `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_pagespeed_result` (PageSpeedResult).
 - `TaskComment.content` is the text field (not `text`). The `parentId` self-relation exists for future threading but is not used by the UI yet.
 
 ### API routes summary
@@ -292,10 +296,33 @@ GET    /api/role-expectations
 GET    /api/role-expectations/:roleName
 PUT    /api/role-expectations/:roleName
 
-# Marketing / GEO (requiere feature flag 'marketing')
+# Marketing (requiere feature flag 'marketing')
 POST   /api/marketing/geo/audit          # dispara audit async, devuelve { auditId }
 GET    /api/marketing/geo/audits         # lista audits del workspace (?projectId=)
 GET    /api/marketing/geo/audits/:id     # detalle completo de un audit
+
+# Marketing — Integraciones Google OAuth (callback sin auth)
+GET    /api/marketing/integrations/google/callback          # recibe redirect de Google (no requiere auth)
+# Marketing — Integraciones (requieren auth)
+GET    /api/marketing/integrations/google/auth-url          # ?projectId=&type=google_analytics
+GET    /api/marketing/projects/:id/integrations             # lista integraciones del proyecto
+PATCH  /api/marketing/projects/:id/integrations/:type       # actualizar propertyId / customerId
+DELETE /api/marketing/projects/:id/integrations/:type       # desconectar integración + revocar token
+
+# Marketing — Analytics GA4
+GET    /api/marketing/projects/:id/analytics                # ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+GET    /api/marketing/projects/:id/ads                      # placeholder (requiere Developer Token de Google Ads)
+
+# Marketing — Snapshots e Insights IA
+GET    /api/marketing/projects/:id/snapshots                # ?month=YYYY-MM
+POST   /api/marketing/projects/:id/snapshots                # body: { month } — guarda snapshot GA4 del mes
+GET    /api/marketing/projects/:id/insights/:month          # análisis IA del mes (YYYY-MM)
+POST   /api/marketing/projects/:id/insights/:month          # genera análisis IA con Claude Haiku
+
+# Marketing — PageSpeed Insights
+POST   /api/marketing/projects/:id/pagespeed                # body: { strategy } — dispara análisis async, devuelve { resultId }
+GET    /api/marketing/projects/:id/pagespeed                # ?strategy=mobile&limit=5 — historial de resultados
+GET    /api/marketing/projects/:id/pagespeed/:resultId      # estado y detalle de un análisis
 
 # Billing
 GET    /api/billing/status               # estado trial/suscripción del workspace
@@ -335,7 +362,8 @@ GET    /api/feature-flags/:key           # check flag para workspace actual (aut
 /preferences      → Preferences.jsx      (PrivateRoute)
 /realtime         → RealTime.jsx         (PrivateRoute)
 /docs             → Docs.jsx             (PrivateRoute)
-/marketing        → Marketing.jsx        (PrivateRoute) — tab GEO operativo; resto "Próximamente"
+/marketing        → Marketing.jsx        (PrivateRoute) — tabs GEO y Web operativos; Informes con GA4 dashboard
+/oauth-result     → OAuthResult.jsx      (pública) — puente de callback OAuth: postMessage al opener y cierra popup
 /billing          → Billing.jsx          (PrivateRoute) — visible para todos; acciones solo admin/owner
 /reports             → Reports.jsx          (AdminRoute)
 /admin               → Admin.jsx            (AdminRoute)  — ?tab= query param
@@ -343,6 +371,21 @@ GET    /api/feature-flags/:key           # check flag para workspace actual (aut
 /admin/rrhh          → RRHH.jsx             (AdminRoute)
 /superadmin          → SuperAdmin.jsx        (SuperAdminRoute — requiere isSuperAdmin)
 ```
+
+### Cron jobs (`backend/src/index.js`)
+
+| Schedule | Timezone | Descripción |
+|----------|----------|-------------|
+| `1 0 * * 5` (viernes 00:01) | ART | Envía resúmenes semanales de IA por email a todos los miembros |
+| `0 0 * * 6` (sábados 00:00) | ART | Actualiza perfil de memoria de insights por usuario |
+| `0 2 1 * *` (1° mes 02:00) | ART | Guarda snapshot de analytics del mes anterior para todos los proyectos con GA4 conectado |
+| `30 3 1 * *` (1° mes 03:30) | ART | Corre análisis PageSpeed (mobile + desktop) para todos los proyectos con websiteUrl |
+| `0 3 * * *` (diario 03:00) | ART | Marca trials expirados como `past_due` |
+| `0 0 * * *` (medianoche) | ART | Auto-pausa tareas `IN_PROGRESS` al cierre del día |
+| `0 3 * * 0` (domingos 03:00) | ART | Limpia notificaciones antiguas (leídas >30d, no leídas >90d) |
+| `*/15 * * * *` (cada 15 min) | — | Ejecuta eliminaciones de workspaces programadas vencidas |
+
+Todos los jobs con lógica pesada usan in-memory locks (`let jobRunning = false`) para evitar solapamiento.
 
 ### Testing
 ```
@@ -353,6 +396,8 @@ backend/
     unit/
       auth.middleware.test.js
       assertNoActiveTask.test.js
+      analyticsSnapshot.helpers.test.js   # monthBounds, prevMonth, delta helpers
+      pageSpeed.helpers.test.js           # URL normalization, scoreRating, parseAudit
     integration/
       auth.test.js
       starTask.test.js
@@ -363,12 +408,13 @@ frontend/
     utils/
       format.test.js
       linkify.test.jsx
+      webTabDates.test.js                 # getDateParams, formatDateLabel, currentMonthStr, prevMonthStr
     hooks/
       useRoles.test.js
 ```
 
 ### Deploy
-- **Backend:** Railway (auto-runs `npm run db:migrate` on deploy; seed must be run manually once). Required env vars: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`.
+- **Backend:** Railway (auto-runs `npm run db:migrate` on deploy; seed must be run manually once). Required env vars: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`.
 - **Frontend:** Vercel Pro (root: `/frontend`; `vercel.json` rewrites all paths to `index.html`). Add `*.blisstracker.app` as Custom Domain. Required env vars: `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`.
 - **DNS (Cloudflare):** `A blisstracker.app → Vercel` + `A *.blisstracker.app → Vercel` (wildcard requires Vercel Pro).
 - **Backend CORS:** `app.js` allows `*.blisstracker.app` via regex — do not hardcode a single origin.
@@ -385,7 +431,7 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 | **Google Analytics Admin API** | Futuro: listar properties disponibles (evitar tipear Property ID a mano) | OAuth |
 | **Google Analytics API** | Legacy / fallback UA — habilitada por si acaso | OAuth |
 | **Google Search Console API** | Futuro: tab SEO — impresiones, clicks, posición | OAuth |
-| **PageSpeed Insights API** | Futuro: tab SEO — Core Web Vitals, performance score | API Key (sin OAuth) |
+| **PageSpeed Insights API** | Marketing → Web: performance score, CWV, oportunidades y diagnósticos | API Key (`PAGESPEED_API_KEY`) |
 | **YouTube Analytics API** | Futuro: métricas de canal YouTube por proyecto | OAuth |
 | **Business Profile Performance API** | Futuro: métricas de Google My Business | OAuth |
 

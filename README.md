@@ -50,10 +50,14 @@ EMAIL_FROM=BlissTracker <noreply@blisstracker.app>
 APP_DOMAIN=blisstracker.app
 FRONTEND_URL=http://localhost:5173
 GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=<client secret del OAuth app de Google Cloud>
 ANTHROPIC_API_KEY=sk-ant-...
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_ID=price_...
+ENCRYPTION_KEY=<64 chars hex — AES-256-GCM para cifrar tokens OAuth en DB>
+BACKEND_URL=http://localhost:3001
+PAGESPEED_API_KEY=<API key de Google Cloud para PageSpeed Insights>
 ```
 
 **Credenciales tras el seed:**
@@ -214,7 +218,8 @@ team-tracker/
         │   ├── ProjectDetail.jsx    # Tab "Info" con websiteUrl + redes sociales
         │   ├── MyReports.jsx
         │   ├── RealTime.jsx
-        │   ├── Marketing.jsx        # Tab GEO operativo; SEO/Anuncios/etc. Próximamente
+        │   ├── Marketing.jsx        # Tabs GEO y Web (GA4+PageSpeed) operativos
+        │   ├── OAuthResult.jsx      # Puente OAuth: postMessage al opener y cierra popup
         │   ├── Billing.jsx          # Estado trial/plan, upgrade, portal Stripe
         │   ├── Reports.jsx          # Admin
         │   ├── Admin.jsx            # Panel admin (deep link ?tab=)
@@ -229,7 +234,8 @@ team-tracker/
         │   ├── TrialBanner.jsx      # Banner trial ≤7d o past_due
         │   ├── ProjectInfoTab.jsx   # websiteUrl + conexiones sociales del proyecto
         │   ├── marketing/
-        │   │   └── GeoTab.jsx       # Selector proyecto, audit panel, score, items, historial
+        │   │   ├── GeoTab.jsx       # Selector proyecto, audit panel, score, items, historial
+        │   │   └── WebTab.jsx       # GA4 dashboard + snapshots IA + PageSpeed Insights
         │   ├── admin/
         │   │   ├── TeamTab.jsx      # Solo invitaciones por email
         │   │   └── ...
@@ -258,6 +264,10 @@ team-tracker/
 | `Project` | Proyectos/clientes: websiteUrl (GEO), connections (JSON redes sociales) |
 | `ProjectLink` | Links útiles por proyecto (Drive, Figma, etc.) |
 | `GeoAudit` | Análisis GEO por proyecto: score, 6 componentes, items, señales negativas |
+| `ProjectIntegration` | Tokens OAuth por proyecto (GA4, Google Ads): cifrados con AES-256-GCM |
+| `AnalyticsSnapshot` | Resumen mensual de GA4 por proyecto: sesiones, usuarios, páginas, canales |
+| `AnalyticsInsight` | Análisis IA mensual generado con Claude Haiku (deltas, tendencias, recomendaciones) |
+| `PageSpeedResult` | Resultados de PageSpeed Insights API: score, métricas CWV, oportunidades, diagnósticos |
 | `Service` | Servicios que ofrece la agencia (únicos por workspace) |
 | `Notification` | Notificaciones tipadas (5 tipos) |
 | `DailyInsight` | Coaching IA diario cacheado por usuario |
@@ -312,7 +322,7 @@ El panel super admin tiene sidebar con: Dashboard (stats + workspaces), **Billin
 
 ### Backend (Railway)
 
-1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`
+1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`
 2. Railway ejecuta `npm run db:migrate` automáticamente al deployar
 3. Seed manual una vez desde Railway Shell
 
@@ -340,6 +350,33 @@ El módulo GEO (Generative Engine Optimization) analiza qué tan bien posicionad
 - **Items unificados:** lista de hallazgos + señales negativas con severidad/prioridad.
 - **Crear tarea:** desde cualquier item se puede crear una tarea en el proyecto con prefijo "GEO - ".
 - **Feature flag:** requiere `marketing` activado en SuperAdmin → Feature Flags.
+
+---
+
+## Marketing — Web (GA4 + PageSpeed)
+
+Tab **Web** en Marketing: conecta Google Analytics 4 y muestra métricas de performance del sitio.
+
+### Google Analytics 4
+
+- **Conexión OAuth:** botón "Conectar GA4" en ProjectInfoTab abre un popup OAuth. El token se cifra con AES-256-GCM y se guarda en `ProjectIntegration`.
+- **Dashboard:** sesiones, usuarios activos, nuevos usuarios, pageviews, bounce rate, duración promedio. Rangos: este mes, mes anterior, últimos 90 días, o rango personalizado.
+- **Top páginas:** las 10 páginas más visitadas con pageviews y usuarios.
+- **Canales:** desglose de tráfico por canal (Organic, Direct, Social, etc.).
+- **Snapshots IA:** botón "Guardar snapshot" persiste el resumen mensual en DB; "Analizar con IA" genera análisis con Claude Haiku mostrando deltas vs mes anterior, tendencias y recomendaciones accionables.
+- **Crear tarea:** desde cada recomendación de IA se puede crear una tarea con prefijo "Analytics - ".
+- **Cron automático:** cada 1° del mes a las 02:00 ART se guarda el snapshot del mes anterior para todos los proyectos con GA4 conectado.
+
+### PageSpeed Insights
+
+- **Análisis manual:** botón "Analizar" en la sección Performance corre PageSpeed Insights API (mobile/desktop).
+- **Score:** 0–100 con colores (verde ≥ 90, naranja ≥ 50, rojo < 50).
+- **Core Web Vitals:** LCP, FCP, TBT, CLS, Speed Index, TTFB con valores y rating por métrica.
+- **Oportunidades:** mejoras estimadas con ahorro en ms (p.ej. eliminar JS no usado).
+- **Diagnósticos:** audits fallidos adicionales que afectan la performance.
+- **Crear tarea:** desde cualquier oportunidad o diagnóstico se puede crear una tarea con prefijo "Perf - ".
+- **Historial:** badges con el score de los últimos N análisis.
+- **Cron automático:** cada 1° del mes a las 03:30 ART corre análisis mobile + desktop para todos los proyectos con websiteUrl.
 
 ---
 
