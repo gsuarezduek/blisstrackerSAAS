@@ -9,6 +9,13 @@ function parseDateParam(val, fallback) {
   return fallback
 }
 
+// Search Console trata la URL como string exacto.
+// Las propiedades URL-prefix deben terminar con "/"; las sc-domain: no llevan slash.
+function normalizeSiteUrl(url) {
+  if (!url || url.startsWith('sc-domain:')) return url
+  return url.endsWith('/') ? url : url + '/'
+}
+
 function defaultDates(days = 28) {
   const end   = new Date()
   const start = new Date()
@@ -53,7 +60,7 @@ async function getSearchConsoleData(req, res, next) {
     }
 
     // Si el usuario guardó un Site URL específico lo usamos; si no, recurrimos a websiteUrl del proyecto
-    const siteUrl = integration.propertyId || project.websiteUrl
+    const siteUrl = normalizeSiteUrl(integration.propertyId || project.websiteUrl)
     if (!siteUrl) {
       return res.status(400).json({
         error: 'No hay URL de sitio configurada. Agregá la URL en la tab Info del proyecto.',
