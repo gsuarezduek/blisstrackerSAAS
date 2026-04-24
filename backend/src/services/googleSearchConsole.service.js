@@ -11,12 +11,19 @@ const CACHE_TTL = 30 * 60 * 1000
  */
 async function querySearchConsole(accessToken, siteUrl, body) {
   const encoded = encodeURIComponent(siteUrl)
-  const { data } = await axios.post(
-    `https://searchconsole.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
-    body,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  )
-  return data.rows ?? []
+  try {
+    const { data } = await axios.post(
+      `https://searchconsole.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
+      body,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    )
+    return data.rows ?? []
+  } catch (err) {
+    const googleMsg = err.response?.data?.error?.message ?? err.message
+    const e = new Error(googleMsg)
+    e.httpStatus = err.response?.status
+    throw e
+  }
 }
 
 /**
