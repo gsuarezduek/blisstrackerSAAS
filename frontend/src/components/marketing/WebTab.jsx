@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
-import ProjectSearchSelect from './ProjectSearchSelect'
 
 function CreateTaskModal({ title, projectId, projectName, onClose }) {
   const { user } = useAuth()
@@ -596,9 +595,7 @@ function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, hist
   )
 }
 
-export default function WebTab({ subtab = 'analytics' }) {
-  const [projects,     setProjects]     = useState([])
-  const [projectId,    setProjectId]    = useState('')
+export default function WebTab({ subtab = 'analytics', projectId, projects }) {
   const [rangePreset,  setRangePreset]  = useState('thisMonth')
   const [customStart,  setCustomStart]  = useState(todayStr())
   const [customEnd,    setCustomEnd]    = useState(todayStr())
@@ -626,12 +623,6 @@ export default function WebTab({ subtab = 'analytics' }) {
   const [psHistory,    setPsHistory]    = useState([])     // historial de scores
   const [psRunning,    setPsRunning]    = useState(false)
   const [psPollId,     setPsPollId]     = useState(null)
-
-  useEffect(() => {
-    api.get('/projects').then(r => {
-      setProjects(r.data)
-    }).catch(() => {})
-  }, [])
 
   function handlePresetChange(val) {
     setRangePreset(val)
@@ -795,17 +786,6 @@ export default function WebTab({ subtab = 'analytics' }) {
 
       {/* Controles */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap gap-4 items-end">
-        <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-            Proyecto
-          </label>
-          <ProjectSearchSelect
-            projects={projects}
-            value={projectId}
-            onChange={setProjectId}
-            placeholder="Buscar proyecto…"
-          />
-        </div>
         {subtab === 'analytics' && <div className="flex flex-wrap items-end gap-2">
           <div className="w-[180px]">
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">

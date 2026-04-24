@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
-import ProjectSearchSelect from './ProjectSearchSelect'
 
 // ─── Formateadores ────────────────────────────────────────────────────────────
 const fmtNum = n => (n ?? 0).toLocaleString('es-AR')
@@ -125,9 +124,7 @@ function DeviceBar({ devices }) {
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function SeoTab() {
-  const [projects,     setProjects]     = useState([])
-  const [projectId,    setProjectId]    = useState('')
+export default function SeoTab({ projectId, projects }) {
   const [rangePreset,  setRangePreset]  = useState('thisMonth')
   const [customStart,  setCustomStart]  = useState(todayStr())
   const [customEnd,    setCustomEnd]    = useState(todayStr())
@@ -135,10 +132,6 @@ export default function SeoTab() {
   const [data,         setData]         = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState('')
-
-  useEffect(() => {
-    api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
-  }, [])
 
   useEffect(() => {
     if (!projectId) return
@@ -177,15 +170,6 @@ export default function SeoTab() {
 
       {/* Controles */}
       <div className="flex flex-wrap items-end gap-3">
-        <div className="flex-1 min-w-48">
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Proyecto</label>
-          <ProjectSearchSelect
-            projects={projects}
-            value={projectId}
-            onChange={setProjectId}
-            placeholder="Buscar proyecto…"
-          />
-        </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Período</label>
           <select
@@ -231,7 +215,7 @@ export default function SeoTab() {
       {!projectId && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
           <div className="text-4xl mb-3">🔍</div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Seleccioná un proyecto para ver los datos de Search Console</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Seleccioná un proyecto arriba para ver los datos de Search Console</p>
         </div>
       )}
 

@@ -13,6 +13,7 @@ import ProjectSituation from '../components/ProjectSituation'
 import ProjectInfoTab from '../components/ProjectInfoTab'
 import { useAuth } from '../context/AuthContext'
 import { avatarUrl } from '../utils/avatarUrl'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
 
 const STATUS_LABEL = {
   BLOCKED:     'Bloqueada',
@@ -67,6 +68,7 @@ export default function ProjectDetail() {
   const [searchParams] = useSearchParams()
   const { user: authUser } = useAuth()
   const { labelFor } = useRoles()
+  const { enabled: marketingEnabled } = useFeatureFlag('marketing')
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
@@ -293,13 +295,20 @@ export default function ProjectDetail() {
                 <select
                   className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500"
                   value={infoTab}
-                  onChange={e => setInfoTab(e.target.value)}
+                  onChange={e => {
+                    if (e.target.value === 'marketing') {
+                      navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${id}`)
+                    } else {
+                      setInfoTab(e.target.value)
+                    }
+                  }}
                 >
                   {data.project.situationEnabled !== false && <option value="situacion">Situación</option>}
                   {data.project.linksEnabled !== false && <option value="links">Links útiles</option>}
                   <option value="personas">Equipo</option>
                   {data.project.services?.length > 0 && <option value="servicios">Servicios</option>}
                   <option value="info">Info</option>
+                  {marketingEnabled && <option value="marketing">Marketing ↗</option>}
                 </select>
                 {/* Desktop */}
                 <div className="hidden sm:flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
@@ -339,6 +348,17 @@ export default function ProjectDetail() {
                   >
                     Info
                   </button>
+                  {marketingEnabled && (
+                    <button
+                      onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${id}`)}
+                      className="px-4 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1"
+                    >
+                      Marketing
+                      <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
 

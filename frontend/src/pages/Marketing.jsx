@@ -1,10 +1,13 @@
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import GeoTab from '../components/marketing/GeoTab'
 import WebTab from '../components/marketing/WebTab'
 import SeoTab from '../components/marketing/SeoTab'
+import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import api from '../api/client'
 
 const NAV = [
   {
@@ -78,6 +81,12 @@ function ComingSoon({ label }) {
 export default function Marketing() {
   const { enabled, loading: flagLoading } = useFeatureFlag('marketing')
   const [searchParams, setSearchParams] = useSearchParams()
+  const [projects,   setProjects]   = useState([])
+  const [projectId,  setProjectId]  = useState(searchParams.get('projectId') ?? '')
+
+  useEffect(() => {
+    api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
+  }, [])
 
   function resolveNav() {
     const rawTab = searchParams.get('tab')
@@ -116,9 +125,9 @@ export default function Marketing() {
     if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />
     if (activeSub?.soon)                               return <ComingSoon label={activeSub.label} />
 
-    if (tab === 'geo-seo' && sub === 'geo') return <GeoTab />
-    if (tab === 'geo-seo' && sub === 'seo') return <SeoTab />
-    if (tab === 'web')                      return <WebTab subtab={sub} />
+    if (tab === 'geo-seo' && sub === 'geo') return <GeoTab projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'seo') return <SeoTab projectId={projectId} projects={projects} />
+    if (tab === 'web')                      return <WebTab subtab={sub} projectId={projectId} projects={projects} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />
   }
@@ -131,11 +140,21 @@ export default function Marketing() {
       <main className="max-w-5xl mx-auto px-4 py-8">
 
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Marketing</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Herramientas de optimización y análisis para tus proyectos
-          </p>
+        <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Marketing</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Herramientas de optimización y análisis para tus proyectos
+            </p>
+          </div>
+          <div className="w-64">
+            <ProjectSearchSelect
+              projects={projects}
+              value={projectId}
+              onChange={setProjectId}
+              placeholder="Seleccioná un proyecto…"
+            />
+          </div>
         </div>
 
         {!enabled ? (

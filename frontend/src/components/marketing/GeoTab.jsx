@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
-import ProjectSearchSelect from './ProjectSearchSelect'
 
 const COMPONENTS_META = [
   { key: 'citability',     icon: '🧠', label: 'Citabilidad IA',     desc: 'Qué tan probable es que la IA cite tu sitio' },
@@ -171,9 +170,7 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
   )
 }
 
-export default function GeoTab() {
-  const [projects, setProjects]     = useState([])
-  const [projectId, setProjectId]   = useState('')
+export default function GeoTab({ projectId, projects }) {
   const [audits, setAudits]         = useState([])
   const [activeAudit, setActive]    = useState(null)
   const [running, setRunning]       = useState(false)
@@ -181,13 +178,6 @@ export default function GeoTab() {
   const [loadingAudits, setLoadingAudits] = useState(false)
   const [taskModal, setTaskModal]   = useState(null) // { title }
   const pollRef = useRef(null)
-
-  // Cargar proyectos del workspace
-  useEffect(() => {
-    api.get('/projects').then(r => {
-      setProjects(r.data)
-    }).catch(() => {})
-  }, [])
 
   const selectedProject = projects.find(p => String(p.id) === projectId)
 
@@ -284,29 +274,12 @@ export default function GeoTab() {
     <div className="space-y-6">
 
       {/* Selector de proyecto */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Proyecto a analizar
-        </label>
-        {projects.length === 0 ? (
-          <p className="text-sm text-gray-400">Cargando proyectos…</p>
-        ) : (
-          <ProjectSearchSelect
-            projects={projects}
-            value={projectId}
-            onChange={setProjectId}
-            showUrl
-            placeholder="Buscar proyecto…"
-          />
-        )}
-
-        {noUrl && (
-          <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl text-sm text-amber-700 dark:text-amber-400">
-            Este proyecto no tiene una URL configurada.
-            Podés agregarla desde <strong>Admin → Proyectos</strong>, editando el proyecto.
-          </div>
-        )}
-      </div>
+      {noUrl && (
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl text-sm text-amber-700 dark:text-amber-400">
+          Este proyecto no tiene una URL configurada.
+          Podés agregarla desde <strong>Proyectos → Info</strong>.
+        </div>
+      )}
 
       {/* Panel de auditoría */}
       {selectedProject && !noUrl && (
@@ -536,11 +509,11 @@ export default function GeoTab() {
         />
       )}
 
-      {!projectId && projects.length > 0 && (
+      {!projectId && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
           <div className="text-4xl mb-3">🤖</div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Seleccioná un proyecto para empezar el análisis GEO.
+            Seleccioná un proyecto arriba para empezar el análisis GEO.
           </p>
         </div>
       )}
