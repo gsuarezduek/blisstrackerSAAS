@@ -13,7 +13,12 @@ function parseDateParam(val, fallback) {
 // Las propiedades URL-prefix deben terminar con "/"; las sc-domain: no llevan slash.
 function normalizeSiteUrl(url) {
   if (!url || url.startsWith('sc-domain:')) return url
-  let u = url.replace(/^http:\/\//i, 'https://')
+  let u = url
+  if (!u.match(/^https?:\/\//i)) {
+    u = 'https://' + u          // sin protocolo → agregar https
+  } else {
+    u = u.replace(/^http:\/\//i, 'https://')  // http → https
+  }
   return u.endsWith('/') ? u : u + '/'
 }
 
