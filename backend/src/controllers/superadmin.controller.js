@@ -384,4 +384,123 @@ async function listPayments(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments }
+// Pricing de Claude Haiku (modelo usado para todos los servicios de IA)
+const HAIKU_INPUT_COST_PER_1M  = 0.80   // USD por 1M input tokens
+const HAIKU_OUTPUT_COST_PER_1M = 4.00   // USD por 1M output tokens
+
+function calcTokenCost(inputTokens, outputTokens) {
+  return (inputTokens / 1_000_000) * HAIKU_INPUT_COST_PER_1M
+       + (outputTokens / 1_000_000) * HAIKU_OUTPUT_COST_PER_1M
+}
+
+/**
+ * GET /api/superadmin/ai-tokens
+ * Estadísticas de uso de tokens de IA.
+ * Query params:
+ *   ?period=all|30d|7d  (default: all)
+ */
+async function getAiTokenStats(req, res, next) {
+  try {
+    const { period = 'all' } = req.query
+    let dateFilter = {}
+    if (period === '30d') {
+      const from = new Date(); from.setDate(from.getDate() - 30)
+      dateFilter = { createdAt: { gte: from } }
+    } else if (period === '7d') {
+      const from = new Date(); from.setDate(from.getDate() - 7)
+      dateFilter = { createdAt: { gte: from } }
+    }
+
+    const [globalByService, workspaces, byWorkspaceAndService, dailySeries] = await Promise.all([
+      // Totales globales agrupados por servicio
+      prisma.aiTokenLog.groupBy({
+        by: ['service'],
+        where: dateFilter,
+        _sum: { inputTokens: true, outputTokens: true },
+        orderBy: { _sum: { inputTokens: 'desc' } },
+      }),
+
+      // Info de todos los workspaces (para enriquecer resultados)
+      prisma.workspace.findMany({
+        select: { id: true, name: true, slug: true, status: true },
+      }),
+
+      // Totales por workspace + servicio
+      prisma.aiTokenLog.groupBy({
+        by: ['workspaceId', 'service'],
+        where: dateFilter,
+        _sum: { inputTokens: true, outputTokens: true },
+      }),
+
+      // Serie diaria (últimos 30 días siempre) para el gráfico de evolución
+      prisma.aiTokenLog.groupBy({
+        by: ['service'],
+        where: { createdAt: { gte: (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d })() } },
+        _sum: { inputTokens: true, outputTokens: true },
+      }),
+    ])
+
+    const wsMap = Object.fromEntries(workspaces.map(w => [w.id, w]))
+
+    // Calcular totales globales
+    const totalInput  = globalByService.reduce((s, r) => s + (r._sum.inputTokens  || 0), 0)
+    const totalOutput = globalByService.reduce((s, r) => s + (r._sum.outputTokens || 0), 0)
+
+    // Armar breakdown por servicio
+    const byService = globalByService.map(r => ({
+      service:       r.service,
+      inputTokens:   r._sum.inputTokens  || 0,
+      outputTokens:  r._sum.outputTokens || 0,
+      total:         (r._sum.inputTokens || 0) + (r._sum.outputTokens || 0),
+      estimatedCost: calcTokenCost(r._sum.inputTokens || 0, r._sum.outputTokens || 0),
+    }))
+
+    // Agrupar por workspace
+    const byWorkspaceMap = {}
+    for (const row of byWorkspaceAndService) {
+      const wid = row.workspaceId
+      if (!byWorkspaceMap[wid]) {
+        byWorkspaceMap[wid] = {
+          workspaceId:   wid,
+          name:          wsMap[wid]?.name  ?? `Workspace #${wid}`,
+          slug:          wsMap[wid]?.slug  ?? '',
+          status:        wsMap[wid]?.status ?? 'unknown',
+          inputTokens:   0,
+          outputTokens:  0,
+          total:         0,
+          estimatedCost: 0,
+          byService:     [],
+        }
+      }
+      const inp  = row._sum.inputTokens  || 0
+      const out  = row._sum.outputTokens || 0
+      byWorkspaceMap[wid].inputTokens  += inp
+      byWorkspaceMap[wid].outputTokens += out
+      byWorkspaceMap[wid].total        += inp + out
+      byWorkspaceMap[wid].estimatedCost += calcTokenCost(inp, out)
+      byWorkspaceMap[wid].byService.push({
+        service:       row.service,
+        inputTokens:   inp,
+        outputTokens:  out,
+        total:         inp + out,
+        estimatedCost: calcTokenCost(inp, out),
+      })
+    }
+
+    // Incluir workspaces sin uso (total = 0) no tiene sentido, solo los que tienen logs
+    const byWorkspace = Object.values(byWorkspaceMap)
+      .sort((a, b) => b.total - a.total)
+
+    res.json({
+      period,
+      totalInputTokens:  totalInput,
+      totalOutputTokens: totalOutput,
+      totalTokens:       totalInput + totalOutput,
+      estimatedCostUsd:  calcTokenCost(totalInput, totalOutput),
+      byService,
+      byWorkspace,
+    })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats }

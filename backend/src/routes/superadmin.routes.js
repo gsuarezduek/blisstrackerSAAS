@@ -33,6 +33,7 @@ router.post('/impersonate',             c.impersonate)
 router.get('/feedback',                 c.listFeedback)
 router.put('/feedback/:id/read',        c.markFeedbackRead)
 router.get('/email-logs',               c.listEmailLogs)
+router.get('/ai-tokens',                c.getAiTokenStats)
 
 // Anuncios
 router.get('/announcements',              ann.listAll)
