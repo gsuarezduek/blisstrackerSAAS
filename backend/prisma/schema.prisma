@@ -318,9 +318,10 @@ model Task {
   pausedMinutes   Int        @default(0)
   completedAt     DateTime?
   minutesOverride Int?
-  starred         Int        @default(0)
-  isBacklog       Boolean    @default(false)
-  createdAt       DateTime   @default(now())
+  starred              Int        @default(0)
+  isBacklog            Boolean    @default(false)
+  dismissedByCreator   Boolean    @default(false)
+  createdAt            DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
   notifications Notification[]

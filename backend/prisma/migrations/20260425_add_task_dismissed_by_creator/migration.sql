@@ -1,0 +1,1 @@
+ALTER TABLE "Task" ADD COLUMN "dismissedByCreator" BOOLEAN NOT NULL DEFAULT false;

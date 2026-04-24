@@ -502,6 +502,7 @@ async function delegated(req, res, next) {
       where: {
         createdById,
         userId: { not: createdById },
+        dismissedByCreator: false,
         workDay: { workspaceId },
         OR: [
           { status: { not: 'COMPLETED' } },
@@ -520,4 +521,34 @@ async function delegated(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, editTask, setDuration, starTask, addToToday, moveToBacklog, completedHistory, delegated, assertNoActiveTask }
+async function dismissDelegated(req, res, next) {
+  try {
+    const createdById = req.user.userId
+    const workspaceId = req.workspace.id
+    const { status } = req.query  // opcional: filtra por estado
+
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+
+    const where = {
+      createdById,
+      userId: { not: createdById },
+      dismissedByCreator: false,
+      workDay: { workspaceId },
+      OR: [
+        { status: { not: 'COMPLETED' } },
+        { status: 'COMPLETED', completedAt: { gte: weekAgo } },
+      ],
+    }
+    if (status) where.status = status
+
+    const { count } = await prisma.task.updateMany({
+      where,
+      data: { dismissedByCreator: true },
+    })
+
+    res.json({ dismissed: count })
+  } catch (err) { next(err) }
+}
+
+module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, editTask, setDuration, starTask, addToToday, moveToBacklog, completedHistory, delegated, dismissDelegated, assertNoActiveTask }

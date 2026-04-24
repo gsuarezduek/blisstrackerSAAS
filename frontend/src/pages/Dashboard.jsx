@@ -27,6 +27,8 @@ export default function Dashboard() {
   const [delegated, setDelegated] = useState([])
   const [delegatedOpen, setDelegatedOpen] = useState(false)
   const [delegatedFilter, setDelegatedFilter] = useState('ALL')
+  const [dismissConfirm, setDismissConfirm] = useState(false)
+  const [dismissing, setDismissing] = useState(false)
   const [backlogOpen,       setBacklogOpen]       = useState(false)
   const [completedOpen,     setCompletedOpen]     = useState(false)
   const [completedHistory,  setCompletedHistory]  = useState([])
@@ -226,6 +228,19 @@ export default function Dashboard() {
       .filter(g => g.tasks.length > 0)
   }, [delegatedByProject, delegatedFilter])
   const hasActiveTask = !!activeTask
+
+  async function handleDismissDelegated() {
+    setDismissing(true)
+    try {
+      const params = delegatedFilter !== 'ALL' ? `?status=${delegatedFilter}` : ''
+      await api.delete(`/tasks/delegated${params}`)
+      const { data } = await api.get('/tasks/delegated')
+      setDelegated(data)
+      setDelegatedFilter('ALL')
+      setDismissConfirm(false)
+    } catch (_) {}
+    setDismissing(false)
+  }
 
   // Inactivity detection
   async function handleAutoPause() {
@@ -608,10 +623,10 @@ export default function Dashboard() {
 
             {delegatedOpen && (
               <div className="mt-2 space-y-4">
-                {/* Pills de filtro por estado */}
-                {delegatedStatuses.length > 2 && (
+                {/* Pills de filtro + botón borrar */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex flex-wrap gap-1.5">
-                    {delegatedStatuses.map(s => {
+                    {delegatedStatuses.length > 2 && delegatedStatuses.map(s => {
                       const label = { ALL: 'Todas', PENDING: 'Pendiente', IN_PROGRESS: 'En curso', PAUSED: 'Pausada', BLOCKED: 'Bloqueada', COMPLETED: 'Completada' }[s]
                       const active = delegatedFilter === s
                       const color = active ? {
@@ -625,7 +640,7 @@ export default function Dashboard() {
                       return (
                         <button
                           key={s}
-                          onClick={() => setDelegatedFilter(s)}
+                          onClick={() => { setDelegatedFilter(s); setDismissConfirm(false) }}
                           className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${color}`}
                         >
                           {label}
@@ -633,7 +648,40 @@ export default function Dashboard() {
                       )
                     })}
                   </div>
-                )}
+
+                  {/* Borrar del dashboard */}
+                  {filteredDelegatedByProject.length > 0 && (
+                    dismissConfirm ? (
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">¿Confirmar?</span>
+                        <button
+                          onClick={handleDismissDelegated}
+                          disabled={dismissing}
+                          className="text-xs font-medium px-2.5 py-1 rounded-full bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 transition-colors"
+                        >
+                          {dismissing ? 'Borrando…' : 'Sí, borrar'}
+                        </button>
+                        <button
+                          onClick={() => setDismissConfirm(false)}
+                          className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDismissConfirm(true)}
+                        className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0"
+                        title={delegatedFilter === 'ALL' ? 'Borrar todas del dashboard' : `Borrar ${delegatedFilter === 'COMPLETED' ? 'completadas' : 'filtradas'} del dashboard`}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                          <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 3.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
+                        </svg>
+                        {delegatedFilter === 'ALL' ? 'Borrar todas' : `Borrar ${filteredDelegatedByProject.reduce((s, g) => s + g.tasks.length, 0)}`}
+                      </button>
+                    )
+                  )}
+                </div>
                 {filteredDelegatedByProject.map(({ project, tasks }) => (
                   <div key={project.id}>
                     <p className="text-xs font-medium text-primary-600 dark:text-primary-400 mb-1.5 px-1">{project.name}</p>
