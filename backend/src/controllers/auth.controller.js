@@ -204,7 +204,7 @@ async function resetPassword(req, res, next) {
  */
 async function googleLogin(req, res, next) {
   try {
-    const { credential } = req.body
+    const { credential, nonce } = req.body
     const slug = req.headers['x-workspace']
 
     if (!credential) return res.status(400).json({ error: 'Token de Google requerido' })
@@ -215,6 +215,15 @@ async function googleLogin(req, res, next) {
       audience: process.env.GOOGLE_CLIENT_ID,
     })
     const payload = ticket.getPayload()
+
+    // Verificar nonce anti-CSRF si fue enviado
+    if (nonce) {
+      const expectedNonce = crypto.createHash('sha256').update(nonce).digest('hex')
+      if (payload.nonce !== expectedNonce) {
+        return res.status(401).json({ error: 'Nonce inválido' })
+      }
+    }
+
     if (!payload.email_verified) {
       return res.status(401).json({ error: 'El email de Google no está verificado' })
     }

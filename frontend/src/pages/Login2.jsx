@@ -1,21 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import BlissLogo from '../components/BlissLogo'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const RESERVED_SLUGS = ['www', 'app', 'api', 'mail', 'static', 'cdn']
-
-function isRealWorkspaceSubdomain() {
-  const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-  const hostname  = window.location.hostname
-  const match = hostname.match(new RegExp(`^([a-z0-9-]+)\\.${appDomain.replace(/\./g, '\\.')}$`))
-  return !!(match && !RESERVED_SLUGS.includes(match[1]))
-}
+import { isWorkspaceSubdomain } from '../utils/domain'
 
 // ── Selector de workspace post-login ──────────────────────────────────────────
 
@@ -81,6 +71,13 @@ function RootLogin() {
   const [loading,    setLoading]    = useState(false)
   const [workspaces, setWorkspaces] = useState(null)
 
+  // Nonce para el botón de Google — generado una sola vez por sesión de login
+  const nonce = useMemo(() => {
+    const bytes = new Uint8Array(16)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+  }, [])
+
   function redirect(workspaces) {
     const target = fromSlug
       ? workspaces.find(w => w.slug === fromSlug) ?? workspaces[0]
@@ -111,7 +108,7 @@ function RootLogin() {
     setError('')
     setLoading(true)
     try {
-      const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/google`, { credential })
+      const { data } = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/google`, { credential, nonce })
       redirect(data.workspaces)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo iniciar sesión con Google')
@@ -157,6 +154,7 @@ function RootLogin() {
           </div>
           <div className="flex justify-center">
             <GoogleLogin
+              nonce={nonce}
               onSuccess={handleGoogleSuccess}
               onError={() => setError('No se pudo iniciar sesión con Google')}
               useOneTap={false} text="continue_with" locale="es"
@@ -188,7 +186,7 @@ export default function Login2() {
     return null
   }
 
-  if (!isRealWorkspaceSubdomain()) return <RootLogin />
+  if (!isWorkspaceSubdomain()) return <RootLogin />
 
   // En subdominio de workspace → redirigir al login central
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'

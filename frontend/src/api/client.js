@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { isWorkspaceSubdomain } from '../utils/domain'
 
 // Extrae el slug del workspace desde el hostname.
 // En producción: 'bliss.blisstracker.app' → 'bliss'
@@ -32,7 +33,11 @@ api.interceptors.response.use(
   err => {
     if (err.response?.status === 401) {
       localStorage.removeItem('token')
-      window.location.href = '/login'
+      // Solo redirigir al login desde subdominios de workspace.
+      // En el dominio raíz (blisstracker.app) dejamos que la app muestre Landing.
+      if (isWorkspaceSubdomain()) {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(err)
   }
