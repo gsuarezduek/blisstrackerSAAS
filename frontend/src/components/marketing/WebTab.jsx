@@ -595,7 +595,7 @@ function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, hist
   )
 }
 
-export default function WebTab() {
+export default function WebTab({ subtab = 'analytics' }) {
   const [projects,     setProjects]     = useState([])
   const [projectId,    setProjectId]    = useState('')
   const [rangePreset,  setRangePreset]  = useState('thisMonth')
@@ -768,8 +768,10 @@ export default function WebTab() {
     }
   }
 
-  const ov            = analytics?.overview ?? {}
-  const totalSessions = analytics?.channels?.reduce((s, c) => s + c.sessions, 0) || 0
+  const ov              = analytics?.overview ?? {}
+  const totalSessions   = analytics?.channels?.reduce((s, c) => s + c.sessions, 0) || 0
+  const selectedProject = projects.find(p => String(p.id) === projectId)
+  const websiteUrlForPS = selectedProject?.websiteUrl ?? analytics?.websiteUrl
   const dateLabel     = formatDateLabel(appliedRange.preset, appliedRange.start, appliedRange.end)
   const activeMonth   = getActiveMonth(appliedRange.preset)
   const isMonthly     = !!activeMonth
@@ -807,7 +809,7 @@ export default function WebTab() {
             ))}
           </select>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
+        {subtab === 'analytics' && <div className="flex flex-wrap items-end gap-2">
           <div className="w-[180px]">
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
               Período
@@ -860,8 +862,8 @@ export default function WebTab() {
               </button>
             </>
           )}
-        </div>
-        {analytics?.websiteUrl && (
+        </div>}
+        {subtab === 'analytics' && analytics?.websiteUrl && (
           <a
             href={/^https?:\/\//i.test(analytics.websiteUrl) ? analytics.websiteUrl : `https://${analytics.websiteUrl}`}
             target="_blank"
@@ -877,8 +879,8 @@ export default function WebTab() {
         )}
       </div>
 
-      {/* Estados de error */}
-      {errorStatus === 'no_integration' && (
+      {/* Estados de error — solo Analytics */}
+      {subtab === 'analytics' && errorStatus === 'no_integration' && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-8 text-center">
           <div className="text-3xl mb-3">📊</div>
           <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">
@@ -889,7 +891,7 @@ export default function WebTab() {
           </p>
         </div>
       )}
-      {errorStatus === 'no_property' && (
+      {subtab === 'analytics' && errorStatus === 'no_property' && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-8 text-center">
           <div className="text-3xl mb-3">🔢</div>
           <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">
@@ -900,7 +902,7 @@ export default function WebTab() {
           </p>
         </div>
       )}
-      {errorStatus === 'revoked' && (
+      {subtab === 'analytics' && errorStatus === 'revoked' && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl p-8 text-center">
           <div className="text-3xl mb-3">⚠️</div>
           <p className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">
@@ -911,22 +913,22 @@ export default function WebTab() {
           </p>
         </div>
       )}
-      {error && (
+      {subtab === 'analytics' && error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-2xl p-4 text-sm text-red-700 dark:text-red-400">
           {error}
         </div>
       )}
 
-      {/* Loading */}
-      {loading && (
+      {/* Loading — solo Analytics */}
+      {subtab === 'analytics' && loading && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-12 text-center">
           <div className="inline-block w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-3" />
           <p className="text-sm text-gray-400">Cargando datos de Google Analytics…</p>
         </div>
       )}
 
-      {/* Dashboard */}
-      {analytics && !loading && (
+      {/* Dashboard — solo Analytics */}
+      {subtab === 'analytics' && analytics && !loading && (
         <>
           {/* Métricas principales */}
           <div>
@@ -1223,10 +1225,10 @@ export default function WebTab() {
         </>
       )}
 
-      {/* ── PageSpeed Insights ── independiente del período, aparece si hay websiteUrl */}
-      {(analytics?.websiteUrl || psResult || psRunning) && (
+      {/* ── PageSpeed Insights — solo Performance ── */}
+      {subtab === 'performance' && (
         <PageSpeedSection
-          websiteUrl={analytics?.websiteUrl}
+          websiteUrl={websiteUrlForPS}
           strategy={psStrategy}
           onStrategyChange={s => setPsStrategy(s)}
           result={psResult}
@@ -1234,7 +1236,7 @@ export default function WebTab() {
           running={psRunning}
           onRun={handleRunPageSpeed}
           projectId={projectId}
-          projectName={analytics?.projectName ?? ''}
+          projectName={selectedProject?.name ?? analytics?.projectName ?? ''}
         />
       )}
 
