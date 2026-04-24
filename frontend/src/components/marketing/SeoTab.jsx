@@ -2,25 +2,51 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import ProjectSearchSelect from './ProjectSearchSelect'
 
-// Formateadores
-const fmtNum  = n => (n ?? 0).toLocaleString('es-AR')
-const fmtPct  = n => `${((n ?? 0) * 100).toFixed(1)}%`
-const fmtPos  = n => (n ?? 0).toFixed(1)
+// ─── Formateadores ────────────────────────────────────────────────────────────
+const fmtNum = n => (n ?? 0).toLocaleString('es-AR')
+const fmtPct = n => `${((n ?? 0) * 100).toFixed(1)}%`
+const fmtPos = n => (n ?? 0).toFixed(1)
 
-const PERIODS = [
-  { label: 'Últimos 7 días',  days: 7  },
-  { label: 'Últimos 28 días', days: 28 },
-  { label: 'Últimos 90 días', days: 90 },
+// ─── Fechas — Search Console solo acepta YYYY-MM-DD (no 'NdaysAgo') ──────────
+const PRESET_RANGES = [
+  { value: 'thisMonth', label: 'Este mes' },
+  { value: 'lastMonth', label: 'Mes anterior' },
+  { value: '90daysAgo', label: 'Últimos 90 días' },
+  { value: 'custom',    label: 'Personalizado' },
 ]
 
-function datesFromDays(days) {
-  const end   = new Date()
-  const start = new Date()
-  start.setDate(start.getDate() - days)
-  const fmt = d => d.toISOString().slice(0, 10)
-  return { startDate: fmt(start), endDate: fmt(end) }
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
 }
 
+function getDateParams(range, customStart, customEnd) {
+  const now   = new Date()
+  const year  = now.getFullYear()
+  const month = now.getMonth()
+  const pad   = n => String(n).padStart(2, '0')
+
+  if (range === 'thisMonth') {
+    return { startDate: `${year}-${pad(month + 1)}-01`, endDate: todayStr() }
+  }
+  if (range === 'lastMonth') {
+    const lm      = month === 0 ? 11 : month - 1
+    const lmYear  = month === 0 ? year - 1 : year
+    const lastDay = new Date(lmYear, lm + 1, 0).getDate()
+    return {
+      startDate: `${lmYear}-${pad(lm + 1)}-01`,
+      endDate:   `${lmYear}-${pad(lm + 1)}-${pad(lastDay)}`,
+    }
+  }
+  if (range === '90daysAgo') {
+    const start = new Date()
+    start.setDate(start.getDate() - 90)
+    return { startDate: start.toISOString().slice(0, 10), endDate: todayStr() }
+  }
+  // custom
+  return { startDate: customStart || todayStr(), endDate: customEnd || todayStr() }
+}
+
+// ─── Componentes de UI ────────────────────────────────────────────────────────
 function MetricCard({ label, value, sub }) {
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
@@ -68,10 +94,9 @@ function DataTable({ title, rows, cols }) {
 
 function DeviceBar({ devices }) {
   if (!devices?.length) return null
-  const total = devices.reduce((s, d) => s + d.clicks, 0) || 1
+  const total  = devices.reduce((s, d) => s + d.clicks, 0) || 1
   const COLORS = { DESKTOP: 'bg-primary-500', MOBILE: 'bg-blue-500', TABLET: 'bg-purple-400' }
   const LABELS = { DESKTOP: 'Desktop', MOBILE: 'Mobile', TABLET: 'Tablet' }
-
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Dispositivos</h3>
@@ -99,30 +124,32 @@ function DeviceBar({ devices }) {
   )
 }
 
+// ─── Componente principal ─────────────────────────────────────────────────────
 export default function SeoTab() {
-  const [projects,   setProjects]   = useState([])
-  const [projectId,  setProjectId]  = useState('')
-  const [periodIdx,  setPeriodIdx]  = useState(1) // 28 días por defecto
-  const [data,       setData]       = useState(null)
-  const [loading,    setLoading]    = useState(false)
-  const [error,      setError]      = useState('')
+  const [projects,     setProjects]     = useState([])
+  const [projectId,    setProjectId]    = useState('')
+  const [rangePreset,  setRangePreset]  = useState('thisMonth')
+  const [customStart,  setCustomStart]  = useState(todayStr())
+  const [customEnd,    setCustomEnd]    = useState(todayStr())
+  const [appliedRange, setAppliedRange] = useState({ preset: 'thisMonth', start: '', end: '' })
+  const [data,         setData]         = useState(null)
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState('')
 
-  // Cargar lista de proyectos
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
   }, [])
 
-  // Cargar datos cuando cambia proyecto o período
   useEffect(() => {
     if (!projectId) return
-    const { startDate, endDate } = datesFromDays(PERIODS[periodIdx].days)
+    const { startDate, endDate } = getDateParams(appliedRange.preset, appliedRange.start, appliedRange.end)
     setLoading(true)
     setError('')
     setData(null)
     api.get(`/marketing/projects/${projectId}/search-console`, { params: { startDate, endDate } })
       .then(r => setData(r.data))
       .catch(err => {
-        const msg = err.response?.data?.error ?? 'Error al cargar datos'
+        const msg    = err.response?.data?.error ?? 'Error al cargar datos'
         const status = err.response?.data?.status
         if (status === 'no_site_url') {
           setError('Este proyecto no tiene URL de sitio configurada. Agregala en la tab Info del proyecto.')
@@ -131,7 +158,17 @@ export default function SeoTab() {
         }
       })
       .finally(() => setLoading(false))
-  }, [projectId, periodIdx])
+  }, [projectId, appliedRange])
+
+  function handleRangeChange(val) {
+    setRangePreset(val)
+    if (val !== 'custom') setAppliedRange({ preset: val, start: '', end: '' })
+  }
+
+  function handleApplyCustom() {
+    if (!customStart || !customEnd || customStart > customEnd) return
+    setAppliedRange({ preset: 'custom', start: customStart, end: customEnd })
+  }
 
   const overview = data?.overview
 
@@ -152,15 +189,42 @@ export default function SeoTab() {
         <div>
           <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Período</label>
           <select
-            value={periodIdx}
-            onChange={e => setPeriodIdx(Number(e.target.value))}
+            value={rangePreset}
+            onChange={e => handleRangeChange(e.target.value)}
             className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           >
-            {PERIODS.map((p, i) => (
-              <option key={i} value={i}>{p.label}</option>
+            {PRESET_RANGES.map(p => (
+              <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
         </div>
+        {rangePreset === 'custom' && (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Desde</label>
+              <input
+                type="date" value={customStart} max={customEnd || todayStr()}
+                onChange={e => setCustomStart(e.target.value)}
+                className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Hasta</label>
+              <input
+                type="date" value={customEnd} min={customStart} max={todayStr()}
+                onChange={e => setCustomEnd(e.target.value)}
+                className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <button
+              onClick={handleApplyCustom}
+              disabled={!customStart || !customEnd || customStart > customEnd}
+              className="px-4 py-2.5 text-sm bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white font-medium rounded-xl transition-colors self-end"
+            >
+              Aplicar
+            </button>
+          </>
+        )}
       </div>
 
       {/* Estado vacío */}
@@ -191,50 +255,46 @@ export default function SeoTab() {
       {/* Datos */}
       {data && !loading && (
         <>
-          {/* Métricas overview */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <MetricCard label="Clicks"       value={fmtNum(overview.clicks)}      />
-            <MetricCard label="Impresiones"  value={fmtNum(overview.impressions)} />
-            <MetricCard label="CTR promedio" value={fmtPct(overview.ctr)}         />
-            <MetricCard label="Posición media" value={fmtPos(overview.position)}  sub="más bajo = mejor" />
+            <MetricCard label="Clicks"         value={fmtNum(overview.clicks)}      />
+            <MetricCard label="Impresiones"    value={fmtNum(overview.impressions)} />
+            <MetricCard label="CTR promedio"   value={fmtPct(overview.ctr)}         />
+            <MetricCard label="Posición media" value={fmtPos(overview.position)} sub="más bajo = mejor" />
           </div>
 
-          {/* Dispositivos */}
           {data.devices?.length > 0 && <DeviceBar devices={data.devices} />}
 
-          {/* Top queries + top páginas */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <DataTable
               title="Top consultas"
               rows={data.topQueries}
               cols={[
-                { key: 'query',       label: 'Consulta',    truncate: true },
-                { key: 'clicks',      label: 'Clicks',      right: true, fmt: fmtNum },
-                { key: 'impressions', label: 'Impres.',     right: true, fmt: fmtNum },
-                { key: 'position',    label: 'Posición',    right: true, fmt: fmtPos },
+                { key: 'query',       label: 'Consulta',  truncate: true },
+                { key: 'clicks',      label: 'Clicks',    right: true, fmt: fmtNum },
+                { key: 'impressions', label: 'Impres.',   right: true, fmt: fmtNum },
+                { key: 'position',    label: 'Posición',  right: true, fmt: fmtPos },
               ]}
             />
             <DataTable
               title="Top páginas"
               rows={data.topPages}
               cols={[
-                { key: 'page',        label: 'Página',      truncate: true, mono: true },
-                { key: 'clicks',      label: 'Clicks',      right: true, fmt: fmtNum },
-                { key: 'impressions', label: 'Impres.',     right: true, fmt: fmtNum },
-                { key: 'position',    label: 'Posición',    right: true, fmt: fmtPos },
+                { key: 'page',        label: 'Página',    truncate: true, mono: true },
+                { key: 'clicks',      label: 'Clicks',    right: true, fmt: fmtNum },
+                { key: 'impressions', label: 'Impres.',   right: true, fmt: fmtNum },
+                { key: 'position',    label: 'Posición',  right: true, fmt: fmtPos },
               ]}
             />
           </div>
 
-          {/* Países */}
           {data.countries?.length > 0 && (
             <DataTable
               title="Top países"
               rows={data.countries}
               cols={[
-                { key: 'country',     label: 'País',        fmt: c => c?.toUpperCase() },
-                { key: 'clicks',      label: 'Clicks',      right: true, fmt: fmtNum },
-                { key: 'impressions', label: 'Impresiones', right: true, fmt: fmtNum },
+                { key: 'country',     label: 'País',         fmt: c => c?.toUpperCase() },
+                { key: 'clicks',      label: 'Clicks',       right: true, fmt: fmtNum },
+                { key: 'impressions', label: 'Impresiones',  right: true, fmt: fmtNum },
               ]}
             />
           )}
