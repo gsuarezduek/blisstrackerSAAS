@@ -64,6 +64,13 @@ function IcoLogout() {
     </svg>
   )
 }
+function IcoPlus() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
+      <path fillRule="evenodd" d="M12 3.75a.75.75 0 01.75.75v6.75h6.75a.75.75 0 010 1.5h-6.75v6.75a.75.75 0 01-1.5 0v-6.75H4.5a.75.75 0 010-1.5h6.75V4.5a.75.75 0 01.75-.75z" clipRule="evenodd" />
+    </svg>
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -161,17 +168,26 @@ export default function Navbar() {
         highlight: true,
       }],
     }] : []),
-    ...(otherWorkspaces.length > 0 ? [{
+    {
       id: 'workspaces',
-      heading: 'Cambiar workspace',
-      items: otherWorkspaces.map(ws => ({
-        key:      ws.slug,
-        label:    switchLoading === ws.slug ? 'Cambiando…' : ws.name,
-        icon:     <IcoWorkspace />,
-        onClick:  () => handleSwitch(ws.slug),
-        disabled: !!switchLoading,
-      })),
-    }] : []),
+      heading: 'Workspaces',
+      items: [
+        ...otherWorkspaces.map(ws => ({
+          key:      ws.slug,
+          label:    switchLoading === ws.slug ? 'Cambiando…' : ws.name,
+          icon:     <IcoWorkspace />,
+          onClick:  () => handleSwitch(ws.slug),
+          disabled: !!switchLoading,
+        })),
+        {
+          key:       'new-workspace',
+          to:        '/register',
+          label:     'Crear workspace',
+          icon:      <IcoPlus />,
+          highlight: true,
+        },
+      ],
+    },
     {
       id: 'logout',
       items: [{
