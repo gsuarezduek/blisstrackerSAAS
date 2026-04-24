@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
+import ProjectSearchSelect from './ProjectSearchSelect'
 
 function CreateTaskModal({ title, projectId, projectName, onClose }) {
   const { user } = useAuth()
@@ -629,7 +630,6 @@ export default function WebTab({ subtab = 'analytics' }) {
   useEffect(() => {
     api.get('/projects').then(r => {
       setProjects(r.data)
-      if (r.data.length > 0) setProjectId(String(r.data[0].id))
     }).catch(() => {})
   }, [])
 
@@ -799,15 +799,12 @@ export default function WebTab({ subtab = 'analytics' }) {
           <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
             Proyecto
           </label>
-          <select
+          <ProjectSearchSelect
+            projects={projects}
             value={projectId}
-            onChange={e => setProjectId(e.target.value)}
-            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            {projects.map(p => (
-              <option key={p.id} value={String(p.id)}>{p.name}</option>
-            ))}
-          </select>
+            onChange={setProjectId}
+            placeholder="Buscar proyecto…"
+          />
         </div>
         {subtab === 'analytics' && <div className="flex flex-wrap items-end gap-2">
           <div className="w-[180px]">

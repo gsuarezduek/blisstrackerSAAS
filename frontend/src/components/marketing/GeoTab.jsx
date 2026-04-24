@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
+import ProjectSearchSelect from './ProjectSearchSelect'
 
 const COMPONENTS_META = [
   { key: 'citability',     icon: '🧠', label: 'Citabilidad IA',     desc: 'Qué tan probable es que la IA cite tu sitio' },
@@ -185,8 +186,6 @@ export default function GeoTab() {
   useEffect(() => {
     api.get('/projects').then(r => {
       setProjects(r.data)
-      const first = r.data.find(p => p.websiteUrl)
-      if (first) setProjectId(String(first.id))
     }).catch(() => {})
   }, [])
 
@@ -292,18 +291,13 @@ export default function GeoTab() {
         {projects.length === 0 ? (
           <p className="text-sm text-gray-400">Cargando proyectos…</p>
         ) : (
-          <select
+          <ProjectSearchSelect
+            projects={projects}
             value={projectId}
-            onChange={e => setProjectId(e.target.value)}
-            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="">— Seleccioná un proyecto —</option>
-            {projects.map(p => (
-              <option key={p.id} value={String(p.id)}>
-                {p.name}{p.websiteUrl ? ` — ${p.websiteUrl}` : ' (sin URL)'}
-              </option>
-            ))}
-          </select>
+            onChange={setProjectId}
+            showUrl
+            placeholder="Buscar proyecto…"
+          />
         )}
 
         {noUrl && (
