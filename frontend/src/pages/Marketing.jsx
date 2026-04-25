@@ -7,6 +7,7 @@ import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
 import SaludTab    from '../components/marketing/SaludTab'
+import InstagramTab from '../components/marketing/InstagramTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import api from '../api/client'
@@ -32,10 +33,10 @@ const NAV = [
   {
     id: 'rrss',
     label: '📱 RRSS',
-    soon: true,
     subs: [
-      { id: 'metricas',   label: '📊 Métricas',   soon: true },
-      { id: 'contenidos', label: '✍️ Contenidos', soon: true },
+      { id: 'instagram', label: '📸 Instagram' },
+      { id: 'tiktok',    label: '🎵 TikTok',   soon: true },
+      { id: 'youtube',   label: '▶️ YouTube',  soon: true },
     ],
   },
   {
@@ -60,7 +61,7 @@ const LEGACY_MAP = {
   seo:        { tab: 'geo-seo',  sub: 'seo' },
   web:        { tab: 'web',      sub: 'analytics' },
   anuncios:   { tab: 'anuncios', sub: 'google-ads' },
-  contenidos: { tab: 'rrss',     sub: 'contenidos' },
+  contenidos: { tab: 'rrss',     sub: 'instagram' },
   informes:   { tab: 'informes', sub: 'salud' },
 }
 
@@ -146,6 +147,7 @@ export default function Marketing() {
     if (tab === 'geo-seo' && sub === 'seo')      return <SeoTab      projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'keywords') return <KeywordsTab projectId={projectId} projects={projects} />
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} />
+    if (tab === 'rrss' && sub === 'instagram')   return <InstagramTab projectId={projectId} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />
   }

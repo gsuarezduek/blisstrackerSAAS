@@ -53,7 +53,7 @@ STRIPE_SECRET_KEY=sk_live_...          # o sk_test_... en desarrollo
 STRIPE_WEBHOOK_SECRET=whsec_...        # secret del webhook en Stripe Dashboard
 STRIPE_PRICE_ID=price_...             # ID del precio por seat/mes en Stripe
 ENCRYPTION_KEY=<64 chars hex>         # AES-256-GCM key para cifrar tokens OAuth en DB (node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-BACKEND_URL=https://api.blisstracker.app  # URL pública del backend (para construir redirect URI de OAuth)
+BACKEND_URL=https://blisstrackersaas-production.up.railway.app  # URL pública del backend (para construir redirect URI de OAuth)
 PAGESPEED_API_KEY=...                 # Google Cloud API Key con acceso a PageSpeed Insights API
 ```
 
@@ -435,17 +435,28 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 | **YouTube Analytics API** | Futuro: métricas de canal YouTube por proyecto | OAuth |
 | **Business Profile Performance API** | Futuro: métricas de Google My Business | OAuth |
 
-**Redirect URI registrada en Cloud Console:**
-- `https://api.blisstracker.app/api/marketing/integrations/google/callback` (producción)
+**Redirect URIs registradas en Cloud Console (Google):**
+- `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/google/callback` (producción)
 - `http://localhost:3001/api/marketing/integrations/google/callback` (desarrollo)
 
-**OAuth Consent Screen scopes habilitados:**
+**Redirect URIs registradas en Meta for Developers (Instagram):**
+- `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/meta/callback` (producción)
+- `http://localhost:3001/api/marketing/integrations/meta/callback` (desarrollo)
+
+**OAuth Consent Screen scopes habilitados (Google):**
 - `https://www.googleapis.com/auth/analytics.readonly`
 - Agregar `https://www.googleapis.com/auth/adwords` cuando el Developer Token de Google Ads sea aprobado
+
+**Permisos requeridos en Meta App (Instagram Graph API):**
+- `instagram_basic` — leer perfil y publicaciones
+- `pages_show_list` — listar páginas de Facebook del usuario
+- `pages_read_engagement` — acceder a la cuenta IG a través de la página
 
 **Env vars de integraciones (Railway):**
 ```
 GOOGLE_CLIENT_SECRET=...        # client secret del OAuth app de Google Cloud
 ENCRYPTION_KEY=<64 chars hex>   # AES-256-GCM key para cifrar tokens en DB
-BACKEND_URL=https://api.blisstracker.app
+BACKEND_URL=https://blisstrackersaas-production.up.railway.app
+META_APP_ID=...                 # Facebook App ID (Meta for Developers)
+META_APP_SECRET=...             # Facebook App Secret
 ```

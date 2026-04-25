@@ -22,8 +22,9 @@ const { updateAllMemories }             = require('./services/insightMemory.serv
 const { saveAllPreviousMonthSnapshots } = require('./services/analyticsSnapshot.service')
 const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service')
 const { saveAllKeywordRankings }        = require('./services/keywordTracking.service')
-const { runAllMonthlyGeoAudits }        = require('./services/geoAudit.service')
-const { sendAllMonthlyMarketingReports } = require('./services/monthlyMarketingReport.service')
+const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.service')
+const { sendAllMonthlyMarketingReports }   = require('./services/monthlyMarketingReport.service')
+const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
 
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
 let weeklyReportRunning         = false
@@ -33,6 +34,7 @@ let pageSpeedMonthlyRunning     = false
 let keywordRankingsRunning      = false
 let geoMonthlyRunning           = false
 let marketingReportRunning      = false
+let instagramSnapshotRunning    = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -139,6 +141,16 @@ cron.schedule('0 5 1 * *', async () => {
   try { await sendAllMonthlyMarketingReports() }
   catch (err) { console.error('[MonthlyReport] Error en cron mensual:', err.message) }
   finally { marketingReportRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: snapshot mensual de Instagram — 1° del mes 04:30 ART
+cron.schedule('30 4 1 * *', async () => {
+  if (instagramSnapshotRunning) { console.log('[InstagramSnapshot] Ya en ejecución, se omite.'); return }
+  instagramSnapshotRunning = true
+  console.log('[InstagramSnapshot] Iniciando guardado mensual automático...')
+  try { await saveAllMonthlyInstagramSnapshots() }
+  catch (err) { console.error('[InstagramSnapshot] Error en cron mensual:', err.message) }
+  finally { instagramSnapshotRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: eliminar workspaces vencidos — cada 15 minutos
