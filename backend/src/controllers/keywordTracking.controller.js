@@ -30,16 +30,88 @@ async function listKeywords(req, res, next) {
   try {
     const projectId   = Number(req.params.id)
     const workspaceId = req.workspace.id
+    const reqCountry  = req.query.country || null
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, workspaceId },
-      select: { id: true },
-    })
+    const [project, integration] = await Promise.all([
+      prisma.project.findFirst({
+        where: { id: projectId, workspaceId },
+        select: { id: true, websiteUrl: true },
+      }),
+      prisma.projectIntegration.findUnique({
+        where: { projectId_type: { projectId, type: 'google_search_console' } },
+      }),
+    ])
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const month     = currentMonthStr()
-    const prevM     = prevMonth(month)
+    const integrationCountry = integration?.country || 'arg'
+    const country = reqCountry || integrationCountry
+    const liveMode = !!reqCountry && reqCountry !== integrationCountry
 
+    const month = currentMonthStr()
+    const prevM = prevMonth(month)
+
+    if (liveMode) {
+      // ── Modo en vivo: consulta GSC con filtro de país diferente al almacenado ──
+      if (!integration || integration.status !== 'active') {
+        return res.status(400).json({ error: 'GSC no conectado', status: 'no_integration' })
+      }
+
+      const tracked = await prisma.trackedKeyword.findMany({
+        where: { projectId, workspaceId },
+        orderBy: { createdAt: 'asc' },
+      })
+
+      if (!tracked.length) {
+        return res.json({ keywords: [], liveMode: true, country, integrationCountry })
+      }
+
+      const siteUrl = normalizeSiteUrl(integration.propertyId || project.websiteUrl)
+      if (!siteUrl) return res.status(400).json({ error: 'No hay URL de sitio configurada' })
+
+      const { startDate, endDate } = monthBounds(month)
+      const accessToken = await getValidAccessToken(integration)
+
+      let rows = []
+      try {
+        rows = await querySearchConsole(accessToken, siteUrl, {
+          startDate,
+          endDate,
+          type: 'web',
+          dimensions: ['query'],
+          rowLimit: 100,
+          ...(country !== 'all' ? {
+            dimensionFilterGroups: [{ filters: [{ dimension: 'country', operator: 'equals', expression: country }] }],
+          } : {}),
+        })
+      } catch (err) {
+        return res.status(502).json({ error: `Error al consultar Search Console: ${err.message}` })
+      }
+
+      const rowMap = {}
+      for (const r of rows) rowMap[r.keys[0].toLowerCase()] = r
+
+      const keywords = tracked.map(kw => {
+        const row = rowMap[kw.query.toLowerCase()]
+        return {
+          id:               kw.id,
+          query:            kw.query,
+          currentMonth:     month,
+          currentPosition:  row ? row.position : null,
+          previousPosition: null,
+          delta:            null,
+          clicks:           row ? Math.round(row.clicks)      : 0,
+          impressions:      row ? Math.round(row.impressions)  : 0,
+          ctr:              row ? row.ctr                      : 0,
+          hasAnalysis:      !!kw.analysisContent,
+          analysisUpdatedAt: kw.analysisUpdatedAt,
+          createdAt:        kw.createdAt,
+        }
+      })
+
+      return res.json({ keywords, liveMode: true, country, integrationCountry })
+    }
+
+    // ── Modo almacenado: devuelve rankings guardados en DB ──
     const tracked = await prisma.trackedKeyword.findMany({
       where: { projectId, workspaceId },
       include: {
@@ -51,11 +123,11 @@ async function listKeywords(req, res, next) {
       orderBy: { createdAt: 'asc' },
     })
 
-    const result = tracked.map(kw => {
+    const keywords = tracked.map(kw => {
       const curr = kw.rankings.find(r => r.month === month)
       const prev = kw.rankings.find(r => r.month === prevM)
       const delta = curr && prev && prev.position > 0
-        ? parseFloat((prev.position - curr.position).toFixed(2))  // negativo = empeoró, positivo = mejoró
+        ? parseFloat((prev.position - curr.position).toFixed(2))
         : null
       return {
         id:               kw.id,
@@ -73,7 +145,7 @@ async function listKeywords(req, res, next) {
       }
     })
 
-    res.json(result)
+    res.json({ keywords, liveMode: false, country: integrationCountry, integrationCountry })
   } catch (err) { next(err) }
 }
 
@@ -165,6 +237,7 @@ async function suggestKeywords(req, res, next) {
     const month = currentMonthStr()
     const { startDate, endDate } = monthBounds(month)
     const accessToken = await getValidAccessToken(integration)
+    const country = req.query.country || integration.country || 'arg'
 
     let rows = []
     try {
@@ -174,6 +247,9 @@ async function suggestKeywords(req, res, next) {
         type: 'web',
         dimensions: ['query'],
         rowLimit: 25,
+        ...(country !== 'all' ? {
+          dimensionFilterGroups: [{ filters: [{ dimension: 'country', operator: 'equals', expression: country }] }],
+        } : {}),
       })
     } catch (err) {
       return res.status(502).json({ error: `Error al consultar Search Console: ${err.message}` })

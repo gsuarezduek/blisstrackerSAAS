@@ -228,7 +228,7 @@ async function listIntegrations(req, res, next) {
       where: { projectId },
       select: {
         type: true, status: true, propertyId: true,
-        customerId: true, scopes: true, connectedAt: true,
+        customerId: true, country: true, scopes: true, connectedAt: true,
         // tokens NO se devuelven al frontend
       },
     })
@@ -245,7 +245,7 @@ async function updateIntegration(req, res, next) {
   try {
     const projectId = Number(req.params.id)
     const type      = req.params.type
-    const { propertyId, customerId } = req.body
+    const { propertyId, customerId, country } = req.body
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, workspaceId: req.workspace.id },
@@ -256,11 +256,12 @@ async function updateIntegration(req, res, next) {
     const updateData = {}
     if (propertyId !== undefined) updateData.propertyId = propertyId || null
     if (customerId !== undefined) updateData.customerId = customerId || null
+    if (country    !== undefined) updateData.country    = country    || 'arg'
 
     const updated = await prisma.projectIntegration.update({
       where: { projectId_type: { projectId, type } },
       data:  updateData,
-      select: { type: true, status: true, propertyId: true, customerId: true, scopes: true },
+      select: { type: true, status: true, propertyId: true, customerId: true, country: true, scopes: true },
     })
 
     res.json(updated)

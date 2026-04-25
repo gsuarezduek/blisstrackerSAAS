@@ -1,6 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 
+// ─── Países disponibles (ISO 3166-1 alpha-3 lowercase) ────────────────────────
+
+const COUNTRIES = [
+  { code: 'arg', label: 'Argentina' },
+  { code: 'mex', label: 'México' },
+  { code: 'col', label: 'Colombia' },
+  { code: 'esp', label: 'España' },
+  { code: 'chl', label: 'Chile' },
+  { code: 'per', label: 'Perú' },
+  { code: 'ury', label: 'Uruguay' },
+  { code: 'bra', label: 'Brasil' },
+  { code: 'usa', label: 'EE.UU.' },
+  { code: 'all', label: 'Global (todos)' },
+]
+
+const countryLabel = code => COUNTRIES.find(c => c.code === code)?.label ?? code.toUpperCase()
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmtPos = n => (n != null && n > 0) ? n.toFixed(1) : '—'
@@ -34,9 +51,7 @@ function PositionChart({ rankings }) {
 
   return (
     <svg width={W} height={H} className="w-full" viewBox={`0 0 ${W} ${H}`}>
-      {/* Fondo */}
       <rect width={W} height={H} rx="6" className="fill-gray-50 dark:fill-gray-700/50" />
-      {/* Línea */}
       <polyline
         points={pts}
         fill="none"
@@ -45,26 +60,13 @@ function PositionChart({ rankings }) {
         strokeLinejoin="round"
         strokeLinecap="round"
       />
-      {/* Puntos */}
       {validRankings.map((r, i) => (
         <g key={r.month}>
           <circle cx={toX(i)} cy={toY(r.position)} r="3.5" className="fill-primary-500" />
-          {/* Etiqueta mes */}
-          <text
-            x={toX(i)} y={H - 2}
-            textAnchor="middle"
-            fontSize="8"
-            className="fill-gray-400 dark:fill-gray-500"
-          >
+          <text x={toX(i)} y={H - 2} textAnchor="middle" fontSize="8" className="fill-gray-400 dark:fill-gray-500">
             {r.month.slice(5)}
           </text>
-          {/* Valor posición */}
-          <text
-            x={toX(i)} y={toY(r.position) - 6}
-            textAnchor="middle"
-            fontSize="9"
-            className="fill-gray-600 dark:fill-gray-300 font-medium"
-          >
+          <text x={toX(i)} y={toY(r.position) - 6} textAnchor="middle" fontSize="9" className="fill-gray-600 dark:fill-gray-300 font-medium">
             {r.position.toFixed(1)}
           </text>
         </g>
@@ -78,9 +80,9 @@ function PositionChart({ rankings }) {
 function GeoBadge({ level }) {
   if (!level) return null
   const map = {
-    alto:  { dot: 'bg-green-500',  text: 'text-green-700 dark:text-green-400',  bg: 'bg-green-50 dark:bg-green-900/20',  label: 'Alto' },
+    alto:  { dot: 'bg-green-500',  text: 'text-green-700 dark:text-green-400',   bg: 'bg-green-50 dark:bg-green-900/20',   label: 'Alto' },
     medio: { dot: 'bg-yellow-500', text: 'text-yellow-700 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20', label: 'Medio' },
-    bajo:  { dot: 'bg-red-500',    text: 'text-red-700 dark:text-red-400',      bg: 'bg-red-50 dark:bg-red-900/20',      label: 'Bajo' },
+    bajo:  { dot: 'bg-red-500',    text: 'text-red-700 dark:text-red-400',       bg: 'bg-red-50 dark:bg-red-900/20',       label: 'Bajo' },
   }
   const s = map[level] ?? map.bajo
   return (
@@ -91,7 +93,7 @@ function GeoBadge({ level }) {
   )
 }
 
-// ─── Panel de análisis IA ────────────────────────────────────────────────────
+// ─── Panel de análisis IA ─────────────────────────────────────────────────────
 
 function AnalysisPanel({ analysis, loading, onGenerate, updatedAt }) {
   if (loading) {
@@ -124,7 +126,6 @@ function AnalysisPanel({ analysis, loading, onGenerate, updatedAt }) {
 
   return (
     <div className="mt-3 space-y-4">
-      {/* Métricas principales */}
       <div className="flex flex-wrap gap-2 items-center">
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${intent.color}`}>
           {intent.label}
@@ -138,26 +139,18 @@ function AnalysisPanel({ analysis, loading, onGenerate, updatedAt }) {
         <GeoBadge level={analysis.potencialGeo} />
       </div>
 
-      {/* Resumen */}
-      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-        {analysis.resumen}
-      </p>
+      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{analysis.resumen}</p>
 
-      {/* Motivo GEO */}
       {analysis.motivoGeo && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 italic">
-          GEO: {analysis.motivoGeo}
-        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 italic">GEO: {analysis.motivoGeo}</p>
       )}
 
-      {/* Tipo contenido */}
       {analysis.tipoContenido && (
         <p className="text-xs text-gray-600 dark:text-gray-400">
           Tipo de contenido recomendado: <span className="font-medium capitalize">{analysis.tipoContenido}</span>
         </p>
       )}
 
-      {/* Long-tail */}
       {analysis.longTail?.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Variantes long-tail</p>
@@ -171,22 +164,16 @@ function AnalysisPanel({ analysis, loading, onGenerate, updatedAt }) {
         </div>
       )}
 
-      {/* Topic Cluster */}
       {analysis.topicCluster && (
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 space-y-1.5">
           <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Topic Cluster</p>
-          <p className="text-xs text-gray-800 dark:text-gray-200 font-medium">
-            Pilar: {analysis.topicCluster.pillar}
-          </p>
+          <p className="text-xs text-gray-800 dark:text-gray-200 font-medium">Pilar: {analysis.topicCluster.pillar}</p>
           {analysis.topicCluster.clusters?.map((c, i) => (
-            <p key={i} className="text-xs text-gray-600 dark:text-gray-400 pl-3 before:content-['·'] before:mr-1">
-              {c}
-            </p>
+            <p key={i} className="text-xs text-gray-600 dark:text-gray-400 pl-3 before:content-['·'] before:mr-1">{c}</p>
           ))}
         </div>
       )}
 
-      {/* Recomendaciones */}
       {analysis.recomendaciones?.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Recomendaciones</p>
@@ -200,7 +187,6 @@ function AnalysisPanel({ analysis, loading, onGenerate, updatedAt }) {
         </div>
       )}
 
-      {/* Actualizar */}
       <div className="flex items-center justify-between pt-1">
         {updatedAt && (
           <p className="text-[10px] text-gray-400">
@@ -255,15 +241,11 @@ function KeywordRow({ kw, isExpanded, onToggle, onRemove }) {
 
   const deltaColor = kw.delta == null
     ? 'text-gray-400'
-    : kw.delta > 0
-      ? 'text-green-600 dark:text-green-400'
-      : 'text-red-500 dark:text-red-400'
+    : kw.delta > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'
 
   const deltaLabel = kw.delta == null
     ? '—'
-    : kw.delta > 0
-      ? `↑ ${kw.delta.toFixed(1)}`
-      : `↓ ${Math.abs(kw.delta).toFixed(1)}`
+    : kw.delta > 0 ? `↑ ${kw.delta.toFixed(1)}` : `↓ ${Math.abs(kw.delta).toFixed(1)}`
 
   return (
     <>
@@ -307,12 +289,8 @@ function KeywordRow({ kw, isExpanded, onToggle, onRemove }) {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Gráfico */}
-                {history?.rankings?.length > 1 && (
-                  <PositionChart rankings={history.rankings} />
-                )}
+                {history?.rankings?.length > 1 && <PositionChart rankings={history.rankings} />}
 
-                {/* Tabla historial */}
                 {history?.rankings?.length > 0 ? (
                   <table className="w-full text-xs">
                     <thead>
@@ -342,12 +320,10 @@ function KeywordRow({ kw, isExpanded, onToggle, onRemove }) {
                   </p>
                 )}
 
-                {/* Error análisis */}
                 {analysisError && (
                   <p className="text-xs text-red-500 dark:text-red-400">{analysisError}</p>
                 )}
 
-                {/* Panel IA */}
                 <div className="border-t border-gray-100 dark:border-gray-700/50 pt-3">
                   <AnalysisPanel
                     analysis={analysis}
@@ -367,7 +343,7 @@ function KeywordRow({ kw, isExpanded, onToggle, onRemove }) {
 
 // ─── Modal "Agregar keywords" ─────────────────────────────────────────────────
 
-function SuggestModal({ projectId, onClose, onAdded }) {
+function SuggestModal({ projectId, country, onClose, onAdded }) {
   const [suggestions, setSuggestions] = useState([])
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
@@ -375,11 +351,12 @@ function SuggestModal({ projectId, onClose, onAdded }) {
   const [saving,      setSaving]      = useState(false)
 
   useEffect(() => {
-    api.get(`/marketing/projects/${projectId}/keywords/suggest`)
+    const params = country && country !== 'arg' ? `?country=${country}` : ''
+    api.get(`/marketing/projects/${projectId}/keywords/suggest${params}`)
       .then(r => setSuggestions(r.data.queries ?? []))
       .catch(err => setError(err.response?.data?.error ?? 'Error al cargar sugerencias'))
       .finally(() => setLoading(false))
-  }, [projectId])
+  }, [projectId, country])
 
   function toggleSelect(query) {
     setSelected(prev => {
@@ -407,22 +384,21 @@ function SuggestModal({ projectId, onClose, onAdded }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-white">Agregar keywords desde GSC</h3>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-white">Agregar keywords desde GSC</h3>
+            <p className="text-xs text-gray-400 mt-0.5">País: {countryLabel(country)}</p>
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-3">
           {loading && (
             <div className="flex items-center justify-center py-10">
               <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
-          {error && (
-            <p className="text-sm text-red-500 dark:text-red-400 py-4">{error}</p>
-          )}
+          {error && <p className="text-sm text-red-500 dark:text-red-400 py-4">{error}</p>}
           {!loading && !error && suggestions.length === 0 && (
             <p className="text-sm text-gray-400 py-4 text-center">
               No se encontraron queries en Search Console para este mes.
@@ -453,7 +429,6 @@ function SuggestModal({ projectId, onClose, onAdded }) {
           ))}
         </div>
 
-        {/* Footer */}
         <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
           <p className="text-xs text-gray-400">{selected.size} seleccionada{selected.size !== 1 ? 's' : ''}</p>
           <div className="flex gap-2">
@@ -474,28 +449,113 @@ function SuggestModal({ projectId, onClose, onAdded }) {
   )
 }
 
+// ─── Selector de país ─────────────────────────────────────────────────────────
+
+function CountrySelector({ country, integrationCountry, onChange, onSaveDefault, savingDefault }) {
+  const isLive = country !== integrationCountry
+
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        value={country}
+        onChange={e => onChange(e.target.value)}
+        className="text-xs border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+      >
+        {COUNTRIES.map(c => (
+          <option key={c.code} value={c.code}>{c.label}</option>
+        ))}
+      </select>
+
+      {isLive && (
+        <>
+          <span className="text-[10px] font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded-full">
+            En vivo
+          </span>
+          <button
+            onClick={onSaveDefault}
+            disabled={savingDefault}
+            className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors disabled:opacity-50 whitespace-nowrap"
+            title={`Guardar ${countryLabel(country)} como país predeterminado`}
+          >
+            {savingDefault ? 'Guardando…' : 'Guardar como predeterminado'}
+          </button>
+        </>
+      )}
+
+      {!isLive && (
+        <span className="text-[10px] text-gray-400 dark:text-gray-500">
+          predeterminado
+        </span>
+      )}
+    </div>
+  )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function KeywordsTab({ projectId, projects }) {
-  const [keywords,     setKeywords]     = useState([])
-  const [loading,      setLoading]      = useState(false)
-  const [error,        setError]        = useState('')
-  const [expanded,     setExpanded]     = useState(null)
-  const [suggestOpen,  setSuggestOpen]  = useState(false)
+  const [keywords,          setKeywords]          = useState([])
+  const [loading,           setLoading]           = useState(false)
+  const [error,             setError]             = useState('')
+  const [expanded,          setExpanded]          = useState(null)
+  const [suggestOpen,       setSuggestOpen]       = useState(false)
+  const [country,           setCountry]           = useState('arg')
+  const [integrationCountry, setIntegrationCountry] = useState('arg')
+  const [liveMode,          setLiveMode]          = useState(false)
+  const [savingDefault,     setSavingDefault]     = useState(false)
 
   const selectedProject = projects.find(p => String(p.id) === String(projectId))
 
-  const loadKeywords = useCallback(() => {
+  const loadKeywords = useCallback((overrideCountry) => {
     if (!projectId) return
+    const c = overrideCountry ?? country
     setLoading(true)
     setError('')
-    api.get(`/marketing/projects/${projectId}/keywords`)
-      .then(r => setKeywords(r.data))
+    const params = c ? `?country=${c}` : ''
+    api.get(`/marketing/projects/${projectId}/keywords${params}`)
+      .then(r => {
+        const data = r.data
+        setKeywords(data.keywords ?? [])
+        setLiveMode(data.liveMode ?? false)
+        if (data.integrationCountry) {
+          setIntegrationCountry(data.integrationCountry)
+          // Solo setea el country inicial desde la integración en la primera carga
+          if (overrideCountry === undefined && !liveMode) {
+            setCountry(data.integrationCountry)
+          }
+        }
+      })
       .catch(err => setError(err.response?.data?.error ?? 'Error al cargar keywords'))
       .finally(() => setLoading(false))
-  }, [projectId])
+  }, [projectId, country]) // eslint-disable-line
 
-  useEffect(() => { loadKeywords() }, [loadKeywords])
+  // Carga inicial y cuando cambia el proyecto
+  useEffect(() => {
+    setCountry('arg')
+    setIntegrationCountry('arg')
+    setLiveMode(false)
+    setExpanded(null)
+    loadKeywords('arg')
+  }, [projectId]) // eslint-disable-line
+
+  function handleCountryChange(newCountry) {
+    setCountry(newCountry)
+    setExpanded(null)
+    loadKeywords(newCountry)
+  }
+
+  async function handleSaveDefault() {
+    setSavingDefault(true)
+    try {
+      await api.patch(`/marketing/projects/${projectId}/integrations/google_search_console`, { country })
+      setIntegrationCountry(country)
+      setLiveMode(false)
+    } catch (err) {
+      alert(err.response?.data?.error ?? 'Error al guardar el país predeterminado')
+    } finally {
+      setSavingDefault(false)
+    }
+  }
 
   async function handleRemove(kwId) {
     if (!window.confirm('¿Dejar de rastrear esta keyword? Se borrarán todos sus datos históricos.')) return
@@ -543,7 +603,7 @@ export default function KeywordsTab({ projectId, projects }) {
   return (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
         <div>
           <h2 className="text-sm font-semibold text-gray-800 dark:text-white">
             Palabras clave rastreadas
@@ -556,14 +616,35 @@ export default function KeywordsTab({ projectId, projects }) {
             {selectedProject?.name && ` · ${selectedProject.name}`}
           </p>
         </div>
-        <button
-          onClick={() => setSuggestOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-colors"
-        >
-          <span className="text-base leading-none">+</span>
-          Agregar
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <CountrySelector
+            country={country}
+            integrationCountry={integrationCountry}
+            onChange={handleCountryChange}
+            onSaveDefault={handleSaveDefault}
+            savingDefault={savingDefault}
+          />
+          <button
+            onClick={() => setSuggestOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-colors"
+          >
+            <span className="text-base leading-none">+</span>
+            Agregar
+          </button>
+        </div>
       </div>
+
+      {/* Aviso modo en vivo */}
+      {liveMode && (
+        <div className="mb-4 flex items-start gap-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl px-4 py-3">
+          <span className="text-orange-500 mt-0.5 shrink-0">ℹ</span>
+          <p className="text-xs text-orange-700 dark:text-orange-300">
+            Mostrando datos en vivo de <strong>{countryLabel(country)}</strong> desde Search Console. Los rankings
+            guardados mensualmente son de <strong>{countryLabel(integrationCountry)}</strong>.
+            {' '}El historial y el delta solo están disponibles para el país predeterminado.
+          </p>
+        </div>
+      )}
 
       {/* Lista vacía */}
       {keywords.length === 0 && (
@@ -592,7 +673,9 @@ export default function KeywordsTab({ projectId, projects }) {
               <tr className="border-b border-gray-100 dark:border-gray-700">
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-left">Keyword</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Posición</th>
-                <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Cambio</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">
+                  {liveMode ? <span className="text-orange-500">Cambio</span> : 'Cambio'}
+                </th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Clicks</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Impres.</th>
                 <th className="px-2 py-3" />
@@ -614,15 +697,16 @@ export default function KeywordsTab({ projectId, projects }) {
       )}
 
       <p className="text-xs text-gray-400 mt-3 text-right">
-        Rankings guardados automáticamente el 1° de cada mes · Datos de Google Search Console
+        Rankings guardados automáticamente el 1° de cada mes · {countryLabel(integrationCountry)} · Google Search Console
       </p>
 
       {/* Modal sugerencias */}
       {suggestOpen && (
         <SuggestModal
           projectId={projectId}
+          country={country}
           onClose={() => setSuggestOpen(false)}
-          onAdded={loadKeywords}
+          onAdded={() => loadKeywords(country)}
         />
       )}
     </>

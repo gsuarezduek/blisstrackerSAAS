@@ -58,8 +58,9 @@ async function saveMonthKeywordRankings(projectId, workspaceId, month) {
 
   const accessToken = await getValidAccessToken(integration)
   const { startDate, endDate } = monthBounds(month)
+  const country = integration.country || 'arg'
 
-  // Una sola query para top 100 queries del mes
+  // Una sola query para top 100 queries del mes, filtrada por país
   let rows = []
   try {
     rows = await querySearchConsole(accessToken, siteUrl, {
@@ -68,6 +69,9 @@ async function saveMonthKeywordRankings(projectId, workspaceId, month) {
       type: 'web',
       dimensions: ['query'],
       rowLimit: 100,
+      ...(country !== 'all' ? {
+        dimensionFilterGroups: [{ filters: [{ dimension: 'country', operator: 'equals', expression: country }] }],
+      } : {}),
     })
   } catch (err) {
     console.error(`[KeywordTracking] Error GSC proyecto ${projectId}:`, err.message)

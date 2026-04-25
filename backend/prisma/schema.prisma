@@ -644,6 +644,7 @@ model ProjectIntegration {
 
   propertyId   String?  // GA4: "properties/123456789"
   customerId   String?  // Google Ads: "123-456-7890"
+  country      String   @default("arg") // ISO 3166-1 alpha-3 lowercase (arg, mex, esp…) — país de referencia para keywords
 
   // Tokens cifrados (AES-256-GCM, formato "iv:tag:ciphertext" hex)
   accessToken  String?
