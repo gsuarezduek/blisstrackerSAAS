@@ -111,11 +111,24 @@ export default function Marketing() {
     const firstSub = navItem?.subs[0]?.id ?? ''
     const params = { tab: id }
     if (firstSub) params.sub = firstSub
+    if (projectId) params.projectId = projectId
     setSearchParams(params, { replace: true })
   }
 
   function setSub(id) {
-    setSearchParams({ tab, sub: id }, { replace: true })
+    const params = { tab, sub: id }
+    if (projectId) params.projectId = projectId
+    setSearchParams(params, { replace: true })
+  }
+
+  function handleProjectChange(id) {
+    setProjectId(id)
+    setSearchParams(prev => {
+      const p = Object.fromEntries(prev.entries())
+      if (id) p.projectId = id
+      else delete p.projectId
+      return p
+    }, { replace: true })
   }
 
   const activeNav = NAV.find(n => n.id === tab) ?? NAV[0]
@@ -151,7 +164,7 @@ export default function Marketing() {
             <ProjectSearchSelect
               projects={projects}
               value={projectId}
-              onChange={setProjectId}
+              onChange={handleProjectChange}
               placeholder="Seleccioná un proyecto…"
             />
           </div>
