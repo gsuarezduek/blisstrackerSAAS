@@ -8,6 +8,7 @@ const analytics         = require('../controllers/analytics.controller')
 const searchConsole     = require('../controllers/searchConsole.controller')
 const analyticsSnapshot = require('../controllers/analyticsSnapshot.controller')
 const pageSpeed         = require('../controllers/pageSpeed.controller')
+const keywords          = require('../controllers/keywordTracking.controller')
 
 // ─── SIN AUTH — El callback de Google no lleva Authorization header ───────────
 router.get('/integrations/google/callback', integrations.handleCallback)
@@ -42,5 +43,13 @@ router.post('/projects/:id/insights/:month',      analyticsSnapshot.createInsigh
 router.post('/projects/:id/pagespeed',            pageSpeed.runAnalysis)
 router.get('/projects/:id/pagespeed',             pageSpeed.listResults)
 router.get('/projects/:id/pagespeed/:resultId',   pageSpeed.getResult)
+
+// Keywords Tracking — /suggest debe ir ANTES de /:kwId para evitar conflicto de rutas
+router.get('/projects/:id/keywords/suggest',         keywords.suggestKeywords)
+router.get('/projects/:id/keywords',                 keywords.listKeywords)
+router.post('/projects/:id/keywords',                keywords.addKeyword)
+router.delete('/projects/:id/keywords/:kwId',        keywords.removeKeyword)
+router.get('/projects/:id/keywords/:kwId/history',   keywords.getHistory)
+router.post('/projects/:id/keywords/:kwId/analysis', keywords.generateAnalysis)
 
 module.exports = router

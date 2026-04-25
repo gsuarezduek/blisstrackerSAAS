@@ -21,12 +21,14 @@ const { sendAllWeeklyReports }          = require('./services/weeklyReport.servi
 const { updateAllMemories }             = require('./services/insightMemory.service')
 const { saveAllPreviousMonthSnapshots } = require('./services/analyticsSnapshot.service')
 const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service')
+const { saveAllKeywordRankings }        = require('./services/keywordTracking.service')
 
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
-let weeklyReportRunning    = false
-let insightMemoryRunning   = false
-let analyticsSnapshotRunning = false
-let pageSpeedMonthlyRunning  = false
+let weeklyReportRunning       = false
+let insightMemoryRunning      = false
+let analyticsSnapshotRunning  = false
+let pageSpeedMonthlyRunning   = false
+let keywordRankingsRunning    = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -62,6 +64,15 @@ cron.schedule('0 2 1 * *', async () => {
   console.log('[AnalyticsSnapshot] Iniciando guardado mensual automático...')
   try { await saveAllPreviousMonthSnapshots() }
   finally { analyticsSnapshotRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: guardar rankings de keywords del mes anterior — 1° de cada mes a las 04:00 ART (después de analytics y pagespeed)
+cron.schedule('0 4 1 * *', async () => {
+  if (keywordRankingsRunning) { console.log('[KeywordTracking] Ya en ejecución, se omite.'); return }
+  keywordRankingsRunning = true
+  console.log('[KeywordTracking] Iniciando guardado mensual de rankings...')
+  try { await saveAllKeywordRankings() }
+  finally { keywordRankingsRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: limpiar notificaciones antiguas — domingos 03:00 hora Buenos Aires

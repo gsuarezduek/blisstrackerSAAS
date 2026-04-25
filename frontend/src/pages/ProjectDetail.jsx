@@ -297,7 +297,7 @@ export default function ProjectDetail() {
                   value={infoTab}
                   onChange={e => {
                     if (e.target.value === 'marketing') {
-                      navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${id}`)
+                      navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)
                     } else {
                       setInfoTab(e.target.value)
                     }
@@ -350,7 +350,7 @@ export default function ProjectDetail() {
                   </button>
                   {marketingEnabled && (
                     <button
-                      onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${id}`)}
+                      onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)}
                       className="px-4 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1"
                     >
                       Marketing

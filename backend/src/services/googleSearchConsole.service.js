@@ -104,4 +104,4 @@ function clearCache(integrationId) {
   }
 }
 
-module.exports = { fetchSearchConsoleData, clearCache }
+module.exports = { fetchSearchConsoleData, clearCache, querySearchConsole }

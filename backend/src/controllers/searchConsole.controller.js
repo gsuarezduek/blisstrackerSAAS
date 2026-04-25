@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { fetchSearchConsoleData } = require('../services/googleSearchConsole.service')
+const { normalizeSiteUrl } = require('../utils/seo')
 
 // Acepta 'YYYY-MM-DD' solamente (Search Console no acepta 'NdaysAgo')
 const VALID_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -9,18 +10,6 @@ function parseDateParam(val, fallback) {
   return fallback
 }
 
-// Search Console trata la URL como string exacto.
-// Las propiedades URL-prefix deben terminar con "/"; las sc-domain: no llevan slash.
-function normalizeSiteUrl(url) {
-  if (!url || url.startsWith('sc-domain:')) return url
-  let u = url
-  if (!u.match(/^https?:\/\//i)) {
-    u = 'https://' + u          // sin protocolo → agregar https
-  } else {
-    u = u.replace(/^http:\/\//i, 'https://')  // http → https
-  }
-  return u.endsWith('/') ? u : u + '/'
-}
 
 function defaultDates(days = 28) {
   const end   = new Date()

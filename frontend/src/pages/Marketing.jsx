@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
-import GeoTab from '../components/marketing/GeoTab'
-import WebTab from '../components/marketing/WebTab'
-import SeoTab from '../components/marketing/SeoTab'
+import GeoTab      from '../components/marketing/GeoTab'
+import WebTab      from '../components/marketing/WebTab'
+import SeoTab      from '../components/marketing/SeoTab'
+import KeywordsTab from '../components/marketing/KeywordsTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import api from '../api/client'
@@ -14,8 +15,9 @@ const NAV = [
     id: 'geo-seo',
     label: '🤖 GEO / SEO',
     subs: [
-      { id: 'geo', label: '🤖 GEO' },
-      { id: 'seo', label: '🔍 SEO' },
+      { id: 'geo',      label: '🤖 GEO' },
+      { id: 'seo',      label: '🔍 SEO' },
+      { id: 'keywords', label: '🔑 Keywords' },
     ],
   },
   {
@@ -138,9 +140,10 @@ export default function Marketing() {
     if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />
     if (activeSub?.soon)                               return <ComingSoon label={activeSub.label} />
 
-    if (tab === 'geo-seo' && sub === 'geo') return <GeoTab projectId={projectId} projects={projects} />
-    if (tab === 'geo-seo' && sub === 'seo') return <SeoTab projectId={projectId} projects={projects} />
-    if (tab === 'web')                      return <WebTab subtab={sub} projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'geo')      return <GeoTab      projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'seo')      return <SeoTab      projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'keywords') return <KeywordsTab projectId={projectId} projects={projects} />
+    if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />
   }
