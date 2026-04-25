@@ -332,6 +332,40 @@ async function generateAnalysis(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── GET /projects/:id/keywords/heatmap ──────────────────────────────────────
+
+async function getHeatmap(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId },
+      select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const tracked = await prisma.trackedKeyword.findMany({
+      where: { projectId, workspaceId },
+      include: {
+        rankings: { orderBy: { month: 'asc' } },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    const keywords = tracked.map(kw => ({
+      id:       kw.id,
+      query:    kw.query,
+      rankings: kw.rankings.map(r => ({
+        month:    r.month,
+        position: r.position,
+      })),
+    }))
+
+    res.json({ keywords })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   listKeywords,
   addKeyword,
@@ -339,4 +373,5 @@ module.exports = {
   suggestKeywords,
   getHistory,
   generateAnalysis,
+  getHeatmap,
 }

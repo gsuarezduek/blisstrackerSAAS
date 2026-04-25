@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
-const { fetchSearchConsoleData } = require('../services/googleSearchConsole.service')
+const { fetchSearchConsoleData, fetchQueryPages, querySearchConsole } = require('../services/googleSearchConsole.service')
+const { getValidAccessToken } = require('../services/tokenRefresh.service')
 const { normalizeSiteUrl } = require('../utils/seo')
 
 // Acepta 'YYYY-MM-DD' solamente (Search Console no acepta 'NdaysAgo')
@@ -63,7 +64,9 @@ async function getSearchConsoleData(req, res, next) {
       })
     }
 
-    const data = await fetchSearchConsoleData(integration, siteUrl, startDate, endDate)
+    const device  = req.query.device  || null
+    const compare = req.query.compare === 'true'
+    const data = await fetchSearchConsoleData(integration, siteUrl, startDate, endDate, { device, compare })
     res.json({ ...data, projectName: project.name })
   } catch (err) {
     const status = err.httpStatus ?? err.response?.status
@@ -116,4 +119,42 @@ async function getSearchConsoleData(req, res, next) {
   }
 }
 
-module.exports = { getSearchConsoleData }
+/**
+ * GET /api/marketing/projects/:id/search-console/query-pages?query=...&startDate=...&endDate=...
+ */
+async function getQueryPages(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { query, startDate, endDate } = req.query
+
+    if (!query?.trim()) return res.status(400).json({ error: 'query requerida' })
+
+    const defaults = defaultDates(28)
+    const start    = parseDateParam(startDate, defaults.startDate)
+    const end      = parseDateParam(endDate,   defaults.endDate)
+
+    const [project, integration] = await Promise.all([
+      prisma.project.findFirst({
+        where: { id: projectId, workspaceId },
+        select: { id: true, websiteUrl: true },
+      }),
+      prisma.projectIntegration.findUnique({
+        where: { projectId_type: { projectId, type: 'google_search_console' } },
+      }),
+    ])
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!integration || integration.status !== 'active') {
+      return res.status(400).json({ error: 'GSC no conectado', status: 'no_integration' })
+    }
+
+    const siteUrl = normalizeSiteUrl(integration.propertyId || project.websiteUrl)
+    if (!siteUrl) return res.status(400).json({ error: 'No hay URL de sitio configurada' })
+
+    const accessToken = await getValidAccessToken(integration)
+    const pages = await fetchQueryPages(accessToken, siteUrl, query.trim(), start, end)
+    res.json({ query: query.trim(), pages })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getSearchConsoleData, getQueryPages }

@@ -170,6 +170,117 @@ function CreateTaskModal({ title, projectId, projectName, onClose }) {
   )
 }
 
+// ─── Timeline de scores ───────────────────────────────────────────────────────
+
+function ScoreTimeline({ audits }) {
+  const completed = audits.filter(a => a.status === 'completed' && a.score != null)
+  if (completed.length < 2) return null
+
+  const pts = [...completed].reverse() // cronológico
+  const W = 320, H = 80, PAD = 16
+  const scores = pts.map(a => a.score)
+  const minS = Math.min(...scores), maxS = Math.max(...scores)
+  const range = maxS - minS || 1
+
+  const toX = i  => PAD + (i / (pts.length - 1)) * (W - PAD * 2)
+  const toY = s  => PAD + ((maxS - s) / range) * (H - PAD * 2)
+
+  const pathD = pts.map((a, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(a.score)}`).join(' ')
+
+  function dotColor(score) {
+    if (score >= 86) return '#10b981'
+    if (score >= 68) return '#22c55e'
+    if (score >= 36) return '#f59e0b'
+    return '#ef4444'
+  }
+
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+        Evolución del score
+      </p>
+      <svg width={W} height={H} className="w-full" viewBox={`0 0 ${W} ${H}`}>
+        <rect width={W} height={H} rx="8" className="fill-gray-50 dark:fill-gray-700/50" />
+        <path d={pathD} fill="none" stroke="#f97316" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map((a, i) => (
+          <g key={a.id}>
+            <circle cx={toX(i)} cy={toY(a.score)} r="4" fill={dotColor(a.score)} />
+            <text x={toX(i)} y={H - 2} textAnchor="middle" fontSize="8" fill="#94a3b8">
+              {new Date(a.createdAt).toLocaleDateString('es-AR', { month: 'short', day: '2-digit' })}
+            </text>
+            <text x={toX(i)} y={toY(a.score) - 7} textAnchor="middle" fontSize="9" fill="#374151" className="dark:fill-gray-200 font-medium">
+              {a.score}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+// ─── Benchmark cross-proyecto ─────────────────────────────────────────────────
+
+function CrossProjectPanel() {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/marketing/geo/audits?summary=true')
+      .then(r => setData(r.data))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+  )
+  if (!data?.length) return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+      <div className="text-4xl mb-3">🤖</div>
+      <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay auditorías GEO completadas. Seleccioná un proyecto para empezar.</p>
+    </div>
+  )
+
+  const BAND_COLORS = {
+    Excelente: 'bg-emerald-500',
+    Bueno:     'bg-green-500',
+    Base:      'bg-amber-400',
+    Crítico:   'bg-red-500',
+  }
+  const BAND_TEXT = {
+    Excelente: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20',
+    Bueno:     'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20',
+    Base:      'text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20',
+    Crítico:   'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20',
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+        Salud GEO por proyecto ({data.length})
+      </h3>
+      <div className="space-y-3">
+        {data.sort((a, b) => b.score - a.score).map(p => (
+          <div key={p.projectId} className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{p.projectName}</span>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  <span className="text-sm font-bold text-gray-900 dark:text-white">{p.score}/100</span>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${BAND_TEXT[p.band] ?? ''}`}>{p.band}</span>
+                </div>
+              </div>
+              <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                <div className={`h-1.5 rounded-full ${BAND_COLORS[p.band] ?? 'bg-gray-400'}`} style={{ width: `${p.score}%` }} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function GeoTab({ projectId, projects }) {
   const [audits, setAudits]         = useState([])
   const [activeAudit, setActive]    = useState(null)
@@ -177,6 +288,8 @@ export default function GeoTab({ projectId, projects }) {
   const [error, setError]           = useState('')
   const [loadingAudits, setLoadingAudits] = useState(false)
   const [taskModal, setTaskModal]   = useState(null) // { title }
+  const [llmsModal, setLlmsModal]   = useState(null) // { content } | 'loading'
+  const [schemaModal, setSchemaModal] = useState(null) // { schemas } | 'loading'
   const pollRef = useRef(null)
 
   const selectedProject = projects.find(p => String(p.id) === projectId)
@@ -259,6 +372,30 @@ export default function GeoTab({ projectId, projects }) {
     }
   }
 
+  async function handleGenerateLlmsTxt() {
+    if (!activeAudit?.id) return
+    setLlmsModal('loading')
+    try {
+      const { data } = await api.get(`/marketing/geo/audits/${activeAudit.id}/llms-txt`)
+      setLlmsModal({ content: data.content })
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al generar llms.txt')
+      setLlmsModal(null)
+    }
+  }
+
+  async function handleGenerateSchema() {
+    if (!activeAudit?.id) return
+    setSchemaModal('loading')
+    try {
+      const { data } = await api.post(`/marketing/geo/audits/${activeAudit.id}/schema`)
+      setSchemaModal({ schemas: data.schemas })
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al generar schemas')
+      setSchemaModal(null)
+    }
+  }
+
   function parseField(val) {
     if (!val) return []
     if (Array.isArray(val)) return val
@@ -269,6 +406,10 @@ export default function GeoTab({ projectId, projects }) {
   const sortedFindings = [...items].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9))
 
   const noUrl = selectedProject && !selectedProject.websiteUrl
+  const hasLlmsFinding  = sortedFindings.some(f =>
+    f.title?.toLowerCase().includes('llms') || f.description?.toLowerCase().includes('llms')
+  )
+  const schemaScoreLow  = activeAudit?.schema != null && activeAudit.schema < 70
 
   return (
     <div className="space-y-6">
@@ -385,6 +526,24 @@ export default function GeoTab({ projectId, projects }) {
             </div>
           </div>
 
+          {/* Herramientas de generación */}
+          {(hasLlmsFinding || schemaScoreLow) && (
+            <div className="flex flex-wrap gap-2">
+              {hasLlmsFinding && (
+                <button onClick={handleGenerateLlmsTxt}
+                  className="px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
+                  📄 Generar llms.txt
+                </button>
+              )}
+              {schemaScoreLow && (
+                <button onClick={handleGenerateSchema}
+                  className="px-3 py-1.5 text-xs font-medium bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-700 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors">
+                  🏷️ Generar JSON-LD
+                </button>
+              )}
+            </div>
+          )}
+
           {/* 6 componentes */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Componentes</h3>
@@ -463,6 +622,7 @@ export default function GeoTab({ projectId, projects }) {
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
             Historial de análisis
           </h3>
+          <ScoreTimeline audits={audits} />
           {loadingAudits ? (
             <p className="text-sm text-gray-400">Cargando…</p>
           ) : (
@@ -509,12 +669,83 @@ export default function GeoTab({ projectId, projects }) {
         />
       )}
 
-      {!projectId && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-          <div className="text-4xl mb-3">🤖</div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Seleccioná un proyecto arriba para empezar el análisis GEO.
-          </p>
+      {!projectId && <CrossProjectPanel />}
+
+      {/* Modal llms.txt */}
+      {llmsModal && llmsModal !== 'loading' && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">llms.txt generado</h2>
+              <button onClick={() => setLlmsModal(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
+            </div>
+            <textarea
+              readOnly
+              value={llmsModal.content}
+              rows={14}
+              className="w-full border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-xs font-mono resize-none focus:outline-none"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => { navigator.clipboard.writeText(llmsModal.content); alert('Copiado al portapapeles') }}
+                className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl">
+                Copiar
+              </button>
+              <button onClick={() => setLlmsModal(null)} className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700">
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {llmsModal === 'loading' && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-8 flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-gray-600 dark:text-gray-300">Generando llms.txt…</span>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Schema.org */}
+      {schemaModal && schemaModal !== 'loading' && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Schema.org JSON-LD</h2>
+              <button onClick={() => setSchemaModal(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
+            </div>
+            {schemaModal.schemas.length === 0
+              ? <p className="text-sm text-gray-500">No se generaron schemas. El sitio podría ya tenerlos todos.</p>
+              : (
+                <div className="flex-1 overflow-y-auto space-y-4">
+                  {schemaModal.schemas.map((s, i) => (
+                    <div key={i}>
+                      <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">{s.type}</p>
+                      <textarea readOnly value={s.jsonLd} rows={6}
+                        className="w-full border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-xs font-mono resize-none focus:outline-none" />
+                      <button onClick={() => { navigator.clipboard.writeText(s.jsonLd); alert(`${s.type} copiado`) }}
+                        className="mt-1 text-xs text-primary-600 dark:text-primary-400 hover:underline">
+                        Copiar {s.type}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )
+            }
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setSchemaModal(null)} className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700">
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {schemaModal === 'loading' && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-8 flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-gray-600 dark:text-gray-300">Generando Schema.org…</span>
+          </div>
         </div>
       )}
     </div>

@@ -59,7 +59,8 @@ async function getAnalyticsData(req, res, next) {
       })
     }
 
-    const data = await fetchGA4Report(integration, startDate, endDate)
+    const comparePrevious = req.query.compare === 'true'
+    const data = await fetchGA4Report(integration, startDate, endDate, { comparePrevious })
     res.json({ ...data, projectName: project.name, websiteUrl: project.websiteUrl })
   } catch (err) {
     console.error('[analytics.getAnalyticsData] error:', err.code ?? '', err.message)

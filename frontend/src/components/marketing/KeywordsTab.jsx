@@ -29,6 +29,175 @@ function currentMonthStr() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
+// ─── Heatmap de keywords ──────────────────────────────────────────────────────
+
+const HM_COLORS = {
+  top3:   'bg-green-500 text-white',
+  top10:  'bg-blue-500 text-white',
+  top20:  'bg-yellow-400 text-gray-900',
+  below:  'bg-red-400 text-white',
+  noData: 'bg-gray-100 dark:bg-gray-700 text-gray-400',
+}
+
+function heatmapColor(position) {
+  if (position == null || position <= 0) return HM_COLORS.noData
+  if (position <= 3)  return HM_COLORS.top3
+  if (position <= 10) return HM_COLORS.top10
+  if (position <= 20) return HM_COLORS.top20
+  return HM_COLORS.below
+}
+
+function KeywordHeatmap({ projectId }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!projectId) return
+    setLoading(true)
+    api.get(`/marketing/projects/${projectId}/keywords/heatmap`)
+      .then(r => setData(r.data.keywords))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [projectId])
+
+  if (loading) return (
+    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+  )
+  if (!data?.length) return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center text-sm text-gray-400">
+      Sin datos de keywords para mostrar el heatmap.
+    </div>
+  )
+
+  // Obtener todos los meses únicos y tomar los últimos 6
+  const allMonths = [...new Set(data.flatMap(kw => kw.rankings.map(r => r.month)))].sort().slice(-6)
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Heatmap de posiciones</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Últimos {allMonths.length} meses</p>
+        </div>
+        <div className="flex items-center gap-2 text-[10px]">
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-green-500" /> 1-3</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-blue-500" /> 4-10</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-yellow-400" /> 11-20</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-400" /> 21+</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-gray-100 dark:border-gray-700">
+              <th className="px-4 py-2 text-left text-gray-500 dark:text-gray-400 font-medium min-w-[160px]">Keyword</th>
+              {allMonths.map(m => (
+                <th key={m} className="px-2 py-2 text-center text-gray-400 font-medium min-w-[60px]">
+                  {m.slice(5)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map(kw => {
+              const rankMap = {}
+              kw.rankings.forEach(r => { rankMap[r.month] = r.position })
+              return (
+                <tr key={kw.id} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300 max-w-[160px] truncate font-medium">
+                    {kw.query}
+                  </td>
+                  {allMonths.map(m => {
+                    const pos = rankMap[m]
+                    return (
+                      <td key={m} className="px-2 py-2 text-center">
+                        <span
+                          title={pos != null && pos > 0 ? `Pos. ${pos.toFixed(1)}` : 'Sin dato'}
+                          className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded min-w-[36px] ${heatmapColor(pos)}`}
+                        >
+                          {pos != null && pos > 0 ? pos.toFixed(1) : '—'}
+                        </span>
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ─── Vista de clusters ────────────────────────────────────────────────────────
+
+function ClustersView({ keywords, projectId, expanded, onToggle, onRemove }) {
+  const withAnalysis = keywords.filter(kw => kw.hasAnalysis)
+
+  if (withAnalysis.length < 2) {
+    return (
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center">
+        <div className="text-3xl mb-3">🗂️</div>
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Clusters no disponibles</p>
+        <p className="text-xs text-gray-400">Analizá al menos 2 keywords con IA para ver los topic clusters.</p>
+      </div>
+    )
+  }
+
+  // Agrupar por topic cluster pillar (requiere que el análisis esté cacheado en kw)
+  // Como no tenemos el analysisContent en la lista, agrupamos por hasAnalysis vs no
+  const withCluster = withAnalysis
+  const noCluster   = keywords.filter(kw => !kw.hasAnalysis)
+
+  return (
+    <div className="space-y-4">
+      {withCluster.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+            Keywords con análisis IA
+          </p>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-700">
+                  <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-left">Keyword</th>
+                  <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Posición</th>
+                  <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Cambio</th>
+                  <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Clicks</th>
+                  <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Impres.</th>
+                  <th className="px-2 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {withCluster.map(kw => (
+                  <KeywordRow key={kw.id} kw={{ ...kw, projectId }} isExpanded={expanded === kw.id} onToggle={() => onToggle(kw.id)} onRemove={onRemove} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {noCluster.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+            Sin clasificar
+          </p>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden opacity-70">
+            <table className="w-full">
+              <tbody>
+                {noCluster.map(kw => (
+                  <KeywordRow key={kw.id} kw={{ ...kw, projectId }} isExpanded={expanded === kw.id} onToggle={() => onToggle(kw.id)} onRemove={onRemove} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Mini gráfico SVG de posición ─────────────────────────────────────────────
 
 function PositionChart({ rankings }) {
@@ -257,7 +426,10 @@ function KeywordRow({ kw, isExpanded, onToggle, onRemove }) {
           {kw.query}
         </td>
         <td className="px-4 py-3 text-sm text-right tabular-nums text-gray-700 dark:text-gray-300">
-          {fmtPos(kw.currentPosition)}
+          {kw.currentPosition != null && kw.currentPosition > 0 && kw.currentPosition < 1.0
+            ? <span className="text-xs font-semibold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded-full">⭐ Featured</span>
+            : fmtPos(kw.currentPosition)
+          }
         </td>
         <td className={`px-4 py-3 text-sm text-right tabular-nums font-medium ${deltaColor}`}>
           {deltaLabel}
@@ -404,29 +576,49 @@ function SuggestModal({ projectId, country, onClose, onAdded }) {
               No se encontraron queries en Search Console para este mes.
             </p>
           )}
-          {!loading && suggestions.map(s => (
-            <label
-              key={s.query}
-              className={`flex items-center gap-3 py-2.5 border-b border-gray-50 dark:border-gray-700/50 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${s.alreadyTracked ? 'opacity-50 cursor-default' : ''}`}
-            >
-              <input
-                type="checkbox"
-                disabled={s.alreadyTracked}
-                checked={s.alreadyTracked || selected.has(s.query)}
-                onChange={() => !s.alreadyTracked && toggleSelect(s.query)}
-                className="accent-primary-600 w-3.5 h-3.5 shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{s.query}</p>
-                <p className="text-xs text-gray-400">{fmtNum(s.impressions)} impres. · pos. {s.position.toFixed(1)}</p>
-              </div>
-              {s.alreadyTracked && (
-                <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full shrink-0">
-                  Rastreada
-                </span>
-              )}
-            </label>
-          ))}
+          {!loading && (() => {
+            // Calcular opportunity scores y ordenar
+            const maxOpp = Math.max(...suggestions.map(s => s.impressions / Math.max(s.position, 1)), 1)
+            const withOpp = suggestions
+              .map(s => ({ ...s, opp: s.impressions / Math.max(s.position, 1) }))
+              .sort((a, b) => b.opp - a.opp)
+            return withOpp.map(s => {
+              const score = s.opp / maxOpp
+              const oppBadge = !s.alreadyTracked
+                ? score > 0.6 ? { label: 'Alta oportunidad', cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' }
+                : score > 0.3 ? { label: 'Media', cls: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' }
+                : null
+                : null
+              return (
+                <label
+                  key={s.query}
+                  className={`flex items-center gap-3 py-2.5 border-b border-gray-50 dark:border-gray-700/50 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${s.alreadyTracked ? 'opacity-50 cursor-default' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={s.alreadyTracked}
+                    checked={s.alreadyTracked || selected.has(s.query)}
+                    onChange={() => !s.alreadyTracked && toggleSelect(s.query)}
+                    className="accent-primary-600 w-3.5 h-3.5 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{s.query}</p>
+                    <p className="text-xs text-gray-400">{fmtNum(s.impressions)} impres. · pos. {s.position.toFixed(1)}</p>
+                  </div>
+                  {oppBadge && (
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${oppBadge.cls}`}>
+                      {oppBadge.label}
+                    </span>
+                  )}
+                  {s.alreadyTracked && (
+                    <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full shrink-0">
+                      Rastreada
+                    </span>
+                  )}
+                </label>
+              )
+            })
+          })()}
         </div>
 
         <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
@@ -493,12 +685,32 @@ function CountrySelector({ country, integrationCountry, onChange, onSaveDefault,
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
+function exportCsv(keywords) {
+  const header = 'query,posición,delta,clicks,impresiones,CTR'
+  const rows   = keywords.map(kw => [
+    `"${kw.query}"`,
+    kw.currentPosition != null ? kw.currentPosition.toFixed(1) : '',
+    kw.delta != null ? kw.delta.toFixed(1) : '',
+    kw.clicks ?? 0,
+    kw.impressions ?? 0,
+    kw.ctr != null ? `${(kw.ctr * 100).toFixed(1)}%` : '',
+  ].join(','))
+  const csv  = [header, ...rows].join('\n')
+  const url  = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `keywords-${new Date().toISOString().slice(0, 10)}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function KeywordsTab({ projectId, projects }) {
   const [keywords,          setKeywords]          = useState([])
   const [loading,           setLoading]           = useState(false)
   const [error,             setError]             = useState('')
   const [expanded,          setExpanded]          = useState(null)
   const [suggestOpen,       setSuggestOpen]       = useState(false)
+  const [view,              setView]              = useState('tabla') // 'tabla' | 'heatmap' | 'clusters'
   const [country,           setCountry]           = useState('arg')
   const [integrationCountry, setIntegrationCountry] = useState('arg')
   const [liveMode,          setLiveMode]          = useState(false)
@@ -624,6 +836,32 @@ export default function KeywordsTab({ projectId, projects }) {
             onSaveDefault={handleSaveDefault}
             savingDefault={savingDefault}
           />
+          {/* Toggle de vista */}
+          <div className="flex rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden text-xs">
+            {[
+              { id: 'tabla',    label: 'Tabla' },
+              { id: 'heatmap',  label: 'Heatmap' },
+              { id: 'clusters', label: 'Clusters' },
+            ].map(v => (
+              <button key={v.id} onClick={() => setView(v.id)}
+                className={`px-3 py-2 transition-colors ${
+                  view === v.id
+                    ? 'bg-primary-600 text-white'
+                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+          {keywords.length > 0 && (
+            <button
+              onClick={() => exportCsv(keywords)}
+              className="px-3 py-2 text-xs border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              title="Exportar a CSV"
+            >
+              ↓ CSV
+            </button>
+          )}
           <button
             onClick={() => setSuggestOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-colors"
@@ -665,8 +903,8 @@ export default function KeywordsTab({ projectId, projects }) {
         </div>
       )}
 
-      {/* Tabla de keywords */}
-      {keywords.length > 0 && (
+      {/* Vistas de keywords */}
+      {keywords.length > 0 && view === 'tabla' && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
           <table className="w-full">
             <thead>
@@ -694,6 +932,20 @@ export default function KeywordsTab({ projectId, projects }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {view === 'heatmap' && (
+        <KeywordHeatmap projectId={projectId} />
+      )}
+
+      {keywords.length > 0 && view === 'clusters' && (
+        <ClustersView
+          keywords={keywords}
+          projectId={projectId}
+          expanded={expanded}
+          onToggle={id => setExpanded(expanded === id ? null : id)}
+          onRemove={handleRemove}
+        />
       )}
 
       <p className="text-xs text-gray-400 mt-3 text-right">

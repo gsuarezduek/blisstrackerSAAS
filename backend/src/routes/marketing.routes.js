@@ -9,6 +9,7 @@ const searchConsole     = require('../controllers/searchConsole.controller')
 const analyticsSnapshot = require('../controllers/analyticsSnapshot.controller')
 const pageSpeed         = require('../controllers/pageSpeed.controller')
 const keywords          = require('../controllers/keywordTracking.controller')
+const healthScore       = require('../controllers/healthScore.controller')
 
 // ─── SIN AUTH — El callback de Google no lleva Authorization header ───────────
 router.get('/integrations/google/callback', integrations.handleCallback)
@@ -17,9 +18,11 @@ router.get('/integrations/google/callback', integrations.handleCallback)
 router.use(auth, resolveWorkspace)
 
 // GEO
-router.post('/geo/audit',      geo.runAudit)
-router.get('/geo/audits',      geo.listAudits)
-router.get('/geo/audits/:id',  geo.getAudit)
+router.post('/geo/audit',                    geo.runAudit)
+router.get('/geo/audits',                    geo.listAudits)
+router.get('/geo/audits/:id',                geo.getAudit)
+router.get('/geo/audits/:id/llms-txt',       geo.generateLlmsTxt)
+router.post('/geo/audits/:id/schema',        geo.generateSchemaOrg)
 
 // Integraciones: OAuth + gestión
 router.get('/integrations/google/auth-url',                    integrations.getAuthUrl)
@@ -29,9 +32,11 @@ router.patch('/projects/:id/integrations/:type',              integrations.updat
 router.delete('/projects/:id/integrations/:type',             integrations.disconnect)
 
 // Datos en tiempo real de integraciones
-router.get('/projects/:id/analytics',       analytics.getAnalyticsData)
-router.get('/projects/:id/ads',             analytics.getAdsData)
-router.get('/projects/:id/search-console',  searchConsole.getSearchConsoleData)
+router.get('/projects/:id/analytics',                      analytics.getAnalyticsData)
+router.get('/projects/:id/ads',                            analytics.getAdsData)
+router.get('/projects/:id/search-console',                 searchConsole.getSearchConsoleData)
+router.get('/projects/:id/search-console/query-pages',     searchConsole.getQueryPages)
+router.get('/projects/:id/health-score',                   healthScore.getHealthScore)
 
 // Snapshots mensuales + Insights IA
 router.get('/projects/:id/snapshots',             analyticsSnapshot.getSnapshot)
@@ -44,8 +49,9 @@ router.post('/projects/:id/pagespeed',            pageSpeed.runAnalysis)
 router.get('/projects/:id/pagespeed',             pageSpeed.listResults)
 router.get('/projects/:id/pagespeed/:resultId',   pageSpeed.getResult)
 
-// Keywords Tracking — /suggest debe ir ANTES de /:kwId para evitar conflicto de rutas
+// Keywords Tracking — rutas estáticas ANTES de las dinámicas /:kwId
 router.get('/projects/:id/keywords/suggest',         keywords.suggestKeywords)
+router.get('/projects/:id/keywords/heatmap',         keywords.getHeatmap)
 router.get('/projects/:id/keywords',                 keywords.listKeywords)
 router.post('/projects/:id/keywords',                keywords.addKeyword)
 router.delete('/projects/:id/keywords/:kwId',        keywords.removeKeyword)

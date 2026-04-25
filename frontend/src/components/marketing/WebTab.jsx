@@ -595,11 +595,30 @@ function PageSpeedSection({ websiteUrl, strategy, onStrategyChange, result, hist
   )
 }
 
+const SOURCE_COLORS = {
+  google:    'bg-blue-500',
+  facebook:  'bg-blue-700',
+  instagram: 'bg-pink-500',
+  email:     'bg-orange-500',
+  direct:    'bg-gray-400',
+  cpc:       'bg-purple-500',
+  organic:   'bg-green-500',
+}
+function sourceColor(source, medium) {
+  if (medium === 'organic' || medium === 'organic search') return SOURCE_COLORS.organic
+  if (medium === 'cpc' || medium === 'ppc')                 return SOURCE_COLORS.cpc
+  if (medium === 'email')                                   return SOURCE_COLORS.email
+  if (source === '(direct)')                                return SOURCE_COLORS.direct
+  const key = source?.toLowerCase()
+  return SOURCE_COLORS[key] ?? 'bg-indigo-400'
+}
+
 export default function WebTab({ subtab = 'analytics', projectId, projects }) {
   const [rangePreset,  setRangePreset]  = useState('thisMonth')
   const [customStart,  setCustomStart]  = useState(todayStr())
   const [customEnd,    setCustomEnd]    = useState(todayStr())
   const [appliedRange, setAppliedRange] = useState({ preset: 'thisMonth', start: '', end: '' })
+  const [compare,      setCompare]      = useState(true)
   const [analytics,    setAnalytics]    = useState(null)
   const [loading,      setLoading]      = useState(false)
   const [errorStatus,  setErrorStatus]  = useState(null)
@@ -646,7 +665,9 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
     setInsight(null)
     setSnapSaved(false)
 
-    api.get(`/marketing/projects/${projectId}/analytics?startDate=${startDate}&endDate=${endDate}`)
+    const isMonthlyPreset = appliedRange.preset === 'thisMonth' || appliedRange.preset === 'lastMonth'
+    const useCompare = compare && isMonthlyPreset
+    api.get(`/marketing/projects/${projectId}/analytics?startDate=${startDate}&endDate=${endDate}&compare=${useCompare}`)
       .then(r => setAnalytics(r.data))
       .catch(e => {
         const status = e.response?.status
@@ -767,12 +788,20 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
   const activeMonth   = getActiveMonth(appliedRange.preset)
   const isMonthly     = !!activeMonth
 
-  // Deltas vs snapshot del mes anterior
+  // Deltas: preferir analytics.comparison (de GA4), fallback a prevSnap
+  const gaComp = analytics?.comparison
   function snapDelta(curr, prevVal) {
     if (prevVal == null || prevVal === 0 || curr == null) return null
     return Math.round(((curr - prevVal) / prevVal) * 100)
   }
-  const deltas = prevSnap ? {
+  const deltas = gaComp ? {
+    sessions:    gaComp.sessionsDelta,
+    activeUsers: gaComp.activeUsersDelta,
+    newUsers:    gaComp.newUsersDelta,
+    pageviews:   gaComp.screenPageViewsDelta,
+    bounceRate:  gaComp.bounceRateDelta,
+    avgDuration: gaComp.averageSessionDurationDelta,
+  } : prevSnap ? {
     sessions:    snapDelta(ov.sessions,              prevSnap.sessions),
     activeUsers: snapDelta(ov.activeUsers,            prevSnap.activeUsers),
     newUsers:    snapDelta(ov.newUsers,               prevSnap.newUsers),
@@ -840,6 +869,17 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
             </>
           )}
         </div>}
+        {subtab === 'analytics' && (appliedRange.preset === 'thisMonth' || appliedRange.preset === 'lastMonth') && (
+          <label className="flex items-center gap-2 cursor-pointer pb-2">
+            <input
+              type="checkbox"
+              checked={compare}
+              onChange={e => setCompare(e.target.checked)}
+              className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-xs text-gray-600 dark:text-gray-400">Comparar con período anterior</span>
+          </label>
+        )}
         {subtab === 'analytics' && analytics?.websiteUrl && (
           <a
             href={/^https?:\/\//i.test(analytics.websiteUrl) ? analytics.websiteUrl : `https://${analytics.websiteUrl}`}
@@ -907,6 +947,16 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
       {/* Dashboard — solo Analytics */}
       {subtab === 'analytics' && analytics && !loading && (
         <>
+          {/* Banner de caída de tráfico */}
+          {gaComp?.sessionsDelta != null && gaComp.sessionsDelta < -20 && (
+            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-xl px-4 py-3 flex items-center gap-3">
+              <span className="text-xl flex-shrink-0">⚠️</span>
+              <p className="text-sm text-orange-700 dark:text-orange-300">
+                Las sesiones cayeron <strong>{Math.abs(gaComp.sessionsDelta)}%</strong> respecto al período anterior.
+              </p>
+            </div>
+          )}
+
           {/* Métricas principales */}
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -1037,6 +1087,46 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
               </div>
             )}
           </div>
+
+          {/* Fuentes de tráfico detalladas */}
+          {analytics.trafficSources?.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+              <SectionTitle>Fuentes de tráfico</SectionTitle>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                      <th className="pb-2 font-medium">Fuente</th>
+                      <th className="pb-2 font-medium">Medium</th>
+                      <th className="pb-2 font-medium text-right w-20">Sesiones</th>
+                      <th className="pb-2 font-medium text-right w-14">%</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                    {analytics.trafficSources.map((src, i) => (
+                      <tr key={i}>
+                        <td className="py-2 pr-3">
+                          <span className="flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sourceColor(src.source, src.medium)}`} />
+                            <span className="font-medium text-gray-700 dark:text-gray-300">
+                              {src.source || '(direct)'}
+                            </span>
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 text-gray-500 dark:text-gray-400">{src.medium || '—'}</td>
+                        <td className="py-2 text-right font-medium text-gray-700 dark:text-gray-300 tabular-nums">
+                          {fmt(src.sessions)}
+                        </td>
+                        <td className="py-2 text-right text-gray-400 tabular-nums">
+                          {src.pct != null ? `${src.pct}%` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Top páginas */}
           {analytics.topPages?.length > 0 && (

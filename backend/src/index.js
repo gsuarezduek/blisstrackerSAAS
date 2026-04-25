@@ -22,13 +22,17 @@ const { updateAllMemories }             = require('./services/insightMemory.serv
 const { saveAllPreviousMonthSnapshots } = require('./services/analyticsSnapshot.service')
 const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service')
 const { saveAllKeywordRankings }        = require('./services/keywordTracking.service')
+const { runAllMonthlyGeoAudits }        = require('./services/geoAudit.service')
+const { sendAllMonthlyMarketingReports } = require('./services/monthlyMarketingReport.service')
 
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
-let weeklyReportRunning       = false
-let insightMemoryRunning      = false
-let analyticsSnapshotRunning  = false
-let pageSpeedMonthlyRunning   = false
-let keywordRankingsRunning    = false
+let weeklyReportRunning         = false
+let insightMemoryRunning        = false
+let analyticsSnapshotRunning    = false
+let pageSpeedMonthlyRunning     = false
+let keywordRankingsRunning      = false
+let geoMonthlyRunning           = false
+let marketingReportRunning      = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -117,6 +121,24 @@ cron.schedule('0 3 * * *', async () => {
     data:  { status: 'past_due' },
   })
   console.log(`[TrialExpiry] ${count} workspace(s) marcado(s) como past_due.`)
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: GEO audit mensual — 1° del mes 01:00 ART
+cron.schedule('0 1 1 * *', async () => {
+  if (geoMonthlyRunning) { console.log('[GeoAudit] Ya en ejecución, se omite.'); return }
+  geoMonthlyRunning = true
+  try { await runAllMonthlyGeoAudits() }
+  catch (err) { console.error('[GeoAudit] Error en cron mensual:', err.message) }
+  finally { geoMonthlyRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: informe mensual de marketing — 1° del mes 05:00 ART
+cron.schedule('0 5 1 * *', async () => {
+  if (marketingReportRunning) { console.log('[MonthlyReport] Ya en ejecución, se omite.'); return }
+  marketingReportRunning = true
+  try { await sendAllMonthlyMarketingReports() }
+  catch (err) { console.error('[MonthlyReport] Error en cron mensual:', err.message) }
+  finally { marketingReportRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: eliminar workspaces vencidos — cada 15 minutos

@@ -390,4 +390,47 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
   }
 }
 
-module.exports = { runGeoAnalysis }
+// ─── Cron: audit mensual automático ───────────────────────────────────────────
+
+/**
+ * Ejecutado el 1° de cada mes: corre un GeoAudit para todos los proyectos
+ * que tienen websiteUrl configurada.
+ */
+async function runAllMonthlyGeoAudits() {
+  const projects = await prisma.project.findMany({
+    where:  { websiteUrl: { not: null } },
+    select: { id: true, workspaceId: true, websiteUrl: true },
+  })
+
+  console.log(`[GeoAudit] Iniciando audit mensual para ${projects.length} proyecto(s)...`)
+  let done = 0
+
+  for (const project of projects) {
+    try {
+      const raw = /^https?:\/\//i.test(project.websiteUrl)
+        ? project.websiteUrl
+        : 'https://' + project.websiteUrl
+      let url
+      try { url = new URL(raw).href } catch { continue }
+
+      const audit = await prisma.geoAudit.create({
+        data: {
+          workspaceId: project.workspaceId,
+          projectId:   project.id,
+          url,
+          status: 'running',
+        },
+      })
+
+      // Llamada directa (con await) en lugar de setImmediate — el cron espera
+      await runGeoAnalysis(audit.id, project.workspaceId, project.id, url, null)
+      done++
+    } catch (err) {
+      console.error(`[GeoAudit] Error en proyecto ${project.id}:`, err.message)
+    }
+  }
+
+  console.log(`[GeoAudit] ${done}/${projects.length} audits completados.`)
+}
+
+module.exports = { runGeoAnalysis, runAllMonthlyGeoAudits }
