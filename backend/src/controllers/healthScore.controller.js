@@ -46,7 +46,7 @@ async function getHealthScore(req, res, next) {
       // Keywords: posición promedio del mes actual
       prisma.keywordRanking.findMany({
         where: {
-          keyword: { projectId, workspaceId },
+          trackedKeyword: { projectId, workspaceId },
           month,
           position: { gt: 0 },
         },

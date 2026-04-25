@@ -36,7 +36,7 @@ async function generateMonthlyReport(project, workspaceId, month) {
       select:  { score: true, createdAt: true },
     }),
     prisma.keywordRanking.findMany({
-      where:  { keyword: { projectId: project.id, workspaceId }, month, position: { gt: 0 } },
+      where:  { trackedKeyword: { projectId: project.id, workspaceId }, month, position: { gt: 0 } },
       select: { position: true, keyword: { select: { query: true } } },
     }),
     prisma.analyticsSnapshot.findFirst({

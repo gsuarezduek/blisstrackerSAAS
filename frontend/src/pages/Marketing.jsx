@@ -7,7 +7,6 @@ import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
 import SaludTab    from '../components/marketing/SaludTab'
-import InformesTab from '../components/marketing/InformesTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import api from '../api/client'
@@ -51,10 +50,7 @@ const NAV = [
   {
     id: 'informes',
     label: '📊 Informes',
-    subs: [
-      { id: 'salud',     label: '❤️ Salud' },
-      { id: 'analytics', label: '📈 Analytics' },
-    ],
+    subs: [],
   },
 ]
 
@@ -141,6 +137,8 @@ export default function Marketing() {
   const activeSub = activeNav.subs.find(s => s.id === sub) ?? activeNav.subs[0]
 
   function renderContent() {
+    if (tab === 'informes') return <SaludTab projectId={projectId} onNavigate={(t, s) => { setTab(t); setSub(s) }} />
+
     if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />
     if (activeSub?.soon)                               return <ComingSoon label={activeSub.label} />
 
@@ -148,8 +146,6 @@ export default function Marketing() {
     if (tab === 'geo-seo' && sub === 'seo')      return <SeoTab      projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'keywords') return <KeywordsTab projectId={projectId} projects={projects} />
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} />
-    if (tab === 'informes' && sub === 'salud')     return <SaludTab    projectId={projectId} onNavigate={(t, s) => { setTab(t); setSub(s) }} />
-    if (tab === 'informes' && sub === 'analytics') return <InformesTab projectId={projectId} projects={projects} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />
   }
