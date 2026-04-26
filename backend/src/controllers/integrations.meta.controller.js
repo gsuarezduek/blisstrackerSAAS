@@ -43,7 +43,7 @@ async function getMetaAuthUrl(req, res, next) {
     const params = new URLSearchParams({
       client_id:     process.env.META_APP_ID,
       redirect_uri:  buildMetaRedirectUri(),
-      scope:         'instagram_business_basic,pages_show_list,pages_read_engagement',
+      scope:         'pages_show_list,pages_read_engagement',
       state,
       response_type: 'code',
     })
@@ -122,7 +122,7 @@ async function handleMetaCallback(req, res, next) {
         accessToken:  encrypt(longToken),
         refreshToken: null,        // Meta no tiene refresh_token
         expiresAt,
-        scopes:       'instagram_business_basic,pages_show_list,pages_read_engagement',
+        scopes:       'pages_show_list,pages_read_engagement',
         connectedById: userId,
         connectedAt:  new Date(),
       },
@@ -135,7 +135,7 @@ async function handleMetaCallback(req, res, next) {
         accessToken:  encrypt(longToken),
         refreshToken: null,
         expiresAt,
-        scopes:       'instagram_business_basic,pages_show_list,pages_read_engagement',
+        scopes:       'pages_show_list,pages_read_engagement',
         connectedById: userId,
         connectedAt:  new Date(),
       },
