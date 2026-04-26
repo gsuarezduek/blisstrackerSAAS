@@ -448,7 +448,7 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 - Agregar `https://www.googleapis.com/auth/adwords` cuando el Developer Token de Google Ads sea aprobado
 
 **Permisos requeridos en Meta App (Instagram Graph API):**
-- `instagram_basic` — leer perfil y publicaciones
+- `instagram_business_basic` — leer perfil y publicaciones (reemplaza al deprecado `instagram_basic` desde dic 2024)
 - `pages_show_list` — listar páginas de Facebook del usuario
 - `pages_read_engagement` — acceder a la cuenta IG a través de la página
 
