@@ -1,12 +1,14 @@
 const axios = require('axios')
 
-const BASE = 'https://graph.facebook.com/v21.0'
+// Instagram Business Login usa graph.instagram.com (no graph.facebook.com)
+const BASE = 'https://graph.instagram.com'
 
 /**
  * Obtiene métricas de Instagram para un IG Business/Creator Account.
+ * Usa graph.instagram.com — flujo Instagram Business Login.
  *
- * @param {string} igUserId   — Instagram User ID (almacenado en integration.propertyId)
- * @param {string} accessToken — Long-lived user access token
+ * @param {string} igUserId    — Instagram User ID (almacenado en integration.propertyId)
+ * @param {string} accessToken — Long-lived Instagram token
  * @returns {Promise<object>}
  */
 async function fetchInstagramMetrics(igUserId, accessToken) {

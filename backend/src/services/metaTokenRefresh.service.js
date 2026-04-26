@@ -2,7 +2,8 @@ const axios            = require('axios')
 const prisma           = require('../lib/prisma')
 const { encrypt, decrypt } = require('../lib/encryption')
 
-const META_GRAPH = 'https://graph.facebook.com/v21.0'
+// Instagram Business Login tokens se renuevan en graph.instagram.com
+const IG_GRAPH = 'https://graph.instagram.com'
 
 /**
  * Devuelve un access token válido para una integración de tipo 'instagram'.
@@ -30,15 +31,13 @@ async function getValidMetaToken(integration) {
     return decrypt(integration.accessToken)
   }
 
-  // Queda poco tiempo — extender el long-lived token
+  // Queda poco tiempo — renovar el long-lived token (Instagram Business Login)
   const currentToken = decrypt(integration.accessToken)
 
-  const { data } = await axios.get(`${META_GRAPH}/oauth/access_token`, {
+  const { data } = await axios.get(`${IG_GRAPH}/refresh_access_token`, {
     params: {
-      grant_type:        'fb_exchange_token',
-      client_id:         process.env.META_APP_ID,
-      client_secret:     process.env.META_APP_SECRET,
-      fb_exchange_token: currentToken,
+      grant_type:   'ig_refresh_token',
+      access_token: currentToken,
     },
   })
 

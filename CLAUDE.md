@@ -447,10 +447,9 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 - `https://www.googleapis.com/auth/analytics.readonly`
 - Agregar `https://www.googleapis.com/auth/adwords` cuando el Developer Token de Google Ads sea aprobado
 
-**Permisos requeridos en Meta App (Instagram Graph API):**
-- `pages_show_list` — listar páginas de Facebook del usuario
-- `pages_read_engagement` — acceder a la cuenta IG a través de la página
-- Nota: usamos Facebook Login (dialog/oauth), no Instagram Login. Los datos de Instagram se acceden via Page token sin scope `instagram_*` explícito.
+**Permisos requeridos en Meta App (Instagram Business Login):**
+- `instagram_business_basic` — leer perfil y publicaciones (flujo Instagram Business Login)
+- Nota: usamos Instagram Business Login (`instagram.com/oauth/authorize`), NO Facebook Login. Esto evita la dependencia de Facebook Pages y Business Manager. Tokens se manejan en `graph.instagram.com`.
 
 **Env vars de integraciones (Railway):**
 ```
