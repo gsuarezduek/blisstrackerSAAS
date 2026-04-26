@@ -77,6 +77,9 @@ async function handleMetaCallback(req, res, next) {
     ? (process.env.FRONTEND_URL || 'http://localhost:5173')
     : `https://${slug}.${appDomain}`
 
+  const redirectUri = buildMetaRedirectUri()
+  console.log(`[MetaOAuth] Iniciando callback — redirectUri: ${redirectUri}, projectId: ${projectId}`)
+
   try {
     // 1. Intercambiar code por short-lived token (POST a api.instagram.com)
     const tokenRes = await axios.post(
@@ -85,7 +88,7 @@ async function handleMetaCallback(req, res, next) {
         client_id:     process.env.META_APP_ID,
         client_secret: process.env.META_APP_SECRET,
         grant_type:    'authorization_code',
-        redirect_uri:  buildMetaRedirectUri(),
+        redirect_uri:  redirectUri,
         code,
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
@@ -131,8 +134,12 @@ async function handleMetaCallback(req, res, next) {
     console.log(`[MetaOAuth] Instagram conectado: proyecto ${projectId}, @${username} (${igUserId})`)
     res.redirect(`${frontendBase}/oauth-result?success=true&type=instagram`)
   } catch (err) {
-    console.error('[MetaOAuth] Error en callback:', err.response?.data || err.message)
-    const msg = err.response?.data?.error_message || err.response?.data?.error?.message || err.message
+    console.error('[MetaOAuth] Error en callback — respuesta completa:', JSON.stringify(err.response?.data ?? err.message, null, 2))
+    console.error('[MetaOAuth] redirect_uri usado:', redirectUri)
+    const msg = err.response?.data?.error_message
+      || err.response?.data?.error?.message
+      || err.response?.data?.error_description
+      || err.message
     res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(msg)}`)
   }
 }
