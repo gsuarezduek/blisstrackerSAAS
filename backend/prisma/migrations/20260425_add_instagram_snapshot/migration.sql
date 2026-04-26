@@ -1,6 +1,6 @@
 -- CreateTable: InstagramSnapshot
 CREATE TABLE "InstagramSnapshot" (
-    "id"             SERIAL PRIMARY KEY,
+    "id"             SERIAL,
     "projectId"      INTEGER NOT NULL,
     "workspaceId"    INTEGER NOT NULL,
     "month"          TEXT NOT NULL,
