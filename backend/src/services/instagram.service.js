@@ -83,6 +83,11 @@ async function resolveIgUserId(accessToken) {
   })
 
   const pages = data?.data ?? []
+
+  console.log(`[Instagram] /me/accounts devolvió ${pages.length} página(s):`,
+    pages.map(p => ({ id: p.id, name: p.name, hasIg: !!p.instagram_business_account }))
+  )
+
   for (const page of pages) {
     if (page.instagram_business_account?.id) {
       return {
@@ -92,9 +97,11 @@ async function resolveIgUserId(accessToken) {
     }
   }
 
+  const pageNames = pages.map(p => p.name).join(', ') || 'ninguna'
   throw new Error(
-    'No se encontró una cuenta de Instagram Business o Creator vinculada a este Facebook. ' +
-    'Asegurate de tener una página de Facebook con una cuenta de Instagram conectada.'
+    `No se encontró una cuenta de Instagram Business vinculada. ` +
+    `Páginas detectadas: ${pageNames}. ` +
+    `Asegurate de que la cuenta de Instagram esté conectada directamente a una Página de Facebook (no solo al Business Manager).`
   )
 }
 
