@@ -75,33 +75,47 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
  * @returns {Promise<{ igUserId: string, username: string }>}
  */
 async function resolveIgUserId(accessToken) {
+  // Paso 1: obtener páginas con sus Page Access Tokens
   const { data } = await axios.get(`${BASE}/me/accounts`, {
     params: {
-      fields:       'name,instagram_business_account{id,username}',
+      fields:       'name,access_token',
       access_token: accessToken,
     },
   })
 
   const pages = data?.data ?? []
-
   console.log(`[Instagram] /me/accounts devolvió ${pages.length} página(s):`,
-    pages.map(p => ({ id: p.id, name: p.name, hasIg: !!p.instagram_business_account }))
+    pages.map(p => ({ id: p.id, name: p.name }))
   )
 
+  // Paso 2: para cada página, consultar instagram_business_account usando el Page Access Token
   for (const page of pages) {
-    if (page.instagram_business_account?.id) {
-      return {
-        igUserId: page.instagram_business_account.id,
-        username: page.instagram_business_account.username ?? null,
+    try {
+      const pageToken = page.access_token || accessToken
+      const { data: pageData } = await axios.get(`${BASE}/${page.id}`, {
+        params: {
+          fields:       'instagram_business_account{id,username}',
+          access_token: pageToken,
+        },
+      })
+      const igAccount = pageData?.instagram_business_account
+      if (igAccount?.id) {
+        console.log(`[Instagram] IG Business Account encontrado en página "${page.name}": @${igAccount.username}`)
+        return {
+          igUserId: igAccount.id,
+          username: igAccount.username ?? null,
+        }
       }
+    } catch (err) {
+      console.warn(`[Instagram] Error consultando página "${page.name}":`, err.response?.data || err.message)
     }
   }
 
   const pageNames = pages.map(p => p.name).join(', ') || 'ninguna'
   throw new Error(
     `No se encontró una cuenta de Instagram Business vinculada. ` +
-    `Páginas detectadas: ${pageNames}. ` +
-    `Asegurate de que la cuenta de Instagram esté conectada directamente a una Página de Facebook (no solo al Business Manager).`
+    `Páginas consultadas: ${pageNames}. ` +
+    `Asegurate de que la cuenta de Instagram esté conectada a una de esas páginas.`
   )
 }
 
