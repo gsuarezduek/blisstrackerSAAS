@@ -82,28 +82,44 @@ async function handleMetaCallback(req, res, next) {
 
   try {
     // 1. Intercambiar code por short-lived token (POST a api.instagram.com)
-    const tokenRes = await axios.post(
-      'https://api.instagram.com/oauth/access_token',
-      new URLSearchParams({
-        client_id:     process.env.META_APP_ID,
-        client_secret: process.env.META_APP_SECRET,
-        grant_type:    'authorization_code',
-        redirect_uri:  redirectUri,
-        code,
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-    )
+    console.log(`[MetaOAuth] Paso 1 — intercambiando code. client_id: ${process.env.META_APP_ID}, redirect_uri: ${redirectUri}`)
+    let tokenRes
+    try {
+      tokenRes = await axios.post(
+        'https://api.instagram.com/oauth/access_token',
+        new URLSearchParams({
+          client_id:     process.env.META_APP_ID,
+          client_secret: process.env.META_APP_SECRET,
+          grant_type:    'authorization_code',
+          redirect_uri:  redirectUri,
+          code,
+        }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+      )
+      console.log('[MetaOAuth] Paso 1 OK — user_id:', tokenRes.data.user_id)
+    } catch (e) {
+      console.error('[MetaOAuth] Paso 1 FALLÓ:', JSON.stringify(e.response?.data ?? e.message))
+      throw e
+    }
     const shortToken = tokenRes.data.access_token
     const igUserId   = String(tokenRes.data.user_id) // Instagram Business Login devuelve user_id directamente
 
     // 2. Canjear short-lived → long-lived (60 días) via graph.instagram.com
-    const longRes = await axios.get('https://graph.instagram.com/access_token', {
-      params: {
-        grant_type:        'ig_exchange_token',
-        client_secret:     process.env.META_APP_SECRET,
-        access_token:      shortToken,
-      },
-    })
+    console.log('[MetaOAuth] Paso 2 — canjeando long-lived token')
+    let longRes
+    try {
+      longRes = await axios.get('https://graph.instagram.com/access_token', {
+        params: {
+          grant_type:   'ig_exchange_token',
+          client_secret: process.env.META_APP_SECRET,
+          access_token:  shortToken,
+        },
+      })
+      console.log('[MetaOAuth] Paso 2 OK — expires_in:', longRes.data.expires_in)
+    } catch (e) {
+      console.error('[MetaOAuth] Paso 2 FALLÓ:', JSON.stringify(e.response?.data ?? e.message))
+      throw e
+    }
     const longToken = longRes.data.access_token
     const expiresIn = longRes.data.expires_in ?? 5183944
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
