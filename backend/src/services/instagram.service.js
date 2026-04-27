@@ -13,13 +13,13 @@ const BASE = 'https://graph.instagram.com'
  */
 async function fetchInstagramMetrics(igUserId, accessToken) {
   const [profileRes, mediaRes] = await Promise.all([
-    axios.get(`${BASE}/${igUserId}`, {
+    axios.get(`${BASE}/me`, {
       params: {
         fields:       'followers_count,media_count,name,username,profile_picture_url,biography,website',
         access_token: accessToken,
       },
     }),
-    axios.get(`${BASE}/${igUserId}/media`, {
+    axios.get(`${BASE}/me/media`, {
       params: {
         fields:       'id,like_count,comments_count,timestamp,media_type',
         limit:        30,

@@ -124,15 +124,17 @@ async function handleMetaCallback(req, res, next) {
     const expiresIn = longRes.data.expires_in ?? 5183944
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
-    // 3. Obtener username del perfil
-    console.log('[MetaOAuth] Paso 3 — fetching perfil, igUserId:', igUserId)
+    // 3. Obtener id real y username via /me (Instagram Business Login requiere /me, no /{user_id})
+    console.log('[MetaOAuth] Paso 3 — fetching /me')
     let username = null
+    let resolvedIgUserId = igUserId
     try {
-      const profileRes = await axios.get(`https://graph.instagram.com/${igUserId}`, {
-        params: { fields: 'username', access_token: longToken },
+      const profileRes = await axios.get('https://graph.instagram.com/me', {
+        params: { fields: 'id,username', access_token: longToken },
       })
-      username = profileRes.data?.username ?? null
-      console.log('[MetaOAuth] Paso 3 OK — username:', username)
+      username         = profileRes.data?.username ?? null
+      resolvedIgUserId = profileRes.data?.id ? String(profileRes.data.id) : igUserId
+      console.log('[MetaOAuth] Paso 3 OK — username:', username, 'id:', resolvedIgUserId)
     } catch (e) {
       console.error('[MetaOAuth] Paso 3 FALLÓ:', JSON.stringify(e.response?.data ?? e.message))
       throw e
@@ -143,14 +145,14 @@ async function handleMetaCallback(req, res, next) {
     await prisma.projectIntegration.upsert({
       where:  { projectId_type: { projectId, type: 'instagram' } },
       update: {
-        workspaceId, status: 'active', propertyId: igUserId,
+        workspaceId, status: 'active', propertyId: resolvedIgUserId,
         accessToken: encrypt(longToken), refreshToken: null,
         expiresAt, scopes: 'instagram_business_basic',
         connectedById: userId, connectedAt: new Date(),
       },
       create: {
         projectId, workspaceId, type: 'instagram', status: 'active',
-        propertyId: igUserId, accessToken: encrypt(longToken), refreshToken: null,
+        propertyId: resolvedIgUserId, accessToken: encrypt(longToken), refreshToken: null,
         expiresAt, scopes: 'instagram_business_basic',
         connectedById: userId, connectedAt: new Date(),
       },
