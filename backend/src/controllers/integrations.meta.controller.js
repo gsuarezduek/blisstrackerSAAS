@@ -125,12 +125,21 @@ async function handleMetaCallback(req, res, next) {
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
     // 3. Obtener username del perfil
-    const profileRes = await axios.get(`https://graph.instagram.com/${igUserId}`, {
-      params: { fields: 'username', access_token: longToken },
-    })
-    const username = profileRes.data?.username ?? null
+    console.log('[MetaOAuth] Paso 3 — fetching perfil, igUserId:', igUserId)
+    let username = null
+    try {
+      const profileRes = await axios.get(`https://graph.instagram.com/${igUserId}`, {
+        params: { fields: 'username', access_token: longToken },
+      })
+      username = profileRes.data?.username ?? null
+      console.log('[MetaOAuth] Paso 3 OK — username:', username)
+    } catch (e) {
+      console.error('[MetaOAuth] Paso 3 FALLÓ:', JSON.stringify(e.response?.data ?? e.message))
+      throw e
+    }
 
     // 4. Upsert en ProjectIntegration
+    console.log('[MetaOAuth] Paso 4 — guardando en DB')
     await prisma.projectIntegration.upsert({
       where:  { projectId_type: { projectId, type: 'instagram' } },
       update: {
@@ -147,7 +156,7 @@ async function handleMetaCallback(req, res, next) {
       },
     })
 
-    console.log(`[MetaOAuth] Instagram conectado: proyecto ${projectId}, @${username} (${igUserId})`)
+    console.log(`[MetaOAuth] Paso 4 OK — Instagram conectado: proyecto ${projectId}, @${username} (${igUserId})`)
     res.redirect(`${frontendBase}/oauth-result?success=true&type=instagram`)
   } catch (err) {
     console.error('[MetaOAuth] Error en callback — respuesta completa:', JSON.stringify(err.response?.data ?? err.message, null, 2))
