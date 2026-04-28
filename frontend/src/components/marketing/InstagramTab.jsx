@@ -156,12 +156,9 @@ function FollowersCard({ followersCount, mediaCount, projectId }) {
             : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
         }`}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs">
-            <span>👥</span>
-            <span>Seguidores</span>
-          </div>
-          <span className="text-xs text-purple-500 dark:text-purple-400">{open ? '▲' : '▼ ver evolución'}</span>
+        <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs">
+          <span>👥</span>
+          <span>Seguidores</span>
         </div>
         <div className="text-2xl font-bold text-gray-900 dark:text-white">{fmtK(followersCount)}</div>
         <div className="text-xs text-gray-400 dark:text-gray-500">{fmtNum(mediaCount)} publicaciones</div>
@@ -200,9 +197,8 @@ function FollowersCard({ followersCount, mediaCount, projectId }) {
               <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : logs.length < 2 ? (
-            <p className="text-xs text-gray-400 text-center py-4">
-              No hay suficientes datos para este período todavía.
-              Los datos se acumulan cada vez que visitás esta sección.
+            <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-6">
+              Recopilando información, pronto vas a poder ver la evolución de seguidores.
             </p>
           ) : (
             <LineChart
@@ -315,9 +311,6 @@ function TopOfMonth({ topOfMonth }) {
               : 'Sin publicaciones en lo que va del mes'}
           </p>
         </div>
-        <p className="text-[10px] text-gray-400 dark:text-gray-500 max-w-[160px] text-right leading-tight">
-          Alcance no disponible sin permisos avanzados
-        </p>
       </div>
 
       {postsThisMonth === 0 ? (
@@ -328,7 +321,7 @@ function TopOfMonth({ topOfMonth }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <TopPostCard post={p1} medal="🥇" category="Más likes"    categoryIcon="❤️" />
           <TopPostCard post={p2} medal="🥈" category="Más comentarios" categoryIcon="💬" />
-          <TopPostCard post={p3} medal="🥉" category="Mayor engagement" categoryIcon="⚡" />
+          <TopPostCard post={p3} medal="🥉" category="Más interacciones" categoryIcon="⚡" />
         </div>
       )}
     </div>
@@ -612,11 +605,11 @@ export default function InstagramTab({ projectId }) {
         </div>
       )}
 
-      {/* TOP del mes */}
-      {m?.topOfMonth && <TopOfMonth topOfMonth={m.topOfMonth} />}
-
       {/* Insights: breakdown por tipo + mejor horario */}
       {m && <ContentInsights byType={m.byType} bestHour={m.bestHour} />}
+
+      {/* TOP del mes */}
+      {m?.topOfMonth && <TopOfMonth topOfMonth={m.topOfMonth} />}
 
       {/* Evolución histórica mensual */}
       {snapshots.length >= 2 && (

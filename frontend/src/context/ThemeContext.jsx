@@ -2,16 +2,33 @@ import { createContext, useContext, useEffect, useState } from 'react'
 
 const ThemeContext = createContext()
 
+const APP_DOMAIN = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
+
+function readThemeCookie() {
+  const match = document.cookie.match(/(?:^|;\s*)theme=([^;]*)/)
+  return match?.[1] ?? null
+}
+
+function writeThemeCookie(value) {
+  // Solo en producción: cookie con dominio padre para compartir entre subdominios
+  if (!window.location.hostname.includes(APP_DOMAIN)) return
+  document.cookie = `theme=${value}; path=/; domain=.${APP_DOMAIN}; max-age=31536000; SameSite=Lax`
+}
+
 export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
-    const isDark = localStorage.getItem('theme') === 'dark'
+    // localStorage tiene prioridad; si no hay, leer la cookie compartida del dominio padre
+    const stored = localStorage.getItem('theme') ?? readThemeCookie()
+    const isDark  = stored === 'dark'
     document.documentElement.classList.toggle('dark', isDark)
     return isDark
   })
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('theme', dark ? 'dark' : 'light')
+    const value = dark ? 'dark' : 'light'
+    localStorage.setItem('theme', value)
+    writeThemeCookie(value)
   }, [dark])
 
   return (
