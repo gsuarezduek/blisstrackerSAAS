@@ -265,12 +265,6 @@ function AccountHeader({ metrics, integration, onDisconnect, disconnecting }) {
               <strong className="text-gray-900 dark:text-white">{fmtK(metrics?.followersCount)}</strong>
               <span className="text-gray-500 dark:text-gray-400 ml-1">seguidores</span>
             </span>
-            {metrics?.followingCount != null && (
-              <span>
-                <strong className="text-gray-900 dark:text-white">{fmtK(metrics.followingCount)}</strong>
-                <span className="text-gray-500 dark:text-gray-400 ml-1">siguiendo</span>
-              </span>
-            )}
           </div>
 
           {/* Bio */}

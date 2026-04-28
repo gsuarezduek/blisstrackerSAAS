@@ -21,7 +21,7 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
   const [profileRes, mediaRes] = await Promise.all([
     axios.get(`${BASE}/me`, {
       params: {
-        fields:       'followers_count,following_count,media_count,name,username,profile_picture_url,biography,website',
+        fields:       'followers_count,media_count,name,username,profile_picture_url,biography,website',
         access_token: accessToken,
       },
     }),
@@ -37,9 +37,8 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
   const profile = profileRes.data
   const media   = mediaRes.data?.data ?? []
 
-  const followersCount = profile.followers_count  ?? 0
-  const followingCount = profile.following_count  ?? null
-  const mediaCount     = profile.media_count      ?? 0
+  const followersCount = profile.followers_count ?? 0
+  const mediaCount     = profile.media_count     ?? 0
 
   // ── Promedios ─────────────────────────────────────────────────────────────
 
@@ -130,7 +129,6 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
 
   return {
     followersCount,
-    followingCount,
     mediaCount,
     name:          profile.name                ?? null,
     username:      profile.username            ?? null,
