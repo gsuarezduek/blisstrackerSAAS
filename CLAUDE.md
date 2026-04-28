@@ -449,7 +449,12 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 
 **Permisos requeridos en Meta App (Instagram Business Login):**
 - `instagram_business_basic` — leer perfil y publicaciones (flujo Instagram Business Login)
-- Nota: usamos Instagram Business Login (`instagram.com/oauth/authorize`), NO Facebook Login. Esto evita la dependencia de Facebook Pages y Business Manager. Tokens se manejan en `graph.instagram.com`.
+- Notas de implementación:
+  - Usar `instagram.com/oauth/authorize` (NO `facebook.com/dialog/oauth`) — evita dependencia de Facebook Pages y Business Manager
+  - Token exchange: POST `api.instagram.com/oauth/access_token`
+  - Long-lived token: GET `graph.instagram.com/access_token?grant_type=ig_exchange_token`
+  - Todas las llamadas de datos usan `graph.instagram.com/me` (NO `/{user_id}` — da OAuthException code 2)
+  - El `user_id` del token exchange es app-scoped; usar el `id` de `/me` como `propertyId`
 
 **Env vars de integraciones (Railway):**
 ```

@@ -369,7 +369,7 @@ async function starTask(req, res, next) {
 
     if (nextLevel === 1) {
       const starredCount = await prisma.task.count({
-        where: { userId, starred: { gt: 0 }, status: { not: 'COMPLETED' } },
+        where: { userId, starred: { gt: 0 }, status: { not: 'COMPLETED' }, workDay: { workspaceId: req.workspace.id } },
       })
       if (starredCount >= 3) {
         return res.status(409).json({ error: 'Máximo 3 tareas destacadas. Quitá una primero.' })

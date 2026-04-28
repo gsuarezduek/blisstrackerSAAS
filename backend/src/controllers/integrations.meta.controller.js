@@ -78,54 +78,36 @@ async function handleMetaCallback(req, res, next) {
     : `https://${slug}.${appDomain}`
 
   const redirectUri = buildMetaRedirectUri()
-  console.log(`[MetaOAuth] Iniciando callback — redirectUri: ${redirectUri}, projectId: ${projectId}`)
 
   try {
     // 1. Intercambiar code por short-lived token (POST a api.instagram.com)
-    console.log(`[MetaOAuth] Paso 1 — intercambiando code. client_id: ${process.env.META_APP_ID}, redirect_uri: ${redirectUri}`)
-    let tokenRes
-    try {
-      tokenRes = await axios.post(
-        'https://api.instagram.com/oauth/access_token',
-        new URLSearchParams({
-          client_id:     process.env.META_APP_ID,
-          client_secret: process.env.META_APP_SECRET,
-          grant_type:    'authorization_code',
-          redirect_uri:  redirectUri,
-          code,
-        }),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-      )
-      console.log('[MetaOAuth] Paso 1 OK — user_id:', tokenRes.data.user_id)
-    } catch (e) {
-      console.error('[MetaOAuth] Paso 1 FALLÓ:', JSON.stringify(e.response?.data ?? e.message))
-      throw e
-    }
+    const tokenRes = await axios.post(
+      'https://api.instagram.com/oauth/access_token',
+      new URLSearchParams({
+        client_id:     process.env.META_APP_ID,
+        client_secret: process.env.META_APP_SECRET,
+        grant_type:    'authorization_code',
+        redirect_uri:  redirectUri,
+        code,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+    )
     const shortToken = tokenRes.data.access_token
-    const igUserId   = String(tokenRes.data.user_id) // Instagram Business Login devuelve user_id directamente
+    const igUserId   = String(tokenRes.data.user_id)
 
     // 2. Canjear short-lived → long-lived (60 días) via graph.instagram.com
-    console.log('[MetaOAuth] Paso 2 — canjeando long-lived token')
-    let longRes
-    try {
-      longRes = await axios.get('https://graph.instagram.com/access_token', {
-        params: {
-          grant_type:   'ig_exchange_token',
-          client_secret: process.env.META_APP_SECRET,
-          access_token:  shortToken,
-        },
-      })
-      console.log('[MetaOAuth] Paso 2 OK — expires_in:', longRes.data.expires_in)
-    } catch (e) {
-      console.error('[MetaOAuth] Paso 2 FALLÓ:', JSON.stringify(e.response?.data ?? e.message))
-      throw e
-    }
+    const longRes = await axios.get('https://graph.instagram.com/access_token', {
+      params: {
+        grant_type:    'ig_exchange_token',
+        client_secret: process.env.META_APP_SECRET,
+        access_token:  shortToken,
+      },
+    })
     const longToken = longRes.data.access_token
     const expiresIn = longRes.data.expires_in ?? 5183944
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
-    // 3. Obtener id real y username via /me (Instagram Business Login requiere /me, no /{user_id})
-    console.log('[MetaOAuth] Paso 3 — fetching /me')
+    // 3. Obtener id real y username via /me
     let username = null
     let resolvedIgUserId = igUserId
     try {
@@ -134,14 +116,9 @@ async function handleMetaCallback(req, res, next) {
       })
       username         = profileRes.data?.username ?? null
       resolvedIgUserId = profileRes.data?.id ? String(profileRes.data.id) : igUserId
-      console.log('[MetaOAuth] Paso 3 OK — username:', username, 'id:', resolvedIgUserId)
-    } catch (e) {
-      console.error('[MetaOAuth] Paso 3 FALLÓ:', JSON.stringify(e.response?.data ?? e.message))
-      throw e
-    }
+    } catch { /* username es opcional, no bloquea el flujo */ }
 
     // 4. Upsert en ProjectIntegration
-    console.log('[MetaOAuth] Paso 4 — guardando en DB')
     await prisma.projectIntegration.upsert({
       where:  { projectId_type: { projectId, type: 'instagram' } },
       update: {
@@ -158,7 +135,7 @@ async function handleMetaCallback(req, res, next) {
       },
     })
 
-    console.log(`[MetaOAuth] Paso 4 OK — Instagram conectado: proyecto ${projectId}, @${username} (${igUserId})`)
+    console.log(`[MetaOAuth] Instagram conectado: proyecto ${projectId}, @${username} (${resolvedIgUserId})`)
     res.redirect(`${frontendBase}/oauth-result?success=true&type=instagram`)
   } catch (err) {
     console.error('[MetaOAuth] Error en callback — respuesta completa:', JSON.stringify(err.response?.data ?? err.message, null, 2))
