@@ -45,7 +45,8 @@ model Workspace {
   pageSpeedResults     PageSpeedResult[]
   trackedKeywords      TrackedKeyword[]   @relation("WorkspaceTrackedKeywords")
   keywordRankings      KeywordRanking[]   @relation("WorkspaceKeywordRankings")
-  instagramSnapshots   InstagramSnapshot[]
+  instagramSnapshots    InstagramSnapshot[]
+  instagramFollowerLogs InstagramFollowerLog[]
 
   @@index([slug])
 }
@@ -227,7 +228,8 @@ model Project {
   pageSpeedResults   PageSpeedResult[]
   trackedKeywords    TrackedKeyword[] @relation("ProjectTrackedKeywords")
   keywordRankings    KeywordRanking[] @relation("ProjectKeywordRankings")
-  instagramSnapshots InstagramSnapshot[]
+  instagramSnapshots    InstagramSnapshot[]
+  instagramFollowerLogs InstagramFollowerLog[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -829,5 +831,22 @@ model InstagramSnapshot {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, month])
+  @@index([workspaceId])
+}
+
+// ─── INSTAGRAM FOLLOWER LOG ───────────────────────────────────────────────────
+
+model InstagramFollowerLog {
+  id             Int      @id @default(autoincrement())
+  projectId      Int
+  workspaceId    Int
+  date           String   // "YYYY-MM-DD" en horario ART
+  followersCount Int
+  createdAt      DateTime @default(now())
+
+  project   Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, date])
   @@index([workspaceId])
 }

@@ -45,6 +45,7 @@ router.get('/projects/:id/health-score',                   healthScore.getHealth
 // Instagram
 router.get('/projects/:id/instagram/snapshots',  instagram.getSnapshots)
 router.post('/projects/:id/instagram/snapshots', instagram.saveSnapshot)
+router.get('/projects/:id/instagram/followers',  instagram.getFollowerLog)
 router.get('/projects/:id/instagram',            instagram.getMetrics)
 
 // Snapshots mensuales + Insights IA
