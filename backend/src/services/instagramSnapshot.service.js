@@ -17,25 +17,33 @@ function prevMonthStr(month) {
 /**
  * Guarda un snapshot de Instagram para un proyecto y mes específicos.
  * Usa la integración activa del proyecto.
+ *
+ * @param {number} projectId
+ * @param {number} workspaceId
+ * @param {string} month           — "YYYY-MM"
+ * @param {object|null} preloadedMetrics — si se proveen, evita re-fetchear de la API
  */
-async function saveInstagramSnapshot(projectId, workspaceId, month) {
-  const integration = await prisma.projectIntegration.findUnique({
-    where: { projectId_type: { projectId, type: 'instagram' } },
-  })
-  if (!integration || integration.status !== 'active') {
-    throw new Error(`Proyecto ${projectId}: no tiene integración de Instagram activa`)
-  }
+async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMetrics = null) {
+  let metrics = preloadedMetrics
 
-  const token   = await getValidMetaToken(integration)
-  const metrics = await fetchInstagramMetrics(integration.propertyId, token)
+  if (!metrics) {
+    const integration = await prisma.projectIntegration.findUnique({
+      where: { projectId_type: { projectId, type: 'instagram' } },
+    })
+    if (!integration || integration.status !== 'active') {
+      throw new Error(`Proyecto ${projectId}: no tiene integración de Instagram activa`)
+    }
+    const token = await getValidMetaToken(integration)
+    metrics     = await fetchInstagramMetrics(integration.propertyId, token)
+  }
 
   await prisma.instagramSnapshot.upsert({
     where: { projectId_month: { projectId, month } },
     update: {
       followersCount: metrics.followersCount,
-      mediaCount:     metrics.mediaCount    ?? null,
-      avgLikes:       metrics.avgLikes      ?? null,
-      avgComments:    metrics.avgComments   ?? null,
+      mediaCount:     metrics.mediaCount     ?? null,
+      avgLikes:       metrics.avgLikes       ?? null,
+      avgComments:    metrics.avgComments    ?? null,
       engagementRate: metrics.engagementRate ?? null,
     },
     create: {
@@ -43,9 +51,9 @@ async function saveInstagramSnapshot(projectId, workspaceId, month) {
       workspaceId,
       month,
       followersCount: metrics.followersCount,
-      mediaCount:     metrics.mediaCount    ?? null,
-      avgLikes:       metrics.avgLikes      ?? null,
-      avgComments:    metrics.avgComments   ?? null,
+      mediaCount:     metrics.mediaCount     ?? null,
+      avgLikes:       metrics.avgLikes       ?? null,
+      avgComments:    metrics.avgComments    ?? null,
       engagementRate: metrics.engagementRate ?? null,
     },
   })

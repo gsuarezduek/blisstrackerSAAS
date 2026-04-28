@@ -34,6 +34,12 @@ async function getMetrics(req, res, next) {
     const metrics = await fetchInstagramMetrics(integration.propertyId, token)
 
     res.json(metrics)
+
+    // Auto-snapshot silencioso: actualiza el mes actual sin bloquear la respuesta
+    setImmediate(() => {
+      saveInstagramSnapshot(projectId, workspaceId, currentMonthStr(), metrics)
+        .catch(err => console.warn('[Instagram] Auto-snapshot failed:', err.message))
+    })
   } catch (err) { next(err) }
 }
 
