@@ -17,6 +17,22 @@
     <!-- PWA / Android -->
     <link rel="icon" type="image/png" sizes="192x192" href="/logo-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/logo-512.png" />
+    <!-- Tema oscuro: aplicar ANTES del primer paint para evitar flash blanco -->
+    <script>
+      (function() {
+        try {
+          // 1. Intentar localStorage (mismo origen)
+          var theme = localStorage.getItem('theme');
+          // 2. Si no hay, leer cookie compartida entre subdominios
+          if (!theme) {
+            var m = document.cookie.match(/(?:^|;\s*)theme=([^;]*)/);
+            theme = m ? m[1] : null;
+          }
+          if (theme === 'dark') document.documentElement.classList.add('dark');
+        } catch(e) {}
+      })();
+    </script>
+
     <!-- Google Analytics — solo en el dominio raíz (landing), no en workspaces -->
     <script>
       (function() {

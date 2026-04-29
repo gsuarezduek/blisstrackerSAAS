@@ -21,6 +21,8 @@ export function ThemeProvider({ children }) {
     const stored = localStorage.getItem('theme') ?? readThemeCookie()
     const isDark  = stored === 'dark'
     document.documentElement.classList.toggle('dark', isDark)
+    // Escribir la cookie sincrónicamente para que ya esté disponible en otros subdominios
+    writeThemeCookie(isDark ? 'dark' : 'light')
     return isDark
   })
 
