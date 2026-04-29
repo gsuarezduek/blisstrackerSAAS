@@ -21,17 +21,14 @@
     <script>
       (function() {
         try {
-          // 1. localStorage (mismo origen)
-          var theme = localStorage.getItem('theme');
-          // 2. Cookie compartida entre subdominios
+          // 1. Parámetro ?theme= en la URL (pasado al redirigir desde subdominio — tiene prioridad)
+          var theme = new URLSearchParams(window.location.search).get('theme');
+          // 2. localStorage (mismo origen)
+          if (!theme) theme = localStorage.getItem('theme');
+          // 3. Cookie compartida entre subdominios
           if (!theme) {
             var m = document.cookie.match(/(?:^|;\s*)theme=([^;]*)/);
             theme = m ? m[1] : null;
-          }
-          // 3. Parámetro ?theme= en la URL (pasado al redirigir desde subdominio)
-          if (!theme) {
-            var p = new URLSearchParams(window.location.search).get('theme');
-            if (p) theme = p;
           }
           if (theme === 'dark') document.documentElement.classList.add('dark');
         } catch(e) {}

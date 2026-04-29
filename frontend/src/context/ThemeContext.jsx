@@ -17,9 +17,9 @@ function writeThemeCookie(value) {
 
 export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
-    // Prioridad: localStorage → cookie → parámetro ?theme= en la URL
+    // Prioridad: ?theme= en URL (pasado al redirigir) → localStorage → cookie
     const urlParam = new URLSearchParams(window.location.search).get('theme')
-    const stored   = localStorage.getItem('theme') ?? readThemeCookie() ?? urlParam
+    const stored   = urlParam ?? localStorage.getItem('theme') ?? readThemeCookie()
     const isDark   = stored === 'dark'
     document.documentElement.classList.toggle('dark', isDark)
     // Persistir en localStorage y cookie para visitas futuras
