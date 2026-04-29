@@ -190,6 +190,7 @@ export default function Login2() {
 
   // En subdominio de workspace → redirigir al login central
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-  window.location.replace(`https://${appDomain}/login?from=${slug}`)
+  const theme = localStorage.getItem('theme') || 'light'
+  window.location.replace(`https://${appDomain}/login?from=${slug}&theme=${theme}`)
   return null
 }

@@ -17,11 +17,13 @@ function writeThemeCookie(value) {
 
 export function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
-    // localStorage tiene prioridad; si no hay, leer la cookie compartida del dominio padre
-    const stored = localStorage.getItem('theme') ?? readThemeCookie()
-    const isDark  = stored === 'dark'
+    // Prioridad: localStorage → cookie → parámetro ?theme= en la URL
+    const urlParam = new URLSearchParams(window.location.search).get('theme')
+    const stored   = localStorage.getItem('theme') ?? readThemeCookie() ?? urlParam
+    const isDark   = stored === 'dark'
     document.documentElement.classList.toggle('dark', isDark)
-    // Escribir la cookie sincrónicamente para que ya esté disponible en otros subdominios
+    // Persistir en localStorage y cookie para visitas futuras
+    localStorage.setItem('theme', isDark ? 'dark' : 'light')
     writeThemeCookie(isDark ? 'dark' : 'light')
     return isDark
   })
