@@ -28,7 +28,7 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
     axios.get(`${BASE}/me/media`, {
       params: {
         fields:       'id,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,caption',
-        limit:        30,
+        limit:        100,
         access_token: accessToken,
       },
     }),
@@ -40,17 +40,26 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
   const followersCount = profile.followers_count ?? 0
   const mediaCount     = profile.media_count     ?? 0
 
-  // ── Promedios ─────────────────────────────────────────────────────────────
+  // ── Mes actual en horario ART ─────────────────────────────────────────────
 
-  const postsWithLikes    = media.filter(m => m.like_count     != null)
-  const postsWithComments = media.filter(m => m.comments_count != null)
+  const artNow     = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const monthStart = new Date(artNow.getFullYear(), artNow.getMonth(), 1)
 
-  const avgLikes = postsWithLikes.length > 0
-    ? parseFloat((postsWithLikes.reduce((s, m) => s + m.like_count, 0) / postsWithLikes.length).toFixed(1))
+  // Publicaciones del mes actual
+  const monthPosts        = media.filter(m => m.timestamp && new Date(m.timestamp) >= monthStart)
+  const monthWithLikes    = monthPosts.filter(m => m.like_count     != null)
+  const monthWithComments = monthPosts.filter(m => m.comments_count != null)
+  const monthWithBoth     = monthPosts.filter(m => m.like_count != null && m.comments_count != null)
+  const postsThisMonth    = monthPosts.length
+
+  // ── Promedios del mes ─────────────────────────────────────────────────────
+
+  const avgLikes = monthWithLikes.length > 0
+    ? parseFloat((monthWithLikes.reduce((s, m) => s + m.like_count, 0) / monthWithLikes.length).toFixed(1))
     : null
 
-  const avgComments = postsWithComments.length > 0
-    ? parseFloat((postsWithComments.reduce((s, m) => s + m.comments_count, 0) / postsWithComments.length).toFixed(1))
+  const avgComments = monthWithComments.length > 0
+    ? parseFloat((monthWithComments.reduce((s, m) => s + m.comments_count, 0) / monthWithComments.length).toFixed(1))
     : null
 
   // Engagement rate = (avg_likes + avg_comments) / followers * 100
@@ -58,16 +67,10 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
     ? parseFloat((((avgLikes ?? 0) + (avgComments ?? 0)) / followersCount * 100).toFixed(2))
     : null
 
-  // ── Posts por semana ───────────────────────────────────────────────────────
+  // ── Mejor publicación del mes ─────────────────────────────────────────────
 
-  const fourWeeksAgo = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000)
-  const recentPosts  = media.filter(m => m.timestamp && new Date(m.timestamp) >= fourWeeksAgo)
-  const postsPerWeek = parseFloat((recentPosts.length / 4).toFixed(1))
-
-  // ── Mejor publicación ─────────────────────────────────────────────────────
-
-  const bestPostRaw = postsWithLikes.length > 0
-    ? postsWithLikes.reduce((best, m) => m.like_count > best.like_count ? m : best)
+  const bestPostRaw = monthWithLikes.length > 0
+    ? monthWithLikes.reduce((best, m) => m.like_count > best.like_count ? m : best)
     : null
 
   const bestPost = bestPostRaw ? {
@@ -80,10 +83,10 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
     caption:       bestPostRaw.caption   ?? null,
   } : null
 
-  // ── Breakdown por tipo de contenido ───────────────────────────────────────
+  // ── Breakdown por tipo de contenido (del mes) ─────────────────────────────
 
   const typeMap = {}
-  for (const m of postsWithLikes) {
+  for (const m of monthWithLikes) {
     const type = m.media_type ?? 'IMAGE'
     if (!typeMap[type]) typeMap[type] = { likes: 0, count: 0 }
     typeMap[type].likes += m.like_count
@@ -99,10 +102,11 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
     .sort((a, b) => b.avgLikes - a.avgLikes)
 
   // ── Mejor horario (ventanas de 3h en horario ART) ─────────────────────────
-  // Usa todas las publicaciones disponibles (hasta 30); ventanas con ≥1 post
+  // Usa todos los posts disponibles (hasta 100) para mayor representatividad
 
+  const allWithLikes = media.filter(m => m.like_count != null)
   const hourBuckets = {}
-  for (const m of postsWithLikes) {
+  for (const m of allWithLikes) {
     if (!m.timestamp) continue
     const local = new Date(new Date(m.timestamp).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
     const bucket = Math.floor(local.getHours() / 3) * 3  // 0, 3, 6, 9, 12, 15, 18, 21
@@ -114,11 +118,7 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
     .map(([h, { likes, count }]) => ({ hour: Number(h), avgLikes: parseFloat((likes / count).toFixed(1)), count }))
     .sort((a, b) => b.avgLikes - a.avgLikes)[0] ?? null
 
-  // ── TOP del mes: mejores publicaciones del mes calendario actual (ART) ────
-
-  const artNow       = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
-  const monthStart   = new Date(artNow.getFullYear(), artNow.getMonth(), 1)
-  const monthPosts   = media.filter(m => m.timestamp && new Date(m.timestamp) >= monthStart)
+  // ── TOP del mes ────────────────────────────────────────────────────────────
 
   function toPostCard(m) {
     if (!m) return null
@@ -134,15 +134,11 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
     }
   }
 
-  const monthWithLikes    = monthPosts.filter(m => m.like_count     != null)
-  const monthWithComments = monthPosts.filter(m => m.comments_count != null)
-  const monthWithBoth     = monthPosts.filter(m => m.like_count != null && m.comments_count != null)
+  const topLikes      = monthWithLikes.length    > 0 ? toPostCard(monthWithLikes.reduce((b, m)    => m.like_count > b.like_count ? m : b))        : null
+  const topComments   = monthWithComments.length > 0 ? toPostCard(monthWithComments.reduce((b, m) => m.comments_count > b.comments_count ? m : b)) : null
+  const topEngagement = monthWithBoth.length     > 0 ? toPostCard(monthWithBoth.reduce((b, m)     => (m.like_count + m.comments_count) > (b.like_count + b.comments_count) ? m : b)) : null
 
-  const topLikes       = monthWithLikes.length    > 0 ? toPostCard(monthWithLikes.reduce((b, m)    => m.like_count > b.like_count ? m : b))        : null
-  const topComments    = monthWithComments.length > 0 ? toPostCard(monthWithComments.reduce((b, m) => m.comments_count > b.comments_count ? m : b)) : null
-  const topEngagement  = monthWithBoth.length     > 0 ? toPostCard(monthWithBoth.reduce((b, m)     => (m.like_count + m.comments_count) > (b.like_count + b.comments_count) ? m : b)) : null
-
-  const topOfMonth = { topLikes, topComments, topEngagement, postsThisMonth: monthPosts.length }
+  const topOfMonth = { topLikes, topComments, topEngagement, postsThisMonth }
 
   // ── Últimas 9 publicaciones para la grilla ────────────────────────────────
 
@@ -168,7 +164,7 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
     avgLikes,
     avgComments,
     engagementRate,
-    postsPerWeek,
+    postsThisMonth,
     bestPost,
     byType,
     bestHour,

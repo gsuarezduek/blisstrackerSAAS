@@ -45,6 +45,7 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
       avgLikes:       metrics.avgLikes       ?? null,
       avgComments:    metrics.avgComments    ?? null,
       engagementRate: metrics.engagementRate ?? null,
+      postsCount:     metrics.postsThisMonth ?? null,
     },
     create: {
       projectId,
@@ -55,6 +56,7 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
       avgLikes:       metrics.avgLikes       ?? null,
       avgComments:    metrics.avgComments    ?? null,
       engagementRate: metrics.engagementRate ?? null,
+      postsCount:     metrics.postsThisMonth ?? null,
     },
   })
 

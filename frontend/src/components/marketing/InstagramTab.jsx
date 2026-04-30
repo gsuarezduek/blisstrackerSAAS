@@ -108,6 +108,53 @@ function LineChart({ data, valueAccessor, labelAccessor, label, color = '#a855f7
   )
 }
 
+// ── Navegación por mes ────────────────────────────────────────────────────────
+
+function monthLabel(ym) {
+  const [y, m] = ym.split('-')
+  const label = new Date(Number(y), Number(m) - 1, 1)
+    .toLocaleString('es-AR', { month: 'long', year: 'numeric' })
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+function MonthNav({ selectedMonth, availableMonths, onChange }) {
+  const idx = availableMonths.indexOf(selectedMonth)
+  const canPrev = idx < availableMonths.length - 1
+  const canNext = idx > 0
+  const isCurrentMonth = idx === 0
+
+  return (
+    <div className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3">
+      <button
+        onClick={() => canPrev && onChange(availableMonths[idx + 1])}
+        disabled={!canPrev}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-lg"
+      >‹</button>
+
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+          {monthLabel(selectedMonth)}
+        </span>
+        {isCurrentMonth ? (
+          <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">
+            En vivo
+          </span>
+        ) : (
+          <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-medium">
+            Snapshot
+          </span>
+        )}
+      </div>
+
+      <button
+        onClick={() => canNext && onChange(availableMonths[idx - 1])}
+        disabled={!canNext}
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-lg"
+      >›</button>
+    </div>
+  )
+}
+
 // ── KPI Card — seguidores ────────────────────────────────────────────────────
 
 const FOLLOWER_FILTERS = [
@@ -290,7 +337,7 @@ function ContentInsights({ byType, bestHour }) {
               <p className="text-xs text-gray-400 mt-0.5">
                 {fmtNum(Math.round(bestHour.avgLikes))} likes promedio · {bestHour.count} posts analizados
               </p>
-              <p className="text-xs text-gray-400">Basado en las últimas 30 publicaciones · Horario ART</p>
+              <p className="text-xs text-gray-400">Basado en las últimas publicaciones · Horario ART</p>
             </div>
           </div>
         ) : (
@@ -433,9 +480,12 @@ function ConnectPrompt({ projectId, onConnected }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function InstagramTab({ projectId }) {
+  const currentMonth = todayAR().slice(0, 7)
+
   const [integration,    setIntegration]    = useState(null)
   const [metrics,        setMetrics]        = useState(null)
   const [snapshots,      setSnapshots]      = useState([])
+  const [selectedMonth,  setSelectedMonth]  = useState(currentMonth)
   const [followerLogs,   setFollowerLogs]   = useState([])
   const [followerFilter, setFollowerFilter] = useState('30d')
   const [followerLoading,setFollowerLoading]= useState(false)
@@ -512,43 +562,74 @@ export default function InstagramTab({ projectId }) {
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={fetchData} />
 
-  const m = metrics
+  // Meses disponibles: mes actual + meses con snapshot (ordenados más reciente primero)
+  const availableMonths = [...new Set([currentMonth, ...snapshots.map(s => s.month)])]
+    .sort().reverse()
+
+  const isCurrentMonth = selectedMonth === currentMonth
+  // Para el mes actual → datos en vivo; para meses anteriores → snapshot guardado
+  const displayData = isCurrentMonth
+    ? metrics
+    : (snapshots.find(s => s.month === selectedMonth) ?? null)
 
   return (
     <div className="space-y-4">
 
       {/* Header con perfil */}
-      <AccountHeader metrics={m} integration={integration} onDisconnect={handleDisconnect} disconnecting={disconnecting} />
+      <AccountHeader metrics={metrics} integration={integration} onDisconnect={handleDisconnect} disconnecting={disconnecting} />
 
       {/* Error */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">{error}</div>
       )}
 
-      {/* KPI cards — Seguidores es especial (expandible) */}
-      {m && (
+      {/* Navegación por mes */}
+      {availableMonths.length > 0 && (
+        <MonthNav
+          selectedMonth={selectedMonth}
+          availableMonths={availableMonths}
+          onChange={setSelectedMonth}
+        />
+      )}
+
+      {/* KPI cards */}
+      {displayData && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <FollowersCard followersCount={m.followersCount} mediaCount={m.mediaCount} />
+          <FollowersCard followersCount={displayData.followersCount} mediaCount={displayData.mediaCount} />
           <KpiCard
             icon="❤️" label="Engagement"
-            value={m.engagementRate != null ? `${m.engagementRate}%` : '—'}
-            valueClass={engagementColor(m.engagementRate)}
-            sub={engagementLabel(m.engagementRate)}
+            value={displayData.engagementRate != null ? `${displayData.engagementRate}%` : '—'}
+            valueClass={engagementColor(displayData.engagementRate)}
+            sub={engagementLabel(displayData.engagementRate)}
           />
-          <KpiCard icon="👍" label="Avg. Likes"      value={m.avgLikes    != null ? fmtNum(m.avgLikes)    : '—'} sub="últimas 30 publicaciones" />
-          <KpiCard icon="💬" label="Avg. Comentarios" value={m.avgComments != null ? fmtNum(m.avgComments) : '—'} sub="últimas 30 publicaciones" />
-          <KpiCard icon="📅" label="Posts / semana"  value={m.postsPerWeek != null ? m.postsPerWeek : '—'}        sub="últimas 4 semanas" />
+          <KpiCard
+            icon="👍" label="Avg. Likes"
+            value={displayData.avgLikes != null ? fmtNum(displayData.avgLikes) : '—'}
+            sub="promedio del mes"
+          />
+          <KpiCard
+            icon="💬" label="Avg. Comentarios"
+            value={displayData.avgComments != null ? fmtNum(displayData.avgComments) : '—'}
+            sub="promedio del mes"
+          />
+          <KpiCard
+            icon="📅" label="Posts del mes"
+            value={(displayData.postsThisMonth ?? displayData.postsCount) != null
+              ? fmtNum(displayData.postsThisMonth ?? displayData.postsCount)
+              : '—'}
+            sub={isCurrentMonth ? 'publicaciones este mes' : 'publicaciones ese mes'}
+          />
         </div>
       )}
 
-      {/* Insights: breakdown por tipo + mejor horario */}
-      {m && <ContentInsights byType={m.byType} bestHour={m.bestHour} />}
+      {/* Insights: breakdown por tipo + mejor horario — solo mes actual (datos en vivo) */}
+      {isCurrentMonth && metrics && <ContentInsights byType={metrics.byType} bestHour={metrics.bestHour} />}
 
-      {/* TOP del mes */}
-      {m?.topOfMonth && <TopOfMonth topOfMonth={m.topOfMonth} />}
+      {/* TOP del mes — solo mes actual (datos en vivo) */}
+      {isCurrentMonth && metrics?.topOfMonth && <TopOfMonth topOfMonth={metrics.topOfMonth} />}
 
       {/* Evolución de seguidores */}
-      {integration && m && (
+      {integration && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📈 Evolución de seguidores</p>
@@ -600,7 +681,7 @@ export default function InstagramTab({ projectId }) {
         </div>
       )}
 
-      {/* Engagement histórico mensual — aparece cuando hay 2+ meses */}
+      {/* Engagement histórico mensual — aparece cuando hay 2+ meses con datos */}
       {snapshots.filter(d => d.engagementRate != null).length >= 2 && (
         <LineChart
           data={snapshots.filter(d => d.engagementRate != null)}
