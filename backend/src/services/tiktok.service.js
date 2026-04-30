@@ -12,14 +12,25 @@ const TIKTOK_BASE = 'https://open.tiktokapis.com/v2'
 async function fetchTikTokMetrics(accessToken) {
   console.log('[TikTok] Usando token:', accessToken?.slice(0, 20) + '…', '| longitud:', accessToken?.length)
 
-  // ── Perfil básico (user.info.basic — siempre disponible) ─────────────────
+  // ── Perfil básico (user.info.basic — display_name, avatar_url) ──────────
   const profileRes = await axios.get(`${TIKTOK_BASE}/user/info/`, {
-    params: { fields: 'display_name,bio_description,avatar_url,is_verified' },
+    params: { fields: 'display_name,avatar_url' },
     headers: { 'Authorization': `Bearer ${accessToken}` },
   })
 
-  // ── Stats de cuenta (user.info.stats — requiere aprobación de TikTok) ────
-  // Puede fallar en sandbox o antes de que el scope esté aprobado → valores null
+  // ── Perfil extendido (user.info.profile — bio, username, is_verified) ────
+  let profileExt = {}
+  try {
+    const extRes = await axios.get(`${TIKTOK_BASE}/user/info/`, {
+      params: { fields: 'bio_description,is_verified,username' },
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    })
+    profileExt = extRes.data?.data?.user ?? {}
+  } catch (err) {
+    console.warn('[TikTok] user.info.profile no disponible:', err.response?.status ?? err.message)
+  }
+
+  // ── Stats de cuenta (user.info.stats — follower/likes/video counts) ──────
   let statsUser = {}
   try {
     const statsRes = await axios.get(`${TIKTOK_BASE}/user/info/`, {
@@ -28,10 +39,10 @@ async function fetchTikTokMetrics(accessToken) {
     })
     statsUser = statsRes.data?.data?.user ?? {}
   } catch (err) {
-    console.warn('[TikTok] user.info.stats no disponible (scope pendiente de aprobación):', err.response?.status ?? err.message)
+    console.warn('[TikTok] user.info.stats no disponible:', err.response?.status ?? err.message)
   }
 
-  // ── Videos (video.list — siempre disponible si el scope está aprobado) ───
+  // ── Videos (video.list) ───────────────────────────────────────────────────
   const videosRes = await axios.post(
     `${TIKTOK_BASE}/video/list/`,
     { max_count: 20 },
@@ -114,10 +125,11 @@ async function fetchTikTokMetrics(accessToken) {
   const recentVideos = videos.slice(0, 9).map(toVideoCard)
 
   return {
-    displayName:    user.display_name    ?? null,
-    bioDescription: user.bio_description ?? null,
-    avatarUrl:      user.avatar_url      ?? null,
-    isVerified:     user.is_verified     ?? false,
+    displayName:    user.display_name           ?? null,
+    bioDescription: profileExt.bio_description  ?? null,
+    avatarUrl:      user.avatar_url             ?? null,
+    isVerified:     profileExt.is_verified      ?? false,
+    username:       profileExt.username         ?? null,
     followersCount,
     followingCount,
     likesCount,

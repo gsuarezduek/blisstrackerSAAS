@@ -45,7 +45,7 @@ async function getTikTokAuthUrl(req, res, next) {
       client_key:            process.env.TIKTOK_CLIENT_KEY,
       redirect_uri:          buildTikTokRedirectUri(),
       response_type:         'code',
-      scope:                 'user.info.basic,user.info.stats,video.list',
+      scope:                 'user.info.basic,user.info.profile,user.info.stats,video.list',
       state,
       code_challenge:        codeChallenge,
       code_challenge_method: 'S256',
@@ -123,13 +123,13 @@ async function handleTikTokCallback(req, res, next) {
       update: {
         workspaceId, status: 'active', propertyId: openId,
         accessToken: encrypt(accessToken), refreshToken: encrypt(refreshToken),
-        expiresAt, scopes: 'user.info.basic,user.info.stats,video.list',
+        expiresAt, scopes: 'user.info.basic,user.info.profile,user.info.stats,video.list',
         connectedById: userId, connectedAt: new Date(),
       },
       create: {
         projectId, workspaceId, type: 'tiktok', status: 'active',
         propertyId: openId, accessToken: encrypt(accessToken), refreshToken: encrypt(refreshToken),
-        expiresAt, scopes: 'user.info.basic,user.info.stats,video.list',
+        expiresAt, scopes: 'user.info.basic,user.info.profile,user.info.stats,video.list',
         connectedById: userId, connectedAt: new Date(),
       },
     })
