@@ -34,8 +34,34 @@ async function getMetrics(req, res, next) {
       return res.status(404).json({ error: 'Sin integración de TikTok', code: 'NOT_CONNECTED' })
     }
 
-    const token   = await getValidTikTokToken(integration)
-    const metrics = await fetchTikTokMetrics(token)
+    let token
+    try {
+      token = await getValidTikTokToken(integration)
+    } catch (tokenErr) {
+      // Token expirado y no se pudo renovar → marcar integración como expirada
+      await prisma.projectIntegration.update({
+        where: { id: integration.id },
+        data:  { status: 'expired' },
+      }).catch(() => {})
+      return res.status(400).json({ error: tokenErr.message, code: 'TOKEN_EXPIRED' })
+    }
+
+    let metrics
+    try {
+      metrics = await fetchTikTokMetrics(token)
+    } catch (apiErr) {
+      const status = apiErr.response?.status
+      if (status === 401) {
+        // Token inválido en la API de TikTok → marcar como expirado
+        await prisma.projectIntegration.update({
+          where: { id: integration.id },
+          data:  { status: 'expired' },
+        }).catch(() => {})
+        return res.status(400).json({ error: 'Token de TikTok inválido. Reconectá la cuenta.', code: 'TOKEN_EXPIRED' })
+      }
+      console.error('[TikTok] Error al fetchear métricas:', apiErr.response?.data ?? apiErr.message)
+      return res.status(502).json({ error: 'Error al obtener datos de TikTok', code: 'API_ERROR' })
+    }
 
     res.json(metrics)
 
@@ -43,15 +69,17 @@ async function getMetrics(req, res, next) {
     setImmediate(async () => {
       const month = currentMonthStr()
       const date  = todayStr()
-      await Promise.allSettled([
-        saveTikTokSnapshot(projectId, workspaceId, month, metrics)
-          .catch(err => console.warn('[TikTok] Auto-snapshot failed:', err.message)),
-        prisma.tikTokFollowerLog.upsert({
-          where:  { projectId_date: { projectId, date } },
-          update: { followersCount: metrics.followersCount },
-          create: { projectId, workspaceId, date, followersCount: metrics.followersCount },
-        }).catch(err => console.warn('[TikTok] Follower log failed:', err.message)),
-      ])
+      if (metrics.followersCount != null) {
+        await Promise.allSettled([
+          saveTikTokSnapshot(projectId, workspaceId, month, metrics)
+            .catch(err => console.warn('[TikTok] Auto-snapshot failed:', err.message)),
+          prisma.tikTokFollowerLog.upsert({
+            where:  { projectId_date: { projectId, date } },
+            update: { followersCount: metrics.followersCount },
+            create: { projectId, workspaceId, date, followersCount: metrics.followersCount },
+          }).catch(err => console.warn('[TikTok] Follower log failed:', err.message)),
+        ])
+      }
     })
   } catch (err) { next(err) }
 }

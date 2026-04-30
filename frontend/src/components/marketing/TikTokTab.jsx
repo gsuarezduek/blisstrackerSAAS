@@ -241,7 +241,7 @@ const FOLLOWER_FILTERS = [
   { key: 'all',  label: 'Todo',    days: null },
 ]
 
-function ConnectPrompt({ projectId, onConnected }) {
+function ConnectPrompt({ projectId, onConnected, inline = false }) {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
   const pollRef = useRef(null)
@@ -275,6 +275,17 @@ function ConnectPrompt({ projectId, onConnected }) {
       setError(err.response?.data?.error || 'No se pudo iniciar la conexión.')
     }
   }
+
+  if (inline) return (
+    <>
+      {error && <p className="text-sm text-red-600 dark:text-red-400 mb-2 max-w-sm">{error}</p>}
+      <button onClick={handleConnect} disabled={loading || !projectId}
+        className="px-5 py-2.5 text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+        style={{ background: 'linear-gradient(135deg, #000 50%, #69C9D0 100%)' }}>
+        {loading ? 'Reconectando…' : 'Reconectar TikTok'}
+      </button>
+    </>
+  )
 
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -375,6 +386,18 @@ export default function TikTokTab({ projectId }) {
   )
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={fetchData} />
+
+  // Token expirado → mostrar prompt de reconexión en lugar de error genérico
+  if (integration.status === 'expired') return (
+    <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+      <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl text-white" style={{ background: 'linear-gradient(135deg, #000 50%, #69C9D0 100%)' }}>🔒</div>
+      <div>
+        <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Sesión de TikTok expirada</p>
+        <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs">El token de acceso venció. Reconectá la cuenta para seguir viendo métricas.</p>
+      </div>
+      <ConnectPrompt projectId={projectId} onConnected={fetchData} inline />
+    </div>
+  )
 
   const availableMonths = [...new Set([currentMonth, ...snapshots.map(s => s.month)])].sort().reverse()
   const isCurrentMonth  = selectedMonth === currentMonth
