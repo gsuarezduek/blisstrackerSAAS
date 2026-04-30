@@ -13,6 +13,7 @@ const healthScore       = require('../controllers/healthScore.controller')
 const metaIntegrations  = require('../controllers/integrations.meta.controller')
 const instagram         = require('../controllers/instagram.controller')
 const metaAds           = require('../controllers/metaAds.controller')
+const googleAds         = require('../controllers/googleAds.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -46,7 +47,10 @@ router.get('/projects/:id/search-console/query-pages',     searchConsole.getQuer
 router.get('/projects/:id/health-score',                   healthScore.getHealthScore)
 
 // Meta Ads
-router.get('/projects/:id/meta-ads', metaAds.getMetaAdsData)
+router.get('/projects/:id/meta-ads',    metaAds.getMetaAdsData)
+
+// Google Ads
+router.get('/projects/:id/google-ads',  googleAds.getGoogleAdsData)
 
 // Instagram
 router.get('/projects/:id/instagram/snapshots',  instagram.getSnapshots)

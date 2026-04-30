@@ -8,7 +8,8 @@ import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
 import SaludTab    from '../components/marketing/SaludTab'
 import InstagramTab from '../components/marketing/InstagramTab'
-import MetaAdsTab  from '../components/marketing/MetaAdsTab'
+import MetaAdsTab    from '../components/marketing/MetaAdsTab'
+import GoogleAdsTab  from '../components/marketing/GoogleAdsTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import api from '../api/client'
@@ -45,7 +46,7 @@ const NAV = [
     label: '📣 Anuncios',
     subs: [
       { id: 'meta-ads',   label: '📘 Meta Ads' },
-      { id: 'google-ads', label: '🔍 Google Ads', soon: true },
+      { id: 'google-ads', label: '🔍 Google Ads' },
     ],
   },
   {
@@ -148,7 +149,8 @@ export default function Marketing() {
     if (tab === 'geo-seo' && sub === 'keywords') return <KeywordsTab projectId={projectId} projects={projects} />
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} />
     if (tab === 'rrss'     && sub === 'instagram') return <InstagramTab projectId={projectId} />
-    if (tab === 'anuncios' && sub === 'meta-ads')  return <MetaAdsTab  projectId={projectId} />
+    if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} />
+    if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />
   }
