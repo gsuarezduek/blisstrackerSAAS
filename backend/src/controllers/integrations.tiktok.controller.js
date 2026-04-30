@@ -104,15 +104,18 @@ async function handleTikTokCallback(req, res, next) {
     )
 
     const body = tokenRes.data
+    console.log('[TikTokOAuth] Token response body:', JSON.stringify(body, null, 2))
+
+    // TikTok v2 puede devolver los campos en el nivel raíz o anidados en body.data
     if (body.error?.code && body.error.code !== 'ok') {
       throw new Error(body.error.message || 'Error al obtener token de TikTok')
     }
 
-    const data         = body.data
+    const data         = body.data ?? body
     const accessToken  = data.access_token
     const refreshToken = data.refresh_token
     const openId       = data.open_id
-    const expiresAt    = new Date(Date.now() + data.expires_in * 1000)
+    const expiresAt    = new Date(Date.now() + (data.expires_in ?? 86400) * 1000)
 
     // 2. Upsert en ProjectIntegration
     await prisma.projectIntegration.upsert({

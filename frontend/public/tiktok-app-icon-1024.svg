@@ -1,0 +1,25 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFAE5C"/>
+      <stop offset="100%" stop-color="#E67A1F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fondo blanco -->
+  <rect width="1024" height="1024" fill="#FFFFFF"/>
+
+  <!-- Hexágono centrado en 512,512 radio 340 -->
+  <polygon
+    points="172,512 342,218.23 682,218.23 852,512 682,805.77 342,805.77"
+    fill="url(#hexGrad)"/>
+
+  <!-- Check blanco grueso -->
+  <path
+    d="M 338 524 L 456 652 L 700 390"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="82"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+</svg>

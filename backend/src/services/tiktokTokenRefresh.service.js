@@ -39,10 +39,10 @@ async function getValidTikTokToken(integration) {
     throw new Error(`No se pudo renovar el token de TikTok: ${body.error.message}. Reconectá la cuenta.`)
   }
 
-  const data            = body.data
+  const data            = body.data ?? body
   const newAccessToken  = data.access_token
   const newRefreshToken = data.refresh_token || refreshToken
-  const expiresAt       = new Date(now + data.expires_in * 1000)
+  const expiresAt       = new Date(now + (data.expires_in ?? 86400) * 1000)
 
   await prisma.projectIntegration.update({
     where: { id: integration.id },
