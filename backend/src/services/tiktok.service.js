@@ -10,30 +10,42 @@ const TIKTOK_BASE = 'https://open.tiktokapis.com/v2'
  * @returns {Promise<object>}
  */
 async function fetchTikTokMetrics(accessToken) {
-  const [profileRes, videosRes] = await Promise.all([
-    axios.get(`${TIKTOK_BASE}/user/info/`, {
-      params: {
-        fields: 'display_name,bio_description,avatar_url,is_verified,follower_count,following_count,likes_count,video_count',
-      },
+  // ── Perfil básico (user.info.basic — siempre disponible) ─────────────────
+  const profileRes = await axios.get(`${TIKTOK_BASE}/user/info/`, {
+    params: { fields: 'display_name,bio_description,avatar_url,is_verified' },
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  })
+
+  // ── Stats de cuenta (user.info.stats — requiere aprobación de TikTok) ────
+  // Puede fallar en sandbox o antes de que el scope esté aprobado → valores null
+  let statsUser = {}
+  try {
+    const statsRes = await axios.get(`${TIKTOK_BASE}/user/info/`, {
+      params: { fields: 'follower_count,following_count,likes_count,video_count' },
       headers: { 'Authorization': `Bearer ${accessToken}` },
-    }),
-    axios.post(
-      `${TIKTOK_BASE}/video/list/`,
-      { max_count: 20 },
-      {
-        params: { fields: 'id,title,create_time,cover_image_url,share_url,view_count,like_count,comment_count,share_count,duration' },
-        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      },
-    ),
-  ])
+    })
+    statsUser = statsRes.data?.data?.user ?? {}
+  } catch (err) {
+    console.warn('[TikTok] user.info.stats no disponible (scope pendiente de aprobación):', err.response?.status ?? err.message)
+  }
+
+  // ── Videos (video.list — siempre disponible si el scope está aprobado) ───
+  const videosRes = await axios.post(
+    `${TIKTOK_BASE}/video/list/`,
+    { max_count: 20 },
+    {
+      params: { fields: 'id,title,create_time,cover_image_url,share_url,view_count,like_count,comment_count,share_count,duration' },
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    },
+  )
 
   const user   = profileRes.data?.data?.user ?? {}
   const videos = videosRes.data?.data?.videos ?? []
 
-  const followersCount = user.follower_count  ?? 0
-  const followingCount = user.following_count ?? 0
-  const likesCount     = user.likes_count     ?? 0
-  const videoCount     = user.video_count     ?? 0
+  const followersCount = statsUser.follower_count  ?? null
+  const followingCount = statsUser.following_count ?? null
+  const likesCount     = statsUser.likes_count     ?? null
+  const videoCount     = statsUser.video_count     ?? null
 
   // ── Mes actual en horario ART ─────────────────────────────────────────────
   const artNow     = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
