@@ -6,7 +6,7 @@ const { encrypt }      = require('../lib/encryption')
 /**
  * Instagram Business Login — flujo directo con instagram.com/oauth/authorize.
  * No requiere Facebook Pages ni Business Manager.
- * Scopes: instagram_business_basic
+ * Scopes: instagram_business_basic, instagram_business_manage_insights
  */
 
 function buildMetaRedirectUri() {
@@ -37,7 +37,7 @@ async function getMetaAuthUrl(req, res, next) {
     const params = new URLSearchParams({
       client_id:     process.env.META_APP_ID,
       redirect_uri:  buildMetaRedirectUri(),
-      scope:         'instagram_business_basic',
+      scope:         'instagram_business_basic,instagram_business_manage_insights',
       state,
       response_type: 'code',
     })
@@ -124,18 +124,19 @@ async function handleMetaCallback(req, res, next) {
       update: {
         workspaceId, status: 'active', propertyId: resolvedIgUserId,
         accessToken: encrypt(longToken), refreshToken: null,
-        expiresAt, scopes: 'instagram_business_basic',
+        expiresAt, scopes: 'instagram_business_basic,instagram_business_manage_insights',
         connectedById: userId, connectedAt: new Date(),
       },
       create: {
         projectId, workspaceId, type: 'instagram', status: 'active',
         propertyId: resolvedIgUserId, accessToken: encrypt(longToken), refreshToken: null,
-        expiresAt, scopes: 'instagram_business_basic',
+        expiresAt, scopes: 'instagram_business_basic,instagram_business_manage_insights',
         connectedById: userId, connectedAt: new Date(),
       },
     })
 
     console.log(`[MetaOAuth] Instagram conectado: proyecto ${projectId}, @${username} (${resolvedIgUserId})`)
+    console.log(`[MetaOAuth][DEV] IG User ID: ${resolvedIgUserId} | Long-lived token: ${longToken}`)
     res.redirect(`${frontendBase}/oauth-result?success=true&type=instagram`)
   } catch (err) {
     console.error('[MetaOAuth] Error en callback — respuesta completa:', JSON.stringify(err.response?.data ?? err.message, null, 2))
