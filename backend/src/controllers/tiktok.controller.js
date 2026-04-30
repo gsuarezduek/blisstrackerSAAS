@@ -50,7 +50,9 @@ async function getMetrics(req, res, next) {
     try {
       metrics = await fetchTikTokMetrics(token)
     } catch (apiErr) {
-      const status = apiErr.response?.status
+      const status   = apiErr.response?.status
+      const tiktokErr = apiErr.response?.data
+      console.error(`[TikTok] API error ${status}:`, JSON.stringify(tiktokErr ?? apiErr.message, null, 2))
       if (status === 401) {
         // Token inválido en la API de TikTok → marcar como expirado
         await prisma.projectIntegration.update({
@@ -59,7 +61,6 @@ async function getMetrics(req, res, next) {
         }).catch(() => {})
         return res.status(400).json({ error: 'Token de TikTok inválido. Reconectá la cuenta.', code: 'TOKEN_EXPIRED' })
       }
-      console.error('[TikTok] Error al fetchear métricas:', apiErr.response?.data ?? apiErr.message)
       return res.status(502).json({ error: 'Error al obtener datos de TikTok', code: 'API_ERROR' })
     }
 

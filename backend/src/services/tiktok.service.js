@@ -10,6 +10,8 @@ const TIKTOK_BASE = 'https://open.tiktokapis.com/v2'
  * @returns {Promise<object>}
  */
 async function fetchTikTokMetrics(accessToken) {
+  console.log('[TikTok] Usando token:', accessToken?.slice(0, 20) + '…', '| longitud:', accessToken?.length)
+
   // ── Perfil básico (user.info.basic — siempre disponible) ─────────────────
   const profileRes = await axios.get(`${TIKTOK_BASE}/user/info/`, {
     params: { fields: 'display_name,bio_description,avatar_url,is_verified' },
