@@ -265,13 +265,15 @@ function ConnectPrompt({ projectId, onConnected }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function GoogleAdsTab({ projectId }) {
-  const [integration,   setIntegration]   = useState(null)  // null = cargando, false = no conectado
-  const [initLoading,   setInitLoading]   = useState(true)
-  const [data,          setData]          = useState(null)
-  const [datePreset,    setDatePreset]    = useState('this_month')
-  const [dataLoading,   setDataLoading]   = useState(false)
-  const [error,         setError]         = useState(null)
-  const [disconnecting, setDisconnecting] = useState(false)
+  const [integration,        setIntegration]        = useState(null)
+  const [initLoading,        setInitLoading]        = useState(true)
+  const [data,               setData]               = useState(null)
+  const [datePreset,         setDatePreset]         = useState('this_month')
+  const [dataLoading,        setDataLoading]        = useState(false)
+  const [error,              setError]              = useState(null)
+  const [errorCode,          setErrorCode]          = useState(null)
+  const [editingCustomerId,  setEditingCustomerId]  = useState(false)
+  const [disconnecting,      setDisconnecting]      = useState(false)
 
   const loadIntegration = useCallback(async () => {
     if (!projectId) return null
@@ -285,6 +287,7 @@ export default function GoogleAdsTab({ projectId }) {
     if (!intg?.customerId) return
     setDataLoading(true)
     setError(null)
+    setErrorCode(null)
     try {
       const res = await api.get(`/marketing/projects/${projectId}/google-ads`, {
         params: { datePreset: preset },
@@ -292,6 +295,7 @@ export default function GoogleAdsTab({ projectId }) {
       setData(res.data)
     } catch (err) {
       setError(err.response?.data?.error || 'Error al cargar datos de Google Ads.')
+      setErrorCode(err.response?.data?.code ?? null)
     } finally {
       setDataLoading(false)
     }
@@ -322,6 +326,9 @@ export default function GoogleAdsTab({ projectId }) {
   async function handleCustomerIdSaved() {
     const intg = await loadIntegration()
     setIntegration(intg)
+    setEditingCustomerId(false)
+    setError(null)
+    setErrorCode(null)
     if (intg?.customerId) loadData(datePreset, intg)
   }
 
@@ -355,8 +362,8 @@ export default function GoogleAdsTab({ projectId }) {
   // Sin integración → prompt de conexión
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={handleConnected} />
 
-  // Integración conectada pero sin Customer ID → formulario
-  if (!integration.customerId) {
+  // Integración conectada pero sin Customer ID, o usuario quiere editarlo → formulario
+  if (!integration.customerId || editingCustomerId) {
     return (
       <div className="space-y-4">
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
@@ -368,13 +375,23 @@ export default function GoogleAdsTab({ projectId }) {
                 <p className="text-xs text-green-600 dark:text-green-400">OAuth autorizado ✓</p>
               </div>
             </div>
-            <button
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-            >
-              {disconnecting ? 'Desconectando…' : 'Desconectar'}
-            </button>
+            <div className="flex items-center gap-3">
+              {editingCustomerId && (
+                <button
+                  onClick={() => setEditingCustomerId(false)}
+                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Cancelar
+                </button>
+              )}
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+              >
+                {disconnecting ? 'Desconectando…' : 'Desconectar'}
+              </button>
+            </div>
           </div>
         </div>
         <CustomerIdForm projectId={projectId} onSaved={handleCustomerIdSaved} />
@@ -411,8 +428,16 @@ export default function GoogleAdsTab({ projectId }) {
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">
-          {error}
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300 flex items-start justify-between gap-3">
+          <span>{error}</span>
+          {errorCode === 'NOT_FOUND' && (
+            <button
+              onClick={() => setEditingCustomerId(true)}
+              className="shrink-0 text-xs underline text-red-600 dark:text-red-400 hover:no-underline whitespace-nowrap"
+            >
+              Corregir Customer ID
+            </button>
+          )}
         </div>
       )}
 

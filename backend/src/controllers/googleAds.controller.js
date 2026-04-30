@@ -33,11 +33,26 @@ async function getGoogleAdsData(req, res, next) {
     const data = await fetchGoogleAdsData(integration, datePreset)
     res.json(data)
   } catch (err) {
-    // Error específico de Google Ads API
-    const gadsErr = err.response?.data?.error
-    if (gadsErr) {
-      console.error('[GoogleAds] API error:', JSON.stringify(gadsErr))
-      return res.status(400).json({ error: gadsErr.message || 'Error en Google Ads API' })
+    // Error específico de Google Ads API — puede venir como objeto o como array
+    const body = err.response?.data
+    if (body) {
+      console.error('[GoogleAds] API error:', JSON.stringify(body))
+      // Formato objeto: { error: { message, code, status } }
+      const gadsErr = body.error
+      if (gadsErr) {
+        const status = err.response.status
+        if (status === 404) {
+          return res.status(400).json({
+            error: `Cuenta de Google Ads no encontrada (ID: ${req.body?.customerId ?? '?'}). Verificá que el Customer ID sea correcto y que tu cuenta de Google tenga acceso directo a esa cuenta.`,
+            code: 'NOT_FOUND',
+          })
+        }
+        return res.status(400).json({ error: gadsErr.message || 'Error en Google Ads API' })
+      }
+      // Formato array (algunas versiones de la API)
+      if (Array.isArray(body) && body[0]?.error) {
+        return res.status(400).json({ error: body[0].error.message || 'Error en Google Ads API' })
+      }
     }
     next(err)
   }
