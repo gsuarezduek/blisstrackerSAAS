@@ -47,7 +47,7 @@ function todayAR() {
 
 // ── SVG Line Chart genérico ────────────────────────────────────────────────────
 
-function LineChart({ data, valueAccessor, labelAccessor, label, color = '#a855f7', formatY = v => v }) {
+function LineChart({ data, valueAccessor, labelAccessor, label, color = '#a855f7', formatY = v => v, chartHeight = 90, displayHeight = 100, bare = false }) {
   if (!data || data.length < 2) return null
 
   const values = data.map(valueAccessor)
@@ -56,7 +56,7 @@ function LineChart({ data, valueAccessor, labelAccessor, label, color = '#a855f7
   const range  = maxV - minV || 1
 
   const W   = 500
-  const H   = 90
+  const H   = chartHeight
   const PAD = { top: 10, right: 10, bottom: 26, left: 54 }
   const inner = { w: W - PAD.left - PAD.right, h: H - PAD.top - PAD.bottom }
 
@@ -70,10 +70,10 @@ function LineChart({ data, valueAccessor, labelAccessor, label, color = '#a855f7
     .map((d, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i).toFixed(1)} ${yScale(valueAccessor(d)).toFixed(1)}`)
     .join(' ')
 
-  return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+  const chart = (
+    <>
       {label && <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">{label}</p>}
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 100 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: displayHeight }}>
         {[0, 0.5, 1].map(t => {
           const y = PAD.top + inner.h * (1 - t)
           return (
@@ -97,11 +97,18 @@ function LineChart({ data, valueAccessor, labelAccessor, label, color = '#a855f7
           </g>
         ))}
       </svg>
+    </>
+  )
+
+  if (bare) return chart
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+      {chart}
     </div>
   )
 }
 
-// ── KPI Card — seguidores con toggle de gráfico ───────────────────────────────
+// ── KPI Card — seguidores ────────────────────────────────────────────────────
 
 const FOLLOWER_FILTERS = [
   { key: '7d',    label: '7 días',   days: 7   },
@@ -111,106 +118,15 @@ const FOLLOWER_FILTERS = [
   { key: 'all',   label: 'Todo',     days: null },
 ]
 
-function FollowersCard({ followersCount, mediaCount, projectId }) {
-  const [open,    setOpen]    = useState(false)
-  const [filter,  setFilter]  = useState('30d')
-  const [logs,    setLogs]    = useState([])
-  const [loading, setLoading] = useState(false)
-
-  const fetchLogs = useCallback(async (filterKey) => {
-    setLoading(true)
-    try {
-      const today = todayAR()
-      const f = FOLLOWER_FILTERS.find(x => x.key === filterKey)
-      const from = f.days ? subtractDays(today, f.days - 1) : undefined
-      const params = { to: today }
-      if (from) params.from = from
-      const { data } = await api.get(`/marketing/projects/${projectId}/instagram/followers`, { params })
-      setLogs(data.logs ?? [])
-    } catch { /* silencioso */ }
-    finally { setLoading(false) }
-  }, [projectId])
-
-  function handleToggle() {
-    const next = !open
-    setOpen(next)
-    if (next && logs.length === 0) fetchLogs(filter)
-  }
-
-  function handleFilter(key) {
-    setFilter(key)
-    fetchLogs(key)
-  }
-
-  // Delta seguidores en el período visible
-  const delta = logs.length >= 2 ? logs[logs.length - 1].followersCount - logs[0].followersCount : null
-
+function FollowersCard({ followersCount, mediaCount }) {
   return (
-    <div className="col-span-2 sm:col-span-1">
-      {/* Tarjeta principal — clickeable */}
-      <button
-        onClick={handleToggle}
-        className={`w-full text-left bg-white dark:bg-gray-800 border rounded-xl p-4 flex flex-col gap-1 transition-colors ${
-          open
-            ? 'border-purple-400 dark:border-purple-600 shadow-sm'
-            : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
-        }`}
-      >
-        <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs">
-          <span>👥</span>
-          <span>Seguidores</span>
-        </div>
-        <div className="text-2xl font-bold text-gray-900 dark:text-white">{fmtK(followersCount)}</div>
-        <div className="text-xs text-gray-400 dark:text-gray-500">{fmtNum(mediaCount)} publicaciones</div>
-      </button>
-
-      {/* Panel expandido con gráfico */}
-      {open && (
-        <div className="mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
-          {/* Filtros */}
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex gap-1 flex-wrap">
-              {FOLLOWER_FILTERS.map(f => (
-                <button
-                  key={f.key}
-                  onClick={() => handleFilter(f.key)}
-                  className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
-                    filter === f.key
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            {delta != null && (
-              <span className={`text-xs font-semibold ${delta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
-                {delta >= 0 ? '+' : ''}{fmtNum(delta)} en el período
-              </span>
-            )}
-          </div>
-
-          {/* Gráfico o estados */}
-          {loading ? (
-            <div className="flex justify-center py-6">
-              <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : logs.length < 2 ? (
-            <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-6">
-              Recopilando información, pronto vas a poder ver la evolución de seguidores.
-            </p>
-          ) : (
-            <LineChart
-              data={logs}
-              valueAccessor={d => d.followersCount}
-              labelAccessor={d => d.date?.slice(5)}
-              color="#a855f7"
-              formatY={v => fmtK(Math.round(v))}
-            />
-          )}
-        </div>
-      )}
+    <div className="col-span-2 sm:col-span-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs">
+        <span>👥</span>
+        <span>Seguidores</span>
+      </div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-white">{fmtK(followersCount)}</div>
+      <div className="text-xs text-gray-400 dark:text-gray-500">{fmtNum(mediaCount)} publicaciones</div>
     </div>
   )
 }
@@ -517,12 +433,15 @@ function ConnectPrompt({ projectId, onConnected }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function InstagramTab({ projectId }) {
-  const [integration,   setIntegration]   = useState(null)
-  const [metrics,       setMetrics]       = useState(null)
-  const [snapshots,     setSnapshots]     = useState([])
-  const [loading,       setLoading]       = useState(false)
-  const [error,         setError]         = useState(null)
-  const [disconnecting, setDisconnecting] = useState(false)
+  const [integration,    setIntegration]    = useState(null)
+  const [metrics,        setMetrics]        = useState(null)
+  const [snapshots,      setSnapshots]      = useState([])
+  const [followerLogs,   setFollowerLogs]   = useState([])
+  const [followerFilter, setFollowerFilter] = useState('30d')
+  const [followerLoading,setFollowerLoading]= useState(false)
+  const [loading,        setLoading]        = useState(false)
+  const [error,          setError]          = useState(null)
+  const [disconnecting,  setDisconnecting]  = useState(false)
 
   const fetchData = useCallback(async () => {
     if (!projectId) return
@@ -534,19 +453,36 @@ export default function InstagramTab({ projectId }) {
       setIntegration(ig ?? null)
       if (!ig) { setLoading(false); return }
 
-      const [metricsRes, snapshotsRes] = await Promise.allSettled([
+      const [metricsRes, snapshotsRes, logsRes] = await Promise.allSettled([
         api.get(`/marketing/projects/${projectId}/instagram`),
         api.get(`/marketing/projects/${projectId}/instagram/snapshots`),
+        api.get(`/marketing/projects/${projectId}/instagram/followers`, { params: { to: todayAR() } }),
       ])
 
       if (metricsRes.status   === 'fulfilled') setMetrics(metricsRes.value.data)
       if (snapshotsRes.status === 'fulfilled') setSnapshots(snapshotsRes.value.data.snapshots ?? [])
+      if (logsRes.status      === 'fulfilled') setFollowerLogs(logsRes.value.data.logs ?? [])
       if (metricsRes.status   === 'rejected')  setError(metricsRes.reason?.response?.data?.error || 'No se pudieron cargar las métricas.')
     } catch (err) {
       setError(err.response?.data?.error || 'Error al cargar datos de Instagram.')
     } finally {
       setLoading(false)
     }
+  }, [projectId])
+
+  const fetchFollowerLogs = useCallback(async (filterKey) => {
+    if (!projectId) return
+    setFollowerLoading(true)
+    try {
+      const today = todayAR()
+      const f = FOLLOWER_FILTERS.find(x => x.key === filterKey)
+      const from = f.days ? subtractDays(today, f.days - 1) : undefined
+      const params = { to: today }
+      if (from) params.from = from
+      const { data } = await api.get(`/marketing/projects/${projectId}/instagram/followers`, { params })
+      setFollowerLogs(data.logs ?? [])
+    } catch { /* silencioso */ }
+    finally { setFollowerLoading(false) }
   }, [projectId])
 
   useEffect(() => { fetchData() }, [fetchData])
@@ -592,7 +528,7 @@ export default function InstagramTab({ projectId }) {
       {/* KPI cards — Seguidores es especial (expandible) */}
       {m && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <FollowersCard followersCount={m.followersCount} mediaCount={m.mediaCount} projectId={projectId} />
+          <FollowersCard followersCount={m.followersCount} mediaCount={m.mediaCount} />
           <KpiCard
             icon="❤️" label="Engagement"
             value={m.engagementRate != null ? `${m.engagementRate}%` : '—'}
@@ -611,37 +547,71 @@ export default function InstagramTab({ projectId }) {
       {/* TOP del mes */}
       {m?.topOfMonth && <TopOfMonth topOfMonth={m.topOfMonth} />}
 
-      {/* Evolución histórica mensual */}
-      {snapshots.length >= 2 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">📈 Evolución histórica mensual</h3>
-          <LineChart
-            data={snapshots}
-            valueAccessor={d => d.followersCount}
-            labelAccessor={d => d.month?.slice(5)}
-            label="Seguidores por mes"
-            color="#a855f7"
-            formatY={v => fmtK(Math.round(v))}
-          />
-          <LineChart
-            data={snapshots.filter(d => d.engagementRate != null)}
-            valueAccessor={d => d.engagementRate}
-            labelAccessor={d => d.month?.slice(5)}
-            label="Engagement rate (%)"
-            color="#ec4899"
-            formatY={v => `${v.toFixed(1)}%`}
-          />
+      {/* Evolución de seguidores */}
+      {integration && m && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📈 Evolución de seguidores</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {followerLogs.length >= 2 && (() => {
+                const delta = followerLogs[followerLogs.length - 1].followersCount - followerLogs[0].followersCount
+                return (
+                  <span className={`text-xs font-semibold ${delta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                    {delta >= 0 ? '+' : ''}{fmtNum(delta)} en el período
+                  </span>
+                )
+              })()}
+              <div className="flex gap-1 flex-wrap">
+                {FOLLOWER_FILTERS.map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => { setFollowerFilter(f.key); fetchFollowerLogs(f.key) }}
+                    className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
+                      followerFilter === f.key
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >{f.label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {followerLoading ? (
+            <div className="flex justify-center py-10">
+              <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : followerLogs.length >= 2 ? (
+            <LineChart
+              data={followerLogs}
+              valueAccessor={d => d.followersCount}
+              labelAccessor={d => d.date?.slice(5)}
+              color="#a855f7"
+              formatY={v => fmtK(Math.round(v))}
+              chartHeight={160}
+              displayHeight={180}
+              bare
+            />
+          ) : (
+            <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">
+              Recopilando información, pronto vas a poder ver la evolución de seguidores.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Sin historial aún */}
-      {snapshots.length < 2 && integration && m && (
-        <div className="bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-5 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Los gráficos mensuales aparecerán cuando haya al menos 2 meses de datos.
-            Se guardan automáticamente cada vez que visitás esta sección.
-          </p>
-        </div>
+      {/* Engagement histórico mensual — aparece cuando hay 2+ meses */}
+      {snapshots.filter(d => d.engagementRate != null).length >= 2 && (
+        <LineChart
+          data={snapshots.filter(d => d.engagementRate != null)}
+          valueAccessor={d => d.engagementRate}
+          labelAccessor={d => d.month?.slice(5)}
+          label="Engagement rate mensual (%)"
+          color="#ec4899"
+          formatY={v => `${v.toFixed(1)}%`}
+          chartHeight={160}
+          displayHeight={180}
+        />
       )}
     </div>
   )
