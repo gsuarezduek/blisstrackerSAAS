@@ -25,6 +25,7 @@ const { saveAllKeywordRankings }        = require('./services/keywordTracking.se
 const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.service')
 const { sendAllMonthlyMarketingReports }   = require('./services/monthlyMarketingReport.service')
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
+const { saveAllMonthlyTikTokSnapshots }    = require('./services/tiktokSnapshot.service')
 
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
 let weeklyReportRunning         = false
@@ -35,6 +36,7 @@ let keywordRankingsRunning      = false
 let geoMonthlyRunning           = false
 let marketingReportRunning      = false
 let instagramSnapshotRunning    = false
+let tiktokSnapshotRunning       = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -151,6 +153,15 @@ cron.schedule('30 4 1 * *', async () => {
   try { await saveAllMonthlyInstagramSnapshots() }
   catch (err) { console.error('[InstagramSnapshot] Error en cron mensual:', err.message) }
   finally { instagramSnapshotRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: snapshot TikTok mensual — 1° de cada mes a las 05:30 ART
+cron.schedule('30 5 1 * *', async () => {
+  if (tiktokSnapshotRunning) { console.log('[TikTokSnapshot] Ya en ejecución, se omite.'); return }
+  tiktokSnapshotRunning = true
+  try { await saveAllMonthlyTikTokSnapshots() }
+  catch (err) { console.error('[TikTokSnapshot] Error en cron mensual:', err.message) }
+  finally { tiktokSnapshotRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: eliminar workspaces vencidos — cada 15 minutos

@@ -8,6 +8,7 @@ import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
 import SaludTab    from '../components/marketing/SaludTab'
 import InstagramTab from '../components/marketing/InstagramTab'
+import TikTokTab    from '../components/marketing/TikTokTab'
 import MetaAdsTab    from '../components/marketing/MetaAdsTab'
 import GoogleAdsTab  from '../components/marketing/GoogleAdsTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
@@ -37,7 +38,7 @@ const NAV = [
     label: '📱 RRSS',
     subs: [
       { id: 'instagram', label: '📸 Instagram' },
-      { id: 'tiktok',    label: '🎵 TikTok',   soon: true },
+      { id: 'tiktok',    label: '🎵 TikTok' },
       { id: 'youtube',   label: '▶️ YouTube',  soon: true },
     ],
   },
@@ -149,6 +150,7 @@ export default function Marketing() {
     if (tab === 'geo-seo' && sub === 'keywords') return <KeywordsTab projectId={projectId} projects={projects} />
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} />
     if (tab === 'rrss'     && sub === 'instagram') return <InstagramTab projectId={projectId} />
+    if (tab === 'rrss'     && sub === 'tiktok')    return <TikTokTab    projectId={projectId} />
     if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} />
     if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} />
 

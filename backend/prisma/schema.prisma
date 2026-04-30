@@ -47,6 +47,8 @@ model Workspace {
   keywordRankings      KeywordRanking[]   @relation("WorkspaceKeywordRankings")
   instagramSnapshots    InstagramSnapshot[]
   instagramFollowerLogs InstagramFollowerLog[]
+  tiktokSnapshots       TikTokSnapshot[]
+  tiktokFollowerLogs    TikTokFollowerLog[]
 
   @@index([slug])
 }
@@ -230,6 +232,8 @@ model Project {
   keywordRankings    KeywordRanking[] @relation("ProjectKeywordRankings")
   instagramSnapshots    InstagramSnapshot[]
   instagramFollowerLogs InstagramFollowerLog[]
+  tiktokSnapshots       TikTokSnapshot[]
+  tiktokFollowerLogs    TikTokFollowerLog[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -837,6 +841,48 @@ model InstagramSnapshot {
 // ─── INSTAGRAM FOLLOWER LOG ───────────────────────────────────────────────────
 
 model InstagramFollowerLog {
+  id             Int      @id @default(autoincrement())
+  projectId      Int
+  workspaceId    Int
+  date           String   // "YYYY-MM-DD" en horario ART
+  followersCount Int
+  createdAt      DateTime @default(now())
+
+  project   Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, date])
+  @@index([workspaceId])
+}
+
+// ─── TIKTOK SNAPSHOTS ─────────────────────────────────────────────────────────
+
+model TikTokSnapshot {
+  id             Int      @id @default(autoincrement())
+  projectId      Int
+  workspaceId    Int
+  month          String   // "YYYY-MM"
+  followersCount Int      @default(0)
+  videoCount     Int?
+  likesCount     Float?   // total likes acumulados de la cuenta
+  avgViews       Float?
+  avgLikes       Float?
+  avgComments    Float?
+  avgShares      Float?
+  postsThisMonth Int?
+  engagementRate Float?
+  createdAt      DateTime @default(now())
+
+  project   Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, month])
+  @@index([workspaceId])
+}
+
+// ─── TIKTOK FOLLOWER LOG ──────────────────────────────────────────────────────
+
+model TikTokFollowerLog {
   id             Int      @id @default(autoincrement())
   projectId      Int
   workspaceId    Int

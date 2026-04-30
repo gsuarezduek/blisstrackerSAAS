@@ -12,6 +12,8 @@ const keywords          = require('../controllers/keywordTracking.controller')
 const healthScore       = require('../controllers/healthScore.controller')
 const metaIntegrations  = require('../controllers/integrations.meta.controller')
 const instagram         = require('../controllers/instagram.controller')
+const tiktokIntegrations = require('../controllers/integrations.tiktok.controller')
+const tiktok             = require('../controllers/tiktok.controller')
 const metaAds           = require('../controllers/metaAds.controller')
 const googleAds         = require('../controllers/googleAds.controller')
 
@@ -19,6 +21,7 @@ const googleAds         = require('../controllers/googleAds.controller')
 router.get('/integrations/google/callback',    integrations.handleCallback)
 router.get('/integrations/meta/callback',      metaIntegrations.handleMetaCallback)
 router.get('/integrations/meta-ads/callback',  metaIntegrations.handleMetaAdsCallback)
+router.get('/integrations/tiktok/callback',    tiktokIntegrations.handleTikTokCallback)
 
 // ─── CON AUTH — todo lo demás requiere usuario autenticado y workspace ─────────
 router.use(auth, resolveWorkspace)
@@ -57,6 +60,13 @@ router.get('/projects/:id/instagram/snapshots',  instagram.getSnapshots)
 router.post('/projects/:id/instagram/snapshots', instagram.saveSnapshot)
 router.get('/projects/:id/instagram/followers',  instagram.getFollowerLog)
 router.get('/projects/:id/instagram',            instagram.getMetrics)
+
+// TikTok
+router.get('/integrations/tiktok/auth-url',              tiktokIntegrations.getTikTokAuthUrl)
+router.get('/projects/:id/tiktok/snapshots',              tiktok.getSnapshots)
+router.post('/projects/:id/tiktok/snapshots',             tiktok.saveSnapshot)
+router.get('/projects/:id/tiktok/followers',              tiktok.getFollowerLog)
+router.get('/projects/:id/tiktok',                        tiktok.getMetrics)
 
 // Snapshots mensuales + Insights IA
 router.get('/projects/:id/snapshots',             analyticsSnapshot.getSnapshot)
