@@ -12,10 +12,12 @@ const keywords          = require('../controllers/keywordTracking.controller')
 const healthScore       = require('../controllers/healthScore.controller')
 const metaIntegrations  = require('../controllers/integrations.meta.controller')
 const instagram         = require('../controllers/instagram.controller')
+const metaAds           = require('../controllers/metaAds.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
-router.get('/integrations/google/callback', integrations.handleCallback)
-router.get('/integrations/meta/callback',   metaIntegrations.handleMetaCallback)
+router.get('/integrations/google/callback',    integrations.handleCallback)
+router.get('/integrations/meta/callback',      metaIntegrations.handleMetaCallback)
+router.get('/integrations/meta-ads/callback',  metaIntegrations.handleMetaAdsCallback)
 
 // ─── CON AUTH — todo lo demás requiere usuario autenticado y workspace ─────────
 router.use(auth, resolveWorkspace)
@@ -30,6 +32,7 @@ router.post('/geo/audits/:id/schema',        geo.generateSchemaOrg)
 // Integraciones: OAuth + gestión
 router.get('/integrations/google/auth-url',                    integrations.getAuthUrl)
 router.get('/integrations/meta/auth-url',                      metaIntegrations.getMetaAuthUrl)
+router.get('/integrations/meta-ads/auth-url',                  metaIntegrations.getMetaAdsAuthUrl)
 router.post('/projects/:id/integrations/connect-existing',    integrations.connectExisting)
 router.get('/projects/:id/integrations',                      integrations.listIntegrations)
 router.patch('/projects/:id/integrations/:type',              integrations.updateIntegration)
@@ -41,6 +44,9 @@ router.get('/projects/:id/ads',                            analytics.getAdsData)
 router.get('/projects/:id/search-console',                 searchConsole.getSearchConsoleData)
 router.get('/projects/:id/search-console/query-pages',     searchConsole.getQueryPages)
 router.get('/projects/:id/health-score',                   healthScore.getHealthScore)
+
+// Meta Ads
+router.get('/projects/:id/meta-ads', metaAds.getMetaAdsData)
 
 // Instagram
 router.get('/projects/:id/instagram/snapshots',  instagram.getSnapshots)
