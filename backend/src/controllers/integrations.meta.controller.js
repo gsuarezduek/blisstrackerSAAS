@@ -186,6 +186,8 @@ async function getMetaAdsAuthUrl(req, res, next) {
 
     // Meta Ads usa Facebook Login — facebook.com (distinto al Instagram Business Login)
     const url = `https://www.facebook.com/dialog/oauth?${params.toString()}`
+    console.log('[MetaAds] Auth URL generada:', url)
+    console.log('[MetaAds] META_APP_ID:', process.env.META_APP_ID, '| redirect_uri:', buildMetaAdsRedirectUri())
     res.json({ url })
   } catch (err) { next(err) }
 }

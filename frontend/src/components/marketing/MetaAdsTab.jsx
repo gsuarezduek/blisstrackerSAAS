@@ -165,7 +165,11 @@ function ConnectPrompt({ projectId, onConnected }) {
             return
           }
         } catch { /* ignorar */ }
-        if (popup?.closed) { clearInterval(pollRef.current); setLoading(false) }
+        if (popup?.closed) {
+          clearInterval(pollRef.current)
+          setLoading(false)
+          setError('La ventana se cerró sin completar la autorización. Si Facebook mostró un error, verificá que la redirect URI esté registrada en Meta for Developers y que tu cuenta tenga acceso a una Ad Account activa.')
+        }
         if (elapsed >= 5 * 60 * 1000) {
           clearInterval(pollRef.current); setLoading(false)
           setError('La conexión tardó demasiado. Intentá de nuevo.')
