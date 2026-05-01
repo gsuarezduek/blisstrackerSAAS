@@ -405,11 +405,11 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
                   {s.keywords.table.slice(0, 15).map((kw, i) => (
                     <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
                       <td className="py-1.5 text-gray-700 dark:text-gray-300">{kw.query}</td>
-                      <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-white">{kw.position?.toFixed(1)}</td>
+                      <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-white">{kw.position != null ? Number(kw.position).toFixed(1) : '—'}</td>
                       <td className="py-1.5 text-right">
                         {kw.delta != null
                           ? <span className={kw.delta > 0 ? 'text-green-600' : kw.delta < 0 ? 'text-red-500' : 'text-gray-400'}>
-                              {kw.delta > 0 ? `↑${kw.delta}` : kw.delta < 0 ? `↓${Math.abs(kw.delta)}` : '—'}
+                              {kw.delta > 0 ? `↑${Number(kw.delta).toFixed(1)}` : kw.delta < 0 ? `↓${Math.abs(Number(kw.delta)).toFixed(1)}` : '—'}
                             </span>
                           : <span className="text-gray-400">—</span>
                         }
@@ -454,9 +454,9 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
             return (
               <div className="mt-4 grid grid-cols-3 gap-2 text-xs text-center">
                 {[
-                  { label: 'LCP',  value: m.lcp  != null ? `${(m.lcp/1000).toFixed(1)}s`  : null },
-                  { label: 'CLS',  value: m.cls  != null ? m.cls.toFixed(3) : null },
-                  { label: 'FCP',  value: m.fcp  != null ? `${(m.fcp/1000).toFixed(1)}s`  : null },
+                  { label: 'LCP',  value: m.lcp  != null ? `${(Number(m.lcp)/1000).toFixed(1)}s`  : null },
+                  { label: 'CLS',  value: m.cls  != null ? Number(m.cls).toFixed(3) : null },
+                  { label: 'FCP',  value: m.fcp  != null ? `${(Number(m.fcp)/1000).toFixed(1)}s`  : null },
                 ].filter(v => v.value).map((v, i) => (
                   <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
                     <p className="font-semibold text-gray-900 dark:text-white">{v.value}</p>
