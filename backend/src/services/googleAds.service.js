@@ -1,7 +1,7 @@
 const axios                  = require('axios')
 const { getValidAccessToken } = require('./tokenRefresh.service')
 
-const GADS_BASE = 'https://googleads.googleapis.com/v18'
+const GADS_BASE = 'https://googleads.googleapis.com/v17'
 
 const GAQL_DATE_CLAUSE = {
   today:      'TODAY',

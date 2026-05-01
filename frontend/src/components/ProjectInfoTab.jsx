@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
 
 const CONNECTIONS = [
   { key: 'instagram', label: 'Instagram', placeholder: 'https://instagram.com/usuario',    icon: '📸' },
@@ -22,11 +23,10 @@ const GOOGLE_INTEGRATIONS = [
     desc:  'Ver clicks, impresiones y palabras clave en Marketing → SEO',
   },
   {
-    key:        'google_ads',
-    label:      'Google Ads',
-    icon:       '📣',
-    desc:       'Ver impresiones, clics y conversiones',
-    comingSoon: true,
+    key:   'google_ads',
+    label: 'Google Ads',
+    icon:  '📣',
+    desc:  'Ver campañas, clics y conversiones en Marketing → Anuncios',
   },
 ]
 
@@ -65,6 +65,7 @@ function parseConnections(raw) {
 
 export default function ProjectInfoTab({ project, onSave }) {
   const connections = parseConnections(project.connections)
+  const { enabled: marketingEnabled } = useFeatureFlag('marketing')
 
   const [websiteUrl, setWebsiteUrl] = useState(project.websiteUrl ?? '')
   const [conns, setConns]           = useState(connections)
@@ -78,12 +79,13 @@ export default function ProjectInfoTab({ project, onSave }) {
   const [propertyInput, setPropertyInput] = useState({})
   const [propSaving,    setPropSaving]    = useState({})
 
-  // Cargar integraciones del proyecto
+  // Cargar integraciones solo si marketing está habilitado
   useEffect(() => {
+    if (!marketingEnabled) return
     api.get(`/marketing/projects/${project.id}/integrations`)
       .then(r => setIntegrations(r.data))
       .catch(() => {})
-  }, [project.id])
+  }, [project.id, marketingEnabled])
 
   function getIntegration(type) {
     return integrations.find(i => i.type === type)
@@ -207,6 +209,22 @@ export default function ProjectInfoTab({ project, onSave }) {
     }
   }
 
+  async function handleSaveCustomerId(type) {
+    const val = propertyInput[type]?.trim()
+    if (!val) return
+    setPropSaving(prev => ({ ...prev, [type]: true }))
+    try {
+      const { data } = await api.patch(
+        `/marketing/projects/${project.id}/integrations/${type}`,
+        { customerId: val }
+      )
+      setIntegrations(prev => prev.map(i => i.type === type ? { ...i, ...data } : i))
+      setPropertyInput(prev => ({ ...prev, [type]: '' }))
+    } finally {
+      setPropSaving(prev => ({ ...prev, [type]: false }))
+    }
+  }
+
   function isDirty() {
     if (websiteUrl.trim() !== (project.websiteUrl ?? '')) return true
     return CONNECTIONS.some(c => (conns[c.key] ?? '') !== (connections[c.key] ?? ''))
@@ -284,8 +302,9 @@ export default function ProjectInfoTab({ project, onSave }) {
         {saved && <span className="text-sm text-emerald-500">Los cambios se guardaron correctamente</span>}
       </div>
 
-      {/* Integraciones Google */}
-      <div className="border-t border-gray-200 dark:border-gray-700 pt-5">
+      {/* Integraciones Google + Sociales — solo si el workspace tiene el flag marketing */}
+      {marketingEnabled && (
+      <><div className="border-t border-gray-200 dark:border-gray-700 pt-5">
         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
           Integraciones Google
         </p>
@@ -386,6 +405,63 @@ export default function ProjectInfoTab({ project, onSave }) {
                           {propSaving[integ.key] ? '…' : 'Guardar'}
                         </button>
                         {connected.propertyId && (
+                          <button
+                            onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
+                            className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {hasError && (
+                      <p className="text-xs text-red-500 mt-1">
+                        El token fue revocado. Desconectá y volvé a conectar.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Customer ID para Google Ads */}
+                {connected && integ.key === 'google_ads' && (
+                  <div>
+                    {connected.customerId ? (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-gray-400">
+                          Customer ID:{' '}
+                          <span className="font-mono text-gray-600 dark:text-gray-300">
+                            {connected.customerId}
+                          </span>
+                        </p>
+                        <button
+                          onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.customerId }))}
+                          className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
+                        >
+                          Cambiar
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Ingresá el Customer ID para ver los datos (ej: 123-456-7890)
+                      </p>
+                    )}
+                    {(propertyInput[integ.key] !== undefined || !connected.customerId) && (
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          type="text"
+                          value={propertyInput[integ.key] ?? ''}
+                          onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
+                          placeholder="123-456-7890"
+                          className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        <button
+                          onClick={() => handleSaveCustomerId(integ.key)}
+                          disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
+                          className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                        >
+                          {propSaving[integ.key] ? '…' : 'Guardar'}
+                        </button>
+                        {connected.customerId && (
                           <button
                             onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
                             className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
@@ -553,6 +629,7 @@ export default function ProjectInfoTab({ project, onSave }) {
           })}
         </div>
       </div>
+      </>)}
 
     </div>
   )

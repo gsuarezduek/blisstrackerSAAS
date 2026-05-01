@@ -33,6 +33,18 @@ async function getGoogleAdsData(req, res, next) {
     const data = await fetchGoogleAdsData(integration, datePreset)
     res.json(data)
   } catch (err) {
+    // Token de Google expirado — marcar integración y devolver 400 con código reconocible
+    if (err.code === 'TOKEN_EXPIRED' || err.message?.includes('invalid_grant')) {
+      await prisma.projectIntegration.update({
+        where: { projectId_type: { projectId: Number(req.params.id), type: 'google_ads' } },
+        data:  { status: 'expired' },
+      }).catch(() => {})
+      return res.status(400).json({
+        error: 'El token de Google Ads expiró. Desconectá y volvé a conectar la integración.',
+        code:  'TOKEN_EXPIRED',
+      })
+    }
+
     // Error específico de Google Ads API — puede venir como objeto o como array
     const body = err.response?.data
     if (body) {
@@ -43,7 +55,7 @@ async function getGoogleAdsData(req, res, next) {
         const status = err.response.status
         if (status === 404) {
           return res.status(400).json({
-            error: `Cuenta de Google Ads no encontrada (ID: ${req.body?.customerId ?? '?'}). Verificá que el Customer ID sea correcto y que tu cuenta de Google tenga acceso directo a esa cuenta.`,
+            error: `Cuenta de Google Ads no encontrada (ID: ${req.query?.customerId ?? '?'}). Verificá que el Customer ID sea correcto y que tu cuenta de Google tenga acceso directo a esa cuenta.`,
             code: 'NOT_FOUND',
           })
         }

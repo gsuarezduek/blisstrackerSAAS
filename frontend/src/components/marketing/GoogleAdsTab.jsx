@@ -438,6 +438,11 @@ export default function GoogleAdsTab({ projectId }) {
               Corregir Customer ID
             </button>
           )}
+          {errorCode === 'TOKEN_EXPIRED' && (
+            <span className="shrink-0 text-xs text-red-500 dark:text-red-400">
+              Desconectá y volvé a conectar desde <strong>Info</strong> del proyecto
+            </span>
+          )}
         </div>
       )}
 
