@@ -18,8 +18,19 @@ async function main() {
   const adAccountId = process.env.AD_ACCOUNT_ID  // con prefijo "act_"
   const projectId   = Number(process.env.PROJECT_ID)
 
-  if (!token || !adAccountId || !projectId) {
-    console.error('Faltan variables: SYSTEM_TOKEN, AD_ACCOUNT_ID, PROJECT_ID')
+  // Sin PROJECT_ID → listar proyectos disponibles
+  if (!projectId) {
+    const projects = await prisma.project.findMany({
+      select: { id: true, name: true, workspaceId: true },
+      orderBy: { id: 'asc' },
+    })
+    console.log('Proyectos disponibles:')
+    projects.forEach(p => console.log(`  ID: ${p.id} | workspaceId: ${p.workspaceId} | nombre: ${p.name}`))
+    return
+  }
+
+  if (!token || !adAccountId) {
+    console.error('Faltan variables: SYSTEM_TOKEN, AD_ACCOUNT_ID')
     process.exit(1)
   }
 
@@ -30,7 +41,7 @@ async function main() {
     where:  { id: projectId },
     select: { id: true, workspaceId: true },
   })
-  if (!project) { console.error('Proyecto no encontrado'); process.exit(1) }
+  if (!project) { console.error(`Proyecto ${projectId} no encontrado`); process.exit(1) }
 
   const result = await prisma.projectIntegration.upsert({
     where:  { projectId_type: { projectId, type: 'meta_ads' } },

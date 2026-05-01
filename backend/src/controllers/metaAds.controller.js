@@ -27,7 +27,14 @@ async function getMetaAdsData(req, res, next) {
     const data  = await fetchMetaAdsData(integration.propertyId, token, datePreset)
 
     res.json(data)
-  } catch (err) { next(err) }
+  } catch (err) {
+    if (err.response?.data) {
+      console.error('[MetaAds] Error de Facebook API:', JSON.stringify(err.response.data, null, 2))
+      const fbErr = err.response.data.error
+      return res.status(400).json({ error: fbErr?.message || 'Error en Meta Ads API', code: fbErr?.code })
+    }
+    next(err)
+  }
 }
 
 module.exports = { getMetaAdsData }
