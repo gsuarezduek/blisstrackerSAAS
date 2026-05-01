@@ -179,17 +179,12 @@ Máximo 3 oportunidades y 3 quickWins. Sé específico con URLs y acciones concr
 
   const message = await anthropic.messages.create({
     model:      'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
+    max_tokens: 2048,
     messages:   [{ role: 'user', content: prompt }],
   })
 
-  logTokens({
-    workspaceId,
-    service:      'seoAiInsight',
-    model:        'claude-haiku-4-5-20251001',
-    inputTokens:  message.usage?.input_tokens  ?? 0,
-    outputTokens: message.usage?.output_tokens ?? 0,
-  }).catch(err => console.error('[SeoAiInsight] Error al registrar tokens:', err.message))
+  logTokens('seoAiInsight', null, message.usage, workspaceId)
+    .catch(err => console.error('[SeoAiInsight] Error al registrar tokens:', err.message))
 
   const raw       = message.content[0].text.trim()
   const jsonMatch = raw.match(/\{[\s\S]*\}/)
