@@ -159,8 +159,8 @@ async function aggregateReportData(projectId, workspaceId, month) {
         completedAt: { gte: monthStart, lte: monthEnd },
       },
       select: {
-        id: true, name: true, completedAt: true,
-        user: { select: { name: true } },
+        id: true, description: true, completedAt: true,
+        createdBy: { select: { name: true } },
       },
       orderBy: { completedAt: 'desc' },
     }),

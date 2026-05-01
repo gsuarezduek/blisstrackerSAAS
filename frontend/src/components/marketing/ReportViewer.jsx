@@ -484,9 +484,9 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
             {s.tasks.map((task) => (
               <li key={task.id} className="flex items-start gap-2 text-sm">
                 <span className="text-green-500 mt-0.5 shrink-0">✓</span>
-                <span className="text-gray-700 dark:text-gray-300">{task.name}</span>
-                {task.user?.name && (
-                  <span className="ml-auto text-xs text-gray-400 dark:text-gray-500 shrink-0">{task.user.name}</span>
+                <span className="text-gray-700 dark:text-gray-300">{task.description}</span>
+                {task.createdBy?.name && (
+                  <span className="ml-auto text-xs text-gray-400 dark:text-gray-500 shrink-0">{task.createdBy.name}</span>
                 )}
               </li>
             ))}
