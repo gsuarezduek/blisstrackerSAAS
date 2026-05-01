@@ -104,9 +104,8 @@ function ObjectivesModal({ objectives, onSave, onClose, saving }) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function InformesTab({ projectId }) {
-  const today = currentMonthStr()
-
-  const [month,       setMonth]       = useState(today)
+  // Default: último mes cerrado (el mes actual no tiene snapshots todavía)
+  const [month,       setMonth]       = useState(prevMonthStr(currentMonthStr()))
   const [reportMeta,  setReportMeta]  = useState(null)
   const [reportData,  setReportData]  = useState(null)
   const [loading,     setLoading]     = useState(false)

@@ -913,6 +913,7 @@ model MonthlyReport {
   token       String   @unique
   objectives  String   @default("{}")  // JSON: { sessions, followersIg, followersTk, ... }
   notes       String?
+  analysis    String?  // JSON: { resumen, highlights, alertas, nextSteps } — cacheado, no se regenera
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

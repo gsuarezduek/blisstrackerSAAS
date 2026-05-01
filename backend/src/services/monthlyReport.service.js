@@ -49,7 +49,7 @@ function monthOfDate(d) {
  * Recopila todos los datos necesarios para el informe mensual de un proyecto.
  * Retorna un objeto estructurado con secciones condicionales.
  */
-async function aggregateReportData(projectId, workspaceId, month) {
+async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null) {
   const prev     = prevMonthStr(month)
   const last3    = prevMonthsArr(month, 3)
 
@@ -295,7 +295,10 @@ async function aggregateReportData(projectId, workspaceId, month) {
   const services = project?.services?.map(ps => ps.service.name) ?? []
 
   // ── Análisis IA ──────────────────────────────────────────────────────────────
-  const analysis = await generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, performance })
+  // Si ya existe un análisis cacheado, no se regenera
+  const analysis = cachedAnalysis
+    ? cachedAnalysis
+    : await generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, performance, workspaceId })
 
   return {
     project: {
@@ -308,12 +311,13 @@ async function aggregateReportData(projectId, workspaceId, month) {
     connectedTypes: [...connectedTypes],
     sections: { geo, analytics, evolution, instagram, tiktok, keywords, performance, tasks },
     analysis,
+    _analysisIsNew: !cachedAnalysis && !!analysis?.resumen,
   }
 }
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, performance }) {
+async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, performance, workspaceId }) {
   const dataCtx = JSON.stringify({
     proyecto: project?.name,
     mes:      month,
@@ -372,13 +376,8 @@ Respondé SOLO con un JSON con esta estructura exacta:
       messages:   [{ role: 'user', content: prompt }],
     })
 
-    logTokens?.({
-      workspaceId: null,
-      model:       'claude-haiku-4-5-20251001',
-      inputTokens: message.usage?.input_tokens  ?? 0,
-      outputTokens: message.usage?.output_tokens ?? 0,
-      feature:     'monthly_report',
-    }).catch(err => console.error('[MonthlyReport] Error al registrar tokens de IA:', err.message))
+    logTokens('monthly_report', null, message.usage, workspaceId ?? null)
+      .catch(err => console.error('[MonthlyReport] Error al registrar tokens de IA:', err.message))
 
     const raw       = message.content[0].text.trim()
     const jsonMatch = raw.match(/\{[\s\S]*\}/)

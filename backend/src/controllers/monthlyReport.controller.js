@@ -60,8 +60,22 @@ async function getReport(req, res, next) {
       })
     }
 
+    // Pasar análisis cacheado si ya existe (evita regenerar con Claude en cada carga)
+    const cachedAnalysis = report.analysis ? safeParseObj(report.analysis) : null
+
     // Agregar todos los datos
-    const data = await aggregateReportData(projectId, workspaceId, month)
+    const data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis)
+
+    // Si se generó un análisis nuevo, guardarlo en DB para futuras cargas
+    if (data._analysisIsNew && data.analysis) {
+      await prisma.monthlyReport.update({
+        where: { id: report.id },
+        data:  { analysis: JSON.stringify(data.analysis) },
+      })
+    }
+
+    // No exponer el flag interno al cliente
+    delete data._analysisIsNew
 
     res.json({
       report: {
@@ -132,7 +146,17 @@ async function getPublicReport(req, res, next) {
     const report = await prisma.monthlyReport.findUnique({ where: { token } })
     if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
 
-    const data = await aggregateReportData(report.projectId, report.workspaceId, report.month)
+    const cachedAnalysis = report.analysis ? safeParseObj(report.analysis) : null
+    const data = await aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis)
+
+    // Si se generó un análisis nuevo también lo guardamos (ej: primera vez que el cliente abre el link)
+    if (data._analysisIsNew && data.analysis) {
+      await prisma.monthlyReport.update({
+        where: { id: report.id },
+        data:  { analysis: JSON.stringify(data.analysis) },
+      })
+    }
+    delete data._analysisIsNew
 
     res.json({
       report: {
