@@ -85,7 +85,7 @@ async function aggregateReportData(projectId, workspaceId, month) {
     prisma.geoAudit.findFirst({
       where:   { projectId, workspaceId, status: 'completed' },
       orderBy: { createdAt: 'desc' },
-      select:  { score: true, createdAt: true, components: true },
+      select:  { score: true, createdAt: true, citability: true, brandAuthority: true, eeat: true, technical: true, platforms: true, schema: true },
     }),
 
     // GA4 snapshots
@@ -180,9 +180,14 @@ async function aggregateReportData(projectId, workspaceId, month) {
     score: geoAudit.score,
     band:  geoBand(geoAudit.score),
     date:  geoAudit.createdAt,
-    components: (() => {
-      try { return JSON.parse(geoAudit.components || '{}') } catch { return {} }
-    })(),
+    components: {
+      citability:     geoAudit.citability     ?? null,
+      brandAuthority: geoAudit.brandAuthority ?? null,
+      eeat:           geoAudit.eeat           ?? null,
+      technical:      geoAudit.technical      ?? null,
+      platforms:      geoAudit.platforms      ?? null,
+      schema:         geoAudit.schema         ?? null,
+    },
   } : null
 
   // ── Analytics GA4 ────────────────────────────────────────────────────────────
