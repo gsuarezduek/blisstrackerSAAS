@@ -28,7 +28,23 @@ async function getValidAccessToken(integration) {
   )
   client.setCredentials({ refresh_token: decrypt(integration.refreshToken) })
 
-  const { credentials } = await client.refreshAccessToken()
+  let credentials
+  try {
+    const result = await client.refreshAccessToken()
+    credentials = result.credentials
+  } catch (err) {
+    const isInvalidGrant = err.message?.includes('invalid_grant') || err.response?.data?.error === 'invalid_grant'
+    if (isInvalidGrant) {
+      await prisma.projectIntegration.update({
+        where: { id: integration.id },
+        data:  { status: 'expired' },
+      }).catch(() => {})
+      const e = new Error('El token de Google expiró. Reconectá la integración.')
+      e.code = 'TOKEN_EXPIRED'
+      throw e
+    }
+    throw err
+  }
 
   // Persistir nuevo access token
   await prisma.projectIntegration.update({

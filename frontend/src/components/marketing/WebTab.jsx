@@ -674,7 +674,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
         const body   = e.response?.data
         if (status === 404)                                              setErrorStatus('no_integration')
         else if (body?.status === 'no_property')                        setErrorStatus('no_property')
-        else if (body?.status === 'revoked' || body?.status === 'error') setErrorStatus('revoked')
+        else if (body?.code === 'TOKEN_EXPIRED' || body?.status === 'revoked' || body?.status === 'error') setErrorStatus('revoked')
         else setError(body?.error || 'Error al cargar datos')
       })
       .finally(() => setLoading(false))

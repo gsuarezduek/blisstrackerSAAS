@@ -64,8 +64,8 @@ export default function InformesTab() {
           setErrorStatus('no_integration')
         } else if (body?.status === 'no_property') {
           setErrorStatus('no_property')
-        } else if (body?.status === 'revoked' || body?.status === 'error') {
-          setErrorStatus('error')
+        } else if (body?.code === 'TOKEN_EXPIRED' || body?.status === 'revoked' || body?.status === 'error') {
+          setErrorStatus('revoked')
         } else {
           setError(body?.error || 'Error al cargar datos de Analytics')
         }

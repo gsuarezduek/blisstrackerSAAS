@@ -66,17 +66,18 @@ async function getAnalyticsData(req, res, next) {
     console.error('[analytics.getAnalyticsData] error:', err.code ?? '', err.message)
     // Marcar como error si el token fue revocado por el usuario en Google
     if (
+      err.code === 'TOKEN_EXPIRED' ||
       err.message?.includes('invalid_grant') ||
       err.message?.includes('Token has been expired') ||
       err.message?.includes('UNAUTHENTICATED')
     ) {
       await prisma.projectIntegration.update({
         where: { projectId_type: { projectId: Number(req.params.id), type: 'google_analytics' } },
-        data:  { status: 'error' },
+        data:  { status: 'expired' },
       }).catch(() => {})
-      return res.status(401).json({
-        error: 'Token revocado. Desconectá y volvé a conectar Google Analytics.',
-        status: 'revoked',
+      return res.status(400).json({
+        error: 'El token de Google Analytics expiró. Reconectá la integración.',
+        code:  'TOKEN_EXPIRED',
       })
     }
     next(err)
