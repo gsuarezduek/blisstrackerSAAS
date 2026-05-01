@@ -45,11 +45,13 @@ model Workspace {
   pageSpeedResults     PageSpeedResult[]
   trackedKeywords      TrackedKeyword[]   @relation("WorkspaceTrackedKeywords")
   keywordRankings      KeywordRanking[]   @relation("WorkspaceKeywordRankings")
-  instagramSnapshots    InstagramSnapshot[]
-  instagramFollowerLogs InstagramFollowerLog[]
-  tiktokSnapshots       TikTokSnapshot[]
-  tiktokFollowerLogs    TikTokFollowerLog[]
-  monthlyReports        MonthlyReport[]
+  instagramSnapshots        InstagramSnapshot[]
+  instagramFollowerLogs     InstagramFollowerLog[]
+  tiktokSnapshots           TikTokSnapshot[]
+  tiktokFollowerLogs        TikTokFollowerLog[]
+  monthlyReports            MonthlyReport[]
+  searchConsoleSnapshots    SearchConsoleSnapshot[]
+  seoAiInsights             SeoAiInsight[]
 
   @@index([slug])
 }
@@ -230,12 +232,14 @@ model Project {
   analyticsInsights  AnalyticsInsight[]
   pageSpeedResults   PageSpeedResult[]
   trackedKeywords    TrackedKeyword[] @relation("ProjectTrackedKeywords")
-  keywordRankings    KeywordRanking[] @relation("ProjectKeywordRankings")
-  instagramSnapshots    InstagramSnapshot[]
-  instagramFollowerLogs InstagramFollowerLog[]
-  tiktokSnapshots       TikTokSnapshot[]
-  tiktokFollowerLogs    TikTokFollowerLog[]
-  monthlyReports        MonthlyReport[]
+  keywordRankings           KeywordRanking[] @relation("ProjectKeywordRankings")
+  instagramSnapshots        InstagramSnapshot[]
+  instagramFollowerLogs     InstagramFollowerLog[]
+  tiktokSnapshots           TikTokSnapshot[]
+  tiktokFollowerLogs        TikTokFollowerLog[]
+  monthlyReports            MonthlyReport[]
+  searchConsoleSnapshots    SearchConsoleSnapshot[]
+  seoAiInsights             SeoAiInsight[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -916,5 +920,47 @@ model MonthlyReport {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, month])
+  @@index([workspaceId])
+}
+
+// ─── SEO SNAPSHOTS ────────────────────────────────────────────────────────────
+
+model SearchConsoleSnapshot {
+  id          Int      @id @default(autoincrement())
+  projectId   Int
+  workspaceId Int
+  month       String   // "YYYY-MM"
+
+  clicks      Int      @default(0)
+  impressions Int      @default(0)
+  ctr         Float    @default(0)
+  avgPosition Float    @default(0)
+  devices     String   @default("{}") // JSON: {DESKTOP:{clicks,impressions}, MOBILE:{...}, TABLET:{...}}
+  countries   String   @default("[]") // JSON: [{country, clicks, impressions}]
+  topQueries  String   @default("[]") // JSON: [{query, clicks, impressions, ctr, position}]
+  topPages    String   @default("[]") // JSON: [{page, clicks, impressions, ctr, position}]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, month])
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+model SeoAiInsight {
+  id          Int      @id @default(autoincrement())
+  projectId   Int      @unique
+  workspaceId Int
+  // JSON: { titulo, resumen, oportunidades:[{pagina,accion,impacto,razon}], quickWins:[{titulo,descripcion,tarea}] }
+  content     String
+  generatedAt DateTime @default(now())
+
+  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   @@index([workspaceId])
 }

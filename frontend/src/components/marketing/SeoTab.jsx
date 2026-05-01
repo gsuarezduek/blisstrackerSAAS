@@ -1,84 +1,167 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import { useAuth } from '../../context/AuthContext'
 
-// ─── Formateadores ────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtNum = n => (n ?? 0).toLocaleString('es-AR')
 const fmtPct = n => `${((n ?? 0) * 100).toFixed(1)}%`
-const fmtPos = n => (n ?? 0).toFixed(1)
+const fmtPos = n => n != null ? parseFloat(n).toFixed(1) : '—'
 
-// ─── Fechas — Search Console solo acepta YYYY-MM-DD ──────────────────────────
-const PRESET_RANGES = [
-  { value: 'thisMonth', label: 'Este mes' },
-  { value: 'lastMonth', label: 'Mes anterior' },
-  { value: '90daysAgo', label: 'Últimos 90 días' },
-  { value: 'custom',    label: 'Personalizado' },
-]
-
-function todayStr() { return new Date().toISOString().slice(0, 10) }
-
-function getDateParams(range, customStart, customEnd) {
-  const now   = new Date()
-  const year  = now.getFullYear()
-  const month = now.getMonth()
-  const pad   = n => String(n).padStart(2, '0')
-
-  if (range === 'thisMonth') {
-    return { startDate: `${year}-${pad(month + 1)}-01`, endDate: todayStr() }
-  }
-  if (range === 'lastMonth') {
-    const lm      = month === 0 ? 11 : month - 1
-    const lmYear  = month === 0 ? year - 1 : year
-    const lastDay = new Date(lmYear, lm + 1, 0).getDate()
-    return { startDate: `${lmYear}-${pad(lm + 1)}-01`, endDate: `${lmYear}-${pad(lm + 1)}-${pad(lastDay)}` }
-  }
-  if (range === '90daysAgo') {
-    const start = new Date(); start.setDate(start.getDate() - 90)
-    return { startDate: start.toISOString().slice(0, 10), endDate: todayStr() }
-  }
-  return { startDate: customStart || todayStr(), endDate: customEnd || todayStr() }
+function currentMonthStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+function prevMonthStr(month) {
+  const [y, m] = month.split('-').map(Number)
+  const pm = m === 1 ? 12 : m - 1
+  const py = m === 1 ? y - 1 : y
+  return `${py}-${String(pm).padStart(2, '0')}`
+}
+function nextMonthStr(month) {
+  const [y, m] = month.split('-').map(Number)
+  const nm = m === 12 ? 1  : m + 1
+  const ny = m === 12 ? y + 1 : y
+  return `${ny}-${String(nm).padStart(2, '0')}`
+}
+function monthLabel(month) {
+  const [y, m] = month.split('-').map(Number)
+  const names = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+  return `${names[m - 1]} ${y}`
 }
 
-// ─── Componentes de UI ────────────────────────────────────────────────────────
-function MetricCard({ label, value, sub }) {
+// ─── Sparkline SVG ────────────────────────────────────────────────────────────
+function Sparkline({ history }) {
+  const points = history.filter(h => h.position !== null)
+  if (points.length < 2) return <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+
+  const positions = points.map(p => p.position)
+  const min = Math.min(...positions)
+  const max = Math.max(...positions)
+  const range = max - min || 1
+
+  const W = 60, H = 20
+  // Posición más baja = mejor = arriba en el chart
+  const coords = points.map((p, i) => {
+    const x = (i / (points.length - 1)) * W
+    const y = ((p.position - min) / range) * H  // sin invertir: bajo = abajo visualmente
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+
+  const last  = points[points.length - 1].position
+  const first = points[0].position
+  const color = last < first ? '#22c55e' : last > first ? '#ef4444' : '#94a3b8'
+
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-    </div>
+    <svg width={W} height={H} className="overflow-visible inline-block align-middle">
+      <polyline
+        points={coords.join(' ')}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
   )
 }
 
-function DeviceBar({ devices }) {
-  if (!devices?.length) return null
-  const total  = devices.reduce((s, d) => s + d.clicks, 0) || 1
-  const COLORS = { DESKTOP: 'bg-primary-500', MOBILE: 'bg-blue-500', TABLET: 'bg-purple-400' }
-  const LABELS = { DESKTOP: 'Desktop', MOBILE: 'Mobile', TABLET: 'Tablet' }
+// ─── Delta badge ──────────────────────────────────────────────────────────────
+function DeltaBadge({ delta }) {
+  if (delta == null) return null
+  // delta positivo = bajó posición (empeoró), negativo = subió (mejoró)
+  if (Math.abs(delta) < 0.5) return null
+  const improved = delta < 0
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Dispositivos</h3>
-      <div className="flex rounded-full overflow-hidden h-3 mb-3">
-        {devices.map(d => (
-          <div key={d.device} className={`${COLORS[d.device] ?? 'bg-gray-300'} transition-all`}
-            style={{ width: `${(d.clicks / total) * 100}%` }}
-            title={`${LABELS[d.device] ?? d.device}: ${fmtNum(d.clicks)} clicks`} />
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {devices.map(d => (
-          <div key={d.device} className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
-            <span className={`w-2.5 h-2.5 rounded-full inline-block ${COLORS[d.device] ?? 'bg-gray-300'}`} />
-            {LABELS[d.device] ?? d.device}
-            <span className="font-medium text-gray-800 dark:text-gray-200">{fmtNum(d.clicks)}</span>
-            <span className="text-gray-400">({((d.clicks / total) * 100).toFixed(0)}%)</span>
+    <span className={`ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+      improved
+        ? 'text-green-600 bg-green-50 dark:bg-green-900/30'
+        : 'text-red-500 bg-red-50 dark:bg-red-900/30'
+    }`}>
+      {improved ? '↑' : '↓'} {Math.abs(delta).toFixed(1)}
+    </span>
+  )
+}
+
+// ─── Modal crear tarea ────────────────────────────────────────────────────────
+function CreateTaskModal({ title, projectId, projectName, onClose }) {
+  const { user }                    = useAuth()
+  const [description, setDescription] = useState(`SEO - ${title}`)
+  const [members, setMembers]        = useState([])
+  const [assigneeId, setAssigneeId]  = useState('')
+  const [saving, setSaving]          = useState(false)
+  const [done, setDone]              = useState(false)
+
+  useEffect(() => {
+    api.get(`/projects/${projectId}/members`)
+      .then(r => { setMembers(r.data); setAssigneeId(String(user?.id ?? '')) })
+      .catch(() => {})
+  }, [projectId, user])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!description.trim()) return
+    setSaving(true)
+    try {
+      const body = { description: description.trim(), projectId: String(projectId) }
+      if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
+      await api.post('/tasks', body)
+      setDone(true)
+      setTimeout(onClose, 1200)
+    } catch { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Crear tarea</h2>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+          Proyecto: <span className="font-medium text-gray-600 dark:text-gray-300">{projectName}</span>
+        </p>
+        {done ? (
+          <div className="flex flex-col items-center py-6 gap-2">
+            <span className="text-3xl">✅</span>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tarea creada</p>
           </div>
-        ))}
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
+              <textarea autoFocus rows={3} value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+              />
+            </div>
+            {members.length > 1 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asignar a</label>
+                <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                  {members.map(m => (
+                    <option key={m.id} value={String(m.id)}>
+                      {m.name}{String(m.id) === String(user?.id) ? ' (yo)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose}
+                className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                Cancelar
+              </button>
+              <button type="submit" disabled={saving || !description.trim()}
+                className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+                {saving ? 'Guardando…' : 'Crear tarea'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   )
 }
 
-// Fila expandible de query con páginas rankeando
+// ─── QueryRow expandible ──────────────────────────────────────────────────────
 function QueryRow({ row, comparison, startDate, endDate, projectId }) {
   const [expanded, setExpanded] = useState(false)
   const [pages,    setPages]    = useState(null)
@@ -99,40 +182,36 @@ function QueryRow({ row, comparison, startDate, endDate, projectId }) {
     setExpanded(e => !e)
   }
 
-  const comp = comparison?.find(c => c.query === row.query)
+  const comp     = comparison?.find(c => c.query === row.query)
   const hasDrop  = comp?.positionDelta != null && comp.positionDelta > 3
   const hasGain  = comp?.positionDelta != null && comp.positionDelta < -3
 
   return (
     <>
-      <tr
-        onClick={toggle}
-        className="border-b border-gray-50 dark:border-gray-700/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer"
-      >
+      <tr onClick={toggle}
+        className="border-b border-gray-50 dark:border-gray-700/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer">
         <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300 max-w-[200px] truncate">
           <span className="flex items-center gap-1.5">
             <span className="text-gray-400 text-[10px]">{expanded ? '▼' : '▶'}</span>
             {row.query}
           </span>
         </td>
-        <td className="px-4 py-2.5 text-right tabular-nums">{fmtNum(row.clicks)}</td>
-        <td className="px-4 py-2.5 text-right tabular-nums">{fmtNum(row.impressions)}</td>
-        <td className="px-4 py-2.5 text-right tabular-nums">{fmtPos(row.position)}
+        <td className="px-4 py-2.5 text-right tabular-nums text-sm text-gray-700 dark:text-gray-300">{fmtNum(row.clicks)}</td>
+        <td className="px-4 py-2.5 text-right tabular-nums text-sm text-gray-700 dark:text-gray-300">{fmtNum(row.impressions)}</td>
+        <td className="px-4 py-2.5 text-right tabular-nums text-sm text-gray-700 dark:text-gray-300">
+          {fmtPos(row.position)}
           {hasDrop && (
-            <span className="ml-1.5 text-[10px] font-semibold text-red-500 bg-red-50 dark:bg-red-900/30 px-1.5 py-0.5 rounded-full">
-              ↓ {comp.positionDelta.toFixed(1)}
-            </span>
+            <span className="ml-1.5 text-[10px] font-semibold text-red-500 bg-red-50 dark:bg-red-900/30 px-1.5 py-0.5 rounded-full">↓ {comp.positionDelta.toFixed(1)}</span>
           )}
           {hasGain && (
-            <span className="ml-1.5 text-[10px] font-semibold text-green-600 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full">
-              ↑ {Math.abs(comp.positionDelta).toFixed(1)}
-            </span>
+            <span className="ml-1.5 text-[10px] font-semibold text-green-600 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full">↑ {Math.abs(comp.positionDelta).toFixed(1)}</span>
           )}
         </td>
+        <td className="px-4 py-2.5 text-right tabular-nums text-sm text-gray-700 dark:text-gray-300">{fmtPct(row.ctr)}</td>
       </tr>
       {expanded && (
         <tr className="border-b border-gray-50 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-700/20">
-          <td colSpan={4} className="px-6 py-3">
+          <td colSpan={5} className="px-6 py-3">
             {loading
               ? <div className="flex items-center gap-2 text-xs text-gray-400"><div className="w-3 h-3 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />Cargando páginas…</div>
               : pages?.length > 0
@@ -165,215 +244,237 @@ function QueryRow({ row, comparison, startDate, endDate, projectId }) {
   )
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
-export default function SeoTab({ projectId, projects }) {
-  const [rangePreset,  setRangePreset]  = useState('thisMonth')
-  const [customStart,  setCustomStart]  = useState(todayStr())
-  const [customEnd,    setCustomEnd]    = useState(todayStr())
-  const [appliedRange, setAppliedRange] = useState({ preset: 'thisMonth', start: '', end: '' })
-  const [device,       setDevice]       = useState(null) // null = todos, 'MOBILE', 'DESKTOP'
-  const [data,         setData]         = useState(null)
-  const [loading,      setLoading]      = useState(false)
-  const [error,        setError]        = useState('')
+// ─── Panel Live: últimos 30 días ──────────────────────────────────────────────
+function LivePanel({ projectId, projectName }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState(null)
 
-  const isMonthlyPreset = appliedRange.preset === 'thisMonth' || appliedRange.preset === 'lastMonth'
+  const [aiData,       setAiData]       = useState(null)
+  const [aiLoading,    setAiLoading]    = useState(false)
+  const [aiError,      setAiError]      = useState(null)
+  const [aiCooldown,   setAiCooldown]   = useState(0)
+  const [taskModal,    setTaskModal]    = useState(null) // { title }
 
+  const today = new Date()
+  const end   = today.toISOString().slice(0, 10)
+  const start = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate()).toISOString().slice(0, 10)
+
+  // Fetch live GSC data
   useEffect(() => {
     if (!projectId) return
-    const { startDate, endDate } = getDateParams(appliedRange.preset, appliedRange.start, appliedRange.end)
+    const ctrl = new AbortController()
     setLoading(true)
-    setError('')
+    setError(null)
     setData(null)
-    const params = { startDate, endDate }
-    if (device)          params.device  = device
-    if (isMonthlyPreset) params.compare = 'true'
-
-    api.get(`/marketing/projects/${projectId}/search-console`, { params })
+    api.get(`/marketing/projects/${projectId}/search-console`, {
+      params: { startDate: start, endDate: end, compare: 'true' },
+      signal: ctrl.signal,
+    })
       .then(r => setData(r.data))
       .catch(err => {
-        const msg    = err.response?.data?.error ?? 'Error al cargar datos'
+        if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
         const status = err.response?.data?.status
         if (status === 'no_site_url') {
-          setError('Este proyecto no tiene URL de sitio configurada. Agregala en la tab Info del proyecto.')
+          setError({ type: 'no_site_url', msg: 'Este proyecto no tiene URL de sitio configurada. Agregala en la tab Info del proyecto.' })
+        } else if (status === 'no_integration') {
+          setError({ type: 'no_integration', msg: err.response?.data?.error ?? 'Google Search Console no conectado.' })
         } else {
-          setError(msg)
+          setError({ type: 'generic', msg: err.response?.data?.error ?? 'Error al cargar datos de Search Console.' })
         }
       })
       .finally(() => setLoading(false))
-  }, [projectId, appliedRange, device])
+    return () => ctrl.abort()
+  }, [projectId])
 
-  function handleRangeChange(val) {
-    setRangePreset(val)
-    if (val !== 'custom') setAppliedRange({ preset: val, start: '', end: '' })
+  // Fetch AI insights
+  useEffect(() => {
+    if (!projectId) return
+    const ctrl = new AbortController()
+    api.get(`/marketing/projects/${projectId}/seo/ai-insights`, { signal: ctrl.signal })
+      .then(r => {
+        setAiData(r.data.insight)
+        setAiCooldown(r.data.cooldownRemaining ?? 0)
+      })
+      .catch(err => {
+        if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
+      })
+    return () => ctrl.abort()
+  }, [projectId])
+
+  async function generateAiInsights() {
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const { data: r } = await api.post(`/marketing/projects/${projectId}/seo/ai-insights`)
+      setAiData(r.insight)
+      setAiCooldown(r.cooldownRemaining ?? 60)
+    } catch (err) {
+      const d = err.response?.data
+      if (d?.waitMins) {
+        setAiCooldown(d.waitMins)
+        setAiError(`Esperá ${d.waitMins} minuto${d.waitMins > 1 ? 's' : ''} antes de regenerar.`)
+      } else {
+        setAiError(d?.error ?? 'Error al generar análisis')
+      }
+    } finally {
+      setAiLoading(false)
+    }
   }
 
-  function handleApplyCustom() {
-    if (!customStart || !customEnd || customStart > customEnd) return
-    setAppliedRange({ preset: 'custom', start: customStart, end: customEnd })
-  }
-
-  const overview   = data?.overview
-  const { startDate, endDate } = getDateParams(appliedRange.preset, appliedRange.start, appliedRange.end)
-  const comparison = data?.topQueriesComparison
+  const overview  = data?.overview
+  const impactColor = { alto: 'text-red-500', medio: 'text-orange-500', bajo: 'text-blue-500' }
 
   return (
-    <div className="space-y-5">
-
-      {/* Controles */}
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Período</label>
-          <select
-            value={rangePreset}
-            onChange={e => handleRangeChange(e.target.value)}
-            className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            {PRESET_RANGES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
-        </div>
-        {rangePreset === 'custom' && (
-          <>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Desde</label>
-              <input type="date" value={customStart} max={customEnd || todayStr()}
-                onChange={e => setCustomStart(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Hasta</label>
-              <input type="date" value={customEnd} min={customStart} max={todayStr()}
-                onChange={e => setCustomEnd(e.target.value)}
-                className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-            </div>
-            <button onClick={handleApplyCustom} disabled={!customStart || !customEnd || customStart > customEnd}
-              className="px-4 py-2.5 text-sm bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white font-medium rounded-xl transition-colors self-end">
-              Aplicar
-            </button>
-          </>
-        )}
-
-        {/* Filtro dispositivo */}
-        <div className="flex rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden text-xs self-end">
-          {[
-            { val: null,      label: 'Todos' },
-            { val: 'MOBILE',  label: '📱 Mobile' },
-            { val: 'DESKTOP', label: '🖥️ Desktop' },
-          ].map(d => (
-            <button key={String(d.val)} onClick={() => setDevice(d.val)}
-              className={`px-3 py-2 transition-colors ${
-                device === d.val
-                  ? 'bg-primary-600 text-white'
-                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}>
-              {d.label}
-            </button>
-          ))}
-        </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          Datos en vivo — últimos 30 días
+          <span className="ml-2 text-xs font-normal text-gray-400">({start} → {end})</span>
+        </h2>
       </div>
-
-      {/* Estado vacío */}
-      {!projectId && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
-          <div className="text-4xl mb-3">🔍</div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Seleccioná un proyecto arriba para ver los datos de Search Console</p>
-        </div>
-      )}
 
       {/* Error */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3 text-sm text-red-600 dark:text-red-400">
-          {error}
-          {error.includes('no conectado') && (
+          {error.msg}
+          {error.type === 'no_integration' && (
             <span className="ml-1">Conectalo en <strong>Proyectos → Info → Integraciones Google</strong>.</span>
           )}
         </div>
       )}
 
-      {/* Loading */}
       {loading && (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center justify-center py-12">
+          <div className="w-7 h-7 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
-      {/* Datos */}
       {data && !loading && (
         <>
+          {/* KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <MetricCard label="Clicks"         value={fmtNum(overview.clicks)}      />
-            <MetricCard label="Impresiones"    value={fmtNum(overview.impressions)} />
-            <MetricCard label="CTR promedio"   value={fmtPct(overview.ctr)}         />
-            <MetricCard label="Posición media" value={fmtPos(overview.position)} sub="más bajo = mejor" />
+            {[
+              { label: 'Clicks',         value: fmtNum(overview.clicks)       },
+              { label: 'Impresiones',    value: fmtNum(overview.impressions)  },
+              { label: 'CTR promedio',   value: fmtPct(overview.ctr)          },
+              { label: 'Posición media', value: fmtPos(overview.position), sub: 'más bajo = mejor' },
+            ].map(k => (
+              <div key={k.label} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{k.label}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{k.value}</p>
+                {k.sub && <p className="text-xs text-gray-400 mt-0.5">{k.sub}</p>}
+              </div>
+            ))}
           </div>
 
-          {data.devices?.length > 0 && <DeviceBar devices={data.devices} />}
+          {/* AI Insights */}
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Sugerencias IA</h3>
+              <button
+                onClick={generateAiInsights}
+                disabled={aiLoading || aiCooldown > 0}
+                className="text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
+              >
+                {aiLoading ? 'Generando…' : aiCooldown > 0 ? `Disponible en ${aiCooldown} min` : aiData ? 'Regenerar' : 'Generar análisis IA'}
+              </button>
+            </div>
 
-          {/* Top consultas — expandible */}
+            {aiError && (
+              <p className="text-xs text-orange-500 mb-3">{aiError}</p>
+            )}
+
+            {!aiData && !aiLoading && (
+              <p className="text-sm text-gray-400 dark:text-gray-500">
+                Generá un análisis IA para obtener sugerencias accionables basadas en tus datos de Search Console.
+              </p>
+            )}
+
+            {aiLoading && (
+              <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
+                <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                Analizando datos con IA…
+              </div>
+            )}
+
+            {aiData && !aiLoading && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">{aiData.titulo}</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">{aiData.resumen}</p>
+                </div>
+
+                {aiData.oportunidades?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Oportunidades</p>
+                    <div className="space-y-2">
+                      {aiData.oportunidades.map((op, i) => (
+                        <div key={i} className="flex items-start gap-3 bg-gray-50 dark:bg-gray-700/40 rounded-lg p-3">
+                          <span className={`text-xs font-bold mt-0.5 ${impactColor[op.impacto] ?? 'text-gray-500'}`}>
+                            {op.impacto?.toUpperCase()}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-mono text-gray-500 dark:text-gray-400 truncate">{op.pagina}</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">{op.accion}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{op.razon}</p>
+                          </div>
+                          <button
+                            onClick={() => setTaskModal({ title: op.accion })}
+                            className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
+                          >
+                            + tarea
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {aiData.quickWins?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Quick wins</p>
+                    <div className="space-y-2">
+                      {aiData.quickWins.map((qw, i) => (
+                        <div key={i} className="flex items-start gap-3 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/40 rounded-lg p-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{qw.titulo}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{qw.descripcion}</p>
+                          </div>
+                          <button
+                            onClick={() => setTaskModal({ title: qw.tarea })}
+                            className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
+                          >
+                            + tarea
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Top consultas */}
           {data.topQueries?.length > 0 && (
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Top consultas</h3>
-                {comparison && (
-                  <span className="text-[10px] text-gray-400">Click en una fila para ver páginas</span>
-                )}
+                <span className="text-[10px] text-gray-400">Click en una fila para ver páginas</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 dark:border-gray-700">
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-left">Consulta</th>
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Clicks</th>
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Impres.</th>
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Posición</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.topQueries.map((row, i) => (
-                      <QueryRow
-                        key={i}
-                        row={row}
-                        comparison={comparison}
-                        startDate={startDate}
-                        endDate={endDate}
-                        projectId={projectId}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Top páginas */}
-          {data.topPages?.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Top páginas</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100 dark:border-gray-700">
-                      {[
-                        { key: 'page',        label: 'Página' },
-                        { key: 'clicks',      label: 'Clicks',   right: true },
-                        { key: 'impressions', label: 'Impres.',  right: true },
-                        { key: 'position',    label: 'Posición', right: true },
-                      ].map(c => (
-                        <th key={c.key} className={`px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 ${c.right ? 'text-right' : 'text-left'}`}>
-                          {c.label}
-                        </th>
+                      {['Consulta', 'Clicks', 'Impres.', 'Posición', 'CTR'].map((h, i) => (
+                        <th key={h} className={`px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 ${i > 0 ? 'text-right' : 'text-left'}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {data.topPages.map((row, i) => (
-                      <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                        <td className="px-4 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-300 max-w-[220px] truncate">{row.page}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtNum(row.clicks)}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtNum(row.impressions)}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtPos(row.position)}</td>
-                      </tr>
+                    {data.topQueries.map((row, i) => (
+                      <QueryRow key={i} row={row} comparison={data.topQueriesComparison} startDate={start} endDate={end} projectId={projectId} />
                     ))}
                   </tbody>
                 </table>
@@ -392,26 +493,25 @@ export default function SeoTab({ projectId, projects }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 dark:border-gray-700">
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-left">Página</th>
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Impresiones</th>
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">CTR actual</th>
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Posición</th>
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right"></th>
+                      {['Página', 'Impresiones', 'CTR actual', 'Posición', ''].map((h, i) => (
+                        <th key={i} className={`px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {data.opportunityPages.map((row, i) => (
                       <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                        <td className="px-4 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-300 max-w-[220px] truncate">{row.page}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-300 max-w-[200px] truncate">{row.page}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtNum(row.impressions)}</td>
-                        <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${row.ctr < 0.03 ? 'text-red-500' : 'text-orange-500'}`}>
-                          {fmtPct(row.ctr)}
-                        </td>
+                        <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${row.ctr < 0.03 ? 'text-red-500' : 'text-orange-500'}`}>{fmtPct(row.ctr)}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{fmtPos(row.position)}</td>
                         <td className="px-4 py-2.5 text-right">
-                          <span className="text-[10px] font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-full whitespace-nowrap">
-                            Mejorar meta
-                          </span>
+                          <button
+                            onClick={() => setTaskModal({ title: `Mejorar title/meta de ${row.page}` })}
+                            className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
+                          >
+                            + tarea
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -421,6 +521,38 @@ export default function SeoTab({ projectId, projects }) {
             </div>
           )}
 
+          {/* Top páginas */}
+          {data.topPages?.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Top páginas</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-700">
+                      {['Página', 'Clicks', 'Impres.', 'CTR', 'Posición'].map((h, i) => (
+                        <th key={h} className={`px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.topPages.map((row, i) => (
+                      <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                        <td className="px-4 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-300 max-w-[220px] truncate">{row.page}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtNum(row.clicks)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtNum(row.impressions)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtPct(row.ctr)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtPos(row.position)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Top países */}
           {data.countries?.length > 0 && (
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
@@ -440,12 +572,282 @@ export default function SeoTab({ projectId, projects }) {
             </div>
           )}
 
-          <p className="text-xs text-gray-400 text-right">
-            Sitio: <span className="font-mono">{data.siteUrl}</span>
-            {' · '}{data.startDate} → {data.endDate}
-          </p>
+          {data.siteUrl && (
+            <p className="text-xs text-gray-400 text-right">
+              Sitio: <span className="font-mono">{data.siteUrl}</span>
+            </p>
+          )}
         </>
       )}
+
+      {taskModal && (
+        <CreateTaskModal
+          title={taskModal.title}
+          projectId={projectId}
+          projectName={projectName}
+          onClose={() => setTaskModal(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Panel de snapshot mensual ────────────────────────────────────────────────
+function SnapshotPanel({ projectId }) {
+  const defaultMonth = prevMonthStr(currentMonthStr())
+  const [month,    setMonth]    = useState(defaultMonth)
+  const [snap,     setSnap]     = useState(null)
+  const [loading,  setLoading]  = useState(false)
+  const [notFound, setNotFound] = useState(false)
+  const [saving,   setSaving]   = useState(false)
+
+  const [kwHistory,    setKwHistory]    = useState(null)
+  const [kwLoading,    setKwLoading]    = useState(false)
+
+  // Fetch snapshot del mes seleccionado
+  useEffect(() => {
+    if (!projectId) return
+    const ctrl = new AbortController()
+    setLoading(true)
+    setSnap(null)
+    setNotFound(false)
+    api.get(`/marketing/projects/${projectId}/seo/snapshot/${month}`, { signal: ctrl.signal })
+      .then(r => setSnap(r.data))
+      .catch(err => {
+        if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
+        if (err.response?.status === 404) setNotFound(true)
+      })
+      .finally(() => setLoading(false))
+    return () => ctrl.abort()
+  }, [projectId, month])
+
+  // Fetch keyword history (sparklines)
+  useEffect(() => {
+    if (!projectId) return
+    const ctrl = new AbortController()
+    setKwLoading(true)
+    api.get(`/marketing/projects/${projectId}/keywords/history-batch`, {
+      params: { months: 6 },
+      signal: ctrl.signal,
+    })
+      .then(r => setKwHistory(r.data))
+      .catch(err => {
+        if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
+      })
+      .finally(() => setKwLoading(false))
+    return () => ctrl.abort()
+  }, [projectId])
+
+  async function handleSaveSnapshot() {
+    setSaving(true)
+    try {
+      const { data } = await api.post(`/marketing/projects/${projectId}/seo/snapshots`, { month })
+      setSnap(data)
+      setNotFound(false)
+    } catch (err) {
+      alert(err.response?.data?.error ?? 'No se pudo guardar el snapshot')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const devices = snap?.devices ? (
+    typeof snap.devices === 'string' ? JSON.parse(snap.devices) : snap.devices
+  ) : {}
+
+  const deviceEntries = Object.entries(devices)
+  const totalClicks = deviceEntries.reduce((s, [, v]) => s + (v.clicks ?? 0), 0) || 1
+  const DEVICE_COLORS = { DESKTOP: 'bg-primary-500', MOBILE: 'bg-blue-500', TABLET: 'bg-purple-400' }
+  const DEVICE_LABELS = { DESKTOP: 'Desktop', MOBILE: 'Mobile', TABLET: 'Tablet' }
+
+  return (
+    <div className="space-y-4">
+      {/* Selector de mes */}
+      <div className="flex items-center gap-3">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Historial mensual</h2>
+        <div className="flex items-center gap-1 ml-auto">
+          <button
+            onClick={() => setMonth(m => prevMonthStr(m))}
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors text-xs"
+            title="Mes anterior"
+          >◀</button>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 min-w-[80px] text-center">
+            {monthLabel(month)}
+          </span>
+          <button
+            onClick={() => setMonth(m => nextMonthStr(m))}
+            disabled={month >= currentMonthStr()}
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs"
+            title="Mes siguiente"
+          >▶</button>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center py-10">
+          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {notFound && !loading && (
+        <div className="bg-white dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+            No hay snapshot guardado para <strong>{monthLabel(month)}</strong>
+          </p>
+          <button
+            onClick={handleSaveSnapshot}
+            disabled={saving}
+            className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white rounded-xl text-sm font-medium transition-colors"
+          >
+            {saving ? 'Guardando…' : 'Guardar snapshot ahora'}
+          </button>
+          <p className="text-xs text-gray-400 mt-2">
+            Requiere Google Search Console conectado y activo
+          </p>
+        </div>
+      )}
+
+      {snap && !loading && (
+        <>
+          {/* KPIs del snapshot */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Clicks',         value: fmtNum(snap.clicks)       },
+              { label: 'Impresiones',    value: fmtNum(snap.impressions)  },
+              { label: 'CTR promedio',   value: fmtPct(snap.ctr)          },
+              { label: 'Posición media', value: fmtPos(snap.avgPosition), sub: 'más bajo = mejor' },
+            ].map(k => (
+              <div key={k.label} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{k.label}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{k.value}</p>
+                {k.sub && <p className="text-xs text-gray-400 mt-0.5">{k.sub}</p>}
+              </div>
+            ))}
+          </div>
+
+          {/* Dispositivos */}
+          {deviceEntries.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Dispositivos</h3>
+              <div className="flex rounded-full overflow-hidden h-3 mb-3">
+                {deviceEntries.map(([device, v]) => (
+                  <div key={device}
+                    className={`${DEVICE_COLORS[device] ?? 'bg-gray-300'} transition-all`}
+                    style={{ width: `${((v.clicks ?? 0) / totalClicks) * 100}%` }}
+                    title={`${DEVICE_LABELS[device] ?? device}: ${fmtNum(v.clicks)} clicks`} />
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {deviceEntries.map(([device, v]) => (
+                  <div key={device} className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
+                    <span className={`w-2.5 h-2.5 rounded-full inline-block ${DEVICE_COLORS[device] ?? 'bg-gray-300'}`} />
+                    {DEVICE_LABELS[device] ?? device}
+                    <span className="font-medium text-gray-800 dark:text-gray-200">{fmtNum(v.clicks)}</span>
+                    <span className="text-gray-400">({(((v.clicks ?? 0) / totalClicks) * 100).toFixed(0)}%)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Guardar de nuevo */}
+          <div className="flex justify-end">
+            <button
+              onClick={handleSaveSnapshot}
+              disabled={saving}
+              className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-3 py-1.5 transition-all disabled:opacity-50"
+            >
+              {saving ? 'Actualizando…' : 'Actualizar snapshot'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Keywords con sparklines */}
+      {!kwLoading && kwHistory?.keywords?.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Keywords trackeadas</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Posición mensual — últimos {kwHistory.months?.length ?? 6} meses</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-700">
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-left">Keyword</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Posición actual</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">vs mes ant.</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Tendencia</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Clicks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kwHistory.keywords.map(kw => {
+                  const months  = kwHistory.months ?? []
+                  const last    = kw.history[kw.history.length - 1]
+                  const prev    = kw.history[kw.history.length - 2]
+                  const delta   = last?.position != null && prev?.position != null
+                    ? parseFloat((prev.position - last.position).toFixed(2))
+                    : null
+
+                  // Posición para el mes seleccionado (si está en los últimos 6)
+                  const snapEntry = kw.history.find(h => h.month === month)
+                  const displayPos = snapEntry?.position ?? last?.position
+
+                  return (
+                    <tr key={kw.id} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300 max-w-[180px] truncate font-medium">{kw.query}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                        {displayPos != null ? parseFloat(displayPos).toFixed(1) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <DeltaBadge delta={delta != null ? -delta : null} />
+                        {delta == null && <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Sparkline history={kw.history} />
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-500">
+                        {fmtNum(last?.clicks ?? 0)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {!kwLoading && kwHistory?.keywords?.length === 0 && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">No hay keywords trackeadas para este proyecto.</p>
+          <p className="text-xs text-gray-400 mt-1">Agregá keywords en la tab <strong>Keywords</strong> para ver el historial aquí.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+export default function SeoTab({ projectId, projects }) {
+  const projectName = projects?.find(p => p.id === projectId)?.name ?? ''
+
+  if (!projectId) {
+    return (
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
+        <div className="text-4xl mb-3">🔍</div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Seleccioná un proyecto arriba para ver los datos de Search Console</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-8">
+      <LivePanel projectId={projectId} projectName={projectName} />
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <SnapshotPanel projectId={projectId} />
+      </div>
     </div>
   )
 }

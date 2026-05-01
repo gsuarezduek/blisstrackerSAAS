@@ -366,6 +366,54 @@ async function getHeatmap(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── GET /projects/:id/keywords/history-batch?months=6 ──────────────────────
+// Devuelve el historial de posición de TODAS las keywords trackeadas en los
+// últimos N meses. Usado para renderizar sparklines en la tab SEO.
+
+async function getHistoryBatch(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const months      = Math.min(Number(req.query.months) || 6, 12)
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId },
+      select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    // Generar lista de N meses hacia atrás desde el mes actual
+    const monthList = []
+    const now = new Date()
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      monthList.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
+
+    const tracked = await prisma.trackedKeyword.findMany({
+      where: { projectId, workspaceId },
+      include: {
+        rankings: {
+          where: { month: { in: monthList } },
+          orderBy: { month: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    const keywords = tracked.map(kw => ({
+      id:      kw.id,
+      query:   kw.query,
+      history: monthList.map(m => {
+        const r = kw.rankings.find(r => r.month === m)
+        return { month: m, position: r?.position ?? null, clicks: r?.clicks ?? 0, impressions: r?.impressions ?? 0 }
+      }),
+    }))
+
+    res.json({ keywords, months: monthList })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   listKeywords,
   addKeyword,
@@ -374,4 +422,5 @@ module.exports = {
   getHistory,
   generateAnalysis,
   getHeatmap,
+  getHistoryBatch,
 }

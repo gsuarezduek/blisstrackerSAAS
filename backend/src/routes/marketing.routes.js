@@ -85,9 +85,16 @@ router.get('/projects/:id/reports',          monthlyReport.listReports)
 router.get('/projects/:id/reports/:month',   monthlyReport.getReport)
 router.patch('/projects/:id/reports/:month', monthlyReport.updateReport)
 
+// SEO — Snapshots mensuales + Análisis IA (Google Search Console)
+router.get('/projects/:id/seo/snapshot/:month',  searchConsole.getSeoSnapshot)
+router.post('/projects/:id/seo/snapshots',        searchConsole.saveSeoSnapshot)
+router.get('/projects/:id/seo/ai-insights',       searchConsole.getSeoAiInsights)
+router.post('/projects/:id/seo/ai-insights',      searchConsole.createSeoAiInsights)
+
 // Keywords Tracking — rutas estáticas ANTES de las dinámicas /:kwId
 router.get('/projects/:id/keywords/suggest',         keywords.suggestKeywords)
 router.get('/projects/:id/keywords/heatmap',         keywords.getHeatmap)
+router.get('/projects/:id/keywords/history-batch',   keywords.getHistoryBatch)
 router.get('/projects/:id/keywords',                 keywords.listKeywords)
 router.post('/projects/:id/keywords',                keywords.addKeyword)
 router.delete('/projects/:id/keywords/:kwId',        keywords.removeKeyword)

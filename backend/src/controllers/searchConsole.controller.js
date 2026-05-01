@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const { fetchSearchConsoleData, fetchQueryPages, querySearchConsole } = require('../services/googleSearchConsole.service')
 const { getValidAccessToken } = require('../services/tokenRefresh.service')
 const { normalizeSiteUrl } = require('../utils/seo')
+const { saveMonthSnapshot, generateSeoAiInsights } = require('../services/searchConsoleSnapshot.service')
 
 // Acepta 'YYYY-MM-DD' solamente (Search Console no acepta 'NdaysAgo')
 const VALID_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -157,4 +158,141 @@ async function getQueryPages(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getSearchConsoleData, getQueryPages }
+// ─── SEO Snapshots ────────────────────────────────────────────────────────────
+
+function parseSnapshot(snap) {
+  return {
+    ...snap,
+    devices:    JSON.parse(snap.devices),
+    countries:  JSON.parse(snap.countries),
+    topQueries: JSON.parse(snap.topQueries),
+    topPages:   JSON.parse(snap.topPages),
+  }
+}
+
+/**
+ * GET /api/marketing/projects/:id/seo/snapshot/:month
+ * Devuelve el snapshot guardado para un mes (YYYY-MM). 404 si no existe.
+ */
+async function getSeoSnapshot(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.params
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'month debe tener formato YYYY-MM' })
+    }
+
+    const snap = await prisma.searchConsoleSnapshot.findUnique({
+      where: { projectId_month: { projectId, month } },
+    })
+
+    if (!snap) return res.status(404).json({ error: 'Sin datos para este mes' })
+    res.json(parseSnapshot(snap))
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/seo/snapshots
+ * Guarda manualmente un snapshot. body: { month: 'YYYY-MM' }
+ */
+async function saveSeoSnapshot(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.body
+
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'month debe tener formato YYYY-MM' })
+    }
+
+    const snap = await saveMonthSnapshot(projectId, workspaceId, month)
+    if (!snap) {
+      return res.status(400).json({
+        error: 'No se pudo guardar el snapshot. Verificá que GSC esté conectado y activo.',
+      })
+    }
+    res.json(parseSnapshot(snap))
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/marketing/projects/:id/seo/ai-insights
+ * Devuelve el análisis IA guardado (si existe) con tiempo de cooldown.
+ */
+async function getSeoAiInsights(req, res, next) {
+  try {
+    const projectId = Number(req.params.id)
+    const existing  = await prisma.seoAiInsight.findUnique({ where: { projectId } })
+
+    if (!existing) return res.json({ insight: null, cooldownRemaining: 0 })
+
+    const ageMs   = Date.now() - new Date(existing.generatedAt).getTime()
+    const cooldown = Math.max(0, 60 * 60 * 1000 - ageMs)
+
+    res.json({
+      insight:           JSON.parse(existing.content),
+      generatedAt:       existing.generatedAt,
+      cooldownRemaining: Math.ceil(cooldown / 60000),
+    })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/seo/ai-insights
+ * (Re)genera el análisis IA con datos live de los últimos 30 días.
+ */
+async function createSeoAiInsights(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    // Cooldown de 1 hora
+    const existing = await prisma.seoAiInsight.findUnique({ where: { projectId } })
+    if (existing) {
+      const ageMs = Date.now() - new Date(existing.generatedAt).getTime()
+      if (ageMs < 60 * 60 * 1000) {
+        const waitMins = Math.ceil((60 * 60 * 1000 - ageMs) / 60000)
+        return res.status(429).json({ error: `Esperá ${waitMins} min antes de regenerar.`, waitMins })
+      }
+    }
+
+    const [project, integration] = await Promise.all([
+      prisma.project.findFirst({
+        where:  { id: projectId, workspaceId },
+        select: { id: true, name: true, websiteUrl: true },
+      }),
+      prisma.projectIntegration.findUnique({
+        where:  { projectId_type: { projectId, type: 'google_search_console' } },
+      }),
+    ])
+
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!integration || integration.status !== 'active') {
+      return res.status(400).json({ error: 'Google Search Console no conectado o inactivo' })
+    }
+
+    const siteUrl = normalizeSiteUrl(integration.propertyId || project.websiteUrl)
+    if (!siteUrl) return res.status(400).json({ error: 'No hay URL de sitio configurada' })
+
+    const end   = new Date()
+    const start = new Date(); start.setDate(start.getDate() - 30)
+
+    const liveData = await fetchSearchConsoleData(
+      integration, siteUrl,
+      start.toISOString().slice(0, 10),
+      end.toISOString().slice(0, 10),
+      { compare: true },
+    )
+
+    const insight = await generateSeoAiInsights(projectId, workspaceId, liveData)
+    res.json({ insight, generatedAt: new Date(), cooldownRemaining: 60 })
+  } catch (err) { next(err) }
+}
+
+module.exports = {
+  getSearchConsoleData, getQueryPages,
+  getSeoSnapshot, saveSeoSnapshot,
+  getSeoAiInsights, createSeoAiInsights,
+}
