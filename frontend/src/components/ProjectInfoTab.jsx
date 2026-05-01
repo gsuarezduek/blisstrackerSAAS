@@ -69,17 +69,22 @@ export default function ProjectInfoTab({ project, onSave }) {
         `/marketing/integrations/google/auth-url?projectId=${project.id}&type=${type}`
       )
 
-      // Si el workspace ya tiene tokens de otro proyecto, reutilizarlos sin pasar por OAuth
-      if (data.hasExistingTokens) {
-        const r = await api.post(
-          `/marketing/projects/${project.id}/integrations/connect-existing?type=${type}`
-        )
-        setIntegrations(prev => {
-          const others = prev.filter(i => i.type !== type)
-          return [...others, r.data]
-        })
-        setIntegLoading(prev => ({ ...prev, [type]: false }))
-        return
+      // Si el workspace ya tiene tokens de otro proyecto, intentar reutilizarlos
+      // Solo si no se está forzando reconexión (forceOAuth)
+      if (data.hasExistingTokens && !data.forceOAuth) {
+        try {
+          const r = await api.post(
+            `/marketing/projects/${project.id}/integrations/connect-existing?type=${type}`
+          )
+          setIntegrations(prev => {
+            const others = prev.filter(i => i.type !== type)
+            return [...others, r.data]
+          })
+          setIntegLoading(prev => ({ ...prev, [type]: false }))
+          return
+        } catch {
+          // Si falla la reutilización, caer al flujo OAuth completo
+        }
       }
 
       // Primera vez: flujo OAuth con popup
