@@ -213,7 +213,7 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 - When a model has two relations to the same model, named relations are required (e.g. `Task.createdBy` / `Task.user` both pointing to `User`).
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_workspace_deletion_request`, `add_email_log`, `update_default_avatar`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `fix_service_unique_index` (drops global Service_name_key), `add_project_connections` (Project.connections JSON), `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique` (drops residual global Project_name_key), `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_pagespeed_result` (PageSpeedResult), `add_instagram_snapshot` (InstagramSnapshot — métricas mensuales Instagram), `add_tiktok` (TikTokSnapshot + TikTokFollowerLog).
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_workspace_deletion_request`, `add_email_log`, `update_default_avatar`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `fix_service_unique_index` (drops global Service_name_key), `add_project_connections` (Project.connections JSON), `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique` (drops residual global Project_name_key), `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_pagespeed_result` (PageSpeedResult), `add_instagram_snapshot` (InstagramSnapshot — métricas mensuales Instagram), `add_tiktok` (TikTokSnapshot + TikTokFollowerLog), `add_monthly_report` (MonthlyReport — token UUID para URL pública del informe mensual del cliente).
 - `TaskComment.content` is the text field (not `text`). The `parentId` self-relation exists for future threading but is not used by the UI yet.
 
 ### API routes summary
@@ -353,6 +353,14 @@ POST   /api/marketing/projects/:id/pagespeed                # body: { strategy }
 GET    /api/marketing/projects/:id/pagespeed                # ?strategy=mobile&limit=5 — historial de resultados
 GET    /api/marketing/projects/:id/pagespeed/:resultId      # estado y detalle de un análisis
 
+# Marketing — Informes mensuales (autenticados)
+GET    /api/marketing/projects/:id/reports                  # lista informes del proyecto
+GET    /api/marketing/projects/:id/reports/:month           # obtiene/crea informe (YYYY-MM) + agrega datos
+PATCH  /api/marketing/projects/:id/reports/:month           # actualiza objectives y notes
+
+# Informes — acceso público (sin auth)
+GET    /api/public/report/:token                            # datos completos del informe para el cliente
+
 # Billing
 GET    /api/billing/status               # estado trial/suscripción del workspace
 POST   /api/billing/checkout             # crea Stripe Checkout session (admin/owner)
@@ -391,7 +399,8 @@ GET    /api/feature-flags/:key           # check flag para workspace actual (aut
 /preferences      → Preferences.jsx      (PrivateRoute)
 /realtime         → RealTime.jsx         (PrivateRoute)
 /docs             → Docs.jsx             (PrivateRoute)
-/marketing        → Marketing.jsx        (PrivateRoute) — tabs GEO y Web operativos; Informes con GA4 dashboard
+/marketing        → Marketing.jsx        (PrivateRoute) — tabs GEO y Web operativos; Informes con informe mensual consolidado
+/report/:token    → ReportPublic.jsx     (pública, sin auth) — informe mensual para clientes identificado por token UUID
 /oauth-result     → OAuthResult.jsx      (pública) — puente de callback OAuth: postMessage al opener y cierra popup
 /billing          → Billing.jsx          (PrivateRoute) — visible para todos; acciones solo admin/owner
 /reports             → Reports.jsx          (AdminRoute)

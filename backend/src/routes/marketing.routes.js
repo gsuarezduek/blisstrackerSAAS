@@ -16,6 +16,7 @@ const tiktokIntegrations = require('../controllers/integrations.tiktok.controlle
 const tiktok             = require('../controllers/tiktok.controller')
 const metaAds           = require('../controllers/metaAds.controller')
 const googleAds         = require('../controllers/googleAds.controller')
+const monthlyReport     = require('../controllers/monthlyReport.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -78,6 +79,11 @@ router.post('/projects/:id/insights/:month',      analyticsSnapshot.createInsigh
 router.post('/projects/:id/pagespeed',            pageSpeed.runAnalysis)
 router.get('/projects/:id/pagespeed',             pageSpeed.listResults)
 router.get('/projects/:id/pagespeed/:resultId',   pageSpeed.getResult)
+
+// Informes mensuales
+router.get('/projects/:id/reports',          monthlyReport.listReports)
+router.get('/projects/:id/reports/:month',   monthlyReport.getReport)
+router.patch('/projects/:id/reports/:month', monthlyReport.updateReport)
 
 // Keywords Tracking — rutas estáticas ANTES de las dinámicas /:kwId
 router.get('/projects/:id/keywords/suggest',         keywords.suggestKeywords)

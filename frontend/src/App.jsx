@@ -53,8 +53,9 @@ import SuperAdmin from './pages/SuperAdmin'
 import JoinWorkspace from './pages/JoinWorkspace'
 import Marketing   from './pages/Marketing'
 import Billing     from './pages/Billing'
-import OAuthResult from './pages/OAuthResult'
-import LegalPage   from './pages/TermsPage'
+import OAuthResult  from './pages/OAuthResult'
+import LegalPage    from './pages/TermsPage'
+import ReportPublic from './pages/ReportPublic'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -97,6 +98,7 @@ export default function App() {
           <Route path="/oauth"        element={<OAuthPopup    />} />
           <Route path="/auth"         element={<AuthCallback  />} />
           <Route path="/oauth-result" element={<OAuthResult   />} />
+          <Route path="/report/:token" element={<ReportPublic />} />
           <Route path="/condiciones"  element={<LegalPage docKey="terms_of_service" />} />
           <Route path="/privacidad"   element={<LegalPage docKey="privacy_policy"   />} />
           <Route path="/join"     element={<JoinWorkspace />} />

@@ -7,6 +7,7 @@ import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
 import SaludTab    from '../components/marketing/SaludTab'
+import InformesTab  from '../components/marketing/InformesTab'
 import InstagramTab from '../components/marketing/InstagramTab'
 import TikTokTab    from '../components/marketing/TikTokTab'
 import MetaAdsTab    from '../components/marketing/MetaAdsTab'
@@ -140,7 +141,7 @@ export default function Marketing() {
   const activeSub = activeNav.subs.find(s => s.id === sub) ?? activeNav.subs[0]
 
   function renderContent() {
-    if (tab === 'informes') return <SaludTab projectId={projectId} onNavigate={(t, s) => { setTab(t); setSub(s) }} />
+    if (tab === 'informes') return <InformesTab projectId={projectId} />
 
     if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />
     if (activeSub?.soon)                               return <ComingSoon label={activeSub.label} />

@@ -1,279 +1,245 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import ReportViewer from './ReportViewer'
 
-const DATE_RANGES = [
-  { value: '7daysAgo',  label: 'Últimos 7 días' },
-  { value: '30daysAgo', label: 'Últimos 30 días' },
-  { value: '90daysAgo', label: 'Últimos 90 días' },
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function currentMonthStr() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function prevMonthStr(month) {
+  const [y, m] = month.split('-').map(Number)
+  const pm = m === 1 ? 12 : m - 1
+  const py = m === 1 ? y - 1 : y
+  return `${py}-${String(pm).padStart(2, '0')}`
+}
+
+function nextMonthStr(month) {
+  const [y, m] = month.split('-').map(Number)
+  const nm = m === 12 ? 1 : m + 1
+  const ny = m === 12 ? y + 1 : y
+  return `${ny}-${String(nm).padStart(2, '0')}`
+}
+
+function monthLabel(month) {
+  if (!month) return ''
+  const [y, m] = month.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+}
+
+// ─── Modal de objetivos ───────────────────────────────────────────────────────
+
+const OBJECTIVE_FIELDS = [
+  { key: 'sessions',      label: 'Sesiones web',          placeholder: '20000' },
+  { key: 'newUsers',      label: 'Usuarios nuevos',       placeholder: '8000'  },
+  { key: 'conversions',   label: 'Conversiones',          placeholder: '150'   },
+  { key: 'followersIg',   label: 'Seguidores Instagram',  placeholder: '15000' },
+  { key: 'engagementIg',  label: 'Engagement IG (%)',     placeholder: '3.5'   },
+  { key: 'followersTk',   label: 'Seguidores TikTok',     placeholder: '5000'  },
 ]
 
-function fmt(n, decimals = 0) {
-  if (n == null || n === '') return '—'
-  return Number(n).toLocaleString('es-AR', { maximumFractionDigits: decimals })
-}
+function ObjectivesModal({ objectives, onSave, onClose, saving }) {
+  const [draft, setDraft] = useState(
+    OBJECTIVE_FIELDS.reduce((acc, f) => ({
+      ...acc,
+      [f.key]: objectives[f.key] != null ? String(objectives[f.key]) : '',
+    }), {})
+  )
 
-function fmtDuration(seconds) {
-  if (!seconds) return '—'
-  const m = Math.floor(seconds / 60)
-  const s = Math.round(seconds % 60)
-  return `${m}m ${String(s).padStart(2, '0')}s`
-}
+  function handleSave() {
+    const parsed = {}
+    OBJECTIVE_FIELDS.forEach(f => {
+      const v = parseFloat(draft[f.key])
+      if (!isNaN(v) && v > 0) parsed[f.key] = v
+    })
+    onSave(parsed)
+  }
 
-function MetricCard({ label, value, sub }) {
   return (
-    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white">{value ?? '—'}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">🎯 Objetivos del mes</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
+        </div>
+
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Definí las metas para este mes. Solo se muestran las métricas con datos disponibles.
+        </p>
+
+        <div className="space-y-3">
+          {OBJECTIVE_FIELDS.map(f => (
+            <div key={f.key} className="flex items-center gap-3">
+              <label className="text-sm text-gray-700 dark:text-gray-300 w-44 shrink-0">{f.label}</label>
+              <input
+                type="number"
+                value={draft[f.key]}
+                onChange={e => setDraft(d => ({ ...d, [f.key]: e.target.value }))}
+                placeholder={f.placeholder}
+                className="flex-1 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 mt-6">
+          <button onClick={onClose} className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Guardando...' : 'Guardar objetivos'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
 
-export default function InformesTab() {
-  const [projects,      setProjects]      = useState([])
-  const [projectId,     setProjectId]     = useState('')
-  const [dateRange,     setDateRange]     = useState('30daysAgo')
-  const [analytics,     setAnalytics]     = useState(null)
-  const [loading,       setLoading]       = useState(false)
-  const [error,         setError]         = useState('')
-  const [errorStatus,   setErrorStatus]   = useState(null) // 'no_integration' | 'no_property' | 'error' | 'revoked'
+// ─── Componente principal ─────────────────────────────────────────────────────
 
-  // Cargar lista de proyectos
-  useEffect(() => {
-    api.get('/projects').then(r => {
-      setProjects(r.data)
-      if (r.data.length > 0) setProjectId(String(r.data[0].id))
-    }).catch(() => {})
-  }, [])
+export default function InformesTab({ projectId }) {
+  const today = currentMonthStr()
 
-  // Cargar datos de analytics cuando cambia proyecto o período
-  useEffect(() => {
+  const [month,       setMonth]       = useState(today)
+  const [reportMeta,  setReportMeta]  = useState(null)
+  const [reportData,  setReportData]  = useState(null)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState(null)
+  const [showObjModal, setShowObjModal] = useState(false)
+  const [savingObjs,  setSavingObjs]  = useState(false)
+  const [copied,      setCopied]      = useState(false)
+
+  const fetchReport = useCallback(async () => {
     if (!projectId) return
     setLoading(true)
-    setError('')
-    setErrorStatus(null)
-    setAnalytics(null)
+    setError(null)
+    try {
+      const res = await api.get(`/marketing/projects/${projectId}/reports/${month}`)
+      setReportMeta(res.data.report)
+      setReportData(res.data.data)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al cargar el informe')
+    } finally {
+      setLoading(false)
+    }
+  }, [projectId, month])
 
-    api.get(`/marketing/projects/${projectId}/analytics?dateRange=${dateRange}`)
-      .then(r => setAnalytics(r.data))
-      .catch(e => {
-        const status = e.response?.status
-        const body   = e.response?.data
+  useEffect(() => {
+    fetchReport()
+  }, [fetchReport])
 
-        if (status === 404) {
-          setErrorStatus('no_integration')
-        } else if (body?.status === 'no_property') {
-          setErrorStatus('no_property')
-        } else if (body?.code === 'TOKEN_EXPIRED' || body?.status === 'revoked' || body?.status === 'error') {
-          setErrorStatus('revoked')
-        } else {
-          setError(body?.error || 'Error al cargar datos de Analytics')
-        }
-      })
-      .finally(() => setLoading(false))
-  }, [projectId, dateRange])
+  async function handleSaveObjectives(objectives) {
+    setSavingObjs(true)
+    try {
+      const res = await api.patch(`/marketing/projects/${projectId}/reports/${month}`, { objectives })
+      setReportMeta(prev => ({ ...prev, objectives: res.data.report.objectives }))
+      setShowObjModal(false)
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al guardar objetivos')
+    } finally {
+      setSavingObjs(false)
+    }
+  }
 
-  const overview = analytics?.overview ?? {}
+  function handleCopyLink() {
+    if (!reportMeta?.token) return
+    const url = `${window.location.origin}/report/${reportMeta.token}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    })
+  }
+
+  const isCurrentOrFuture = month >= today
+  const canGoNext = month < today
+
+  if (!projectId) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+        <p className="text-4xl mb-3">📊</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">Seleccioná un proyecto para ver el informe mensual.</p>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
 
-      {/* Controles */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex flex-wrap gap-4 items-end">
-        <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-            Proyecto
-          </label>
-          <select
-            value={projectId}
-            onChange={e => setProjectId(e.target.value)}
-            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+      {/* ── Barra de navegación de mes ── */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMonth(prevMonthStr(month))}
+            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
-            {projects.map(p => (
-              <option key={p.id} value={String(p.id)}>{p.name}</option>
-            ))}
-          </select>
+            ◀
+          </button>
+          <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize min-w-[140px] text-center">
+            {monthLabel(month)}
+          </span>
+          <button
+            onClick={() => canGoNext && setMonth(nextMonthStr(month))}
+            disabled={!canGoNext}
+            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ▶
+          </button>
         </div>
-        <div className="w-[180px]">
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-            Período
-          </label>
-          <select
-            value={dateRange}
-            onChange={e => setDateRange(e.target.value)}
-            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowObjModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
-            {DATE_RANGES.map(d => (
-              <option key={d.value} value={d.value}>{d.label}</option>
-            ))}
-          </select>
+            🎯 Objetivos
+          </button>
+          <button
+            onClick={handleCopyLink}
+            disabled={!reportMeta?.token}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-40"
+          >
+            {copied ? '✓ Copiado' : '📋 Link del cliente'}
+          </button>
         </div>
       </div>
 
-      {/* Estados de error / sin integración */}
-      {errorStatus === 'no_integration' && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-6 text-center">
-          <div className="text-3xl mb-2">📊</div>
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-            Google Analytics no está conectado para este proyecto
-          </p>
-          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-            Conectalo desde <strong>Mis Proyectos → [Proyecto] → Info</strong>
-          </p>
-        </div>
-      )}
-
-      {errorStatus === 'no_property' && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-6 text-center">
-          <div className="text-3xl mb-2">🔢</div>
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-            Falta el GA4 Property ID
-          </p>
-          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-            Ingresalo en <strong>Mis Proyectos → [Proyecto] → Info → Integraciones Google</strong>
-          </p>
-        </div>
-      )}
-
-      {errorStatus === 'error' && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl p-6 text-center">
-          <div className="text-3xl mb-2">⚠️</div>
-          <p className="text-sm font-medium text-red-700 dark:text-red-300">
-            La integración con Google Analytics tiene un error
-          </p>
-          <p className="text-xs text-red-500 dark:text-red-400 mt-1">
-            Desconectá y volvé a conectar desde la tab Info del proyecto
-          </p>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-2xl p-4 text-sm text-red-700 dark:text-red-400">
-          {error}
-        </div>
-      )}
-
-      {/* Loading */}
+      {/* ── Contenido ── */}
       {loading && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-          <div className="inline-block w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mb-3" />
-          <p className="text-sm text-gray-400">Cargando datos de Google Analytics…</p>
+        <div className="flex justify-center py-16">
+          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
-      {/* Datos GA4 */}
-      {analytics && !loading && (
-        <>
-          {/* Métricas principales */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-              <span>📊</span>
-              Google Analytics
-              <span className="text-xs font-normal text-gray-400">
-                · {DATE_RANGES.find(d => d.value === dateRange)?.label}
-              </span>
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <MetricCard label="Sesiones"         value={fmt(overview.sessions)} />
-              <MetricCard label="Usuarios activos" value={fmt(overview.activeUsers)} />
-              <MetricCard label="Nuevos usuarios"  value={fmt(overview.newUsers)} />
-              <MetricCard label="Vistas de página" value={fmt(overview.screenPageViews)} />
-              <MetricCard
-                label="Tasa de rebote"
-                value={overview.bounceRate != null
-                  ? `${fmt(overview.bounceRate * 100, 1)}%`
-                  : '—'}
-              />
-              <MetricCard
-                label="Duración media"
-                value={fmtDuration(overview.averageSessionDuration)}
-              />
-            </div>
-          </div>
-
-          {/* Canales de tráfico */}
-          {analytics.channels?.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-                Canales de tráfico
-              </h3>
-              <div className="space-y-2.5">
-                {analytics.channels.map((ch, i) => {
-                  const maxSessions = analytics.channels[0]?.sessions || 1
-                  const pct = Math.round((ch.sessions / maxSessions) * 100)
-                  return (
-                    <div key={i}>
-                      <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-gray-700 dark:text-gray-300">
-                          {ch.channel || 'Directo'}
-                        </span>
-                        <span className="text-gray-500 text-xs">
-                          {fmt(ch.sessions)} ses. · {fmt(ch.users)} usr.
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary-500 rounded-full transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Top páginas */}
-          {analytics.topPages?.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-                Top páginas
-              </h3>
-              <div className="space-y-3">
-                {analytics.topPages.map((page, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <span className="text-xs text-gray-400 w-5 mt-0.5 flex-shrink-0 text-right">
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate">
-                        {page.path}
-                      </p>
-                      {page.title && page.title !== page.path && (
-                        <p className="text-xs text-gray-400 truncate">{page.title}</p>
-                      )}
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {fmt(page.pageviews)}
-                      </p>
-                      <p className="text-xs text-gray-400">vistas</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Timestamp */}
-          <p className="text-xs text-gray-400 text-right">
-            Datos actualizados: {analytics.fetchedAt
-              ? new Date(analytics.fetchedAt).toLocaleString('es-AR')
-              : '—'}
-          </p>
-        </>
+      {!loading && error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-5 text-center">
+          <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+          <button onClick={fetchReport} className="mt-2 text-xs text-red-500 underline">Reintentar</button>
+        </div>
       )}
 
-      {/* Placeholder Google Ads */}
-      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600 p-6 text-center">
-        <div className="text-2xl mb-2">📣</div>
-        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Google Ads — Próximamente</p>
-        <p className="text-xs text-gray-400 mt-1">
-          En proceso de configuración del Developer Token con Google.
-        </p>
-      </div>
+      {!loading && !error && reportData && (
+        <ReportViewer
+          data={reportData}
+          objectives={reportMeta?.objectives ?? {}}
+          isPublic={false}
+        />
+      )}
 
+      {/* ── Modal de objetivos ── */}
+      {showObjModal && (
+        <ObjectivesModal
+          objectives={reportMeta?.objectives ?? {}}
+          onSave={handleSaveObjectives}
+          onClose={() => setShowObjModal(false)}
+          saving={savingObjs}
+        />
+      )}
     </div>
   )
 }
