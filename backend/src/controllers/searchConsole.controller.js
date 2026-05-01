@@ -82,7 +82,7 @@ async function getSearchConsoleData(req, res, next) {
       await prisma.projectIntegration.update({
         where: { projectId_type: { projectId: Number(req.params.id), type: 'google_search_console' } },
         data:  { status: 'error' },
-      }).catch(() => {})
+      }).catch(err => console.error('[SearchConsole] Error al marcar integración como error:', err.message))
       return res.status(401).json({
         error: 'Token revocado. Desconectá y volvé a conectar Search Console.',
         status: 'revoked',

@@ -53,7 +53,7 @@ async function runAnalysis(req, res) {
       await prisma.pageSpeedResult.update({
         where: { id: record.id },
         data:  { status: 'error', errorMsg: err.message },
-      }).catch(() => {})
+      }).catch(e => console.error('[PageSpeed] Error al guardar estado de error:', e.message))
     }
   })
 }

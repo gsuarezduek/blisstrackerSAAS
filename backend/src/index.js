@@ -83,48 +83,92 @@ cron.schedule('0 4 1 * *', async () => {
   finally { keywordRankingsRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
-// Cron: limpiar notificaciones antiguas — domingos 03:00 hora Buenos Aires
+// Cron: limpieza semanal de tablas de crecimiento ilimitado — domingos 03:00 hora Buenos Aires
 cron.schedule('0 3 * * 0', async () => {
-  console.log('[NotifCleanup] Limpiando notificaciones antiguas...')
-  const prisma = require('./lib/prisma')
-  const now = new Date()
-  const cutoffRead   = new Date(now - 30 * 24 * 60 * 60 * 1000)  // 30 días
-  const cutoffUnread = new Date(now - 90 * 24 * 60 * 60 * 1000)  // 90 días
-  const { count } = await prisma.notification.deleteMany({
-    where: {
-      OR: [
-        { read: true,  createdAt: { lt: cutoffRead   } },
-        { read: false, createdAt: { lt: cutoffUnread } },
-      ],
-    },
-  })
-  console.log(count > 0 ? `[NotifCleanup] ${count} notificación(es) eliminada(s).` : '[NotifCleanup] Nada que limpiar.')
+  try {
+    const prisma = require('./lib/prisma')
+    const now    = new Date()
+    const days   = d => new Date(now - d * 24 * 60 * 60 * 1000)
+
+    // Notificaciones: leídas >30d, no leídas >90d
+    const { count: notifCount } = await prisma.notification.deleteMany({
+      where: {
+        OR: [
+          { read: true,  createdAt: { lt: days(30)  } },
+          { read: false, createdAt: { lt: days(90)  } },
+        ],
+      },
+    })
+
+    // Logs de tokens IA: >90d (solo son estadísticas históricas)
+    const { count: tokenCount } = await prisma.aiTokenLog.deleteMany({
+      where: { createdAt: { lt: days(90) } },
+    })
+
+    // Historial de logins: >180d
+    const { count: loginCount } = await prisma.userLogin.deleteMany({
+      where: { loginAt: { lt: days(180) } },
+    })
+
+    // Insights diarios: >365d (se usan para contexto de IA hasta hace ~30d, los viejos no sirven)
+    const { count: insightCount } = await prisma.dailyInsight.deleteMany({
+      where: { createdAt: { lt: days(365) } },
+    })
+
+    // Email logs: >180d
+    const { count: emailCount } = await prisma.emailLog.deleteMany({
+      where: { createdAt: { lt: days(180) } },
+    })
+
+    const totals = [
+      notifCount  && `${notifCount} notif.`,
+      tokenCount  && `${tokenCount} token logs`,
+      loginCount  && `${loginCount} logins`,
+      insightCount && `${insightCount} insights`,
+      emailCount  && `${emailCount} email logs`,
+    ].filter(Boolean)
+
+    console.log(totals.length
+      ? `[WeeklyCleanup] Eliminados: ${totals.join(', ')}`
+      : '[WeeklyCleanup] Nada que limpiar.'
+    )
+  } catch (err) {
+    console.error('[WeeklyCleanup] Error en limpieza semanal:', err.message)
+  }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: auto-pausar tareas EN CURSO al final del día — medianoche hora Buenos Aires
 cron.schedule('0 0 * * *', async () => {
   console.log('[AutoPause] Pausando tareas en curso al cierre del día...')
-  const prisma = require('./lib/prisma')
-  const { count } = await prisma.task.updateMany({
-    where: { status: 'IN_PROGRESS' },
-    data: { status: 'PAUSED', pausedAt: new Date() },
-  })
-  console.log(count > 0 ? `[AutoPause] ${count} tarea(s) pausada(s).` : '[AutoPause] Sin tareas activas.')
+  try {
+    const prisma = require('./lib/prisma')
+    const { count } = await prisma.task.updateMany({
+      where: { status: 'IN_PROGRESS' },
+      data: { status: 'PAUSED', pausedAt: new Date() },
+    })
+    console.log(count > 0 ? `[AutoPause] ${count} tarea(s) pausada(s).` : '[AutoPause] Sin tareas activas.')
+  } catch (err) {
+    console.error('[AutoPause] Error al pausar tareas:', err.message)
+  }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: marcar trials expirados como past_due — diariamente a las 03:00 ART
 cron.schedule('0 3 * * *', async () => {
-  const expired = await prisma.workspace.findMany({
-    where: { status: 'trialing', trialEndsAt: { lt: new Date() } },
-    select: { id: true },
-  })
-  if (expired.length === 0) return
-  const ids = expired.map(w => w.id)
-  const { count } = await prisma.workspace.updateMany({
-    where: { id: { in: ids } },
-    data:  { status: 'past_due' },
-  })
-  console.log(`[TrialExpiry] ${count} workspace(s) marcado(s) como past_due.`)
+  try {
+    const expired = await prisma.workspace.findMany({
+      where: { status: 'trialing', trialEndsAt: { lt: new Date() } },
+      select: { id: true },
+    })
+    if (expired.length === 0) return
+    const ids = expired.map(w => w.id)
+    const { count } = await prisma.workspace.updateMany({
+      where: { id: { in: ids } },
+      data:  { status: 'past_due' },
+    })
+    console.log(`[TrialExpiry] ${count} workspace(s) marcado(s) como past_due.`)
+  } catch (err) {
+    console.error('[TrialExpiry] Error al marcar trials expirados:', err.message)
+  }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: GEO audit mensual — 1° del mes 01:00 ART

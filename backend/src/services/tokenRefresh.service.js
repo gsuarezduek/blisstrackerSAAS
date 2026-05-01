@@ -38,7 +38,7 @@ async function getValidAccessToken(integration) {
       await prisma.projectIntegration.update({
         where: { id: integration.id },
         data:  { status: 'expired' },
-      }).catch(() => {})
+      }).catch(err => console.error('[TokenRefresh] Error al marcar integración como expirada:', err.message))
       const e = new Error('El token de Google expiró. Reconectá la integración.')
       e.code = 'TOKEN_EXPIRED'
       throw e

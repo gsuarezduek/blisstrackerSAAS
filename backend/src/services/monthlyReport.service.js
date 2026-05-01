@@ -373,7 +373,7 @@ Respondé SOLO con un JSON con esta estructura exacta:
       inputTokens: message.usage?.input_tokens  ?? 0,
       outputTokens: message.usage?.output_tokens ?? 0,
       feature:     'monthly_report',
-    }).catch(() => {})
+    }).catch(err => console.error('[MonthlyReport] Error al registrar tokens de IA:', err.message))
 
     const raw       = message.content[0].text.trim()
     const jsonMatch = raw.match(/\{[\s\S]*\}/)

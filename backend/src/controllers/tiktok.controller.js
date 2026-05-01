@@ -42,7 +42,7 @@ async function getMetrics(req, res, next) {
       await prisma.projectIntegration.update({
         where: { id: integration.id },
         data:  { status: 'expired' },
-      }).catch(() => {})
+      }).catch(err => console.error('[TikTok] Error al marcar integración como expirada (token):', err.message))
       return res.status(400).json({ error: tokenErr.message, code: 'TOKEN_EXPIRED' })
     }
 
@@ -58,7 +58,7 @@ async function getMetrics(req, res, next) {
         await prisma.projectIntegration.update({
           where: { id: integration.id },
           data:  { status: 'expired' },
-        }).catch(() => {})
+        }).catch(err => console.error('[TikTok] Error al marcar integración como expirada (API 401):', err.message))
         return res.status(400).json({ error: 'Token de TikTok inválido. Reconectá la cuenta.', code: 'TOKEN_EXPIRED' })
       }
       return res.status(502).json({ error: 'Error al obtener datos de TikTok', code: 'API_ERROR' })

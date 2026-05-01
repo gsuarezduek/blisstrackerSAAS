@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import ReportViewer from './ReportViewer'
 
@@ -114,25 +114,25 @@ export default function InformesTab({ projectId }) {
   const [showObjModal, setShowObjModal] = useState(false)
   const [savingObjs,  setSavingObjs]  = useState(false)
   const [copied,      setCopied]      = useState(false)
-
-  const fetchReport = useCallback(async () => {
-    if (!projectId) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await api.get(`/marketing/projects/${projectId}/reports/${month}`)
-      setReportMeta(res.data.report)
-      setReportData(res.data.data)
-    } catch (err) {
-      setError(err.response?.data?.error || 'Error al cargar el informe')
-    } finally {
-      setLoading(false)
-    }
-  }, [projectId, month])
+  const [retryKey,    setRetryKey]    = useState(0)
 
   useEffect(() => {
-    fetchReport()
-  }, [fetchReport])
+    if (!projectId) return
+    const controller = new AbortController()
+    setLoading(true)
+    setError(null)
+    api.get(`/marketing/projects/${projectId}/reports/${month}`, { signal: controller.signal })
+      .then(res => {
+        setReportMeta(res.data.report)
+        setReportData(res.data.data)
+      })
+      .catch(err => {
+        if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
+        setError(err.response?.data?.error || 'Error al cargar el informe')
+      })
+      .finally(() => setLoading(false))
+    return () => controller.abort()
+  }, [projectId, month, retryKey])
 
   async function handleSaveObjectives(objectives) {
     setSavingObjs(true)
@@ -219,7 +219,7 @@ export default function InformesTab({ projectId }) {
       {!loading && error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-5 text-center">
           <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
-          <button onClick={fetchReport} className="mt-2 text-xs text-red-500 underline">Reintentar</button>
+          <button onClick={() => setRetryKey(k => k + 1)} className="mt-2 text-xs text-red-500 underline">Reintentar</button>
         </div>
       )}
 

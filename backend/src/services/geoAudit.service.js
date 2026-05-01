@@ -311,7 +311,7 @@ async function setStep(auditId, step) {
   await prisma.geoAudit.update({
     where: { id: auditId },
     data:  { errorMsg: step },
-  }).catch(() => {})
+  }).catch(err => console.error('[GeoAudit] Error al actualizar paso:', err.message))
 }
 
 async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
@@ -386,7 +386,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
         status:   'failed',
         errorMsg: err.message?.slice(0, 500) ?? 'Error desconocido',
       },
-    }).catch(() => {})
+    }).catch(e => console.error('[GeoAudit] Error al marcar audit como fallido:', e.message))
   }
 }
 

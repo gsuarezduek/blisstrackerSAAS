@@ -249,7 +249,7 @@ async function toggleMemberActive(req, res, next) {
     })
 
     // Sincronizar cantidad de seats en Stripe (fire-and-forget)
-    syncSeatsToStripe(workspaceId).catch(() => {})
+    syncSeatsToStripe(workspaceId).catch(err => console.error('[Workspace] Error sincronizando seats (member update):', err.message))
 
     res.json({
       ...user,
@@ -337,7 +337,7 @@ async function createWorkspace(req, res, next) {
       return { workspace, owner }
     })
 
-    sendWelcomeEmail(ownerEmail, ownerName, result.workspace.id).catch(() => {})
+    sendWelcomeEmail(ownerEmail, ownerName, result.workspace.id).catch(err => console.error('[Workspace] Error enviando welcome email:', err.message))
 
     // Crear Stripe Customer de forma asíncrona (no bloquea el registro si Stripe falla)
     if (stripe) {
@@ -567,7 +567,7 @@ async function joinWorkspace(req, res, next) {
     )
 
     // Sincronizar seats en Stripe (fire-and-forget)
-    syncSeatsToStripe(workspaceId).catch(() => {})
+    syncSeatsToStripe(workspaceId).catch(err => console.error('[Workspace] Error sincronizando seats (join):', err.message))
 
     res.json({
       token:  jwtToken,

@@ -134,7 +134,7 @@ async function reviewRequest(req, res, next) {
           ? `Tu solicitud de licencia (${request.startDate}${request.startDate !== request.endDate ? ' → ' + request.endDate : ''}) fue aprobada.`
           : `Tu solicitud de licencia (${request.startDate}${request.startDate !== request.endDate ? ' → ' + request.endDate : ''}) fue rechazada.${reviewNote ? ' Nota: ' + reviewNote.trim() : ''}`,
       },
-    }).catch(() => {})
+    }).catch(err => console.error('[Vacation] Error al crear notificación de revisión:', err.message))
 
     // Email al usuario
     sendVacationReviewEmail(
@@ -143,7 +143,7 @@ async function reviewRequest(req, res, next) {
       workspace.name,
       { ...request, status, reviewNote: reviewNote?.trim() || null },
       workspaceId,
-    ).catch(() => {})
+    ).catch(err => console.error('[Vacation] Error al enviar email de revisión:', err.message))
 
     res.json(updated)
   } catch (err) { next(err) }
@@ -240,7 +240,7 @@ async function createRequest(req, res, next) {
           type:    'VACATION_REQUEST',
           message: `${requester.name} solicitó días de licencia (${type}) del ${startDate}${startDate !== endDate ? ' al ' + endDate : ''}.`,
         })),
-      }).catch(() => {})
+      }).catch(err => console.error('[Vacation] Error al crear notificaciones de solicitud:', err.message))
 
       // Email a los admins
       const adminEmails = adminMembers.map(m => m.user.email)
@@ -250,7 +250,7 @@ async function createRequest(req, res, next) {
         workspace.name,
         { startDate, endDate, type, observation: observation?.trim() || null },
         workspaceId,
-      ).catch(() => {})
+      ).catch(err => console.error('[Vacation] Error al enviar email de solicitud:', err.message))
     }
 
     res.status(201).json(request)

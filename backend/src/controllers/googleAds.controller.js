@@ -38,7 +38,7 @@ async function getGoogleAdsData(req, res, next) {
       await prisma.projectIntegration.update({
         where: { projectId_type: { projectId: Number(req.params.id), type: 'google_ads' } },
         data:  { status: 'expired' },
-      }).catch(() => {})
+      }).catch(err => console.error('[GoogleAds] Error al marcar integración como expirada:', err.message))
       return res.status(400).json({
         error: 'El token de Google Ads expiró. Desconectá y volvé a conectar la integración.',
         code:  'TOKEN_EXPIRED',

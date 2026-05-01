@@ -89,7 +89,7 @@ async function login(req, res, next) {
 
       prisma.userLogin.create({
         data: { userId: user.id, workspaceId: workspace.id, method: 'email' },
-      }).catch(() => {})
+      }).catch(err => console.error('[Login] Error al registrar userLogin (email):', err.message))
 
       return res.json({ token: signToken(user, member, workspace), user: formatUser(user, member) })
     }
@@ -236,7 +236,7 @@ async function googleLogin(req, res, next) {
 
       prisma.userLogin.create({
         data: { userId: user.id, workspaceId: workspace.id, method: 'google' },
-      }).catch(() => {})
+      }).catch(err => console.error('[Login] Error al registrar userLogin (google):', err.message))
 
       return res.json({ token: signToken(user, member, workspace), user: formatUser(user, member) })
     }
@@ -281,7 +281,7 @@ async function switchWorkspace(req, res, next) {
 
     prisma.userLogin.create({
       data: { userId: user.id, workspaceId: workspace.id, method: 'switch' },
-    }).catch(() => {})
+    }).catch(err => console.error('[Login] Error al registrar userLogin (switch):', err.message))
 
     res.json({ token: signToken(user, member, workspace), slug: targetSlug })
   } catch (err) {

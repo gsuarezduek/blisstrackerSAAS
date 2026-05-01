@@ -162,7 +162,7 @@ Incluí las ${tendencias.length > 0 ? tendencias.length : '3-5'} tendencias prin
     model:        'claude-haiku-4-5-20251001',
     inputTokens:  response.usage?.input_tokens  ?? 0,
     outputTokens: response.usage?.output_tokens ?? 0,
-  }).catch(() => {})
+  }).catch(err => console.error('[AnalyticsSnapshot] Error al registrar tokens de IA:', err.message))
 
   const parsed = parseAIJson(response.content[0].text)
 

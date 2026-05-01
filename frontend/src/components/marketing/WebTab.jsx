@@ -656,6 +656,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
   // Fetch principal: analytics en tiempo real
   useEffect(() => {
     if (!projectId) return
+    const controller = new AbortController()
     const { startDate, endDate } = getDateParams(appliedRange.preset, appliedRange.start, appliedRange.end)
     setLoading(true)
     setError('')
@@ -668,9 +669,10 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
     const isMonthlyPreset = appliedRange.preset === 'thisMonth' || appliedRange.preset === 'lastMonth'
     const firstDayOfMonth = new Date().getDate() === 1
     const useCompare = compare && isMonthlyPreset && !(appliedRange.preset === 'thisMonth' && firstDayOfMonth)
-    api.get(`/marketing/projects/${projectId}/analytics?startDate=${startDate}&endDate=${endDate}&compare=${useCompare}`)
+    api.get(`/marketing/projects/${projectId}/analytics?startDate=${startDate}&endDate=${endDate}&compare=${useCompare}`, { signal: controller.signal })
       .then(r => setAnalytics(r.data))
       .catch(e => {
+        if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return
         const status = e.response?.status
         const body   = e.response?.data
         if (status === 404)                                              setErrorStatus('no_integration')
@@ -679,6 +681,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
         else setError(body?.error || 'Error al cargar datos')
       })
       .finally(() => setLoading(false))
+    return () => controller.abort()
   }, [projectId, appliedRange])
 
   // Cuando hay analytics y el período es mensual: cargar snapshot anterior + insight
@@ -687,34 +690,39 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
     const activeMonth = getActiveMonth(appliedRange.preset)
     if (!activeMonth) return
 
+    const controller = new AbortController()
     const compMonth = prevMonthStr(activeMonth)
 
     // Snapshot del mes anterior para deltas
-    api.get(`/marketing/projects/${projectId}/snapshots?month=${compMonth}`)
+    api.get(`/marketing/projects/${projectId}/snapshots?month=${compMonth}`, { signal: controller.signal })
       .then(r => setPrevSnap(r.data))
-      .catch(() => setPrevSnap(null))
+      .catch(e => { if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') setPrevSnap(null) })
 
     // Insight IA existente
-    api.get(`/marketing/projects/${projectId}/insights/${activeMonth}`)
+    api.get(`/marketing/projects/${projectId}/insights/${activeMonth}`, { signal: controller.signal })
       .then(r => setInsight(r.data))
-      .catch(() => setInsight(null))
+      .catch(e => { if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') setInsight(null) })
+
+    return () => controller.abort()
   }, [analytics, projectId, appliedRange])
 
   // Cargar último resultado PageSpeed + historial cuando cambia proyecto o estrategia
   useEffect(() => {
     if (!projectId) return
+    const controller = new AbortController()
     setPsResult(null)
     setPsHistory([])
-    api.get(`/marketing/projects/${projectId}/pagespeed?strategy=${psStrategy}&limit=6`)
+    api.get(`/marketing/projects/${projectId}/pagespeed?strategy=${psStrategy}&limit=6`, { signal: controller.signal })
       .then(r => {
         setPsHistory(r.data)
         if (r.data.length > 0) {
-          api.get(`/marketing/projects/${projectId}/pagespeed/${r.data[0].id}`)
+          api.get(`/marketing/projects/${projectId}/pagespeed/${r.data[0].id}`, { signal: controller.signal })
             .then(r2 => setPsResult(r2.data))
-            .catch(() => {})
+            .catch(e => { if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') console.error('[PageSpeed] Error al cargar último resultado:', e.message) })
         }
       })
-      .catch(() => {})
+      .catch(e => { if (e.name !== 'CanceledError' && e.code !== 'ERR_CANCELED') console.error('[PageSpeed] Error al cargar historial:', e.message) })
+    return () => controller.abort()
   }, [projectId, psStrategy])
 
   // Limpiar polling al desmontar

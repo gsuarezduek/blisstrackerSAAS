@@ -74,7 +74,7 @@ async function getAnalyticsData(req, res, next) {
       await prisma.projectIntegration.update({
         where: { projectId_type: { projectId: Number(req.params.id), type: 'google_analytics' } },
         data:  { status: 'expired' },
-      }).catch(() => {})
+      }).catch(err => console.error('[Analytics] Error al marcar integración como expirada:', err.message))
       return res.status(400).json({
         error: 'El token de Google Analytics expiró. Reconectá la integración.',
         code:  'TOKEN_EXPIRED',
