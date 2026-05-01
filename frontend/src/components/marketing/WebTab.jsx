@@ -666,7 +666,8 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
     setSnapSaved(false)
 
     const isMonthlyPreset = appliedRange.preset === 'thisMonth' || appliedRange.preset === 'lastMonth'
-    const useCompare = compare && isMonthlyPreset
+    const firstDayOfMonth = new Date().getDate() === 1
+    const useCompare = compare && isMonthlyPreset && !(appliedRange.preset === 'thisMonth' && firstDayOfMonth)
     api.get(`/marketing/projects/${projectId}/analytics?startDate=${startDate}&endDate=${endDate}&compare=${useCompare}`)
       .then(r => setAnalytics(r.data))
       .catch(e => {
@@ -788,13 +789,21 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
   const activeMonth   = getActiveMonth(appliedRange.preset)
   const isMonthly     = !!activeMonth
 
+  // El 1° del mes, "Este mes" solo tiene datos parciales del día actual:
+  // comparar contra el mismo período del mes anterior devuelve -99% (0 sesiones vs día completo).
+  // Suprimimos la comparación ese día y mostramos un aviso.
+  const dayOfMonth          = new Date().getDate()
+  const isFirstDayOfMonth   = dayOfMonth === 1
+  const suppressComparison  = appliedRange.preset === 'thisMonth' && isFirstDayOfMonth
+
   // Deltas: preferir analytics.comparison (de GA4), fallback a prevSnap
+  // No aplicar deltas si el mes acaba de comenzar.
   const gaComp = analytics?.comparison
   function snapDelta(curr, prevVal) {
     if (prevVal == null || prevVal === 0 || curr == null) return null
     return Math.round(((curr - prevVal) / prevVal) * 100)
   }
-  const deltas = gaComp ? {
+  const deltas = suppressComparison ? {} : gaComp ? {
     sessions:    gaComp.sessionsDelta,
     activeUsers: gaComp.activeUsersDelta,
     newUsers:    gaComp.newUsersDelta,
@@ -869,7 +878,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
             </>
           )}
         </div>}
-        {subtab === 'analytics' && (appliedRange.preset === 'thisMonth' || appliedRange.preset === 'lastMonth') && (
+        {subtab === 'analytics' && (appliedRange.preset === 'thisMonth' || appliedRange.preset === 'lastMonth') && !(appliedRange.preset === 'thisMonth' && new Date().getDate() === 1) && (
           <label className="flex items-center gap-2 cursor-pointer pb-2">
             <input
               type="checkbox"
@@ -947,8 +956,18 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
       {/* Dashboard — solo Analytics */}
       {subtab === 'analytics' && analytics && !loading && (
         <>
+          {/* Aviso primer día del mes */}
+          {suppressComparison && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl px-4 py-3 flex items-center gap-3">
+              <span className="text-xl flex-shrink-0">📅</span>
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                El mes acaba de comenzar. Los datos de hoy son parciales, así que las comparaciones con el mes anterior estarán disponibles a partir de mañana.
+              </p>
+            </div>
+          )}
+
           {/* Banner de caída de tráfico */}
-          {gaComp?.sessionsDelta != null && gaComp.sessionsDelta < -20 && (
+          {!suppressComparison && gaComp?.sessionsDelta != null && gaComp.sessionsDelta < -20 && (
             <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-xl px-4 py-3 flex items-center gap-3">
               <span className="text-xl flex-shrink-0">⚠️</span>
               <p className="text-sm text-orange-700 dark:text-orange-300">

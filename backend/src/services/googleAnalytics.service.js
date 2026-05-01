@@ -9,6 +9,11 @@ const CACHE_TTL = 30 * 60 * 1000 // 30 minutos
 /**
  * Calcula el período anterior equivalente.
  * Soporta formato 'YYYY-MM-DD' y 'NdaysAgo'.
+ *
+ * Cuando startDate es el 1° de un mes, compara los mismos días ordinales
+ * del mes anterior (ej: 1-15 de mayo → 1-15 de abril) en vez de contar
+ * hacia atrás desde el día anterior al inicio. Esto evita comparar datos
+ * parciales del día actual contra el fin del mes pasado.
  */
 function computePreviousPeriod(startDate, endDate) {
   const daysAgoMatch = startDate.match(/^(\d+)daysAgo$/)
@@ -16,8 +21,22 @@ function computePreviousPeriod(startDate, endDate) {
     const n = parseInt(daysAgoMatch[1])
     return { startDate: `${n * 2}daysAgo`, endDate: `${n + 1}daysAgo` }
   }
-  const s    = new Date(startDate)
-  const e    = new Date(endDate)
+  const s = new Date(startDate)
+  const e = new Date(endDate)
+
+  // Si el período empieza el 1° del mes → comparar mismos días del mes anterior
+  if (s.getUTCDate() === 1) {
+    const prevYear  = s.getUTCMonth() === 0 ? s.getUTCFullYear() - 1 : s.getUTCFullYear()
+    const prevMonth = s.getUTCMonth() === 0 ? 11 : s.getUTCMonth() - 1 // 0-indexed
+    const lastDayOfPrevMonth = new Date(Date.UTC(prevYear, prevMonth + 1, 0)).getUTCDate()
+    const endDay = Math.min(e.getUTCDate(), lastDayOfPrevMonth)
+    const pad = n => String(n).padStart(2, '0')
+    return {
+      startDate: `${prevYear}-${pad(prevMonth + 1)}-01`,
+      endDate:   `${prevYear}-${pad(prevMonth + 1)}-${pad(endDay)}`,
+    }
+  }
+
   const days = Math.round((e - s) / 86400000) + 1
   const prevEnd   = new Date(s.getTime() - 86400000)
   const prevStart = new Date(prevEnd.getTime() - (days - 1) * 86400000)

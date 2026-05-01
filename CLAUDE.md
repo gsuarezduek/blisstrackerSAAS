@@ -55,6 +55,10 @@ STRIPE_PRICE_ID=price_...             # ID del precio por seat/mes en Stripe
 ENCRYPTION_KEY=<64 chars hex>         # AES-256-GCM key para cifrar tokens OAuth en DB (node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 BACKEND_URL=https://blisstrackersaas-production.up.railway.app  # URL pública del backend (para construir redirect URI de OAuth)
 PAGESPEED_API_KEY=...                 # Google Cloud API Key con acceso a PageSpeed Insights API
+META_APP_ID=...                       # Facebook App ID (Meta for Developers)
+META_APP_SECRET=...                   # Facebook App Secret
+TIKTOK_CLIENT_KEY=...                 # TikTok App Client Key (TikTok for Developers)
+TIKTOK_CLIENT_SECRET=...              # TikTok App Client Secret
 ```
 
 **frontend/.env.development**
@@ -209,7 +213,7 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 - When a model has two relations to the same model, named relations are required (e.g. `Task.createdBy` / `Task.user` both pointing to `User`).
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_workspace_deletion_request`, `add_email_log`, `update_default_avatar`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `fix_service_unique_index` (drops global Service_name_key), `add_project_connections` (Project.connections JSON), `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique` (drops residual global Project_name_key), `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_pagespeed_result` (PageSpeedResult).
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_workspace_deletion_request`, `add_email_log`, `update_default_avatar`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `fix_service_unique_index` (drops global Service_name_key), `add_project_connections` (Project.connections JSON), `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique` (drops residual global Project_name_key), `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_pagespeed_result` (PageSpeedResult), `add_instagram_snapshot` (InstagramSnapshot — métricas mensuales Instagram), `add_tiktok` (TikTokSnapshot + TikTokFollowerLog).
 - `TaskComment.content` is the text field (not `text`). The `parentId` self-relation exists for future threading but is not used by the UI yet.
 
 ### API routes summary
@@ -301,19 +305,44 @@ POST   /api/marketing/geo/audit          # dispara audit async, devuelve { audit
 GET    /api/marketing/geo/audits         # lista audits del workspace (?projectId=)
 GET    /api/marketing/geo/audits/:id     # detalle completo de un audit
 
-# Marketing — Integraciones Google OAuth (callback sin auth)
-GET    /api/marketing/integrations/google/callback          # recibe redirect de Google (no requiere auth)
+# Marketing — OAuth callbacks (sin auth — vienen de Google/Meta/TikTok)
+GET    /api/marketing/integrations/google/callback          # callback Google OAuth
+GET    /api/marketing/integrations/meta/callback            # callback Instagram Business Login
+GET    /api/marketing/integrations/meta-ads/callback        # callback Meta Ads (Facebook Login)
+GET    /api/marketing/integrations/tiktok/callback          # callback TikTok OAuth (PKCE)
+
 # Marketing — Integraciones (requieren auth)
 GET    /api/marketing/integrations/google/auth-url          # ?projectId=&type=google_analytics
+GET    /api/marketing/integrations/meta/auth-url            # ?projectId=
+GET    /api/marketing/integrations/meta-ads/auth-url        # ?projectId=
+GET    /api/marketing/integrations/tiktok/auth-url          # ?projectId=
+POST   /api/marketing/projects/:id/integrations/connect-existing  # reutiliza tokens vigentes del workspace (mismo type)
 GET    /api/marketing/projects/:id/integrations             # lista integraciones del proyecto
 PATCH  /api/marketing/projects/:id/integrations/:type       # actualizar propertyId / customerId
 DELETE /api/marketing/projects/:id/integrations/:type       # desconectar integración + revocar token
 
 # Marketing — Analytics GA4
 GET    /api/marketing/projects/:id/analytics                # ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
-GET    /api/marketing/projects/:id/ads                      # placeholder (requiere Developer Token de Google Ads)
 
-# Marketing — Snapshots e Insights IA
+# Marketing — Google Ads
+GET    /api/marketing/projects/:id/google-ads               # ?datePreset= — requiere customerId en integration + GOOGLE_ADS_DEVELOPER_TOKEN
+
+# Marketing — Meta Ads
+GET    /api/marketing/projects/:id/meta-ads                 # ?datePreset= — usa token de ProjectIntegration type=meta_ads
+
+# Marketing — Instagram
+GET    /api/marketing/projects/:id/instagram                # métricas del mes actual
+GET    /api/marketing/projects/:id/instagram/snapshots      # ?months=12
+POST   /api/marketing/projects/:id/instagram/snapshots      # body: { month }
+GET    /api/marketing/projects/:id/instagram/followers      # ?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+# Marketing — TikTok
+GET    /api/marketing/projects/:id/tiktok                   # métricas del mes actual
+GET    /api/marketing/projects/:id/tiktok/snapshots         # ?months=12
+POST   /api/marketing/projects/:id/tiktok/snapshots         # body: { month }
+GET    /api/marketing/projects/:id/tiktok/followers         # ?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+# Marketing — Snapshots GA4 e Insights IA
 GET    /api/marketing/projects/:id/snapshots                # ?month=YYYY-MM
 POST   /api/marketing/projects/:id/snapshots                # body: { month } — guarda snapshot GA4 del mes
 GET    /api/marketing/projects/:id/insights/:month          # análisis IA del mes (YYYY-MM)
@@ -380,6 +409,8 @@ GET    /api/feature-flags/:key           # check flag para workspace actual (aut
 | `0 0 * * 6` (sábados 00:00) | ART | Actualiza perfil de memoria de insights por usuario |
 | `0 2 1 * *` (1° mes 02:00) | ART | Guarda snapshot de analytics del mes anterior para todos los proyectos con GA4 conectado |
 | `30 3 1 * *` (1° mes 03:30) | ART | Corre análisis PageSpeed (mobile + desktop) para todos los proyectos con websiteUrl |
+| `30 4 1 * *` (1° mes 04:30) | ART | Guarda snapshot de Instagram del mes anterior para todos los proyectos con Instagram activo |
+| `0 5 1 * *` (1° mes 05:00) | ART | Guarda snapshot de TikTok del mes anterior para todos los proyectos con TikTok activo |
 | `0 3 * * *` (diario 03:00) | ART | Marca trials expirados como `past_due` |
 | `0 0 * * *` (medianoche) | ART | Auto-pausa tareas `IN_PROGRESS` al cierre del día |
 | `0 3 * * 0` (domingos 03:00) | ART | Limpia notificaciones antiguas (leídas >30d, no leídas >90d) |
@@ -414,7 +445,8 @@ frontend/
 ```
 
 ### Deploy
-- **Backend:** Railway (auto-runs `npm run db:migrate` on deploy; seed must be run manually once). Required env vars: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`.
+- **Backend:** Railway (auto-runs `npm run db:migrate` on deploy; seed must be run manually once). Required env vars: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`, `META_APP_ID`, `META_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`.
+- **Scripts de utilidad:** `backend/scripts/` — scripts de uso único para operaciones directas en DB (ej: `insert-meta-ads-token.js`, `create-test-user.js`). Ejecutar con `DATABASE_URL=... ENCRYPTION_KEY=... node scripts/<nombre>.js`.
 - **Frontend:** Vercel Pro (root: `/frontend`; `vercel.json` rewrites all paths to `index.html`). Add `*.blisstracker.app` as Custom Domain. Required env vars: `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`.
 - **DNS (Cloudflare):** `A blisstracker.app → Vercel` + `A *.blisstracker.app → Vercel` (wildcard requires Vercel Pro).
 - **Backend CORS:** `app.js` allows `*.blisstracker.app` via regex — do not hardcode a single origin.
@@ -443,24 +475,37 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 - `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/meta/callback` (producción)
 - `http://localhost:3001/api/marketing/integrations/meta/callback` (desarrollo)
 
-**OAuth Consent Screen scopes habilitados (Google):**
-- `https://www.googleapis.com/auth/analytics.readonly`
-- Agregar `https://www.googleapis.com/auth/adwords` cuando el Developer Token de Google Ads sea aprobado
+**Redirect URIs registradas en Meta for Developers:**
+- Instagram Business Login: `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/meta/callback`
+- Meta Ads (Facebook Login): `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/meta-ads/callback`
+- (+ variantes `http://localhost:3001/...` para desarrollo)
 
-**Permisos requeridos en Meta App (Instagram Business Login):**
-- `instagram_business_basic` — leer perfil y publicaciones (flujo Instagram Business Login)
-- Notas de implementación:
-  - Usar `instagram.com/oauth/authorize` (NO `facebook.com/dialog/oauth`) — evita dependencia de Facebook Pages y Business Manager
+**Redirect URIs registradas en TikTok for Developers:**
+- `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/tiktok/callback`
+- `http://localhost:3001/api/marketing/integrations/tiktok/callback`
+
+**OAuth Consent Screen scopes habilitados (Google):**
+- `https://www.googleapis.com/auth/analytics.readonly` — verificación en curso
+- `https://www.googleapis.com/auth/adwords` — pendiente Standard Access approval de Google Ads
+
+**Permisos requeridos en Meta App:**
+- Instagram Business Login: `instagram_business_basic`, `instagram_business_manage_insights` — App Review en curso
+- Facebook Login (Meta Ads): `ads_read` — requiere Business Verification + App Review. En desarrollo: usar System User Token generado desde Business Manager → Settings → System Users → Generate Token (Never expiry).
+- Notas de implementación Instagram:
+  - Usar `instagram.com/oauth/authorize` (NO `facebook.com/dialog/oauth`)
   - Token exchange: POST `api.instagram.com/oauth/access_token`
   - Long-lived token: GET `graph.instagram.com/access_token?grant_type=ig_exchange_token`
   - Todas las llamadas de datos usan `graph.instagram.com/me` (NO `/{user_id}` — da OAuthException code 2)
   - El `user_id` del token exchange es app-scoped; usar el `id` de `/me` como `propertyId`
 
-**Env vars de integraciones (Railway):**
-```
-GOOGLE_CLIENT_SECRET=...        # client secret del OAuth app de Google Cloud
-ENCRYPTION_KEY=<64 chars hex>   # AES-256-GCM key para cifrar tokens en DB
-BACKEND_URL=https://blisstrackersaas-production.up.railway.app
-META_APP_ID=...                 # Facebook App ID (Meta for Developers)
-META_APP_SECRET=...             # Facebook App Secret
-```
+**Permisos requeridos en TikTok App:**
+- `user.info.basic`, `user.info.profile`, `user.info.stats`, `video.list` — App Review en curso
+- OAuth v2 requiere PKCE obligatorio: `code_verifier` generado con `crypto.randomBytes(32).toString('base64url')`, `code_challenge = base64url(sha256(codeVerifier))`. El `codeVerifier` se almacena en el JWT state (10min) y se recupera en el callback.
+- Access tokens duran 24h, refresh tokens duran 365 días. `tiktokTokenRefresh.service.js` renueva automáticamente.
+
+**Token expiry — patrón unificado:**
+- Todos los servicios de integración detectan tokens expirados y marcan `ProjectIntegration.status = 'expired'`
+- Los controllers devuelven `{ error: '...', code: 'TOKEN_EXPIRED' }` con status HTTP 400 (nunca 401 — evita logout del usuario)
+- El frontend detecta `code === 'TOKEN_EXPIRED'` y muestra prompt de reconexión
+- `connect-existing` solo reutiliza tokens con `status: 'active'` y `expiresAt > now` — si todos expiraron cae al flujo OAuth completo
+- Google tokens: `invalid_grant` → status `expired`, requiere reconectar. App en modo Testing expira tokens a los 7 días — publicar la app en Google Cloud Console para tokens permanentes.

@@ -58,6 +58,10 @@ STRIPE_PRICE_ID=price_...
 ENCRYPTION_KEY=<64 chars hex — AES-256-GCM para cifrar tokens OAuth en DB>
 BACKEND_URL=http://localhost:3001
 PAGESPEED_API_KEY=<API key de Google Cloud para PageSpeed Insights>
+META_APP_ID=<Facebook App ID — Meta for Developers>
+META_APP_SECRET=<Facebook App Secret>
+TIKTOK_CLIENT_KEY=<TikTok App Key — TikTok for Developers>
+TIKTOK_CLIENT_SECRET=<TikTok App Secret>
 ```
 
 **Credenciales tras el seed:**
@@ -196,11 +200,21 @@ team-tracker/
 │       │   └── ...
 │       ├── webhooks/
 │       │   └── stripe.webhook.js        # maneja eventos Stripe (raw body)
+│       ├── scripts/
+│       │   ├── create-test-user.js         # Crea usuario de prueba para verificación Google OAuth
+│       │   └── insert-meta-ads-token.js    # Inserta System User Token de Meta Ads en DB
 │       └── services/
-│           ├── email.service.js         # Resend + log a EmailLog
-│           ├── weeklyReport.service.js  # Cron viernes 14:00 ART
-│           ├── insightMemory.service.js # Cron sábado 00:00 ART
-│           └── geoAudit.service.js      # Fetch + cheerio + Claude → GeoAudit
+│           ├── email.service.js               # Resend + log a EmailLog
+│           ├── weeklyReport.service.js        # Cron viernes 14:00 ART
+│           ├── insightMemory.service.js       # Cron sábado 00:00 ART
+│           ├── geoAudit.service.js            # Fetch + cheerio + Claude → GeoAudit
+│           ├── tokenRefresh.service.js        # Refresca access tokens de Google OAuth
+│           ├── instagram.service.js           # API calls a graph.instagram.com
+│           ├── instagramSnapshot.service.js   # Snapshots mensuales de Instagram
+│           ├── metaTokenRefresh.service.js    # Extiende long-lived tokens de Meta
+│           ├── tiktok.service.js              # API calls a TikTok v2 (PKCE, 4 scopes)
+│           ├── tiktokTokenRefresh.service.js  # Refresca access tokens de TikTok v2
+│           └── tiktokSnapshot.service.js      # Snapshots mensuales de TikTok
 └── frontend/
     └── src/
         ├── context/
@@ -218,7 +232,7 @@ team-tracker/
         │   ├── ProjectDetail.jsx    # Tab "Info" con websiteUrl + redes sociales
         │   ├── MyReports.jsx
         │   ├── RealTime.jsx
-        │   ├── Marketing.jsx        # Tabs GEO y Web (GA4+PageSpeed) operativos
+        │   ├── Marketing.jsx        # Tabs GEO, Web (GA4+PageSpeed) y RRSS (Instagram, TikTok, Meta Ads)
         │   ├── OAuthResult.jsx      # Puente OAuth: postMessage al opener y cierra popup
         │   ├── Billing.jsx          # Estado trial/plan, upgrade, portal Stripe
         │   ├── Reports.jsx          # Admin
@@ -232,10 +246,14 @@ team-tracker/
         ├── components/
         │   ├── Navbar.jsx           # Nav items con fuente única (links/adminSublinks/profileSections)
         │   ├── TrialBanner.jsx      # Banner trial ≤7d o past_due
-        │   ├── ProjectInfoTab.jsx   # websiteUrl + conexiones sociales del proyecto
+        │   ├── ProjectInfoTab.jsx   # websiteUrl + conexiones sociales + botones de conexión OAuth
         │   ├── marketing/
         │   │   ├── GeoTab.jsx       # Selector proyecto, audit panel, score, items, historial
-        │   │   └── WebTab.jsx       # GA4 dashboard + snapshots IA + PageSpeed Insights
+        │   │   ├── WebTab.jsx       # GA4 dashboard + snapshots IA + PageSpeed Insights
+        │   │   ├── InstagramTab.jsx # Métricas Instagram + snapshots + gráficos evolución
+        │   │   ├── TikTokTab.jsx    # Métricas TikTok + snapshots + estado de verificación
+        │   │   ├── MetaAdsTab.jsx   # Métricas Meta Ads + desglose por campaña
+        │   │   └── InformesTab.jsx  # GA4 overview + canales + top páginas
         │   ├── admin/
         │   │   ├── TeamTab.jsx      # Solo invitaciones por email
         │   │   └── ...
@@ -264,10 +282,13 @@ team-tracker/
 | `Project` | Proyectos/clientes: websiteUrl (GEO), connections (JSON redes sociales) |
 | `ProjectLink` | Links útiles por proyecto (Drive, Figma, etc.) |
 | `GeoAudit` | Análisis GEO por proyecto: score, 6 componentes, items, señales negativas |
-| `ProjectIntegration` | Tokens OAuth por proyecto (GA4, Google Ads): cifrados con AES-256-GCM |
+| `ProjectIntegration` | Tokens OAuth por proyecto (GA4, Instagram, TikTok, Meta Ads): cifrados con AES-256-GCM |
 | `AnalyticsSnapshot` | Resumen mensual de GA4 por proyecto: sesiones, usuarios, páginas, canales |
 | `AnalyticsInsight` | Análisis IA mensual generado con Claude Haiku (deltas, tendencias, recomendaciones) |
 | `PageSpeedResult` | Resultados de PageSpeed Insights API: score, métricas CWV, oportunidades, diagnósticos |
+| `InstagramSnapshot` | Snapshot mensual de métricas Instagram: seguidores, engagement, likes promedio |
+| `TikTokSnapshot` | Snapshot mensual de métricas TikTok: seguidores, likes, videos, engagement |
+| `TikTokFollowerLog` | Log diario de seguidores TikTok para gráficos de evolución |
 | `Service` | Servicios que ofrece la agencia (únicos por workspace) |
 | `Notification` | Notificaciones tipadas (5 tipos) |
 | `DailyInsight` | Coaching IA diario cacheado por usuario |
@@ -322,7 +343,7 @@ El panel super admin tiene sidebar con: Dashboard (stats + workspaces), **Billin
 
 ### Backend (Railway)
 
-1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`
+1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`, `META_APP_ID`, `META_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`
 2. Railway ejecuta `npm run db:migrate` automáticamente al deployar
 3. Seed manual una vez desde Railway Shell
 
@@ -353,6 +374,45 @@ El módulo GEO (Generative Engine Optimization) analiza qué tan bien posicionad
 
 ---
 
+## Marketing — RRSS (Instagram · TikTok · Meta Ads)
+
+Tab **RRSS** en Marketing: conecta redes sociales y muestra métricas de audiencia y engagement.
+
+### Instagram
+
+- **Conexión OAuth:** usa Instagram Business Login (`instagram.com/oauth/authorize`) con scope `instagram_business_basic`.
+- **Token exchange:** short-lived → long-lived (60 días) vía `api.instagram.com/oauth/access_token` + `graph.instagram.com/access_token`.
+- **Métricas en tiempo real:** seguidores, engagement rate, likes promedio, comentarios promedio, posts por semana (media últimas 4 semanas), últimas publicaciones.
+- **Snapshots mensuales:** cron automático cada 1° del mes a las 04:30 ART guarda snapshot histórico.
+- **Gráficos SVG:** evolución de seguidores y engagement por mes.
+- **Token expirado:** cuando el token expira (>60 días sin renovar), se muestra estado "Sesión expirada" con botón para reconectar.
+
+### TikTok
+
+- **Conexión OAuth v2 PKCE:** `code_verifier` generado en backend, almacenado en state JWT; `code_challenge = base64url(sha256(verifier))`.
+- **Scopes:** `user.info.basic`, `user.info.profile`, `user.info.stats`, `video.list`.
+- **Métricas en tiempo real:** seguidores, likes totales, engagement rate, videos totales, últimos 20 videos.
+- **Arquitectura resiliente:** cada scope hace su propio call en try/catch — si un scope no está aprobado, solo esos campos retornan `null` sin romper toda la integración.
+- **Snapshots mensuales:** cron automático cada 1° del mes a las 05:00 ART.
+- **Estado de verificación:** badge con estado de la app (en revisión, activa) si aplica.
+
+### Meta Ads
+
+- **Conexión OAuth:** scope `ads_read` vía `facebook.com/dialog/oauth`. Requiere Business Verification de Meta para uso en producción.
+- **Workaround System User Token:** mientras Business Verification está pendiente, insertar token permanente generado desde Business Manager → System Users → Generate Token (Never expiry) usando el script `backend/scripts/insert-meta-ads-token.js`.
+- **Métricas:** gasto total, impresiones, clics, CTR, CPC, CPM por período (7/30/90 días).
+- **Desglose por campaña:** tabla de campañas activas con métricas individuales.
+- **Nota:** `ads_read` requiere aprobación del Developer Token de Google Ads y Business Verification antes de funcionar en producción con OAuth estándar.
+
+### Patrón común de expiración de tokens
+
+Todas las integraciones siguen el mismo patrón:
+- Token expirado o inválido → backend retorna HTTP **400** con `{ code: 'TOKEN_EXPIRED' }` (nunca 401 — evita cerrar sesión del usuario).
+- La integración se marca como `status: 'expired'` en DB.
+- El frontend muestra estado "Sesión expirada" con botón para reconectar.
+
+---
+
 ## Marketing — Web (GA4 + PageSpeed)
 
 Tab **Web** en Marketing: conecta Google Analytics 4 y muestra métricas de performance del sitio.
@@ -377,6 +437,26 @@ Tab **Web** en Marketing: conecta Google Analytics 4 y muestra métricas de perf
 - **Crear tarea:** desde cualquier oportunidad o diagnóstico se puede crear una tarea con prefijo "Perf - ".
 - **Historial:** badges con el score de los últimos N análisis.
 - **Cron automático:** cada 1° del mes a las 03:30 ART corre análisis mobile + desktop para todos los proyectos con websiteUrl.
+
+---
+
+## Scripts de utilidad
+
+Scripts en `backend/scripts/`:
+
+| Script | Uso |
+|--------|-----|
+| `create-test-user.js` | Crea/actualiza usuario `admin@blissmkt.ar` en workspace `monethx10` para verificación de Google OAuth |
+| `insert-meta-ads-token.js` | Inserta un System User Token de Meta Ads directo en DB (workaround Business Verification pendiente) |
+
+```bash
+# Crear usuario de prueba (requiere DATABASE_URL de producción)
+DATABASE_URL="postgresql://..." node scripts/create-test-user.js
+
+# Insertar token Meta Ads
+DATABASE_URL="..." ENCRYPTION_KEY="..." SYSTEM_TOKEN="EAF..." AD_ACCOUNT_ID="act_..." PROJECT_ID=62 \
+  node scripts/insert-meta-ads-token.js
+```
 
 ---
 

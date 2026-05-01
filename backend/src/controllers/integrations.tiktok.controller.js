@@ -104,7 +104,6 @@ async function handleTikTokCallback(req, res, next) {
     )
 
     const body = tokenRes.data
-    console.log('[TikTokOAuth] Token response body:', JSON.stringify(body, null, 2))
 
     // TikTok v2 puede devolver los campos en el nivel raíz o anidados en body.data
     if (body.error?.code && body.error.code !== 'ok') {
