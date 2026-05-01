@@ -118,12 +118,12 @@ async function aggregateReportData(projectId, workspaceId, month) {
     }),
 
     // TikTok snapshots
-    prisma.tiktokSnapshot.findFirst({
+    prisma.tikTokSnapshot.findFirst({
       where:   { projectId, workspaceId, month },
       select:  { followersCount: true, engagementRate: true, avgViews: true,
                  avgLikes: true, postsThisMonth: true, likesCount: true },
     }),
-    prisma.tiktokSnapshot.findFirst({
+    prisma.tikTokSnapshot.findFirst({
       where:   { projectId, workspaceId, month: prev },
       select:  { followersCount: true, engagementRate: true },
     }),
