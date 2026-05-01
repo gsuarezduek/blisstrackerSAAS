@@ -93,17 +93,18 @@ async function connectExisting(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    // Buscar tokens existentes en el workspace
+    // Buscar tokens vigentes en el workspace (status active, no expirados)
     const source = await prisma.projectIntegration.findFirst({
       where: {
         workspaceId: req.workspace.id,
         type,
-        status: 'active',
+        status:      'active',
         refreshToken: { not: null },
+        expiresAt:   { gt: new Date() },
         NOT: { projectId },
       },
     })
-    if (!source) return res.status(404).json({ error: 'No hay tokens previos en este workspace' })
+    if (!source) return res.status(404).json({ error: 'No hay tokens vigentes en este workspace', code: 'NO_VALID_TOKEN' })
 
     const integration = await prisma.projectIntegration.upsert({
       where:  { projectId_type: { projectId, type } },
