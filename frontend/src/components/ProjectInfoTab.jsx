@@ -30,6 +30,33 @@ const GOOGLE_INTEGRATIONS = [
   },
 ]
 
+const SOCIAL_INTEGRATIONS = [
+  {
+    key:      'instagram',
+    label:    'Instagram',
+    icon:     '📸',
+    desc:     'Seguidores, engagement y métricas de publicaciones',
+    authPath: (projectId) => `/marketing/integrations/meta/auth-url?projectId=${projectId}`,
+    popup:    'instagram_oauth',
+  },
+  {
+    key:      'tiktok',
+    label:    'TikTok',
+    icon:     '🎵',
+    desc:     'Seguidores, vistas y métricas de videos',
+    authPath: (projectId) => `/marketing/integrations/tiktok/auth-url?projectId=${projectId}`,
+    popup:    'tiktok_oauth',
+  },
+  {
+    key:      'meta_ads',
+    label:    'Meta Ads',
+    icon:     '📣',
+    desc:     'Campañas de Facebook e Instagram Ads',
+    authPath: (projectId) => `/marketing/integrations/meta-ads/auth-url?projectId=${projectId}`,
+    popup:    'metaads_oauth',
+  },
+]
+
 function parseConnections(raw) {
   if (!raw) return {}
   if (typeof raw === 'object') return raw
@@ -45,7 +72,7 @@ export default function ProjectInfoTab({ project, onSave }) {
   const [saved, setSaved]           = useState(false)
   const [error, setError]           = useState('')
 
-  // Integraciones Google
+  // Integraciones (Google + Sociales — misma lista de la API)
   const [integrations,  setIntegrations]  = useState([])
   const [integLoading,  setIntegLoading]  = useState({})
   const [propertyInput, setPropertyInput] = useState({})
@@ -126,6 +153,41 @@ export default function ProjectInfoTab({ project, onSave }) {
       setIntegrations(prev => prev.filter(i => i.type !== type))
     } finally {
       setIntegLoading(prev => ({ ...prev, [type]: false }))
+    }
+  }
+
+  async function handleConnectSocial(integ) {
+    setIntegLoading(prev => ({ ...prev, [integ.key]: true }))
+    try {
+      const { data } = await api.get(integ.authPath(project.id))
+      localStorage.removeItem('__ga_oauth_result')
+      window.open(data.url, integ.popup, 'width=520,height=660,left=200,top=80')
+
+      const TIMEOUT_MS = 5 * 60 * 1000
+      const startedAt  = Date.now()
+      const poll = setInterval(() => {
+        const stored = localStorage.getItem('__ga_oauth_result')
+        if (stored) {
+          clearInterval(poll)
+          localStorage.removeItem('__ga_oauth_result')
+          try {
+            const result = JSON.parse(stored)
+            setIntegLoading(prev => ({ ...prev, [integ.key]: false }))
+            if (result.success) {
+              api.get(`/marketing/projects/${project.id}/integrations`)
+                .then(r => setIntegrations(r.data))
+                .catch(() => {})
+            }
+          } catch { /* ignorar */ }
+          return
+        }
+        if (Date.now() - startedAt > TIMEOUT_MS) {
+          clearInterval(poll)
+          setIntegLoading(prev => ({ ...prev, [integ.key]: false }))
+        }
+      }, 600)
+    } catch {
+      setIntegLoading(prev => ({ ...prev, [integ.key]: false }))
     }
   }
 
@@ -407,6 +469,84 @@ export default function ProjectInfoTab({ project, onSave }) {
                       </p>
                     )}
                   </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Integraciones Redes Sociales */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-5">
+        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+          Integraciones Redes Sociales
+        </p>
+        <div className="space-y-3">
+          {SOCIAL_INTEGRATIONS.map(integ => {
+            const connected = getIntegration(integ.key)
+            const isLoading = integLoading[integ.key]
+            const isExpired = connected?.status === 'expired'
+            const isError   = connected?.status === 'error'
+
+            return (
+              <div
+                key={integ.key}
+                className="border border-gray-200 dark:border-gray-600 rounded-xl p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-xl flex-shrink-0">{integ.icon}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{integ.label}</p>
+                      <p className="text-xs text-gray-400 truncate">{integ.desc}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {connected && !isExpired && !isError && (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                        Conectado
+                      </span>
+                    )}
+                    {(isExpired || isError) && (
+                      <span className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                        {isExpired ? 'Expirado' : 'Error'}
+                      </span>
+                    )}
+
+                    {connected && !isExpired && !isError ? (
+                      <button
+                        onClick={() => handleDisconnect(integ.key)}
+                        disabled={isLoading}
+                        className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
+                      >
+                        {isLoading ? '…' : 'Desconectar'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleConnectSocial(integ)}
+                        disabled={isLoading}
+                        className="px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                      >
+                        {isLoading ? 'Conectando…' : isExpired || isError ? 'Reconectar' : 'Conectar'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Info de la cuenta conectada */}
+                {connected && !isExpired && !isError && connected.propertyId && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    ID:{' '}
+                    <span className="font-mono text-gray-500 dark:text-gray-400">{connected.propertyId}</span>
+                    {connected.connectedAt && (
+                      <span className="ml-2">
+                        · conectado {new Date(connected.connectedAt).toLocaleDateString('es-AR')}
+                      </span>
+                    )}
+                  </p>
                 )}
               </div>
             )
