@@ -36,8 +36,8 @@
     </script>
 
     <!-- Políticas — declaradas en HTML estático para bots (Google OAuth verification) -->
-    <link rel="privacy-policy" href="https://www.blisstracker.app/privacidad" />
-    <link rel="terms-of-service" href="https://www.blisstracker.app/condiciones" />
+    <link rel="privacy-policy" href="https://blisstracker.app/privacidad" />
+    <link rel="terms-of-service" href="https://blisstracker.app/condiciones" />
 
     <!-- Google Analytics — solo en el dominio raíz (landing), no en workspaces -->
     <script>
@@ -58,7 +58,9 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Fallback estático para crawlers que no ejecutan JS (ej: bot de verificación Google OAuth).
+         React reemplaza este contenido al montar. -->
+    <div id="root"><footer style="text-align:center;padding:10px;font-size:12px;background:#000;color:#888;position:fixed;bottom:0;width:100%"><a href="/privacidad" style="color:#aaa;margin:0 8px">Política de privacidad</a><a href="/condiciones" style="color:#aaa;margin:0 8px">Condiciones de uso</a></footer></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

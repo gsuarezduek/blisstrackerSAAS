@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useContext } from 'react'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import LoadingSpinner from '../components/LoadingSpinner'
 import useRoles from '../hooks/useRoles'
+import { WorkspaceContext } from '../context/WorkspaceContext'
 
 const TZ = 'America/Argentina/Buenos_Aires'
 
@@ -101,6 +102,7 @@ function StatCardSlider({ slides }) {
 
 function MiniDashboard({ users, lastLoginsMap, dashStats }) {
   const { labelFor } = useRoles()
+  const { workspace } = useContext(WorkspaceContext)
   const today = todayBA()
   const HORIZON = 30
 
@@ -246,7 +248,7 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
         {/* Aniversarios laborales */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-            🎉 Aniversarios en Bliss
+            🎉 Aniversarios en {workspace?.name ?? 'Bliss'}
           </p>
           {upcomingAnniversaries.length === 0
             ? <p className="text-sm text-gray-400 dark:text-gray-500">Ninguno en los próximos 30 días</p>
