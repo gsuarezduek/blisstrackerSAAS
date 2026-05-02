@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, useContext } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import LoadingSpinner from '../components/LoadingSpinner'
 import useRoles from '../hooks/useRoles'
-import { WorkspaceContext } from '../context/WorkspaceContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 
 const TZ = 'America/Argentina/Buenos_Aires'
 
@@ -102,7 +102,7 @@ function StatCardSlider({ slides }) {
 
 function MiniDashboard({ users, lastLoginsMap, dashStats }) {
   const { labelFor } = useRoles()
-  const { workspace } = useContext(WorkspaceContext)
+  const { workspace } = useWorkspace()
   const today = todayBA()
   const HORIZON = 30
 
