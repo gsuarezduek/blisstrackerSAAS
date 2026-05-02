@@ -344,6 +344,35 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
         </SectionCard>
       )}
 
+      {/* ── Tráfico desde IAs ── */}
+      {s.analytics?.aiTraffic && Object.keys(s.analytics.aiTraffic).length > 0 && (
+        <SectionCard title="Tráfico desde IAs" icon="🤖">
+          {(() => {
+            const AI_LABELS = {
+              chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude',
+              grok: 'Grok', metaAi: 'Meta AI', perplexity: 'Perplexity', copilot: 'Copilot',
+            }
+            const entries = Object.entries(s.analytics.aiTraffic).sort(([, a], [, b]) => b - a)
+            const total   = entries.reduce((s, [, v]) => s + v, 0)
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {entries.map(([key, sessions]) => (
+                    <div key={key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(sessions)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{AI_LABELS[key] ?? key}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500 text-right">
+                  Total: <strong className="text-gray-600 dark:text-gray-300">{fmt(total)} sesiones</strong> referidas desde IAs este mes
+                </p>
+              </div>
+            )
+          })()}
+        </SectionCard>
+      )}
+
       {/* ── RRSS: Instagram + TikTok en grid ── */}
       {(s.instagram || s.tiktok) && (
         <div className={`grid gap-5 ${s.instagram && s.tiktok ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>

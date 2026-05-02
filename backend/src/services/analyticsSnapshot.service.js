@@ -1,6 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk')
 const prisma    = require('../lib/prisma')
-const { fetchGA4Report } = require('./googleAnalytics.service')
+const { fetchGA4Report, fetchAiTrafficData } = require('./googleAnalytics.service')
 const { parseAIJson }    = require('../utils/parseAIJson')
 const { logTokens }      = require('../lib/logTokens')
 
@@ -44,7 +44,15 @@ async function saveMonthSnapshot(projectId, workspaceId, month) {
   if (!integration || integration.status !== 'active' || !integration.propertyId) return null
 
   const { startDate, endDate } = monthBounds(month)
-  const data = await fetchGA4Report(integration, startDate, endDate)
+
+  // Fetch GA4 overview + AI traffic en paralelo
+  const [data, aiTrafficRaw] = await Promise.all([
+    fetchGA4Report(integration, startDate, endDate),
+    fetchAiTrafficData(integration, startDate, endDate).catch(err => {
+      console.warn('[AnalyticsSnapshot] aiTraffic fetch failed (ignorado):', err.message)
+      return {}
+    }),
+  ])
 
   const payload = {
     sessions:    Math.round(data.overview?.sessions             ?? 0),
@@ -55,6 +63,7 @@ async function saveMonthSnapshot(projectId, workspaceId, month) {
     avgDuration: data.overview?.averageSessionDuration          ?? 0,
     conversions: data.conversions?.total                        ?? 0,
     topChannels: JSON.stringify((data.channels ?? []).slice(0, 5)),
+    aiTraffic:   JSON.stringify(aiTrafficRaw),
   }
 
   return prisma.analyticsSnapshot.upsert({

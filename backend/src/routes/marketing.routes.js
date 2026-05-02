@@ -48,6 +48,7 @@ router.delete('/projects/:id/integrations/:type',             integrations.disco
 // Datos en tiempo real de integraciones
 router.get('/projects/:id/analytics',                      analytics.getAnalyticsData)
 router.get('/projects/:id/ads',                            analytics.getAdsData)
+router.get('/projects/:id/ai-traffic',                     analytics.getAiTrafficData)
 router.get('/projects/:id/search-console',                 searchConsole.getSearchConsoleData)
 router.get('/projects/:id/search-console/query-pages',     searchConsole.getQueryPages)
 router.get('/projects/:id/health-score',                   healthScore.getHealthScore)

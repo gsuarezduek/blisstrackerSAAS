@@ -260,13 +260,85 @@ function parseTrafficSources(response, totalSessions) {
   }))
 }
 
+// ─── AI Traffic ──────────────────────────────────────────────────────────────
+
+// Mapa de dominio referente → nombre canónico de la IA
+const AI_SOURCE_MAP = {
+  'chatgpt.com':           'chatgpt',
+  'chat.openai.com':       'chatgpt',
+  'claude.ai':             'claude',
+  'gemini.google.com':     'gemini',
+  'grok.x.ai':             'grok',
+  'grok.com':              'grok',
+  'x.ai':                  'grok',
+  'meta.ai':               'metaAi',
+  'www.meta.ai':           'metaAi',
+  'perplexity.ai':         'perplexity',
+  'copilot.microsoft.com': 'copilot',
+}
+
+const AI_KNOWN_SOURCES = Object.keys(AI_SOURCE_MAP)
+
+/**
+ * Consulta GA4 para obtener sesiones provenientes de fuentes de IA conocidas.
+ * Retorna un objeto con la clave canónica de la IA y el total de sesiones.
+ * Ejemplo: { chatgpt: 45, claude: 12, gemini: 8, grok: 0, ... }
+ *
+ * @param {object} integration  — ProjectIntegration con GA4 activo
+ * @param {string} startDate    — 'NdaysAgo' | 'YYYY-MM-DD'
+ * @param {string} endDate      — 'today' | 'YYYY-MM-DD'
+ * @returns {Promise<object>}
+ */
+async function fetchAiTrafficData(integration, startDate = '30daysAgo', endDate = 'today') {
+  const cacheKey = `ga4ai:${integration.id}:${startDate}:${endDate}`
+  const cached   = CACHE.get(cacheKey)
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data
+
+  const accessToken = await getValidAccessToken(integration)
+  const oauth2Client = new OAuth2Client()
+  oauth2Client.setCredentials({ access_token: accessToken })
+  const analyticsClient = new BetaAnalyticsDataClient({ authClient: oauth2Client })
+
+  const raw = integration.propertyId
+  if (!raw) throw new Error('propertyId no configurado para esta integración')
+  const property = raw.startsWith('properties/') ? raw : `properties/${raw}`
+
+  const [response] = await analyticsClient.runReport({
+    property,
+    dateRanges: [{ startDate, endDate }],
+    dimensions: [{ name: 'sessionSource' }],
+    metrics:    [{ name: 'sessions' }],
+    dimensionFilter: {
+      filter: {
+        fieldName:      'sessionSource',
+        inListFilter:   { values: AI_KNOWN_SOURCES },
+      },
+    },
+    limit: 50,
+  })
+
+  // Acumular sesiones por IA canónica
+  const totals = {}
+  for (const row of response.rows ?? []) {
+    const source   = row.dimensionValues[0].value
+    const sessions = parseInt(row.metricValues[0].value, 10) || 0
+    const key      = AI_SOURCE_MAP[source]
+    if (key) totals[key] = (totals[key] ?? 0) + sessions
+  }
+
+  CACHE.set(cacheKey, { data: totals, fetchedAt: Date.now() })
+  return totals
+}
+
 /**
  * Invalida la caché de un proyecto/período específico (útil tras reconectar).
  */
 function invalidateCache(integrationId) {
   for (const key of CACHE.keys()) {
-    if (key.startsWith(`ga4:${integrationId}:`)) CACHE.delete(key)
+    if (key.startsWith(`ga4:${integrationId}:`) || key.startsWith(`ga4ai:${integrationId}:`)) {
+      CACHE.delete(key)
+    }
   }
 }
 
-module.exports = { fetchGA4Report, invalidateCache }
+module.exports = { fetchGA4Report, fetchAiTrafficData, invalidateCache }

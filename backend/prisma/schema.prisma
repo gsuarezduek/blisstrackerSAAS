@@ -724,6 +724,7 @@ model AnalyticsSnapshot {
   avgDuration Float    @default(0)   // segundos
   conversions Int      @default(0)
   topChannels String   @default("[]") // JSON: [{channel, sessions, users}]
+  aiTraffic   String   @default("{}") // JSON: { chatgpt, claude, gemini, grok, metaAi, perplexity, copilot, other }
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

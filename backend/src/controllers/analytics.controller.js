@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma')
-const { fetchGA4Report } = require('../services/googleAnalytics.service')
+const { fetchGA4Report, fetchAiTrafficData } = require('../services/googleAnalytics.service')
 
 // Acepta 'NdaysAgo', 'today', 'yesterday' o 'YYYY-MM-DD'
 const VALID_GA4_DATE = /^(\d{4}-\d{2}-\d{2}|\d+daysAgo|today|yesterday)$/
@@ -114,4 +114,77 @@ async function getAdsData(req, res) {
   })
 }
 
-module.exports = { getAnalyticsData, getAdsData }
+/**
+ * GET /api/marketing/projects/:id/ai-traffic
+ * Query: ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD  (default: últimos 30 días)
+ *
+ * Devuelve:
+ *   live:     { chatgpt: 45, claude: 12, ... }  — período solicitado en tiempo real
+ *   history:  [{ month: "2026-04", chatgpt: 38, claude: 9, ... }]  — snapshots guardados
+ */
+async function getAiTrafficData(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const startDate = parseDateParam(req.query.startDate, '30daysAgo')
+    const endDate   = parseDateParam(req.query.endDate,   'today')
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId },
+      select: { id: true, name: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const integration = await prisma.projectIntegration.findUnique({
+      where: { projectId_type: { projectId, type: 'google_analytics' } },
+    })
+
+    if (!integration) {
+      return res.status(404).json({ error: 'Google Analytics no conectado', code: 'NO_INTEGRATION' })
+    }
+    if (integration.status === 'expired') {
+      return res.status(400).json({ error: 'Token expirado. Reconectá GA4.', code: 'TOKEN_EXPIRED' })
+    }
+    if (!integration.propertyId) {
+      return res.status(400).json({ error: 'GA4 Property ID no configurado.', code: 'NO_PROPERTY' })
+    }
+
+    // Fetch en paralelo: datos live + histórico de snapshots
+    const [live, snapshots] = await Promise.all([
+      fetchAiTrafficData(integration, startDate, endDate),
+      prisma.analyticsSnapshot.findMany({
+        where:   { projectId, workspaceId },
+        orderBy: { month: 'asc' },
+        select:  { month: true, aiTraffic: true },
+      }),
+    ])
+
+    // Parsear histórico — solo incluir meses que tengan algún dato de IA
+    const history = snapshots
+      .map(s => {
+        let t = {}
+        try { t = JSON.parse(s.aiTraffic || '{}') } catch { /* ignore */ }
+        const total = Object.values(t).reduce((a, b) => a + b, 0)
+        return total > 0 ? { month: s.month, ...t } : null
+      })
+      .filter(Boolean)
+
+    res.json({ live, history, projectName: project.name })
+  } catch (err) {
+    if (
+      err.code === 'TOKEN_EXPIRED' ||
+      err.message?.includes('invalid_grant') ||
+      err.message?.includes('UNAUTHENTICATED')
+    ) {
+      await prisma.projectIntegration.update({
+        where: { projectId_type: { projectId: Number(req.params.id), type: 'google_analytics' } },
+        data:  { status: 'expired' },
+      }).catch(() => {})
+      return res.status(400).json({ error: 'Token expirado. Reconectá GA4.', code: 'TOKEN_EXPIRED' })
+    }
+    next(err)
+  }
+}
+
+module.exports = { getAnalyticsData, getAdsData, getAiTrafficData }

@@ -92,7 +92,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.analyticsSnapshot.findFirst({
       where:   { projectId, workspaceId, month },
       select:  { sessions: true, activeUsers: true, newUsers: true, pageviews: true,
-                 bounceRate: true, avgDuration: true, conversions: true, topChannels: true },
+                 bounceRate: true, avgDuration: true, conversions: true, topChannels: true,
+                 aiTraffic: true },
     }),
     prisma.analyticsSnapshot.findFirst({
       where:   { projectId, workspaceId, month: prev },
@@ -201,6 +202,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     conversions: analyticsSnap.conversions ?? 0,
     topChannels: (() => {
       try { return JSON.parse(analyticsSnap.topChannels || '[]') } catch { return [] }
+    })(),
+    aiTraffic: (() => {
+      try {
+        const raw = JSON.parse(analyticsSnap.aiTraffic || '{}')
+        // Solo incluir fuentes con > 0 sesiones
+        return Object.fromEntries(Object.entries(raw).filter(([, v]) => v > 0))
+      } catch { return {} }
     })(),
     delta: analyticsPrev ? {
       sessions:    pct(analyticsSnap.sessions    ?? 0, analyticsPrev.sessions),
