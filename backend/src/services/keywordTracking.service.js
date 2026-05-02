@@ -195,13 +195,8 @@ Respondé SOLO con un JSON válido, sin markdown ni texto adicional:
     messages:   [{ role: 'user', content: prompt }],
   })
 
-  await logTokens({
-    workspaceId,
-    service:      'keywordAnalysis',
-    model:        'claude-haiku-4-5-20251001',
-    inputTokens:  response.usage?.input_tokens  ?? 0,
-    outputTokens: response.usage?.output_tokens ?? 0,
-  }).catch(err => console.error('[KeywordTracking] Error al registrar tokens de IA:', err.message))
+  logTokens('keywordAnalysis', null, response.usage, workspaceId)
+    .catch(err => console.error('[KeywordTracking] Error al registrar tokens de IA:', err.message))
 
   const parsed = parseAIJson(response.content[0].text)
 

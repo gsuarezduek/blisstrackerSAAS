@@ -45,17 +45,14 @@ async function listKeywords(req, res, next) {
 
     const integrationCountry = integration?.country || 'arg'
     const country = reqCountry || integrationCountry
-    const liveMode = !!reqCountry && reqCountry !== integrationCountry
-
     const month = currentMonthStr()
     const prevM = prevMonth(month)
+    // Siempre usamos datos en vivo de GSC: el mes actual nunca está completo
+    // y para cambios de país también necesitamos consultar GSC directamente
+    const liveMode = true
 
-    if (liveMode) {
-      // ── Modo en vivo: consulta GSC con filtro de país diferente al almacenado ──
-      if (!integration || integration.status !== 'active') {
-        return res.status(400).json({ error: 'GSC no conectado', status: 'no_integration' })
-      }
-
+    if (liveMode && integration?.status === 'active') {
+      // ── Modo en vivo: consulta GSC directamente ──
       const tracked = await prisma.trackedKeyword.findMany({
         where: { projectId, workspaceId },
         orderBy: { createdAt: 'asc' },
@@ -68,9 +65,25 @@ async function listKeywords(req, res, next) {
       const siteUrl = normalizeSiteUrl(integration.propertyId || project.websiteUrl)
       if (!siteUrl) return res.status(400).json({ error: 'No hay URL de sitio configurada' })
 
-      const { startDate, endDate } = monthBounds(month)
+      // Para el mes actual: últimos 30 días (igual que el SEO tab) para tener datos suficientes
+      // Para país diferente: mes calendario actual
+      let startDate, endDate
+      if (!reqCountry || reqCountry === integrationCountry) {
+        // Mes actual → últimos 30 días
+        const now  = new Date()
+        const from = new Date(now); from.setDate(now.getDate() - 30)
+        const pad  = n => String(n).padStart(2, '0')
+        startDate = `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`
+        endDate   = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+      } else {
+        const bounds = monthBounds(month)
+        startDate = bounds.startDate
+        endDate   = bounds.endDate
+      }
+
       const accessToken = await getValidAccessToken(integration)
 
+      // Consultar top 500 para no perder keywords con pocos clicks
       let rows = []
       try {
         rows = await querySearchConsole(accessToken, siteUrl, {
@@ -78,7 +91,7 @@ async function listKeywords(req, res, next) {
           endDate,
           type: 'web',
           dimensions: ['query'],
-          rowLimit: 100,
+          rowLimit: 500,
           ...(country !== 'all' ? {
             dimensionFilterGroups: [{ filters: [{ dimension: 'country', operator: 'equals', expression: country }] }],
           } : {}),
@@ -90,15 +103,28 @@ async function listKeywords(req, res, next) {
       const rowMap = {}
       for (const r of rows) rowMap[r.keys[0].toLowerCase()] = r
 
+      // Para el delta, leer ranking del mes anterior desde DB
+      const prevRankings = await prisma.keywordRanking.findMany({
+        where: { projectId, workspaceId, month: prevM },
+        select: { trackedKeywordId: true, position: true },
+      })
+      const prevMap = {}
+      for (const pr of prevRankings) prevMap[pr.trackedKeywordId] = pr.position
+
       const keywords = tracked.map(kw => {
-        const row = rowMap[kw.query.toLowerCase()]
+        const row     = rowMap[kw.query.toLowerCase()]
+        const currPos = row ? row.position : null
+        const prevPos = prevMap[kw.id] && prevMap[kw.id] > 0 ? prevMap[kw.id] : null
+        const delta   = currPos != null && prevPos != null
+          ? parseFloat((prevPos - currPos).toFixed(2))
+          : null
         return {
           id:               kw.id,
           query:            kw.query,
           currentMonth:     month,
-          currentPosition:  row ? row.position : null,
-          previousPosition: null,
-          delta:            null,
+          currentPosition:  currPos,
+          previousPosition: prevPos,
+          delta,
           clicks:           row ? Math.round(row.clicks)      : 0,
           impressions:      row ? Math.round(row.impressions)  : 0,
           ctr:              row ? row.ctr                      : 0,
@@ -111,7 +137,7 @@ async function listKeywords(req, res, next) {
       return res.json({ keywords, liveMode: true, country, integrationCountry })
     }
 
-    // ── Modo almacenado: devuelve rankings guardados en DB ──
+    // ── Modo almacenado: sin integración activa, devuelve rankings guardados ──
     const tracked = await prisma.trackedKeyword.findMany({
       where: { projectId, workspaceId },
       include: {
