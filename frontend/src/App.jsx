@@ -53,6 +53,7 @@ import SuperAdmin from './pages/SuperAdmin'
 import JoinWorkspace from './pages/JoinWorkspace'
 import Marketing   from './pages/Marketing'
 import Billing     from './pages/Billing'
+import EOS         from './pages/EOS'
 import OAuthResult  from './pages/OAuthResult'
 import LegalPage    from './pages/TermsPage'
 import ReportPublic from './pages/ReportPublic'
@@ -119,6 +120,7 @@ export default function App() {
           <Route path="/admin"              element={<AdminRoute><Admin        /></AdminRoute>} />
           <Route path="/admin/productivity" element={<AdminRoute><Productivity /></AdminRoute>} />
           <Route path="/admin/rrhh"         element={<AdminRoute><RRHH        /></AdminRoute>} />
+          <Route path="/admin/eos"          element={<AdminRoute><EOS         /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

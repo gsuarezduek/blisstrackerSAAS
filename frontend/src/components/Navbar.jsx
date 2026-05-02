@@ -90,7 +90,7 @@ export default function Navbar() {
   const profileRef = useRef(null)
   const adminRef   = useRef(null)
 
-  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh')
+  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos')
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -124,6 +124,7 @@ export default function Navbar() {
   const isAdmin   = user?.isAdmin === true
   const avatarSrc = avatarUrl(user?.avatar)
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
+  const { enabled: eosEnabled }       = useFeatureFlag('eos')
 
   // ── Links de navegación principal ────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
@@ -141,6 +142,7 @@ export default function Navbar() {
   const adminSublinks = [
     { to: '/admin/productivity', label: '📊 Productividad' },
     { to: '/admin/rrhh',         label: '👥 RRHH' },
+    ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
     { to: '/admin',              label: '⚙️ Panel' },
   ]
 

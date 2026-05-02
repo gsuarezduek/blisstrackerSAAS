@@ -16,6 +16,11 @@ const FEATURE_FLAGS = [
     name: 'Sección Marketing',
     description: 'Módulos de marketing asociados a proyectos: GEO (optimización para motores IA), SEO, anuncios y más.',
   },
+  {
+    key: 'eos',
+    name: 'Sección EOS',
+    description: 'Sistema Entrepreneurial Operating System basado en el libro Traction de Gino Wickman. Incluye Visión, Personas, Datos, Asuntos, Procesos y Tracción.',
+  },
 ]
 
 module.exports = { FEATURE_FLAGS }
