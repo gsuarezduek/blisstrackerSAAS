@@ -50,17 +50,21 @@ function monthOfDate(d) {
  * Retorna un objeto estructurado con secciones condicionales.
  */
 async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null) {
-  const prev     = prevMonthStr(month)
-  const last3    = prevMonthsArr(month, 3)
+  // El informe del mes X muestra datos del mes X-1.
+  // Ej: "Informe de Mayo 2026" → período de datos: Abril 2026.
+  const dataMonth = prevMonthStr(month)
+  const prev      = prevMonthStr(dataMonth)   // mes anterior al período (para deltas)
+  const last3     = prevMonthsArr(dataMonth, 3)
 
-  // Rango de fechas del mes (para tasks)
-  const [y, mo] = month.split('-').map(Number)
+  // Rango de fechas del período de datos (para tasks)
+  const [y, mo] = dataMonth.split('-').map(Number)
   const monthStart = new Date(Date.UTC(y, mo - 1, 1))
   const monthEnd   = new Date(Date.UTC(y, mo, 0, 23, 59, 59, 999))
 
   const [
     project,
     geoAudit,
+    geoAuditHistory,
     analyticsSnap,
     analyticsPrev,
     analyticsEvolution,
@@ -88,9 +92,17 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       select:  { score: true, createdAt: true, citability: true, brandAuthority: true, eeat: true, technical: true, platforms: true, schema: true },
     }),
 
-    // GA4 snapshots
+    // Historial de scores GEO (últimos 6 audits completados, para gráfico de evolución)
+    prisma.geoAudit.findMany({
+      where:   { projectId, workspaceId, status: 'completed' },
+      orderBy: { createdAt: 'desc' },
+      take:    6,
+      select:  { score: true, createdAt: true },
+    }),
+
+    // GA4 snapshots — se usa dataMonth (mes anterior al del informe)
     prisma.analyticsSnapshot.findFirst({
-      where:   { projectId, workspaceId, month },
+      where:   { projectId, workspaceId, month: dataMonth },
       select:  { sessions: true, activeUsers: true, newUsers: true, pageviews: true,
                  bounceRate: true, avgDuration: true, conversions: true, topChannels: true,
                  aiTraffic: true },
@@ -109,7 +121,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
     // Instagram snapshots
     prisma.instagramSnapshot.findFirst({
-      where:   { projectId, workspaceId, month },
+      where:   { projectId, workspaceId, month: dataMonth },
       select:  { followersCount: true, engagementRate: true, avgLikes: true,
                  avgComments: true, postsCount: true, mediaCount: true },
     }),
@@ -120,7 +132,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
     // TikTok snapshots
     prisma.tikTokSnapshot.findFirst({
-      where:   { projectId, workspaceId, month },
+      where:   { projectId, workspaceId, month: dataMonth },
       select:  { followersCount: true, engagementRate: true, avgViews: true,
                  avgLikes: true, postsThisMonth: true, likesCount: true },
     }),
@@ -141,12 +153,12 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       select:  { performanceScore: true, metrics: true, createdAt: true },
     }),
 
-    // Keywords con rankings del mes y anterior
+    // Keywords con rankings del período de datos y el anterior
     prisma.trackedKeyword.findMany({
       where:   { projectId, workspaceId },
       include: {
         rankings: {
-          where:   { month: { in: [month, prev] } },
+          where:   { month: { in: [dataMonth, prev] } },
           orderBy: { month: 'desc' },
         },
       },
@@ -189,6 +201,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       platforms:      geoAudit.platforms      ?? null,
       schema:         geoAudit.schema         ?? null,
     },
+    // Historial de audits ordenado de más antiguo a más reciente (para gráfico de evolución)
+    history: geoAuditHistory.length >= 2
+      ? [...geoAuditHistory].reverse().map(a => ({
+          score: a.score,
+          date:  a.createdAt,
+        }))
+      : null,
   } : null
 
   // ── Analytics GA4 ────────────────────────────────────────────────────────────
@@ -260,7 +279,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Keywords movers ──────────────────────────────────────────────────────────
   const kwMovers = allKeywords
     .map(kw => {
-      const curr = kw.rankings.find(r => r.month === month)
+      const curr = kw.rankings.find(r => r.month === dataMonth)
       const prv  = kw.rankings.find(r => r.month === prev)
       if (!curr || !prv || prv.position <= 0 || curr.position <= 0) return null
       return { query: kw.query, delta: parseFloat((prv.position - curr.position).toFixed(1)), currPos: curr.position }
@@ -270,10 +289,10 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   const kwImproved = kwMovers.filter(m => m.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5)
   const kwDeclined = kwMovers.filter(m => m.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5)
 
-  // Tabla completa de keywords del mes
+  // Tabla completa de keywords del período de datos
   const kwTable = allKeywords
     .map(kw => {
-      const curr = kw.rankings.find(r => r.month === month)
+      const curr = kw.rankings.find(r => r.month === dataMonth)
       const prv  = kw.rankings.find(r => r.month === prev)
       if (!curr || curr.position <= 0) return null
       return {
@@ -306,7 +325,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // Si ya existe un análisis cacheado, no se regenera
   const analysis = cachedAnalysis
     ? cachedAnalysis
-    : await generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, performance, workspaceId })
+    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, keywords, performance, workspaceId })
 
   return {
     project: {
@@ -315,7 +334,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       websiteUrl: project?.websiteUrl,
       services,
     },
-    month,
+    month,        // mes del informe (ej: "2026-05") — para identificación/navegación
+    dataMonth,    // período de los datos (ej: "2026-04") — para mostrar al usuario
     connectedTypes: [...connectedTypes],
     sections: { geo, analytics, evolution, instagram, tiktok, keywords, performance, tasks },
     analysis,

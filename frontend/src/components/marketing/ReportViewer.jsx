@@ -3,10 +3,13 @@
  * Se usa tanto en la URL pública (/report/:token) como en el tab interno (InformesTab).
  *
  * Props:
- *   data       — objeto { project, month, sections, analysis, connectedTypes }
- *   objectives — objeto con targets (puede ser {})
- *   isPublic   — boolean: true en la URL del cliente (sin edición)
+ *   data             — objeto { project, month, sections, analysis, connectedTypes }
+ *   objectives       — objeto con targets (puede ser {})
+ *   isPublic         — boolean: true en la URL del cliente (sin edición)
+ *   onSaveAnalysis   — función async(updatedAnalysis) — solo en vista interna
  */
+
+import { useState } from 'react'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -145,11 +148,12 @@ function LineChart({ points, color = '#f97316', height = 60, showLabels = true }
 
 // ─── Secciones ────────────────────────────────────────────────────────────────
 
-function SectionCard({ title, icon, children, className = '' }) {
+function SectionCard({ title, icon, children, className = '', action }) {
   return (
     <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 ${className}`}>
-      <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-        <span>{icon}</span> {title}
+      <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2"><span>{icon}</span> {title}</span>
+        {action}
       </h3>
       {children}
     </div>
@@ -243,10 +247,28 @@ function ObjectivesTable({ objectives, sections }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function ReportViewer({ data, objectives = {}, isPublic = false }) {
+export default function ReportViewer({ data, objectives = {}, isPublic = false, onSaveAnalysis }) {
+  const [editingResumen, setEditingResumen] = useState(false)
+  const [resumenDraft,   setResumenDraft]   = useState('')
+  const [savingResumen,  setSavingResumen]  = useState(false)
+
   if (!data) return null
 
-  const { project, month, sections, analysis } = data
+  const { project, month, dataMonth, sections, analysis } = data
+  // dataMonth = período real de los datos (ej: "2026-04")
+  // month     = mes del informe (ej: "2026-05")
+  const displayMonth = dataMonth || month
+
+  async function handleSaveResumen() {
+    if (!onSaveAnalysis) return
+    setSavingResumen(true)
+    try {
+      await onSaveAnalysis({ ...analysis, resumen: resumenDraft })
+      setEditingResumen(false)
+    } finally {
+      setSavingResumen(false)
+    }
+  }
   const s = sections
 
   // Canales de tráfico para el chart
@@ -276,7 +298,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
             <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">
-              Informe mensual — {monthLabel(month)}
+              Informe mensual — {monthLabel(displayMonth)}
             </p>
             {project.websiteUrl && (
               <a href={project.websiteUrl} target="_blank" rel="noreferrer"
@@ -285,37 +307,77 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
               </a>
             )}
           </div>
-          {s.geo && <ScoreRing score={s.geo.score} band={s.geo.band} />}
         </div>
       </div>
 
       {/* ── Resumen ejecutivo ── */}
-      {analysis?.resumen && (
-        <SectionCard title="Resumen del mes" icon="📝">
-          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">{analysis.resumen}</p>
-
-          {analysis.highlights?.length > 0 && (
-            <div className="mt-4 space-y-1.5">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Logros del mes</p>
-              {analysis.highlights.map((hl, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <span className="text-green-500 mt-0.5 shrink-0">✓</span>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{hl}</span>
-                </div>
-              ))}
-            </div>
+      {(analysis?.resumen || (!isPublic && onSaveAnalysis)) && (
+        <SectionCard
+          title="Resumen del mes"
+          icon="📝"
+          action={!isPublic && onSaveAnalysis && !editingResumen && (
+            <button
+              onClick={() => { setResumenDraft(analysis?.resumen || ''); setEditingResumen(true) }}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
+            >
+              ✏️ Editar
+            </button>
           )}
-
-          {analysis.alertas?.length > 0 && (
-            <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl space-y-1">
-              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Oportunidades de mejora</p>
-              {analysis.alertas.map((a, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <span className="text-amber-500 mt-0.5 shrink-0">→</span>
-                  <span className="text-sm text-amber-800 dark:text-amber-300">{a}</span>
-                </div>
-              ))}
+        >
+          {editingResumen ? (
+            <div className="space-y-3">
+              <textarea
+                value={resumenDraft}
+                onChange={e => setResumenDraft(e.target.value)}
+                rows={8}
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setEditingResumen(false)}
+                  className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveResumen}
+                  disabled={savingResumen}
+                  className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {savingResumen ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
             </div>
+          ) : (
+            <>
+              <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">
+                {analysis?.resumen || <span className="text-gray-400 dark:text-gray-500 italic">Sin resumen todavía.</span>}
+              </p>
+
+              {analysis?.highlights?.length > 0 && (
+                <div className="mt-4 space-y-1.5">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Logros del mes</p>
+                  {analysis.highlights.map((hl, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5 shrink-0">✓</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{hl}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {analysis?.alertas?.length > 0 && (
+                <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl space-y-1">
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Oportunidades de mejora</p>
+                  {analysis.alertas.map((a, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-amber-500 mt-0.5 shrink-0">→</span>
+                      <span className="text-sm text-amber-800 dark:text-amber-300">{a}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </SectionCard>
       )}
@@ -323,6 +385,88 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
       {/* ── Objetivos ── */}
       {Object.keys(objectives).length > 0 && (
         <ObjectivesTable objectives={objectives} sections={s} />
+      )}
+
+      {/* ── GEO / Presencia en IAs ── */}
+      {s.geo && (
+        <SectionCard title="Presencia en IAs (GEO)" icon="🌐">
+          {/* Score ring + desglose de componentes */}
+          <div className="flex flex-col sm:flex-row gap-6 items-start">
+            <div className="shrink-0 flex flex-col items-center gap-1">
+              <ScoreRing score={s.geo.score} band={s.geo.band} />
+              {s.geo.date && (
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  {new Date(s.geo.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </p>
+              )}
+            </div>
+            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {[
+                { label: 'Citabilidad',       key: 'citability' },
+                { label: 'Autoridad de marca', key: 'brandAuthority' },
+                { label: 'E-E-A-T',            key: 'eeat' },
+                { label: 'Técnico',            key: 'technical' },
+                { label: 'Plataformas',        key: 'platforms' },
+                { label: 'Schema',             key: 'schema' },
+              ].filter(c => s.geo.components[c.key] != null).map(c => {
+                const val = s.geo.components[c.key]
+                const col = val >= 86 ? '#3b82f6' : val >= 68 ? '#22c55e' : val >= 36 ? '#eab308' : '#ef4444'
+                return (
+                  <div key={c.key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-2.5">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.label}</span>
+                      <span className="text-xs font-bold text-gray-900 dark:text-white ml-1">{Math.round(val)}</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${val}%`, backgroundColor: col }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Evolución histórica de scores GEO */}
+          {s.geo.history && s.geo.history.length >= 2 && (
+            <div className="mt-5">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Evolución del score</p>
+              <LineChart
+                points={s.geo.history.map(h => ({
+                  label: new Date(h.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }),
+                  value: h.score,
+                }))}
+                color="#3b82f6"
+                height={70}
+              />
+            </div>
+          )}
+
+          {/* Tráfico desde IAs */}
+          {s.analytics?.aiTraffic && Object.keys(s.analytics.aiTraffic).length > 0 && (() => {
+            const AI_LABELS = {
+              chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude',
+              grok: 'Grok', metaAi: 'Meta AI', perplexity: 'Perplexity', copilot: 'Copilot',
+            }
+            const entries = Object.entries(s.analytics.aiTraffic).sort(([, a], [, b]) => b - a)
+            const total   = entries.reduce((acc, [, v]) => acc + v, 0)
+            return (
+              <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Sesiones referidas desde IAs</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {entries.map(([key, sessions]) => (
+                    <div key={key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+                      <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(sessions)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{AI_LABELS[key] ?? key}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500 text-right mt-2">
+                  Total: <strong className="text-gray-600 dark:text-gray-300">{fmt(total)} sesiones</strong> referidas desde IAs este mes
+                </p>
+              </div>
+            )
+          })()}
+        </SectionCard>
       )}
 
       {/* ── Analytics GA4 ── */}
@@ -341,35 +485,6 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
               <BarChart items={channels} color="#f97316" />
             </div>
           )}
-        </SectionCard>
-      )}
-
-      {/* ── Tráfico desde IAs ── */}
-      {s.analytics?.aiTraffic && Object.keys(s.analytics.aiTraffic).length > 0 && (
-        <SectionCard title="Tráfico desde IAs" icon="🤖">
-          {(() => {
-            const AI_LABELS = {
-              chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude',
-              grok: 'Grok', metaAi: 'Meta AI', perplexity: 'Perplexity', copilot: 'Copilot',
-            }
-            const entries = Object.entries(s.analytics.aiTraffic).sort(([, a], [, b]) => b - a)
-            const total   = entries.reduce((s, [, v]) => s + v, 0)
-            return (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {entries.map(([key, sessions]) => (
-                    <div key={key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(sessions)}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{AI_LABELS[key] ?? key}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400 dark:text-gray-500 text-right">
-                  Total: <strong className="text-gray-600 dark:text-gray-300">{fmt(total)} sesiones</strong> referidas desde IAs este mes
-                </p>
-              </div>
-            )
-          })()}
         </SectionCard>
       )}
 
@@ -428,6 +543,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
                     <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Posición</th>
                     <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Cambio</th>
                     <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Clics</th>
+                    <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Impresiones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -444,6 +560,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
                         }
                       </td>
                       <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{fmt(kw.clicks)}</td>
+                      <td className="py-1.5 text-right text-gray-500 dark:text-gray-500">{kw.impressions != null ? fmt(kw.impressions) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -541,7 +658,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false }
       {isPublic && (
         <div className="text-center py-4">
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            Generado por <strong className="text-gray-600 dark:text-gray-400">BlissTracker</strong> · {monthLabel(month)}
+            Generado por <strong className="text-gray-600 dark:text-gray-400">BlissTracker</strong> · {monthLabel(displayMonth)}
           </p>
         </div>
       )}

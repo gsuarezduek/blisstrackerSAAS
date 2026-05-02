@@ -104,8 +104,9 @@ function ObjectivesModal({ objectives, onSave, onClose, saving }) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function InformesTab({ projectId }) {
-  // Default: último mes cerrado (el mes actual no tiene snapshots todavía)
-  const [month,       setMonth]       = useState(prevMonthStr(currentMonthStr()))
+  // Default: informe del mes actual (que contiene datos del mes anterior)
+  // Ej: "Informe de Mayo 2026" → muestra datos de Abril 2026
+  const [month,       setMonth]       = useState(currentMonthStr())
   const [reportMeta,  setReportMeta]  = useState(null)
   const [reportData,  setReportData]  = useState(null)
   const [loading,     setLoading]     = useState(false)
@@ -146,6 +147,11 @@ export default function InformesTab({ projectId }) {
     }
   }
 
+  async function handleSaveAnalysis(updatedAnalysis) {
+    await api.patch(`/marketing/projects/${projectId}/reports/${month}`, { analysis: updatedAnalysis })
+    setReportData(prev => prev ? { ...prev, analysis: updatedAnalysis } : prev)
+  }
+
   function handleCopyLink() {
     if (!reportMeta?.token) return
     const url = `${window.location.origin}/report/${reportMeta.token}`
@@ -179,9 +185,10 @@ export default function InformesTab({ projectId }) {
           >
             ◀
           </button>
-          <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize min-w-[140px] text-center">
-            {monthLabel(month)}
-          </span>
+          <div className="text-center min-w-[160px]">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{monthLabel(month)}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 capitalize">datos de {monthLabel(prevMonthStr(month))}</p>
+          </div>
           <button
             onClick={() => canGoNext && setMonth(nextMonthStr(month))}
             disabled={!canGoNext}
@@ -227,6 +234,7 @@ export default function InformesTab({ projectId }) {
           data={reportData}
           objectives={reportMeta?.objectives ?? {}}
           isPublic={false}
+          onSaveAnalysis={handleSaveAnalysis}
         />
       )}
 

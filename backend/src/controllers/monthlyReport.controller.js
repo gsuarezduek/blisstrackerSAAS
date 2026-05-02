@@ -102,7 +102,7 @@ async function updateReport(req, res, next) {
     const projectId   = Number(req.params.id)
     const workspaceId = req.workspace.id
     const { month }   = req.params
-    const { objectives, notes } = req.body
+    const { objectives, notes, analysis } = req.body
 
     if (!/^\d{4}-\d{2}$/.test(month)) {
       return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
@@ -114,6 +114,7 @@ async function updateReport(req, res, next) {
     const updateData = {}
     if (objectives !== undefined) updateData.objectives = JSON.stringify(objectives)
     if (notes      !== undefined) updateData.notes      = notes
+    if (analysis   !== undefined) updateData.analysis   = JSON.stringify(analysis)
 
     const report = await prisma.monthlyReport.upsert({
       where:  { projectId_month: { projectId, month } },
