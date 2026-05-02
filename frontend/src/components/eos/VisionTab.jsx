@@ -82,6 +82,45 @@ function CoreValuesHelp() {
   )
 }
 
+// ─── Contenido de ayuda: Meta a 10 años ──────────────────────────────────────
+
+function TenYearHelp() {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">
+        Cómo fijar una meta a 10 años
+      </p>
+      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        Reúnete con tu equipo de liderazgo y discutan hacia dónde quieren llevar tu organización. Una advertencia: aunque tus valores medulares y tu enfoque medular ya están presentes dentro de tu organización, la meta a 10 años será distinta. Nunca he visto que un equipo aterrice en la misma página con respecto a su meta de 10 años en la primera discusión. Ten paciencia en el primer intento.
+      </p>
+      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        Recomiendo empezar preguntándole a todos qué tan lejos quieren ver. Después les preguntaría a todos qué nivel de ingresos creen que la organización podría tener para ese punto. Esa es una pregunta particularmente divertida, y seguramente tendrás una gran variedad de respuestas. Estos diferentes números deberían llevar a todos a discutir y ultimadamente ponerse de acuerdo.
+      </p>
+      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        Después que estas dos preguntas abran y arranquen la discusión, pregúntale a todos cuál creen que es la meta. Puede tomar varias reuniones llegar a la respuesta final. He tenido que regresar con algunos clientes de EOS con la misma pregunta cada trimestre hasta que la aterrizan.
+      </p>
+      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        Al tomar esa decisión, confirma que todos se sientan motivados por ella y que estén en la misma página. Como con todas las actividades para fijar metas, tu meta a 10 años debe ser <strong className="text-gray-900 dark:text-white">específica y medible</strong> para que no puedan existir áreas grises. Sabrás cuál es la meta correcta cuando la tengas: será la que cause pasión, emoción y energía en cada una de las personas en tu organización cuando la repiten.
+      </p>
+      <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 space-y-2 mt-2">
+        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Preguntas para arrancar la discusión</p>
+        <ul className="space-y-1">
+          {[
+            '¿Qué tan lejos queremos ver? ¿Cuál es nuestra ambición máxima?',
+            '¿Qué nivel de ingresos creés que podríamos tener en 10 años?',
+            '¿Cómo queremos que nos conozca el mercado dentro de una década?',
+            '¿Qué impacto queremos haber generado en nuestros clientes y en la industria?',
+          ].map(q => (
+            <li key={q} className="text-sm text-gray-600 dark:text-gray-300 flex items-start gap-2">
+              <span className="text-primary-400 shrink-0 mt-0.5">→</span> {q}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 // ─── Contenido de ayuda: Enfoque Medular ─────────────────────────────────────
 
 function EnfoqueMedularHelp() {
@@ -349,8 +388,9 @@ export default function VisionTab() {
   }
 
   // Campos de texto con auto-save
-  const purpose = useDebouncedField(data?.purpose ?? '', 'purpose', saveFields)
-  const niche   = useDebouncedField(data?.niche   ?? '', 'niche',   saveFields)
+  const purpose       = useDebouncedField(data?.purpose       ?? '', 'purpose',       saveFields)
+  const niche         = useDebouncedField(data?.niche         ?? '', 'niche',         saveFields)
+  const tenYearTarget = useDebouncedField(data?.tenYearTarget ?? '', 'tenYearTarget', saveFields)
 
   if (loading) {
     return (
@@ -421,9 +461,26 @@ export default function VisionTab() {
         </div>
       </SectionCard>
 
+      {/* ── Meta a 10 años ── */}
+      <SectionCard
+        title="Meta a 10 años"
+        desc="¿Dónde querés que esté tu organización dentro de una década?"
+        saving={tenYearTarget.saving}
+        saved={tenYearTarget.saved}
+        onHelp={() => setShowHelp('tenYear')}
+      >
+        <textarea
+          value={tenYearTarget.value}
+          onChange={e => tenYearTarget.handleChange(e.target.value)}
+          rows={4}
+          maxLength={1000}
+          placeholder="Ej: Ser la agencia de marketing digital líder en LATAM, con presencia en 5 países y 200 clientes activos."
+          className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+        />
+      </SectionCard>
+
       {/* ── Otras secciones (próximamente) ── */}
       {[
-        { title: 'Visión a 10 años (BHAG)', desc: 'El gran objetivo audaz y difuso que guía el rumbo a largo plazo.' },
         { title: 'Estrategia de Marketing', desc: 'Cliente ideal, propuesta de valor única y garantías.' },
         { title: 'Imagen a 3 años',         desc: '¿Cómo se ve la empresa en 3 años? Ingresos, rentabilidad, headcount y logros.' },
         { title: 'Plan a 1 año',            desc: 'Objetivos concretos y medibles para los próximos 12 meses.' },
@@ -446,6 +503,11 @@ export default function VisionTab() {
       {showHelp === 'enfoque' && (
         <HelpModal title="¿Cómo definir el Enfoque Medular?" onClose={() => setShowHelp(null)}>
           <EnfoqueMedularHelp />
+        </HelpModal>
+      )}
+      {showHelp === 'tenYear' && (
+        <HelpModal title="¿Cómo fijar una Meta a 10 años?" onClose={() => setShowHelp(null)}>
+          <TenYearHelp />
         </HelpModal>
       )}
     </div>

@@ -1,0 +1,1 @@
+ALTER TABLE "EOSData" ADD COLUMN "tenYearTarget" TEXT;

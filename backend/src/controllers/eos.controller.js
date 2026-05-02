@@ -8,9 +8,10 @@ function safeParseArr(str) {
 
 function formatRecord(record) {
   return {
-    coreValues: safeParseArr(record.coreValues),
-    purpose:    record.purpose ?? '',
-    niche:      record.niche   ?? '',
+    coreValues:    safeParseArr(record.coreValues),
+    purpose:       record.purpose       ?? '',
+    niche:         record.niche         ?? '',
+    tenYearTarget: record.tenYearTarget ?? '',
   }
 }
 
@@ -43,7 +44,7 @@ async function getEOS(req, res, next) {
 async function updateEOS(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { coreValues, purpose, niche } = req.body
+    const { coreValues, purpose, niche, tenYearTarget } = req.body
 
     const updateData = {}
 
@@ -55,8 +56,9 @@ async function updateEOS(req, res, next) {
       updateData.coreValues = JSON.stringify(clean)
     }
 
-    if (purpose !== undefined) updateData.purpose = String(purpose).slice(0, 500)
-    if (niche   !== undefined) updateData.niche   = String(niche).slice(0, 500)
+    if (purpose       !== undefined) updateData.purpose       = String(purpose).slice(0, 500)
+    if (niche         !== undefined) updateData.niche         = String(niche).slice(0, 500)
+    if (tenYearTarget !== undefined) updateData.tenYearTarget = String(tenYearTarget).slice(0, 1000)
 
     const record = await prisma.eOSData.upsert({
       where:  { workspaceId },

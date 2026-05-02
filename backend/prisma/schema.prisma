@@ -1007,8 +1007,9 @@ model EOSData {
   id          Int      @id @default(autoincrement())
   workspaceId Int      @unique
   coreValues  String   @default("[]")   // JSON: string[]
-  purpose     String?                   // Propósito / Causa / Pasión
-  niche       String?                   // Nicho de la organización
+  purpose       String?                 // Propósito / Causa / Pasión
+  niche         String?                 // Nicho de la organización
+  tenYearTarget String?                 // Meta a 10 años
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
