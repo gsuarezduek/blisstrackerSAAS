@@ -211,6 +211,37 @@ Respondé SOLO con un JSON válido, sin markdown ni texto adicional:
   return parsed
 }
 
+// ─── Cron: guardar rankings semanales del mes actual ─────────────────────────
+
+/**
+ * Ejecutado semanalmente: actualiza rankings del mes en curso para todos los
+ * proyectos con GSC activo y al menos 1 keyword trackeada.
+ * Usa upsert, por lo que sobreescribe el dato del mes actual con datos frescos.
+ */
+async function saveCurrentMonthKeywordRankings() {
+  const now   = new Date()
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+
+  const projects = await prisma.trackedKeyword.findMany({
+    where:    {},
+    select:   { projectId: true, workspaceId: true },
+    distinct: ['projectId'],
+  })
+
+  console.log(`[KeywordTracking] Actualizando rankings de ${month} (mes actual) para ${projects.length} proyecto(s)...`)
+  let saved = 0
+  for (const { projectId, workspaceId } of projects) {
+    try {
+      await saveMonthKeywordRankings(projectId, workspaceId, month)
+      saved++
+    } catch (err) {
+      console.error(`[KeywordTracking] Error en proyecto ${projectId}:`, err.message)
+    }
+    await new Promise(r => setTimeout(r, 500))
+  }
+  console.log(`[KeywordTracking] ${saved}/${projects.length} proyectos actualizados (mes actual).`)
+}
+
 // ─── Cron: guardar rankings del mes anterior ──────────────────────────────────
 
 /**
@@ -247,5 +278,6 @@ module.exports = {
   saveMonthKeywordRankings,
   generateKeywordAnalysis,
   saveAllKeywordRankings,
+  saveCurrentMonthKeywordRankings,
   currentMonthStr,
 }

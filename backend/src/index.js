@@ -21,7 +21,7 @@ const { sendAllWeeklyReports }          = require('./services/weeklyReport.servi
 const { updateAllMemories }             = require('./services/insightMemory.service')
 const { saveAllPreviousMonthSnapshots } = require('./services/analyticsSnapshot.service')
 const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service')
-const { saveAllKeywordRankings }        = require('./services/keywordTracking.service')
+const { saveAllKeywordRankings, saveCurrentMonthKeywordRankings } = require('./services/keywordTracking.service')
 const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.service')
 const { sendAllMonthlyMarketingReports }   = require('./services/monthlyMarketingReport.service')
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
@@ -34,6 +34,7 @@ let insightMemoryRunning        = false
 let analyticsSnapshotRunning    = false
 let pageSpeedMonthlyRunning     = false
 let keywordRankingsRunning      = false
+let keywordWeeklyRunning        = false
 let geoMonthlyRunning           = false
 let marketingReportRunning      = false
 let instagramSnapshotRunning    = false
@@ -83,6 +84,16 @@ cron.schedule('0 4 1 * *', async () => {
   console.log('[KeywordTracking] Iniciando guardado mensual de rankings...')
   try { await saveAllKeywordRankings() }
   finally { keywordRankingsRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: actualizar rankings del mes actual — lunes 06:00 ART (semanal, upsert)
+cron.schedule('0 6 * * 1', async () => {
+  if (keywordWeeklyRunning) { console.log('[KeywordTracking] Semanal ya en ejecución, se omite.'); return }
+  keywordWeeklyRunning = true
+  console.log('[KeywordTracking] Iniciando actualización semanal de rankings del mes actual...')
+  try { await saveCurrentMonthKeywordRankings() }
+  catch (err) { console.error('[KeywordTracking] Error en cron semanal:', err.message) }
+  finally { keywordWeeklyRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: limpieza semanal de tablas de crecimiento ilimitado — domingos 03:00 hora Buenos Aires

@@ -243,4 +243,19 @@ Usá datos reales del sitio donde sea posible. Para campos desconocidos usá val
   } catch (err) { next(err) }
 }
 
-module.exports = { runAudit, listAudits, getAudit, generateLlmsTxt, generateSchemaOrg }
+// ─── DELETE /geo/audits/:id ───────────────────────────────────────────────────
+
+async function deleteAudit(req, res, next) {
+  try {
+    const id          = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const audit = await prisma.geoAudit.findFirst({ where: { id, workspaceId } })
+    if (!audit) return res.status(404).json({ error: 'Auditoría no encontrada' })
+
+    await prisma.geoAudit.delete({ where: { id } })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+module.exports = { runAudit, listAudits, getAudit, generateLlmsTxt, generateSchemaOrg, deleteAudit }

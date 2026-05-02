@@ -32,7 +32,7 @@ async function saveTikTokSnapshot(projectId, workspaceId, month, preloaded = nul
       throw new Error(`Proyecto ${projectId}: no tiene integración de TikTok activa`)
     }
     const token = await getValidTikTokToken(integration)
-    metrics     = await fetchTikTokMetrics(token)
+    metrics     = await fetchTikTokMetrics(token, month)
   }
 
   await prisma.tikTokSnapshot.upsert({

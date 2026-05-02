@@ -155,7 +155,7 @@ export default function InformesTab({ projectId }) {
     })
   }
 
-  const isCurrentOrFuture = month >= today
+  const today = currentMonthStr()
   const canGoNext = month < today
 
   if (!projectId) {

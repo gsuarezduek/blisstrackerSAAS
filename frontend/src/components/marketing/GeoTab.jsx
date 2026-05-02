@@ -290,6 +290,8 @@ export default function GeoTab({ projectId, projects }) {
   const [taskModal, setTaskModal]   = useState(null) // { title }
   const [llmsModal, setLlmsModal]   = useState(null) // { content } | 'loading'
   const [schemaModal, setSchemaModal] = useState(null) // { schemas } | 'loading'
+  const [deleteModal, setDeleteModal] = useState(null) // { id } | null
+  const [deleting, setDeleting]     = useState(false)
   const pollRef = useRef(null)
 
   const selectedProject = projects.find(p => String(p.id) === projectId)
@@ -369,6 +371,21 @@ export default function GeoTab({ projectId, projects }) {
     } catch (e) {
       setRunning(false)
       setError(e.response?.data?.error || 'Error al iniciar el análisis')
+    }
+  }
+
+  async function handleDeleteAudit() {
+    if (!deleteModal) return
+    setDeleting(true)
+    try {
+      await api.delete(`/marketing/geo/audits/${deleteModal.id}`)
+      setAudits(prev => prev.filter(a => a.id !== deleteModal.id))
+      if (activeAudit?.id === deleteModal.id) setActive(null)
+      setDeleteModal(null)
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al eliminar la auditoría')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -630,28 +647,40 @@ export default function GeoTab({ projectId, projects }) {
               {audits.map(a => (
                 <div
                   key={a.id}
-                  onClick={() => a.status === 'completed' && loadAuditDetail(a.id)}
-                  className={`py-3 flex items-center justify-between gap-4 ${
-                    a.status === 'completed' ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 rounded-lg px-2 -mx-2' : ''
-                  }`}
+                  className="py-3 flex items-center justify-between gap-4 group"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{a.url}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{fmtDate(a.createdAt)}</p>
+                  <div
+                    className={`flex-1 min-w-0 flex items-center justify-between gap-4 ${
+                      a.status === 'completed' ? 'cursor-pointer' : ''
+                    }`}
+                    onClick={() => a.status === 'completed' && loadAuditDetail(a.id)}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{a.url}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{fmtDate(a.createdAt)}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {a.status === 'completed' && a.score != null && (
+                        <span className={`text-sm font-bold ${scoreColor(a.score)}`}>{a.score}/100</span>
+                      )}
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                        a.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                        a.status === 'running'   ? 'bg-blue-100  dark:bg-blue-900/30  text-blue-700  dark:text-blue-400'  :
+                        a.status === 'failed'    ? 'bg-red-100   dark:bg-red-900/30   text-red-700   dark:text-red-400'   :
+                                                   'bg-gray-100  dark:bg-gray-700     text-gray-500  dark:text-gray-400'
+                      }`}>
+                        {a.status === 'completed' ? 'completado' : a.status === 'running' ? 'analizando…' : a.status === 'failed' ? 'falló' : 'pendiente'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {a.status === 'completed' && a.score != null && (
-                      <span className={`text-sm font-bold ${scoreColor(a.score)}`}>{a.score}/100</span>
-                    )}
-                    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-                      a.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                      a.status === 'running'   ? 'bg-blue-100  dark:bg-blue-900/30  text-blue-700  dark:text-blue-400'  :
-                      a.status === 'failed'    ? 'bg-red-100   dark:bg-red-900/30   text-red-700   dark:text-red-400'   :
-                                                 'bg-gray-100  dark:bg-gray-700     text-gray-500  dark:text-gray-400'
-                    }`}>
-                      {a.status === 'completed' ? 'completado' : a.status === 'running' ? 'analizando…' : a.status === 'failed' ? 'falló' : 'pendiente'}
-                    </span>
-                  </div>
+                  <button
+                    onClick={e => { e.stopPropagation(); setDeleteModal({ id: a.id, score: a.score, date: a.createdAt }) }}
+                    disabled={a.status === 'running'}
+                    title="Eliminar análisis"
+                    className="flex-shrink-0 text-gray-200 dark:text-gray-700 hover:text-red-500 dark:hover:text-red-400 transition-colors text-xl leading-none disabled:opacity-30 disabled:cursor-not-allowed opacity-0 group-hover:opacity-100"
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
             </div>
@@ -670,6 +699,46 @@ export default function GeoTab({ projectId, projects }) {
       )}
 
       {!projectId && <CrossProjectPanel />}
+
+      {/* Modal de confirmación de eliminación */}
+      {deleteModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={e => e.target === e.currentTarget && setDeleteModal(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-start gap-4 mb-5">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                <span className="text-red-600 dark:text-red-400 text-lg">🗑</span>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Eliminar análisis</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  {deleteModal.score != null
+                    ? `Score ${deleteModal.score}/100 · ${fmtDate(deleteModal.date)}`
+                    : fmtDate(deleteModal.date)
+                  }
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
+              Esta acción es permanente. El análisis se eliminará del historial y no se tendrá en cuenta en el gráfico de evolución de score ni en los informes.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteModal(null)}
+                className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteAudit}
+                disabled={deleting}
+                className="flex-1 py-2 text-sm bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+              >
+                {deleting ? 'Eliminando…' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal llms.txt */}
       {llmsModal && llmsModal !== 'loading' && (

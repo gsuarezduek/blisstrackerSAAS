@@ -17,6 +17,7 @@ const tiktok             = require('../controllers/tiktok.controller')
 const metaAds           = require('../controllers/metaAds.controller')
 const googleAds         = require('../controllers/googleAds.controller')
 const monthlyReport     = require('../controllers/monthlyReport.controller')
+const cannibalization   = require('../controllers/cannibalization.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -31,6 +32,7 @@ router.use(auth, resolveWorkspace)
 router.post('/geo/audit',                    geo.runAudit)
 router.get('/geo/audits',                    geo.listAudits)
 router.get('/geo/audits/:id',                geo.getAudit)
+router.delete('/geo/audits/:id',             geo.deleteAudit)
 router.get('/geo/audits/:id/llms-txt',       geo.generateLlmsTxt)
 router.post('/geo/audits/:id/schema',        geo.generateSchemaOrg)
 
@@ -84,6 +86,12 @@ router.get('/projects/:id/pagespeed/:resultId',   pageSpeed.getResult)
 router.get('/projects/:id/reports',          monthlyReport.listReports)
 router.get('/projects/:id/reports/:month',   monthlyReport.getReport)
 router.patch('/projects/:id/reports/:month', monthlyReport.updateReport)
+
+// Canibalización SEO
+router.post('/projects/:id/cannibal',         cannibalization.runAnalysis)
+router.get('/projects/:id/cannibal',          cannibalization.listReports)
+router.get('/projects/:id/cannibal/:rid',     cannibalization.getReport)
+router.delete('/projects/:id/cannibal/:rid',  cannibalization.deleteReport)
 
 // SEO — Snapshots mensuales + Análisis IA (Google Search Console)
 router.get('/projects/:id/seo/snapshot/:month',  searchConsole.getSeoSnapshot)

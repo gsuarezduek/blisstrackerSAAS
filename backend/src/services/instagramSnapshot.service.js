@@ -34,7 +34,7 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
       throw new Error(`Proyecto ${projectId}: no tiene integración de Instagram activa`)
     }
     const token = await getValidMetaToken(integration)
-    metrics     = await fetchInstagramMetrics(integration.propertyId, token)
+    metrics     = await fetchInstagramMetrics(integration.propertyId, token, month)
   }
 
   await prisma.instagramSnapshot.upsert({

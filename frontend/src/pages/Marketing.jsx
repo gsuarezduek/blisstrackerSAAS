@@ -6,7 +6,8 @@ import GeoTab      from '../components/marketing/GeoTab'
 import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
-import SaludTab    from '../components/marketing/SaludTab'
+import SaludTab         from '../components/marketing/SaludTab'
+import CanibalizacionTab from '../components/marketing/CanibalizacionTab'
 import InformesTab  from '../components/marketing/InformesTab'
 import InstagramTab from '../components/marketing/InstagramTab'
 import TikTokTab    from '../components/marketing/TikTokTab'
@@ -21,9 +22,10 @@ const NAV = [
     id: 'geo-seo',
     label: '🤖 GEO / SEO',
     subs: [
-      { id: 'geo',      label: '🤖 GEO' },
-      { id: 'seo',      label: '🔍 SEO' },
-      { id: 'keywords', label: '🔑 Keywords' },
+      { id: 'geo',            label: '🤖 GEO' },
+      { id: 'seo',            label: '🔍 SEO' },
+      { id: 'keywords',       label: '🔑 Keywords' },
+      { id: 'canibalizacion', label: '⚠️ Canibalización' },
     ],
   },
   {
@@ -146,9 +148,10 @@ export default function Marketing() {
     if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />
     if (activeSub?.soon)                               return <ComingSoon label={activeSub.label} />
 
-    if (tab === 'geo-seo' && sub === 'geo')      return <GeoTab      projectId={projectId} projects={projects} />
-    if (tab === 'geo-seo' && sub === 'seo')      return <SeoTab      projectId={projectId} projects={projects} />
-    if (tab === 'geo-seo' && sub === 'keywords') return <KeywordsTab projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'geo')            return <GeoTab            projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'seo')            return <SeoTab            projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'keywords')       return <KeywordsTab       projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'canibalizacion') return <CanibalizacionTab projectId={projectId} />
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} />
     if (tab === 'rrss'     && sub === 'instagram') return <InstagramTab projectId={projectId} />
     if (tab === 'rrss'     && sub === 'tiktok')    return <TikTokTab    projectId={projectId} />

@@ -9,7 +9,7 @@ const TIKTOK_BASE = 'https://open.tiktokapis.com/v2'
  * @param {string} accessToken — TikTok access token válido
  * @returns {Promise<object>}
  */
-async function fetchTikTokMetrics(accessToken) {
+async function fetchTikTokMetrics(accessToken, targetMonth = null) {
   // ── Perfil básico (user.info.basic — display_name, avatar_url) ──────────
   const profileRes = await axios.get(`${TIKTOK_BASE}/user/info/`, {
     params: { fields: 'display_name,avatar_url' },
@@ -58,12 +58,20 @@ async function fetchTikTokMetrics(accessToken) {
   const likesCount     = statsUser.likes_count     ?? null
   const videoCount     = statsUser.video_count     ?? null
 
-  // ── Mes actual en horario ART ─────────────────────────────────────────────
-  const artNow     = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
-  const monthStart = new Date(artNow.getFullYear(), artNow.getMonth(), 1)
+  // ── Mes a filtrar (ART) ───────────────────────────────────────────────────
+  // Si se pasa targetMonth ("YYYY-MM"), filtramos ese mes. Si no, usamos el mes actual.
 
-  // Videos del mes (create_time es Unix timestamp en segundos)
-  const monthVideos = videos.filter(v => v.create_time && new Date(v.create_time * 1000) >= monthStart)
+  const artNow      = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const filterMonth = targetMonth ||
+    `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}`
+
+  // Videos del mes objetivo (create_time es Unix timestamp en segundos)
+  const monthVideos = videos.filter(v => {
+    if (!v.create_time) return false
+    const artDate   = new Date(new Date(v.create_time * 1000).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+    const postMonth = `${artDate.getFullYear()}-${String(artDate.getMonth() + 1).padStart(2, '0')}`
+    return postMonth === filterMonth
+  })
   const postsThisMonth = monthVideos.length
 
   // ── Promedios del mes ─────────────────────────────────────────────────────

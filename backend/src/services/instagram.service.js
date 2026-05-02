@@ -17,7 +17,7 @@ const TYPE_LABEL = {
  * @param {string} accessToken — Long-lived Instagram token
  * @returns {Promise<object>}
  */
-async function fetchInstagramMetrics(igUserId, accessToken) {
+async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null) {
   const [profileRes, mediaRes] = await Promise.all([
     axios.get(`${BASE}/me`, {
       params: {
@@ -40,13 +40,20 @@ async function fetchInstagramMetrics(igUserId, accessToken) {
   const followersCount = profile.followers_count ?? 0
   const mediaCount     = profile.media_count     ?? 0
 
-  // ── Mes actual en horario ART ─────────────────────────────────────────────
+  // ── Mes a filtrar (ART) ───────────────────────────────────────────────────
+  // Si se pasa targetMonth ("YYYY-MM"), filtramos ese mes. Si no, usamos el mes actual.
 
   const artNow     = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
-  const monthStart = new Date(artNow.getFullYear(), artNow.getMonth(), 1)
+  const filterMonth = targetMonth ||
+    `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}`
 
-  // Publicaciones del mes actual
-  const monthPosts        = media.filter(m => m.timestamp && new Date(m.timestamp) >= monthStart)
+  // Publicaciones del mes objetivo
+  const monthPosts        = media.filter(m => {
+    if (!m.timestamp) return false
+    const artDate  = new Date(new Date(m.timestamp).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+    const postMonth = `${artDate.getFullYear()}-${String(artDate.getMonth() + 1).padStart(2, '0')}`
+    return postMonth === filterMonth
+  })
   const monthWithLikes    = monthPosts.filter(m => m.like_count     != null)
   const monthWithComments = monthPosts.filter(m => m.comments_count != null)
   const monthWithBoth     = monthPosts.filter(m => m.like_count != null && m.comments_count != null)
