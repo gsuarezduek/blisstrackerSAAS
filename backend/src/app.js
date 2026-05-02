@@ -32,6 +32,7 @@ const billingRoutes           = require('./routes/billing.routes')
 const superadminRoutes        = require('./routes/superadmin.routes')
 const legalRoutes             = require('./routes/legal.routes')
 const publicReportRoutes      = require('./routes/publicReport.routes')
+const eosRoutes               = require('./routes/eos.routes')
 const { handleWebhook }       = require('./webhooks/stripe.webhook')
 
 const app = express()
@@ -110,6 +111,7 @@ app.use('/api/public',           publicReportRoutes)
 app.use('/api/billing',          billingRoutes)
 app.use('/api/superadmin',        superadminRoutes)
 app.use('/api/legal',             legalRoutes)
+app.use('/api/eos',              eosRoutes)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 

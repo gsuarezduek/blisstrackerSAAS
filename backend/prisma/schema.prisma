@@ -53,6 +53,7 @@ model Workspace {
   searchConsoleSnapshots    SearchConsoleSnapshot[]
   seoAiInsights             SeoAiInsight[]
   cannibalReports           CannibalReport[]
+  eosData                   EOSData?
 
   @@index([slug])
 }
@@ -997,5 +998,21 @@ model CannibalReport {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([projectId, workspaceId])
+  @@index([workspaceId])
+}
+
+// ─── EOS (Entrepreneurial Operating System) ──────────────────────────────────
+
+model EOSData {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int      @unique
+  coreValues  String   @default("[]")   // JSON: string[]
+  purpose     String?                   // Propósito / Causa / Pasión
+  niche       String?                   // Nicho de la organización
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   @@index([workspaceId])
 }
