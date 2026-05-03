@@ -79,7 +79,7 @@ function InlineField({ label, value, onChange, placeholder, maxLength = 200 }) {
 }
 
 // Lista editable genérica (add/edit/remove)
-function ItemsList({ items, onChange, maxItems, placeholder, emptyMsg }) {
+function ItemsList({ items, onChange, maxItems, minItems = 0, placeholder, emptyMsg }) {
   const [draft,   setDraft]   = useState('')
   const [editing, setEditing] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -134,9 +134,17 @@ function ItemsList({ items, onChange, maxItems, placeholder, emptyMsg }) {
         <p className="text-sm text-gray-400 dark:text-gray-500 italic">{emptyMsg}</p>
       )}
 
-      <p className={`text-xs font-medium ${items.length >= maxItems ? 'text-amber-500' : 'text-gray-400'}`}>
-        {items.length} / {maxItems}{items.length >= maxItems && ' · máximo alcanzado'}
-      </p>
+      {(() => {
+        const tooFew  = minItems > 0 && items.length > 0 && items.length < minItems
+        const perfect = minItems > 0 && items.length >= minItems
+        const atMax   = items.length >= maxItems && minItems === 0
+        const color   = tooFew ? 'text-amber-500' : perfect ? 'text-green-500' : atMax ? 'text-amber-500' : 'text-gray-400'
+        const label   = tooFew  ? ` · necesitás exactamente ${minItems}`
+          : perfect && minItems === maxItems ? ' · ✓ completo'
+          : atMax   ? ' · máximo alcanzado'
+          : ''
+        return <p className={`text-xs font-medium ${color}`}>{items.length} / {maxItems}{label}</p>
+      })()}
 
       {items.length < maxItems && (
         <div className="flex gap-2">
@@ -451,8 +459,38 @@ export default function VisionTab() {
     return <div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
   }
 
+  const progress = [
+    { label: 'Valores Medulares',       done: coreValues.items.length >= 3 },
+    { label: 'Enfoque Medular',         done: !!(purpose.value.trim() || niche.value.trim()) },
+    { label: 'Meta a 10 años',          done: !!tenYearTarget.value.trim() },
+    { label: 'Estrategia de Marketing', done: !!(marketingTarget.value.trim() || marketingUniques.items.length > 0) },
+    { label: 'Imagen a 3 años',         done: !!(threeYearDescription.value.trim() || threeYearGoals.items.length > 0) },
+    { label: 'Plan a 1 año',            done: oneYearGoals.items.length > 0 },
+  ]
+  const doneCount = progress.filter(s => s.done).length
+
   return (
     <div className="space-y-6">
+
+      {/* ── Progreso ── */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-5 py-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Progreso del V/TO</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{doneCount} / {progress.length} secciones</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {progress.map(s => (
+            <span key={s.label} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              s.done
+                ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.done ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+              {s.label}
+            </span>
+          ))}
+        </div>
+      </div>
 
       {/* ── 1. Valores Medulares ── */}
       <SectionCard
@@ -524,7 +562,7 @@ export default function VisionTab() {
             <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Las 3 cosas que te hacen diferente y mejor a tu competencia. Exactamente 3.</p>
             <ItemsList
               items={marketingUniques.items} onChange={marketingUniques.handleChange}
-              maxItems={3} placeholder="Ej: Resultados garantizados en 90 días…"
+              maxItems={3} minItems={3} placeholder="Ej: Resultados garantizados en 90 días…"
               emptyMsg="Agregá exactamente 3 diferenciadores."
             />
           </div>
