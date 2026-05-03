@@ -20,6 +20,9 @@ const {
   getWeek, createTodo, updateTodo, deleteTodo,
   upsertMeeting,
 } = require('../controllers/eosTraction.controller')
+const {
+  getAssessment, startRound, submitResponse, closeRound,
+} = require('../controllers/orgAssessment.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
@@ -78,5 +81,11 @@ router.post('/traction/todos',            createTodo)
 router.patch('/traction/todos/:id',       updateTodo)
 router.delete('/traction/todos/:id',      deleteTodo)
 router.put('/traction/meetings/:week',    upsertMeeting)
+
+// Evaluación Organizacional
+router.get('/assessment',                          getAssessment)
+router.post('/assessment/start',                   startRound)
+router.post('/assessment/rounds/:id/response',     submitResponse)
+router.post('/assessment/rounds/:id/close',        closeRound)
 
 module.exports = router

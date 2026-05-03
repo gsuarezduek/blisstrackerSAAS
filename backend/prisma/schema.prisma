@@ -65,6 +65,8 @@ model Workspace {
   eosRocks                  EOSRock[]
   eosTodos                  EOSTodo[]
   eosMeetings               EOSMeeting[]
+  orgAssessmentRounds       OrgAssessmentRound[]
+  orgAssessmentResponses    OrgAssessmentResponse[]
 
   @@index([slug])
 }
@@ -170,6 +172,7 @@ model User {
   createdIssues             EOSIssue[]                 @relation("IssueCreatedBy")
   ownedRocks                EOSRock[]                  @relation("RockOwner")
   ownedTodos                EOSTodo[]                  @relation("TodoOwner")
+  orgAssessmentResponses    OrgAssessmentResponse[]
 }
 
 model UserLogin {
@@ -1267,4 +1270,38 @@ model EOSMeeting {
 
   @@unique([workspaceId, week])
   @@index([workspaceId])
+}
+
+model OrgAssessmentRound {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  status      String    @default("open")  // open | closed
+  resultData  String?   // JSON: { scores, categoryAverages, totalAverage, analysis, respondentCount }
+  closedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  responses OrgAssessmentResponse[]
+
+  @@index([workspaceId])
+}
+
+model OrgAssessmentResponse {
+  id          Int      @id @default(autoincrement())
+  roundId     Int
+  workspaceId Int
+  userId      Int
+  answers     String   @default("[]")  // JSON: [{questionId, score}]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  round     OrgAssessmentRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, userId])
+  @@index([roundId])
+  @@index([workspaceId])
+  @@index([userId])
 }
