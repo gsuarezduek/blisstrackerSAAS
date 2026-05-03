@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Navbar from '../components/Navbar'
 import VisionTab from '../components/eos/VisionTab'
+import PersonasTab from '../components/eos/PersonasTab'
 
 const TABS = [
   {
@@ -89,9 +90,10 @@ export default function EOS() {
         </div>
 
         {/* Contenido */}
-        {tab === 'vision' && <VisionTab />}
+        {tab === 'vision'   && <VisionTab />}
+        {tab === 'personas' && <PersonasTab />}
 
-        {tab !== 'vision' && current && (
+        {tab !== 'vision' && tab !== 'personas' && current && (
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center">
             <p className="text-5xl mb-4">{current.label.split(' ')[0]}</p>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{current.title}</h2>

@@ -54,6 +54,9 @@ model Workspace {
   seoAiInsights             SeoAiInsight[]
   cannibalReports           CannibalReport[]
   eosData                   EOSData?
+  peopleAnalyzerRatings     PeopleAnalyzerRating[]
+  eosStrikes                EOSStrike[]
+  accountabilityNodes       AccountabilityNode[]
 
   @@index([slug])
 }
@@ -149,6 +152,10 @@ model User {
   vacationRequests          VacationRequest[]          @relation("VacationRequestUser")
   vacationRequestsReviewed  VacationRequest[]          @relation("VacationRequestReviewer")
   announcements             Announcement[]             @relation("AnnouncementCreatedBy")
+  analyzerRatings           PeopleAnalyzerRating[]     @relation("AnalyzedPerson")
+  eosStrikesReceived        EOSStrike[]                @relation("StrikedPerson")
+  eosStrikesGiven           EOSStrike[]                @relation("StrikeCreator")
+  accountabilitySeats       AccountabilityNode[]       @relation("SeatHolder")
 }
 
 model UserLogin {
@@ -1037,4 +1044,60 @@ model EOSData {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+}
+
+// ─── EOS — PERSONAS ───────────────────────────────────────────────────────────
+
+model PeopleAnalyzerRating {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  userId      Int
+  valueKey    String   // texto del valor medular o 'gwc_get'/'gwc_want'/'gwc_capacity'
+  rating      String   // '+' | '+/-' | '-'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation("AnalyzedPerson", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, valueKey])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+model EOSStrike {
+  id           Int      @id @default(autoincrement())
+  workspaceId  Int
+  userId       Int
+  strikeNumber Int      // 1, 2 o 3 (asignado automáticamente)
+  reason       String
+  createdById  Int
+  createdAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId],  references: [id], onDelete: Cascade)
+  user      User      @relation("StrikedPerson", fields: [userId],       references: [id], onDelete: Cascade)
+  createdBy User      @relation("StrikeCreator", fields: [createdById],  references: [id])
+
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+model AccountabilityNode {
+  id               Int      @id @default(autoincrement())
+  workspaceId      Int
+  parentId         Int?
+  seat             String
+  userId           Int?
+  accountabilities String   @default("[]")  // JSON: string[]
+  order            Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?               @relation("SeatHolder", fields: [userId],   references: [id], onDelete: SetNull)
+  parent    AccountabilityNode? @relation("NodeHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children  AccountabilityNode[] @relation("NodeHierarchy")
+
+  @@index([workspaceId])
+  @@index([parentId])
 }
