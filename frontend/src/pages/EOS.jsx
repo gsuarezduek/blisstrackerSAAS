@@ -4,6 +4,8 @@ import VisionTab from '../components/eos/VisionTab'
 import PersonasTab from '../components/eos/PersonasTab'
 import DatosTab from '../components/eos/DatosTab'
 import ProcesosTab from '../components/eos/ProcesosTab'
+import AsuntosTab from '../components/eos/AsuntosTab'
+import TraccionTab from '../components/eos/TraccionTab'
 
 const TABS = [
   {
@@ -96,8 +98,10 @@ export default function EOS() {
         {tab === 'personas' && <PersonasTab />}
         {tab === 'datos'    && <DatosTab />}
         {tab === 'procesos' && <ProcesosTab />}
+        {tab === 'asuntos'  && <AsuntosTab />}
+        {tab === 'traccion' && <TraccionTab />}
 
-        {tab !== 'vision' && tab !== 'personas' && tab !== 'datos' && tab !== 'procesos' && current && (
+        {tab !== 'vision' && tab !== 'personas' && tab !== 'datos' && tab !== 'procesos' && tab !== 'asuntos' && tab !== 'traccion' && current && (
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center">
             <p className="text-5xl mb-4">{current.label.split(' ')[0]}</p>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{current.title}</h2>

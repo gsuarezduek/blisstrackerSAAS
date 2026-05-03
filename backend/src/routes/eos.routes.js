@@ -12,6 +12,14 @@ const {
   getProcesses, createProcess, updateProcess, deleteProcess,
   createStep, updateStep, deleteStep,
 } = require('../controllers/eosProcesses.controller')
+const {
+  getIssues, createIssue, updateIssue, deleteIssue,
+} = require('../controllers/eosIssues.controller')
+const {
+  getRocks, createRock, updateRock, deleteRock,
+  getWeek, createTodo, updateTodo, deleteTodo,
+  upsertMeeting,
+} = require('../controllers/eosTraction.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
@@ -51,5 +59,24 @@ router.delete('/processes/:id',                        deleteProcess)
 router.post('/processes/:id/steps',                    createStep)
 router.patch('/processes/:id/steps/:stepId',           updateStep)
 router.delete('/processes/:id/steps/:stepId',          deleteStep)
+
+// Asuntos — Issues
+router.get('/issues',      getIssues)
+router.post('/issues',     createIssue)
+router.patch('/issues/:id', updateIssue)
+router.delete('/issues/:id', deleteIssue)
+
+// Tracción — Rocas
+router.get('/traction/rocks',          getRocks)
+router.post('/traction/rocks',         createRock)
+router.patch('/traction/rocks/:id',    updateRock)
+router.delete('/traction/rocks/:id',   deleteRock)
+
+// Tracción — Semana (To-Dos + Meeting)
+router.get('/traction/week',              getWeek)
+router.post('/traction/todos',            createTodo)
+router.patch('/traction/todos/:id',       updateTodo)
+router.delete('/traction/todos/:id',      deleteTodo)
+router.put('/traction/meetings/:week',    upsertMeeting)
 
 module.exports = router

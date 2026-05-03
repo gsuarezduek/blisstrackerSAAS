@@ -61,6 +61,10 @@ model Workspace {
   scorecardEntries          ScorecardEntry[]
   eosProcesses              EOSProcess[]
   eosProcessSteps           EOSProcessStep[]
+  eosIssues                 EOSIssue[]
+  eosRocks                  EOSRock[]
+  eosTodos                  EOSTodo[]
+  eosMeetings               EOSMeeting[]
 
   @@index([slug])
 }
@@ -162,6 +166,10 @@ model User {
   accountabilitySeats       AccountabilityNode[]       @relation("SeatHolder")
   ownedMetrics              ScorecardMetric[]          @relation("MetricOwner")
   ownedProcesses            EOSProcess[]               @relation("ProcessOwner")
+  ownedIssues               EOSIssue[]                 @relation("IssueOwner")
+  createdIssues             EOSIssue[]                 @relation("IssueCreatedBy")
+  ownedRocks                EOSRock[]                  @relation("RockOwner")
+  ownedTodos                EOSTodo[]                  @relation("TodoOwner")
 }
 
 model UserLogin {
@@ -1180,5 +1188,83 @@ model EOSProcessStep {
   workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([processId])
+  @@index([workspaceId])
+}
+
+model EOSIssue {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  title       String
+  description String?
+  ownerId     Int?
+  createdById Int?
+  type        String    @default("weekly")   // 'weekly' | 'quarterly'
+  status      String    @default("open")     // 'open' | 'solved'
+  priority    String    @default("medium")   // 'high' | 'medium' | 'low'
+  notes       String?
+  solvedAt    DateTime?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner       User?     @relation("IssueOwner",     fields: [ownerId],     references: [id], onDelete: SetNull)
+  createdBy   User?     @relation("IssueCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([type, status])
+}
+
+model EOSRock {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  title       String
+  description String?
+  ownerId     Int?
+  quarter     String    // "2026-Q2"
+  status      String    @default("not_started")  // not_started | on_track | off_track | complete
+  notes       String?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner     User?     @relation("RockOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([quarter])
+}
+
+model EOSTodo {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  title       String
+  ownerId     Int?
+  week        String    // "2026-W18" ISO
+  done        Boolean   @default(false)
+  completedAt DateTime?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner     User?     @relation("TodoOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, week])
+}
+
+model EOSMeeting {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  week        String    // "2026-W18"
+  date        String?   // "2026-05-06"
+  rating      Int?      // 1-10
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, week])
   @@index([workspaceId])
 }
