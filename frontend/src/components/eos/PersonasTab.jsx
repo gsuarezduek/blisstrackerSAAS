@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 
@@ -67,9 +67,9 @@ function ConfirmModal({ message, onConfirm, onCancel }) {
 // 1. ANALIZADOR DE PERSONAS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const RATING_CYCLE  = [null, '+', '+/-', '-']
-const RATING_LABEL  = { '+': '+', '+/-': '+/-', '-': '−' }
-const RATING_COLOR  = {
+const RATING_CYCLE = [null, '+', '+/-', '-']
+const RATING_LABEL = { '+': '+', '+/-': '+/-', '-': '−' }
+const RATING_COLOR = {
   '+':   'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 border-green-200 dark:border-green-800',
   '+/-': 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 border-amber-200 dark:border-amber-800',
   '-':   'bg-red-100   text-red-700   dark:bg-red-900/40   dark:text-red-400   border-red-200   dark:border-red-800',
@@ -109,15 +109,12 @@ function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
         <thead>
           <tr>
             <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[140px]">Persona</th>
-            {/* Separator header */}
             {allColumns.map((col, i) => (
               <th key={col.key} className={`py-2 px-1 text-center text-xs font-medium min-w-[44px] ${
                 col.isGwc && i === coreValues.length ? 'pl-4 border-l border-gray-200 dark:border-gray-700' : ''
               }`}>
-                <span
-                  title={col.title}
-                  className={`block truncate ${col.isGwc ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'}`}
-                >
+                <span title={col.title}
+                  className={`block truncate ${col.isGwc ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'}`}>
                   {col.label}
                 </span>
               </th>
@@ -144,8 +141,7 @@ function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
                       <button
                         onClick={() => onRatingChange(member.id, col.key, nextRating(rating))}
                         title={`${col.title} — clic para cambiar`}
-                        className={`w-10 h-7 rounded-lg text-xs font-semibold border transition-colors ${RATING_COLOR[rating]}`}
-                      >
+                        className={`w-10 h-7 rounded-lg text-xs font-semibold border transition-colors ${RATING_COLOR[rating]}`}>
                         {rating ? RATING_LABEL[rating] : '·'}
                       </button>
                     </td>
@@ -156,8 +152,6 @@ function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
           })}
         </tbody>
       </table>
-
-      {/* Leyenda */}
       <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
         {[
           { r: '+',   label: 'Por encima de las expectativas' },
@@ -186,7 +180,6 @@ function PeopleAnalyzerHelp() {
       </p>
       <div>
         <p className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider mb-2">Cómo calificar los Valores Medulares</p>
-        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-3">Para cada valor medular, evaluá si la persona lo vive consistentemente en su trabajo diario:</p>
         <div className="space-y-2">
           {[
             { r: '+',   color: 'text-green-600', desc: 'La persona exhibe este valor de manera consistente. Es un ejemplo para el equipo.' },
@@ -204,9 +197,9 @@ function PeopleAnalyzerHelp() {
         <p className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider mb-2">GWC — Get it · Want it · Capacity</p>
         <div className="space-y-2">
           {[
-            { label: 'G — ¿Lo entiende?',        desc: '¿La persona comprende naturalmente qué implica su rol, cómo encaja en la empresa y qué se espera de ella?' },
-            { label: 'W — ¿Lo quiere?',           desc: '¿La persona genuinamente quiere hacer ese trabajo? No lo hace por obligación ni por el dinero solamente.' },
-            { label: 'C — ¿Tiene capacidad?',     desc: '¿Tiene el conocimiento, las habilidades y la energía para desempeñar el rol de manera excelente?' },
+            { label: 'G — ¿Lo entiende?',    desc: '¿La persona comprende naturalmente qué implica su rol, cómo encaja en la empresa y qué se espera de ella?' },
+            { label: 'W — ¿Lo quiere?',       desc: '¿La persona genuinamente quiere hacer ese trabajo? No lo hace por obligación ni por el dinero solamente.' },
+            { label: 'C — ¿Tiene capacidad?', desc: '¿Tiene el conocimiento, las habilidades y la energía para desempeñar el rol de manera excelente?' },
           ].map(({ label, desc }) => (
             <div key={label}>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</p>
@@ -285,44 +278,32 @@ function AddStrikeModal({ members, strikesMap, onSave, onClose, saving }) {
           <h2 className="text-base font-semibold text-gray-900 dark:text-white">Registrar falta</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
         </div>
-
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Persona</label>
-            <select
-              value={userId}
-              onChange={e => setUserId(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
+            <select value={userId} onChange={e => setUserId(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500">
               <option value="">Seleccioná una persona…</option>
               {available.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({strikesMap[m.id]?.length ?? 0}/3 faltas)
-                </option>
+                <option key={m.id} value={m.id}>{m.name} ({strikesMap[m.id]?.length ?? 0}/3 faltas)</option>
               ))}
             </select>
           </div>
-
           {userId && (
             <div className={`flex items-center gap-3 p-3 rounded-xl border ${STRIKES_RULES[nextNumber - 1].bg}`}>
               <span className={`text-sm font-bold ${STRIKES_RULES[nextNumber - 1].color}`}>Falta {nextNumber}</span>
               <span className="text-xs text-gray-600 dark:text-gray-400">{STRIKES_RULES[nextNumber - 1].title}</span>
             </div>
           )}
-
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Razón / Comportamiento observado</label>
-            <textarea
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-              rows={4}
-              maxLength={1000}
+            <textarea value={reason} onChange={e => setReason(e.target.value)}
+              rows={4} maxLength={1000}
               placeholder="Describí específicamente el comportamiento observado y en qué valor medular impacta…"
               className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
             />
           </div>
         </div>
-
         <div className="flex gap-2 mt-5">
           <button onClick={onClose} className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
           <button onClick={handleSave} disabled={!userId || !reason.trim() || saving}
@@ -339,14 +320,12 @@ function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike }) {
   const [expanded,     setExpanded]     = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [saving,       setSaving]       = useState(false)
-  const [confirmDel,   setConfirmDel]   = useState(null) // { strikeId }
+  const [confirmDel,   setConfirmDel]   = useState(null)
 
   async function handleAdd(userId, reason) {
     setSaving(true)
-    try {
-      await onAddStrike(userId, reason)
-      setShowAddModal(false)
-    } finally { setSaving(false) }
+    try { await onAddStrike(userId, reason); setShowAddModal(false) }
+    finally { setSaving(false) }
   }
 
   async function handleRemove(strikeId) {
@@ -354,14 +333,11 @@ function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike }) {
     setConfirmDel(null)
   }
 
-  const membersWithStrikes = members
-    .map(m => ({ ...m, strikes: strikesMap[m.id] || [] }))
-    .filter(m => m.strikes.length > 0)
+  const membersWithStrikes = members.map(m => ({ ...m, strikes: strikesMap[m.id] || [] })).filter(m => m.strikes.length > 0)
   const membersClean = members.filter(m => !strikesMap[m.id]?.length)
 
   return (
     <div className="space-y-5">
-      {/* Reglas */}
       <div className="space-y-2">
         {STRIKES_RULES.map(rule => (
           <div key={rule.number} className={`flex items-start gap-3 p-3.5 rounded-xl border ${rule.bg}`}>
@@ -373,8 +349,6 @@ function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike }) {
           </div>
         ))}
       </div>
-
-      {/* Lista de personas con faltas */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Registro de faltas</p>
@@ -383,23 +357,18 @@ function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike }) {
             + Registrar falta
           </button>
         </div>
-
         {membersWithStrikes.length === 0 && (
           <p className="text-sm text-gray-400 dark:text-gray-500 italic py-4 text-center">No hay faltas registradas.</p>
         )}
-
         {membersWithStrikes.map(m => (
           <div key={m.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-            <button
-              onClick={() => setExpanded(expanded === m.id ? null : m.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
-            >
+            <button onClick={() => setExpanded(expanded === m.id ? null : m.id)}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left">
               <Avatar src={m.avatar} name={m.name} />
               <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200">{m.name}</span>
               <StrikesDots count={m.strikes.length} />
               <span className="text-gray-400 text-xs ml-2">{expanded === m.id ? '▲' : '▼'}</span>
             </button>
-
             {expanded === m.id && (
               <div className="border-t border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
                 {m.strikes.map(s => (
@@ -415,16 +384,13 @@ function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike }) {
                       <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{s.reason}</p>
                     </div>
                     <button onClick={() => setConfirmDel({ strikeId: s.id })}
-                      className="p-1 text-gray-400 hover:text-red-500 transition-colors shrink-0" title="Eliminar falta">
-                      ✕
-                    </button>
+                      className="p-1 text-gray-400 hover:text-red-500 transition-colors shrink-0" title="Eliminar falta">✕</button>
                   </div>
                 ))}
               </div>
             )}
           </div>
         ))}
-
         {membersClean.length > 0 && (
           <div className="flex flex-wrap gap-2 pt-2">
             {membersClean.map(m => (
@@ -436,10 +402,7 @@ function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike }) {
           </div>
         )}
       </div>
-
-      {showAddModal && (
-        <AddStrikeModal members={members} strikesMap={strikesMap} onSave={handleAdd} onClose={() => setShowAddModal(false)} saving={saving} />
-      )}
+      {showAddModal && <AddStrikeModal members={members} strikesMap={strikesMap} onSave={handleAdd} onClose={() => setShowAddModal(false)} saving={saving} />}
       {confirmDel && (
         <ConfirmModal
           message="¿Eliminás esta falta? Los números de las faltas restantes se reordenarán."
@@ -455,13 +418,54 @@ function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike }) {
 // 3. ORGANIGRAMA DE RENDICIÓN DE CUENTAS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function NodeModal({ node, members, onSave, onClose, saving }) {
-  const [seat, setSeat]                     = useState(node?.seat ?? '')
-  const [userId, setUserId]                 = useState(node?.userId ? String(node.userId) : '')
-  const [accs, setAccs]                     = useState(node?.accountabilities ?? [])
-  const [accDraft, setAccDraft]             = useState('')
+// Devuelve el Set de IDs del nodo y todos sus descendientes
+function getDescendantIds(nodes, nodeId) {
+  const ids = new Set([nodeId])
+  const queue = [nodeId]
+  while (queue.length) {
+    const curr = queue.shift()
+    nodes.filter(n => n.parentId === curr).forEach(child => {
+      ids.add(child.id)
+      queue.push(child.id)
+    })
+  }
+  return ids
+}
+
+// Construye una lista ordenada (BFS) para el dropdown de "Reporta a"
+function buildParentOptions(nodes, excludeIds = new Set()) {
+  const result = []
+  function visit(parentId, depth) {
+    nodes
+      .filter(n => n.parentId === parentId)
+      .sort((a, b) => a.order - b.order)
+      .forEach(n => {
+        if (!excludeIds.has(n.id)) {
+          result.push({ node: n, depth })
+          visit(n.id, depth + 1)
+        }
+      })
+  }
+  visit(null, 0)
+  return result
+}
+
+// ─── NodeModal ────────────────────────────────────────────────────────────────
+
+function NodeModal({ node, allNodes, members, initialParentId, onSave, onClose, saving }) {
+  const [seat,     setSeat]     = useState(node?.seat ?? '')
+  const [userId,   setUserId]   = useState(node?.userId != null ? String(node.userId) : '')
+  const [parentId, setParentId] = useState(
+    node
+      ? (node.parentId != null ? String(node.parentId) : '')
+      : (initialParentId != null ? String(initialParentId) : '')
+  )
+  const [accs,     setAccs]     = useState(node?.accountabilities ?? [])
+  const [accDraft, setAccDraft] = useState('')
 
   const isNew = !node?.id
+  const excludedIds = isNew ? new Set() : getDescendantIds(allNodes, node.id)
+  const parentOptions = buildParentOptions(allNodes, excludedIds)
 
   function addAcc() {
     if (!accDraft.trim() || accs.length >= 10) return
@@ -469,11 +473,14 @@ function NodeModal({ node, members, onSave, onClose, saving }) {
     setAccDraft('')
   }
 
-  function removeAcc(i) { setAccs(accs.filter((_, idx) => idx !== i)) }
-
   function handleSave() {
     if (!seat.trim()) return
-    onSave({ seat: seat.trim(), userId: userId ? Number(userId) : null, accountabilities: accs })
+    onSave({
+      seat:             seat.trim(),
+      userId:           userId ? Number(userId) : null,
+      accountabilities: accs,
+      parentId:         parentId ? Number(parentId) : null,
+    })
   }
 
   return (
@@ -485,6 +492,7 @@ function NodeModal({ node, members, onSave, onClose, saving }) {
         </div>
 
         <div className="space-y-4">
+          {/* Nombre del puesto */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre del puesto</label>
             <input type="text" value={seat} onChange={e => setSeat(e.target.value)} maxLength={100}
@@ -493,6 +501,21 @@ function NodeModal({ node, members, onSave, onClose, saving }) {
             />
           </div>
 
+          {/* Reporta a */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reporta a</label>
+            <select value={parentId} onChange={e => setParentId(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+              <option value="">— Puesto raíz (sin superior) —</option>
+              {parentOptions.map(({ node: n, depth }) => (
+                <option key={n.id} value={n.id}>
+                  {'\u00A0\u00A0'.repeat(depth)}{depth > 0 ? '↳ ' : ''}{n.seat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Persona asignada */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Persona asignada</label>
             <select value={userId} onChange={e => setUserId(e.target.value)}
@@ -502,6 +525,7 @@ function NodeModal({ node, members, onSave, onClose, saving }) {
             </select>
           </div>
 
+          {/* Responsabilidades clave */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Responsabilidades clave</label>
             {accs.length > 0 && (
@@ -510,7 +534,7 @@ function NodeModal({ node, members, onSave, onClose, saving }) {
                   <li key={i} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <span className="text-gray-400">·</span>
                     <span className="flex-1">{a}</span>
-                    <button onClick={() => removeAcc(i)} className="text-gray-400 hover:text-red-500 text-xs">✕</button>
+                    <button onClick={() => setAccs(accs.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-500 text-xs">✕</button>
                   </li>
                 ))}
               </ul>
@@ -523,9 +547,7 @@ function NodeModal({ node, members, onSave, onClose, saving }) {
                   className="flex-1 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 <button onClick={addAcc} disabled={!accDraft.trim()}
-                  className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl transition-colors disabled:opacity-40">
-                  +
-                </button>
+                  className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl transition-colors disabled:opacity-40">+</button>
               </div>
             )}
           </div>
@@ -543,11 +565,124 @@ function NodeModal({ node, members, onSave, onClose, saving }) {
   )
 }
 
-function AccountabilityNodeCard({ node, members, depth, onEdit, onDelete, onAddChild }) {
+// ─── Vista árbol: tarjeta de nodo ─────────────────────────────────────────────
+
+function OrgCard({ node, allNodes, members, onEdit, onDelete, onAddChild }) {
   const person = node.userId ? members.find(m => m.id === node.userId) : null
 
   return (
-    <div className={`group flex items-stretch gap-0 ${depth > 0 ? '' : ''}`}>
+    <div className="group relative bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl p-3 shadow-sm hover:border-primary-400 dark:hover:border-primary-600 hover:shadow-md transition-all cursor-default select-none"
+         style={{ width: 192 }}>
+      {/* Botones flotantes */}
+      <div className="absolute -top-3 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button onClick={() => onAddChild(node.id)} title="Agregar subordinado"
+          className="w-6 h-6 bg-primary-600 hover:bg-primary-700 text-white rounded-full text-sm font-bold flex items-center justify-center shadow">+</button>
+        <button onClick={() => onEdit(node)} title="Editar"
+          className="w-6 h-6 bg-gray-500 hover:bg-gray-600 text-white rounded-full text-xs flex items-center justify-center shadow">✎</button>
+        <button onClick={() => onDelete(node.id)} title="Eliminar"
+          className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full text-sm font-bold flex items-center justify-center shadow">×</button>
+      </div>
+
+      {/* Puesto */}
+      <p className="text-sm font-bold text-gray-900 dark:text-white leading-snug line-clamp-2" title={node.seat}>
+        {node.seat}
+      </p>
+
+      {/* Persona */}
+      {person ? (
+        <div className="flex items-center gap-1.5 mt-2">
+          <img src={avatarUrl(person.avatar)} alt={person.name}
+            className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
+          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{person.name}</span>
+        </div>
+      ) : (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 italic">Sin asignar</p>
+      )}
+
+      {/* Responsabilidades */}
+      {node.accountabilities.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 space-y-0.5">
+          {node.accountabilities.slice(0, 3).map((a, i) => (
+            <p key={i} className="text-xs text-gray-500 dark:text-gray-400 truncate">· {a}</p>
+          ))}
+          {node.accountabilities.length > 3 && (
+            <p className="text-xs text-gray-400 dark:text-gray-500">+{node.accountabilities.length - 3} más</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Vista árbol: nodo recursivo con conectores CSS ───────────────────────────
+// Cada child-wrapper tiene padding horizontal de H_PAD px.
+// Los segmentos de la barra horizontal se dibujan con divs absolutos:
+//   primer hijo  → left:50%  right:0   (centro → borde derecho)
+//   último hijo  → left:0    right:50% (borde izquierdo → centro)
+//   hijos medios → left:0    right:0   (ancho completo)
+// Como los padding son simétricos, los extremos de los segmentos se tocan
+// exactamente en el punto medio entre hermanos.
+
+const H_PAD = 20 // px padding horizontal por hijo
+
+function OrgTreeNode({ node, allNodes, members, onEdit, onDelete, onAddChild }) {
+  const children = allNodes.filter(n => n.parentId === node.id).sort((a, b) => a.order - b.order)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <OrgCard node={node} allNodes={allNodes} members={members}
+        onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild} />
+
+      {children.length > 0 && (
+        <>
+          {/* Línea vertical bajando desde la tarjeta */}
+          <div className="bg-gray-300 dark:bg-gray-600" style={{ width: 1, height: 28 }} />
+
+          {/* Fila de hijos */}
+          <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+            {children.map((child, i) => {
+              const isFirst = i === 0
+              const isLast  = i === children.length - 1
+              const isOnly  = children.length === 1
+
+              return (
+                <div key={child.id}
+                     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
+                              position: 'relative', paddingLeft: H_PAD, paddingRight: H_PAD }}>
+                  {/* Segmento horizontal de la barra */}
+                  {!isOnly && isFirst && (
+                    <div className="absolute bg-gray-300 dark:bg-gray-600"
+                         style={{ top: 0, left: '50%', right: 0, height: 1 }} />
+                  )}
+                  {!isOnly && isLast && (
+                    <div className="absolute bg-gray-300 dark:bg-gray-600"
+                         style={{ top: 0, left: 0, right: '50%', height: 1 }} />
+                  )}
+                  {!isOnly && !isFirst && !isLast && (
+                    <div className="absolute bg-gray-300 dark:bg-gray-600"
+                         style={{ top: 0, left: 0, right: 0, height: 1 }} />
+                  )}
+                  {/* Línea vertical bajando al hijo */}
+                  <div className="bg-gray-300 dark:bg-gray-600" style={{ width: 1, height: 28 }} />
+                  {/* Sub-árbol hijo */}
+                  <OrgTreeNode node={child} allNodes={allNodes} members={members}
+                    onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild} />
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Vista lista (compacta, indentada) ────────────────────────────────────────
+
+function ListNodeCard({ node, members, onEdit, onDelete, onAddChild }) {
+  const person = node.userId ? members.find(m => m.id === node.userId) : null
+  return (
+    <div className="group flex items-stretch">
       <div className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 hover:border-primary-300 dark:hover:border-primary-700 transition-colors">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
@@ -562,9 +697,9 @@ function AccountabilityNodeCard({ node, members, depth, onEdit, onDelete, onAddC
             )}
           </div>
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <button onClick={() => onAddChild(node.id)} title="Agregar hijo" className="p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 text-xs">＋</button>
-            <button onClick={() => onEdit(node)}        title="Editar"       className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs">✏️</button>
-            <button onClick={() => onDelete(node.id)}   title="Eliminar"     className="p-1 text-gray-400 hover:text-red-500 text-xs">✕</button>
+            <button onClick={() => onAddChild(node.id)} title="Agregar subordinado" className="p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 text-xs">＋</button>
+            <button onClick={() => onEdit(node)}        title="Editar"              className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs">✎</button>
+            <button onClick={() => onDelete(node.id)}   title="Eliminar"            className="p-1 text-gray-400 hover:text-red-500 text-xs">✕</button>
           </div>
         </div>
         {node.accountabilities.length > 0 && (
@@ -581,41 +716,35 @@ function AccountabilityNodeCard({ node, members, depth, onEdit, onDelete, onAddC
   )
 }
 
-function AccountabilityTree({ nodes, parentId = null, members, depth = 0, onEdit, onDelete, onAddChild }) {
-  const children = nodes
-    .filter(n => n.parentId === parentId)
-    .sort((a, b) => a.order - b.order)
-
+function ListTree({ nodes, parentId = null, members, depth = 0, onEdit, onDelete, onAddChild }) {
+  const children = nodes.filter(n => n.parentId === parentId).sort((a, b) => a.order - b.order)
   if (children.length === 0) return null
-
   return (
     <div className={depth === 0 ? 'space-y-3' : 'ml-6 pl-4 border-l-2 border-gray-200 dark:border-gray-700 mt-3 space-y-3'}>
       {children.map(node => (
         <div key={node.id}>
-          <AccountabilityNodeCard
-            node={node} members={members} depth={depth}
-            onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
-          />
-          <AccountabilityTree
-            nodes={nodes} parentId={node.id} members={members} depth={depth + 1}
-            onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
-          />
+          <ListNodeCard node={node} members={members} onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild} />
+          <ListTree nodes={nodes} parentId={node.id} members={members} depth={depth + 1}
+            onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild} />
         </div>
       ))}
     </div>
   )
 }
 
+// ─── AccountabilityChart — contenedor principal ───────────────────────────────
+
 function AccountabilityChart({ members, nodes, onCreateNode, onUpdateNode, onDeleteNode }) {
   const [modalState, setModalState] = useState(null) // { mode: 'add'|'edit', node?, parentId? }
   const [saving,     setSaving]     = useState(false)
   const [confirmDel, setConfirmDel] = useState(null)
+  const [view,       setView]       = useState('tree') // 'tree' | 'list'
 
   async function handleSave(data) {
     setSaving(true)
     try {
       if (modalState.mode === 'add') {
-        await onCreateNode({ parentId: modalState.parentId ?? null, ...data })
+        await onCreateNode(data)        // data ya incluye parentId elegido en el modal
       } else {
         await onUpdateNode(modalState.node.id, data)
       }
@@ -628,11 +757,21 @@ function AccountabilityChart({ members, nodes, onCreateNode, onUpdateNode, onDel
     setConfirmDel(null)
   }
 
+  const rootNodes = nodes.filter(n => n.parentId === null).sort((a, b) => a.order - b.order)
+
+  const handlers = {
+    onEdit:     node     => setModalState({ mode: 'edit', node }),
+    onDelete:   nodeId   => setConfirmDel({ nodeId }),
+    onAddChild: parentId => setModalState({ mode: 'add', parentId }),
+  }
+
   return (
     <div className="space-y-4">
       {nodes.length === 0 ? (
         <div className="py-8 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">El organigrama está vacío. Comenzá agregando el puesto raíz.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+            El organigrama está vacío. Comenzá agregando el puesto raíz.
+          </p>
           <button onClick={() => setModalState({ mode: 'add', parentId: null })}
             className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors">
             + Agregar puesto raíz
@@ -640,23 +779,50 @@ function AccountabilityChart({ members, nodes, onCreateNode, onUpdateNode, onDel
         </div>
       ) : (
         <>
-          <AccountabilityTree
-            nodes={nodes} members={members}
-            onEdit={node => setModalState({ mode: 'edit', node })}
-            onDelete={nodeId => setConfirmDel({ nodeId })}
-            onAddChild={parentId => setModalState({ mode: 'add', parentId })}
-          />
-          <button onClick={() => setModalState({ mode: 'add', parentId: null })}
-            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-xl hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-            + Agregar puesto raíz
-          </button>
+          {/* Toolbar */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex gap-0.5 bg-gray-100 dark:bg-gray-700 rounded-xl p-1">
+              {[{ id: 'tree', label: '🌳 Vista árbol' }, { id: 'list', label: '☰ Vista lista' }].map(v => (
+                <button key={v.id} onClick={() => setView(v.id)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                    view === v.id
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setModalState({ mode: 'add', parentId: null })}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-xl hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+              + Puesto raíz
+            </button>
+          </div>
+
+          {/* Vista árbol */}
+          {view === 'tree' && (
+            <div className="overflow-x-auto">
+              <div className="inline-flex gap-16 min-w-full justify-center py-6 px-8 bg-gray-50 dark:bg-gray-900/40 rounded-2xl border border-gray-100 dark:border-gray-800">
+                {rootNodes.map(root => (
+                  <OrgTreeNode key={root.id} node={root} allNodes={nodes} members={members} {...handlers} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Vista lista */}
+          {view === 'list' && (
+            <ListTree nodes={nodes} members={members} {...handlers} />
+          )}
         </>
       )}
 
       {modalState && (
         <NodeModal
           node={modalState.mode === 'edit' ? modalState.node : null}
+          allNodes={nodes}
           members={members}
+          initialParentId={modalState.mode === 'add' ? (modalState.parentId ?? null) : null}
           onSave={handleSave}
           onClose={() => setModalState(null)}
           saving={saving}
@@ -724,9 +890,8 @@ export default function PersonasTab() {
       .finally(() => setLoading(false))
   }, [])
 
-  // ── People Analyzer
   async function handleRatingChange(userId, valueKey, rating) {
-    const res = await api.patch('/eos/people-analyzer', { userId, valueKey, rating })
+    await api.patch('/eos/people-analyzer', { userId, valueKey, rating })
     setData(prev => {
       const ratingsMap = { ...prev.ratingsMap }
       if (!ratingsMap[userId]) ratingsMap[userId] = {}
@@ -738,10 +903,8 @@ export default function PersonasTab() {
       }
       return { ...prev, ratingsMap }
     })
-    return res.data
   }
 
-  // ── Strikes
   async function handleAddStrike(userId, reason) {
     const res = await api.post('/eos/strikes', { userId, reason })
     const strike = res.data
@@ -757,16 +920,14 @@ export default function PersonasTab() {
     setData(prev => {
       const strikesMap = {}
       for (const [uid, strikes] of Object.entries(prev.strikesMap)) {
-        const remaining = strikes.filter(s => s.id !== strikeId).map((s, i) => ({ ...s, strikeNumber: i + 1 }))
-        strikesMap[uid] = remaining
+        strikesMap[uid] = strikes.filter(s => s.id !== strikeId).map((s, i) => ({ ...s, strikeNumber: i + 1 }))
       }
       return { ...prev, strikesMap }
     })
   }
 
-  // ── Accountability Chart
-  async function handleCreateNode(data) {
-    const res = await api.post('/eos/accountability', data)
+  async function handleCreateNode(nodeData) {
+    const res = await api.post('/eos/accountability', nodeData)
     setData(prev => ({ ...prev, nodes: [...prev.nodes, res.data] }))
   }
 
@@ -793,50 +954,34 @@ export default function PersonasTab() {
 
   return (
     <div className="space-y-6">
-
-      {/* ── 1. Analizador de Personas ── */}
       <SectionCard
         title="Analizador de Personas"
         desc="Evaluá a cada miembro del equipo contra los Valores Medulares y el GWC de su puesto."
         onHelp={() => setShowHelp('analyzer')}
       >
-        <PeopleAnalyzer
-          members={members}
-          coreValues={coreValues}
-          ratingsMap={ratingsMap}
-          onRatingChange={handleRatingChange}
-        />
+        <PeopleAnalyzer members={members} coreValues={coreValues} ratingsMap={ratingsMap} onRatingChange={handleRatingChange} />
       </SectionCard>
 
-      {/* ── 2. Regla de las 3 Faltas ── */}
       <SectionCard
         title="Regla de las 3 Faltas"
         desc="Protocolo para acompañar y, cuando es necesario, separar a quienes no viven los valores medulares."
       >
-        <ThreeStrikes
-          members={members}
-          strikesMap={strikesMap}
-          onAddStrike={handleAddStrike}
-          onRemoveStrike={handleRemoveStrike}
-        />
+        <ThreeStrikes members={members} strikesMap={strikesMap} onAddStrike={handleAddStrike} onRemoveStrike={handleRemoveStrike} />
       </SectionCard>
 
-      {/* ── 3. Organigrama de Rendición de Cuentas ── */}
       <SectionCard
         title="Organigrama de Rendición de Cuentas"
         desc="Define quién es responsable de cada función clave de la empresa."
         onHelp={() => setShowHelp('accountability')}
       >
         <AccountabilityChart
-          members={members}
-          nodes={nodes}
+          members={members} nodes={nodes}
           onCreateNode={handleCreateNode}
           onUpdateNode={handleUpdateNode}
           onDeleteNode={handleDeleteNode}
         />
       </SectionCard>
 
-      {/* ── Modales de ayuda ── */}
       {showHelp === 'analyzer' && (
         <HelpModal title="¿Cómo usar el Analizador de Personas?" onClose={() => setShowHelp(null)}>
           <PeopleAnalyzerHelp />
@@ -847,7 +992,6 @@ export default function PersonasTab() {
           <AccountabilityHelp />
         </HelpModal>
       )}
-
     </div>
   )
 }
