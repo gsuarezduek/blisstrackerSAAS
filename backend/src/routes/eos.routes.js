@@ -8,6 +8,10 @@ const {
 const {
   getScorecard, createMetric, updateMetric, deleteMetric, upsertEntry,
 } = require('../controllers/eosScorecard.controller')
+const {
+  getProcesses, createProcess, updateProcess, deleteProcess,
+  createStep, updateStep, deleteStep,
+} = require('../controllers/eosProcesses.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
@@ -38,5 +42,14 @@ router.post('/scorecard',                        createMetric)
 router.patch('/scorecard/:id',                   updateMetric)
 router.delete('/scorecard/:id',                  deleteMetric)
 router.put('/scorecard/:id/entries/:period',     upsertEntry)
+
+// Procesos
+router.get('/processes',                               getProcesses)
+router.post('/processes',                              createProcess)
+router.patch('/processes/:id',                         updateProcess)
+router.delete('/processes/:id',                        deleteProcess)
+router.post('/processes/:id/steps',                    createStep)
+router.patch('/processes/:id/steps/:stepId',           updateStep)
+router.delete('/processes/:id/steps/:stepId',          deleteStep)
 
 module.exports = router

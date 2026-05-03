@@ -59,6 +59,8 @@ model Workspace {
   accountabilityNodes       AccountabilityNode[]
   scorecardMetrics          ScorecardMetric[]
   scorecardEntries          ScorecardEntry[]
+  eosProcesses              EOSProcess[]
+  eosProcessSteps           EOSProcessStep[]
 
   @@index([slug])
 }
@@ -159,6 +161,7 @@ model User {
   eosStrikesGiven           EOSStrike[]                @relation("StrikeCreator")
   accountabilitySeats       AccountabilityNode[]       @relation("SeatHolder")
   ownedMetrics              ScorecardMetric[]          @relation("MetricOwner")
+  ownedProcesses            EOSProcess[]               @relation("ProcessOwner")
 }
 
 model UserLogin {
@@ -1140,5 +1143,42 @@ model ScorecardEntry {
 
   @@unique([metricId, period])
   @@index([metricId])
+  @@index([workspaceId])
+}
+
+// ─── EOS PROCESOS ─────────────────────────────────────────────────────────────
+
+model EOSProcess {
+  id          Int              @id @default(autoincrement())
+  workspaceId Int
+  name        String
+  ownerId     Int?
+  status      String           @default("not_started")   // 'not_started' | 'documented' | 'followed'
+  description String?
+  order       Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner     User?            @relation("ProcessOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  steps     EOSProcessStep[]
+
+  @@index([workspaceId])
+}
+
+model EOSProcessStep {
+  id          Int       @id @default(autoincrement())
+  processId   Int
+  workspaceId Int
+  title       String
+  description String?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  process   EOSProcess @relation(fields: [processId],   references: [id], onDelete: Cascade)
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([processId])
   @@index([workspaceId])
 }
