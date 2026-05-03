@@ -57,6 +57,8 @@ model Workspace {
   peopleAnalyzerRatings     PeopleAnalyzerRating[]
   eosStrikes                EOSStrike[]
   accountabilityNodes       AccountabilityNode[]
+  scorecardMetrics          ScorecardMetric[]
+  scorecardEntries          ScorecardEntry[]
 
   @@index([slug])
 }
@@ -156,6 +158,7 @@ model User {
   eosStrikesReceived        EOSStrike[]                @relation("StrikedPerson")
   eosStrikesGiven           EOSStrike[]                @relation("StrikeCreator")
   accountabilitySeats       AccountabilityNode[]       @relation("SeatHolder")
+  ownedMetrics              ScorecardMetric[]          @relation("MetricOwner")
 }
 
 model UserLogin {
@@ -1100,4 +1103,42 @@ model AccountabilityNode {
 
   @@index([workspaceId])
   @@index([parentId])
+}
+
+// ─── EOS SCORECARD ────────────────────────────────────────────────────────────
+
+model ScorecardMetric {
+  id          Int              @id @default(autoincrement())
+  workspaceId Int
+  name        String
+  ownerId     Int?
+  goal        Float?
+  unit        String?
+  frequency   String           @default("weekly")   // 'weekly' | 'monthly'
+  order       Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner     User?            @relation("MetricOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  entries   ScorecardEntry[]
+
+  @@index([workspaceId])
+}
+
+model ScorecardEntry {
+  id          Int             @id @default(autoincrement())
+  metricId    Int
+  workspaceId Int
+  period      String          // 'YYYY-Www' semanal | 'YYYY-MM' mensual
+  value       Float?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  metric    ScorecardMetric @relation(fields: [metricId],    references: [id], onDelete: Cascade)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([metricId, period])
+  @@index([metricId])
+  @@index([workspaceId])
 }

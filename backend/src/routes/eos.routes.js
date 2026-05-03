@@ -5,6 +5,9 @@ const {
   addStrike, removeStrike,
   createNode, updateNode, deleteNode,
 } = require('../controllers/eosPeople.controller')
+const {
+  getScorecard, createMetric, updateMetric, deleteMetric, upsertEntry,
+} = require('../controllers/eosScorecard.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
@@ -28,5 +31,12 @@ router.delete('/strikes/:id',  removeStrike)
 router.post('/accountability',        createNode)
 router.patch('/accountability/:id',   updateNode)
 router.delete('/accountability/:id',  deleteNode)
+
+// Datos — Scorecard
+router.get('/scorecard',                         getScorecard)
+router.post('/scorecard',                        createMetric)
+router.patch('/scorecard/:id',                   updateMetric)
+router.delete('/scorecard/:id',                  deleteMetric)
+router.put('/scorecard/:id/entries/:period',     upsertEntry)
 
 module.exports = router
