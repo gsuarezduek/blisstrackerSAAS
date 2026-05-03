@@ -1007,9 +1007,30 @@ model EOSData {
   id          Int      @id @default(autoincrement())
   workspaceId Int      @unique
   coreValues  String   @default("[]")   // JSON: string[]
+  // Visión — Enfoque Medular
   purpose       String?                 // Propósito / Causa / Pasión
   niche         String?                 // Nicho de la organización
-  tenYearTarget String?                 // Meta a 10 años
+
+  // Visión — Meta a 10 años
+  tenYearTarget String?
+
+  // Visión — Estrategia de Marketing
+  marketingTarget    String?            // Cliente ideal / La Lista
+  marketingUniques   String   @default("[]")  // JSON: string[] — 3 diferenciadores
+  marketingProcess   String?            // Proceso probado
+  marketingGuarantee String?            // Garantía
+
+  // Visión — Imagen a 3 años
+  threeYearRevenue     String?
+  threeYearProfit      String?
+  threeYearHeadcount   String?
+  threeYearDescription String?
+  threeYearGoals       String   @default("[]")  // JSON: string[]
+
+  // Visión — Plan a 1 año
+  oneYearRevenue String?
+  oneYearProfit  String?
+  oneYearGoals   String   @default("[]")  // JSON: string[] (Rocks)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
