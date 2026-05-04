@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import api from '../../api/client'
+import { WorkspaceContext } from '../../context/WorkspaceContext'
 
 // ─── Helpers de tiempo (para VTO) ────────────────────────────────────────────
 
@@ -640,10 +641,8 @@ export default function VisionTab() {
   const [showHelp, setShowHelp] = useState(null)
   const [vtoMode,  setVtoMode]  = useState(false)
 
-  // Workspace name para el VTO header
-  const workspaceName = typeof window !== 'undefined'
-    ? (window.location.hostname.split('.')[0] || 'Mi Empresa')
-    : 'Mi Empresa'
+  const { workspace } = useContext(WorkspaceContext)
+  const workspaceName = workspace?.name || 'Mi Empresa'
 
   useEffect(() => {
     api.get('/eos')
