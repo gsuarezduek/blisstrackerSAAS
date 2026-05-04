@@ -69,7 +69,11 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month') {
       headers: {
         'Authorization':     `Bearer ${accessToken}`,
         'developer-token':   devToken,
-        'login-customer-id': customerId,
+        // Si la cuenta es cliente de un MCC, login-customer-id debe ser el ID del manager.
+        // Se guarda en integration.propertyId; si no está, se usa el propio customerId (cuenta directa).
+        'login-customer-id': integration.propertyId
+          ? normalizeCustomerId(integration.propertyId)
+          : customerId,
         'Content-Type':      'application/json',
       },
     },

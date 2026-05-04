@@ -132,56 +132,96 @@ function CampaignsTable({ campaigns }) {
   )
 }
 
-// ── Formulario de Customer ID ─────────────────────────────────────────────────
+// ── Formulario de Customer ID (+ Manager Account ID opcional) ────────────────
 
-function CustomerIdForm({ projectId, onSaved }) {
-  const [value,   setValue]   = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
+function CustomerIdForm({ projectId, onSaved, initialCustomerId = '', initialManagerId = '' }) {
+  const [customerId,  setCustomerId]  = useState(initialCustomerId)
+  const [managerId,   setManagerId]   = useState(initialManagerId)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState(null)
+
+  function cleanId(v) { return v.replace(/-/g, '').trim() }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const clean = value.replace(/-/g, '').trim()
-    if (!/^\d{8,12}$/.test(clean)) {
+    const cleanCust = cleanId(customerId)
+    const cleanMgr  = cleanId(managerId)
+
+    if (!/^\d{8,12}$/.test(cleanCust)) {
       setError('El Customer ID debe ser un número de 8 a 12 dígitos (ej: 123-456-7890)')
+      return
+    }
+    if (cleanMgr && !/^\d{8,12}$/.test(cleanMgr)) {
+      setError('El Manager Account ID debe ser un número de 8 a 12 dígitos (ej: 123-456-7890)')
       return
     }
     setLoading(true)
     setError(null)
     try {
-      await api.patch(`/marketing/projects/${projectId}/integrations/google_ads`, { customerId: clean })
+      await api.patch(`/marketing/projects/${projectId}/integrations/google_ads`, {
+        customerId: cleanCust,
+        propertyId: cleanMgr || null,   // null borra el manager ID si se deja vacío
+      })
       onSaved()
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo guardar el Customer ID.')
+      setError(err.response?.data?.error || 'No se pudo guardar.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center max-w-sm mx-auto">
+    <div className="flex flex-col items-center justify-center py-12 text-center max-w-sm mx-auto">
       <div className="w-14 h-14 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center text-3xl mb-4">
         🔑
       </div>
       <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-1">
-        Ingresá tu Customer ID
+        Configurar cuenta de Google Ads
       </h3>
-      <p className="text-sm text-gray-400 dark:text-gray-500 mb-6">
-        Lo encontrás en la esquina superior derecha de Google Ads, con el formato{' '}
-        <span className="font-mono">123-456-7890</span>.
+      <p className="text-sm text-gray-400 dark:text-gray-500 mb-6 text-left">
+        Ingresá el Customer ID de la cuenta que querés ver. Si la cuenta está administrada
+        desde un <strong className="text-gray-500 dark:text-gray-400">Manager Account (MCC)</strong>,
+        agregá también el ID del manager.
       </p>
-      <form onSubmit={handleSubmit} className="w-full space-y-3">
-        <input
-          type="text"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          placeholder="123-456-7890"
-          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center font-mono"
-        />
+      <form onSubmit={handleSubmit} className="w-full space-y-4 text-left">
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            Customer ID <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={customerId}
+            onChange={e => setCustomerId(e.target.value)}
+            placeholder="123-456-7890"
+            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+          />
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            Esquina superior derecha de Google Ads
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            Manager Account ID <span className="text-gray-400 dark:text-gray-500 font-normal">(solo si usás MCC)</span>
+          </label>
+          <input
+            type="text"
+            value={managerId}
+            onChange={e => setManagerId(e.target.value)}
+            placeholder="987-654-3210 (opcional)"
+            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+          />
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            ID del Manager Account desde el que administrás esta cuenta
+          </p>
+        </div>
+
         {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+
         <button
           type="submit"
-          disabled={loading || !value.trim()}
+          disabled={loading || !customerId.trim()}
           className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 transition-colors"
         >
           {loading ? 'Guardando…' : 'Guardar y continuar'}
@@ -394,7 +434,12 @@ export default function GoogleAdsTab({ projectId }) {
             </div>
           </div>
         </div>
-        <CustomerIdForm projectId={projectId} onSaved={handleCustomerIdSaved} />
+        <CustomerIdForm
+          projectId={projectId}
+          onSaved={handleCustomerIdSaved}
+          initialCustomerId={integration.customerId || ''}
+          initialManagerId={integration.propertyId || ''}
+        />
       </div>
     )
   }
@@ -412,8 +457,13 @@ export default function GoogleAdsTab({ projectId }) {
             <div>
               <p className="font-semibold text-gray-900 dark:text-white">Google Ads</p>
               <p className="text-xs text-gray-400 dark:text-gray-500">
-                Customer ID: {String(integration.customerId).replace(/(\d{3})(\d{3})(\d+)/, '$1-$2-$3')}
+                Cliente: {String(integration.customerId).replace(/(\d{3})(\d{3})(\d+)/, '$1-$2-$3')}
               </p>
+              {integration.propertyId && (
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  Manager: {String(integration.propertyId).replace(/(\d{3})(\d{3})(\d+)/, '$1-$2-$3')}
+                </p>
+              )}
             </div>
           </div>
           <button
@@ -430,12 +480,12 @@ export default function GoogleAdsTab({ projectId }) {
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300 flex items-start justify-between gap-3">
           <span>{error}</span>
-          {errorCode === 'NOT_FOUND' && (
+          {(errorCode === 'NOT_FOUND' || errorCode === 'PERMISSION_DENIED') && (
             <button
               onClick={() => setEditingCustomerId(true)}
               className="shrink-0 text-xs underline text-red-600 dark:text-red-400 hover:no-underline whitespace-nowrap"
             >
-              Corregir Customer ID
+              {errorCode === 'PERMISSION_DENIED' ? 'Configurar Manager ID' : 'Corregir Customer ID'}
             </button>
           )}
           {errorCode === 'TOKEN_EXPIRED' && (

@@ -34,8 +34,8 @@ async function main() {
     process.exit(1)
   }
 
-  // System User Tokens no vencen → expiresAt lejano
-  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+  // System User Tokens no vencen → expiresAt null (token permanente)
+  const expiresAt = null
 
   const project = await prisma.project.findUnique({
     where:  { id: projectId },

@@ -10,17 +10,23 @@ const FB_GRAPH = 'https://graph.facebook.com/v21.0'
  */
 async function getValidFbToken(integration) {
   const now       = Date.now()
-  const expiresAt = integration.expiresAt?.getTime() ?? 0
+  const expiresAt = integration.expiresAt?.getTime() ?? null
+
+  // Token permanente (System User Token sin vencimiento) — usar directamente
+  if (expiresAt === null) {
+    return decrypt(integration.accessToken)
+  }
 
   if (expiresAt < now) {
     throw new Error('El token de Meta Ads expiró. Reconectá la cuenta desde la configuración del proyecto.')
   }
 
+  // Token vigente con más de 10 días — usar directamente
   if (expiresAt - now > 10 * 24 * 60 * 60 * 1000) {
     return decrypt(integration.accessToken)
   }
 
-  // Renovar con fb_exchange_token
+  // Renovar con fb_exchange_token (tokens OAuth de corta duración)
   const current = decrypt(integration.accessToken)
   const { data } = await axios.get(`${FB_GRAPH}/oauth/access_token`, {
     params: {

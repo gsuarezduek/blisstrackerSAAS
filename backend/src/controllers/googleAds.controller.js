@@ -59,6 +59,12 @@ async function getGoogleAdsData(req, res, next) {
             code: 'NOT_FOUND',
           })
         }
+        if (status === 403) {
+          return res.status(400).json({
+            error: 'Sin permiso para acceder a esta cuenta. Si es una cuenta cliente de un Manager Account (MCC), ingresá el ID del Manager en el campo correspondiente.',
+            code: 'PERMISSION_DENIED',
+          })
+        }
         return res.status(400).json({ error: gadsErr.message || 'Error en Google Ads API' })
       }
       // Formato array (algunas versiones de la API)
