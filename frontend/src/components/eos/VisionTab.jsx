@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback, useContext } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
-import { WorkspaceContext } from '../../context/WorkspaceContext'
+import { useWorkspace } from '../../context/WorkspaceContext'
 
 // ─── Helpers de tiempo (para VTO) ────────────────────────────────────────────
 
@@ -641,7 +641,7 @@ export default function VisionTab() {
   const [showHelp, setShowHelp] = useState(null)
   const [vtoMode,  setVtoMode]  = useState(false)
 
-  const { workspace } = useContext(WorkspaceContext)
+  const { workspace } = useWorkspace()
   const workspaceName = workspace?.name || 'Mi Empresa'
 
   useEffect(() => {
