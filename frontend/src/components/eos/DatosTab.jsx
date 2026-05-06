@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 
@@ -15,45 +15,75 @@ function getISOWeek(date) {
   return [d.getUTCFullYear(), week]
 }
 
-function weekPeriod(date) {
-  const [year, week] = getISOWeek(date)
-  return `${year}-W${String(week).padStart(2, '0')}`
+/** Todas las ISO weeks que pertenecen al año ISO dado (52 o 53 semanas) */
+function yearWeekPeriods(year) {
+  const periods = []
+  const jan4 = new Date(Date.UTC(year, 0, 4))
+  const dow4 = jan4.getUTCDay() || 7
+  let d = new Date(Date.UTC(year, 0, 4 - dow4 + 1)) // Lunes de W01
+  while (true) {
+    const [isoYear, isoWeek] = getISOWeek(d)
+    if (isoYear !== year) break
+    periods.push(`${isoYear}-W${String(isoWeek).padStart(2, '0')}`)
+    d.setUTCDate(d.getUTCDate() + 7)
+  }
+  return periods
 }
 
-function lastNWeekPeriods(n) {
-  const now = new Date()
-  return Array.from({ length: n }, (_, i) => {
-    const d = new Date(now)
-    d.setDate(d.getDate() - (n - 1 - i) * 7)
-    return weekPeriod(d)
-  })
+/** Los 12 meses del año calendario dado */
+function yearMonthPeriods(year) {
+  return Array.from({ length: 12 }, (_, i) =>
+    `${year}-${String(i + 1).padStart(2, '0')}`
+  )
 }
 
-function lastNMonthPeriods(n) {
-  const now = new Date()
-  return Array.from({ length: n }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (n - 1 - i), 1)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-  })
-}
-
-const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+const MONTH_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+const MONTH_LONG  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+const WEEK_MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 
 function weekLabel(period) {
-  // "2026-W18" → "S18"
   return 'S' + parseInt(period.split('-W')[1], 10)
 }
 
-function monthLabel(period) {
-  // "2026-05" → "May"
-  return MONTH_NAMES[parseInt(period.split('-')[1], 10) - 1]
+function weekTooltip(period) {
+  const [y, ws] = period.split('-W')
+  const year = parseInt(y), week = parseInt(ws)
+  const jan4 = new Date(Date.UTC(year, 0, 4))
+  const dow4 = jan4.getUTCDay() || 7
+  const mon  = new Date(Date.UTC(year, 0, 4 - dow4 + 1 + (week - 1) * 7))
+  const sun  = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6)
+  const fmt  = d => `${d.getUTCDate()} ${WEEK_MONTHS[d.getUTCMonth()]}`
+  return `${fmt(mon)} – ${fmt(sun)}`
 }
 
-function currentWeekPeriod() { return weekPeriod(new Date()) }
-function currentMonthPeriod() {
+function monthLabel(period) {
+  return MONTH_SHORT[parseInt(period.split('-')[1], 10) - 1]
+}
+
+function monthTooltip(period) {
+  const [year, m] = period.split('-')
+  return `${MONTH_LONG[parseInt(m, 10) - 1]} ${year}`
+}
+
+function todayWeekPeriod() {
+  const now = new Date()
+  const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
+}
+
+function todayMonthPeriod() {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
+
+const TODAY_WEEK       = todayWeekPeriod()
+const TODAY_MONTH      = todayMonthPeriod()
+const TODAY_WEEK_YEAR  = parseInt(TODAY_WEEK.split('-W')[0])
+const TODAY_MONTH_YEAR = parseInt(TODAY_MONTH.split('-')[0])
 
 function formatVal(v) {
   if (v === null || v === undefined) return ''
@@ -63,23 +93,54 @@ function formatVal(v) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Celda editable de scorecard
+// YearNav — navegación de año con botón "Hoy"
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ScoreCell({ metricId, period, initialValue, goal, isCurrent, onSave }) {
-  const [val, setVal]     = useState(initialValue != null ? formatVal(initialValue) : '')
-  const lastSaved         = useRef(initialValue ?? null)
+function YearNav({ year, onPrev, onNext, isCurrentYear, onToday }) {
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={onPrev}
+        title="Año anterior"
+        className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-semibold"
+      >‹</button>
+      <span className="text-sm font-bold text-gray-800 dark:text-gray-100 w-12 text-center tabular-nums select-none">
+        {year}
+      </span>
+      <button
+        onClick={onNext}
+        title="Año siguiente"
+        className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm font-semibold"
+      >›</button>
+      {!isCurrentYear && (
+        <button
+          onClick={onToday}
+          className="ml-1 px-2.5 py-1 text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 border border-primary-200 dark:border-primary-700 rounded-lg transition-colors"
+        >
+          Hoy
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ScoreCell — celda editable de scorecard
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ScoreCell({ metricId, period, initialValue, goal, isCurrent, isWeekly, onSave }) {
+  const [val, setVal]       = useState(initialValue != null ? formatVal(initialValue) : '')
+  const lastSaved           = useRef(initialValue ?? null)
   const [saving, setSaving] = useState(false)
 
-  // Sincronizar si cambia el valor externo (ej: reload de datos)
   useEffect(() => {
     setVal(initialValue != null ? formatVal(initialValue) : '')
     lastSaved.current = initialValue ?? null
   }, [initialValue])
 
-  const numVal  = val === '' ? null : parseFloat(val)
-  const hasGoal = goal != null
-  const onTrack = hasGoal && numVal != null && numVal >= goal
+  const numVal   = val === '' ? null : parseFloat(val)
+  const hasGoal  = goal != null
+  const onTrack  = hasGoal && numVal != null && numVal >= goal
   const offTrack = hasGoal && numVal != null && numVal < goal
 
   async function save() {
@@ -108,10 +169,10 @@ function ScoreCell({ metricId, period, initialValue, goal, isCurrent, onSave }) 
           value={val}
           onChange={e => setVal(e.target.value)}
           onBlur={save}
-          onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur() } }}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
           placeholder="—"
-          className={`w-full text-right text-xs px-2 py-2 bg-transparent focus:outline-none focus:bg-primary-50 dark:focus:bg-primary-900/20 transition-colors ${textColor} ${saving ? 'opacity-40' : ''}`}
-          style={{ minWidth: 52 }}
+          className={`w-full text-right text-xs bg-transparent focus:outline-none focus:bg-primary-50 dark:focus:bg-primary-900/20 transition-colors ${textColor} ${saving ? 'opacity-40' : ''} ${isWeekly ? 'px-1 py-2' : 'px-2 py-2'}`}
+          style={{ minWidth: isWeekly ? 34 : 50 }}
         />
       </div>
     </td>
@@ -119,7 +180,7 @@ function ScoreCell({ metricId, period, initialValue, goal, isCurrent, onSave }) 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Modal para crear / editar una métrica
+// Modal crear / editar métrica
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const UNITS = ['', '#', '$', '%', 'hs', 'días', 'km', 'kg', 'leads', 'clientes', 'ventas', 'tickets']
@@ -156,7 +217,6 @@ function MetricModal({ metric, members, onSave, onClose, saving }) {
         </div>
 
         <div className="space-y-4">
-          {/* Nombre */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre de la métrica</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={200}
@@ -165,11 +225,13 @@ function MetricModal({ metric, members, onSave, onClose, saving }) {
             />
           </div>
 
-          {/* Frecuencia */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Frecuencia</label>
             <div className="flex gap-2">
-              {[{ v: 'weekly', label: 'Semanal', desc: '13 semanas' }, { v: 'monthly', label: 'Mensual', desc: '12 meses' }].map(opt => (
+              {[
+                { v: 'weekly',  label: 'Semanal',  desc: 'S1 – S52 por año' },
+                { v: 'monthly', label: 'Mensual',  desc: 'Ene – Dic por año' },
+              ].map(opt => (
                 <button key={opt.v} type="button" onClick={() => setFrequency(opt.v)}
                   className={`flex-1 py-2.5 px-3 rounded-xl border-2 text-sm font-medium transition-all ${
                     frequency === opt.v
@@ -183,7 +245,6 @@ function MetricModal({ metric, members, onSave, onClose, saving }) {
             </div>
           </div>
 
-          {/* Meta + Unidad */}
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Meta</label>
@@ -204,7 +265,6 @@ function MetricModal({ metric, members, onSave, onClose, saving }) {
             </div>
           </div>
 
-          {/* Responsable */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Responsable</label>
             <select value={ownerId} onChange={e => setOwnerId(e.target.value)}
@@ -228,71 +288,88 @@ function MetricModal({ metric, members, onSave, onClose, saving }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Tabla de scorecard (semanal o mensual)
+// ScorecardTable — tabla con scroll horizontal y columna sticky
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ScorecardTable({ metrics, entriesMap, members, periods, currentPeriod, labelFn, onEntryChange, onEdit, onDelete }) {
+function ScorecardTable({
+  metrics, entriesMap, members, periods, currentPeriod,
+  labelFn, tooltipFn,
+  onEntryChange, onEdit, onDelete,
+  containerRef, currentPeriodRef,
+  isWeekly,
+}) {
   function avg(metricId) {
     const vals = periods.map(p => entriesMap[metricId]?.[p]).filter(v => v != null)
     if (!vals.length) return null
     return vals.reduce((a, b) => a + b, 0) / vals.length
   }
 
+  const colW = isWeekly ? 'min-w-[38px]' : 'min-w-[62px]'
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+    <div ref={containerRef} className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="bg-gray-50 dark:bg-gray-900/60">
-            {/* Columna métrica — sticky */}
+            {/* Columna métrica sticky */}
             <th className="sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 text-left px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 min-w-[180px]">
               Métrica
             </th>
-            <th className="px-3 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-center min-w-[90px]">
-              Responsable
+            <th className="px-2 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-center min-w-[72px]">
+              Resp.
             </th>
-            <th className="px-3 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-right min-w-[70px]">
+            <th className="px-3 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-right min-w-[58px]">
               Meta
             </th>
+
+            {/* Columnas de período */}
             {periods.map(p => (
-              <th key={p} className={`px-1 py-2.5 text-xs font-medium border-b border-gray-200 dark:border-gray-700 text-right min-w-[52px] ${
-                p === currentPeriod
-                  ? 'text-primary-600 dark:text-primary-400 font-semibold border-l-2 border-primary-300 dark:border-primary-700'
-                  : 'text-gray-400 dark:text-gray-500'
-              }`}>
+              <th
+                key={p}
+                ref={p === currentPeriod ? currentPeriodRef : null}
+                title={tooltipFn ? tooltipFn(p) : undefined}
+                className={`px-1 py-2.5 text-xs font-medium border-b border-gray-200 dark:border-gray-700 text-right ${colW} ${
+                  p === currentPeriod
+                    ? 'text-primary-600 dark:text-primary-400 font-bold border-l-2 border-primary-300 dark:border-primary-700'
+                    : 'text-gray-400 dark:text-gray-500'
+                }`}
+              >
                 {labelFn(p)}
               </th>
             ))}
-            <th className="px-3 py-2.5 text-xs font-medium text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700 text-right min-w-[60px]">
+
+            <th className="px-3 py-2.5 text-xs font-medium text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700 text-right min-w-[52px]">
               Prom.
             </th>
             <th className="px-2 py-2.5 border-b border-gray-200 dark:border-gray-700 w-10" />
           </tr>
         </thead>
+
         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
           {metrics.map(metric => {
-            const owner  = metric.ownerId ? members.find(m => m.id === metric.ownerId) : null
-            const avgVal = avg(metric.id)
+            const owner   = metric.ownerId ? members.find(m => m.id === metric.ownerId) : null
+            const avgVal  = avg(metric.id)
             const hasGoal = metric.goal != null
-            const avgOnTrack  = hasGoal && avgVal != null && avgVal >= metric.goal
-            const avgOffTrack = hasGoal && avgVal != null && avgVal < metric.goal
+            const avgOK   = hasGoal && avgVal != null && avgVal >= metric.goal
+            const avgBAD  = hasGoal && avgVal != null && avgVal < metric.goal
 
             return (
               <tr key={metric.id} className="group hover:bg-gray-50/50 dark:hover:bg-gray-700/20">
-                {/* Nombre */}
+                {/* Nombre sticky */}
                 <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20 px-4 py-2 transition-colors">
                   <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{metric.name}</span>
                 </td>
 
                 {/* Responsable */}
-                <td className="px-3 py-2 text-center">
+                <td className="px-2 py-2 text-center">
                   {owner ? (
-                    <div className="flex items-center justify-center gap-1.5">
+                    <div className="flex items-center justify-center gap-1">
                       <img src={avatarUrl(owner.avatar)} alt={owner.name}
-                        className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600" />
-                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[60px]">{owner.name}</span>
+                        className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
+                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[44px] hidden md:inline">{owner.name.split(' ')[0]}</span>
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-300 dark:text-gray-600 italic">—</span>
+                    <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
                   )}
                 </td>
 
@@ -300,7 +377,8 @@ function ScorecardTable({ metrics, entriesMap, members, periods, currentPeriod, 
                 <td className="px-3 py-2 text-right">
                   {metric.goal != null ? (
                     <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      {formatVal(metric.goal)}{metric.unit ? <span className="font-normal text-gray-400 dark:text-gray-500 ml-0.5">{metric.unit}</span> : null}
+                      {formatVal(metric.goal)}
+                      {metric.unit ? <span className="font-normal text-gray-400 dark:text-gray-500 ml-0.5">{metric.unit}</span> : null}
                     </span>
                   ) : (
                     <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
@@ -316,6 +394,7 @@ function ScorecardTable({ metrics, entriesMap, members, periods, currentPeriod, 
                     initialValue={entriesMap[metric.id]?.[period] ?? null}
                     goal={metric.goal}
                     isCurrent={period === currentPeriod}
+                    isWeekly={isWeekly}
                     onSave={onEntryChange}
                   />
                 ))}
@@ -324,8 +403,8 @@ function ScorecardTable({ metrics, entriesMap, members, periods, currentPeriod, 
                 <td className="px-3 py-2 text-right">
                   {avgVal != null ? (
                     <span className={`text-xs font-medium ${
-                      avgOnTrack  ? 'text-green-600 dark:text-green-400'
-                    : avgOffTrack ? 'text-red-600 dark:text-red-400'
+                      avgOK  ? 'text-green-600 dark:text-green-400'
+                    : avgBAD ? 'text-red-600 dark:text-red-400'
                     : 'text-gray-500 dark:text-gray-400'
                     }`}>
                       {formatVal(avgVal)}
@@ -354,7 +433,7 @@ function ScorecardTable({ metrics, entriesMap, members, periods, currentPeriod, 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DatosTab — componente principal
+// ConfirmModal
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function ConfirmModal({ message, onConfirm, onCancel }) {
@@ -371,19 +450,31 @@ function ConfirmModal({ message, onConfirm, onCancel }) {
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// DatosTab — componente principal
+// ═══════════════════════════════════════════════════════════════════════════════
+
 export default function DatosTab() {
-  const [members,    setMembers]    = useState([])
-  const [metrics,    setMetrics]    = useState([])
-  const [entriesMap, setEntriesMap] = useState({})  // { [metricId]: { [period]: value } }
-  const [loading,    setLoading]    = useState(true)
-  const [modalMetric, setModalMetric] = useState(null)   // { mode: 'add'|'edit', metric? }
+  const [members,     setMembers]     = useState([])
+  const [metrics,     setMetrics]     = useState([])
+  const [entriesMap,  setEntriesMap]  = useState({})
+  const [loading,     setLoading]     = useState(true)
+  const [modalMetric, setModalMetric] = useState(null)
   const [saving,      setSaving]      = useState(false)
   const [confirmDel,  setConfirmDel]  = useState(null)
+  const [weekYear,    setWeekYear]    = useState(TODAY_WEEK_YEAR)
+  const [monthYear,   setMonthYear]   = useState(TODAY_MONTH_YEAR)
 
-  const weeklyPeriods  = lastNWeekPeriods(13)
-  const monthlyPeriods = lastNMonthPeriods(12)
-  const curWeek  = currentWeekPeriod()
-  const curMonth = currentMonthPeriod()
+  // Refs para auto-scroll de la tabla semanal
+  const weekContainerRef = useRef(null)
+  const weekCurrentThRef = useRef(null)
+
+  const weeklyPeriods  = useMemo(() => yearWeekPeriods(weekYear),   [weekYear])
+  const monthlyPeriods = useMemo(() => yearMonthPeriods(monthYear), [monthYear])
+
+  // El período actual solo se resalta cuando estamos en el año actual
+  const curWeek  = weekYear  === TODAY_WEEK_YEAR  ? TODAY_WEEK  : null
+  const curMonth = monthYear === TODAY_MONTH_YEAR ? TODAY_MONTH : null
 
   useEffect(() => {
     api.get('/eos/scorecard')
@@ -395,6 +486,26 @@ export default function DatosTab() {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  // Auto-scroll semanal: centra la semana actual al cargar o cambiar de año
+  useEffect(() => {
+    if (loading) return
+    const container = weekContainerRef.current
+    if (!container) return
+
+    requestAnimationFrame(() => {
+      const curTh = weekCurrentThRef.current
+      if (curTh) {
+        const cRect  = container.getBoundingClientRect()
+        const thRect = curTh.getBoundingClientRect()
+        const target = container.scrollLeft + thRect.left - cRect.left - cRect.width / 2 + thRect.width / 2
+        container.scrollLeft = Math.max(0, target)
+      } else {
+        // Para años que no son el actual: ir al inicio (S1)
+        container.scrollLeft = 0
+      }
+    })
+  }, [weekYear, loading])
 
   // ── Guardar valor de celda
   const handleEntryChange = useCallback(async (metricId, period, value) => {
@@ -437,7 +548,11 @@ export default function DatosTab() {
   const monthlyMetrics = metrics.filter(m => m.frequency === 'monthly')
 
   if (loading) {
-    return <div className="flex justify-center py-16"><div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    return (
+      <div className="flex justify-center py-16">
+        <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -453,13 +568,15 @@ export default function DatosTab() {
               Verde = alcanzó la meta · Rojo = por debajo.
             </p>
           </div>
-          <button onClick={() => setModalMetric({ mode: 'add' })}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-xl transition-colors shrink-0">
+          <button
+            onClick={() => setModalMetric({ mode: 'add' })}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-xl transition-colors shrink-0"
+          >
             + Nueva métrica
           </button>
         </div>
 
-        {/* Leyenda de colores */}
+        {/* Leyenda */}
         <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-2">
             <span className="w-8 h-5 rounded bg-green-100 dark:bg-green-900/40 border border-green-200 dark:border-green-800" />
@@ -473,6 +590,9 @@ export default function DatosTab() {
             <span className="w-0.5 h-5 bg-primary-400 dark:bg-primary-600 rounded" />
             <span className="text-xs text-gray-500 dark:text-gray-400">Período actual</span>
           </div>
+          <div className="flex items-center gap-1.5 ml-2 pl-4 border-l border-gray-200 dark:border-gray-700">
+            <span className="text-xs text-gray-400 dark:text-gray-500 italic">Hover en encabezados semanales para ver fecha exacta</span>
+          </div>
         </div>
       </div>
 
@@ -482,21 +602,32 @@ export default function DatosTab() {
           <p className="text-3xl mb-3">📊</p>
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sin métricas todavía</p>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 max-w-md mx-auto">
-            Agregá los números que importan: leads, facturación, propuestas enviadas, clientes atendidos… lo que tu equipo debe mirar cada semana o mes.
+            Agregá los números que importan: leads, facturación, propuestas enviadas, clientes atendidos…
           </p>
-          <button onClick={() => setModalMetric({ mode: 'add' })}
-            className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors">
+          <button
+            onClick={() => setModalMetric({ mode: 'add' })}
+            className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors"
+          >
             + Agregar primera métrica
           </button>
         </div>
       )}
 
-      {/* Tabla semanal */}
+      {/* ── Tabla semanal ── */}
       {weeklyMetrics.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Semanales</span>
-            <span className="text-xs text-gray-400 dark:text-gray-500">· últimas 13 semanas</span>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Semanales</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">· {weeklyPeriods.length} semanas · scroll horizontal</span>
+            </div>
+            <YearNav
+              year={weekYear}
+              onPrev={() => setWeekYear(y => y - 1)}
+              onNext={() => setWeekYear(y => y + 1)}
+              isCurrentYear={weekYear === TODAY_WEEK_YEAR}
+              onToday={() => setWeekYear(TODAY_WEEK_YEAR)}
+            />
           </div>
           <ScorecardTable
             metrics={weeklyMetrics}
@@ -505,19 +636,32 @@ export default function DatosTab() {
             periods={weeklyPeriods}
             currentPeriod={curWeek}
             labelFn={weekLabel}
+            tooltipFn={weekTooltip}
             onEntryChange={handleEntryChange}
             onEdit={metric => setModalMetric({ mode: 'edit', metric })}
             onDelete={id => setConfirmDel({ id })}
+            containerRef={weekContainerRef}
+            currentPeriodRef={weekCurrentThRef}
+            isWeekly={true}
           />
         </div>
       )}
 
-      {/* Tabla mensual */}
+      {/* ── Tabla mensual ── */}
       {monthlyMetrics.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Mensuales</span>
-            <span className="text-xs text-gray-400 dark:text-gray-500">· últimos 12 meses</span>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Mensuales</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">· Ene – Dic</span>
+            </div>
+            <YearNav
+              year={monthYear}
+              onPrev={() => setMonthYear(y => y - 1)}
+              onNext={() => setMonthYear(y => y + 1)}
+              isCurrentYear={monthYear === TODAY_MONTH_YEAR}
+              onToday={() => setMonthYear(TODAY_MONTH_YEAR)}
+            />
           </div>
           <ScorecardTable
             metrics={monthlyMetrics}
@@ -526,9 +670,11 @@ export default function DatosTab() {
             periods={monthlyPeriods}
             currentPeriod={curMonth}
             labelFn={monthLabel}
+            tooltipFn={monthTooltip}
             onEntryChange={handleEntryChange}
             onEdit={metric => setModalMetric({ mode: 'edit', metric })}
             onDelete={id => setConfirmDel({ id })}
+            isWeekly={false}
           />
         </div>
       )}
@@ -552,6 +698,7 @@ export default function DatosTab() {
           onCancel={() => setConfirmDel(null)}
         />
       )}
+
     </div>
   )
 }

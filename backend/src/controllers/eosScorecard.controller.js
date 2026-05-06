@@ -44,8 +44,6 @@ async function getScorecard(req, res, next) {
   try {
     const workspaceId = req.workspace.id
 
-    const relevantPeriods = [...lastNWeekPeriods(13), ...lastNMonthPeriods(12)]
-
     const [members, metrics, entries] = await Promise.all([
       prisma.workspaceMember.findMany({
         where:   { workspaceId, active: true },
@@ -57,7 +55,7 @@ async function getScorecard(req, res, next) {
         orderBy: [{ frequency: 'asc' }, { order: 'asc' }],
       }),
       prisma.scorecardEntry.findMany({
-        where:   { workspaceId, period: { in: relevantPeriods } },
+        where:   { workspaceId },
         orderBy: { period: 'asc' },
       }),
     ])
