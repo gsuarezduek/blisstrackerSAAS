@@ -748,10 +748,11 @@ function MeetingSection() {
   return (
     <div className="space-y-5">
       {/* Week nav */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={() => setWeek(w => adjWeek(w, -1))}
           className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          title="Semana anterior"
         >
           ◀
         </button>
@@ -761,15 +762,35 @@ function MeetingSection() {
         <button
           onClick={() => setWeek(w => adjWeek(w, 1))}
           className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          title="Semana siguiente"
         >
           ▶
         </button>
-        <button
-          onClick={() => setWeek(currentWeekStr())}
-          className="ml-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
-        >
-          Hoy
-        </button>
+
+        {/* Pills de navegación rápida */}
+        <div className="flex items-center gap-1 ml-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+          {[
+            { label: 'Anterior', delta: -1 },
+            { label: 'Hoy',      delta:  0 },
+            { label: 'Próxima',  delta:  1 },
+          ].map(({ label, delta }) => {
+            const target   = delta === 0 ? currentWeekStr() : adjWeek(currentWeekStr(), delta)
+            const isActive = week === target
+            return (
+              <button
+                key={label}
+                onClick={() => setWeek(target)}
+                className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                  isActive
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {loading && <p className="text-sm text-gray-400 py-4 text-center">Cargando semana...</p>}

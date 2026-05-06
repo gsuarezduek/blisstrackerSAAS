@@ -172,7 +172,7 @@ function ScoreCell({ metricId, period, initialValue, goal, isCurrent, isWeekly, 
           onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
           placeholder="—"
           className={`w-full text-right text-xs bg-transparent focus:outline-none focus:bg-primary-50 dark:focus:bg-primary-900/20 transition-colors ${textColor} ${saving ? 'opacity-40' : ''} ${isWeekly ? 'px-1 py-2' : 'px-2 py-2'}`}
-          style={{ minWidth: isWeekly ? 34 : 50 }}
+          style={{ minWidth: isWeekly ? 34 : 88 }}
         />
       </div>
     </td>
@@ -304,7 +304,7 @@ function ScorecardTable({
     return vals.reduce((a, b) => a + b, 0) / vals.length
   }
 
-  const colW = isWeekly ? 'min-w-[38px]' : 'min-w-[62px]'
+  const colW = isWeekly ? 'min-w-[38px]' : 'min-w-[96px]'
 
   return (
     <div ref={containerRef} className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
@@ -338,10 +338,14 @@ function ScorecardTable({
               </th>
             ))}
 
-            <th className="px-3 py-2.5 text-xs font-medium text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700 text-right min-w-[52px]">
+            <th className={`px-3 py-2.5 text-xs font-medium text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700 text-right w-[64px] ${
+              !isWeekly ? 'sticky right-10 z-10 bg-gray-50 dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700' : ''
+            }`}>
               Prom.
             </th>
-            <th className="px-2 py-2.5 border-b border-gray-200 dark:border-gray-700 w-10" />
+            <th className={`px-2 py-2.5 border-b border-gray-200 dark:border-gray-700 w-10 ${
+              !isWeekly ? 'sticky right-0 z-10 bg-gray-50 dark:bg-gray-900' : ''
+            }`} />
           </tr>
         </thead>
 
@@ -400,7 +404,9 @@ function ScorecardTable({
                 ))}
 
                 {/* Promedio */}
-                <td className="px-3 py-2 text-right">
+                <td className={`px-3 py-2 text-right w-[64px] ${
+                  !isWeekly ? 'sticky right-10 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20 border-l border-gray-100 dark:border-gray-700' : ''
+                }`}>
                   {avgVal != null ? (
                     <span className={`text-xs font-medium ${
                       avgOK  ? 'text-green-600 dark:text-green-400'
@@ -415,7 +421,9 @@ function ScorecardTable({
                 </td>
 
                 {/* Acciones */}
-                <td className="px-2 py-2 text-center">
+                <td className={`px-2 py-2 text-center w-10 ${
+                  !isWeekly ? 'sticky right-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20' : ''
+                }`}>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-center">
                     <button onClick={() => onEdit(metric)} title="Editar"
                       className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs transition-colors">✎</button>
@@ -465,9 +473,11 @@ export default function DatosTab() {
   const [weekYear,    setWeekYear]    = useState(TODAY_WEEK_YEAR)
   const [monthYear,   setMonthYear]   = useState(TODAY_MONTH_YEAR)
 
-  // Refs para auto-scroll de la tabla semanal
-  const weekContainerRef = useRef(null)
-  const weekCurrentThRef = useRef(null)
+  // Refs para auto-scroll de tablas
+  const weekContainerRef  = useRef(null)
+  const weekCurrentThRef  = useRef(null)
+  const monthContainerRef = useRef(null)
+  const monthCurrentThRef = useRef(null)
 
   const weeklyPeriods  = useMemo(() => yearWeekPeriods(weekYear),   [weekYear])
   const monthlyPeriods = useMemo(() => yearMonthPeriods(monthYear), [monthYear])
@@ -506,6 +516,26 @@ export default function DatosTab() {
       }
     })
   }, [weekYear, loading])
+
+  // Auto-scroll mensual: posiciona el mes actual con 3 anteriores visibles a la izquierda
+  useEffect(() => {
+    if (loading) return
+    const container = monthContainerRef.current
+    if (!container) return
+
+    requestAnimationFrame(() => {
+      const curTh = monthCurrentThRef.current
+      if (curTh) {
+        const cRect  = container.getBoundingClientRect()
+        const thRect = curTh.getBoundingClientRect()
+        // Centrar el mes actual en el viewport
+        const target = container.scrollLeft + thRect.left - cRect.left - cRect.width / 2 + thRect.width / 2
+        container.scrollLeft = Math.max(0, target)
+      } else {
+        container.scrollLeft = 0
+      }
+    })
+  }, [monthYear, loading])
 
   // ── Guardar valor de celda
   const handleEntryChange = useCallback(async (metricId, period, value) => {
@@ -674,6 +704,8 @@ export default function DatosTab() {
             onEntryChange={handleEntryChange}
             onEdit={metric => setModalMetric({ mode: 'edit', metric })}
             onDelete={id => setConfirmDel({ id })}
+            containerRef={monthContainerRef}
+            currentPeriodRef={monthCurrentThRef}
             isWeekly={false}
           />
         </div>
