@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import VisionTab from '../components/eos/VisionTab'
 import PersonasTab from '../components/eos/PersonasTab'
@@ -55,20 +56,38 @@ const TABS = [
 
 const IMPLEMENTED = new Set(['vision', 'personas', 'datos', 'procesos', 'asuntos', 'traccion', 'evaluacion'])
 
+const VALID_TABS = new Set(TABS.map(t => t.id))
+
 export default function EOS() {
-  const [tab, setTab] = useState('vision')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTab = VALID_TABS.has(searchParams.get('tab')) ? searchParams.get('tab') : 'vision'
+  const [tab,     setTab]     = useState(initialTab)
+  const [vtoMode, setVtoMode] = useState(false)
   const current = TABS.find(t => t.id === tab)
+
+  function handleTabChange(id) {
+    setTab(id)
+    setSearchParams({ tab: id }, { replace: true })
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
       <main className="max-w-5xl mx-auto px-4 py-8">
 
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">EOS</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Sistema Operativo Empresarial · basado en <em>Traction</em> de Gino Wickman
-          </p>
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">EOS</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Sistema Operativo Empresarial · basado en <em>Traction</em> de Gino Wickman
+            </p>
+          </div>
+          <button
+            onClick={() => { handleTabChange('vision'); setVtoMode(v => !v) }}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors shadow-sm"
+          >
+            📄 {vtoMode ? 'Cerrar VTO' : 'Ver VTO'}
+          </button>
         </div>
 
         {/* Tabs — select en mobile, botones en desktop */}
@@ -77,7 +96,7 @@ export default function EOS() {
           <select
             className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500"
             value={tab}
-            onChange={e => setTab(e.target.value)}
+            onChange={e => handleTabChange(e.target.value)}
           >
             {TABS.map(t => (
               <option key={t.id} value={t.id}>{t.label}</option>
@@ -89,7 +108,7 @@ export default function EOS() {
             {TABS.map(t => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => handleTabChange(t.id)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   tab === t.id
                     ? 'bg-primary-600 text-white'
@@ -103,7 +122,7 @@ export default function EOS() {
         </div>
 
         {/* Contenido */}
-        {tab === 'vision'     && <VisionTab />}
+        {tab === 'vision'     && <VisionTab vtoMode={vtoMode} setVtoMode={setVtoMode} />}
         {tab === 'personas'   && <PersonasTab />}
         {tab === 'datos'      && <DatosTab />}
         {tab === 'procesos'   && <ProcesosTab />}

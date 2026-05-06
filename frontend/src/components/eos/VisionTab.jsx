@@ -635,11 +635,10 @@ function CoreValuesSection({ items, onChange }) {
 // VisionTab — componente principal
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export default function VisionTab() {
+export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
   const [data,     setData]     = useState(null)
   const [loading,  setLoading]  = useState(true)
   const [showHelp, setShowHelp] = useState(null)
-  const [vtoMode,  setVtoMode]  = useState(false)
 
   const { workspace } = useWorkspace()
   const workspaceName = workspace?.name || 'Mi Empresa'
@@ -706,15 +705,6 @@ export default function VisionTab() {
   return (
     <div className="space-y-6">
 
-      {/* ── VTO Button ── */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => setVtoMode(true)}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors shadow-sm"
-        >
-          📄 Ver VTO
-        </button>
-      </div>
 
       {/* ── Progreso ── */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-5 py-4">

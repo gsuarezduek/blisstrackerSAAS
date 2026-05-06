@@ -237,7 +237,7 @@ export default function ProjectInfoTab({ project, onSave }) {
       const body = {}
       if (websiteUrl.trim() !== (project.websiteUrl ?? '')) body.websiteUrl = websiteUrl.trim() || null
       body.connections = JSON.stringify(conns)
-      const { data } = await api.put(`/projects/${project.id}`, body)
+      const { data } = await api.patch(`/projects/${project.id}/info`, body)
       onSave({ websiteUrl: data.websiteUrl, connections: data.connections })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)

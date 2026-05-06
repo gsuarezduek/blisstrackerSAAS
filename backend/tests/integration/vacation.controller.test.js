@@ -22,6 +22,15 @@ const SECRET         = process.env.JWT_SECRET
 const WORKSPACE_SLUG = 'bliss'
 const WORKSPACE_ID   = 1
 
+// Fechas siempre en el futuro (>48h) para pasar la validación del controller
+function futureDate(daysFromNow) {
+  const d = new Date(Date.now() + daysFromNow * 24 * 60 * 60 * 1000)
+  return d.toLocaleDateString('en-CA') // YYYY-MM-DD
+}
+const DATE_START = futureDate(3)
+const DATE_END   = futureDate(7)
+const DATE_SAME  = futureDate(4)
+
 function makeToken(userId = 1, role = 'member') {
   return `Bearer ${jwt.sign(
     { userId, workspaceId: WORKSPACE_ID, role, isSuperAdmin: false, name: 'Test User', email: 'test@bliss.ar' },
@@ -47,7 +56,7 @@ describe('POST /api/vacation/my/request', () => {
   })
 
   it('crea una solicitud correctamente y retorna 201', async () => {
-    const created = { id: 10, workspaceId: WORKSPACE_ID, userId: 1, startDate: '2026-05-01', endDate: '2026-05-05', type: 'vacaciones', status: 'pending' }
+    const created = { id: 10, workspaceId: WORKSPACE_ID, userId: 1, startDate: DATE_START, endDate: DATE_END, type: 'vacaciones', status: 'pending' }
     prisma.vacationRequest.create.mockResolvedValue(created)
     prisma.user.findUnique.mockResolvedValue({ name: 'Test User', email: 'test@bliss.ar' })
     prisma.workspaceMember.findMany.mockResolvedValue([
@@ -59,14 +68,14 @@ describe('POST /api/vacation/my/request', () => {
       .post('/api/vacation/my/request')
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ startDate: '2026-05-01', endDate: '2026-05-05', type: 'vacaciones' })
+      .send({ startDate: DATE_START, endDate: DATE_END, type: 'vacaciones' })
 
     expect(res.status).toBe(201)
     expect(res.body.id).toBe(10)
   })
 
   it('envía email a los admins del workspace', async () => {
-    prisma.vacationRequest.create.mockResolvedValue({ id: 11, workspaceId: WORKSPACE_ID, userId: 1, startDate: '2026-05-01', endDate: '2026-05-01', type: 'enfermedad', status: 'pending' })
+    prisma.vacationRequest.create.mockResolvedValue({ id: 11, workspaceId: WORKSPACE_ID, userId: 1, startDate: DATE_SAME, endDate: DATE_SAME, type: 'enfermedad', status: 'pending' })
     prisma.user.findUnique.mockResolvedValue({ name: 'Test User', email: 'test@bliss.ar' })
     prisma.workspaceMember.findMany.mockResolvedValue([
       { user: { id: 2, email: 'admin@bliss.ar' } },
@@ -78,13 +87,13 @@ describe('POST /api/vacation/my/request', () => {
       .post('/api/vacation/my/request')
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ startDate: '2026-05-01', endDate: '2026-05-01', type: 'enfermedad' })
+      .send({ startDate: DATE_SAME, endDate: DATE_SAME, type: 'enfermedad' })
 
     expect(sendVacationRequestEmail).toHaveBeenCalledWith(
       ['admin@bliss.ar', 'owner@bliss.ar'],
       'Test User',
       'Bliss Marketing',
-      expect.objectContaining({ startDate: '2026-05-01', type: 'enfermedad' }),
+      expect.objectContaining({ startDate: DATE_SAME, type: 'enfermedad' }),
       WORKSPACE_ID,
     )
   })
@@ -104,7 +113,7 @@ describe('POST /api/vacation/my/request', () => {
       .post('/api/vacation/my/request')
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ startDate: '2026-05-01', endDate: '2026-05-05', type: 'tipoInvalido' })
+      .send({ startDate: DATE_START, endDate: DATE_END, type: 'tipoInvalido' })
 
     expect(res.status).toBe(400)
   })
@@ -114,7 +123,7 @@ describe('POST /api/vacation/my/request', () => {
       .post('/api/vacation/my/request')
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ startDate: '2026-05-10', endDate: '2026-05-01', type: 'vacaciones' })
+      .send({ startDate: DATE_END, endDate: DATE_START, type: 'vacaciones' })
 
     expect(res.status).toBe(400)
   })

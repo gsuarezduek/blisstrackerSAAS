@@ -59,13 +59,13 @@ function adjQuarter(q, delta) {
 
 function currentWeekStr() {
   const now = new Date()
-  // ISO week: Thursday rule
-  const thursday = new Date(now)
-  thursday.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7) + 3)
-  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4))
+  // ISO week: move to Thursday of this week, then count from Jan 1
+  const thursday = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+  const dayNum = thursday.getUTCDay() || 7   // 1=Mon … 7=Sun
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1))
   const week = Math.ceil(((thursday - yearStart) / 86400000 + 1) / 7)
-  const year = thursday.getUTCFullYear()
-  return `${year}-W${String(week).padStart(2, '0')}`
+  return `${thursday.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
 }
 
 function adjWeek(weekStr, delta) {
@@ -82,7 +82,7 @@ function adjWeek(weekStr, delta) {
   // Re-derive week string from new Monday
   const thursday = new Date(monday)
   thursday.setUTCDate(monday.getUTCDate() + 3)
-  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4))
+  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1))
   const newWeek = Math.ceil(((thursday - yearStart) / 86400000 + 1) / 7)
   return `${thursday.getUTCFullYear()}-W${String(newWeek).padStart(2, '0')}`
 }

@@ -487,4 +487,36 @@ async function saveSituation(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, getGlobalSettings, saveGlobalSettings, sendTestEmail, getAiUsage, getMembers }
+/**
+ * PATCH /api/projects/:id/info
+ * Actualiza websiteUrl y connections. Accesible por cualquier miembro del proyecto.
+ */
+async function saveInfo(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId   = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    // Cualquier miembro del proyecto puede editar (no solo admin)
+    if (!isAdmin(req)) {
+      const member = await prisma.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId: req.user.userId } },
+      })
+      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    }
+
+    const { websiteUrl, connections } = req.body
+    const data = {}
+    if (websiteUrl  !== undefined) data.websiteUrl  = websiteUrl || null
+    if (connections !== undefined) data.connections = typeof connections === 'string' ? connections : JSON.stringify(connections)
+
+    const updated = await prisma.project.update({
+      where: { id: projectId },
+      data,
+      select: { websiteUrl: true, connections: true },
+    })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
+module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, sendTestEmail, getAiUsage, getMembers }

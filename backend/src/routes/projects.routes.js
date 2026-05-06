@@ -19,5 +19,6 @@ router.post('/',                           workspaceAdminOnly, c.create)
 router.put('/:id',                         workspaceAdminOnly, c.update)
 router.put('/:id/links',                   c.saveLinks)
 router.patch('/:id/situation',             c.saveSituation)
+router.patch('/:id/info',                  c.saveInfo)
 
 module.exports = router

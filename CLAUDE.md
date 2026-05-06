@@ -205,15 +205,29 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 
 **AI insight context — backlog separation:** Backlog tasks are explicitly separated from pending tasks in the Claude prompt to prevent suggesting their removal.
 
+**EOS module (`/admin/eos`):** Sistema Operativo Empresarial basado en *Traction* de Gino Wickman. Seis componentes implementados:
+- **Visión** — datos estratégicos del workspace (valores, misión, BHAG, estrategia, metas 1 año). Toggle "Ver VTO" muestra el Vision/Traction Organizer en formato del libro.
+- **Personas** — People Analyzer (ratings GWC por persona) + Accountability Chart (árbol de responsabilidades jerárquico) + Strikes.
+- **Datos** — Scorecard semanal con métricas numéricas, responsables y objetivos. Períodos: `YYYY-Www` (ISO week).
+- **Asuntos** — Issues IDS (Identify-Discuss-Solve). Tipos: `weekly` | `quarterly`. Estados: `open` | `solved`. Prioridades: `high` | `medium` | `low`.
+- **Procesos** — Documentación de procesos con pasos ordenados.
+- **Tracción** — Rocks trimestrales (`YYYY-Q1..Q4`) + reuniones L10 semanales (ISO week) + To-Dos de la reunión.
+- **Evaluación** — 18 preguntas (6 componentes EOS × 3) calificadas 1–5 por cada admin. Genera resultado grupal promediado con análisis Claude Haiku. Modelos: `OrgAssessmentRound` (estado `open`/`closed`) + `OrgAssessmentResponse` (única por round+user). Ruta: `GET/POST /api/eos/assessment`.
+
+Todos los modelos EOS tienen `workspaceId` como scope. Las rutas `/api/eos/*` requieren `workspaceAdminOnly`.
+
+**VacationRequest:** Sistema de licencias del equipo. Tipos: `vacaciones` | `estudio` | `maternidad` | `paternidad` | `enfermedad` | `duelo` | `mudanza` | `otro`. Flujo: member crea solicitud → admin aprueba/rechaza → notificaciones + email a ambos lados. Validación: `startDate` debe ser con al menos 48h de anticipación. Estados: `pending` | `approved` | `rejected`. Admins también pueden ajustar el saldo de días de vacaciones manualmente (`VacationAdjustment`).
+
 ### Prisma schema notes
 - `WorkspaceMember.role`: `owner` | `admin` | `member` (workspace-level permissions).
 - `WorkspaceMember.teamRole`: plain `String` referencing `UserRole.name` (e.g. `"DESIGNER"`).
 - `User.isSuperAdmin Boolean @default(false)` — global flag for the BlissTracker internal team only.
 - `User.avatar String @default("2bee.png")` — filename, validated against `ALLOWED_AVATARS`.
 - When a model has two relations to the same model, named relations are required (e.g. `Task.createdBy` / `Task.user` both pointing to `User`).
+- `ProjectIntegration.propertyId` tiene distintos usos según `type`: GA4 → Property ID numérico; `google_ads` → Manager Account ID (MCC) si la cuenta es cliente de un manager; Meta Ads → no usado; TikTok → no usado.
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_task_comments`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_user_login_history`, `add_vacation_days`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_workspace_deletion_request`, `add_email_log`, `update_default_avatar`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `fix_service_unique_index` (drops global Service_name_key), `add_project_connections` (Project.connections JSON), `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique` (drops residual global Project_name_key), `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_pagespeed_result` (PageSpeedResult), `add_instagram_snapshot` (InstagramSnapshot — métricas mensuales Instagram), `add_tiktok` (TikTokSnapshot + TikTokFollowerLog), `add_monthly_report` (MonthlyReport — token UUID para URL pública del informe mensual del cliente).
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_project_member_notification`, `add_task_comments`, `v1_5`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_memory_history`, `add_role_structure`, `add_user_login_history`, `add_vacation_days`, `add_bank_name`, `add_task_sessions`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_email_log`, `add_vacation_management` (VacationRequest + VacationAdjustment), `add_workspace_deletion_request`, `add_announcements`, `add_avatars`, `fix_vacation_schema`, `add_feature_flags`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `add_project_connections` (Project.connections JSON), `fix_service_unique_index`, `add_legal_document`, `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique`, `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_instagram_snapshot`, `add_integration_country`, `add_keyword_tracking` (TrackedKeyword + KeywordRanking), `add_pagespeed_result` (PageSpeedResult), `add_instagram_follower_log`, `add_tiktok` (TikTokSnapshot + TikTokFollowerLog), `add_monthly_report` (MonthlyReport — token UUID para URL pública), `add_monthly_report_analysis`, `add_seo_snapshot` (SEOSnapshot para Google Search Console), `add_ai_traffic_snapshot`, `add_cannibal_report`, `add_eos_data`, `add_eos_focus`, `add_eos_ten_year_target`, `add_eos_vision_remaining`, `add_eos_issues` (EOSIssue), `add_eos_personas`, `add_eos_processes`, `add_eos_scorecard`, `add_eos_traction` (EOSRock + EOSTodo + EOSMeeting), `add_org_assessment` (OrgAssessmentRound + OrgAssessmentResponse).
 - `TaskComment.content` is the text field (not `text`). The `parentId` self-relation exists for future threading but is not used by the UI yet.
 
 ### API routes summary
@@ -291,6 +305,54 @@ PATCH  /api/admin/rrhh/vacation-days/:id
 GET    /api/notifications
 POST   /api/notifications/read-all
 
+# Vacaciones y licencias
+GET    /api/vacation/my                           # saldo + solicitudes propias
+POST   /api/vacation/my/request                  # crear solicitud (≥48h anticipación)
+PATCH  /api/vacation/admin/adjust/:userId         # admin: ajustar saldo de días
+GET    /api/vacation/admin/adjustments/:userId    # admin: historial de ajustes
+GET    /api/vacation/admin/requests               # admin: listar todas las solicitudes
+PATCH  /api/vacation/admin/requests/:id          # admin: aprobar o rechazar
+
+# EOS (requiere workspaceAdminOnly)
+GET    /api/eos                                   # datos del workspace EOS
+PATCH  /api/eos                                  # actualizar datos EOS
+GET    /api/eos/personas
+PATCH  /api/eos/people-analyzer                  # upsert rating GWC de un miembro
+POST   /api/eos/strikes
+DELETE /api/eos/strikes/:id
+POST   /api/eos/accountability                   # crear nodo del Accountability Chart
+PATCH  /api/eos/accountability/:id
+DELETE /api/eos/accountability/:id
+GET    /api/eos/scorecard                        # ?period=YYYY-Www
+POST   /api/eos/scorecard
+PATCH  /api/eos/scorecard/:id
+DELETE /api/eos/scorecard/:id
+PUT    /api/eos/scorecard/:id/entries/:period    # upsert entrada semanal de métrica
+GET    /api/eos/processes
+POST   /api/eos/processes
+PATCH  /api/eos/processes/:id
+DELETE /api/eos/processes/:id
+POST   /api/eos/processes/:id/steps
+PATCH  /api/eos/processes/:id/steps/:stepId
+DELETE /api/eos/processes/:id/steps/:stepId
+GET    /api/eos/issues                           # ?type=weekly|quarterly
+POST   /api/eos/issues
+PATCH  /api/eos/issues/:id
+DELETE /api/eos/issues/:id
+GET    /api/eos/traction/rocks                   # ?quarter=YYYY-Q1
+POST   /api/eos/traction/rocks
+PATCH  /api/eos/traction/rocks/:id
+DELETE /api/eos/traction/rocks/:id
+GET    /api/eos/traction/week                    # ?week=YYYY-Www — rocks + todos + meeting
+POST   /api/eos/traction/todos
+PATCH  /api/eos/traction/todos/:id
+DELETE /api/eos/traction/todos/:id
+PUT    /api/eos/traction/meetings/:week          # upsert datos de la reunión L10
+GET    /api/eos/assessment                       # ronda actual + mis respuestas + historial
+POST   /api/eos/assessment/start                 # admin: abrir nueva ronda
+POST   /api/eos/assessment/rounds/:id/response   # enviar respuestas (upsert)
+POST   /api/eos/assessment/rounds/:id/close      # admin: cerrar ronda + generar análisis IA
+
 GET    /api/insights
 POST   /api/insights/refresh
 POST   /api/insights/feedback
@@ -353,6 +415,24 @@ POST   /api/marketing/projects/:id/pagespeed                # body: { strategy }
 GET    /api/marketing/projects/:id/pagespeed                # ?strategy=mobile&limit=5 — historial de resultados
 GET    /api/marketing/projects/:id/pagespeed/:resultId      # estado y detalle de un análisis
 
+# Marketing — Search Console (SEO)
+GET    /api/marketing/projects/:id/search-console           # ?startDate=&endDate=&compare=true — datos live GSC
+GET    /api/marketing/projects/:id/search-console/query-pages  # top queries + páginas
+GET    /api/marketing/projects/:id/seo/snapshot/:month      # obtener SEOSnapshot guardado (YYYY-MM)
+POST   /api/marketing/projects/:id/seo/snapshots            # body: { month } — guardar snapshot GSC manualmente
+GET    /api/marketing/projects/:id/seo/ai-insights          # análisis IA SEO del mes
+POST   /api/marketing/projects/:id/seo/ai-insights          # generar análisis IA SEO
+
+# Marketing — Keyword Tracking
+GET    /api/marketing/projects/:id/keywords                 # lista keywords trackeadas (?country=)
+POST   /api/marketing/projects/:id/keywords                 # body: { query } — agregar keyword
+DELETE /api/marketing/projects/:id/keywords/:kwId           # eliminar keyword
+GET    /api/marketing/projects/:id/keywords/suggest         # sugerencias GSC (?country=)
+GET    /api/marketing/projects/:id/keywords/heatmap         # heatmap de posiciones (últimos 6 meses)
+GET    /api/marketing/projects/:id/keywords/history-batch   # ?months=6 — historial de múltiples keywords
+GET    /api/marketing/projects/:id/keywords/:kwId/history   # historial de una keyword
+POST   /api/marketing/projects/:id/keywords/:kwId/analysis  # análisis IA de una keyword
+
 # Marketing — Informes mensuales (autenticados)
 GET    /api/marketing/projects/:id/reports                  # lista informes del proyecto
 GET    /api/marketing/projects/:id/reports/:month           # obtiene/crea informe (YYYY-MM) + agrega datos
@@ -407,6 +487,7 @@ GET    /api/feature-flags/:key           # check flag para workspace actual (aut
 /admin               → Admin.jsx            (AdminRoute)  — ?tab= query param
 /admin/productivity  → Productivity.jsx     (AdminRoute)
 /admin/rrhh          → RRHH.jsx             (AdminRoute)
+/admin/eos           → EOS.jsx              (AdminRoute)  — 7 tabs: Visión, Personas, Datos, Asuntos, Procesos, Tracción, Evaluación
 /superadmin          → SuperAdmin.jsx        (SuperAdminRoute — requiere isSuperAdmin)
 ```
 
@@ -416,10 +497,15 @@ GET    /api/feature-flags/:key           # check flag para workspace actual (aut
 |----------|----------|-------------|
 | `1 0 * * 5` (viernes 00:01) | ART | Envía resúmenes semanales de IA por email a todos los miembros |
 | `0 0 * * 6` (sábados 00:00) | ART | Actualiza perfil de memoria de insights por usuario |
-| `0 2 1 * *` (1° mes 02:00) | ART | Guarda snapshot de analytics del mes anterior para todos los proyectos con GA4 conectado |
+| `0 1 1 * *` (1° mes 01:00) | ART | Corre audits GEO mensuales para todos los proyectos con websiteUrl |
+| `0 2 1 * *` (1° mes 02:00) | ART | Guarda snapshot de analytics GA4 del mes anterior |
+| `30 2 1 * *` (1° mes 02:30) | ART | Guarda snapshot de Google Search Console del mes anterior |
 | `30 3 1 * *` (1° mes 03:30) | ART | Corre análisis PageSpeed (mobile + desktop) para todos los proyectos con websiteUrl |
-| `30 4 1 * *` (1° mes 04:30) | ART | Guarda snapshot de Instagram del mes anterior para todos los proyectos con Instagram activo |
-| `0 5 1 * *` (1° mes 05:00) | ART | Guarda snapshot de TikTok del mes anterior para todos los proyectos con TikTok activo |
+| `0 4 1 * *` (1° mes 04:00) | ART | Guarda rankings de keywords (Google Search Console) del mes anterior |
+| `30 4 1 * *` (1° mes 04:30) | ART | Guarda snapshot de Instagram del mes anterior |
+| `0 5 1 * *` (1° mes 05:00) | ART | Envía informe mensual de marketing (legacy service) |
+| `30 5 1 * *` (1° mes 05:30) | ART | Guarda snapshot de TikTok del mes anterior |
+| `0 6 * * 1` (lunes 06:00) | ART | Actualiza rankings de keywords del mes actual (upsert semanal) |
 | `0 3 * * *` (diario 03:00) | ART | Marca trials expirados como `past_due` |
 | `0 0 * * *` (medianoche) | ART | Auto-pausa tareas `IN_PROGRESS` al cierre del día |
 | `0 3 * * 0` (domingos 03:00) | ART | Limpia notificaciones antiguas (leídas >30d, no leídas >90d) |
@@ -432,7 +518,7 @@ Todos los jobs con lógica pesada usan in-memory locks (`let jobRunning = false`
 backend/
   jest.config.js
   tests/
-    setup.js
+    setup.js          ← define JWT_SECRET, NODE_ENV, RESEND_API_KEY (dummy) para evitar que email.service.js falle al importarse
     unit/
       auth.middleware.test.js
       assertNoActiveTask.test.js
@@ -441,6 +527,11 @@ backend/
     integration/
       auth.test.js
       starTask.test.js
+      taskComments.test.js
+      announcements.controller.test.js
+      backlog.test.js
+      projectLinks.test.js
+      vacation.controller.test.js         # usa fechas dinámicas (futureDate) para respetar validación ≥48h
 
 frontend/
   src/tests/
