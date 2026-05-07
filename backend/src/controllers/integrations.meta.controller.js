@@ -88,8 +88,7 @@ async function handleMetaCallback(req, res, next) {
   const redirectUri = buildMetaRedirectUri()
 
   try {
-    // 1. Token exchange vía api.instagram.com (Instagram Business Login)
-    console.log('[MetaOAuth] Token exchange — code_len:', code?.length)
+    // 1. Token exchange — Instagram Business Login requiere cuenta Professional (Business/Creator)
     const tokenRes = await axios.post(
       'https://api.instagram.com/oauth/access_token',
       new URLSearchParams({
@@ -99,23 +98,37 @@ async function handleMetaCallback(req, res, next) {
         redirect_uri:  redirectUri,
         code,
       }).toString(),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, maxRedirects: 0 },
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
     )
-    console.log('[MetaOAuth] Token exchange OK:', JSON.stringify(tokenRes.data))
     const shortToken = tokenRes.data.access_token
     const igUserId   = tokenRes.data.user_id ? String(tokenRes.data.user_id) : null
 
-    // 2. Canjear short-lived → long-lived (60 días) via graph.instagram.com
-    const longRes = await axios.get('https://graph.instagram.com/access_token', {
-      params: {
-        grant_type:    'ig_exchange_token',
-        client_secret: process.env.META_APP_SECRET,
-        access_token:  shortToken,
-      },
-    })
-    const longToken = longRes.data.access_token
-    const expiresIn = longRes.data.expires_in ?? 5183944
-    const expiresAt = new Date(Date.now() + expiresIn * 1000)
+    // 2. Canjear short-lived → long-lived
+    // Los tokens IGAAM (Instagram Business Login) usan fb_exchange_token, no ig_exchange_token
+    let longToken, expiresAt
+    try {
+      const longRes = await axios.get('https://graph.instagram.com/access_token', {
+        params: { grant_type: 'ig_exchange_token', client_secret: process.env.META_APP_SECRET, access_token: shortToken },
+      })
+      longToken = longRes.data.access_token
+      expiresAt = new Date(Date.now() + (longRes.data.expires_in ?? 5183944) * 1000)
+      console.log('[MetaOAuth] Long-lived token OK vía ig_exchange_token')
+    } catch (e1) {
+      console.warn('[MetaOAuth] ig_exchange_token falló:', e1.response?.data?.error?.message ?? e1.message, '— probando fb_exchange_token')
+      try {
+        const fbRes = await axios.get('https://graph.facebook.com/v22.0/oauth/access_token', {
+          params: { grant_type: 'fb_exchange_token', client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, fb_exchange_token: shortToken },
+        })
+        longToken = fbRes.data.access_token
+        expiresAt = new Date(Date.now() + (fbRes.data.expires_in ?? 5183944) * 1000)
+        console.log('[MetaOAuth] Long-lived token OK vía fb_exchange_token')
+      } catch (e2) {
+        // Si ambos fallan, usar el short-lived token (válido 1h) — se renovará al próximo uso
+        console.warn('[MetaOAuth] No se pudo obtener long-lived token, usando short-lived (1h):', e2.response?.data?.error?.message ?? e2.message)
+        longToken = shortToken
+        expiresAt = new Date(Date.now() + 3600 * 1000)
+      }
+    }
 
     // 3. Obtener id real y username via /me
     let username = null
@@ -148,16 +161,14 @@ async function handleMetaCallback(req, res, next) {
     console.log(`[MetaOAuth] Instagram conectado: proyecto ${projectId}, @${username} (${resolvedIgUserId})`)
     res.redirect(`${frontendBase}/oauth-result?success=true&type=instagram`)
   } catch (err) {
-    console.error('[MetaOAuth] Error en callback:')
-    console.error('  HTTP status:', err.response?.status)
-    console.error('  Location header (redirect?):', err.response?.headers?.location ?? 'none')
-    console.error('  Body:', JSON.stringify(err.response?.data ?? err.message, null, 2))
-    console.error('  redirect_uri:', redirectUri)
-    const msg = err.response?.data?.error_message
-      || err.response?.data?.error?.message
-      || err.response?.data?.error_description
-      || err.message
-    res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(msg)}`)
+    const igMsg = err.response?.data?.error?.message || ''
+    // Error típico cuando la cuenta de Instagram no es Professional (Business/Creator)
+    const isAccountTypeError = igMsg.includes('method type: get') || igMsg.includes('IGApiException')
+    const userMsg = isAccountTypeError
+      ? 'La cuenta de Instagram debe ser Professional (Business o Creator). Convertila desde Configuración → Tipo de cuenta en Instagram.'
+      : (err.response?.data?.error_message || igMsg || err.response?.data?.error_description || err.message)
+    console.error('[MetaOAuth] Error:', err.response?.status, igMsg || err.message)
+    res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(userMsg)}`)
   }
 }
 
