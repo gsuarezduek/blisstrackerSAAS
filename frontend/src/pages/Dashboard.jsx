@@ -37,6 +37,8 @@ export default function Dashboard() {
   const [completedLoading,  setCompletedLoading]  = useState(false)
   const [autoPausedTask, setAutoPausedTask] = useState(null)
   const [commentTask, setCommentTask] = useState(null)
+  const [editingTaskId,   setEditingTaskId]   = useState(null)
+  const [editingTaskDesc, setEditingTaskDesc] = useState('')
 
   // AI Insight
   const [insight, setInsight] = useState(null)
@@ -262,6 +264,18 @@ export default function Dashboard() {
   }
 
   const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+
+  async function handleSaveTaskDesc(taskId) {
+    const desc = editingTaskDesc.trim()
+    setEditingTaskId(null)
+    if (!desc) return
+    // Optimistic update en ambas listas
+    setWorkDay(prev => prev ? ({ ...prev, tasks: prev.tasks.map(t => t.id === taskId ? { ...t, description: desc } : t) }) : prev)
+    setCompletedHistory(prev => prev.map(t => t.id === taskId ? { ...t, description: desc } : t))
+    try {
+      await api.patch(`/tasks/${taskId}`, { description: desc })
+    } catch { loadToday() }
+  }
 
   async function loadCompletedHistory(skip = 0) {
     setCompletedLoading(true)
@@ -774,11 +788,32 @@ export default function Dashboard() {
                 const mins = t.minutesOverride !== null && t.minutesOverride !== undefined
                   ? t.minutesOverride
                   : Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+                const isEditing = editingTaskId === t.id
                 return (
-                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+                  <div key={t.id} className="flex items-center gap-3 px-4 py-3 group">
                     <span className="text-green-500 flex-shrink-0 text-sm">✓</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-600 dark:text-gray-300 leading-snug truncate">{t.description}</p>
+                      {isEditing ? (
+                        <input
+                          autoFocus
+                          value={editingTaskDesc}
+                          onChange={e => setEditingTaskDesc(e.target.value)}
+                          onBlur={() => handleSaveTaskDesc(t.id)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter')  e.currentTarget.blur()
+                            if (e.key === 'Escape') setEditingTaskId(null)
+                          }}
+                          className="w-full text-sm text-gray-700 dark:text-gray-200 bg-transparent border-b border-primary-400 focus:outline-none leading-snug"
+                        />
+                      ) : (
+                        <p
+                          onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(t.description) }}
+                          title="Clic para editar"
+                          className="text-sm text-gray-600 dark:text-gray-300 leading-snug truncate cursor-text hover:text-gray-800 dark:hover:text-gray-100 transition-colors"
+                        >
+                          {t.description}
+                        </p>
+                      )}
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
                         {mins > 0 && (
@@ -803,11 +838,32 @@ export default function Dashboard() {
                 const dateStr = new Date(t.completedAt).toLocaleDateString('es-AR', {
                   weekday: 'short', day: 'numeric', month: 'short',
                 })
+                const isEditing = editingTaskId === t.id
                 return (
-                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+                  <div key={t.id} className="flex items-center gap-3 px-4 py-3 group">
                     <span className="text-gray-300 dark:text-gray-600 flex-shrink-0 text-sm">✓</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-500 dark:text-gray-400 leading-snug truncate">{t.description}</p>
+                      {isEditing ? (
+                        <input
+                          autoFocus
+                          value={editingTaskDesc}
+                          onChange={e => setEditingTaskDesc(e.target.value)}
+                          onBlur={() => handleSaveTaskDesc(t.id)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter')  e.currentTarget.blur()
+                            if (e.key === 'Escape') setEditingTaskId(null)
+                          }}
+                          className="w-full text-sm text-gray-600 dark:text-gray-300 bg-transparent border-b border-primary-400 focus:outline-none leading-snug"
+                        />
+                      ) : (
+                        <p
+                          onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(t.description) }}
+                          title="Clic para editar"
+                          className="text-sm text-gray-500 dark:text-gray-400 leading-snug truncate cursor-text hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                        >
+                          {t.description}
+                        </p>
+                      )}
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
                         <span className="text-xs text-gray-300 dark:text-gray-600">·</span>

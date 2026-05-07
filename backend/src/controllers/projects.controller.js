@@ -31,6 +31,10 @@ const includeDetails = {
     orderBy: { user: { name: 'asc' } },
   },
   links: { orderBy: { createdAt: 'asc' } },
+  integrations: {
+    where:  { status: 'active' },
+    select: { type: true },
+  },
 }
 
 async function list(req, res, next) {
