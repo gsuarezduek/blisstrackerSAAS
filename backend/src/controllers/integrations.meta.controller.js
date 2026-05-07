@@ -88,19 +88,42 @@ async function handleMetaCallback(req, res, next) {
       code_len:  code?.length,
     })
 
-    // Instagram requiere multipart/form-data (curl -F), no x-www-form-urlencoded
-    const form = new FormData()
-    form.append('client_id',     process.env.META_APP_ID)
-    form.append('client_secret', process.env.META_APP_SECRET)
-    form.append('grant_type',    'authorization_code')
-    form.append('redirect_uri',  redirectUri)
-    form.append('code',          code)
+    // Intentar con api.instagram.com primero; si falla con 400, probar graph.facebook.com
+    let tokenData
+    try {
+      const form = new FormData()
+      form.append('client_id',     process.env.META_APP_ID)
+      form.append('client_secret', process.env.META_APP_SECRET)
+      form.append('grant_type',    'authorization_code')
+      form.append('redirect_uri',  redirectUri)
+      form.append('code',          code)
 
-    const tokenRes = await axios.post(
-      'https://api.instagram.com/oauth/access_token',
-      form,
-      { headers: form.getHeaders(), maxRedirects: 0 },
-    )
+      const r = await axios.post(
+        'https://api.instagram.com/oauth/access_token',
+        form,
+        { headers: form.getHeaders(), maxRedirects: 0 },
+      )
+      tokenData = r.data
+      console.log('[MetaOAuth] Token exchange OK vía api.instagram.com')
+    } catch (igErr) {
+      console.warn('[MetaOAuth] api.instagram.com falló, intentando graph.facebook.com. Error:', igErr.response?.data ?? igErr.message)
+
+      const r2 = await axios.post(
+        'https://graph.facebook.com/v22.0/oauth/access_token',
+        new URLSearchParams({
+          client_id:     process.env.META_APP_ID,
+          client_secret: process.env.META_APP_SECRET,
+          grant_type:    'authorization_code',
+          redirect_uri:  redirectUri,
+          code,
+        }).toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, maxRedirects: 0 },
+      )
+      tokenData = r2.data
+      console.log('[MetaOAuth] Token exchange OK vía graph.facebook.com')
+    }
+
+    const tokenRes = { data: tokenData }
     const shortToken = tokenRes.data.access_token
     const igUserId   = String(tokenRes.data.user_id)
 

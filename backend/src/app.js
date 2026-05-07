@@ -108,6 +108,20 @@ app.use('/api/avatars',           avatarsRoutes)
 app.use('/api/feature-flags',    featureFlagsRoutes)
 app.use('/api/marketing',        marketingRoutes)
 app.use('/api/public',           publicReportRoutes)
+
+// Verificación de webhook de Instagram (GET sin auth)
+app.get('/api/marketing/integrations/meta/webhook', (req, res) => {
+  const mode      = req.query['hub.mode']
+  const token     = req.query['hub.verify_token']
+  const challenge = req.query['hub.challenge']
+  const expected  = process.env.META_WEBHOOK_VERIFY_TOKEN || 'blisstracker_ig_2026'
+  if (mode === 'subscribe' && token === expected) {
+    console.log('[MetaWebhook] Verificación OK')
+    return res.status(200).send(challenge)
+  }
+  console.warn('[MetaWebhook] Verificación fallida:', { mode, token })
+  res.status(403).send('Forbidden')
+})
 app.use('/api/billing',          billingRoutes)
 app.use('/api/superadmin',        superadminRoutes)
 app.use('/api/legal',             legalRoutes)
