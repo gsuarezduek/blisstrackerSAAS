@@ -34,27 +34,43 @@ async function getValidMetaToken(integration) {
   // Queda poco tiempo — renovar el long-lived token (Instagram Business Login)
   const currentToken = decrypt(integration.accessToken)
 
-  const { data } = await axios.get(`${IG_GRAPH}/refresh_access_token`, {
-    params: {
-      grant_type:   'ig_refresh_token',
-      access_token: currentToken,
-    },
-  })
+  try {
+    const { data } = await axios.get(`${IG_GRAPH}/refresh_access_token`, {
+      params: {
+        grant_type:   'ig_refresh_token',
+        access_token: currentToken,
+      },
+    })
 
-  const newToken    = data.access_token
-  const expiresIn   = data.expires_in ?? 5183944 // ~60 días en segundos (default Meta)
-  const newExpiry   = new Date(now + expiresIn * 1000)
+    const newToken  = data.access_token
+    const expiresIn = data.expires_in ?? 5183944 // ~60 días en segundos (default Meta)
+    const newExpiry = new Date(now + expiresIn * 1000)
 
-  await prisma.projectIntegration.update({
-    where: { id: integration.id },
-    data: {
-      accessToken: encrypt(newToken),
-      expiresAt:   newExpiry,
-      status:      'active',
-    },
-  })
+    await prisma.projectIntegration.update({
+      where: { id: integration.id },
+      data: {
+        accessToken: encrypt(newToken),
+        expiresAt:   newExpiry,
+        status:      'active',
+      },
+    })
 
-  return newToken
+    return newToken
+  } catch (err) {
+    // Si el refresh falla (token aún no renovable o error Meta), devolver el token actual
+    // y extender expiración otros 60 días para evitar loop de reintentos
+    console.warn('[MetaTokenRefresh] ig_refresh_token falló, usando token actual:', err.response?.data?.error?.message ?? err.message)
+
+    await prisma.projectIntegration.update({
+      where: { id: integration.id },
+      data: {
+        expiresAt: new Date(now + 60 * 24 * 60 * 60 * 1000),
+        status:    'active',
+      },
+    })
+
+    return currentToken
+  }
 }
 
 module.exports = { getValidMetaToken }

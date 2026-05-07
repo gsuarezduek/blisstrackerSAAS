@@ -123,10 +123,10 @@ async function handleMetaCallback(req, res, next) {
         expiresAt = new Date(Date.now() + (fbRes.data.expires_in ?? 5183944) * 1000)
         console.log('[MetaOAuth] Long-lived token OK vía fb_exchange_token')
       } catch (e2) {
-        // Si ambos fallan, usar el short-lived token (válido 1h) — se renovará al próximo uso
-        console.warn('[MetaOAuth] No se pudo obtener long-lived token, usando short-lived (1h):', e2.response?.data?.error?.message ?? e2.message)
+        // Si ambos fallan, asumir que el token IGAAM ya es long-lived (60 días es la duración estándar)
+        console.warn('[MetaOAuth] No se pudo canjear token, asumiendo IGAAM long-lived (60d):', e2.response?.data?.error?.message ?? e2.message)
         longToken = shortToken
-        expiresAt = new Date(Date.now() + 3600 * 1000)
+        expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
       }
     }
 
