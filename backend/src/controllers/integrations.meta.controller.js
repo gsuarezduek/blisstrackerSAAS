@@ -1,4 +1,4 @@
-const crypto           = require('crypto')
+const FormData         = require('form-data')
 const axios            = require('axios')
 const jwt              = require('jsonwebtoken')
 const prisma           = require('../lib/prisma')
@@ -29,24 +29,18 @@ async function getMetaAuthUrl(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    // PKCE — requerido por Instagram Business Login
-    const codeVerifier  = crypto.randomBytes(32).toString('base64url')
-    const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
-
     const state = jwt.sign(
-      { projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId, codeVerifier },
+      { projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId },
       process.env.JWT_SECRET,
       { expiresIn: '10m' },
     )
 
     const params = new URLSearchParams({
-      client_id:             process.env.META_APP_ID,
-      redirect_uri:          buildMetaRedirectUri(),
-      scope:                 'instagram_business_basic,instagram_business_manage_insights',
+      client_id:     process.env.META_APP_ID,
+      redirect_uri:  buildMetaRedirectUri(),
+      scope:         'instagram_business_basic,instagram_business_manage_insights',
       state,
-      response_type:         'code',
-      code_challenge:        codeChallenge,
-      code_challenge_method: 'S256',
+      response_type: 'code',
     })
 
     // Instagram Business Login — endpoint de instagram.com, no facebook.com
@@ -89,28 +83,23 @@ async function handleMetaCallback(req, res, next) {
   try {
     // 1. Intercambiar code por short-lived token (POST a api.instagram.com)
     console.log('[MetaOAuth] Iniciando token exchange:', {
-      endpoint:     'https://api.instagram.com/oauth/access_token',
-      client_id:    process.env.META_APP_ID,
-      redirect_uri: redirectUri,
-      code_len:     code?.length,
-      has_verifier: !!codeVerifier,
+      endpoint:  'https://api.instagram.com/oauth/access_token',
+      client_id: process.env.META_APP_ID,
+      code_len:  code?.length,
     })
 
-    const formBody = new URLSearchParams({
-      client_id:     process.env.META_APP_ID,
-      client_secret: process.env.META_APP_SECRET,
-      grant_type:    'authorization_code',
-      redirect_uri:  redirectUri,
-      code,
-    }).toString()
+    // Instagram requiere multipart/form-data (curl -F), no x-www-form-urlencoded
+    const form = new FormData()
+    form.append('client_id',     process.env.META_APP_ID)
+    form.append('client_secret', process.env.META_APP_SECRET)
+    form.append('grant_type',    'authorization_code')
+    form.append('redirect_uri',  redirectUri)
+    form.append('code',          code)
 
     const tokenRes = await axios.post(
       'https://api.instagram.com/oauth/access_token',
-      formBody,
-      {
-        headers:      { 'Content-Type': 'application/x-www-form-urlencoded' },
-        maxRedirects: 0,
-      },
+      form,
+      { headers: form.getHeaders(), maxRedirects: 0 },
     )
     const shortToken = tokenRes.data.access_token
     const igUserId   = String(tokenRes.data.user_id)
