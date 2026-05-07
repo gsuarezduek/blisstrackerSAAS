@@ -36,8 +36,33 @@ async function getMetrics(req, res, next) {
       return res.status(404).json({ error: 'Sin integración de Instagram', code: 'NOT_CONNECTED' })
     }
 
-    const token   = await getValidMetaToken(integration)
-    const metrics = await fetchInstagramMetrics(integration.propertyId, token)
+    let token
+    try {
+      token = await getValidMetaToken(integration)
+    } catch (tokenErr) {
+      await prisma.projectIntegration.update({
+        where: { id: integration.id },
+        data:  { status: 'expired' },
+      })
+      return res.status(400).json({ error: tokenErr.message, code: 'TOKEN_EXPIRED' })
+    }
+
+    let metrics
+    try {
+      metrics = await fetchInstagramMetrics(integration.propertyId, token)
+    } catch (apiErr) {
+      const igErrCode = apiErr.response?.data?.error?.code
+      const igErrMsg  = apiErr.response?.data?.error?.message ?? ''
+      // Error 190 = token inválido/expirado; también capturamos OAuthException genérico
+      if (apiErr.response?.status === 400 || igErrCode === 190 || igErrMsg.includes('OAuthException')) {
+        await prisma.projectIntegration.update({
+          where: { id: integration.id },
+          data:  { status: 'expired' },
+        })
+        return res.status(400).json({ error: 'El token de Instagram expiró. Reconectá la cuenta desde la configuración del proyecto.', code: 'TOKEN_EXPIRED' })
+      }
+      throw apiErr
+    }
 
     res.json(metrics)
 
