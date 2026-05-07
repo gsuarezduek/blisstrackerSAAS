@@ -38,7 +38,7 @@ async function getMetaAuthUrl(req, res, next) {
     const params = new URLSearchParams({
       client_id:     process.env.META_APP_ID,
       redirect_uri:  buildMetaRedirectUri(),
-      scope:         'instagram_business_basic,instagram_business_manage_insights',
+      scope:         'instagram_business_basic,instagram_business_manage_insights,instagram_business_manage_comments,instagram_business_manage_messages,instagram_business_content_publish',
       state,
       response_type: 'code',
     })
@@ -72,6 +72,13 @@ async function handleMetaCallback(req, res, next) {
     )
   }
 
+  if (!process.env.META_APP_ID || !process.env.META_APP_SECRET) {
+    console.error('[MetaOAuth] META_APP_ID o META_APP_SECRET no están configurados')
+    return res.redirect(
+      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=server_config_error`
+    )
+  }
+
   const { projectId, workspaceId, slug, userId, codeVerifier } = statePayload
   const isLocalDev   = process.env.NODE_ENV !== 'production'
   const frontendBase = isLocalDev
@@ -81,51 +88,22 @@ async function handleMetaCallback(req, res, next) {
   const redirectUri = buildMetaRedirectUri()
 
   try {
-    // 1. Intercambiar code por short-lived token (POST a api.instagram.com)
-    console.log('[MetaOAuth] Iniciando token exchange:', {
-      endpoint:  'https://api.instagram.com/oauth/access_token',
-      client_id: process.env.META_APP_ID,
-      code_len:  code?.length,
-    })
-
-    // Intentar con api.instagram.com primero; si falla con 400, probar graph.facebook.com
-    let tokenData
-    try {
-      const form = new FormData()
-      form.append('client_id',     process.env.META_APP_ID)
-      form.append('client_secret', process.env.META_APP_SECRET)
-      form.append('grant_type',    'authorization_code')
-      form.append('redirect_uri',  redirectUri)
-      form.append('code',          code)
-
-      const r = await axios.post(
-        'https://api.instagram.com/oauth/access_token',
-        form,
-        { headers: form.getHeaders(), maxRedirects: 0 },
-      )
-      tokenData = r.data
-      console.log('[MetaOAuth] Token exchange OK vía api.instagram.com')
-    } catch (igErr) {
-      console.warn('[MetaOAuth] api.instagram.com falló, intentando graph.facebook.com. Error:', igErr.response?.data ?? igErr.message)
-
-      const r2 = await axios.post(
-        'https://graph.facebook.com/v22.0/oauth/access_token',
-        new URLSearchParams({
-          client_id:     process.env.META_APP_ID,
-          client_secret: process.env.META_APP_SECRET,
-          grant_type:    'authorization_code',
-          redirect_uri:  redirectUri,
-          code,
-        }).toString(),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, maxRedirects: 0 },
-      )
-      tokenData = r2.data
-      console.log('[MetaOAuth] Token exchange OK vía graph.facebook.com')
-    }
-
-    const tokenRes = { data: tokenData }
+    // 1. Token exchange vía api.instagram.com (Instagram Business Login)
+    console.log('[MetaOAuth] Token exchange — code_len:', code?.length)
+    const tokenRes = await axios.post(
+      'https://api.instagram.com/oauth/access_token',
+      new URLSearchParams({
+        client_id:     process.env.META_APP_ID,
+        client_secret: process.env.META_APP_SECRET,
+        grant_type:    'authorization_code',
+        redirect_uri:  redirectUri,
+        code,
+      }).toString(),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, maxRedirects: 0 },
+    )
+    console.log('[MetaOAuth] Token exchange OK:', JSON.stringify(tokenRes.data))
     const shortToken = tokenRes.data.access_token
-    const igUserId   = String(tokenRes.data.user_id)
+    const igUserId   = tokenRes.data.user_id ? String(tokenRes.data.user_id) : null
 
     // 2. Canjear short-lived → long-lived (60 días) via graph.instagram.com
     const longRes = await axios.get('https://graph.instagram.com/access_token', {
