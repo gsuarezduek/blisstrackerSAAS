@@ -38,7 +38,7 @@ async function getMetaAuthUrl(req, res, next) {
     const params = new URLSearchParams({
       client_id:     process.env.META_APP_ID,
       redirect_uri:  buildMetaRedirectUri(),
-      scope:         'instagram_business_basic,instagram_business_manage_insights,instagram_business_manage_comments,instagram_business_manage_messages,instagram_business_content_publish',
+      scope:         'instagram_business_basic,instagram_business_manage_insights',
       state,
       response_type: 'code',
     })
@@ -103,38 +103,14 @@ async function handleMetaCallback(req, res, next) {
     const shortToken = tokenRes.data.access_token
     const igUserId   = tokenRes.data.user_id ? String(tokenRes.data.user_id) : null
 
-    // 2. Canjear short-lived → long-lived
-    // Los tokens IGAAM (Instagram Business Login) usan fb_exchange_token, no ig_exchange_token
-    let longToken, expiresAt
-    let gotLongLived = false
-    try {
-      const longRes = await axios.get('https://graph.instagram.com/access_token', {
-        params: { grant_type: 'ig_exchange_token', client_secret: process.env.META_APP_SECRET, access_token: shortToken },
-      })
-      longToken    = longRes.data.access_token
-      expiresAt    = new Date(Date.now() + (longRes.data.expires_in ?? 5183944) * 1000)
-      gotLongLived = true
-      console.log('[MetaOAuth] Long-lived token OK vía ig_exchange_token')
-    } catch (e1) {
-      console.warn('[MetaOAuth] ig_exchange_token falló:', e1.response?.data?.error?.message ?? e1.message, '— probando fb_exchange_token')
-      try {
-        const fbRes = await axios.get('https://graph.facebook.com/v22.0/oauth/access_token', {
-          params: { grant_type: 'fb_exchange_token', client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, fb_exchange_token: shortToken },
-        })
-        longToken    = fbRes.data.access_token
-        expiresAt    = new Date(Date.now() + (fbRes.data.expires_in ?? 5183944) * 1000)
-        gotLongLived = true
-        console.log('[MetaOAuth] Long-lived token OK vía fb_exchange_token')
-      } catch (e2) {
-        console.warn('[MetaOAuth] Ambos exchanges fallaron:', e2.response?.data?.error?.message ?? e2.message, '— intentando /me con short-lived token')
-        longToken = shortToken
-        expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
-      }
-    }
+    // 2. Para Instagram Business Login (IGAAM), el token de api.instagram.com/oauth/access_token
+    //    ya es long-lived (60 días). No se necesita paso de exchange adicional.
+    //    Verificamos que funciona llamando a /me — si falla, la cuenta no es Professional o
+    //    el app no tiene los permisos correctos.
+    const longToken = shortToken
+    const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
 
-    // 3. Obtener id real y username via /me
-    //    Si no obtuvimos long-lived token, esta llamada verifica que el token funciona.
-    //    Si también falla, la cuenta probablemente no es Professional → abortar.
+    // 3. Verificar token y obtener id real + username via /me
     let username = null
     let resolvedIgUserId = igUserId
     try {
@@ -143,16 +119,12 @@ async function handleMetaCallback(req, res, next) {
       })
       username         = profileRes.data?.username ?? null
       resolvedIgUserId = profileRes.data?.id ? String(profileRes.data.id) : igUserId
+      console.log('[MetaOAuth] /me OK:', username, resolvedIgUserId)
     } catch (meErr) {
-      if (!gotLongLived) {
-        // El token no funciona para llamadas API — la cuenta probablemente no es Professional
-        const meMsg = meErr.response?.data?.error?.message ?? ''
-        const userMsg = 'La cuenta de Instagram debe ser Professional (Business o Creator). Convertila desde Configuración → Tipo de cuenta en Instagram.'
-        console.warn('[MetaOAuth] /me falló sin long-lived token:', meMsg, '— abortando conexión')
-        return res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(userMsg)}`)
-      }
-      // Si tenemos long-lived pero /me falla (error transitorio de Meta), continuar sin username
-      console.warn('[MetaOAuth] /me falló pero tenemos long-lived token, continuando sin username')
+      const meMsg = meErr.response?.data?.error?.message ?? meErr.message
+      console.warn('[MetaOAuth] /me falló:', meMsg)
+      const userMsg = 'No se pudo acceder a la cuenta de Instagram. Asegurate de que sea una cuenta Professional (Business o Creator) y de que la app tenga los permisos necesarios.'
+      return res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(userMsg)}`)
     }
 
     // 4. Upsert en ProjectIntegration

@@ -7,8 +7,8 @@ const IG_GRAPH = 'https://graph.instagram.com'
 
 /**
  * Devuelve un access token válido para una integración de tipo 'instagram'.
- * Meta no usa refresh_token clásico — extiende el long-lived token usando
- * el mismo endpoint fb_exchange_token con el token vigente.
+ * Instagram Business Login (IGAAM): el token inicial ya es long-lived (60d).
+ * Se renueva con ig_refresh_token en graph.instagram.com/refresh_access_token.
  *
  * - Si faltan >10 días para expirar: devuelve el token actual.
  * - Si quedan ≤10 días: extiende el token (nueva ventana de 60 días) y lo persiste.
