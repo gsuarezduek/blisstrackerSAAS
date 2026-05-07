@@ -88,17 +88,29 @@ async function handleMetaCallback(req, res, next) {
 
   try {
     // 1. Intercambiar code por short-lived token (POST a api.instagram.com)
+    console.log('[MetaOAuth] Iniciando token exchange:', {
+      endpoint:     'https://api.instagram.com/oauth/access_token',
+      client_id:    process.env.META_APP_ID,
+      redirect_uri: redirectUri,
+      code_len:     code?.length,
+      has_verifier: !!codeVerifier,
+    })
+
+    const formBody = new URLSearchParams({
+      client_id:     process.env.META_APP_ID,
+      client_secret: process.env.META_APP_SECRET,
+      grant_type:    'authorization_code',
+      redirect_uri:  redirectUri,
+      code,
+    }).toString()
+
     const tokenRes = await axios.post(
       'https://api.instagram.com/oauth/access_token',
-      new URLSearchParams({
-        client_id:     process.env.META_APP_ID,
-        client_secret: process.env.META_APP_SECRET,
-        grant_type:    'authorization_code',
-        redirect_uri:  redirectUri,
-        code,
-        code_verifier: codeVerifier,   // PKCE — requerido por Instagram
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+      formBody,
+      {
+        headers:      { 'Content-Type': 'application/x-www-form-urlencoded' },
+        maxRedirects: 0,
+      },
     )
     const shortToken = tokenRes.data.access_token
     const igUserId   = String(tokenRes.data.user_id)
@@ -146,8 +158,11 @@ async function handleMetaCallback(req, res, next) {
     console.log(`[MetaOAuth] Instagram conectado: proyecto ${projectId}, @${username} (${resolvedIgUserId})`)
     res.redirect(`${frontendBase}/oauth-result?success=true&type=instagram`)
   } catch (err) {
-    console.error('[MetaOAuth] Error en callback — respuesta completa:', JSON.stringify(err.response?.data ?? err.message, null, 2))
-    console.error('[MetaOAuth] redirect_uri usado:', redirectUri)
+    console.error('[MetaOAuth] Error en callback:')
+    console.error('  HTTP status:', err.response?.status)
+    console.error('  Location header (redirect?):', err.response?.headers?.location ?? 'none')
+    console.error('  Body:', JSON.stringify(err.response?.data ?? err.message, null, 2))
+    console.error('  redirect_uri:', redirectUri)
     const msg = err.response?.data?.error_message
       || err.response?.data?.error?.message
       || err.response?.data?.error_description
