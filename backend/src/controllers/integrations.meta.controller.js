@@ -1,3 +1,4 @@
+const crypto           = require('crypto')
 const axios            = require('axios')
 const jwt              = require('jsonwebtoken')
 const prisma           = require('../lib/prisma')
@@ -28,18 +29,24 @@ async function getMetaAuthUrl(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
+    // PKCE — requerido por Instagram Business Login
+    const codeVerifier  = crypto.randomBytes(32).toString('base64url')
+    const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
+
     const state = jwt.sign(
-      { projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId },
+      { projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId, codeVerifier },
       process.env.JWT_SECRET,
       { expiresIn: '10m' },
     )
 
     const params = new URLSearchParams({
-      client_id:     process.env.META_APP_ID,
-      redirect_uri:  buildMetaRedirectUri(),
-      scope:         'instagram_business_basic,instagram_business_manage_insights',
+      client_id:             process.env.META_APP_ID,
+      redirect_uri:          buildMetaRedirectUri(),
+      scope:                 'instagram_business_basic,instagram_business_manage_insights',
       state,
-      response_type: 'code',
+      response_type:         'code',
+      code_challenge:        codeChallenge,
+      code_challenge_method: 'S256',
     })
 
     // Instagram Business Login — endpoint de instagram.com, no facebook.com
@@ -71,7 +78,7 @@ async function handleMetaCallback(req, res, next) {
     )
   }
 
-  const { projectId, workspaceId, slug, userId } = statePayload
+  const { projectId, workspaceId, slug, userId, codeVerifier } = statePayload
   const isLocalDev   = process.env.NODE_ENV !== 'production'
   const frontendBase = isLocalDev
     ? (process.env.FRONTEND_URL || 'http://localhost:5173')
@@ -89,6 +96,7 @@ async function handleMetaCallback(req, res, next) {
         grant_type:    'authorization_code',
         redirect_uri:  redirectUri,
         code,
+        code_verifier: codeVerifier,   // PKCE — requerido por Instagram
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
     )

@@ -101,8 +101,12 @@ function sortProjects(projects, sort) {
     const ca = a.taskCounts ?? {}
     const cb = b.taskCounts ?? {}
     switch (sort) {
-      case 'newest':
-        return new Date(b.createdAt) - new Date(a.createdAt)
+      case 'newest': {
+        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        if (tB !== tA) return tB - tA
+        return b.id - a.id  // fallback: mayor ID = creado después
+      }
       case 'active': {
         const actA = (ca.COMPLETED_WEEK ?? 0) + (ca.IN_PROGRESS ?? 0)
         const actB = (cb.COMPLETED_WEEK ?? 0) + (cb.IN_PROGRESS ?? 0)
