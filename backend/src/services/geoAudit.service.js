@@ -58,6 +58,11 @@ function extractPageData(html, url) {
   const canonical   = $('link[rel="canonical"]').attr('href') ?? ''
   const langAttr    = $('html').attr('lang') ?? ''
 
+  // Meta robots — noindex/nofollow
+  const robotsMeta  = $('meta[name="robots"], meta[name="googlebot"]').map((_, el) => $(el).attr('content') ?? '').get().join(',')
+  const isNoindex   = /noindex/i.test(robotsMeta)
+  const isNofollow  = /nofollow/i.test(robotsMeta)
+
   const h1 = $('h1').map((_, el) => $(el).text().trim()).get()
   const h2 = $('h2').map((_, el) => $(el).text().trim()).get().slice(0, 10)
   const h3 = $('h3').map((_, el) => $(el).text().trim()).get().slice(0, 10)
@@ -67,10 +72,16 @@ function extractPageData(html, url) {
   $('script[type="application/ld+json"]').each((_, el) => {
     try { schemas.push(JSON.parse($(el).html())) } catch {}
   })
-  const schemaTypes = schemas.map(s => s['@type']).filter(Boolean)
+  // Handle both "@type": "X" and "@type": ["X", "Y"]
+  const schemaTypes = schemas.flatMap(s =>
+    Array.isArray(s['@type']) ? s['@type'] : (s['@type'] ? [s['@type']] : [])
+  ).filter(Boolean)
 
   // Word count before removing elements
   const wordCount = $('body').text().replace(/\s+/g, ' ').trim().split(' ').length
+
+  // SPA/CSR detection: if raw HTML has barely any text, the site likely renders via JS
+  const likelySPA = wordCount < 150 && h1.length === 0 && schemas.length === 0
 
   $('script, style, nav, footer, header, aside, noscript').remove()
   const bodyText = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 4000)
@@ -88,8 +99,14 @@ function extractPageData(html, url) {
   const hasFaq = $('[itemtype*="FAQPage"], [class*="faq"], [id*="faq"]').length > 0
     || schemaTypes.includes('FAQPage')
 
-  // Statistics detection (numbers with %, $, or followed by "mil"/"millones")
-  const statsMatches = (bodyText.match(/\d+[\.,]?\d*\s*(%|€|\$|mil|millones|usuarios|clientes)/gi) ?? []).length
+  // Author / E-E-A-T signals
+  const hasAuthor = $('[rel="author"], [itemprop="author"], [class*="author"], [class*="byline"]').length > 0
+  const dateElems = $('time[datetime], [itemprop="datePublished"], [itemprop="dateModified"]')
+  const hasDates  = dateElems.length > 0
+  const latestDate = dateElems.first().attr('datetime') ?? dateElems.first().text().trim() ?? ''
+
+  // Statistics detection
+  const statsMatches = (bodyText.match(/\d+[\.,]?\d*\s*(%|€|\$|mil\b|millones|billion|million|usuarios|clientes|clients)/gi) ?? []).length
 
   // External citations
   const externalLinks = []
@@ -106,8 +123,10 @@ function extractPageData(html, url) {
 
   return {
     title, description, canonical, langAttr, wordCount,
+    isNoindex, isNofollow, likelySPA,
     h1, h2, h3, bodyText,
     schemas, schemaTypes,
+    hasAuthor, hasDates, latestDate,
     og: { title: ogTitle, description: ogDescription, image: ogImage },
     twitterCard, rssLink, hasFaq, statsMatches,
     internalLinks: [...new Set(internalLinks)].slice(0, 20),
@@ -159,18 +178,24 @@ function analyzeRobots(robotsTxt) {
     const wildcardIdx  = lines.findIndex(l => l.trim() === 'user-agent: *')
 
     if (userAgentIdx !== -1) {
-      const block = lines.slice(userAgentIdx, userAgentIdx + 8)
-      return block.some(l => l.trim() === 'disallow: /')
+      // Collect all lines until the next user-agent block or end of file
+      const block = []
+      for (let i = userAgentIdx + 1; i < lines.length; i++) {
+        if (lines[i].trim().startsWith('user-agent:')) break
+        block.push(lines[i].trim())
+      }
+      return block.some(l => l === 'disallow: /')
     }
     if (wildcardIdx !== -1) {
-      // Wildcard only counts if no explicit Allow for this bot
-      const hasExplicitAllow = lines.some((l, i) => {
-        if (i < wildcardIdx) return false
-        return l.includes(`user-agent: ${nameL}`)
-      })
-      if (hasExplicitAllow) return false
-      const block = lines.slice(wildcardIdx, wildcardIdx + 8)
-      return block.some(l => l.trim() === 'disallow: /')
+      // Specific bot rule anywhere in file takes precedence over wildcard
+      const hasExplicitRule = lines.some(l => l.trim() === `user-agent: ${nameL}`)
+      if (hasExplicitRule) return false
+      const block = []
+      for (let i = wildcardIdx + 1; i < lines.length; i++) {
+        if (lines[i].trim().startsWith('user-agent:')) break
+        block.push(lines[i].trim())
+      }
+      return block.some(l => l === 'disallow: /')
     }
     return false
   }
@@ -201,7 +226,7 @@ function buildPrompt(url, pageData, robotsData, llmsData, aiDiscovery) {
   return `Analizá el siguiente sitio web para GEO y devolvé un JSON con este formato exacto:
 
 {
-  "score": <número 0-100, promedio ponderado de los 6 componentes>,
+  "score": <número 0-100, calculado como: round(citability*0.25 + brandAuthority*0.20 + eeat*0.20 + technical*0.15 + schema*0.10 + platforms*0.10)>,
   "components": {
     "citability": <0-100>,
     "brandAuthority": <0-100>,
@@ -250,6 +275,8 @@ PESOS componentes: citability=25%, brandAuthority=20%, eeat=20%, technical=15%, 
 
 DATOS DEL SITIO:
 URL: ${url}
+${pageData.isNoindex ? '⛔ NOINDEX DETECTADO: la página tiene meta robots noindex — ningún motor de búsqueda ni IA puede indexarla ni citarla. Este es el hallazgo más crítico posible.' : ''}
+${pageData.likelySPA ? '⚠ POSIBLE SPA/CSR: el HTML inicial tiene muy poco contenido (<150 palabras, sin H1, sin schemas). El sitio podría renderizarse con JavaScript en el cliente, lo que impide que los crawlers de IA lean el contenido real.' : ''}
 
 TÍTULO: ${pageData.title || '(sin título)'}
 META DESCRIPCIÓN: ${pageData.description || '(sin meta descripción)'}
@@ -259,6 +286,9 @@ PALABRAS EN PÁGINA: ${pageData.wordCount}
 ESTADÍSTICAS/DATOS detectados: ${pageData.statsMatches} ocurrencias
 SECCIÓN FAQ: ${pageData.hasFaq ? 'presente' : 'no detectada'}
 RSS/ATOM FEED: ${pageData.rssLink ? `presente (${pageData.rssLink})` : 'no detectado'}
+
+AUTORÍA: ${pageData.hasAuthor ? 'detectada (rel=author / itemprop=author / clase byline)' : 'NO detectada — ausencia de autoría reduce score E-E-A-T'}
+FECHAS DE PUBLICACIÓN: ${pageData.hasDates ? `detectadas${pageData.latestDate ? ` (más reciente: ${pageData.latestDate})` : ''}` : 'NO detectadas — sin fechas los LLMs no pueden validar frescura del contenido'}
 
 H1: ${pageData.h1.join(' | ') || '(sin H1)'}
 H2: ${pageData.h2.join(' | ') || '(ninguno)'}
@@ -366,7 +396,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
       ...result,
       schemasPresent,
       schemasMissing,
-      meta: { title: pageData.title, description: pageData.description },
+      meta: { title: pageData.title, description: pageData.description, h2: pageData.h2 },
     })
 
     // 7. Save completed result

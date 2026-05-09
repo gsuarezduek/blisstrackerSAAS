@@ -373,9 +373,131 @@ function ScoreTimeline({ audits }) {
   )
 }
 
+// ─── Impresión de audit GEO ───────────────────────────────────────────────────
+
+function printGeoAudit(audit, findings, negativeSignals, projectName) {
+  const COMP_LABELS = {
+    citability:     'Citabilidad IA',
+    brandAuthority: 'Autoridad de Marca',
+    eeat:           'E-E-A-T',
+    technical:      'Técnico',
+    schema:         'Schema Markup',
+    platforms:      'Plataformas IA',
+  }
+  const SEV_LABELS  = { high: 'Alta', medium: 'Media', low: 'Baja' }
+  const SEV_COLORS  = { high: '#fee2e2', medium: '#fef9c3', low: '#f0fdf4' }
+  const SEV_TEXT    = { high: '#991b1b', medium: '#92400e', low: '#166534' }
+
+  const bandLabel = audit.score >= 86 ? 'Excelente' : audit.score >= 68 ? 'Bueno' : audit.score >= 36 ? 'Base' : 'Crítico'
+  const bandColor = audit.score >= 86 ? '#10b981' : audit.score >= 68 ? '#22c55e' : audit.score >= 36 ? '#f59e0b' : '#ef4444'
+
+  const compsHtml = Object.entries(COMP_LABELS).map(([key, label]) => {
+    const val = audit[key] ?? '—'
+    const c = typeof val === 'number'
+      ? (val >= 80 ? '#10b981' : val >= 55 ? '#f59e0b' : '#ef4444')
+      : '#9ca3af'
+    return `<div class="comp-card">
+      <div class="comp-score" style="color:${c}">${val}</div>
+      <div class="comp-label">${label}</div>
+    </div>`
+  }).join('')
+
+  const findingsHtml = findings.map(f => `
+    <div class="finding">
+      <span class="sev-badge" style="background:${SEV_COLORS[f.severity] ?? '#f9fafb'};color:${SEV_TEXT[f.severity] ?? '#374151'}">${SEV_LABELS[f.severity] ?? f.severity}</span>
+      <div class="finding-body">
+        <p class="finding-title">${f.title ?? ''}</p>
+        ${f.description ? `<p class="finding-desc">${f.description}</p>` : ''}
+        ${f.action     ? `<p class="finding-action">→ ${f.action}</p>` : ''}
+        ${f.impact     ? `<p class="finding-impact">${f.impact}</p>` : ''}
+      </div>
+    </div>`).join('')
+
+  const negHtml = negativeSignals.length ? `
+    <div class="section-title neg-title">⚠️ Señales negativas (${negativeSignals.length})</div>
+    ${negativeSignals.map(s => `
+      <div class="neg-item">
+        <p class="neg-name">${s.title ?? ''}</p>
+        ${s.description ? `<p class="neg-desc">${s.description}</p>` : ''}
+      </div>`).join('')}` : ''
+
+  const date = new Date(audit.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Análisis GEO — ${projectName}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px;
+         color: #111827; background: #fff; padding: 32px 40px; line-height: 1.5; }
+  .print-btn { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 28px;
+               padding: 8px 16px; background: #111827; color: #fff; border: none;
+               border-radius: 8px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .print-btn:hover { background: #1f2937; }
+  .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+  .header-left h1 { font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+  .header-left .url { font-size: 12px; color: #6b7280; margin-bottom: 2px; }
+  .header-left .date { font-size: 12px; color: #9ca3af; }
+  .score-bubble { text-align: center; min-width: 90px; }
+  .score-num { font-size: 40px; font-weight: 800; line-height: 1; color: ${bandColor}; }
+  .score-sub { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .band-badge { display: inline-block; margin-top: 6px; padding: 2px 10px; border-radius: 99px;
+                background: ${bandColor}22; color: ${bandColor}; font-weight: 600; font-size: 12px; }
+  .section-title { font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase;
+                   letter-spacing: .05em; margin: 24px 0 12px; }
+  .neg-title { color: #b91c1c; }
+  .comps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .comp-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; text-align: center; }
+  .comp-score { font-size: 22px; font-weight: 700; }
+  .comp-label { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .finding { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }
+  .finding:last-child { border-bottom: none; }
+  .sev-badge { flex-shrink: 0; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .finding-body { flex: 1; }
+  .finding-title { font-weight: 600; font-size: 13px; color: #1f2937; }
+  .finding-desc { font-size: 12px; color: #6b7280; margin-top: 3px; }
+  .finding-action { font-size: 12px; color: #059669; margin-top: 4px; }
+  .finding-impact { font-size: 11px; color: #9ca3af; margin-top: 3px; font-style: italic; }
+  .neg-item { padding: 8px 0; border-bottom: 1px solid #fef2f2; }
+  .neg-item:last-child { border-bottom: none; }
+  .neg-name { font-weight: 600; font-size: 13px; color: #991b1b; }
+  .neg-desc { font-size: 12px; color: #b91c1c; margin-top: 2px; }
+  .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #e5e7eb;
+            font-size: 11px; color: #9ca3af; text-align: right; }
+  @media print {
+    body { padding: 20px 28px; }
+    .no-print { display: none !important; }
+  }
+</style></head><body>
+  <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+  <div class="header">
+    <div class="header-left">
+      <h1>${projectName}</h1>
+      <p class="url">${audit.url}</p>
+      <p class="date">Análisis del ${date}</p>
+    </div>
+    <div class="score-bubble">
+      <div class="score-num">${audit.score}</div>
+      <div class="score-sub">/100</div>
+      <span class="band-badge">${bandLabel}</span>
+    </div>
+  </div>
+  <div class="section-title">Componentes</div>
+  <div class="comps-grid">${compsHtml}</div>
+  ${negHtml}
+  <div class="section-title">Análisis detallado (${findings.length})</div>
+  ${findingsHtml}
+  <div class="footer no-print">Generado desde BlissTracker · ${date}</div>
+</body></html>`
+
+  const win = window.open('', '_blank', 'width=860,height=750,scrollbars=yes')
+  if (!win) return
+  win.document.write(html)
+  win.document.close()
+}
+
 // ─── Benchmark cross-proyecto ─────────────────────────────────────────────────
 
-function CrossProjectPanel() {
+function CrossProjectPanel({ onSelectProject }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -419,7 +541,11 @@ function CrossProjectPanel() {
           <div key={p.projectId} className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{p.projectName}</span>
+                <button
+                  onClick={() => onSelectProject?.(String(p.projectId))}
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                  title="Ver último análisis"
+                >{p.projectName}</button>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                   <span className="text-sm font-bold text-gray-900 dark:text-white">{p.score}/100</span>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${BAND_TEXT[p.band] ?? ''}`}>{p.band}</span>
@@ -436,7 +562,7 @@ function CrossProjectPanel() {
   )
 }
 
-export default function GeoTab({ projectId, projects }) {
+export default function GeoTab({ projectId, projects, onSelectProject }) {
   const [audits, setAudits]         = useState([])
   const [activeAudit, setActive]    = useState(null)
   const [running, setRunning]       = useState(false)
@@ -698,23 +824,31 @@ export default function GeoTab({ projectId, projects }) {
             </div>
           </div>
 
-          {/* Herramientas de generación */}
-          {(hasLlmsFinding || schemaScoreLow) && (
-            <div className="flex flex-wrap gap-2">
-              {hasLlmsFinding && (
-                <button onClick={handleGenerateLlmsTxt}
-                  className="px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
-                  📄 Generar llms.txt
-                </button>
-              )}
-              {schemaScoreLow && (
-                <button onClick={handleGenerateSchema}
-                  className="px-3 py-1.5 text-xs font-medium bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-700 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors">
-                  🏷️ Generar JSON-LD
-                </button>
-              )}
-            </div>
-          )}
+          {/* Herramientas de generación + impresión */}
+          <div className="flex flex-wrap gap-2">
+            {hasLlmsFinding && (
+              <button onClick={handleGenerateLlmsTxt}
+                className="px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
+                📄 Generar llms.txt
+              </button>
+            )}
+            {schemaScoreLow && (
+              <button onClick={handleGenerateSchema}
+                className="px-3 py-1.5 text-xs font-medium bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-700 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors">
+                🏷️ Generar JSON-LD
+              </button>
+            )}
+            <button
+              onClick={() => printGeoAudit(activeAudit, sortedFindings, negativeSignals, selectedProject?.name ?? activeAudit.url)}
+              title="Imprimir / Exportar PDF"
+              className="px-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center gap-1.5"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                <path fillRule="evenodd" d="M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75v3.552c.377.046.752.097 1.126.153A2.212 2.212 0 0 1 18 8.653v4.097A2.25 2.25 0 0 1 15.75 15h-.241l.305 1.984A1.75 1.75 0 0 1 14.084 19H5.915a1.75 1.75 0 0 1-1.73-2.016L4.49 15H4.25A2.25 2.25 0 0 1 2 12.75V8.653c0-1.082.775-2.034 1.874-2.198.374-.056.749-.107 1.126-.153V2.75Zm4.5 13.5h1l-.307-2H9.807l-.307 2Zm1.997 0h.258l.527-3.44A.75.75 0 0 0 11.54 12H8.46a.75.75 0 0 0-.743.81L8.244 16.25h.258Zm-5.99-10.337c.966-.099 1.94-.17 2.923-.213L8.25 5.25a.75.75 0 0 1 .75.75v.313l.5-.063L10 5.25a.75.75 0 0 1 .75.75v.25l.5.063V6a.75.75 0 0 1 .75-.75h.5a.75.75 0 0 1 .75.75v.245c.984.043 1.96.114 2.925.213A.75.75 0 0 0 16.5 5.5v-2.75a.25.25 0 0 0-.25-.25h-6.5a.25.25 0 0 0-.25.25V5.5a.75.75 0 0 0-.743.663Z" clipRule="evenodd" />
+              </svg>
+              Imprimir
+            </button>
+          </div>
 
           {/* Tráfico desde IAs */}
           <AiTrafficSection projectId={projectId} />
@@ -856,7 +990,7 @@ export default function GeoTab({ projectId, projects }) {
         />
       )}
 
-      {!projectId && <CrossProjectPanel />}
+      {!projectId && <CrossProjectPanel onSelectProject={onSelectProject} />}
 
       {/* Modal de confirmación de eliminación */}
       {deleteModal && (

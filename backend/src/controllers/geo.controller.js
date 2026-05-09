@@ -140,7 +140,7 @@ async function generateLlmsTxt(req, res, next) {
 
     const title       = raw.meta?.title       || ''
     const description = raw.meta?.description || ''
-    const h2s         = (raw.headings?.h2 || []).slice(0, 5).join('\n- ')
+    const h2s         = (raw.meta?.h2 || []).slice(0, 5).join('\n- ')
     const url         = audit.url
 
     const message = await anthropic.messages.create({
@@ -188,12 +188,17 @@ async function generateSchemaOrg(req, res, next) {
 
     const audit = await prisma.geoAudit.findFirst({
       where:  { id, workspaceId, status: 'completed' },
-      select: { rawData: true, url: true },
+      select: { id: true, rawData: true, url: true },
     })
     if (!audit) return res.status(404).json({ error: 'Audit no encontrado o no completado' })
 
     let raw = {}
     try { raw = JSON.parse(audit.rawData || '{}') } catch { /* ignore */ }
+
+    // Return cached schemas if already generated
+    if (raw.generatedSchemas) {
+      return res.json({ schemas: raw.generatedSchemas })
+    }
 
     const schemasMissing = raw.schemasMissing || []
     const schemasPresent = raw.schemasPresent || []
@@ -237,6 +242,19 @@ IMPORTANTE: El JSON-LD dentro de "jsonLd" debe estar en UNA SOLA LÍNEA (sin sal
       if (match) schemas = JSON.parse(match[0])
     } catch (err) {
       console.error('[GEO] Error parseando schemas:', err.message)
+    }
+
+    // Cache generated schemas in rawData to avoid re-calling Claude
+    if (schemas.length > 0) {
+      try {
+        const updatedRaw = JSON.stringify({ ...raw, generatedSchemas: schemas })
+        await prisma.geoAudit.update({
+          where: { id: audit.id },
+          data:  { rawData: updatedRaw },
+        })
+      } catch (err) {
+        console.error('[GEO] Error cacheando schemas:', err.message)
+      }
     }
 
     res.json({ schemas })
