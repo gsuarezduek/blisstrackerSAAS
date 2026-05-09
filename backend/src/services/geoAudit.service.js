@@ -62,18 +62,18 @@ function extractPageData(html, url) {
   const h2 = $('h2').map((_, el) => $(el).text().trim()).get().slice(0, 10)
   const h3 = $('h3').map((_, el) => $(el).text().trim()).get().slice(0, 10)
 
-  // Word count before removing elements
-  const wordCount = $('body').text().replace(/\s+/g, ' ').trim().split(' ').length
-
-  $('script, style, nav, footer, header, aside, noscript').remove()
-  const bodyText = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 4000)
-
-  // JSON-LD schemas
+  // JSON-LD schemas — must extract BEFORE removing script tags
   const schemas = []
   $('script[type="application/ld+json"]').each((_, el) => {
     try { schemas.push(JSON.parse($(el).html())) } catch {}
   })
   const schemaTypes = schemas.map(s => s['@type']).filter(Boolean)
+
+  // Word count before removing elements
+  const wordCount = $('body').text().replace(/\s+/g, ' ').trim().split(' ').length
+
+  $('script, style, nav, footer, header, aside, noscript').remove()
+  const bodyText = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 4000)
 
   // Open Graph / Twitter
   const ogTitle       = $('meta[property="og:title"]').attr('content') ?? ''
