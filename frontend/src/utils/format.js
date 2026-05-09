@@ -17,9 +17,16 @@ export function activeMinutes(task) {
   return task.status === 'IN_PROGRESS' ? Math.min(result, MAX_ACTIVE_MINS) : result
 }
 
+// Minutos efectivos de una tarea completada (usa minutesOverride si fue editado manualmente)
+export function completedMinutes(task) {
+  if (task.minutesOverride != null) return task.minutesOverride
+  if (!task.startedAt || !task.completedAt) return null
+  return Math.max(0, Math.round((new Date(task.completedAt) - new Date(task.startedAt)) / 60000) - (task.pausedMinutes || 0))
+}
+
 // Duration of a completed task as formatted string, or null
 export function completedDuration(task) {
-  if (!task.startedAt || !task.completedAt) return null
-  const mins = Math.max(0, Math.round((new Date(task.completedAt) - new Date(task.startedAt)) / 60000) - (task.pausedMinutes || 0))
+  const mins = completedMinutes(task)
+  if (mins == null) return null
   return fmtMins(mins)
 }

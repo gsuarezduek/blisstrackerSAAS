@@ -2,14 +2,18 @@ import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { linkify } from '../utils/linkify'
-import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
+import { fmtMins, activeMinutes, completedDuration, completedMinutes } from '../utils/format'
 
 export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, onAddToToday, onMoveToBacklog, onOpenComments }) {
   const [loading, setLoading] = useState(false)
   const [showBlockForm, setShowBlockForm] = useState(false)
   const [blockReason, setBlockReason] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const blockInputRef = useRef(null)
+  const [editingDuration, setEditingDuration] = useState(false)
+  const [durationInput, setDurationInput] = useState('')
+  const blockInputRef   = useRef(null)
+  const durationInputRef = useRef(null)
+  const cancelDuration  = useRef(false)
 
   useEffect(() => {
     if (showBlockForm) blockInputRef.current?.focus()
@@ -47,6 +51,29 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
       if (err.response?.status === 409) alert(err.response.data.error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  function startEditDuration() {
+    cancelDuration.current = false
+    setDurationInput(String(completedMinutes(task) ?? 0))
+    setEditingDuration(true)
+    setTimeout(() => { durationInputRef.current?.select() }, 0)
+  }
+
+  async function handleSaveDuration() {
+    if (cancelDuration.current) return
+    const mins = parseInt(durationInput, 10)
+    if (isNaN(mins) || mins < 0) { setEditingDuration(false); return }
+    setLoading(true)
+    try {
+      const { data } = await api.patch(`/tasks/${task.id}/duration`, { minutes: mins })
+      onUpdate(data)
+    } catch (err) {
+      if (err.response?.data?.error) alert(err.response.data.error)
+    } finally {
+      setLoading(false)
+      setEditingDuration(false)
     }
   }
 
@@ -184,8 +211,41 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
             {task.status === 'PAUSED' && (
               <span className="text-xs text-yellow-600">⏸ {fmtMins(activeMinutes(task))} trabajadas</span>
             )}
-            {task.status === 'COMPLETED' && completedDuration(task) && (
-              <span className="text-xs text-green-600">✓ {completedDuration(task)}</span>
+            {task.status === 'COMPLETED' && (
+              editingDuration ? (
+                <span className="flex items-center gap-1">
+                  <input
+                    ref={durationInputRef}
+                    type="number"
+                    min="0"
+                    value={durationInput}
+                    onChange={e => setDurationInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter')  { e.preventDefault(); handleSaveDuration() }
+                      if (e.key === 'Escape') { cancelDuration.current = true; setEditingDuration(false) }
+                    }}
+                    onBlur={handleSaveDuration}
+                    className="w-14 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                  />
+                  <span className="text-xs text-gray-400">min</span>
+                  <button
+                    onMouseDown={() => { cancelDuration.current = true; setEditingDuration(false) }}
+                    className="text-xs text-gray-400 hover:text-gray-600 leading-none"
+                    title="Cancelar">✕</button>
+                </span>
+              ) : (
+                <button
+                  onClick={startEditDuration}
+                  title="Editar duración"
+                  className="group flex items-center gap-0.5 text-xs text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors"
+                >
+                  ✓ {completedDuration(task) ?? '—'}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
+                    className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity ml-0.5">
+                    <path d="M8.54.47a1.6 1.6 0 0 1 2.26 2.26L9.5 4.03 7.97 2.5 8.54.47ZM7.03 3.44 1.5 9a.5.5 0 0 0-.13.24L1 11.17a.25.25 0 0 0 .3.3l1.93-.37A.5.5 0 0 0 3.47 11l5.56-5.53L7.03 3.44Z"/>
+                  </svg>
+                </button>
+              )
             )}
             {task.createdBy && (
               <span className="text-xs text-gray-400 dark:text-gray-500">
