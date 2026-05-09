@@ -167,7 +167,6 @@ model User {
   eosStrikesGiven           EOSStrike[]                @relation("StrikeCreator")
   accountabilitySeats       AccountabilityNode[]       @relation("SeatHolder")
   ownedMetrics              ScorecardMetric[]          @relation("MetricOwner")
-  ownedProcesses            EOSProcess[]               @relation("ProcessOwner")
   ownedIssues               EOSIssue[]                 @relation("IssueOwner")
   createdIssues             EOSIssue[]                 @relation("IssueCreatedBy")
   ownedRocks                EOSRock[]                  @relation("RockOwner")
@@ -1163,7 +1162,7 @@ model EOSProcess {
   id          Int              @id @default(autoincrement())
   workspaceId Int
   name        String
-  ownerId     Int?
+  ownerRole   String?                                     // nombre del rol responsable (referencia a UserRole.name)
   status      String           @default("not_started")   // 'not_started' | 'documented' | 'followed'
   description String?
   order       Int              @default(0)
@@ -1171,7 +1170,6 @@ model EOSProcess {
   updatedAt   DateTime         @updatedAt
 
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  owner     User?            @relation("ProcessOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   steps     EOSProcessStep[]
 
   @@index([workspaceId])

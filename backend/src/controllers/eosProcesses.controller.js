@@ -8,11 +8,11 @@ async function getProcesses(req, res, next) {
   try {
     const workspaceId = req.workspace.id
 
-    const [members, processes] = await Promise.all([
-      prisma.workspaceMember.findMany({
-        where:   { workspaceId, active: true },
-        include: { user: { select: { id: true, name: true, avatar: true } } },
-        orderBy: { user: { name: 'asc' } },
+    const [roles, processes] = await Promise.all([
+      prisma.userRole.findMany({
+        where:   { workspaceId },
+        select:  { name: true, label: true },
+        orderBy: { label: 'asc' },
       }),
       prisma.eOSProcess.findMany({
         where:   { workspaceId },
@@ -22,19 +22,19 @@ async function getProcesses(req, res, next) {
     ])
 
     res.json({
-      members:   members.map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar })),
+      roles:     roles.map(r => ({ name: r.name, label: r.label })),
       processes: processes.map(formatProcess),
     })
   } catch (err) { next(err) }
 }
 
 // ─── POST /api/eos/processes ──────────────────────────────────────────────────
-// body: { name, ownerId? }
+// body: { name, ownerRole? }
 
 async function createProcess(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { name, ownerId } = req.body
+    const { name, ownerRole } = req.body
 
     if (!name?.trim()) return res.status(400).json({ error: 'name es requerido' })
 
@@ -43,9 +43,9 @@ async function createProcess(req, res, next) {
     const process = await prisma.eOSProcess.create({
       data: {
         workspaceId,
-        name:    name.trim().slice(0, 200),
-        ownerId: ownerId ? Number(ownerId) : null,
-        order:   count,
+        name:      name.trim().slice(0, 200),
+        ownerRole: ownerRole?.trim() || null,
+        order:     count,
       },
       include: { steps: true },
     })
@@ -55,13 +55,13 @@ async function createProcess(req, res, next) {
 }
 
 // ─── PATCH /api/eos/processes/:id ─────────────────────────────────────────────
-// body: { name?, ownerId?, status?, description?, order? }
+// body: { name?, ownerRole?, status?, description?, order? }
 
 async function updateProcess(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const id = Number(req.params.id)
-    const { name, ownerId, status, description, order } = req.body
+    const { name, ownerRole, status, description, order } = req.body
 
     const existing = await prisma.eOSProcess.findFirst({ where: { id, workspaceId } })
     if (!existing) return res.status(404).json({ error: 'Proceso no encontrado' })
@@ -72,7 +72,7 @@ async function updateProcess(req, res, next) {
 
     const data = {}
     if (name        !== undefined) data.name        = name.trim().slice(0, 200)
-    if (ownerId     !== undefined) data.ownerId     = ownerId ? Number(ownerId) : null
+    if (ownerRole   !== undefined) data.ownerRole   = ownerRole?.trim() || null
     if (status      !== undefined) data.status      = status
     if (description !== undefined) data.description = description?.trim() || null
     if (order       !== undefined) data.order       = Number(order)
@@ -189,7 +189,7 @@ function formatProcess(p) {
   return {
     id:          p.id,
     name:        p.name,
-    ownerId:     p.ownerId,
+    ownerRole:   p.ownerRole,
     status:      p.status,
     description: p.description,
     order:       p.order,
