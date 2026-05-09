@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -10,6 +10,7 @@ import { useInactivity } from '../hooks/useInactivity'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useAuth } from '../context/AuthContext'
+import { completedMinutes, fmtMins } from '../utils/format'
 
 function todayLabel() {
   return new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
@@ -37,8 +38,12 @@ export default function Dashboard() {
   const [completedLoading,  setCompletedLoading]  = useState(false)
   const [autoPausedTask, setAutoPausedTask] = useState(null)
   const [commentTask, setCommentTask] = useState(null)
-  const [editingTaskId,   setEditingTaskId]   = useState(null)
-  const [editingTaskDesc, setEditingTaskDesc] = useState('')
+  const [editingTaskId,       setEditingTaskId]       = useState(null)
+  const [editingTaskDesc,     setEditingTaskDesc]     = useState('')
+  const [editingDurationId,   setEditingDurationId]   = useState(null)
+  const [durationEditInput,   setDurationEditInput]   = useState('')
+  const cancelDurationEdit = useRef(false)
+  const durationEditRef    = useRef(null)
 
   // AI Insight
   const [insight, setInsight] = useState(null)
@@ -144,7 +149,9 @@ export default function Dashboard() {
   function handleUpdateTask(updated) {
     if (carryOver.find(t => t.id === updated.id)) {
       if (updated.status === 'COMPLETED') {
+        // Quitar de carry-over y agregar a las tareas del día para que aparezca en el conteo
         setCarryOver(prev => prev.filter(t => t.id !== updated.id))
+        setWorkDay(prev => ({ ...prev, tasks: [...prev.tasks, updated] }))
       } else {
         setCarryOver(prev => prev.map(t => t.id === updated.id ? updated : t))
       }
@@ -265,6 +272,27 @@ export default function Dashboard() {
 
   const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 
+  function startEditRowDuration(task) {
+    cancelDurationEdit.current = false
+    setDurationEditInput(String(completedMinutes(task) ?? 0))
+    setEditingDurationId(task.id)
+    setTimeout(() => { durationEditRef.current?.select() }, 0)
+  }
+
+  async function handleSaveRowDuration(taskId) {
+    if (cancelDurationEdit.current) return
+    const mins = parseInt(durationEditInput, 10)
+    setEditingDurationId(null)
+    if (isNaN(mins) || mins < 0) return
+    try {
+      const { data } = await api.patch(`/tasks/${taskId}/duration`, { minutes: mins })
+      handleUpdateTask(data)
+      setCompletedHistory(prev => prev.map(t => t.id === taskId ? data : t))
+    } catch (err) {
+      if (err.response?.data?.error) alert(err.response.data.error)
+    }
+  }
+
   async function handleSaveTaskDesc(taskId) {
     const desc = editingTaskDesc.trim()
     setEditingTaskId(null)
@@ -315,8 +343,8 @@ export default function Dashboard() {
     const blocked    = focusTasks.filter(t => t.status === 'BLOCKED' && !starredIds.has(t.id))
     const pending    = focusTasks.filter(t => t.status === 'PENDING' && !starredIds.has(t.id))
     const totalMins  = completed.reduce((acc, t) => {
-      if (!t.startedAt || !t.completedAt) return acc
-      return acc + Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+      const m = completedMinutes(t)
+      return acc + (m ?? 0)
     }, 0)
     const activeFocusCount = focusTasks.filter(t => t.status !== 'COMPLETED').length
     return { inProgress, completed, starred, paused, blocked, pending, totalMins, activeFocusCount }
@@ -785,10 +813,9 @@ export default function Dashboard() {
                 <p className="text-sm text-gray-400 text-center py-6">No hay tareas completadas aún</p>
               )}
               {completed.map(t => {
-                const mins = t.minutesOverride !== null && t.minutesOverride !== undefined
-                  ? t.minutesOverride
-                  : Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+                const mins = completedMinutes(t)
                 const isEditing = editingTaskId === t.id
+                const isEditingDur = editingDurationId === t.id
                 return (
                   <div key={t.id} className="flex items-center gap-3 px-4 py-3 group">
                     <span className="text-green-500 flex-shrink-0 text-sm">✓</span>
@@ -808,7 +835,7 @@ export default function Dashboard() {
                       ) : (
                         <p
                           onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(t.description) }}
-                          title="Clic para editar"
+                          title="Clic para editar descripción"
                           className="text-sm text-gray-600 dark:text-gray-300 leading-snug truncate cursor-text hover:text-gray-800 dark:hover:text-gray-100 transition-colors"
                         >
                           {t.description}
@@ -816,13 +843,48 @@ export default function Dashboard() {
                       )}
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
-                        {mins > 0 && (
+                        {isEditingDur ? (
                           <>
                             <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
-                              {mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins}m`}
+                            <span className="flex items-center gap-1">
+                              <input
+                                ref={durationEditRef}
+                                type="number"
+                                min="0"
+                                value={durationEditInput}
+                                onChange={e => setDurationEditInput(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter')  { e.preventDefault(); handleSaveRowDuration(t.id) }
+                                  if (e.key === 'Escape') { cancelDurationEdit.current = true; setEditingDurationId(null) }
+                                }}
+                                onBlur={() => handleSaveRowDuration(t.id)}
+                                className="w-14 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                              />
+                              <span className="text-xs text-gray-400">min</span>
+                              <button
+                                onMouseDown={() => { cancelDurationEdit.current = true; setEditingDurationId(null) }}
+                                className="text-xs text-gray-400 hover:text-gray-600 leading-none"
+                              >✕</button>
                             </span>
                           </>
+                        ) : (
+                          <button
+                            onClick={() => startEditRowDuration(t)}
+                            title="Editar duración"
+                            className="group/dur flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+                          >
+                            {mins != null && mins > 0 && (
+                              <>
+                                <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                                <span>{fmtMins(mins)}</span>
+                              </>
+                            )}
+                            {(mins == null || mins === 0) && <span className="opacity-0 group-hover:opacity-60">+ tiempo</span>}
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
+                              className="w-2.5 h-2.5 opacity-0 group-hover/dur:opacity-50 transition-opacity">
+                              <path d="M8.54.47a1.6 1.6 0 0 1 2.26 2.26L9.5 4.03 7.97 2.5 8.54.47ZM7.03 3.44 1.5 9a.5.5 0 0 0-.13.24L1 11.17a.25.25 0 0 0 .3.3l1.93-.37A.5.5 0 0 0 3.47 11l5.56-5.53L7.03 3.44Z"/>
+                            </svg>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -832,13 +894,12 @@ export default function Dashboard() {
 
               {/* Historial de días anteriores */}
               {completedHistory.map(t => {
-                const mins = t.minutesOverride !== null && t.minutesOverride !== undefined
-                  ? t.minutesOverride
-                  : Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+                const mins = completedMinutes(t)
                 const dateStr = new Date(t.completedAt).toLocaleDateString('es-AR', {
                   weekday: 'short', day: 'numeric', month: 'short',
                 })
                 const isEditing = editingTaskId === t.id
+                const isEditingDur = editingDurationId === t.id
                 return (
                   <div key={t.id} className="flex items-center gap-3 px-4 py-3 group">
                     <span className="text-gray-300 dark:text-gray-600 flex-shrink-0 text-sm">✓</span>
@@ -858,7 +919,7 @@ export default function Dashboard() {
                       ) : (
                         <p
                           onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(t.description) }}
-                          title="Clic para editar"
+                          title="Clic para editar descripción"
                           className="text-sm text-gray-500 dark:text-gray-400 leading-snug truncate cursor-text hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                         >
                           {t.description}
@@ -868,13 +929,47 @@ export default function Dashboard() {
                         <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
                         <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
                         <span className="text-xs text-gray-400 dark:text-gray-500 capitalize">{dateStr}</span>
-                        {mins > 0 && (
+                        {isEditingDur ? (
                           <>
                             <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
-                              {mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins}m`}
+                            <span className="flex items-center gap-1">
+                              <input
+                                ref={durationEditRef}
+                                type="number"
+                                min="0"
+                                value={durationEditInput}
+                                onChange={e => setDurationEditInput(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter')  { e.preventDefault(); handleSaveRowDuration(t.id) }
+                                  if (e.key === 'Escape') { cancelDurationEdit.current = true; setEditingDurationId(null) }
+                                }}
+                                onBlur={() => handleSaveRowDuration(t.id)}
+                                className="w-14 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                              />
+                              <span className="text-xs text-gray-400">min</span>
+                              <button
+                                onMouseDown={() => { cancelDurationEdit.current = true; setEditingDurationId(null) }}
+                                className="text-xs text-gray-400 hover:text-gray-600 leading-none"
+                              >✕</button>
                             </span>
                           </>
+                        ) : (
+                          <button
+                            onClick={() => startEditRowDuration(t)}
+                            title="Editar duración"
+                            className="group/dur flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+                          >
+                            {mins != null && mins > 0 && (
+                              <>
+                                <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                                <span>{fmtMins(mins)}</span>
+                              </>
+                            )}
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
+                              className="w-2.5 h-2.5 opacity-0 group-hover/dur:opacity-50 transition-opacity">
+                              <path d="M8.54.47a1.6 1.6 0 0 1 2.26 2.26L9.5 4.03 7.97 2.5 8.54.47ZM7.03 3.44 1.5 9a.5.5 0 0 0-.13.24L1 11.17a.25.25 0 0 0 .3.3l1.93-.37A.5.5 0 0 0 3.47 11l5.56-5.53L7.03 3.44Z"/>
+                            </svg>
+                          </button>
                         )}
                       </div>
                     </div>
