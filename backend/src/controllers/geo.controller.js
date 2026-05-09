@@ -207,7 +207,7 @@ async function generateSchemaOrg(req, res, next) {
 
     const message = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 1000,
+      max_tokens: 3000,
       messages: [{
         role: 'user',
         content: `Generá JSON-LD Schema.org para los tipos faltantes en este sitio web.
@@ -218,15 +218,15 @@ Descripción: ${description}
 Schemas ya presentes: ${schemasPresent.join(', ') || 'ninguno'}
 Schemas faltantes a generar: ${schemasMissing.join(', ')}
 
-Respondé SOLO con un JSON array con esta estructura:
+Respondé SOLO con un JSON array válido y completo. Cada elemento tiene esta estructura:
 [
   {
     "type": "Organization",
-    "jsonLd": "<script type=\\"application/ld+json\\">\\n{ ...JSON-LD... }\\n</script>"
+    "jsonLd": "<script type=\\"application/ld+json\\">{ ...JSON-LD minificado en una sola línea... }</script>"
   }
 ]
 
-Usá datos reales del sitio donde sea posible. Para campos desconocidos usá valores de ejemplo realistas.`,
+IMPORTANTE: El JSON-LD dentro de "jsonLd" debe estar en UNA SOLA LÍNEA (sin saltos de línea) para evitar errores de parseo. Usá datos reales del sitio donde sea posible. Para campos desconocidos usá valores de ejemplo realistas.`,
       }],
     })
 
