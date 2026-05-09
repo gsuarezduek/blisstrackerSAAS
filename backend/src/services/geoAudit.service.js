@@ -358,6 +358,17 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
 
     const { score, components, items, negativeSignals } = result
 
+    // Enrich rawData with page metadata needed for schema generation
+    const IMPORTANT_SCHEMA_TYPES = ['Organization', 'WebSite', 'Article', 'FAQPage', 'BreadcrumbList', 'LocalBusiness', 'Product']
+    const schemasPresent = pageData.schemaTypes ?? []
+    const schemasMissing = IMPORTANT_SCHEMA_TYPES.filter(t => !schemasPresent.includes(t))
+    const enrichedRaw = JSON.stringify({
+      ...result,
+      schemasPresent,
+      schemasMissing,
+      meta: { title: pageData.title, description: pageData.description },
+    })
+
     // 7. Save completed result
     await setStep(auditId, 'Guardando resultados…')
     await prisma.geoAudit.update({
@@ -373,7 +384,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
         platforms:       Number(components.platforms),
         findings:        JSON.stringify(items ?? []),
         recommendations: JSON.stringify(negativeSignals ?? []),
-        rawData:         raw,
+        rawData:         enrichedRaw,
         tokensUsed:      (message.usage.input_tokens ?? 0) + (message.usage.output_tokens ?? 0),
         errorMsg:        null,
       },
