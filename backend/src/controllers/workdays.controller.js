@@ -70,10 +70,28 @@ async function finish(req, res, next) {
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
     const date = todayString(tz)
+    const now = new Date()
+
+    // Auto-pausar cualquier tarea IN_PROGRESS antes de cerrar la jornada
+    const activeTask = await prisma.task.findFirst({
+      where: { userId, status: 'IN_PROGRESS', workDay: { workspaceId } },
+    })
+    if (activeTask) {
+      await prisma.$transaction([
+        prisma.task.update({
+          where: { id: activeTask.id },
+          data: { status: 'PAUSED', pausedAt: now },
+        }),
+        prisma.taskSession.updateMany({
+          where: { taskId: activeTask.id, endedAt: null },
+          data: { endedAt: now },
+        }),
+      ])
+    }
 
     const workDay = await prisma.workDay.update({
       where: { userId_workspaceId_date: { userId, workspaceId, date } },
-      data: { endedAt: new Date() },
+      data: { endedAt: now },
     })
     res.json(workDay)
   } catch (err) {

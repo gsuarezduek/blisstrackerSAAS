@@ -351,7 +351,7 @@ async function setDuration(req, res, next) {
     if (!isAdmin(req) && task.userId !== req.user.userId) {
       return res.status(403).json({ error: 'No tenés permiso para editar esta tarea' })
     }
-    const updated = await prisma.task.update({ where: { id }, data: { minutesOverride: minutes } })
+    const updated = await prisma.task.update({ where: { id }, data: { minutesOverride: minutes }, include: taskInclude })
     res.json(updated)
   } catch (err) { next(err) }
 }
