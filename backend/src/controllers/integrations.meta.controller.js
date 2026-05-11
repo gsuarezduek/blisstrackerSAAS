@@ -103,18 +103,26 @@ async function handleMetaCallback(req, res, next) {
     const shortToken = tokenRes.data.access_token
     const igUserId   = tokenRes.data.user_id ? String(tokenRes.data.user_id) : null
 
-    // 2. Para Instagram Business Login (IGAAM), el token de api.instagram.com/oauth/access_token
-    //    ya es long-lived (60 días). No se necesita paso de exchange adicional.
-    //    Verificamos que funciona llamando a /me — si falla, la cuenta no es Professional o
-    //    el app no tiene los permisos correctos.
-    const longToken = shortToken
-    const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+    // 2. Intercambiar short-lived token → long-lived token (60 días)
+    //    api.instagram.com/oauth/access_token devuelve un token de 1 hora.
+    //    graph.instagram.com/access_token lo convierte a 60 días.
+    const longTokenRes = await axios.get('https://graph.instagram.com/access_token', {
+      params: {
+        grant_type:    'ig_exchange_token',
+        client_id:     process.env.META_APP_ID,
+        client_secret: process.env.META_APP_SECRET,
+        access_token:  shortToken,
+      },
+    })
+    const longToken = longTokenRes.data.access_token
+    const expiresIn = longTokenRes.data.expires_in ?? (60 * 24 * 60 * 60)
+    const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
-    // 3. Verificar token y obtener id real + username via /me
+    // 3. Verificar token y obtener id real + username via /me (versioned)
     let username = null
     let resolvedIgUserId = igUserId
     try {
-      const profileRes = await axios.get('https://graph.instagram.com/me', {
+      const profileRes = await axios.get('https://graph.instagram.com/v21.0/me', {
         params: { fields: 'id,username', access_token: longToken },
       })
       username         = profileRes.data?.username ?? null
