@@ -89,11 +89,12 @@ const COUNT_CONFIG = [
   { key: 'COMPLETED_WEEK', label: 'Esta semana', bg: 'bg-green-100 dark:bg-green-900/30',      text: 'text-green-700 dark:text-green-400' },
 ]
 
+// Cada entrada tiene [clave, label en estado normal, label al togglear]
 const SORT_OPTIONS = [
-  { key: 'name',    label: 'Nombre A–Z' },
-  { key: 'newest',  label: 'Más nuevos' },
-  { key: 'active',  label: 'Más activos' },
-  { key: 'blocked', label: 'Bloqueadas primero' },
+  { key: 'name',    toggle: 'name_desc', label: 'Nombre A–Z',        labelAlt: 'Nombre Z–A'    },
+  { key: 'newest',  toggle: 'oldest',    label: 'Más nuevos',         labelAlt: 'Más antiguos'  },
+  { key: 'active',  toggle: 'inactive',  label: 'Más activos',        labelAlt: 'Más inactivos' },
+  { key: 'blocked', toggle: null,        label: 'Bloqueadas primero',  labelAlt: null            },
 ]
 
 function sortProjects(projects, sort) {
@@ -105,7 +106,13 @@ function sortProjects(projects, sort) {
         const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0
         const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0
         if (tB !== tA) return tB - tA
-        return b.id - a.id  // fallback: mayor ID = creado después
+        return b.id - a.id
+      }
+      case 'oldest': {
+        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        if (tB !== tA) return tA - tB
+        return a.id - b.id
       }
       case 'active': {
         const actA = (ca.COMPLETED_WEEK ?? 0) + (ca.IN_PROGRESS ?? 0)
@@ -113,10 +120,18 @@ function sortProjects(projects, sort) {
         if (actB !== actA) return actB - actA
         return a.name.localeCompare(b.name)
       }
+      case 'inactive': {
+        const actA = (ca.COMPLETED_WEEK ?? 0) + (ca.IN_PROGRESS ?? 0)
+        const actB = (cb.COMPLETED_WEEK ?? 0) + (cb.IN_PROGRESS ?? 0)
+        if (actA !== actB) return actA - actB
+        return a.name.localeCompare(b.name)
+      }
       case 'blocked': {
         if ((cb.BLOCKED ?? 0) !== (ca.BLOCKED ?? 0)) return (cb.BLOCKED ?? 0) - (ca.BLOCKED ?? 0)
         return a.name.localeCompare(b.name)
       }
+      case 'name_desc':
+        return b.name.localeCompare(a.name)
       default: // 'name'
         return a.name.localeCompare(b.name)
     }
@@ -263,12 +278,19 @@ export default function MyProjects() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">Ordenar:</span>
               {SORT_OPTIONS.map(opt => {
-                const isActive = sort === opt.key
+                const isActive   = sort === opt.key || sort === opt.toggle
+                const isAltState = sort === opt.toggle
                 const isBlockedOpt = opt.key === 'blocked'
                 return (
                   <button
                     key={opt.key}
-                    onClick={() => setSort(opt.key)}
+                    onClick={() => {
+                      if (!isActive) {
+                        setSort(opt.key)
+                      } else if (opt.toggle) {
+                        setSort(isAltState ? opt.key : opt.toggle)
+                      }
+                    }}
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                       isActive
                         ? isBlockedOpt
@@ -277,7 +299,7 @@ export default function MyProjects() {
                         : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
                     }`}
                   >
-                    {opt.label}
+                    {isAltState ? opt.labelAlt : opt.label}
                   </button>
                 )
               })}
