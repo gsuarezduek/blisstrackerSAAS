@@ -627,15 +627,30 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
       {s.tasks && s.tasks.length > 0 && (
         <SectionCard title="Trabajo realizado en el mes" icon="🔧">
           <ul className="space-y-2">
-            {s.tasks.map((task) => (
-              <li key={task.id} className="flex items-start gap-2 text-sm">
-                <span className="text-green-500 mt-0.5 shrink-0">✓</span>
-                <span className="text-gray-700 dark:text-gray-300">{task.description}</span>
-                {task.createdBy?.name && (
-                  <span className="ml-auto text-xs text-gray-400 dark:text-gray-500 shrink-0">{task.createdBy.name}</span>
-                )}
-              </li>
-            ))}
+            {s.tasks.map((task) => {
+              const mins = task.minutesOverride != null
+                ? task.minutesOverride
+                : (task.startedAt && task.completedAt)
+                  ? Math.max(0, Math.round((new Date(task.completedAt) - new Date(task.startedAt)) / 60000) - (task.pausedMinutes || 0))
+                  : null
+              const duration = mins != null && mins > 0
+                ? (mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60 > 0 ? `${mins % 60}m` : ''}`.trim())
+                : null
+              return (
+                <li key={task.id} className="flex items-start gap-2 text-sm">
+                  <span className="text-green-500 mt-0.5 shrink-0">✓</span>
+                  <span className="text-gray-700 dark:text-gray-300 flex-1">{task.description}</span>
+                  <div className="ml-2 flex items-center gap-2 shrink-0">
+                    {duration && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">{duration}</span>
+                    )}
+                    {task.user?.name && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500">{task.user.name}</span>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </SectionCard>
       )}

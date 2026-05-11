@@ -77,6 +77,41 @@ function extractPageData(html, url) {
     Array.isArray(s['@type']) ? s['@type'] : (s['@type'] ? [s['@type']] : [])
   ).filter(Boolean)
 
+  // Dynamic widget detection — must run BEFORE removing scripts/iframes
+  // These load content via JS so cheerio sees them as empty, but they ARE present
+  const REVIEW_WIDGET_PATTERNS = [
+    { pattern: /elfsight/i,            label: 'Elfsight widget' },
+    { pattern: /maps\.google|google\.com\/maps/i, label: 'Google Maps/Reviews iframe' },
+    { pattern: /widget\.trustpilot/i, label: 'Trustpilot widget' },
+    { pattern: /reviews\.io/i,        label: 'Reviews.io widget' },
+    { pattern: /birdeye\.com/i,        label: 'Birdeye widget' },
+    { pattern: /podium\.com/i,         label: 'Podium widget' },
+    { pattern: /grade\.us/i,           label: 'Grade.us widget' },
+    { pattern: /reviewtrackers/i,      label: 'ReviewTrackers widget' },
+    { pattern: /senja\.io/i,           label: 'Senja widget' },
+    { pattern: /testimonial\.to/i,     label: 'Testimonial.to widget' },
+  ]
+  const dynamicWidgets = []
+  // Check iframes
+  $('iframe').each((_, el) => {
+    const src = $(el).attr('src') ?? ''
+    for (const { pattern, label } of REVIEW_WIDGET_PATTERNS) {
+      if (pattern.test(src)) { dynamicWidgets.push(label); break }
+    }
+  })
+  // Check scripts
+  $('script[src]').each((_, el) => {
+    const src = $(el).attr('src') ?? ''
+    for (const { pattern, label } of REVIEW_WIDGET_PATTERNS) {
+      if (pattern.test(src)) { dynamicWidgets.push(label); break }
+    }
+  })
+  // Check div class/id patterns (Elfsight and similar inject via class)
+  $('[class*="elfsight"], [class*="trustpilot"], [class*="reviews-widget"], [id*="reviews-widget"]').each(() => {
+    if (!dynamicWidgets.includes('Elfsight widget')) dynamicWidgets.push('widget de reseñas embebido')
+  })
+  const hasDynamicReviewWidget = dynamicWidgets.length > 0
+
   // Word count before removing elements
   const wordCount = $('body').text().replace(/\s+/g, ' ').trim().split(' ').length
 
@@ -127,6 +162,7 @@ function extractPageData(html, url) {
     h1, h2, h3, bodyText,
     schemas, schemaTypes,
     hasAuthor, hasDates, latestDate,
+    hasDynamicReviewWidget, dynamicWidgets: [...new Set(dynamicWidgets)],
     og: { title: ogTitle, description: ogDescription, image: ogImage },
     twitterCard, rssLink, hasFaq, statsMatches,
     internalLinks: [...new Set(internalLinks)].slice(0, 20),
@@ -273,10 +309,17 @@ BANDAS DE SCORE:
 PESOS componentes: citability=25%, brandAuthority=20%, eeat=20%, technical=15%, schema=10%, platforms=10%
 ═══════════════════════════════════════════════════════════
 
+⚠ IMPORTANTE — LIMITACIÓN DEL ANÁLISIS ESTÁTICO:
+Este análisis se basa en el HTML estático de la página (sin ejecutar JavaScript). Por eso:
+- Widgets de terceros (Google Reviews, Elfsight, Trustpilot, chats, mapas) aparecen como contenedores vacíos aunque funcionen perfectamente en el browser.
+- Si detectás que una sección tiene un heading pero el contenido parece ausente, verificá si puede tratarse de un widget dinámico antes de marcarlo como señal negativa.
+- NO reportes como "sección vacía" o "contenido faltante" lo que puede ser contenido dinámico. En su lugar, si corresponde, recomendá añadir markup estático Schema.org que sí sea rastreable por IA.
+
 DATOS DEL SITIO:
 URL: ${url}
 ${pageData.isNoindex ? '⛔ NOINDEX DETECTADO: la página tiene meta robots noindex — ningún motor de búsqueda ni IA puede indexarla ni citarla. Este es el hallazgo más crítico posible.' : ''}
 ${pageData.likelySPA ? '⚠ POSIBLE SPA/CSR: el HTML inicial tiene muy poco contenido (<150 palabras, sin H1, sin schemas). El sitio podría renderizarse con JavaScript en el cliente, lo que impide que los crawlers de IA lean el contenido real.' : ''}
+${pageData.hasDynamicReviewWidget ? `⚠ WIDGETS DINÁMICOS DE RESEÑAS DETECTADOS: ${pageData.dynamicWidgets.join(', ')}. Estas reseñas son invisibles para crawlers de IA (y para este análisis estático). Aunque el sitio SÍ tiene reseñas, no son rastreables. La recomendación correcta es complementar con Schema.org Review/AggregateRating estático, NO reportar como "ausencia de testimonios".` : ''}
 
 TÍTULO: ${pageData.title || '(sin título)'}
 META DESCRIPCIÓN: ${pageData.description || '(sin meta descripción)'}
@@ -332,6 +375,7 @@ LINKS INTERNOS: ${pageData.internalLinks.length} | EXTERNOS (citas): ${pageData.
 Incluí entre 5 y 10 items priorizados por impacto GEO real, ordenados de mayor a menor severidad.
 Cada item debe combinar el problema con la acción concreta y el impacto esperado (usá los % de la investigación donde aplique).
 En negativeSignals, detectá señales que REDUCEN citabilidad: lenguaje excesivamente autopromocional, contenido escaso (<300 palabras), keyword stuffing, texto oculto, ausencia de autoría, fechas desactualizadas.
+NUNCA reportes como señal negativa contenido que podría ser un widget dinámico (reseñas, mapas, chat). Si hay widgets de reseñas dinámicos detectados, reportalos como oportunidad de mejora GEO (agregar Schema.org AggregateRating/Review estático), no como "sección vacía" o "ausencia de testimonios".
 Si no detectás señales negativas, devolvé negativeSignals: [].`
 }
 

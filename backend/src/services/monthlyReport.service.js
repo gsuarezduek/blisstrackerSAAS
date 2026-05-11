@@ -173,7 +173,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       },
       select: {
         id: true, description: true, completedAt: true,
-        createdBy: { select: { name: true } },
+        startedAt: true, pausedMinutes: true, minutesOverride: true,
+        user:      { select: { name: true } },
       },
       orderBy: { completedAt: 'desc' },
     }),

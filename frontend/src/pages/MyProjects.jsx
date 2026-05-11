@@ -125,11 +125,13 @@ function sortProjects(projects, sort) {
 
 export default function MyProjects() {
   const { user } = useAuth()
-  const navigate  = useNavigate()
-  const [projects, setProjects] = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [search,   setSearch]   = useState('')
-  const [sort,     setSort]     = useState('name')
+  const navigate       = useNavigate()
+  const [projects,     setProjects]     = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [search,       setSearch]       = useState('')
+  const [sort,         setSort]         = useState('name')
+  const [filterService, setFilterService] = useState('')
+  const [filterPerson,  setFilterPerson]  = useState('')
 
   useEffect(() => {
     api.get('/projects')
@@ -139,8 +141,22 @@ export default function MyProjects() {
 
   const isAdmin = user?.role === 'ADMIN'
 
+  // Derivar listas únicas de servicios y personas del workspace
+  const allServices = [...new Map(
+    projects.flatMap(p => (p.services ?? []).map(ps => [ps.service.id, ps.service]))
+  ).values()].sort((a, b) => a.name.localeCompare(b.name))
+
+  const allMembers = [...new Map(
+    projects.flatMap(p => (p.members ?? []).map(pm => [pm.user.id, pm.user]))
+  ).values()].sort((a, b) => a.name.localeCompare(b.name))
+
   const filtered = sortProjects(
-    projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase())),
+    projects.filter(p => {
+      if (!p.name.toLowerCase().includes(search.toLowerCase())) return false
+      if (filterService && !(p.services ?? []).some(ps => String(ps.service.id) === filterService)) return false
+      if (filterPerson  && !(p.members  ?? []).some(pm => String(pm.user.id)    === filterPerson))  return false
+      return true
+    }),
     sort
   )
 
@@ -193,6 +209,56 @@ export default function MyProjects() {
               )}
             </div>
 
+            {/* Filtros por Servicio y Persona */}
+            {(allServices.length > 0 || allMembers.length > 0) && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {allServices.length > 0 && (
+                  <div className="relative">
+                    <select
+                      value={filterService}
+                      onChange={e => setFilterService(e.target.value)}
+                      className={`pl-3 pr-7 py-1.5 text-xs font-medium rounded-lg border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                        filterService
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
+                      }`}
+                    >
+                      <option value="">Servicio</option>
+                      {allServices.map(s => (
+                        <option key={s.id} value={String(s.id)}>{s.name}</option>
+                      ))}
+                    </select>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                      className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${filterService ? 'text-white' : 'text-gray-400'}`}>
+                      <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                )}
+                {allMembers.length > 0 && (
+                  <div className="relative">
+                    <select
+                      value={filterPerson}
+                      onChange={e => setFilterPerson(e.target.value)}
+                      className={`pl-3 pr-7 py-1.5 text-xs font-medium rounded-lg border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+                        filterPerson
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
+                      }`}
+                    >
+                      <option value="">Persona</option>
+                      {allMembers.map(m => (
+                        <option key={m.id} value={String(m.id)}>{m.name}</option>
+                      ))}
+                    </select>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                      className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${filterPerson ? 'text-white' : 'text-gray-400'}`}>
+                      <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Ordenar por */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">Ordenar:</span>
@@ -219,8 +285,8 @@ export default function MyProjects() {
           </div>
         )}
 
-        {!loading && search && filtered.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-8">Sin resultados para "{search}"</p>
+        {!loading && filtered.length === 0 && (search || filterService || filterPerson) && (
+          <p className="text-sm text-gray-400 text-center py-8">Sin resultados para los filtros aplicados</p>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
