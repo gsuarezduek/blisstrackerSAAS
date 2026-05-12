@@ -1,7 +1,7 @@
 const axios = require('axios')
 
-// Instagram Business Login usa graph.instagram.com (no graph.facebook.com)
-const BASE = 'https://graph.instagram.com'
+const BASE_IGAAM = 'https://graph.instagram.com/v21.0'
+const BASE_FB    = 'https://graph.facebook.com/v21.0'
 
 const TYPE_LABEL = {
   IMAGE:          'Imagen',
@@ -17,15 +17,24 @@ const TYPE_LABEL = {
  * @param {string} accessToken — Long-lived Instagram token
  * @returns {Promise<object>}
  */
-async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null) {
+/**
+ * @param {string}  igUserId     — Instagram User ID (propertyId en ProjectIntegration)
+ * @param {string}  accessToken  — Token desencriptado
+ * @param {string}  targetMonth  — 'YYYY-MM' opcional; si null usa el mes actual ART
+ * @param {boolean} useFbGraph   — true si el token es de Facebook Graph API (Business Manager)
+ */
+async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, useFbGraph = false) {
+  const base = useFbGraph ? BASE_FB    : BASE_IGAAM
+  const meId = useFbGraph ? igUserId   : 'me'
+
   const [profileRes, mediaRes] = await Promise.all([
-    axios.get(`${BASE}/me`, {
+    axios.get(`${base}/${meId}`, {
       params: {
         fields:       'followers_count,media_count,name,username,profile_picture_url,biography,website',
         access_token: accessToken,
       },
     }),
-    axios.get(`${BASE}/me/media`, {
+    axios.get(`${base}/${meId}/media`, {
       params: {
         fields:       'id,like_count,comments_count,timestamp,media_type,media_url,thumbnail_url,permalink,caption',
         limit:        100,

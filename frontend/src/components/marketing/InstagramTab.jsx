@@ -508,15 +508,16 @@ function ConnectPrompt({ projectId, onConnected }) {
         {showManual && (
           <div className="mt-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-left space-y-3">
             <div>
-              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Cómo obtener el token:</p>
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Cómo obtener el token desde Business Manager:</p>
               <ol className="text-xs text-gray-500 dark:text-gray-400 list-decimal list-inside space-y-1 leading-relaxed">
                 <li>Abrí <span className="font-mono">business.facebook.com</span> → Configuración del negocio</li>
-                <li>Usuarios del sistema → Agregar usuario del sistema</li>
-                <li>Asigná el Instagram al usuario del sistema</li>
-                <li>Generar token → seleccioná la app <strong>BlissTracker</strong></li>
-                <li>Permisos: <span className="font-mono">instagram_business_basic</span> + <span className="font-mono">instagram_business_manage_insights</span></li>
-                <li>Copiá el token y pegalo abajo</li>
+                <li>Usuarios del sistema → Agregar usuario del sistema (rol: Empleado o Admin)</li>
+                <li>Asegurate de que la cuenta de Instagram esté vinculada a una Página de Facebook en el Business Manager</li>
+                <li>Hacé clic en el usuario del sistema → <strong>Generar nuevo token de acceso</strong></li>
+                <li>Seleccioná la app <strong>BlissTracker</strong> y activá los permisos: <span className="font-mono">instagram_basic</span>, <span className="font-mono">instagram_manage_insights</span>, <span className="font-mono">pages_show_list</span></li>
+                <li>Copiá el token generado y pegalo abajo</li>
               </ol>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">⚠️ La cuenta de Instagram debe estar conectada a una Página de Facebook para que el token funcione.</p>
             </div>
             <textarea
               value={manualToken}

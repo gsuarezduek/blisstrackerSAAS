@@ -330,36 +330,72 @@ async function connectInstagramToken(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    // 1. Validar token y obtener id + username
-    let username, igUserId
+    // 1. Detectar tipo de token y obtener id + username
+    // Intenta primero IGAAM (graph.instagram.com) — si falla por "Cannot parse",
+    // es un token de Facebook Graph API (Business Manager) y usa graph.facebook.com.
+    let username, igUserId, finalToken, expiresAt, scopes
+
+    let usedFbGraph = false
     try {
       const profileRes = await axios.get('https://graph.instagram.com/v21.0/me', {
         params: { fields: 'id,username', access_token: accessToken },
       })
-      username  = profileRes.data?.username ?? null
-      igUserId  = profileRes.data?.id ? String(profileRes.data.id) : null
-    } catch (err) {
-      const msg = err.response?.data?.error?.message || err.message
-      return res.status(400).json({ error: `Token inválido: ${msg}` })
+      username = profileRes.data?.username ?? null
+      igUserId = profileRes.data?.id ? String(profileRes.data.id) : null
+    } catch (igErr) {
+      const igMsg = igErr.response?.data?.error?.message || ''
+      const isParseError = igMsg.includes('Cannot parse') || igMsg.includes('Invalid OAuth')
+      if (!isParseError) {
+        return res.status(400).json({ error: `Token inválido: ${igMsg || igErr.message}` })
+      }
+
+      // Token de Facebook Graph API — buscar Instagram Business Account via páginas
+      try {
+        const accountsRes = await axios.get('https://graph.facebook.com/v21.0/me/accounts', {
+          params: {
+            fields:       'id,name,instagram_business_account{id,username}',
+            access_token: accessToken,
+          },
+        })
+        const pages      = accountsRes.data?.data ?? []
+        const pageWithIg = pages.find(p => p.instagram_business_account?.id)
+        if (!pageWithIg) {
+          return res.status(400).json({
+            error: 'Token de Facebook válido, pero no tiene ninguna cuenta de Instagram Business conectada. Asegurate de que la cuenta de Instagram esté vinculada a una Página de Facebook en Business Manager.',
+          })
+        }
+        igUserId     = String(pageWithIg.instagram_business_account.id)
+        username     = pageWithIg.instagram_business_account.username ?? null
+        usedFbGraph  = true
+      } catch (fbErr) {
+        const fbMsg = fbErr.response?.data?.error?.message || fbErr.message
+        return res.status(400).json({ error: `Token inválido: ${fbMsg}` })
+      }
     }
 
-    // 2. Intentar exchange a long-lived token (falla si ya es un System User Token permanente)
-    let finalToken = accessToken
-    let expiresAt  = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000) // 10 años (token permanente)
-    try {
-      const longRes = await axios.get('https://graph.instagram.com/access_token', {
-        params: {
-          grant_type:    'ig_exchange_token',
-          client_id:     process.env.META_APP_ID,
-          client_secret: process.env.META_APP_SECRET,
-          access_token:  accessToken,
-        },
-      })
-      finalToken = longRes.data.access_token
-      const expiresIn = longRes.data.expires_in ?? (60 * 24 * 60 * 60)
-      expiresAt = new Date(Date.now() + expiresIn * 1000)
-    } catch {
-      // System User Tokens son permanentes y no se pueden exchangear — se usa el token original
+    // 2. Long-lived token exchange (solo para IGAAM — los tokens de FB ya son de larga duración)
+    finalToken = accessToken
+    expiresAt  = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000) // default: 10 años
+    scopes     = usedFbGraph
+      ? 'fb_graph,instagram_business_basic,instagram_business_manage_insights'
+      : 'instagram_business_basic,instagram_business_manage_insights'
+
+    if (!usedFbGraph) {
+      try {
+        const longRes = await axios.get('https://graph.instagram.com/access_token', {
+          params: {
+            grant_type:    'ig_exchange_token',
+            client_id:     process.env.META_APP_ID,
+            client_secret: process.env.META_APP_SECRET,
+            access_token:  accessToken,
+          },
+        })
+        finalToken = longRes.data.access_token
+        const expiresIn = longRes.data.expires_in ?? (60 * 24 * 60 * 60)
+        expiresAt = new Date(Date.now() + expiresIn * 1000)
+      } catch {
+        // Token ya es long-lived o no se puede exchangear — usar el original
+      }
     }
 
     // 3. Guardar en ProjectIntegration
@@ -368,13 +404,13 @@ async function connectInstagramToken(req, res, next) {
       update: {
         workspaceId: req.workspace.id, status: 'active', propertyId: igUserId,
         accessToken: encrypt(finalToken), refreshToken: null,
-        expiresAt, scopes: 'instagram_business_basic,instagram_business_manage_insights',
+        expiresAt, scopes,
         connectedById: req.user.userId, connectedAt: new Date(),
       },
       create: {
         projectId, workspaceId: req.workspace.id, type: 'instagram', status: 'active',
         propertyId: igUserId, accessToken: encrypt(finalToken), refreshToken: null,
-        expiresAt, scopes: 'instagram_business_basic,instagram_business_manage_insights',
+        expiresAt, scopes,
         connectedById: req.user.userId, connectedAt: new Date(),
       },
     })

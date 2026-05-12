@@ -49,7 +49,8 @@ async function getMetrics(req, res, next) {
 
     let metrics
     try {
-      metrics = await fetchInstagramMetrics(integration.propertyId, token)
+      const useFbGraph = integration.scopes?.startsWith('fb_graph')
+      metrics = await fetchInstagramMetrics(integration.propertyId, token, null, useFbGraph)
     } catch (apiErr) {
       const igErrCode = apiErr.response?.data?.error?.code
       const igErrMsg  = apiErr.response?.data?.error?.message ?? ''
