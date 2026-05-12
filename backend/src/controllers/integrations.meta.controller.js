@@ -321,6 +321,9 @@ async function handleMetaAdsCallback(req, res, next) {
  * Devuelve array deduplicado de { id, username, name }.
  */
 async function fetchFbInstagramAccounts(accessToken) {
+  const tokenSnippet = accessToken ? accessToken.slice(0, 12) + '…' : '(vacío)'
+  console.log(`[MetaToken] fetchFbInstagramAccounts — token: ${tokenSnippet}`)
+
   const [directRes, pagesRes] = await Promise.allSettled([
     axios.get('https://graph.facebook.com/v21.0/me/instagram_accounts', {
       params: { fields: 'id,username,name', access_token: accessToken },
@@ -329,6 +332,24 @@ async function fetchFbInstagramAccounts(accessToken) {
       params: { fields: 'id,name,instagram_business_account{id,username,name}', access_token: accessToken },
     }),
   ])
+
+  // Log fuente a
+  if (directRes.status === 'fulfilled') {
+    const raw = directRes.value.data?.data ?? []
+    console.log(`[MetaToken] /me/instagram_accounts → ${raw.length} cuenta(s):`, raw.map(a => `${a.id} @${a.username}`))
+  } else {
+    console.warn('[MetaToken] /me/instagram_accounts falló:', directRes.reason?.response?.data?.error ?? directRes.reason?.message)
+  }
+
+  // Log fuente b
+  if (pagesRes.status === 'fulfilled') {
+    const pages = pagesRes.value.data?.data ?? []
+    const withIg = pages.filter(p => p.instagram_business_account?.id)
+    console.log(`[MetaToken] /me/accounts → ${pages.length} página(s), ${withIg.length} con Instagram vinculado:`,
+      withIg.map(p => `Página "${p.name}" → IG ${p.instagram_business_account.id} @${p.instagram_business_account.username}`))
+  } else {
+    console.warn('[MetaToken] /me/accounts falló:', pagesRes.reason?.response?.data?.error ?? pagesRes.reason?.message)
+  }
 
   const accounts = new Map()
 
@@ -349,7 +370,9 @@ async function fetchFbInstagramAccounts(accessToken) {
     }
   }
 
-  return [...accounts.values()]
+  const result = [...accounts.values()]
+  console.log(`[MetaToken] Total cuentas IG encontradas: ${result.length}`, result.map(a => `${a.id} @${a.username}`))
+  return result
 }
 
 /**
@@ -378,29 +401,39 @@ async function connectInstagramToken(req, res, next) {
     // ── Intento 1: token IGAAM (graph.instagram.com) ──────────────────────────
     let username, igUserId, finalToken, expiresAt, usedFbGraph = false
 
+    console.log(`[MetaToken] connectInstagramToken — proyecto ${projectId}, igAccountId: ${igAccountId ?? 'ninguno'}`)
+
     try {
+      console.log('[MetaToken] Probando como token IGAAM (graph.instagram.com/v21.0/me)…')
       const profileRes = await axios.get('https://graph.instagram.com/v21.0/me', {
         params: { fields: 'id,username', access_token: accessToken },
       })
       username = profileRes.data?.username ?? null
       igUserId = profileRes.data?.id ? String(profileRes.data.id) : null
+      console.log(`[MetaToken] Token IGAAM OK — @${username} (${igUserId})`)
     } catch (igErr) {
       const igMsg = igErr.response?.data?.error?.message || ''
+      const igCode = igErr.response?.data?.error?.code
+      console.warn(`[MetaToken] IGAAM falló — code: ${igCode}, msg: "${igMsg}"`)
       const isParseError = igMsg.includes('Cannot parse') || igMsg.includes('Invalid OAuth')
       if (!isParseError) {
+        console.error('[MetaToken] Error no recuperable en IGAAM, abortando.')
         return res.status(400).json({ error: `Token inválido: ${igMsg || igErr.message}` })
       }
 
       // ── Intento 2: token de Facebook Graph API (Business Manager) ──────────
+      console.log('[MetaToken] Tratando como token de Facebook Graph API…')
       let fbAccounts
       try {
         fbAccounts = await fetchFbInstagramAccounts(accessToken)
       } catch (fbErr) {
         const fbMsg = fbErr.response?.data?.error?.message || fbErr.message
+        console.error('[MetaToken] fetchFbInstagramAccounts lanzó excepción:', fbMsg)
         return res.status(400).json({ error: `Token inválido: ${fbMsg}` })
       }
 
       if (fbAccounts.length === 0) {
+        console.warn('[MetaToken] Sin cuentas IG encontradas para este token FB.')
         return res.status(400).json({
           error: 'No se encontró ninguna cuenta de Instagram Business accesible con este token. Verificá que el usuario del sistema tenga las cuentas de Instagram asignadas en Business Manager.',
         })
