@@ -424,6 +424,7 @@ function ConnectPrompt({ projectId, onConnected }) {
   const [showManual,    setShowManual]    = useState(false)
   const [manualToken,   setManualToken]   = useState('')
   const [manualLoading, setManualLoading] = useState(false)
+  const [accounts,      setAccounts]      = useState(null) // lista cuando hay múltiples
   const pollRef = useRef(null)
 
   const handleConnect = async () => {
@@ -462,15 +463,23 @@ function ConnectPrompt({ projectId, onConnected }) {
     }
   }
 
-  const handleManualConnect = async () => {
+  const handleManualConnect = async (igAccountId = null) => {
     if (!manualToken.trim()) { setError('Pegá el token de acceso.'); return }
     setManualLoading(true)
     setError(null)
     try {
-      await api.post(`/marketing/projects/${projectId}/integrations/instagram/connect-token`, {
-        accessToken: manualToken.trim(),
-      })
-      onConnected()
+      const body = { accessToken: manualToken.trim() }
+      if (igAccountId) body.igAccountId = igAccountId
+      const { data } = await api.post(
+        `/marketing/projects/${projectId}/integrations/instagram/connect-token`,
+        body,
+      )
+      if (data.accounts) {
+        // Múltiples cuentas — mostrar picker
+        setAccounts(data.accounts)
+      } else {
+        onConnected()
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'Token inválido o sin permisos suficientes.')
     } finally {
@@ -507,32 +516,72 @@ function ConnectPrompt({ projectId, onConnected }) {
 
         {showManual && (
           <div className="mt-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-left space-y-3">
-            <div>
-              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Cómo obtener el token desde Business Manager:</p>
-              <ol className="text-xs text-gray-500 dark:text-gray-400 list-decimal list-inside space-y-1 leading-relaxed">
-                <li>Abrí <span className="font-mono">business.facebook.com</span> → Configuración del negocio</li>
-                <li>Usuarios del sistema → Agregar usuario del sistema (rol: Empleado o Admin)</li>
-                <li>Asegurate de que la cuenta de Instagram esté vinculada a una Página de Facebook en el Business Manager</li>
-                <li>Hacé clic en el usuario del sistema → <strong>Generar nuevo token de acceso</strong></li>
-                <li>Seleccioná la app <strong>BlissTracker</strong> y activá los permisos: <span className="font-mono">instagram_basic</span>, <span className="font-mono">instagram_manage_insights</span>, <span className="font-mono">pages_show_list</span></li>
-                <li>Copiá el token generado y pegalo abajo</li>
-              </ol>
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">⚠️ La cuenta de Instagram debe estar conectada a una Página de Facebook para que el token funcione.</p>
-            </div>
-            <textarea
-              value={manualToken}
-              onChange={e => setManualToken(e.target.value)}
-              placeholder="EAABwz..."
-              rows={3}
-              className="w-full text-xs font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
-            />
-            <button
-              onClick={handleManualConnect}
-              disabled={manualLoading || !manualToken.trim()}
-              className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {manualLoading ? 'Verificando…' : 'Conectar con token'}
-            </button>
+
+            {/* Picker de cuentas (paso 2 cuando hay múltiples) */}
+            {accounts ? (
+              <>
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                  Encontramos {accounts.length} cuentas. Elegí cuál conectar a este proyecto:
+                </p>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {accounts.map(acc => (
+                    <button
+                      key={acc.id}
+                      onClick={() => handleManualConnect(acc.id)}
+                      disabled={manualLoading}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-left disabled:opacity-50"
+                    >
+                      <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                        {(acc.username || acc.name || '?')[0].toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">
+                          {acc.username ? `@${acc.username}` : acc.name || acc.id}
+                        </p>
+                        {acc.username && acc.name && acc.name !== acc.username && (
+                          <p className="text-[10px] text-gray-400 truncate">{acc.name}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setAccounts(null)}
+                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline underline-offset-2"
+                >
+                  ← Usar otro token
+                </button>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Cómo obtener el token desde Business Manager:</p>
+                  <ol className="text-xs text-gray-500 dark:text-gray-400 list-decimal list-inside space-y-1 leading-relaxed">
+                    <li>Abrí <span className="font-mono">business.facebook.com</span> → Configuración del negocio</li>
+                    <li>Usuarios del sistema → Agregar usuario del sistema (rol: Empleado o Admin)</li>
+                    <li>Asegurate de que las cuentas de Instagram estén asignadas al usuario del sistema</li>
+                    <li>Hacé clic en el usuario del sistema → <strong>Generar nuevo token de acceso</strong></li>
+                    <li>Seleccioná la app <strong>BlissTracker</strong> y activá: <span className="font-mono">instagram_basic</span>, <span className="font-mono">instagram_manage_insights</span>, <span className="font-mono">pages_show_list</span></li>
+                    <li>Copiá el token y pegalo abajo</li>
+                  </ol>
+                </div>
+                <textarea
+                  value={manualToken}
+                  onChange={e => setManualToken(e.target.value)}
+                  placeholder="EAABwz..."
+                  rows={3}
+                  className="w-full text-xs font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+                />
+                <button
+                  onClick={() => handleManualConnect()}
+                  disabled={manualLoading || !manualToken.trim()}
+                  className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {manualLoading ? 'Verificando…' : 'Conectar con token'}
+                </button>
+              </>
+            )}
+
           </div>
         )}
       </div>

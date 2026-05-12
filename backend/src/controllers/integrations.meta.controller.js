@@ -314,14 +314,59 @@ async function handleMetaAdsCallback(req, res, next) {
 }
 
 /**
+ * Recoge todas las cuentas de Instagram accesibles para un token de Facebook.
+ * Prueba dos fuentes en paralelo:
+ *   a) me/instagram_accounts  — cuentas de IG conectadas directamente al Business Manager
+ *   b) me/accounts (páginas)  — cuentas de IG vinculadas a Páginas de Facebook
+ * Devuelve array deduplicado de { id, username, name }.
+ */
+async function fetchFbInstagramAccounts(accessToken) {
+  const [directRes, pagesRes] = await Promise.allSettled([
+    axios.get('https://graph.facebook.com/v21.0/me/instagram_accounts', {
+      params: { fields: 'id,username,name', access_token: accessToken },
+    }),
+    axios.get('https://graph.facebook.com/v21.0/me/accounts', {
+      params: { fields: 'id,name,instagram_business_account{id,username,name}', access_token: accessToken },
+    }),
+  ])
+
+  const accounts = new Map()
+
+  // Fuente a: /me/instagram_accounts
+  if (directRes.status === 'fulfilled') {
+    for (const ig of (directRes.value.data?.data ?? [])) {
+      if (ig.id) accounts.set(ig.id, { id: ig.id, username: ig.username ?? null, name: ig.name ?? null })
+    }
+  }
+
+  // Fuente b: /me/accounts → instagram_business_account
+  if (pagesRes.status === 'fulfilled') {
+    for (const page of (pagesRes.value.data?.data ?? [])) {
+      const ig = page.instagram_business_account
+      if (ig?.id && !accounts.has(ig.id)) {
+        accounts.set(ig.id, { id: ig.id, username: ig.username ?? null, name: ig.name ?? null })
+      }
+    }
+  }
+
+  return [...accounts.values()]
+}
+
+/**
  * POST /api/marketing/projects/:id/integrations/instagram/connect-token
  * Conecta Instagram mediante un token manual (System User Token de Business Manager).
- * Body: { accessToken: string }
+ *
+ * Flujo de 2 pasos:
+ *   Paso 1 — Body: { accessToken }
+ *     → Si es token IGAAM y tiene 1 cuenta: conecta y devuelve { ok, username, igUserId }
+ *     → Si es token de FB con múltiples cuentas: devuelve { accounts: [{id, username, name}] }
+ *   Paso 2 — Body: { accessToken, igAccountId }
+ *     → Conecta la cuenta seleccionada
  */
 async function connectInstagramToken(req, res, next) {
   try {
-    const projectId  = Number(req.params.id)
-    const { accessToken } = req.body
+    const projectId              = Number(req.params.id)
+    const { accessToken, igAccountId } = req.body
     if (!accessToken) return res.status(400).json({ error: 'accessToken requerido' })
 
     const project = await prisma.project.findFirst({
@@ -330,12 +375,9 @@ async function connectInstagramToken(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    // 1. Detectar tipo de token y obtener id + username
-    // Intenta primero IGAAM (graph.instagram.com) — si falla por "Cannot parse",
-    // es un token de Facebook Graph API (Business Manager) y usa graph.facebook.com.
-    let username, igUserId, finalToken, expiresAt, scopes
+    // ── Intento 1: token IGAAM (graph.instagram.com) ──────────────────────────
+    let username, igUserId, finalToken, expiresAt, usedFbGraph = false
 
-    let usedFbGraph = false
     try {
       const profileRes = await axios.get('https://graph.instagram.com/v21.0/me', {
         params: { fields: 'id,username', access_token: accessToken },
@@ -349,36 +391,42 @@ async function connectInstagramToken(req, res, next) {
         return res.status(400).json({ error: `Token inválido: ${igMsg || igErr.message}` })
       }
 
-      // Token de Facebook Graph API — buscar Instagram Business Account via páginas
+      // ── Intento 2: token de Facebook Graph API (Business Manager) ──────────
+      let fbAccounts
       try {
-        const accountsRes = await axios.get('https://graph.facebook.com/v21.0/me/accounts', {
-          params: {
-            fields:       'id,name,instagram_business_account{id,username}',
-            access_token: accessToken,
-          },
-        })
-        const pages      = accountsRes.data?.data ?? []
-        const pageWithIg = pages.find(p => p.instagram_business_account?.id)
-        if (!pageWithIg) {
-          return res.status(400).json({
-            error: 'Token de Facebook válido, pero no tiene ninguna cuenta de Instagram Business conectada. Asegurate de que la cuenta de Instagram esté vinculada a una Página de Facebook en Business Manager.',
-          })
-        }
-        igUserId     = String(pageWithIg.instagram_business_account.id)
-        username     = pageWithIg.instagram_business_account.username ?? null
-        usedFbGraph  = true
+        fbAccounts = await fetchFbInstagramAccounts(accessToken)
       } catch (fbErr) {
         const fbMsg = fbErr.response?.data?.error?.message || fbErr.message
         return res.status(400).json({ error: `Token inválido: ${fbMsg}` })
       }
+
+      if (fbAccounts.length === 0) {
+        return res.status(400).json({
+          error: 'No se encontró ninguna cuenta de Instagram Business accesible con este token. Verificá que el usuario del sistema tenga las cuentas de Instagram asignadas en Business Manager.',
+        })
+      }
+
+      // Si el usuario ya eligió una cuenta (paso 2)
+      if (igAccountId) {
+        const chosen = fbAccounts.find(a => a.id === String(igAccountId))
+        if (!chosen) return res.status(400).json({ error: 'La cuenta seleccionada no está disponible para este token.' })
+        igUserId = chosen.id
+        username = chosen.username ?? chosen.name ?? null
+      } else if (fbAccounts.length === 1) {
+        // Auto-selección si solo hay una cuenta
+        igUserId = fbAccounts[0].id
+        username = fbAccounts[0].username ?? fbAccounts[0].name ?? null
+      } else {
+        // Múltiples cuentas → el frontend debe mostrar el picker
+        return res.json({ accounts: fbAccounts })
+      }
+
+      usedFbGraph = true
     }
 
-    // 2. Long-lived token exchange (solo para IGAAM — los tokens de FB ya son de larga duración)
+    // ── Long-lived token exchange (solo IGAAM) ────────────────────────────────
     finalToken = accessToken
-    expiresAt  = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000) // default: 10 años
-    scopes     = usedFbGraph
-      ? 'fb_graph,instagram_business_basic,instagram_business_manage_insights'
-      : 'instagram_business_basic,instagram_business_manage_insights'
+    expiresAt  = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000)
 
     if (!usedFbGraph) {
       try {
@@ -393,12 +441,14 @@ async function connectInstagramToken(req, res, next) {
         finalToken = longRes.data.access_token
         const expiresIn = longRes.data.expires_in ?? (60 * 24 * 60 * 60)
         expiresAt = new Date(Date.now() + expiresIn * 1000)
-      } catch {
-        // Token ya es long-lived o no se puede exchangear — usar el original
-      }
+      } catch { /* ya es long-lived — usar el original */ }
     }
 
-    // 3. Guardar en ProjectIntegration
+    const scopes = usedFbGraph
+      ? 'fb_graph,instagram_business_basic,instagram_business_manage_insights'
+      : 'instagram_business_basic,instagram_business_manage_insights'
+
+    // ── Guardar en ProjectIntegration ─────────────────────────────────────────
     await prisma.projectIntegration.upsert({
       where:  { projectId_type: { projectId, type: 'instagram' } },
       update: {
@@ -415,7 +465,7 @@ async function connectInstagramToken(req, res, next) {
       },
     })
 
-    console.log(`[MetaToken] Instagram conectado via token manual: proyecto ${projectId}, @${username} (${igUserId})`)
+    console.log(`[MetaToken] Instagram conectado via token ${usedFbGraph ? 'FB' : 'IGAAM'}: proyecto ${projectId}, @${username} (${igUserId})`)
     res.json({ ok: true, username, igUserId })
   } catch (err) { next(err) }
 }
