@@ -419,8 +419,11 @@ function AccountHeader({ metrics, integration, onDisconnect, disconnecting }) {
 // ── Estado vacío (sin integración) ────────────────────────────────────────────
 
 function ConnectPrompt({ projectId, onConnected }) {
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
+  const [loading,       setLoading]       = useState(false)
+  const [error,         setError]         = useState(null)
+  const [showManual,    setShowManual]    = useState(false)
+  const [manualToken,   setManualToken]   = useState('')
+  const [manualLoading, setManualLoading] = useState(false)
   const pollRef = useRef(null)
 
   const handleConnect = async () => {
@@ -459,20 +462,79 @@ function ConnectPrompt({ projectId, onConnected }) {
     }
   }
 
+  const handleManualConnect = async () => {
+    if (!manualToken.trim()) { setError('Pegá el token de acceso.'); return }
+    setManualLoading(true)
+    setError(null)
+    try {
+      await api.post(`/marketing/projects/${projectId}/integrations/instagram/connect-token`, {
+        accessToken: manualToken.trim(),
+      })
+      onConnected()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Token inválido o sin permisos suficientes.')
+    } finally {
+      setManualLoading(false)
+    }
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
+    <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-3xl mb-4">📸</div>
       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Conectá tu cuenta de Instagram</h3>
       <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs mb-6">Necesitás una cuenta de Instagram Business o Creator.</p>
+
       {error && <p className="text-sm text-red-600 dark:text-red-400 mb-4 max-w-sm">{error}</p>}
+
       <button
         onClick={handleConnect}
         disabled={loading || !projectId}
         className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
       >
-        {loading ? 'Conectando…' : 'Conectar Instagram'}
+        {loading ? 'Conectando…' : 'Conectar con Instagram'}
       </button>
+
       {!projectId && <p className="text-xs text-gray-400 mt-2">Seleccioná un proyecto para continuar.</p>}
+
+      {/* Opción manual — System User Token */}
+      <div className="mt-6 w-full max-w-sm">
+        <button
+          onClick={() => { setShowManual(v => !v); setError(null) }}
+          className="text-xs text-gray-400 dark:text-gray-500 hover:text-purple-500 dark:hover:text-purple-400 transition-colors underline underline-offset-2"
+        >
+          {showManual ? 'Ocultar' : '¿Tenés un token de Business Manager?'}
+        </button>
+
+        {showManual && (
+          <div className="mt-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-left space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Cómo obtener el token:</p>
+              <ol className="text-xs text-gray-500 dark:text-gray-400 list-decimal list-inside space-y-1 leading-relaxed">
+                <li>Abrí <span className="font-mono">business.facebook.com</span> → Configuración del negocio</li>
+                <li>Usuarios del sistema → Agregar usuario del sistema</li>
+                <li>Asigná el Instagram al usuario del sistema</li>
+                <li>Generar token → seleccioná la app <strong>BlissTracker</strong></li>
+                <li>Permisos: <span className="font-mono">instagram_business_basic</span> + <span className="font-mono">instagram_business_manage_insights</span></li>
+                <li>Copiá el token y pegalo abajo</li>
+              </ol>
+            </div>
+            <textarea
+              value={manualToken}
+              onChange={e => setManualToken(e.target.value)}
+              placeholder="EAABwz..."
+              rows={3}
+              className="w-full text-xs font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+            />
+            <button
+              onClick={handleManualConnect}
+              disabled={manualLoading || !manualToken.trim()}
+              className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {manualLoading ? 'Verificando…' : 'Conectar con token'}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -313,4 +313,75 @@ async function handleMetaAdsCallback(req, res, next) {
   }
 }
 
-module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback }
+/**
+ * POST /api/marketing/projects/:id/integrations/instagram/connect-token
+ * Conecta Instagram mediante un token manual (System User Token de Business Manager).
+ * Body: { accessToken: string }
+ */
+async function connectInstagramToken(req, res, next) {
+  try {
+    const projectId  = Number(req.params.id)
+    const { accessToken } = req.body
+    if (!accessToken) return res.status(400).json({ error: 'accessToken requerido' })
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId: req.workspace.id },
+      select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    // 1. Validar token y obtener id + username
+    let username, igUserId
+    try {
+      const profileRes = await axios.get('https://graph.instagram.com/v21.0/me', {
+        params: { fields: 'id,username', access_token: accessToken },
+      })
+      username  = profileRes.data?.username ?? null
+      igUserId  = profileRes.data?.id ? String(profileRes.data.id) : null
+    } catch (err) {
+      const msg = err.response?.data?.error?.message || err.message
+      return res.status(400).json({ error: `Token inválido: ${msg}` })
+    }
+
+    // 2. Intentar exchange a long-lived token (falla si ya es un System User Token permanente)
+    let finalToken = accessToken
+    let expiresAt  = new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000) // 10 años (token permanente)
+    try {
+      const longRes = await axios.get('https://graph.instagram.com/access_token', {
+        params: {
+          grant_type:    'ig_exchange_token',
+          client_id:     process.env.META_APP_ID,
+          client_secret: process.env.META_APP_SECRET,
+          access_token:  accessToken,
+        },
+      })
+      finalToken = longRes.data.access_token
+      const expiresIn = longRes.data.expires_in ?? (60 * 24 * 60 * 60)
+      expiresAt = new Date(Date.now() + expiresIn * 1000)
+    } catch {
+      // System User Tokens son permanentes y no se pueden exchangear — se usa el token original
+    }
+
+    // 3. Guardar en ProjectIntegration
+    await prisma.projectIntegration.upsert({
+      where:  { projectId_type: { projectId, type: 'instagram' } },
+      update: {
+        workspaceId: req.workspace.id, status: 'active', propertyId: igUserId,
+        accessToken: encrypt(finalToken), refreshToken: null,
+        expiresAt, scopes: 'instagram_business_basic,instagram_business_manage_insights',
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+      create: {
+        projectId, workspaceId: req.workspace.id, type: 'instagram', status: 'active',
+        propertyId: igUserId, accessToken: encrypt(finalToken), refreshToken: null,
+        expiresAt, scopes: 'instagram_business_basic,instagram_business_manage_insights',
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+    })
+
+    console.log(`[MetaToken] Instagram conectado via token manual: proyecto ${projectId}, @${username} (${igUserId})`)
+    res.json({ ok: true, username, igUserId })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback, connectInstagramToken }
