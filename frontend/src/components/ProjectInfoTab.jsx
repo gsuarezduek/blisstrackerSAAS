@@ -77,6 +77,7 @@ export default function ProjectInfoTab({ project, onSave }) {
   const [integrations,  setIntegrations]  = useState([])
   const [integLoading,  setIntegLoading]  = useState({})
   const [propertyInput, setPropertyInput] = useState({})
+  const [managerInput,  setManagerInput]  = useState({})   // Google Ads: Manager/MCC ID
   const [propSaving,    setPropSaving]    = useState({})
 
   // Cargar integraciones solo si marketing está habilitado
@@ -219,9 +220,24 @@ export default function ProjectInfoTab({ project, onSave }) {
         { customerId: val }
       )
       setIntegrations(prev => prev.map(i => i.type === type ? { ...i, ...data } : i))
-      setPropertyInput(prev => ({ ...prev, [type]: '' }))
+      setPropertyInput(prev => ({ ...prev, [type]: undefined }))
     } finally {
       setPropSaving(prev => ({ ...prev, [type]: false }))
+    }
+  }
+
+  async function handleSaveManagerId(type) {
+    const val = managerInput[type]?.trim()
+    setPropSaving(prev => ({ ...prev, [`${type}_mgr`]: true }))
+    try {
+      const { data } = await api.patch(
+        `/marketing/projects/${project.id}/integrations/${type}`,
+        { propertyId: val || null }        // vacío = limpiar el Manager ID
+      )
+      setIntegrations(prev => prev.map(i => i.type === type ? { ...i, ...data } : i))
+      setManagerInput(prev => ({ ...prev, [type]: undefined }))
+    } finally {
+      setPropSaving(prev => ({ ...prev, [`${type}_mgr`]: false }))
     }
   }
 
@@ -422,57 +438,138 @@ export default function ProjectInfoTab({ project, onSave }) {
                   </div>
                 )}
 
-                {/* Customer ID para Google Ads */}
+                {/* Customer ID + Manager ID para Google Ads */}
                 {connected && integ.key === 'google_ads' && (
-                  <div>
-                    {connected.customerId ? (
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-400">
-                          Customer ID:{' '}
-                          <span className="font-mono text-gray-600 dark:text-gray-300">
+                  <div className="space-y-3">
+
+                    {/* ── Customer ID (cuenta cliente — obligatorio) ── */}
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        Customer ID <span className="text-red-400">*</span>
+                      </p>
+                      {connected.customerId ? (
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs text-gray-600 dark:text-gray-300">
                             {connected.customerId}
                           </span>
-                        </p>
-                        <button
-                          onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.customerId }))}
-                          className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
-                        >
-                          Cambiar
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        Ingresá el Customer ID para ver los datos (ej: 123-456-7890)
-                      </p>
-                    )}
-                    {(propertyInput[integ.key] !== undefined || !connected.customerId) && (
-                      <div className="flex gap-2 mt-2">
-                        <input
-                          type="text"
-                          value={propertyInput[integ.key] ?? ''}
-                          onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
-                          placeholder="123-456-7890"
-                          className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                        <button
-                          onClick={() => handleSaveCustomerId(integ.key)}
-                          disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
-                          className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
-                        >
-                          {propSaving[integ.key] ? '…' : 'Guardar'}
-                        </button>
-                        {connected.customerId && (
                           <button
-                            onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
+                            onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.customerId }))}
+                            className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
+                          >
+                            Cambiar
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          Requerido — ID de la cuenta cliente (ej: 123-456-7890)
+                        </p>
+                      )}
+                      {(propertyInput[integ.key] !== undefined || !connected.customerId) && (
+                        <div className="flex gap-2 mt-1.5">
+                          <input
+                            type="text"
+                            value={propertyInput[integ.key] ?? ''}
+                            onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
+                            placeholder="123-456-7890"
+                            className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                          <button
+                            onClick={() => handleSaveCustomerId(integ.key)}
+                            disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
+                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                          >
+                            {propSaving[integ.key] ? '…' : 'Guardar'}
+                          </button>
+                          {connected.customerId && (
+                            <button
+                              onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
+                              className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Manager ID / MCC (si la cuenta está bajo un Manager Account) ── */}
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                        Manager ID <span className="text-gray-400 font-normal">(MCC — si la cuenta cliente está bajo un Manager Account)</span>
+                      </p>
+                      {connected.propertyId ? (
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs text-gray-600 dark:text-gray-300">
+                            {connected.propertyId}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setManagerInput(prev => ({ ...prev, [integ.key]: connected.propertyId }))}
+                              className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
+                            >
+                              Cambiar
+                            </button>
+                            <button
+                              onClick={async () => {
+                                setPropSaving(prev => ({ ...prev, [`${integ.key}_mgr`]: true }))
+                                try {
+                                  const { data } = await api.patch(
+                                    `/marketing/projects/${project.id}/integrations/${integ.key}`,
+                                    { propertyId: null }
+                                  )
+                                  setIntegrations(prev => prev.map(i => i.type === integ.key ? { ...i, ...data } : i))
+                                } finally {
+                                  setPropSaving(prev => ({ ...prev, [`${integ.key}_mgr`]: false }))
+                                }
+                              }}
+                              disabled={propSaving[`${integ.key}_mgr`]}
+                              className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                            >
+                              Quitar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                          Sin Manager ID — la cuenta es directa o ya tenés acceso sin MCC
+                        </p>
+                      )}
+                      {managerInput[integ.key] !== undefined && (
+                        <div className="flex gap-2 mt-1.5">
+                          <input
+                            type="text"
+                            value={managerInput[integ.key] ?? ''}
+                            onChange={e => setManagerInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
+                            placeholder="123-456-7890  (ID del Manager Account)"
+                            className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                          <button
+                            onClick={() => handleSaveManagerId(integ.key)}
+                            disabled={propSaving[`${integ.key}_mgr`]}
+                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                          >
+                            {propSaving[`${integ.key}_mgr`] ? '…' : 'Guardar'}
+                          </button>
+                          <button
+                            onClick={() => setManagerInput(prev => ({ ...prev, [integ.key]: undefined }))}
                             className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
                           >
                             Cancelar
                           </button>
-                        )}
-                      </div>
-                    )}
+                        </div>
+                      )}
+                      {managerInput[integ.key] === undefined && !connected.propertyId && (
+                        <button
+                          onClick={() => setManagerInput(prev => ({ ...prev, [integ.key]: '' }))}
+                          className="mt-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                        >
+                          + Agregar Manager ID
+                        </button>
+                      )}
+                    </div>
+
                     {hasError && (
-                      <p className="text-xs text-red-500 mt-1">
+                      <p className="text-xs text-red-500">
                         El token fue revocado. Desconectá y volvé a conectar.
                       </p>
                     )}

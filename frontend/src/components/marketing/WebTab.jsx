@@ -621,8 +621,10 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
   const [compare,      setCompare]      = useState(true)
   const [analytics,    setAnalytics]    = useState(null)
   const [loading,      setLoading]      = useState(false)
-  const [errorStatus,  setErrorStatus]  = useState(null)
-  const [error,        setError]        = useState('')
+  const [errorStatus,   setErrorStatus]   = useState(null)
+  const [error,         setError]         = useState('')
+  const [reconnecting,  setReconnecting]  = useState(false)
+  const [retryKey,      setRetryKey]      = useState(0)
 
   // Snapshot del mes anterior (para deltas)
   const [prevSnap,     setPrevSnap]     = useState(null)
@@ -642,6 +644,39 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
   const [psHistory,    setPsHistory]    = useState([])     // historial de scores
   const [psRunning,    setPsRunning]    = useState(false)
   const [psPollId,     setPsPollId]     = useState(null)
+
+  async function handleReconnectGoogle() {
+    if (!projectId || reconnecting) return
+    setReconnecting(true)
+    try {
+      const res    = await api.get(`/marketing/integrations/google/auth-url?projectId=${projectId}&type=google_analytics`)
+      const popup  = window.open(res.data.url, 'google_oauth', 'width=560,height=660,left=200,top=100')
+
+      const poll = setInterval(() => {
+        try {
+          const raw = localStorage.getItem('__ga_oauth_result')
+          if (!raw) return
+          const result = JSON.parse(raw)
+          if (Date.now() - result.ts > 60000) { localStorage.removeItem('__ga_oauth_result'); return }
+          localStorage.removeItem('__ga_oauth_result')
+          clearInterval(poll)
+          setReconnecting(false)
+          if (result.success) {
+            setErrorStatus(null)
+            setError('')
+            setRetryKey(k => k + 1)          // fuerza re-fetch de analytics
+          }
+          if (popup && !popup.closed) popup.close()
+        } catch { /* ignorar */ }
+      }, 600)
+
+      // Limpiar si no hubo resultado en 5 min
+      setTimeout(() => { clearInterval(poll); setReconnecting(false) }, 300_000)
+    } catch (err) {
+      setReconnecting(false)
+      alert(err.response?.data?.error || 'No se pudo iniciar la reconexión con Google')
+    }
+  }
 
   function handlePresetChange(val) {
     setRangePreset(val)
@@ -682,7 +717,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
       })
       .finally(() => setLoading(false))
     return () => controller.abort()
-  }, [projectId, appliedRange])
+  }, [projectId, appliedRange, retryKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cuando hay analytics y el período es mensual: cargar snapshot anterior + insight
   useEffect(() => {
@@ -920,9 +955,18 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
           <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">
             Google Analytics no está conectado para este proyecto
           </p>
-          <p className="text-xs text-amber-600 dark:text-amber-400">
-            Conectalo desde <strong>Mis Proyectos → [Proyecto] → Info</strong>
+          <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">
+            Conectalo ahora o ingresá a <strong>Mis Proyectos → Info</strong> para configurar el Property ID.
           </p>
+          <button
+            onClick={handleReconnectGoogle}
+            disabled={reconnecting}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+          >
+            {reconnecting ? (
+              <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Esperando autorización…</>
+            ) : '🔗 Conectar con Google'}
+          </button>
         </div>
       )}
       {subtab === 'analytics' && errorStatus === 'no_property' && (
@@ -940,11 +984,20 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl p-8 text-center">
           <div className="text-3xl mb-3">⚠️</div>
           <p className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">
-            La conexión con Google Analytics expiró
+            La conexión con Google expiró
           </p>
-          <p className="text-xs text-red-500 dark:text-red-400">
-            Desconectá y volvé a conectar desde la tab Info del proyecto
+          <p className="text-xs text-red-500 dark:text-red-400 mb-4">
+            Volvé a autorizar para restaurar el acceso a Analytics y Search Console.
           </p>
+          <button
+            onClick={handleReconnectGoogle}
+            disabled={reconnecting}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+          >
+            {reconnecting ? (
+              <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Esperando autorización…</>
+            ) : '🔄 Reconectar con Google'}
+          </button>
         </div>
       )}
       {subtab === 'analytics' && error && (

@@ -3,11 +3,20 @@ const jwt                  = require('jsonwebtoken')
 const prisma               = require('../lib/prisma')
 const { encrypt, decrypt } = require('../lib/encryption')
 
+// GA4 y Search Console comparten el mismo scope set — una sola auth sirve para ambos
+const GOOGLE_COMBINED_SCOPES = [
+  'https://www.googleapis.com/auth/analytics.readonly',
+  'https://www.googleapis.com/auth/webmasters.readonly',
+]
+
 const SCOPES = {
-  google_analytics:      ['https://www.googleapis.com/auth/analytics.readonly'],
+  google_analytics:      GOOGLE_COMBINED_SCOPES,
   google_ads:            ['https://www.googleapis.com/auth/adwords'],
-  google_search_console: ['https://www.googleapis.com/auth/webmasters.readonly'],
+  google_search_console: GOOGLE_COMBINED_SCOPES,
 }
+
+// Tipos que comparten tokens entre sí
+const GOOGLE_LINKED_TYPES = ['google_analytics', 'google_search_console']
 
 function buildRedirectUri() {
   const base = process.env.BACKEND_URL || 'http://localhost:3001'
@@ -169,22 +178,53 @@ async function handleCallback(req, res, next) {
     const client         = buildOAuthClient()
     const { tokens }     = await client.getToken(code)
 
-    const data = {
+    const encAccessToken  = tokens.access_token  ? encrypt(tokens.access_token)  : null
+    const encRefreshToken = tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined
+    const expiresAt       = tokens.expiry_date   ? new Date(tokens.expiry_date)  : null
+
+    const baseData = {
       workspaceId,
-      status:       'active',
-      scopes:       tokens.scope || SCOPES[type].join(' '),
-      accessToken:  tokens.access_token ? encrypt(tokens.access_token) : null,
-      refreshToken: tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined,
-      expiresAt:    tokens.expiry_date   ? new Date(tokens.expiry_date)  : null,
+      status:        'active',
+      scopes:        GOOGLE_COMBINED_SCOPES.join(' '),
+      accessToken:   encAccessToken,
+      refreshToken:  encRefreshToken,
+      expiresAt,
       connectedById: userId,
-      connectedAt:  new Date(),
+      connectedAt:   new Date(),
     }
 
-    await prisma.projectIntegration.upsert({
-      where:  { projectId_type: { projectId, type } },
-      update: data,
-      create: { projectId, type, ...data },
-    })
+    // Si es GA4 o GSC, guardar ambos registros con los mismos tokens
+    // (una sola auth OAuth sirve para los dos servicios)
+    const typesToSave = GOOGLE_LINKED_TYPES.includes(type)
+      ? GOOGLE_LINKED_TYPES
+      : [type]
+
+    for (const t of typesToSave) {
+      await prisma.projectIntegration.upsert({
+        where:  { projectId_type: { projectId, type: t } },
+        update: baseData,
+        create: { projectId, type: t, ...baseData },
+      })
+    }
+
+    // Propagar el nuevo refresh_token a todos los proyectos del workspace con los mismos tipos.
+    // Esto evita que otros proyectos sigan teniendo tokens viejos después de que uno reconectó.
+    if (encRefreshToken && GOOGLE_LINKED_TYPES.includes(type)) {
+      await prisma.projectIntegration.updateMany({
+        where: {
+          workspaceId,
+          type:        { in: GOOGLE_LINKED_TYPES },
+          NOT:         { projectId },          // no pisar el que acabamos de guardar
+          refreshToken: { not: null },
+        },
+        data: {
+          accessToken:  encAccessToken,
+          refreshToken: encRefreshToken,
+          expiresAt,
+          status:       'active',              // reactiva los que estaban expired
+        },
+      })
+    }
 
     // Redirigir a la página puente del frontend (en el subdominio del workspace)
     const isLocalDev = process.env.NODE_ENV !== 'production'
