@@ -10,6 +10,8 @@
  */
 
 import { useState } from 'react'
+import RichTextEditor from '../RichTextEditor'
+import '../situation-editor.css'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -342,8 +344,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
     if (!onSaveAnalysis) return
     setSavingNextSteps(true)
     try {
-      const nextSteps = nextStepsDraft.split('\n').map(l => l.trim()).filter(Boolean)
-      await onSaveAnalysis({ ...analysis, nextSteps })
+      await onSaveAnalysis({ ...analysis, nextSteps: nextStepsDraft })
       setEditingNextSteps(false)
     } finally {
       setSavingNextSteps(false)
@@ -422,11 +423,10 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
         >
           {editingResumen ? (
             <div className="space-y-3">
-              <textarea
-                value={resumenDraft}
-                onChange={e => setResumenDraft(e.target.value)}
-                rows={8}
-                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
+              <RichTextEditor
+                defaultContent={resumenDraft}
+                onChange={setResumenDraft}
+                minHeight={160}
               />
               <div className="flex justify-end gap-2">
                 <button
@@ -446,9 +446,20 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
             </div>
           ) : (
             <>
-              <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">
-                {analysis?.resumen || <span className="text-gray-400 dark:text-gray-500 italic">Sin resumen todavía.</span>}
-              </p>
+              {analysis?.resumen ? (
+                analysis.resumen.startsWith('<') ? (
+                  <div
+                    className="situation-content text-sm text-gray-700 dark:text-gray-300"
+                    dangerouslySetInnerHTML={{ __html: analysis.resumen }}
+                  />
+                ) : (
+                  <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">
+                    {analysis.resumen}
+                  </p>
+                )
+              ) : (
+                <span className="text-gray-400 dark:text-gray-500 italic text-sm">Sin resumen todavía.</span>
+              )}
 
               {analysis?.highlights?.length > 0 && (
                 <div className="mt-4 space-y-1.5">
@@ -753,62 +764,78 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
       )}
 
       {/* ── Próximos pasos (editable) ── */}
-      {(analysis?.nextSteps?.length > 0 || canEdit) && (
-        <SectionCard
-          title="Próximos pasos"
-          icon="🚀"
-          action={canEdit && !editingNextSteps && (
-            <button
-              onClick={() => {
-                setNextStepsDraft((analysis?.nextSteps || []).join('\n'))
-                setEditingNextSteps(true)
-              }}
-              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
-            >
-              ✏️ Editar
-            </button>
-          )}
-        >
-          {editingNextSteps ? (
-            <div className="space-y-3">
-              <p className="text-xs text-gray-400 dark:text-gray-500">Un paso por línea</p>
-              <textarea
-                value={nextStepsDraft}
-                onChange={e => setNextStepsDraft(e.target.value)}
-                rows={8}
-                placeholder="Escribí un próximo paso por línea…"
-                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setEditingNextSteps(false)}
-                  className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSaveNextSteps}
-                  disabled={savingNextSteps}
-                  className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-                >
-                  {savingNextSteps ? 'Guardando…' : 'Guardar'}
-                </button>
+      {(() => {
+        const ns = analysis?.nextSteps
+        const hasNextSteps = Array.isArray(ns) ? ns.length > 0 : !!ns
+        if (!hasNextSteps && !canEdit) return null
+
+        function openNextStepsEditor() {
+          let initial = ''
+          if (Array.isArray(ns) && ns.length > 0) {
+            initial = '<ul>' + ns.map(s => `<li>${s}</li>`).join('') + '</ul>'
+          } else if (typeof ns === 'string') {
+            initial = ns
+          }
+          setNextStepsDraft(initial)
+          setEditingNextSteps(true)
+        }
+
+        return (
+          <SectionCard
+            title="Próximos pasos"
+            icon="🚀"
+            action={canEdit && !editingNextSteps && (
+              <button
+                onClick={openNextStepsEditor}
+                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
+              >
+                ✏️ Editar
+              </button>
+            )}
+          >
+            {editingNextSteps ? (
+              <div className="space-y-3">
+                <RichTextEditor
+                  defaultContent={nextStepsDraft}
+                  onChange={setNextStepsDraft}
+                  minHeight={160}
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setEditingNextSteps(false)}
+                    className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSaveNextSteps}
+                    disabled={savingNextSteps}
+                    className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    {savingNextSteps ? 'Guardando…' : 'Guardar'}
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : analysis?.nextSteps?.length > 0 ? (
-            <ul className="space-y-2">
-              {analysis.nextSteps.map((step, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <span className="text-primary-500 font-bold shrink-0">{i + 1}.</span>
-                  <span className="text-gray-700 dark:text-gray-300">{step}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-gray-400 dark:text-gray-500 italic text-sm">Sin próximos pasos todavía.</p>
-          )}
-        </SectionCard>
-      )}
+            ) : Array.isArray(ns) && ns.length > 0 ? (
+              <ul className="space-y-2">
+                {ns.map((step, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <span className="text-primary-500 font-bold shrink-0">{i + 1}.</span>
+                    <span className="text-gray-700 dark:text-gray-300">{step}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : typeof ns === 'string' && ns ? (
+              <div
+                className="situation-content text-sm text-gray-700 dark:text-gray-300"
+                dangerouslySetInnerHTML={{ __html: ns }}
+              />
+            ) : (
+              <p className="text-gray-400 dark:text-gray-500 italic text-sm">Sin próximos pasos todavía.</p>
+            )}
+          </SectionCard>
+        )
+      })()}
 
       {/* ── Trabajo realizado en el mes ── */}
       {s.tasks && s.tasks.length > 0 && (

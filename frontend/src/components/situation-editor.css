@@ -38,6 +38,11 @@
 .situation-editor .tiptap p:first-child {
   margin-top: 0;
 }
+.situation-editor .tiptap hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 0.75em 0;
+}
 
 /* Vista de solo lectura */
 .situation-content h2 {
@@ -75,4 +80,9 @@
 }
 .situation-content p:first-child {
   margin-top: 0;
+}
+.situation-content hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 0.75em 0;
 }
