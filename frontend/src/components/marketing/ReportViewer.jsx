@@ -383,7 +383,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
   // Flags de disponibilidad por grupo
   const hasRRSS    = !!(s.instagram || s.tiktok)
   const hasAds     = !!(s.metaAds || s.googleAds)
-  const hasSeoGeo  = !!(s.keywords || s.geo || aiTrafficEntries)
+  const hasSeoGeo  = !!(s.keywords || s.seo || s.geo || aiTrafficEntries)
   const hasSitio   = !!(s.analytics || evolutionPoints || s.performance)
 
   return (
@@ -612,6 +612,73 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
             </SectionCard>
           )}
 
+          {/* SEO — Search Console */}
+          {s.seo && (
+            <SectionCard title="SEO — Google Search Console" icon="🔍">
+              <KpiGrid items={[
+                { label: 'Clicks orgánicos', value: fmt(s.seo.clicks),      delta: s.seo.delta?.clicks },
+                { label: 'Impresiones',      value: fmt(s.seo.impressions), delta: s.seo.delta?.impressions },
+                { label: 'CTR promedio',     value: s.seo.ctr != null ? `${(s.seo.ctr * 100).toFixed(2)}%` : '—' },
+                { label: 'Posición media',   value: s.seo.avgPosition != null ? String(s.seo.avgPosition) : '—',
+                  delta: s.seo.delta?.avgPosition != null
+                    ? (s.seo.delta.avgPosition > 0 ? s.seo.delta.avgPosition : s.seo.delta.avgPosition)
+                    : undefined,
+                  invertDelta: true,
+                },
+              ]} />
+
+              {s.seo.topQueries?.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Top consultas</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 dark:border-gray-700">
+                          <th className="text-left pb-2 text-gray-500 dark:text-gray-400 font-medium">Consulta</th>
+                          <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Clics</th>
+                          <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Impres.</th>
+                          <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">CTR</th>
+                          <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Posición</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {s.seo.topQueries.map((q, i) => (
+                          <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                            <td className="py-1.5 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{q.query}</td>
+                            <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-white">{fmt(q.clicks)}</td>
+                            <td className="py-1.5 text-right text-gray-500 dark:text-gray-500">{fmt(q.impressions)}</td>
+                            <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{q.ctr != null ? `${(q.ctr * 100).toFixed(1)}%` : '—'}</td>
+                            <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{q.position != null ? Number(q.position).toFixed(1) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {s.seo.topPages?.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Top páginas</p>
+                  <div className="space-y-1.5">
+                    {s.seo.topPages.map((p, i) => {
+                      let label = p.page || ''
+                      try { label = new URL(p.page).pathname } catch { /* keep original */ }
+                      return (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <span className="text-gray-400 dark:text-gray-500 w-4 text-right shrink-0">{i + 1}.</span>
+                          <span className="flex-1 text-gray-700 dark:text-gray-300 truncate">{label}</span>
+                          <span className="text-gray-500 dark:text-gray-400 shrink-0">{fmt(p.clicks)} clics</span>
+                          <span className="text-gray-400 dark:text-gray-500 shrink-0">pos. {p.position != null ? Number(p.position).toFixed(1) : '—'}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </SectionCard>
+          )}
+
           {/* GEO */}
           {s.geo && (
             <SectionCard title="Presencia en IAs (GEO)" icon="🌐">
@@ -720,41 +787,114 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
           {/* Performance */}
           {s.performance && (
             <SectionCard title="Performance web" icon="⚡">
-              <div className="grid grid-cols-2 gap-4">
+              {/* Scores móvil / desktop */}
+              <div className="grid grid-cols-2 gap-4 mb-5">
                 {s.performance.mobile && (
-                  <div className="text-center">
-                    <p className={`text-3xl font-bold ${
+                  <div className="text-center bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                    <p className={`text-4xl font-bold ${
                       s.performance.mobile.score >= 90 ? 'text-green-600' :
                       s.performance.mobile.score >= 50 ? 'text-yellow-600' : 'text-red-600'
                     }`}>{s.performance.mobile.score}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">📱 Móvil</p>
+                    <p className="text-xs font-medium mt-0.5 text-gray-400 dark:text-gray-500">
+                      {s.performance.mobile.score >= 90 ? 'Excelente' : s.performance.mobile.score >= 50 ? 'Necesita mejoras' : 'Deficiente'}
+                    </p>
                   </div>
                 )}
                 {s.performance.desktop && (
-                  <div className="text-center">
-                    <p className={`text-3xl font-bold ${
+                  <div className="text-center bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                    <p className={`text-4xl font-bold ${
                       s.performance.desktop.score >= 90 ? 'text-green-600' :
                       s.performance.desktop.score >= 50 ? 'text-yellow-600' : 'text-red-600'
                     }`}>{s.performance.desktop.score}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">🖥️ Desktop</p>
+                    <p className="text-xs font-medium mt-0.5 text-gray-400 dark:text-gray-500">
+                      {s.performance.desktop.score >= 90 ? 'Excelente' : s.performance.desktop.score >= 50 ? 'Necesita mejoras' : 'Deficiente'}
+                    </p>
                   </div>
                 )}
               </div>
 
-              {(s.performance.mobile?.metrics || s.performance.desktop?.metrics) && (() => {
-                const m = s.performance.mobile?.metrics || {}
+              {/* Core Web Vitals — usa métricas móvil como referencia */}
+              {(() => {
+                const mm = s.performance.mobile?.metrics  || {}
+                const dm = s.performance.desktop?.metrics || {}
+                const cwv = [
+                  {
+                    label: 'LCP',
+                    desc: 'Largest Contentful Paint',
+                    mobile:  mm.lcp != null ? `${(Number(mm.lcp)/1000).toFixed(1)}s` : null,
+                    desktop: dm.lcp != null ? `${(Number(dm.lcp)/1000).toFixed(1)}s` : null,
+                    good: v => parseFloat(v) <= 2.5,
+                    warn: v => parseFloat(v) <= 4.0,
+                  },
+                  {
+                    label: 'CLS',
+                    desc: 'Cumulative Layout Shift',
+                    mobile:  mm.cls != null ? Number(mm.cls).toFixed(3) : null,
+                    desktop: dm.cls != null ? Number(dm.cls).toFixed(3) : null,
+                    good: v => parseFloat(v) <= 0.1,
+                    warn: v => parseFloat(v) <= 0.25,
+                  },
+                  {
+                    label: 'FCP',
+                    desc: 'First Contentful Paint',
+                    mobile:  mm.fcp != null ? `${(Number(mm.fcp)/1000).toFixed(1)}s` : null,
+                    desktop: dm.fcp != null ? `${(Number(dm.fcp)/1000).toFixed(1)}s` : null,
+                    good: v => parseFloat(v) <= 1.8,
+                    warn: v => parseFloat(v) <= 3.0,
+                  },
+                  {
+                    label: 'TBT',
+                    desc: 'Total Blocking Time',
+                    mobile:  mm.tbt != null ? `${Math.round(Number(mm.tbt))}ms` : null,
+                    desktop: dm.tbt != null ? `${Math.round(Number(dm.tbt))}ms` : null,
+                    good: v => parseInt(v) <= 200,
+                    warn: v => parseInt(v) <= 600,
+                  },
+                  {
+                    label: 'Speed Index',
+                    desc: 'Speed Index',
+                    mobile:  mm.speedIndex != null ? `${(Number(mm.speedIndex)/1000).toFixed(1)}s` : null,
+                    desktop: dm.speedIndex != null ? `${(Number(dm.speedIndex)/1000).toFixed(1)}s` : null,
+                    good: v => parseFloat(v) <= 3.4,
+                    warn: v => parseFloat(v) <= 5.8,
+                  },
+                  {
+                    label: 'TTI',
+                    desc: 'Time to Interactive',
+                    mobile:  mm.tti != null ? `${(Number(mm.tti)/1000).toFixed(1)}s` : null,
+                    desktop: dm.tti != null ? `${(Number(dm.tti)/1000).toFixed(1)}s` : null,
+                    good: v => parseFloat(v) <= 3.8,
+                    warn: v => parseFloat(v) <= 7.3,
+                  },
+                ].filter(v => v.mobile || v.desktop)
+
+                if (cwv.length === 0) return null
                 return (
-                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs text-center">
-                    {[
-                      { label: 'LCP', value: m.lcp != null ? `${(Number(m.lcp)/1000).toFixed(1)}s` : null },
-                      { label: 'CLS', value: m.cls != null ? Number(m.cls).toFixed(3) : null },
-                      { label: 'FCP', value: m.fcp != null ? `${(Number(m.fcp)/1000).toFixed(1)}s` : null },
-                    ].filter(v => v.value).map((v, i) => (
-                      <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
-                        <p className="font-semibold text-gray-900 dark:text-white">{v.value}</p>
-                        <p className="text-gray-500 dark:text-gray-400">{v.label}</p>
-                      </div>
-                    ))}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Core Web Vitals</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {cwv.map((v, i) => {
+                        const val = v.mobile || v.desktop
+                        const colorClass = !val ? 'text-gray-400'
+                          : v.good(val) ? 'text-green-600 dark:text-green-400'
+                          : v.warn(val) ? 'text-yellow-600 dark:text-yellow-400'
+                          : 'text-red-600 dark:text-red-400'
+                        return (
+                          <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2.5 text-center">
+                            <p className={`text-base font-bold ${colorClass}`}>{val ?? '—'}</p>
+                            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{v.label}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{v.desc}</p>
+                            {v.mobile && v.desktop && v.mobile !== v.desktop && (
+                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                📱 {v.mobile} · 🖥️ {v.desktop}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )
               })()}

@@ -77,6 +77,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     allKeywords,
     completedTasks,
     integrations,
+    seoSnap,
+    seoPrev,
   ] = await Promise.all([
     // Proyecto
     prisma.project.findUnique({
@@ -153,12 +155,11 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       select:  { performanceScore: true, metrics: true, createdAt: true },
     }),
 
-    // Keywords con rankings del período de datos y el anterior
+    // Keywords — todos los rankings (sin filtrar por mes), el más reciente se usa como "actual"
     prisma.trackedKeyword.findMany({
       where:   { projectId, workspaceId },
       include: {
         rankings: {
-          where:   { month: { in: [dataMonth, prev] } },
           orderBy: { month: 'desc' },
         },
       },
@@ -183,6 +184,17 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.projectIntegration.findMany({
       where:  { projectId, status: 'active' },
       select: { type: true, status: true },
+    }),
+
+    // Search Console snapshot (SEO)
+    prisma.searchConsoleSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: dataMonth },
+      select:  { clicks: true, impressions: true, ctr: true, avgPosition: true,
+                 topQueries: true, topPages: true, devices: true },
+    }),
+    prisma.searchConsoleSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: prev },
+      select:  { clicks: true, impressions: true, ctr: true, avgPosition: true },
     }),
   ])
 
@@ -277,43 +289,61 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     date: (pageSpeedMobile || pageSpeedDesktop).createdAt,
   } : null
 
-  // ── Keywords movers ──────────────────────────────────────────────────────────
-  const kwMovers = allKeywords
-    .map(kw => {
-      const curr = kw.rankings.find(r => r.month === dataMonth)
-      const prv  = kw.rankings.find(r => r.month === prev)
-      if (!curr || !prv || prv.position <= 0 || curr.position <= 0) return null
-      return { query: kw.query, delta: parseFloat((prv.position - curr.position).toFixed(1)), currPos: curr.position }
-    })
-    .filter(Boolean)
+  // ── Search Console (SEO) ────────────────────────────────────────────────────
+  const seo = seoSnap ? {
+    clicks:      seoSnap.clicks      ?? 0,
+    impressions: seoSnap.impressions ?? 0,
+    ctr:         seoSnap.ctr         ?? 0,
+    avgPosition: seoSnap.avgPosition  != null ? parseFloat(Number(seoSnap.avgPosition).toFixed(1)) : null,
+    topQueries: (() => {
+      try { return (JSON.parse(seoSnap.topQueries || '[]')).slice(0, 10) } catch { return [] }
+    })(),
+    topPages: (() => {
+      try { return (JSON.parse(seoSnap.topPages || '[]')).slice(0, 5) } catch { return [] }
+    })(),
+    delta: seoPrev ? {
+      clicks:      pct(seoSnap.clicks      ?? 0, seoPrev.clicks),
+      impressions: pct(seoSnap.impressions ?? 0, seoPrev.impressions),
+      ctr:         pct(seoSnap.ctr         ?? 0, seoPrev.ctr),
+      avgPosition: seoPrev.avgPosition > 0
+        ? parseFloat(((seoPrev.avgPosition - (seoSnap.avgPosition ?? 0))).toFixed(1))
+        : null,
+    } : null,
+  } : null
 
-  const kwImproved = kwMovers.filter(m => m.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5)
-  const kwDeclined = kwMovers.filter(m => m.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5)
-
-  // Tabla completa de keywords del período de datos
+  // ── Keywords — usa el ranking más reciente disponible como "actual"
+  // Preferencia: dataMonth → cualquier mes más reciente (fallback)
+  // Delta: solo si hay un ranking del mes anterior (prev) para comparar
   const kwTable = allKeywords
     .map(kw => {
-      const curr = kw.rankings.find(r => r.month === dataMonth)
-      const prv  = kw.rankings.find(r => r.month === prev)
+      if (kw.rankings.length === 0) return null
+      // Preferir el ranking de dataMonth; si no, el más reciente (ya vienen desc)
+      const curr = kw.rankings.find(r => r.month === dataMonth) || kw.rankings[0]
       if (!curr || curr.position <= 0) return null
+      // Comparación: solo si hay ranking del mes anterior exacto
+      const prv = kw.rankings.find(r => r.month === prev)
       return {
-        query:    kw.query,
-        position: curr.position,
-        delta:    prv && prv.position > 0 ? parseFloat((prv.position - curr.position).toFixed(1)) : null,
-        clicks:   curr.clicks,
+        query:       kw.query,
+        position:    curr.position,
+        delta:       prv && prv.position > 0 ? parseFloat((prv.position - curr.position).toFixed(1)) : null,
+        clicks:      curr.clicks,
         impressions: curr.impressions,
-        ctr:      curr.ctr,
+        ctr:         curr.ctr,
       }
     })
     .filter(Boolean)
     .sort((a, b) => a.position - b.position)
 
+  const kwMovers  = kwTable.filter(k => k.delta != null)
+  const kwImproved = kwMovers.filter(m => m.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5)
+  const kwDeclined = kwMovers.filter(m => m.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5)
+
   const keywords = kwTable.length > 0 ? {
-    table:    kwTable,
-    improved: kwImproved,
-    declined: kwDeclined,
+    table:       kwTable,
+    improved:    kwImproved,
+    declined:    kwDeclined,
     avgPosition: parseFloat((kwTable.reduce((s, k) => s + k.position, 0) / kwTable.length).toFixed(1)),
-    count:    kwTable.length,
+    count:       kwTable.length,
   } : null
 
   // ── Tasks completadas ────────────────────────────────────────────────────────
@@ -326,7 +356,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // Si ya existe un análisis cacheado, no se regenera
   const analysis = cachedAnalysis
     ? cachedAnalysis
-    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, keywords, performance, workspaceId })
+    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, keywords, seo, performance, workspaceId })
 
   return {
     project: {
@@ -338,7 +368,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     month,        // mes del informe (ej: "2026-05") — para identificación/navegación
     dataMonth,    // período de los datos (ej: "2026-04") — para mostrar al usuario
     connectedTypes: [...connectedTypes],
-    sections: { geo, analytics, evolution, instagram, tiktok, keywords, performance, tasks },
+    sections: { geo, analytics, evolution, instagram, tiktok, seo, keywords, performance, tasks },
     analysis,
     _analysisIsNew: !cachedAnalysis && !!analysis?.resumen,
   }
@@ -346,7 +376,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, performance, workspaceId }) {
+async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, seo, performance, workspaceId }) {
   const dataCtx = JSON.stringify({
     proyecto: project?.name,
     mes:      month,
@@ -371,6 +401,13 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
       posPromedio: keywords.avgPosition,
       totalKeywords: keywords.count,
       mejoraronTop3: keywords.improved.slice(0, 3).map(k => k.query),
+    } : null,
+    seo: seo ? {
+      clicks:      seo.clicks,
+      impresiones: seo.impressions,
+      ctr:         seo.ctr != null ? `${(seo.ctr * 100).toFixed(2)}%` : null,
+      posPromedio: seo.avgPosition,
+      deltaClicks: seo.delta?.clicks,
     } : null,
     performance: performance ? {
       mobile:  performance.mobile?.score,
