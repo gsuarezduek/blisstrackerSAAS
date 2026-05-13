@@ -67,6 +67,14 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), hand
 app.use(express.json({ limit: '100kb' }))
 app.set('trust proxy', 1)
 
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  message: { error: 'Demasiadas solicitudes. Intentá de nuevo en 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/api/health',
+})
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 15,
@@ -81,9 +89,19 @@ const forgotPasswordLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 })
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: { error: 'Límite de solicitudes AI alcanzado. Intentá de nuevo en 1 hora.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+app.use('/api', globalLimiter)
 app.use('/api/auth/login', loginLimiter)
 app.use('/api/auth/google', loginLimiter)
 app.use('/api/auth/forgot-password', forgotPasswordLimiter)
+app.use('/api/insights/refresh', aiLimiter)
+app.use('/api/marketing/geo/audit', aiLimiter)
 
 app.use('/api/auth',              authRoutes)
 app.use('/api/workspaces',        workspaceRoutes)

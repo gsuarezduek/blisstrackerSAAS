@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import DOMPurify from 'dompurify'
 import api from '../api/client'
 import RichTextEditor from './RichTextEditor'
 import './situation-editor.css'
@@ -66,7 +67,7 @@ export default function ProjectSituation({ encodedProjectId, initialContent }) {
       {!editing && !isEmpty && (
         <div
           className="situation-content text-sm text-gray-700 dark:text-gray-300"
-          dangerouslySetInnerHTML={{ __html: content }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }}
         />
       )}
 

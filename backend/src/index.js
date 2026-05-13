@@ -1,3 +1,18 @@
+const REQUIRED_ENV = [
+  'DATABASE_URL',
+  'JWT_SECRET',
+  'RESEND_API_KEY',
+  'EMAIL_FROM',
+  'APP_DOMAIN',
+  'ANTHROPIC_API_KEY',
+  'ENCRYPTION_KEY',
+]
+const missing = REQUIRED_ENV.filter(k => !process.env[k])
+if (missing.length) {
+  console.error(`[startup] Variables de entorno faltantes: ${missing.join(', ')}`)
+  process.exit(1)
+}
+
 const app = require('./app')
 const prisma = require('./lib/prisma')
 const { FEATURE_FLAGS } = require('./config/featureFlags')

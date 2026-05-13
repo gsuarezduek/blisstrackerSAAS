@@ -63,6 +63,8 @@ async function saveMonthSnapshot(projectId, workspaceId, month) {
     avgDuration: data.overview?.averageSessionDuration          ?? 0,
     conversions: data.conversions?.total                        ?? 0,
     topChannels: JSON.stringify((data.channels ?? []).slice(0, 5)),
+    topPages:    JSON.stringify((data.topPages ?? []).slice(0, 10)),
+    topSources:  JSON.stringify((data.trafficSources ?? []).slice(0, 10)),
     aiTraffic:   JSON.stringify(aiTrafficRaw),
   }
 

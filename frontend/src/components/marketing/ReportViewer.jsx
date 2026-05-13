@@ -10,6 +10,7 @@
  */
 
 import { useState } from 'react'
+import DOMPurify from 'dompurify'
 import RichTextEditor from '../RichTextEditor'
 import '../situation-editor.css'
 
@@ -450,7 +451,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                 analysis.resumen.startsWith('<') ? (
                   <div
                     className="situation-content text-sm text-gray-700 dark:text-gray-300"
-                    dangerouslySetInnerHTML={{ __html: analysis.resumen }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis.resumen) }}
                   />
                 ) : (
                   <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">
@@ -760,17 +761,84 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
           {/* Analytics GA4 */}
           {s.analytics && (
             <SectionCard title="Analytics web" icon="📊">
+              {/* KPIs principales */}
               <KpiGrid items={[
                 { label: 'Sesiones',        value: fmt(s.analytics.sessions),    delta: s.analytics.delta?.sessions },
                 { label: 'Usuarios nuevos', value: fmt(s.analytics.newUsers),    delta: s.analytics.delta?.newUsers },
-                { label: 'Tasa de rebote',  value: `${s.analytics.bounceRate?.toFixed(1) ?? '—'}%`, invertDelta: true },
+                { label: 'Páginas vistas',  value: fmt(s.analytics.pageviews),   delta: s.analytics.delta?.pageviews },
+                { label: 'Conversiones',    value: fmt(s.analytics.conversions), delta: s.analytics.delta?.conversions },
+                { label: 'Tasa de rebote',  value: `${s.analytics.bounceRate != null ? (s.analytics.bounceRate * 100).toFixed(1) : '—'}%`, invertDelta: true },
                 { label: 'Duración media',  value: fmtDuration(s.analytics.avgDuration) },
               ]} />
 
+              {/* Canales de tráfico */}
               {channels.length > 0 && (
                 <div className="mt-5">
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Canales de tráfico</p>
                   <BarChart items={channels} color="#f97316" />
+                </div>
+              )}
+
+              {/* Fuentes de tráfico */}
+              {s.analytics.topSources?.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Fuentes de tráfico</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 dark:border-gray-700">
+                          <th className="text-left pb-2 text-gray-500 dark:text-gray-400 font-medium">Fuente</th>
+                          <th className="text-left pb-2 text-gray-500 dark:text-gray-400 font-medium">Medium</th>
+                          <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Sesiones</th>
+                          <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {s.analytics.topSources.map((src, i) => (
+                          <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                            <td className="py-1.5 font-medium text-gray-700 dark:text-gray-300">{src.source || '(direct)'}</td>
+                            <td className="py-1.5 text-gray-500 dark:text-gray-400">{src.medium || '—'}</td>
+                            <td className="py-1.5 text-right text-gray-700 dark:text-gray-300">{fmt(src.sessions)}</td>
+                            <td className="py-1.5 text-right text-gray-400">{src.pct != null ? `${src.pct}%` : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Top páginas */}
+              {s.analytics.topPages?.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Top páginas</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 dark:border-gray-700">
+                          <th className="text-left pb-2 text-gray-500 dark:text-gray-400 font-medium w-6">#</th>
+                          <th className="text-left pb-2 text-gray-500 dark:text-gray-400 font-medium">Página</th>
+                          <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Vistas</th>
+                          <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Sesiones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {s.analytics.topPages.map((page, i) => (
+                          <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                            <td className="py-1.5 text-gray-400">{i + 1}</td>
+                            <td className="py-1.5 pr-3">
+                              <p className="font-mono text-gray-700 dark:text-gray-300 truncate max-w-[220px]">{page.path}</p>
+                              {page.title && page.title !== page.path && (
+                                <p className="text-gray-400 dark:text-gray-500 truncate max-w-[220px]">{page.title}</p>
+                              )}
+                            </td>
+                            <td className="py-1.5 text-right font-medium text-gray-700 dark:text-gray-300">{fmt(page.pageviews)}</td>
+                            <td className="py-1.5 text-right text-gray-500 dark:text-gray-400">{fmt(page.sessions)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </SectionCard>
@@ -968,7 +1036,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
             ) : typeof ns === 'string' && ns ? (
               <div
                 className="situation-content text-sm text-gray-700 dark:text-gray-300"
-                dangerouslySetInnerHTML={{ __html: ns }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(ns) }}
               />
             ) : (
               <p className="text-gray-400 dark:text-gray-500 italic text-sm">Sin próximos pasos todavía.</p>

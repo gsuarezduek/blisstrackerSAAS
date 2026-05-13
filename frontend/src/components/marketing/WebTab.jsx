@@ -1094,6 +1094,117 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
             </div>
           </div>
 
+          {/* Análisis IA — primero para períodos mensuales */}
+          {isMonthly && (
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                    Análisis IA · {dateLabel}
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Guardá un snapshot del período y generá un análisis mensual con IA.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={handleSaveSnapshot}
+                    disabled={savingSnap}
+                    className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 rounded-lg transition-colors"
+                  >
+                    {savingSnap ? 'Guardando…' : snapSaved ? '✓ Guardado' : '💾 Guardar snapshot'}
+                  </button>
+                  <button
+                    onClick={handleGenerateInsight}
+                    disabled={insightLoading}
+                    className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white font-medium rounded-lg transition-colors"
+                  >
+                    {insightLoading ? 'Analizando…' : insight ? '🔄 Regenerar' : '✨ Analizar con IA'}
+                  </button>
+                </div>
+              </div>
+
+              {insightLoading && (
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                  Generando análisis con IA…
+                </div>
+              )}
+
+              {insight && !insightLoading && (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-1">
+                      {insight.content?.titulo}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                      {insight.content?.resumen}
+                    </p>
+                  </div>
+
+                  {insight.content?.tendencias?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                        Tendencias
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {insight.content.tendencias.map((t, i) => (
+                          <span
+                            key={i}
+                            className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium
+                              ${t.positivo
+                                ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                              }`}
+                          >
+                            {t.delta != null ? (t.delta > 0 ? '▲' : '▼') : '–'}
+                            {t.metrica}
+                            {t.delta != null && ` ${Math.abs(t.delta)}%`}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {insight.content?.recomendaciones?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                        Recomendaciones
+                      </p>
+                      <ul className="space-y-1.5">
+                        {insight.content.recomendaciones.map((rec, i) => (
+                          <li key={i} className="flex items-start justify-between gap-2">
+                            <span className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                              <span className="text-primary-500 mt-0.5 flex-shrink-0">→</span>
+                              {rec}
+                            </span>
+                            <button
+                              onClick={() => setTaskModal({ title: rec })}
+                              title="Crear tarea a partir de esta recomendación"
+                              className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
+                            >
+                              + tarea
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-gray-400">
+                    Generado: {new Date(insight.generatedAt).toLocaleString('es-AR')}
+                  </p>
+                </div>
+              )}
+
+              {!insight && !insightLoading && (
+                <p className="text-xs text-gray-400">
+                  Guardá un snapshot del período actual y hacé click en "Analizar con IA" para obtener un resumen inteligente con comparaciones y recomendaciones.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Conversiones */}
           <ConversionsBlock conversions={analytics.conversions} sessions={ov.sessions} />
 
@@ -1245,120 +1356,6 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
-
-          {/* Snapshot + Insight IA — solo para períodos mensuales */}
-          {isMonthly && (
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    Análisis IA · {dateLabel}
-                  </h3>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Guardá un snapshot del período y generá un análisis mensual con IA.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={handleSaveSnapshot}
-                    disabled={savingSnap}
-                    className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 rounded-lg transition-colors"
-                  >
-                    {savingSnap ? 'Guardando…' : snapSaved ? '✓ Guardado' : '💾 Guardar snapshot'}
-                  </button>
-                  <button
-                    onClick={handleGenerateInsight}
-                    disabled={insightLoading}
-                    className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white font-medium rounded-lg transition-colors"
-                  >
-                    {insightLoading ? 'Analizando…' : insight ? '🔄 Regenerar' : '✨ Analizar con IA'}
-                  </button>
-                </div>
-              </div>
-
-              {insightLoading && (
-                <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
-                  Generando análisis con IA…
-                </div>
-              )}
-
-              {insight && !insightLoading && (
-                <div className="space-y-4">
-                  {/* Título y resumen */}
-                  <div>
-                    <p className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-1">
-                      {insight.content?.titulo}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                      {insight.content?.resumen}
-                    </p>
-                  </div>
-
-                  {/* Tendencias */}
-                  {insight.content?.tendencias?.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                        Tendencias
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {insight.content.tendencias.map((t, i) => (
-                          <span
-                            key={i}
-                            className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium
-                              ${t.positivo
-                                ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                                : 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                              }`}
-                          >
-                            {t.delta != null ? (t.delta > 0 ? '▲' : '▼') : '–'}
-                            {t.metrica}
-                            {t.delta != null && ` ${Math.abs(t.delta)}%`}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Recomendaciones */}
-                  {insight.content?.recomendaciones?.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                        Recomendaciones
-                      </p>
-                      <ul className="space-y-1.5">
-                        {insight.content.recomendaciones.map((rec, i) => (
-                          <li key={i} className="flex items-start justify-between gap-2">
-                            <span className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                              <span className="text-primary-500 mt-0.5 flex-shrink-0">→</span>
-                              {rec}
-                            </span>
-                            <button
-                              onClick={() => setTaskModal({ title: rec })}
-                              title="Crear tarea a partir de esta recomendación"
-                              className="flex-shrink-0 text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-gray-200 dark:border-gray-600 hover:border-primary-400 rounded-lg px-2 py-0.5 transition-all"
-                            >
-                              + tarea
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <p className="text-[11px] text-gray-400">
-                    Generado: {new Date(insight.generatedAt).toLocaleString('es-AR')}
-                  </p>
-                </div>
-              )}
-
-              {!insight && !insightLoading && (
-                <p className="text-xs text-gray-400">
-                  Guardá un snapshot del período actual y hacé click en "Analizar con IA" para obtener un resumen inteligente con comparaciones y recomendaciones.
-                </p>
-              )}
             </div>
           )}
 
