@@ -178,4 +178,63 @@ function safeParseObj(str) {
   try { return JSON.parse(str || '{}') } catch { return {} }
 }
 
-module.exports = { listReports, getReport, updateReport, getPublicReport }
+/**
+ * POST /api/marketing/projects/:id/reports/:month/regenerate
+ * Limpia el análisis IA cacheado y vuelve a agregar todos los datos frescos.
+ * Útil cuando se reconectó una integración que estaba caída al momento de generar el informe.
+ */
+async function regenerateReport(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.params
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
+    }
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    // Limpiar análisis cacheado (o crear el registro si no existe)
+    let report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month } })
+    if (report) {
+      await prisma.monthlyReport.update({ where: { id: report.id }, data: { analysis: null } })
+    } else {
+      report = await prisma.monthlyReport.create({
+        data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}' },
+      })
+    }
+
+    // Re-agregar todos los datos sin caché de análisis (fuerza regeneración con Claude)
+    const data = await aggregateReportData(projectId, workspaceId, month, null)
+
+    // Guardar nuevo análisis en DB
+    if (data.analysis) {
+      await prisma.monthlyReport.update({
+        where: { id: report.id },
+        data:  { analysis: JSON.stringify(data.analysis) },
+      })
+    }
+
+    delete data._analysisIsNew
+
+    const updatedReport = await prisma.monthlyReport.findUnique({ where: { id: report.id } })
+
+    res.json({
+      report: {
+        id:         updatedReport.id,
+        month:      updatedReport.month,
+        token:      updatedReport.token,
+        objectives: safeParseObj(updatedReport.objectives),
+        notes:      updatedReport.notes,
+        createdAt:  updatedReport.createdAt,
+      },
+      data,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = { listReports, getReport, updateReport, getPublicReport, regenerateReport }

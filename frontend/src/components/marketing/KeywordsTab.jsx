@@ -995,20 +995,23 @@ export default function KeywordsTab({ projectId, projects }) {
                   {liveMode ? <span className="text-orange-500">Cambio</span> : 'Cambio'}
                 </th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Clicks</th>
-                <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Impres.</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Impres. ↓</th>
                 <th className="px-2 py-3" />
               </tr>
             </thead>
             <tbody>
-              {keywords.map(kw => (
-                <KeywordRow
-                  key={kw.id}
-                  kw={{ ...kw, projectId }}
-                  isExpanded={expanded === kw.id}
-                  onToggle={() => setExpanded(expanded === kw.id ? null : kw.id)}
-                  onRemove={handleRemove}
-                />
-              ))}
+              {[...keywords]
+                .sort((a, b) => (b.impressions ?? 0) - (a.impressions ?? 0))
+                .map(kw => (
+                  <KeywordRow
+                    key={kw.id}
+                    kw={{ ...kw, projectId }}
+                    isExpanded={expanded === kw.id}
+                    onToggle={() => setExpanded(expanded === kw.id ? null : kw.id)}
+                    onRemove={handleRemove}
+                  />
+                ))
+              }
             </tbody>
           </table>
         </div>

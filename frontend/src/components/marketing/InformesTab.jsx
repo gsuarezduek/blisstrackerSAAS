@@ -113,8 +113,9 @@ export default function InformesTab({ projectId }) {
   const [error,       setError]       = useState(null)
   const [showObjModal, setShowObjModal] = useState(false)
   const [savingObjs,  setSavingObjs]  = useState(false)
-  const [copied,      setCopied]      = useState(false)
-  const [retryKey,    setRetryKey]    = useState(0)
+  const [copied,        setCopied]        = useState(false)
+  const [retryKey,      setRetryKey]      = useState(0)
+  const [regenerating,  setRegenerating]  = useState(false)
 
   useEffect(() => {
     if (!projectId) return
@@ -144,6 +145,21 @@ export default function InformesTab({ projectId }) {
       alert(err.response?.data?.error || 'Error al guardar objetivos')
     } finally {
       setSavingObjs(false)
+    }
+  }
+
+  async function handleRegenerate() {
+    if (!window.confirm('¿Regenerar el informe? Se volverán a leer todos los datos y se creará un nuevo análisis con IA. El texto editado de Resumen y Próximos pasos se perderá.')) return
+    setRegenerating(true)
+    setError(null)
+    try {
+      const res = await api.post(`/marketing/projects/${projectId}/reports/${month}/regenerate`)
+      setReportMeta(res.data.report)
+      setReportData(res.data.data)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al regenerar el informe')
+    } finally {
+      setRegenerating(false)
     }
   }
 
@@ -199,6 +215,19 @@ export default function InformesTab({ projectId }) {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleRegenerate}
+            disabled={regenerating || loading}
+            title="Vuelve a leer todos los datos y regenera el análisis IA"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
+          >
+            {regenerating ? (
+              <>
+                <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                Regenerando…
+              </>
+            ) : '🔄 Regenerar'}
+          </button>
           <button
             onClick={() => setShowObjModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"

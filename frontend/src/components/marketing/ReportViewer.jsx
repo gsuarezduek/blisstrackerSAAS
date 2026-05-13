@@ -160,6 +160,16 @@ function SectionCard({ title, icon, children, className = '', action }) {
   )
 }
 
+function GroupHeader({ title }) {
+  return (
+    <div className="flex items-center gap-3 pt-1">
+      <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+      <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{title}</span>
+      <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+    </div>
+  )
+}
+
 function KpiGrid({ items }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -245,19 +255,77 @@ function ObjectivesTable({ objectives, sections }) {
   )
 }
 
+// Bloque editable reutilizable (resumen y próximos pasos)
+function EditableSection({ title, icon, value, placeholder, isEditing, draft, onDraft, onEdit, onSave, onCancel, saving, isPublic, canEdit, isArray = false }) {
+  const hasContent = isArray ? value?.length > 0 : !!value
+  if (!hasContent && (isPublic || !canEdit)) return null
+
+  return (
+    <SectionCard
+      title={title}
+      icon={icon}
+      action={canEdit && !isEditing && (
+        <button
+          onClick={onEdit}
+          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
+        >
+          ✏️ Editar
+        </button>
+      )}
+    >
+      {isEditing ? (
+        <div className="space-y-3">
+          <textarea
+            value={draft}
+            onChange={e => onDraft(e.target.value)}
+            rows={8}
+            placeholder={placeholder}
+            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={onCancel}
+              className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onSave}
+              disabled={saving}
+              className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        isArray ? null : (
+          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">
+            {value || <span className="text-gray-400 dark:text-gray-500 italic">{placeholder || 'Sin contenido todavía.'}</span>}
+          </p>
+        )
+      )}
+    </SectionCard>
+  )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function ReportViewer({ data, objectives = {}, isPublic = false, onSaveAnalysis }) {
-  const [editingResumen, setEditingResumen] = useState(false)
-  const [resumenDraft,   setResumenDraft]   = useState('')
-  const [savingResumen,  setSavingResumen]  = useState(false)
+  const [editingResumen,   setEditingResumen]   = useState(false)
+  const [resumenDraft,     setResumenDraft]     = useState('')
+  const [savingResumen,    setSavingResumen]    = useState(false)
+
+  const [editingNextSteps, setEditingNextSteps] = useState(false)
+  const [nextStepsDraft,   setNextStepsDraft]   = useState('')
+  const [savingNextSteps,  setSavingNextSteps]  = useState(false)
 
   if (!data) return null
 
   const { project, month, dataMonth, sections, analysis } = data
-  // dataMonth = período real de los datos (ej: "2026-04")
-  // month     = mes del informe (ej: "2026-05")
   const displayMonth = dataMonth || month
+  const s = sections
+  const canEdit = !isPublic && !!onSaveAnalysis
 
   async function handleSaveResumen() {
     if (!onSaveAnalysis) return
@@ -269,7 +337,18 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
       setSavingResumen(false)
     }
   }
-  const s = sections
+
+  async function handleSaveNextSteps() {
+    if (!onSaveAnalysis) return
+    setSavingNextSteps(true)
+    try {
+      const nextSteps = nextStepsDraft.split('\n').map(l => l.trim()).filter(Boolean)
+      await onSaveAnalysis({ ...analysis, nextSteps })
+      setEditingNextSteps(false)
+    } finally {
+      setSavingNextSteps(false)
+    }
+  }
 
   // Canales de tráfico para el chart
   const channels = (() => {
@@ -284,10 +363,27 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
   const evolutionPoints = (() => {
     if (!s.evolution || s.evolution.length < 2) return null
     return s.evolution.map(snap => ({
-      label: snap.month?.slice(5) || '', // "MM"
+      label: snap.month?.slice(5) || '',
       value: snap.sessions ?? 0,
     }))
   })()
+
+  // Tráfico desde IAs
+  const aiTrafficEntries = (() => {
+    const entries = Object.entries(s.analytics?.aiTraffic || {}).sort(([, a], [, b]) => b - a)
+    return entries.length > 0 ? entries : null
+  })()
+
+  const AI_LABELS = {
+    chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude',
+    grok: 'Grok', metaAi: 'Meta AI', perplexity: 'Perplexity', copilot: 'Copilot',
+  }
+
+  // Flags de disponibilidad por grupo
+  const hasRRSS    = !!(s.instagram || s.tiktok)
+  const hasAds     = !!(s.metaAds || s.googleAds)
+  const hasSeoGeo  = !!(s.keywords || s.geo || aiTrafficEntries)
+  const hasSitio   = !!(s.analytics || evolutionPoints || s.performance)
 
   return (
     <div className={`space-y-5 ${isPublic ? 'max-w-3xl mx-auto' : ''}`}>
@@ -310,12 +406,12 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
         </div>
       </div>
 
-      {/* ── Resumen ejecutivo ── */}
-      {(analysis?.resumen || (!isPublic && onSaveAnalysis)) && (
+      {/* ── 1. Resumen general ── */}
+      {(analysis?.resumen || canEdit) && (
         <SectionCard
           title="Resumen del mes"
           icon="📝"
-          action={!isPublic && onSaveAnalysis && !editingResumen && (
+          action={canEdit && !editingResumen && (
             <button
               onClick={() => { setResumenDraft(analysis?.resumen || ''); setEditingResumen(true) }}
               className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
@@ -387,243 +483,334 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
         <ObjectivesTable objectives={objectives} sections={s} />
       )}
 
-      {/* ── GEO / Presencia en IAs ── */}
-      {s.geo && (
-        <SectionCard title="Presencia en IAs (GEO)" icon="🌐">
-          {/* Score ring + desglose de componentes */}
-          <div className="flex flex-col sm:flex-row gap-6 items-start">
-            <div className="shrink-0 flex flex-col items-center gap-1">
-              <ScoreRing score={s.geo.score} band={s.geo.band} />
-              {s.geo.date && (
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  {new Date(s.geo.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </p>
-              )}
-            </div>
-            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {[
-                { label: 'Citabilidad',       key: 'citability' },
-                { label: 'Autoridad de marca', key: 'brandAuthority' },
-                { label: 'E-E-A-T',            key: 'eeat' },
-                { label: 'Técnico',            key: 'technical' },
-                { label: 'Plataformas',        key: 'platforms' },
-                { label: 'Schema',             key: 'schema' },
-              ].filter(c => s.geo.components[c.key] != null).map(c => {
-                const val = s.geo.components[c.key]
-                const col = val >= 86 ? '#3b82f6' : val >= 68 ? '#22c55e' : val >= 36 ? '#eab308' : '#ef4444'
-                return (
-                  <div key={c.key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-2.5">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.label}</span>
-                      <span className="text-xs font-bold text-gray-900 dark:text-white ml-1">{Math.round(val)}</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full" style={{ width: `${val}%`, backgroundColor: col }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+      {/* ── 2. Redes Sociales ── */}
+      {hasRRSS && (
+        <>
+          <GroupHeader title="Redes Sociales" />
+          <div className={`grid gap-5 ${s.instagram && s.tiktok ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+            {s.instagram && (
+              <SectionCard title="Instagram" icon="📸">
+                <KpiGrid items={[
+                  { label: 'Seguidores',   value: fmt(s.instagram.followersCount), delta: s.instagram.deltaFollowers },
+                  { label: 'Engagement',  value: s.instagram.engagementRate != null ? `${s.instagram.engagementRate.toFixed(2)}%` : '—', delta: s.instagram.deltaEngagement },
+                  { label: 'Avg. likes',  value: fmt(s.instagram.avgLikes, 0) },
+                  { label: 'Posts / mes', value: fmt(s.instagram.postsCount) },
+                ]} />
+              </SectionCard>
+            )}
 
-          {/* Evolución histórica de scores GEO */}
-          {s.geo.history && s.geo.history.length >= 2 && (
-            <div className="mt-5">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Evolución del score</p>
-              <LineChart
-                points={s.geo.history.map(h => ({
-                  label: new Date(h.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }),
-                  value: h.score,
-                }))}
-                color="#3b82f6"
-                height={70}
-              />
-            </div>
+            {s.tiktok && (
+              <SectionCard title="TikTok" icon="🎵">
+                <KpiGrid items={[
+                  { label: 'Seguidores',   value: fmt(s.tiktok.followersCount), delta: s.tiktok.deltaFollowers },
+                  { label: 'Engagement',  value: s.tiktok.engagementRate != null ? `${s.tiktok.engagementRate.toFixed(2)}%` : '—', delta: s.tiktok.deltaEngagement },
+                  { label: 'Avg. views',  value: fmt(s.tiktok.avgViews, 0) },
+                  { label: 'Posts / mes', value: fmt(s.tiktok.postsThisMonth) },
+                ]} />
+              </SectionCard>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── 3. Publicidad ── */}
+      {hasAds && (
+        <>
+          <GroupHeader title="Publicidad" />
+          <div className={`grid gap-5 ${s.metaAds && s.googleAds ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+            {s.metaAds && (
+              <SectionCard title="Meta Ads" icon="📣">
+                <KpiGrid items={[
+                  { label: 'Inversión',    value: s.metaAds.spend != null ? `$${fmt(s.metaAds.spend, 2)}` : '—' },
+                  { label: 'Impresiones', value: fmt(s.metaAds.impressions) },
+                  { label: 'Clics',       value: fmt(s.metaAds.clicks) },
+                  { label: 'CTR',         value: s.metaAds.ctr != null ? `${Number(s.metaAds.ctr).toFixed(2)}%` : '—' },
+                ]} />
+              </SectionCard>
+            )}
+            {s.googleAds && (
+              <SectionCard title="Google Ads" icon="🅖">
+                <KpiGrid items={[
+                  { label: 'Inversión',    value: s.googleAds.cost != null ? `$${fmt(s.googleAds.cost, 2)}` : '—' },
+                  { label: 'Impresiones', value: fmt(s.googleAds.impressions) },
+                  { label: 'Clics',       value: fmt(s.googleAds.clicks) },
+                  { label: 'CTR',         value: s.googleAds.ctr != null ? `${Number(s.googleAds.ctr).toFixed(2)}%` : '—' },
+                ]} />
+              </SectionCard>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── 4. SEO y GEO ── */}
+      {hasSeoGeo && (
+        <>
+          <GroupHeader title="SEO y GEO" />
+
+          {/* Keywords */}
+          {s.keywords && (
+            <SectionCard title="Posicionamiento SEO" icon="🔑">
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="text-center">
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{s.keywords.avgPosition}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Posición promedio</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{s.keywords.count}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Keywords rastreadas</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xl font-bold text-green-600 dark:text-green-400">+{s.keywords.improved?.length ?? 0}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Mejoraron</p>
+                </div>
+              </div>
+
+              {s.keywords.table?.length > 0 && (
+                <div className="overflow-x-auto mt-2">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-700">
+                        <th className="text-left pb-2 text-gray-500 dark:text-gray-400 font-medium">Keyword</th>
+                        <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Posición</th>
+                        <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Cambio</th>
+                        <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Clics</th>
+                        <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Impresiones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {s.keywords.table.slice(0, 15).map((kw, i) => (
+                        <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                          <td className="py-1.5 text-gray-700 dark:text-gray-300">{kw.query}</td>
+                          <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-white">{kw.position != null ? Number(kw.position).toFixed(1) : '—'}</td>
+                          <td className="py-1.5 text-right">
+                            {kw.delta != null
+                              ? <span className={kw.delta > 0 ? 'text-green-600' : kw.delta < 0 ? 'text-red-500' : 'text-gray-400'}>
+                                  {kw.delta > 0 ? `↑${Number(kw.delta).toFixed(1)}` : kw.delta < 0 ? `↓${Math.abs(Number(kw.delta)).toFixed(1)}` : '—'}
+                                </span>
+                              : <span className="text-gray-400">—</span>
+                            }
+                          </td>
+                          <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{fmt(kw.clicks)}</td>
+                          <td className="py-1.5 text-right text-gray-500 dark:text-gray-500">{kw.impressions != null ? fmt(kw.impressions) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </SectionCard>
+          )}
+
+          {/* GEO */}
+          {s.geo && (
+            <SectionCard title="Presencia en IAs (GEO)" icon="🌐">
+              <div className="flex flex-col sm:flex-row gap-6 items-start">
+                <div className="shrink-0 flex flex-col items-center gap-1">
+                  <ScoreRing score={s.geo.score} band={s.geo.band} />
+                  {s.geo.date && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      {new Date(s.geo.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+                <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { label: 'Citabilidad',        key: 'citability' },
+                    { label: 'Autoridad de marca',  key: 'brandAuthority' },
+                    { label: 'E-E-A-T',             key: 'eeat' },
+                    { label: 'Técnico',             key: 'technical' },
+                    { label: 'Plataformas',         key: 'platforms' },
+                    { label: 'Schema',              key: 'schema' },
+                  ].filter(c => s.geo.components[c.key] != null).map(c => {
+                    const val = s.geo.components[c.key]
+                    const col = val >= 86 ? '#3b82f6' : val >= 68 ? '#22c55e' : val >= 36 ? '#eab308' : '#ef4444'
+                    return (
+                      <div key={c.key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-2.5">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.label}</span>
+                          <span className="text-xs font-bold text-gray-900 dark:text-white ml-1">{Math.round(val)}</span>
+                        </div>
+                        <div className="h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${val}%`, backgroundColor: col }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {s.geo.history && s.geo.history.length >= 2 && (
+                <div className="mt-5">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Evolución del score</p>
+                  <LineChart
+                    points={s.geo.history.map(h => ({
+                      label: new Date(h.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }),
+                      value: h.score,
+                    }))}
+                    color="#3b82f6"
+                    height={70}
+                  />
+                </div>
+              )}
+            </SectionCard>
           )}
 
           {/* Tráfico desde IAs */}
-          {s.analytics?.aiTraffic && Object.keys(s.analytics.aiTraffic).length > 0 && (() => {
-            const AI_LABELS = {
-              chatgpt: 'ChatGPT', gemini: 'Gemini', claude: 'Claude',
-              grok: 'Grok', metaAi: 'Meta AI', perplexity: 'Perplexity', copilot: 'Copilot',
-            }
-            const entries = Object.entries(s.analytics.aiTraffic).sort(([, a], [, b]) => b - a)
-            const total   = entries.reduce((acc, [, v]) => acc + v, 0)
-            return (
-              <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Sesiones referidas desde IAs</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {entries.map(([key, sessions]) => (
-                    <div key={key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(sessions)}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{AI_LABELS[key] ?? key}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400 dark:text-gray-500 text-right mt-2">
-                  Total: <strong className="text-gray-600 dark:text-gray-300">{fmt(total)} sesiones</strong> referidas desde IAs este mes
-                </p>
-              </div>
-            )
-          })()}
-        </SectionCard>
-      )}
-
-      {/* ── Analytics GA4 ── */}
-      {s.analytics && (
-        <SectionCard title="Analytics web" icon="📊">
-          <KpiGrid items={[
-            { label: 'Sesiones',       value: fmt(s.analytics.sessions),    delta: s.analytics.delta?.sessions },
-            { label: 'Usuarios nuevos', value: fmt(s.analytics.newUsers),   delta: s.analytics.delta?.newUsers },
-            { label: 'Tasa de rebote', value: `${s.analytics.bounceRate?.toFixed(1) ?? '—'}%`, invertDelta: true, delta: s.analytics.delta?.sessions ? null : null },
-            { label: 'Duración media', value: fmtDuration(s.analytics.avgDuration) },
-          ]} />
-
-          {channels.length > 0 && (
-            <div className="mt-5">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Canales de tráfico</p>
-              <BarChart items={channels} color="#f97316" />
-            </div>
-          )}
-        </SectionCard>
-      )}
-
-      {/* ── RRSS: Instagram + TikTok en grid ── */}
-      {(s.instagram || s.tiktok) && (
-        <div className={`grid gap-5 ${s.instagram && s.tiktok ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
-          {s.instagram && (
-            <SectionCard title="Instagram" icon="📸">
-              <KpiGrid items={[
-                { label: 'Seguidores',   value: fmt(s.instagram.followersCount), delta: s.instagram.deltaFollowers },
-                { label: 'Engagement',  value: s.instagram.engagementRate != null ? `${s.instagram.engagementRate.toFixed(2)}%` : '—', delta: s.instagram.deltaEngagement },
-                { label: 'Avg. likes',  value: fmt(s.instagram.avgLikes, 0) },
-                { label: 'Posts / mes', value: fmt(s.instagram.postsCount) },
-              ]} />
-            </SectionCard>
-          )}
-
-          {s.tiktok && (
-            <SectionCard title="TikTok" icon="🎵">
-              <KpiGrid items={[
-                { label: 'Seguidores',   value: fmt(s.tiktok.followersCount), delta: s.tiktok.deltaFollowers },
-                { label: 'Engagement',  value: s.tiktok.engagementRate != null ? `${s.tiktok.engagementRate.toFixed(2)}%` : '—', delta: s.tiktok.deltaEngagement },
-                { label: 'Avg. views',  value: fmt(s.tiktok.avgViews, 0) },
-                { label: 'Posts / mes', value: fmt(s.tiktok.postsThisMonth) },
-              ]} />
-            </SectionCard>
-          )}
-        </div>
-      )}
-
-      {/* ── Keywords ── */}
-      {s.keywords && (
-        <SectionCard title="Posicionamiento SEO" icon="🔑">
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="text-center">
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{s.keywords.avgPosition}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Posición promedio</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xl font-bold text-gray-900 dark:text-white">{s.keywords.count}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Keywords rastreadas</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xl font-bold text-green-600 dark:text-green-400">+{s.keywords.improved?.length ?? 0}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Mejoraron</p>
-            </div>
-          </div>
-
-          {/* Tabla de keywords */}
-          {s.keywords.table?.length > 0 && (
-            <div className="overflow-x-auto mt-2">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-gray-700">
-                    <th className="text-left pb-2 text-gray-500 dark:text-gray-400 font-medium">Keyword</th>
-                    <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Posición</th>
-                    <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Cambio</th>
-                    <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Clics</th>
-                    <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Impresiones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {s.keywords.table.slice(0, 15).map((kw, i) => (
-                    <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
-                      <td className="py-1.5 text-gray-700 dark:text-gray-300">{kw.query}</td>
-                      <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-white">{kw.position != null ? Number(kw.position).toFixed(1) : '—'}</td>
-                      <td className="py-1.5 text-right">
-                        {kw.delta != null
-                          ? <span className={kw.delta > 0 ? 'text-green-600' : kw.delta < 0 ? 'text-red-500' : 'text-gray-400'}>
-                              {kw.delta > 0 ? `↑${Number(kw.delta).toFixed(1)}` : kw.delta < 0 ? `↓${Math.abs(Number(kw.delta)).toFixed(1)}` : '—'}
-                            </span>
-                          : <span className="text-gray-400">—</span>
-                        }
-                      </td>
-                      <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{fmt(kw.clicks)}</td>
-                      <td className="py-1.5 text-right text-gray-500 dark:text-gray-500">{kw.impressions != null ? fmt(kw.impressions) : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </SectionCard>
-      )}
-
-      {/* ── Performance ── */}
-      {s.performance && (
-        <SectionCard title="Performance web" icon="⚡">
-          <div className="grid grid-cols-2 gap-4">
-            {s.performance.mobile && (
-              <div className="text-center">
-                <p className={`text-3xl font-bold ${
-                  s.performance.mobile.score >= 90 ? 'text-green-600' :
-                  s.performance.mobile.score >= 50 ? 'text-yellow-600' : 'text-red-600'
-                }`}>{s.performance.mobile.score}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">📱 Móvil</p>
-              </div>
-            )}
-            {s.performance.desktop && (
-              <div className="text-center">
-                <p className={`text-3xl font-bold ${
-                  s.performance.desktop.score >= 90 ? 'text-green-600' :
-                  s.performance.desktop.score >= 50 ? 'text-yellow-600' : 'text-red-600'
-                }`}>{s.performance.desktop.score}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">🖥️ Desktop</p>
-              </div>
-            )}
-          </div>
-
-          {/* Core Web Vitals */}
-          {(s.performance.mobile?.metrics || s.performance.desktop?.metrics) && (() => {
-            const m = s.performance.mobile?.metrics || {}
-            return (
-              <div className="mt-4 grid grid-cols-3 gap-2 text-xs text-center">
-                {[
-                  { label: 'LCP',  value: m.lcp  != null ? `${(Number(m.lcp)/1000).toFixed(1)}s`  : null },
-                  { label: 'CLS',  value: m.cls  != null ? Number(m.cls).toFixed(3) : null },
-                  { label: 'FCP',  value: m.fcp  != null ? `${(Number(m.fcp)/1000).toFixed(1)}s`  : null },
-                ].filter(v => v.value).map((v, i) => (
-                  <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
-                    <p className="font-semibold text-gray-900 dark:text-white">{v.value}</p>
-                    <p className="text-gray-500 dark:text-gray-400">{v.label}</p>
+          {aiTrafficEntries && (
+            <SectionCard title="Sesiones referidas desde IAs" icon="🤖">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {aiTrafficEntries.map(([key, sessions]) => (
+                  <div key={key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">{fmt(sessions)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{AI_LABELS[key] ?? key}</p>
                   </div>
                 ))}
               </div>
-            )
-          })()}
+              <p className="text-xs text-gray-400 dark:text-gray-500 text-right mt-3">
+                Total: <strong className="text-gray-600 dark:text-gray-300">{fmt(aiTrafficEntries.reduce((acc, [, v]) => acc + v, 0))} sesiones</strong> desde IAs este mes
+              </p>
+            </SectionCard>
+          )}
+        </>
+      )}
+
+      {/* ── 5. Sitio web ── */}
+      {hasSitio && (
+        <>
+          <GroupHeader title="Sitio web" />
+
+          {/* Analytics GA4 */}
+          {s.analytics && (
+            <SectionCard title="Analytics web" icon="📊">
+              <KpiGrid items={[
+                { label: 'Sesiones',        value: fmt(s.analytics.sessions),    delta: s.analytics.delta?.sessions },
+                { label: 'Usuarios nuevos', value: fmt(s.analytics.newUsers),    delta: s.analytics.delta?.newUsers },
+                { label: 'Tasa de rebote',  value: `${s.analytics.bounceRate?.toFixed(1) ?? '—'}%`, invertDelta: true },
+                { label: 'Duración media',  value: fmtDuration(s.analytics.avgDuration) },
+              ]} />
+
+              {channels.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Canales de tráfico</p>
+                  <BarChart items={channels} color="#f97316" />
+                </div>
+              )}
+            </SectionCard>
+          )}
+
+          {/* Evolución trimestral */}
+          {evolutionPoints && (
+            <SectionCard title="Evolución trimestral" icon="📈">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Sesiones — últimos 3 meses</p>
+              <LineChart points={evolutionPoints} color="#f97316" height={70} />
+            </SectionCard>
+          )}
+
+          {/* Performance */}
+          {s.performance && (
+            <SectionCard title="Performance web" icon="⚡">
+              <div className="grid grid-cols-2 gap-4">
+                {s.performance.mobile && (
+                  <div className="text-center">
+                    <p className={`text-3xl font-bold ${
+                      s.performance.mobile.score >= 90 ? 'text-green-600' :
+                      s.performance.mobile.score >= 50 ? 'text-yellow-600' : 'text-red-600'
+                    }`}>{s.performance.mobile.score}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">📱 Móvil</p>
+                  </div>
+                )}
+                {s.performance.desktop && (
+                  <div className="text-center">
+                    <p className={`text-3xl font-bold ${
+                      s.performance.desktop.score >= 90 ? 'text-green-600' :
+                      s.performance.desktop.score >= 50 ? 'text-yellow-600' : 'text-red-600'
+                    }`}>{s.performance.desktop.score}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">🖥️ Desktop</p>
+                  </div>
+                )}
+              </div>
+
+              {(s.performance.mobile?.metrics || s.performance.desktop?.metrics) && (() => {
+                const m = s.performance.mobile?.metrics || {}
+                return (
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-xs text-center">
+                    {[
+                      { label: 'LCP', value: m.lcp != null ? `${(Number(m.lcp)/1000).toFixed(1)}s` : null },
+                      { label: 'CLS', value: m.cls != null ? Number(m.cls).toFixed(3) : null },
+                      { label: 'FCP', value: m.fcp != null ? `${(Number(m.fcp)/1000).toFixed(1)}s` : null },
+                    ].filter(v => v.value).map((v, i) => (
+                      <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+                        <p className="font-semibold text-gray-900 dark:text-white">{v.value}</p>
+                        <p className="text-gray-500 dark:text-gray-400">{v.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </SectionCard>
+          )}
+        </>
+      )}
+
+      {/* ── Próximos pasos (editable) ── */}
+      {(analysis?.nextSteps?.length > 0 || canEdit) && (
+        <SectionCard
+          title="Próximos pasos"
+          icon="🚀"
+          action={canEdit && !editingNextSteps && (
+            <button
+              onClick={() => {
+                setNextStepsDraft((analysis?.nextSteps || []).join('\n'))
+                setEditingNextSteps(true)
+              }}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
+            >
+              ✏️ Editar
+            </button>
+          )}
+        >
+          {editingNextSteps ? (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500">Un paso por línea</p>
+              <textarea
+                value={nextStepsDraft}
+                onChange={e => setNextStepsDraft(e.target.value)}
+                rows={8}
+                placeholder="Escribí un próximo paso por línea…"
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setEditingNextSteps(false)}
+                  className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveNextSteps}
+                  disabled={savingNextSteps}
+                  className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {savingNextSteps ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          ) : analysis?.nextSteps?.length > 0 ? (
+            <ul className="space-y-2">
+              {analysis.nextSteps.map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className="text-primary-500 font-bold shrink-0">{i + 1}.</span>
+                  <span className="text-gray-700 dark:text-gray-300">{step}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-400 dark:text-gray-500 italic text-sm">Sin próximos pasos todavía.</p>
+          )}
         </SectionCard>
       )}
 
-      {/* ── Evolución trimestral ── */}
-      {evolutionPoints && (
-        <SectionCard title="Evolución trimestral" icon="📈">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Sesiones — últimos 3 meses</p>
-          <LineChart points={evolutionPoints} color="#f97316" height={70} />
-        </SectionCard>
-      )}
-
-      {/* ── Trabajo del mes ── */}
+      {/* ── Trabajo realizado en el mes ── */}
       {s.tasks && s.tasks.length > 0 && (
         <SectionCard title="Trabajo realizado en el mes" icon="🔧">
           <ul className="space-y-2">
@@ -651,20 +838,6 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                 </li>
               )
             })}
-          </ul>
-        </SectionCard>
-      )}
-
-      {/* ── Próximos pasos ── */}
-      {analysis?.nextSteps?.length > 0 && (
-        <SectionCard title="Próximos pasos" icon="🚀">
-          <ul className="space-y-2">
-            {analysis.nextSteps.map((step, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <span className="text-primary-500 font-bold shrink-0">{i + 1}.</span>
-                <span className="text-gray-700 dark:text-gray-300">{step}</span>
-              </li>
-            ))}
           </ul>
         </SectionCard>
       )}
