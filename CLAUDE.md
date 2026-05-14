@@ -125,7 +125,7 @@ Full-stack SaaS task tracker. Multi-tenant: each workspace is a separate subdoma
 
 ### Key domain concepts
 
-**Workspace:** The top-level tenant. Has a `slug` (subdomain), `status` (`trialing` | `active` | `past_due` | `suspended` | `cancelled`), and `timezone`. Members are linked via `WorkspaceMember`.
+**Workspace:** The top-level tenant. Has a `slug` (subdomain), `status` (`trialing` | `active` | `past_due` | `suspended` | `cancelled`), and `timezone`. Members are linked via `WorkspaceMember`. Company profile fields: `companyName`, `companyDescription`, `industry`, `companyWebsite`. Brand identity: `brandColors` (JSON `[{ hex, name? }]`), `brandFonts` (JSON `[{ name, role }]` where `role` is `heading|body|accent`). Logo and banner stored as raw bytes in DB: `logoData`/`logoMimeType` and `bannerData`/`bannerMimeType` (max 5 MB via multer memoryStorage). Feature flag opt-out: `disabledFeatureKeys` (JSON array of keys) — workspace admins can disable globally-enabled flags for their workspace from Preferencias → Módulos adicionales.
 
 **WorkspaceMember:** Joins `User` and `Workspace`. Fields: `role` (owner/admin/member), `teamRole` (internal role name), `active`, `vacationDays`, and the four AI preference flags.
 
@@ -155,7 +155,7 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 
 **Billing:** Workspace has `status` (`trialing` | `active` | `past_due` | `suspended` | `cancelled`) and `trialEndsAt`. Trial = 14 days from registration. A cron runs at 03:00 ART daily to mark expired trials as `past_due`. Stripe integration: Customer created async on workspace registration; Checkout session creates the Stripe subscription; webhooks sync status back to DB. `Subscription` model stores `stripeSubId`, `seats`, `periodStart/End`. Billing actions (Checkout + Portal) require `admin` or `owner` role. `TrialBanner` component shows in Navbar when `trialDaysLeft <= 7` or `status === 'past_due'`. The `bliss` workspace is exempt — set `status = 'active'` manually via SuperAdmin; no Stripe subscription is ever created for it.
 
-**Feature flags:** Defined in `src/config/featureFlags.js`. Auto-upserted on server startup. SuperAdmin manages which workspaces have access (enabledGlobally or per-workspace list). Frontend uses `useFeatureFlag(key)` hook — cached in memory per session. Never create flags manually from the UI.
+**Feature flags:** Defined in `src/config/featureFlags.js`. Auto-upserted on server startup. SuperAdmin manages which workspaces have access (enabledGlobally or per-workspace list). Frontend uses `useFeatureFlag(key)` hook — cached in memory per session. Never create flags manually from the UI. **Workspace opt-out:** even if a flag is enabled by SuperAdmin, a workspace admin can disable it for their workspace via `PATCH /api/workspaces/current/features/:key` (stored in `Workspace.disabledFeatureKeys`). Visible in Preferencias → Módulos adicionales.
 
 **GEO Audit (Marketing):** `GeoAudit` model stores per-project AI analysis results. Score 0–100, 6 components (citability, brandAuthority, eeat, technical, schema, platforms), unified items list, negative signals. Async pattern: `POST /api/marketing/geo/audit` creates record with `status: 'running'` and returns `auditId` immediately; frontend polls `GET /api/marketing/geo/audits/:id` every 3s. Progress steps stored in `errorMsg` during running, cleared on completion. Tasks can be created directly from audit items with "GEO - " prefix.
 
@@ -177,9 +177,9 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 
 **User insight memory:** Generated weekly (Saturday 00:00 ART) by `insightMemory.service.js`. Stored in `UserInsightMemory` (one record per user per workspace per weekStart, upserted).
 
-**Admin panel deep linking:** `Admin.jsx` reads `?tab=` query param on mount. Valid tabs: `projects`, `team`, `services`, `roles`, `role-ai`. Falls back to `'projects'`.
+**Admin panel deep linking:** `Admin.jsx` reads `?tab=` query param on mount. Valid tabs: `projects`, `team`, `services`, `roles`, `role-ai`, `empresa`. Falls back to `'projects'`.
 
-**Preferences:** For admins, shows two tabs — **Globales** (workspace settings: timezone, project settings) and **Personales** (AI feature toggles). Non-admins see only the personal view.
+**Preferences:** For admins, shows two tabs — **Globales** (workspace settings: timezone, project settings) and **Personales** (AI feature toggles + **Módulos adicionales**: opt-out de feature flags habilitados por SuperAdmin para este workspace). Non-admins see only the personal view without the modules section.
 
 **Login tracking:** Every successful login records a `UserLogin` row (userId, workspaceId, loginAt UTC, method). Used in the RRHH panel for login history and average login time.
 
@@ -227,7 +227,7 @@ Todos los modelos EOS tienen `workspaceId` como scope. Las rutas `/api/eos/*` re
 - `ProjectIntegration.propertyId` tiene distintos usos según `type`: GA4 → Property ID numérico; `google_ads` → Manager Account ID (MCC) si la cuenta es cliente de un manager; Meta Ads → no usado; TikTok → no usado.
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_project_member_notification`, `add_task_comments`, `v1_5`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_memory_history`, `add_role_structure`, `add_user_login_history`, `add_vacation_days`, `add_bank_name`, `add_task_sessions`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_email_log`, `add_vacation_management` (VacationRequest + VacationAdjustment), `add_workspace_deletion_request`, `add_announcements`, `add_avatars`, `fix_vacation_schema`, `add_feature_flags`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `add_project_connections` (Project.connections JSON), `fix_service_unique_index`, `add_legal_document`, `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique`, `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_instagram_snapshot`, `add_integration_country`, `add_keyword_tracking` (TrackedKeyword + KeywordRanking), `add_pagespeed_result` (PageSpeedResult), `add_instagram_follower_log`, `add_tiktok` (TikTokSnapshot + TikTokFollowerLog), `add_monthly_report` (MonthlyReport — token UUID para URL pública), `add_monthly_report_analysis`, `add_seo_snapshot` (SEOSnapshot para Google Search Console), `add_ai_traffic_snapshot`, `add_cannibal_report`, `add_eos_data`, `add_eos_focus`, `add_eos_ten_year_target`, `add_eos_vision_remaining`, `add_eos_issues` (EOSIssue), `add_eos_personas`, `add_eos_processes`, `add_eos_scorecard`, `add_eos_traction` (EOSRock + EOSTodo + EOSMeeting), `add_org_assessment` (OrgAssessmentRound + OrgAssessmentResponse).
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_project_member_notification`, `add_task_comments`, `v1_5`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_memory_history`, `add_role_structure`, `add_user_login_history`, `add_vacation_days`, `add_bank_name`, `add_task_sessions`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_email_log`, `add_vacation_management` (VacationRequest + VacationAdjustment), `add_workspace_deletion_request`, `add_announcements`, `add_avatars`, `fix_vacation_schema`, `add_feature_flags`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `add_project_connections` (Project.connections JSON), `fix_service_unique_index`, `add_legal_document`, `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique`, `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_instagram_snapshot`, `add_integration_country`, `add_keyword_tracking` (TrackedKeyword + KeywordRanking), `add_pagespeed_result` (PageSpeedResult), `add_instagram_follower_log`, `add_tiktok` (TikTokSnapshot + TikTokFollowerLog), `add_monthly_report` (MonthlyReport — token UUID para URL pública), `add_monthly_report_analysis`, `add_seo_snapshot` (SEOSnapshot para Google Search Console), `add_ai_traffic_snapshot`, `add_cannibal_report`, `add_eos_data`, `add_eos_focus`, `add_eos_ten_year_target`, `add_eos_vision_remaining`, `add_eos_issues` (EOSIssue), `add_eos_personas`, `add_eos_processes`, `add_eos_scorecard`, `add_eos_traction` (EOSRock + EOSTodo + EOSMeeting), `add_org_assessment` (OrgAssessmentRound + OrgAssessmentResponse), `add_workspace_branding` (companyName, companyDescription, industry, companyWebsite, logoData, bannerData + brandColors, brandFonts), `add_workspace_brand_identity` (disabledFeatureKeys en Workspace + dataCache en MonthlyReport).
 - `TaskComment.content` is the text field (not `text`). The `parentId` self-relation exists for future threading but is not used by the UI yet.
 
 ### API routes summary
@@ -250,7 +250,7 @@ POST   /api/workspaces                    # crear workspace (registro público)
 GET    /api/workspaces/info               # info pública (no auth, usa X-Workspace header)
 GET    /api/workspaces/mine              # workspaces del usuario autenticado
 GET    /api/workspaces/current
-PATCH  /api/workspaces/current           # admin: editar nombre, timezone
+PATCH  /api/workspaces/current           # admin: editar nombre, timezone, datos de empresa, brandColors, brandFonts
 GET    /api/workspaces/current/members
 PUT    /api/workspaces/current/members/:userId        # admin: editar teamRole, memberRole
 PATCH  /api/workspaces/current/members/:userId/toggle-active
@@ -262,6 +262,12 @@ POST   /api/workspaces/join                           # aceptar invitación
 GET    /api/workspaces/current/deletion-request
 POST   /api/workspaces/current/deletion-request      # owner: programar eliminación (48h)
 DELETE /api/workspaces/current/deletion-request      # admin: cancelar eliminación
+POST   /api/workspaces/current/logo                  # admin: subir logo (multipart image, max 5MB)
+DELETE /api/workspaces/current/logo                  # admin: eliminar logo
+POST   /api/workspaces/current/banner                # admin: subir banner (multipart image, max 5MB)
+DELETE /api/workspaces/current/banner                # admin: eliminar banner
+GET    /api/workspaces/current/features              # admin: listar feature flags habilitados + opt-out state
+PATCH  /api/workspaces/current/features/:key         # admin: toggle opt-out de un feature flag
 
 GET    /api/workdays/today
 POST   /api/workdays/finish

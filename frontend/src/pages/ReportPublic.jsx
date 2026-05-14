@@ -57,11 +57,6 @@ export default function ReportPublic() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto">
-        {/* Logo / branding */}
-        <div className="text-center mb-6">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Informe de Marketing</p>
-        </div>
-
         <ReportViewer
           data={data}
           objectives={report?.objectives ?? {}}

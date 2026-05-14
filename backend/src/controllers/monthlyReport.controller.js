@@ -68,7 +68,7 @@ async function getReport(req, res, next) {
     // Branding del workspace
     const workspace = await prisma.workspace.findUnique({
       where:  { id: workspaceId },
-      select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, bannerData: true },
+      select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, bannerData: true, brandColors: true, brandFonts: true },
     })
 
     // Agregar todos los datos
@@ -109,6 +109,8 @@ async function getReport(req, res, next) {
         companyWebsite:     workspace.companyWebsite,
         hasLogo:            !!workspace.logoData,
         hasBanner:          !!workspace.bannerData,
+        brandColors:        workspace.brandColors ? JSON.parse(workspace.brandColors) : [],
+        brandFonts:         workspace.brandFonts  ? JSON.parse(workspace.brandFonts)  : [],
       } : null,
       data,
     })
@@ -175,7 +177,7 @@ async function getPublicReport(req, res, next) {
       Promise.resolve(report.analysis ? safeParseObj(report.analysis) : null),
       prisma.workspace.findUnique({
         where:  { id: report.workspaceId },
-        select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, bannerData: true },
+        select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, bannerData: true, brandColors: true, brandFonts: true },
       }),
     ])
 
@@ -206,6 +208,8 @@ async function getPublicReport(req, res, next) {
         companyWebsite:     workspace.companyWebsite,
         hasLogo:            !!workspace.logoData,
         hasBanner:          !!workspace.bannerData,
+        brandColors:        workspace.brandColors ? JSON.parse(workspace.brandColors) : [],
+        brandFonts:         workspace.brandFonts  ? JSON.parse(workspace.brandFonts)  : [],
       } : null,
       data,
     })

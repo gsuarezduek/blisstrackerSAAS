@@ -339,6 +339,11 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
   const s = sections
   const canEdit = !isPublic && !!onSaveAnalysis
 
+  // ── Colores de marca ─────────────────────────────────────────────────────────
+  const brandColors = workspace?.brandColors || []
+  const brandPrimary   = brandColors[0]?.hex || '#f97316'
+  const brandSecondary = brandColors[1]?.hex || '#3b82f6'
+
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   async function handleSaveResumen() {
@@ -520,8 +525,8 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
 
       {/* ── Header ── */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden print-break-avoid">
-        {/* Banner de la empresa (si existe) */}
-        {workspace?.hasBanner && workspace?.slug && (
+        {/* Banner de la empresa (si existe), o barra de color de marca */}
+        {workspace?.hasBanner && workspace?.slug ? (
           <div className="h-32 w-full overflow-hidden">
             <img
               src={`${import.meta.env.VITE_API_URL}/api/public/banner/${workspace.slug}`}
@@ -530,6 +535,8 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
               onError={e => { e.currentTarget.parentElement.style.display = 'none' }}
             />
           </div>
+        ) : (
+          <div className="h-2 w-full" style={{ backgroundColor: brandPrimary }} />
         )}
 
         <div className="p-6">
@@ -547,7 +554,12 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                 </div>
               )}
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {workspace?.companyName || project.name}
+                </h1>
+                {workspace?.companyName && workspace.companyName !== project.name && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{project.name}</p>
+                )}
                 <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">
                   Informe mensual — {monthLabel(month)}
                 </p>
@@ -556,10 +568,15 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                     {dataPeriodLabel(dataMonth)}
                   </p>
                 )}
-                {project.websiteUrl && (
-                  <a href={project.websiteUrl} target="_blank" rel="noreferrer"
-                    className="text-xs text-primary-600 dark:text-primary-400 hover:underline mt-1 block">
-                    {project.websiteUrl}
+                {(workspace?.companyWebsite || project.websiteUrl) && (
+                  <a
+                    href={workspace?.companyWebsite || project.websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs hover:underline mt-1 block"
+                    style={{ color: brandPrimary }}
+                  >
+                    {workspace?.companyWebsite || project.websiteUrl}
                   </a>
                 )}
               </div>
@@ -579,11 +596,11 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
       {/* ── 0. Scorecard ejecutivo ── */}
       {heroMetrics.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-6 py-5 print-break-avoid">
-          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Resumen del período</p>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: brandPrimary }}>Resumen del período</p>
           <div className={`grid gap-4 ${heroMetrics.length <= 3 ? 'grid-cols-3' : heroMetrics.length === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'}`}>
             {heroMetrics.map((m, i) => (
               <div key={i} className="text-center">
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">{m.value}</p>
+                <p className="text-2xl font-bold" style={{ color: i === 0 ? brandPrimary : undefined }}>{m.value}</p>
                 <div className="h-4 flex items-center justify-center">
                   {m.delta != null ? <DeltaChip delta={m.delta} invert={m.invertDelta} /> : <span />}
                 </div>
@@ -1011,7 +1028,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
               {channels.length > 0 && (
                 <div className="mt-5">
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Canales de tráfico</p>
-                  <BarChart items={channels} color="#f97316" />
+                  <BarChart items={channels} color={brandPrimary} />
                 </div>
               )}
 
@@ -1087,21 +1104,21 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
               {evolutionNewUsers && (
                 <div className="flex items-center gap-4 mb-3">
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-block w-3 h-3 rounded-full bg-orange-500" />
+                    <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: brandPrimary }} />
                     <span className="text-xs text-gray-500 dark:text-gray-400">Sesiones</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-block w-3 h-3 rounded-full bg-blue-500" />
+                    <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: brandSecondary }} />
                     <span className="text-xs text-gray-500 dark:text-gray-400">Usuarios nuevos</span>
                   </div>
                 </div>
               )}
               <LineChart
                 points={evolutionPoints}
-                color="#f97316"
+                color={brandPrimary}
                 height={80}
                 secondPoints={evolutionNewUsers}
-                secondColor="#3b82f6"
+                secondColor={brandSecondary}
               />
 
               {/* Tabla mes a mes */}
@@ -1319,9 +1336,15 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
 
       {/* ── Footer público ── */}
       {isPublic && (
-        <div className="text-center py-4">
+        <div className="text-center py-4 space-y-1">
+          {workspace?.companyName && (
+            <p className="text-xs font-semibold" style={{ color: brandPrimary }}>{workspace.companyName}</p>
+          )}
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            Generado por <strong className="text-gray-600 dark:text-gray-400">BlissTracker</strong> · {monthLabel(displayMonth)}
+            Informe de Marketing · {monthLabel(displayMonth)}
+          </p>
+          <p className="text-xs text-gray-300 dark:text-gray-600">
+            Generado con BlissTracker
           </p>
         </div>
       )}

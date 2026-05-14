@@ -256,6 +256,7 @@ team-tracker/
         │   │   └── InformesTab.jsx  # GA4 overview + canales + top páginas
         │   ├── admin/
         │   │   ├── TeamTab.jsx      # Solo invitaciones por email
+        │   │   ├── EmpresaTab.jsx   # Perfil de empresa + logo/banner + brandColors/brandFonts
         │   │   └── ...
         │   └── ...
         └── api/client.js            # Axios: inyecta JWT + X-Workspace header
@@ -267,7 +268,7 @@ team-tracker/
 
 | Modelo | Descripción |
 |--------|-------------|
-| `Workspace` | Tenant: slug, timezone, status (trialing/active/past_due/suspended/cancelled), stripeCustomerId |
+| `Workspace` | Tenant: slug, timezone, status (trialing/active/past_due/suspended/cancelled), stripeCustomerId. Perfil de empresa: companyName, companyDescription, industry, companyWebsite. Logo y banner como bytes en DB. Paleta de colores y fuentes de marca. `disabledFeatureKeys` para opt-out de feature flags. |
 | `WorkspaceMember` | Membresía usuario↔workspace: role (owner/admin/member), teamRole, preferencias IA |
 | `Subscription` | Plan y facturación por workspace: stripeSubId, seats, periodStart/End |
 | `User` | Cuenta global: email único, datos personales, avatar |
@@ -299,6 +300,7 @@ team-tracker/
 | `UserLogin` | Historial de logins (método, timestamp) |
 | `Feedback` | Sugerencias y bugs enviados por usuarios |
 | `PasswordResetToken` | Tokens de un solo uso para reset de contraseña |
+| `MonthlyReport` | Informe mensual por proyecto con token UUID para URL pública. `dataCache` guarda secciones agregadas (analytics, ads, instagram, etc.) para evitar llamadas repetidas a APIs. Incluye datos de branding del workspace. |
 
 ---
 
@@ -330,12 +332,16 @@ Los arrays `links`, `adminSublinks` y `profileSections` en `Navbar.jsx` son la f
 | Productividad | `/admin/productivity` |
 | RRHH | `/admin/rrhh` |
 
+**Tabs del panel Admin** (query param `?tab=`): `projects`, `team`, `services`, `roles`, `role-ai`, `empresa`. La pestaña **Empresa** (`EmpresaTab.jsx`) gestiona el perfil de la empresa (nombre, descripción, industria, sitio web), logo, banner, paleta de colores de marca y tipografías.
+
 ### Super Admin interno (solo `isSuperAdmin`)
 | Pantalla | Ruta |
 |----------|------|
 | Panel Super Admin | `/superadmin` |
 
 El panel super admin tiene sidebar con: Dashboard (stats + workspaces), **Billing** (MRR/ARR + tabla de suscripciones), Feedback, Emails, Announcements, Avatares, Feature Flags.
+
+Los workspace admins también pueden hacer **opt-out** de módulos habilitados desde Preferencias → Módulos adicionales (usa `PATCH /api/workspaces/current/features/:key`).
 
 ---
 
