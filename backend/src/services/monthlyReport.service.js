@@ -435,7 +435,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // Si ya existe un análisis cacheado, no se regenera
   const analysis = cachedAnalysis
     ? cachedAnalysis
-    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, keywords, seo, performance, workspaceId, objectives, services })
+    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, keywords, seo, performance, googleAds, metaAds, workspaceId, objectives, services })
 
   return {
     project: {
@@ -455,7 +455,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, seo, performance, workspaceId, objectives = {}, services = [] }) {
+async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, seo, performance, googleAds, metaAds, workspaceId, objectives = {}, services = [] }) {
   // Calcular cumplimiento de objetivos si existen
   const objCtx = []
   if (objectives.sessions != null && analytics)
