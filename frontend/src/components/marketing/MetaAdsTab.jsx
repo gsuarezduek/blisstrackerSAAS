@@ -137,8 +137,11 @@ function CampaignsTable({ campaigns }) {
 // ── Prompt de conexión ────────────────────────────────────────────────────────
 
 function ConnectPrompt({ projectId, onConnected }) {
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState(null)
+  const [showManual,  setShowManual]  = useState(false)
+  const [manualToken, setManualToken] = useState('')
+  const [accounts,    setAccounts]    = useState(null) // null | array
   const pollRef = useRef(null)
 
   const handleConnect = async () => {
@@ -181,6 +184,109 @@ function ConnectPrompt({ projectId, onConnected }) {
     }
   }
 
+  async function handleManualConnect(adAccountId = null) {
+    if (!manualToken.trim()) { setError('Ingresá el System User Token.'); return }
+    setLoading(true)
+    setError(null)
+    try {
+      const body = { accessToken: manualToken.trim() }
+      if (adAccountId) body.adAccountId = adAccountId
+      const { data } = await api.post(
+        `/marketing/projects/${projectId}/integrations/meta-ads/connect-token`,
+        body
+      )
+      if (data.accounts) {
+        // Múltiples cuentas — mostrar picker
+        setAccounts(data.accounts)
+        setLoading(false)
+      } else {
+        onConnected()
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al conectar con el token.')
+      setLoading(false)
+    }
+  }
+
+  // ── Vista: picker de cuentas ──────────────────────────────────────────────
+  if (accounts) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+          Seleccioná la cuenta de Meta Ads
+        </p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
+          Se encontraron {accounts.length} cuentas publicitarias.
+        </p>
+        {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3 max-w-sm">{error}</p>}
+        <div className="w-full max-w-sm space-y-2 mb-5">
+          {accounts.map(acc => (
+            <button
+              key={acc.id}
+              onClick={() => handleManualConnect(acc.id)}
+              disabled={loading}
+              className="w-full flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-left disabled:opacity-50"
+            >
+              <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-700 dark:text-blue-300 font-bold text-sm shrink-0">
+                {(acc.name?.[0] ?? '?').toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{acc.name}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">{acc.id}{acc.currency ? ` · ${acc.currency}` : ''}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => { setAccounts(null); setError(null) }}
+          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          ← Usar otro token
+        </button>
+      </div>
+    )
+  }
+
+  // ── Vista: formulario de token manual ─────────────────────────────────────
+  if (showManual) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center text-3xl mb-4">
+          🔑
+        </div>
+        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">
+          System User Token
+        </h3>
+        <p className="text-xs text-gray-400 dark:text-gray-500 max-w-xs mb-5">
+          Generalo desde Business Manager → Configuración → Usuarios del sistema → Generar token.
+          Seleccioná permiso <strong>ads_read</strong>.
+        </p>
+        {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3 max-w-sm">{error}</p>}
+        <textarea
+          value={manualToken}
+          onChange={e => setManualToken(e.target.value)}
+          placeholder="Pegá el System User Token aquí…"
+          rows={3}
+          className="w-full max-w-sm px-3 py-2 text-xs font-mono border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4"
+        />
+        <button
+          onClick={() => handleManualConnect()}
+          disabled={loading || !manualToken.trim()}
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-3"
+        >
+          {loading ? 'Verificando…' : 'Conectar'}
+        </button>
+        <button
+          onClick={() => { setShowManual(false); setError(null); setManualToken('') }}
+          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          ← Volver
+        </button>
+      </div>
+    )
+  }
+
+  // ── Vista: pantalla principal de conexión ─────────────────────────────────
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center text-3xl mb-4">
@@ -195,13 +301,22 @@ function ConnectPrompt({ projectId, onConnected }) {
       {error && (
         <p className="text-sm text-red-600 dark:text-red-400 mb-4 max-w-sm">{error}</p>
       )}
-      <button
-        onClick={handleConnect}
-        disabled={loading || !projectId}
-        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        {loading ? 'Conectando…' : 'Conectar Meta Ads'}
-      </button>
+      <div className="flex flex-col gap-2 items-center">
+        <button
+          onClick={handleConnect}
+          disabled={loading || !projectId}
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? 'Conectando…' : 'Conectar con Facebook'}
+        </button>
+        <button
+          onClick={() => { setShowManual(true); setError(null) }}
+          disabled={!projectId}
+          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-40"
+        >
+          Usar System User Token →
+        </button>
+      </div>
       {!projectId && (
         <p className="text-xs text-gray-400 mt-2">Seleccioná un proyecto para continuar.</p>
       )}

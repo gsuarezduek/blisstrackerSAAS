@@ -57,6 +57,14 @@ function monthLabel(month) {
   return date.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 }
 
+function dataPeriodLabel(dataMonth) {
+  if (!dataMonth) return null
+  const [y, m] = dataMonth.split('-').map(Number)
+  const lastDay = new Date(y, m, 0).getDate()
+  const monthName = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long' })
+  return `Datos del 1 al ${lastDay} de ${monthName} de ${y}`
+}
+
 function monthShort(month) {
   if (!month) return ''
   const [y, m] = month.split('-').map(Number)
@@ -414,7 +422,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
   // Flags de disponibilidad por grupo
   const hasRRSS   = !!(s.instagram || s.tiktok)
   const hasAds    = !!(s.metaAds || s.googleAds)
-  const hasSeoGeo = !!(s.keywords || s.seo || s.geo || aiTrafficEntries)
+  const hasSeoGeo = !!(s.keywords || s.seo || s.geo || aiTrafficEntries || s.cannibalization)
   const hasSitio  = !!(s.analytics || evolutionPoints || s.performance)
 
   // ── Scorecard ejecutivo: métricas clave de todos los servicios ───────────────
@@ -422,15 +430,24 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
     const items = []
     if (s.analytics) {
       items.push({ label: 'Sesiones web',    value: fmt(s.analytics.sessions), delta: s.analytics.delta?.sessions })
-      items.push({ label: 'Usuarios nuevos', value: fmt(s.analytics.newUsers), delta: s.analytics.delta?.newUsers })
+      if (s.analytics.conversions > 0) {
+        items.push({ label: 'Conversiones', value: fmt(s.analytics.conversions), delta: s.analytics.delta?.conversions })
+      }
     }
     if (s.instagram) {
       items.push({ label: 'Seguidores IG', value: fmt(s.instagram.followersCount), delta: s.instagram.deltaFollowers })
     } else if (s.tiktok) {
       items.push({ label: 'Seguidores TK', value: fmt(s.tiktok.followersCount), delta: s.tiktok.deltaFollowers })
     }
-    if (s.seo && s.seo.clicks > 0) {
+    if (s.seo?.avgPosition) {
+      items.push({ label: 'Pos. media SEO', value: String(s.seo.avgPosition) })
+    } else if (s.seo?.clicks > 0) {
       items.push({ label: 'Clics orgánicos', value: fmt(s.seo.clicks), delta: s.seo.delta?.clicks })
+    }
+    // Inversión publicitaria total (Google Ads + Meta Ads)
+    const totalAdSpend = (s.googleAds?.cost ?? 0) + (s.metaAds?.spend ?? 0)
+    if (totalAdSpend > 0) {
+      items.push({ label: 'Inversión en ads', value: `$${totalAdSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })}` })
     }
     if (s.geo) {
       items.push({ label: 'Score GEO', value: `${s.geo.score}/100` })
@@ -507,8 +524,13 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
             <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">
-              Informe mensual — {monthLabel(displayMonth)}
+              Informe mensual — {monthLabel(month)}
             </p>
+            {dataMonth && dataMonth !== month && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 capitalize">
+                {dataPeriodLabel(dataMonth)}
+              </p>
+            )}
             {project.websiteUrl && (
               <a href={project.websiteUrl} target="_blank" rel="noreferrer"
                 className="text-xs text-primary-600 dark:text-primary-400 hover:underline mt-1 block">
@@ -884,6 +906,40 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
               <p className="text-xs text-gray-400 dark:text-gray-500 text-right mt-3">
                 Total: <strong className="text-gray-600 dark:text-gray-300">{fmt(aiTrafficEntries.reduce((acc, [, v]) => acc + v, 0))} sesiones</strong> desde IAs este mes
               </p>
+            </SectionCard>
+          )}
+
+          {/* Canibalización SEO */}
+          {s.cannibalization && (
+            <SectionCard title="Canibalización SEO" icon="⚠️">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div className="text-center bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{s.cannibalization.totalConflicts}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Conflictos totales</p>
+                </div>
+                <div className="text-center bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
+                  <p className="text-xl font-bold text-red-600 dark:text-red-400">{s.cannibalization.criticalCount}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Críticos</p>
+                </div>
+                <div className="text-center bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-3">
+                  <p className="text-xl font-bold text-yellow-600 dark:text-yellow-400">{s.cannibalization.warningCount}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Advertencias</p>
+                </div>
+                <div className="text-center bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{s.cannibalization.trafficAtRisk > 0 ? fmt(s.cannibalization.trafficAtRisk) : '—'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Tráfico en riesgo</p>
+                </div>
+              </div>
+              {s.cannibalization.criticalCount > 0 && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg px-3 py-2">
+                  Se detectaron <strong>{s.cannibalization.criticalCount}</strong> conflictos críticos de canibalización. Se recomienda revisar y consolidar las páginas afectadas.
+                </p>
+              )}
+              {s.cannibalization.date && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 text-right mt-2">
+                  Análisis del {new Date(s.cannibalization.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })} · Período: {s.cannibalization.dateRange}
+                </p>
+              )}
             </SectionCard>
           )}
 

@@ -1,10 +1,19 @@
 const prisma    = require('../lib/prisma')
 const Anthropic = require('@anthropic-ai/sdk')
 const { logTokens } = require('../lib/logTokens')
+const { fetchGoogleAdsData }             = require('./googleAds.service')
+const { fetchMetaAdsData, getValidFbToken } = require('./metaAds.service')
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function monthBounds(month) {
+  const [y, m] = month.split('-').map(Number)
+  const pad     = n => String(n).padStart(2, '0')
+  const lastDay = new Date(y, m, 0).getDate()
+  return { startDate: `${y}-${pad(m)}-01`, endDate: `${y}-${pad(m)}-${pad(lastDay)}` }
+}
 
 function prevMonthStr(month) {
   const [y, m] = month.split('-').map(Number)
@@ -77,6 +86,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     allKeywords,
     completedTasks,
     integrations,
+    cannibalSnap,
     seoSnap,
     seoPrev,
   ] = await Promise.all([
@@ -180,10 +190,19 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       orderBy: { completedAt: 'desc' },
     }),
 
-    // Integraciones activas del proyecto
+    // Integraciones activas del proyecto (incluyendo tokens para ads)
     prisma.projectIntegration.findMany({
       where:  { projectId, status: 'active' },
-      select: { type: true, status: true },
+      select: { type: true, status: true, customerId: true, propertyId: true,
+                accessToken: true, refreshToken: true, expiresAt: true },
+    }),
+
+    // Canibalización — reporte completado más reciente
+    prisma.cannibalReport.findFirst({
+      where:   { projectId, workspaceId, status: 'completed' },
+      orderBy: { createdAt: 'desc' },
+      select:  { totalConflicts: true, criticalCount: true, warningCount: true,
+                 lowCount: true, trafficAtRisk: true, dateRange: true, createdAt: true },
     }),
 
     // Search Console snapshot (SEO)
@@ -200,6 +219,59 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
   // ── Integrations map ─────────────────────────────────────────────────────────
   const connectedTypes = new Set(integrations.map(i => i.type))
+
+  // ── Google Ads + Meta Ads (fetch async con rango de fechas exacto) ────────────
+  const { startDate, endDate } = monthBounds(dataMonth)
+  const dateRange = { startDate, endDate }
+
+  const gadsIntegration = integrations.find(i => i.type === 'google_ads')
+  const metaIntegration = integrations.find(i => i.type === 'meta_ads')
+
+  const [googleAdsRaw, metaAdsRaw] = await Promise.all([
+    gadsIntegration && gadsIntegration.customerId && process.env.GOOGLE_ADS_DEVELOPER_TOKEN
+      ? fetchGoogleAdsData(gadsIntegration, 'this_month', dateRange).catch(err => {
+          console.warn('[MonthlyReport] Google Ads fetch fallido (ignorado):', err.message)
+          return null
+        })
+      : Promise.resolve(null),
+    metaIntegration && metaIntegration.propertyId
+      ? getValidFbToken(metaIntegration)
+          .then(token => fetchMetaAdsData(metaIntegration.propertyId, token, 'this_month', dateRange))
+          .catch(err => {
+            console.warn('[MonthlyReport] Meta Ads fetch fallido (ignorado):', err.message)
+            return null
+          })
+      : Promise.resolve(null),
+  ])
+
+  const googleAds = googleAdsRaw ? {
+    cost:        googleAdsRaw.cost,
+    impressions: googleAdsRaw.impressions,
+    clicks:      googleAdsRaw.clicks,
+    ctr:         googleAdsRaw.ctr,
+    conversions: googleAdsRaw.conversions,
+    campaigns:   (googleAdsRaw.campaigns ?? []).slice(0, 5),
+  } : null
+
+  const metaAds = metaAdsRaw ? {
+    spend:       metaAdsRaw.spend,
+    impressions: metaAdsRaw.impressions,
+    clicks:      metaAdsRaw.clicks,
+    ctr:         metaAdsRaw.ctr,
+    reach:       metaAdsRaw.reach,
+    campaigns:   (metaAdsRaw.campaigns ?? []).slice(0, 5),
+  } : null
+
+  // ── Canibalización ───────────────────────────────────────────────────────────
+  const cannibalization = cannibalSnap ? {
+    totalConflicts: cannibalSnap.totalConflicts ?? 0,
+    criticalCount:  cannibalSnap.criticalCount  ?? 0,
+    warningCount:   cannibalSnap.warningCount   ?? 0,
+    lowCount:       cannibalSnap.lowCount       ?? 0,
+    trafficAtRisk:  cannibalSnap.trafficAtRisk  ?? 0,
+    dateRange:      cannibalSnap.dateRange,
+    date:           cannibalSnap.createdAt,
+  } : null
 
   // ── GEO ──────────────────────────────────────────────────────────────────────
   const geo = geoAudit ? {
@@ -375,7 +447,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     month,        // mes del informe (ej: "2026-05") — para identificación/navegación
     dataMonth,    // período de los datos (ej: "2026-04") — para mostrar al usuario
     connectedTypes: [...connectedTypes],
-    sections: { geo, analytics, evolution, instagram, tiktok, seo, keywords, performance, tasks },
+    sections: { geo, analytics, evolution, instagram, tiktok, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks },
     analysis,
     _analysisIsNew: !cachedAnalysis && !!analysis?.resumen,
   }
@@ -437,6 +509,18 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
     performance: performance ? {
       mobile:  performance.mobile?.score,
       desktop: performance.desktop?.score,
+    } : null,
+    googleAds: googleAds ? {
+      inversion: `$${googleAds.cost.toFixed(2)}`,
+      clicks:    googleAds.clicks,
+      ctr:       `${googleAds.ctr}%`,
+      conversiones: googleAds.conversions,
+    } : null,
+    metaAds: metaAds ? {
+      inversion: `$${metaAds.spend.toFixed(2)}`,
+      clicks:    metaAds.clicks,
+      ctr:       `${metaAds.ctr}%`,
+      alcance:   metaAds.reach,
     } : null,
   }, null, 2)
 

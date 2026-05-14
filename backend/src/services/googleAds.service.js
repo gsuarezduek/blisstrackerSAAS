@@ -37,10 +37,17 @@ function normalizeCustomerId(id) {
  * @param {string} datePreset   — clave de GAQL_DATE_CLAUSE
  * @returns {Promise<object>}
  */
-async function fetchGoogleAdsData(integration, datePreset = 'this_month') {
+/**
+ * @param {object} integration
+ * @param {string} datePreset   — clave de GAQL_DATE_CLAUSE (ignorado si se pasa dateRange)
+ * @param {{ startDate: string, endDate: string }|null} dateRange — rango específico YYYY-MM-DD
+ */
+async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRange = null) {
   const accessToken = await getValidAccessToken(integration)
   const customerId  = normalizeCustomerId(integration.customerId)
-  const dateClause  = GAQL_DATE_CLAUSE[datePreset] ?? 'THIS_MONTH'
+  const dateClause  = dateRange
+    ? `BETWEEN '${dateRange.startDate}' AND '${dateRange.endDate}'`
+    : (GAQL_DATE_CLAUSE[datePreset] ?? 'THIS_MONTH')
   const devToken    = process.env.GOOGLE_ADS_DEVELOPER_TOKEN
 
   const query = `
@@ -56,7 +63,7 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month') {
       metrics.conversions,
       metrics.average_cpc
     FROM campaign
-    WHERE segments.date DURING ${dateClause}
+    WHERE segments.date ${dateRange ? dateClause : `DURING ${dateClause}`}
       AND campaign.status != 'REMOVED'
     ORDER BY metrics.cost_micros DESC
     LIMIT 50

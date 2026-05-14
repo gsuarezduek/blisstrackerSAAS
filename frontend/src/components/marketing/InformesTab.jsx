@@ -203,7 +203,6 @@ export default function InformesTab({ projectId }) {
           </button>
           <div className="text-center min-w-[160px]">
             <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{monthLabel(month)}</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 capitalize">datos de {monthLabel(prevMonthStr(month))}</p>
           </div>
           <button
             onClick={() => canGoNext && setMonth(nextMonthStr(month))}

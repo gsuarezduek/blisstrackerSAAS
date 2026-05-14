@@ -58,24 +58,35 @@ const DATE_PRESETS = new Set([
  * Obtiene métricas de la cuenta publicitaria y sus campañas.
  * @param {string} adAccountId  — e.g. "act_1234567890"
  * @param {string} accessToken
- * @param {string} datePreset   — uno de DATE_PRESETS
+ * @param {string} datePreset   — uno de DATE_PRESETS (ignorado si se pasa dateRange)
+ * @param {{ startDate: string, endDate: string }|null} dateRange — rango específico YYYY-MM-DD
  */
-async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_month') {
-  if (!DATE_PRESETS.has(datePreset)) datePreset = 'this_month'
+async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_month', dateRange = null) {
+  if (!dateRange && !DATE_PRESETS.has(datePreset)) datePreset = 'this_month'
+
+  // Parámetros de fecha: date_preset o time_range
+  const dateParam = dateRange
+    ? { time_range: JSON.stringify({ since: dateRange.startDate, until: dateRange.endDate }) }
+    : { date_preset: datePreset }
+
+  // Para el edge de campaigns, construir el string de insights
+  const insightsParam = dateRange
+    ? `insights.time_range(${JSON.stringify({ since: dateRange.startDate, until: dateRange.endDate })}){spend,reach,impressions,clicks,ctr}`
+    : `insights.date_preset(${datePreset}){spend,reach,impressions,clicks,ctr}`
 
   const [summaryRes, campaignsRes] = await Promise.all([
     // Métricas globales de la cuenta
     axios.get(`${FB_GRAPH}/${adAccountId}/insights`, {
       params: {
         fields:       'spend,reach,impressions,clicks,ctr,cpm,cpc',
-        date_preset:  datePreset,
+        ...dateParam,
         access_token: accessToken,
       },
     }),
     // Campañas con métricas incorporadas (edge expansion)
     axios.get(`${FB_GRAPH}/${adAccountId}/campaigns`, {
       params: {
-        fields:       `id,name,status,objective,insights.date_preset(${datePreset}){spend,reach,impressions,clicks,ctr}`,
+        fields:       `id,name,status,objective,${insightsParam}`,
         limit:        50,
         access_token: accessToken,
       },

@@ -503,4 +503,90 @@ async function connectInstagramToken(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback, connectInstagramToken }
+/**
+ * POST /api/marketing/projects/:id/integrations/meta-ads/connect-token
+ * Conecta Meta Ads mediante un System User Token de Business Manager.
+ *
+ * Flujo de 2 pasos:
+ *   Paso 1 — Body: { accessToken }
+ *     → Llama a /me/adaccounts para obtener todas las cuentas publicitarias
+ *     → Si hay 1 cuenta activa: conecta y devuelve { ok, adAccountId, accountName }
+ *     → Si hay múltiples: devuelve { accounts: [{id, name, currency}] }
+ *   Paso 2 — Body: { accessToken, adAccountId }
+ *     → Conecta la cuenta seleccionada
+ */
+async function connectMetaAdsToken(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const { accessToken, adAccountId } = req.body
+    if (!accessToken) return res.status(400).json({ error: 'accessToken requerido' })
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId: req.workspace.id },
+      select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    // 1. Obtener cuentas publicitarias del token
+    let accountsData
+    try {
+      const { data } = await axios.get('https://graph.facebook.com/v21.0/me/adaccounts', {
+        params: { fields: 'id,name,account_status,currency', access_token: accessToken },
+      })
+      accountsData = data.data ?? []
+    } catch (err) {
+      const msg = err.response?.data?.error?.message || err.message
+      console.error('[MetaAdsToken] Error al obtener cuentas:', msg)
+      return res.status(400).json({ error: `Token inválido o sin permisos: ${msg}` })
+    }
+
+    // account_status 1 = ACTIVE
+    const activeAccounts = accountsData.filter(a => a.account_status === 1)
+    const allAccounts    = activeAccounts.length > 0 ? activeAccounts : accountsData
+
+    if (allAccounts.length === 0) {
+      return res.status(400).json({
+        error: 'No se encontraron cuentas publicitarias accesibles con este token. Verificá que el System User tenga al menos una Ad Account asignada en Business Manager.',
+      })
+    }
+
+    // 2. Determinar qué cuenta usar
+    let chosenAccount
+    if (adAccountId) {
+      chosenAccount = allAccounts.find(a => a.id === String(adAccountId))
+      if (!chosenAccount) return res.status(400).json({ error: 'La cuenta seleccionada no está disponible para este token.' })
+    } else if (allAccounts.length === 1) {
+      chosenAccount = allAccounts[0]
+    } else {
+      // Múltiples cuentas → devolver lista para el picker
+      return res.json({
+        accounts: allAccounts.map(a => ({ id: a.id, name: a.name, currency: a.currency ?? null })),
+      })
+    }
+
+    const finalAdAccountId = chosenAccount.id   // formato "act_XXXXXXXXX"
+    const accountName      = chosenAccount.name
+
+    // 3. Upsert en ProjectIntegration — expiresAt: null indica token permanente (System User)
+    await prisma.projectIntegration.upsert({
+      where:  { projectId_type: { projectId, type: 'meta_ads' } },
+      update: {
+        workspaceId: req.workspace.id, status: 'active', propertyId: finalAdAccountId,
+        accessToken: encrypt(accessToken), refreshToken: null,
+        expiresAt: null, scopes: 'ads_read',
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+      create: {
+        projectId, workspaceId: req.workspace.id, type: 'meta_ads', status: 'active',
+        propertyId: finalAdAccountId, accessToken: encrypt(accessToken), refreshToken: null,
+        expiresAt: null, scopes: 'ads_read',
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+    })
+
+    console.log(`[MetaAdsToken] Meta Ads conectado via token manual: proyecto ${projectId}, cuenta ${finalAdAccountId} (${accountName})`)
+    res.json({ ok: true, adAccountId: finalAdAccountId, accountName })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback, connectInstagramToken, connectMetaAdsToken }
