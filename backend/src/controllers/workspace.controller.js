@@ -46,7 +46,12 @@ async function getCurrent(req, res, next) {
     const sub = await prisma.subscription.findUnique({
       where: { workspaceId: workspace.id },
     })
-    res.json({ ...workspace, subscription: sub })
+    res.json({
+      ...workspace,
+      subscription: sub,
+      brandColors: JSON.parse(workspace.brandColors || '[]'),
+      brandFonts:  JSON.parse(workspace.brandFonts  || '[]'),
+    })
   } catch (err) { next(err) }
 }
 
@@ -56,20 +61,28 @@ async function getCurrent(req, res, next) {
  */
 async function updateCurrent(req, res, next) {
   try {
-    const { name, timezone, companyName, companyDescription, industry, companyWebsite } = req.body
+    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts } = req.body
     const data = {}
     if (name) data.name = name
     if (timezone) data.timezone = timezone
-    if (companyName       !== undefined) data.companyName        = companyName
+    if (companyName        !== undefined) data.companyName        = companyName
     if (companyDescription !== undefined) data.companyDescription = companyDescription
-    if (industry          !== undefined) data.industry           = industry
-    if (companyWebsite    !== undefined) data.companyWebsite     = companyWebsite
+    if (industry           !== undefined) data.industry           = industry
+    if (companyWebsite     !== undefined) data.companyWebsite     = companyWebsite
+    if (brandColors        !== undefined) data.brandColors        = JSON.stringify(brandColors)
+    if (brandFonts         !== undefined) data.brandFonts         = JSON.stringify(brandFonts)
 
     const workspace = await prisma.workspace.update({
       where: { id: req.workspace.id },
       data,
     })
-    res.json(workspace)
+
+    // Deserializar JSON antes de devolver
+    res.json({
+      ...workspace,
+      brandColors: JSON.parse(workspace.brandColors || '[]'),
+      brandFonts:  JSON.parse(workspace.brandFonts  || '[]'),
+    })
   } catch (err) { next(err) }
 }
 

@@ -67,15 +67,18 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // Ej: "Informe de Mayo 2026" → período de datos: Abril 2026.
   const dataMonth = prevMonthStr(month)
 
+  // Ignorar análisis cacheado sin resumen válido (ej: guardado vacío tras un error de Claude)
+  const validCachedAnalysis = cachedAnalysis?.resumen ? cachedAnalysis : null
+
   // Caché completo disponible: retornar sin queries ni llamadas a APIs externas
-  if (cachedData && cachedAnalysis) {
+  if (cachedData && validCachedAnalysis) {
     return {
       project:        cachedData.project,
       month,
       dataMonth:      cachedData.dataMonth,
       connectedTypes: cachedData.connectedTypes,
       sections:       cachedData.sections,
-      analysis:       cachedAnalysis,
+      analysis:       validCachedAnalysis,
       _analysisIsNew:  false,
       _dataCacheIsNew: false,
     }
@@ -549,9 +552,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   const services = project?.services?.map(ps => ps.service.name) ?? []
 
   // ── Análisis IA ──────────────────────────────────────────────────────────────
-  // Si ya existe un análisis cacheado, no se regenera
-  const analysis = cachedAnalysis
-    ? cachedAnalysis
+  // Si ya existe un análisis cacheado con resumen válido, no se regenera
+  const analysis = validCachedAnalysis
+    ? validCachedAnalysis
     : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, keywords, seo, performance, googleAds, metaAds, workspaceId, objectives, services })
 
   return {
@@ -566,7 +569,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     connectedTypes: [...connectedTypes],
     sections: { geo, analytics, evolution, instagram, tiktok, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks },
     analysis,
-    _analysisIsNew:  !cachedAnalysis && !!analysis?.resumen,
+    _analysisIsNew:  !validCachedAnalysis && !!analysis?.resumen,
     // No cachear si estamos usando datos en vivo (cambian a diario)
     _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live',
   }

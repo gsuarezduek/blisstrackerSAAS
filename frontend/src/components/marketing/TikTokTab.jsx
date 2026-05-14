@@ -447,37 +447,53 @@ export default function TikTokTab({ projectId }) {
       {isCurrentMonth && metrics?.topOfMonth && <TopOfMonth topOfMonth={metrics.topOfMonth} />}
 
       {/* Evolución de seguidores */}
-      {integration && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📈 Evolución de seguidores</p>
-            <div className="flex items-center gap-2 flex-wrap">
-              {followerLogs.length >= 2 && (() => {
-                const delta = followerLogs[followerLogs.length - 1].followersCount - followerLogs[0].followersCount
-                return (
-                  <span className={`text-xs font-semibold ${delta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
-                    {delta >= 0 ? '+' : ''}{fmtNum(delta)} en el período
-                  </span>
-                )
-              })()}
-              <div className="flex gap-1 flex-wrap">
-                {FOLLOWER_FILTERS.map(f => (
-                  <button key={f.key} onClick={() => { setFollowerFilter(f.key); fetchFollowerLogs(f.key) }}
-                    className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${followerFilter === f.key ? 'text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-                    style={followerFilter === f.key ? { backgroundColor: TEAL } : {}}
-                  >{f.label}</button>
-                ))}
+      {integration && (() => {
+        // Fallback: si hay pocos logs diarios, usar snapshots mensuales como historial
+        const snapshotFallback = followerLogs.length < 2 && snapshots.filter(s => s.followersCount != null).length >= 2
+          ? snapshots.filter(s => s.followersCount != null).map(s => ({ date: `${s.month}-01`, followersCount: s.followersCount }))
+          : null
+        const chartData = snapshotFallback || followerLogs
+        const hasChart  = chartData.length >= 2
+
+        return (
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📈 Evolución de seguidores</p>
+                {snapshotFallback && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Datos mensuales · el gráfico diario se irá completando</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {hasChart && (() => {
+                  const delta = chartData[chartData.length - 1].followersCount - chartData[0].followersCount
+                  return (
+                    <span className={`text-xs font-semibold ${delta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                      {delta >= 0 ? '+' : ''}{fmtNum(delta)} en el período
+                    </span>
+                  )
+                })()}
+                {!snapshotFallback && (
+                  <div className="flex gap-1 flex-wrap">
+                    {FOLLOWER_FILTERS.map(f => (
+                      <button key={f.key} onClick={() => { setFollowerFilter(f.key); fetchFollowerLogs(f.key) }}
+                        className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${followerFilter === f.key ? 'text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                        style={followerFilter === f.key ? { backgroundColor: TEAL } : {}}
+                      >{f.label}</button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
+            {followerLoading
+              ? <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${TEAL} transparent ${TEAL} ${TEAL}` }} /></div>
+              : hasChart
+                ? <LineChart data={chartData} valueAccessor={d => d.followersCount} labelAccessor={d => snapshotFallback ? d.date?.slice(0, 7) : d.date?.slice(5)} color={TEAL} formatY={v => fmtK(Math.round(v))} chartHeight={160} displayHeight={180} bare />
+                : <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">Recopilando información, pronto vas a poder ver la evolución de seguidores.</p>
+            }
           </div>
-          {followerLoading
-            ? <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${TEAL} transparent ${TEAL} ${TEAL}` }} /></div>
-            : followerLogs.length >= 2
-              ? <LineChart data={followerLogs} valueAccessor={d => d.followersCount} labelAccessor={d => d.date?.slice(5)} color={TEAL} formatY={v => fmtK(Math.round(v))} chartHeight={160} displayHeight={180} bare />
-              : <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">Recopilando información, pronto vas a poder ver la evolución de seguidores.</p>
-          }
-        </div>
-      )}
+        )
+      })()}
 
       {/* Engagement histórico mensual */}
       {snapshots.filter(d => d.engagementRate != null).length >= 2 && (

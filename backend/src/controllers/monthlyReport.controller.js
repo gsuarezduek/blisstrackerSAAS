@@ -254,8 +254,8 @@ async function regenerateReport(req, res, next) {
 
     // Guardar nuevo análisis y caché de datos en DB
     const regenUpdate = {}
-    if (data.analysis)       regenUpdate.analysis  = JSON.stringify(data.analysis)
-    if (data._dataCacheIsNew) regenUpdate.dataCache = JSON.stringify({
+    if (data.analysis?.resumen) regenUpdate.analysis  = JSON.stringify(data.analysis)
+    if (data._dataCacheIsNew)   regenUpdate.dataCache = JSON.stringify({
       project:        data.project,
       dataMonth:      data.dataMonth,
       connectedTypes: data.connectedTypes,
