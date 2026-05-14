@@ -58,10 +58,24 @@ function monthOfDate(d) {
  * Recopila todos los datos necesarios para el informe mensual de un proyecto.
  * Retorna un objeto estructurado con secciones condicionales.
  */
-async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null, objectives = {}) {
+async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null, objectives = {}, cachedData = null) {
   // El informe del mes X muestra datos del mes X-1.
   // Ej: "Informe de Mayo 2026" → período de datos: Abril 2026.
   const dataMonth = prevMonthStr(month)
+
+  // Caché completo disponible: retornar sin queries ni llamadas a APIs externas
+  if (cachedData && cachedAnalysis) {
+    return {
+      project:        cachedData.project,
+      month,
+      dataMonth:      cachedData.dataMonth,
+      connectedTypes: cachedData.connectedTypes,
+      sections:       cachedData.sections,
+      analysis:       cachedAnalysis,
+      _analysisIsNew:  false,
+      _dataCacheIsNew: false,
+    }
+  }
   const prev      = prevMonthStr(dataMonth)   // mes anterior al período (para deltas)
   const last6     = prevMonthsArr(dataMonth, 6)
 
@@ -449,7 +463,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     connectedTypes: [...connectedTypes],
     sections: { geo, analytics, evolution, instagram, tiktok, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks },
     analysis,
-    _analysisIsNew: !cachedAnalysis && !!analysis?.resumen,
+    _analysisIsNew:  !cachedAnalysis && !!analysis?.resumen,
+    _dataCacheIsNew: true,
   }
 }
 

@@ -60,23 +60,30 @@ async function getReport(req, res, next) {
       })
     }
 
-    // Pasar análisis cacheado si ya existe (evita regenerar con Claude en cada carga)
-    const cachedAnalysis = report.analysis ? safeParseObj(report.analysis) : null
+    // Pasar cachés si ya existen (evita queries + llamadas a APIs externas en cada carga)
+    const cachedAnalysis = report.analysis   ? safeParseObj(report.analysis)   : null
+    const cachedData     = report.dataCache  ? safeParseObj(report.dataCache)  : null
     const objectives     = safeParseObj(report.objectives)
 
     // Agregar todos los datos
-    const data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis, objectives)
+    const data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis, objectives, cachedData)
 
-    // Si se generó un análisis nuevo, guardarlo en DB para futuras cargas
-    if (data._analysisIsNew && data.analysis) {
-      await prisma.monthlyReport.update({
-        where: { id: report.id },
-        data:  { analysis: JSON.stringify(data.analysis) },
-      })
+    // Persistir cachés nuevos en DB
+    const dbUpdate = {}
+    if (data._analysisIsNew  && data.analysis)  dbUpdate.analysis  = JSON.stringify(data.analysis)
+    if (data._dataCacheIsNew)                    dbUpdate.dataCache = JSON.stringify({
+      project:        data.project,
+      dataMonth:      data.dataMonth,
+      connectedTypes: data.connectedTypes,
+      sections:       data.sections,
+    })
+    if (Object.keys(dbUpdate).length > 0) {
+      await prisma.monthlyReport.update({ where: { id: report.id }, data: dbUpdate })
     }
 
-    // No exponer el flag interno al cliente
+    // No exponer flags internos al cliente
     delete data._analysisIsNew
+    delete data._dataCacheIsNew
 
     res.json({
       report: {
@@ -201,7 +208,7 @@ async function regenerateReport(req, res, next) {
     // Limpiar análisis cacheado (o crear el registro si no existe)
     let report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month } })
     if (report) {
-      await prisma.monthlyReport.update({ where: { id: report.id }, data: { analysis: null } })
+      await prisma.monthlyReport.update({ where: { id: report.id }, data: { analysis: null, dataCache: null } })
     } else {
       report = await prisma.monthlyReport.create({
         data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}' },
@@ -212,15 +219,21 @@ async function regenerateReport(req, res, next) {
     const objectives = report ? safeParseObj(report.objectives) : {}
     const data = await aggregateReportData(projectId, workspaceId, month, null, objectives)
 
-    // Guardar nuevo análisis en DB
-    if (data.analysis) {
-      await prisma.monthlyReport.update({
-        where: { id: report.id },
-        data:  { analysis: JSON.stringify(data.analysis) },
-      })
+    // Guardar nuevo análisis y caché de datos en DB
+    const regenUpdate = {}
+    if (data.analysis)       regenUpdate.analysis  = JSON.stringify(data.analysis)
+    if (data._dataCacheIsNew) regenUpdate.dataCache = JSON.stringify({
+      project:        data.project,
+      dataMonth:      data.dataMonth,
+      connectedTypes: data.connectedTypes,
+      sections:       data.sections,
+    })
+    if (Object.keys(regenUpdate).length > 0) {
+      await prisma.monthlyReport.update({ where: { id: report.id }, data: regenUpdate })
     }
 
     delete data._analysisIsNew
+    delete data._dataCacheIsNew
 
     const updatedReport = await prisma.monthlyReport.findUnique({ where: { id: report.id } })
 
