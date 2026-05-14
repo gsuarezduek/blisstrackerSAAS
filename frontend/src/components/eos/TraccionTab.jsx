@@ -139,23 +139,17 @@ function RockCard({ rock, members, onUpdate, onDelete }) {
   const [expanded, setExpanded]     = useState(false)
   const [descDraft, setDescDraft]   = useState(rock.description || '')
   const [notesDraft, setNotesDraft] = useState(rock.notes || '')
-  const descTimer  = useRef(null)
-  const notesTimer = useRef(null)
+  const descDirty  = useRef(false)
+  const notesDirty = useRef(false)
 
-  useEffect(() => { setDescDraft(rock.description || '') }, [rock.description])
-  useEffect(() => { setNotesDraft(rock.notes || '')     }, [rock.notes])
+  useEffect(() => { setDescDraft(rock.description || '');  descDirty.current  = false }, [rock.description])
+  useEffect(() => { setNotesDraft(rock.notes || '');       notesDirty.current = false }, [rock.notes])
 
   const st    = STATUS_ROCK[rock.status] || STATUS_ROCK.not_started
   const owner = members.find(m => m.id === rock.ownerId)
 
-  function saveDesc(val) {
-    clearTimeout(descTimer.current)
-    descTimer.current = setTimeout(() => onUpdate(rock.id, { description: val }), 700)
-  }
-  function saveNotes(val) {
-    clearTimeout(notesTimer.current)
-    notesTimer.current = setTimeout(() => onUpdate(rock.id, { notes: val }), 700)
-  }
+  function commitDesc()  { if (descDirty.current)  { descDirty.current  = false; onUpdate(rock.id, { description: descDraft }) } }
+  function commitNotes() { if (notesDirty.current) { notesDirty.current = false; onUpdate(rock.id, { notes: notesDraft })       } }
 
   return (
     <div className={`rounded-xl border border-gray-200 dark:border-gray-700 border-l-4 ${st.border} bg-white dark:bg-gray-800 transition-all`}>
@@ -216,7 +210,8 @@ function RockCard({ rock, members, onUpdate, onDelete }) {
               rows={2}
               placeholder="Descripción, alcance, criterio de éxito..."
               value={descDraft}
-              onChange={e => { setDescDraft(e.target.value); saveDesc(e.target.value) }}
+              onChange={e => { setDescDraft(e.target.value); descDirty.current = true }}
+              onBlur={commitDesc}
             />
           </div>
 
@@ -228,7 +223,8 @@ function RockCard({ rock, members, onUpdate, onDelete }) {
               rows={2}
               placeholder="Registro de progreso durante el trimestre..."
               value={notesDraft}
-              onChange={e => { setNotesDraft(e.target.value); saveNotes(e.target.value) }}
+              onChange={e => { setNotesDraft(e.target.value); notesDirty.current = true }}
+              onBlur={commitNotes}
             />
           </div>
 
@@ -603,12 +599,13 @@ function MeetingCard({ week, meeting, onSave }) {
   const [date, setDate]   = useState(meeting?.date || '')
   const [rating, setRating] = useState(meeting?.rating ?? null)
   const [notes, setNotes] = useState(meeting?.notes || '')
-  const notesTimer = useRef(null)
+  const notesDirty = useRef(false)
 
   useEffect(() => {
     setDate(meeting?.date || '')
     setRating(meeting?.rating ?? null)
     setNotes(meeting?.notes || '')
+    notesDirty.current = false
   }, [week, meeting?.id])
 
   function save(patch) {
@@ -623,8 +620,11 @@ function MeetingCard({ week, meeting, onSave }) {
 
   function handleNotesChange(val) {
     setNotes(val)
-    clearTimeout(notesTimer.current)
-    notesTimer.current = setTimeout(() => save({ notes: val }), 700)
+    notesDirty.current = true
+  }
+
+  function commitNotes() {
+    if (notesDirty.current) { notesDirty.current = false; save({ notes }) }
   }
 
   return (
@@ -673,6 +673,7 @@ function MeetingCard({ week, meeting, onSave }) {
           placeholder="Registrá decisiones clave, acuerdos o temas que necesitan seguimiento..."
           value={notes}
           onChange={e => handleNotesChange(e.target.value)}
+          onBlur={commitNotes}
         />
       </div>
     </div>

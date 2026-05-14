@@ -465,7 +465,7 @@ function SectionCard({ title, desc, saving, saved, onHelp, children }) {
 }
 
 // Campo de texto simple dentro de una subsección
-function SubField({ label, hint, value, onChange, rows = 3, maxLength = 500, placeholder }) {
+function SubField({ label, hint, value, onChange, onBlur, rows = 3, maxLength = 500, placeholder }) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">{label}</label>
@@ -473,6 +473,7 @@ function SubField({ label, hint, value, onChange, rows = 3, maxLength = 500, pla
       <textarea
         value={value}
         onChange={e => onChange(e.target.value)}
+        onBlur={onBlur}
         rows={rows}
         maxLength={maxLength}
         placeholder={placeholder}
@@ -483,7 +484,7 @@ function SubField({ label, hint, value, onChange, rows = 3, maxLength = 500, pla
 }
 
 // Campo de texto de una línea
-function InlineField({ label, value, onChange, placeholder, maxLength = 200 }) {
+function InlineField({ label, value, onChange, onBlur, onKeyDown, placeholder, maxLength = 200 }) {
   return (
     <div>
       <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</label>
@@ -491,6 +492,8 @@ function InlineField({ label, value, onChange, placeholder, maxLength = 200 }) {
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         maxLength={maxLength}
         className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -585,55 +588,57 @@ function ItemsList({ items, onChange, maxItems, minItems = 0, placeholder, empty
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Hook: auto-save con debounce
+// Hook: guarda al perder el foco (blur) o al presionar Enter (inputs de una línea)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function useDebouncedField(initial, fieldKey, onSave, delay = 800) {
-  const [value, setValue]   = useState(initial)
+function useDebouncedField(initial, fieldKey, onSave) {
+  const [value,  setValue]  = useState(initial)
   const [saving, setSaving] = useState(false)
   const [saved,  setSaved]  = useState(false)
-  const timer = useRef(null)
+  const dirty = useRef(false)
 
   useEffect(() => { setValue(initial) }, [initial])
 
   function handleChange(next) {
     setValue(next)
+    dirty.current = true
     setSaved(false)
-    clearTimeout(timer.current)
-    timer.current = setTimeout(async () => {
-      setSaving(true)
-      try {
-        await onSave({ [fieldKey]: next })
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2500)
-      } finally { setSaving(false) }
-    }, delay)
   }
 
-  return { value, handleChange, saving, saved }
+  async function commit(val) {
+    if (!dirty.current) return
+    dirty.current = false
+    setSaving(true)
+    try {
+      await onSave({ [fieldKey]: val })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } finally { setSaving(false) }
+  }
+
+  function handleBlur()    { commit(value) }
+  function handleKeyDown(e) { if (e.key === 'Enter') { e.preventDefault(); commit(value) } }
+
+  return { value, handleChange, handleBlur, handleKeyDown, saving, saved }
 }
 
-// Lista con auto-save propio
-function useDebouncedList(initial, fieldKey, onSave, delay = 800) {
+// Lista con auto-save inmediato (se modifica con botones, no con escritura)
+function useDebouncedList(initial, fieldKey, onSave) {
   const [items,  setItems]  = useState(initial)
   const [saving, setSaving] = useState(false)
   const [saved,  setSaved]  = useState(false)
-  const timer = useRef(null)
 
   useEffect(() => { setItems(initial) }, [initial])   // eslint-disable-line
 
-  function handleChange(next) {
+  async function handleChange(next) {
     setItems(next)
     setSaved(false)
-    clearTimeout(timer.current)
-    timer.current = setTimeout(async () => {
-      setSaving(true)
-      try {
-        await onSave({ [fieldKey]: next })
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2500)
-      } finally { setSaving(false) }
-    }, delay)
+    setSaving(true)
+    try {
+      await onSave({ [fieldKey]: next })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } finally { setSaving(false) }
   }
 
   return { items, handleChange, saving, saved }
@@ -942,13 +947,13 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
           <SubField
             label="Propósito / Causa / Pasión"
             hint="¿Cuál es el propósito, causa o pasión de tu organización?"
-            value={purpose.value} onChange={purpose.handleChange}
+            value={purpose.value} onChange={purpose.handleChange} onBlur={purpose.handleBlur}
             placeholder="Ej: Ayudar a las empresas a alcanzar su máximo potencial a través de la tecnología."
           />
           <SubField
             label="Nicho"
             hint="¿Cuál es el nicho de tu organización?"
-            value={niche.value} onChange={niche.handleChange}
+            value={niche.value} onChange={niche.handleChange} onBlur={niche.handleBlur}
             placeholder="Ej: Agencia de marketing digital para e-commerce de moda en LATAM."
           />
         </div>
@@ -963,7 +968,7 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
       >
         <SubField
           label="" hint=""
-          value={tenYearTarget.value} onChange={tenYearTarget.handleChange}
+          value={tenYearTarget.value} onChange={tenYearTarget.handleChange} onBlur={tenYearTarget.handleBlur}
           rows={4} maxLength={1000}
           placeholder="Ej: Ser la agencia de marketing digital líder en LATAM, con presencia en 5 países y 200 clientes activos."
         />
@@ -981,7 +986,7 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
           <SubField
             label="La Lista / Cliente Ideal"
             hint="¿Quién es exactamente tu cliente ideal?"
-            value={marketingTarget.value} onChange={marketingTarget.handleChange}
+            value={marketingTarget.value} onChange={marketingTarget.handleChange} onBlur={marketingTarget.handleBlur}
             rows={3} maxLength={1000}
             placeholder="Ej: Dueños de PyMEs de servicios con 5 a 30 empleados en Argentina, que quieren sistematizar su gestión."
           />
@@ -999,7 +1004,7 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
           <SubField
             label="Proceso Probado"
             hint="Los pasos que seguís para entregar tus resultados."
-            value={marketingProcess.value} onChange={marketingProcess.handleChange}
+            value={marketingProcess.value} onChange={marketingProcess.handleChange} onBlur={marketingProcess.handleBlur}
             rows={3} maxLength={2000}
             placeholder="Ej: 1. Diagnóstico → 2. Estrategia → 3. Implementación → 4. Optimización → 5. Reporte mensual."
           />
@@ -1007,7 +1012,7 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
           <SubField
             label="Garantía"
             hint="¿Qué le prometés al cliente que, si no se cumple, corregís o devolvés?"
-            value={marketingGuarantee.value} onChange={marketingGuarantee.handleChange}
+            value={marketingGuarantee.value} onChange={marketingGuarantee.handleChange} onBlur={marketingGuarantee.handleBlur}
             rows={2} maxLength={500}
             placeholder='Ej: "Si no ves resultados medibles en 90 días, devolvemos el dinero."'
           />
@@ -1024,15 +1029,15 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
       >
         <div className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <InlineField label="Ingresos objetivo" value={threeYearRevenue.value}   onChange={threeYearRevenue.handleChange}   placeholder="Ej: $2M anuales" />
-            <InlineField label="Rentabilidad"       value={threeYearProfit.value}    onChange={threeYearProfit.handleChange}    placeholder="Ej: 25% margen neto" />
-            <InlineField label="N.° de empleados"   value={threeYearHeadcount.value} onChange={threeYearHeadcount.handleChange} placeholder="Ej: 20 personas" />
+            <InlineField label="Ingresos objetivo" value={threeYearRevenue.value}   onChange={threeYearRevenue.handleChange}   onBlur={threeYearRevenue.handleBlur}   onKeyDown={threeYearRevenue.handleKeyDown}   placeholder="Ej: $2M anuales" />
+            <InlineField label="Rentabilidad"       value={threeYearProfit.value}    onChange={threeYearProfit.handleChange}    onBlur={threeYearProfit.handleBlur}    onKeyDown={threeYearProfit.handleKeyDown}    placeholder="Ej: 25% margen neto" />
+            <InlineField label="N.° de empleados"   value={threeYearHeadcount.value} onChange={threeYearHeadcount.handleChange} onBlur={threeYearHeadcount.handleBlur} onKeyDown={threeYearHeadcount.handleKeyDown} placeholder="Ej: 20 personas" />
           </div>
 
           <SubField
             label="Descripción general"
             hint="¿Cómo se ve, se siente y actúa la organización en 3 años?"
-            value={threeYearDescription.value} onChange={threeYearDescription.handleChange}
+            value={threeYearDescription.value} onChange={threeYearDescription.handleChange} onBlur={threeYearDescription.handleBlur}
             rows={4} maxLength={2000}
             placeholder="Ej: Somos reconocidos como la agencia de referencia en marketing para e-commerce en Argentina. Tenemos 80 clientes activos, operamos desde Buenos Aires y Montevideo, y el equipo está compuesto por 20 personas..."
           />
@@ -1059,8 +1064,8 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
       >
         <div className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InlineField label="Ingresos objetivo del año" value={oneYearRevenue.value} onChange={oneYearRevenue.handleChange} placeholder="Ej: $800K" />
-            <InlineField label="Rentabilidad objetivo"     value={oneYearProfit.value}  onChange={oneYearProfit.handleChange}  placeholder="Ej: 20% margen neto" />
+            <InlineField label="Ingresos objetivo del año" value={oneYearRevenue.value} onChange={oneYearRevenue.handleChange} onBlur={oneYearRevenue.handleBlur} onKeyDown={oneYearRevenue.handleKeyDown} placeholder="Ej: $800K" />
+            <InlineField label="Rentabilidad objetivo"     value={oneYearProfit.value}  onChange={oneYearProfit.handleChange}  onBlur={oneYearProfit.handleBlur}  onKeyDown={oneYearProfit.handleKeyDown}  placeholder="Ej: 20% margen neto" />
           </div>
 
           <div>

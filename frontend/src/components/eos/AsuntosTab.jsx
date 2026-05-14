@@ -23,24 +23,25 @@ function IssueCard({ issue, members, onUpdate, onDelete }) {
   const [expanded, setExpanded]         = useState(false)
   const [descDraft, setDescDraft]       = useState(issue.description || '')
   const [notesDraft, setNotesDraft]     = useState(issue.notes || '')
-  const descTimer  = useRef(null)
-  const notesTimer = useRef(null)
+  const descDirty  = useRef(false)
+  const notesDirty = useRef(false)
 
   // Sync drafts if issue changes from outside (e.g. reorder)
-  useEffect(() => { setDescDraft(issue.description || '') }, [issue.description])
-  useEffect(() => { setNotesDraft(issue.notes || '') }, [issue.notes])
+  useEffect(() => { setDescDraft(issue.description || '');  descDirty.current  = false }, [issue.description])
+  useEffect(() => { setNotesDraft(issue.notes || '');       notesDirty.current = false }, [issue.notes])
 
   function handleDescChange(val) {
     setDescDraft(val)
-    clearTimeout(descTimer.current)
-    descTimer.current = setTimeout(() => onUpdate(issue.id, { description: val }), 700)
+    descDirty.current = true
   }
 
   function handleNotesChange(val) {
     setNotesDraft(val)
-    clearTimeout(notesTimer.current)
-    notesTimer.current = setTimeout(() => onUpdate(issue.id, { notes: val }), 700)
+    notesDirty.current = true
   }
+
+  function commitDesc()  { if (descDirty.current)  { descDirty.current  = false; onUpdate(issue.id, { description: descDraft }) } }
+  function commitNotes() { if (notesDirty.current) { notesDirty.current = false; onUpdate(issue.id, { notes: notesDraft })       } }
 
   const owner = members.find(m => m.id === issue.ownerId)
   const isSolved = issue.status === 'solved'
@@ -93,6 +94,7 @@ function IssueCard({ issue, members, onUpdate, onDelete }) {
               placeholder="¿Cuál es el problema?"
               value={descDraft}
               onChange={e => handleDescChange(e.target.value)}
+              onBlur={commitDesc}
             />
           </div>
 
@@ -107,6 +109,7 @@ function IssueCard({ issue, members, onUpdate, onDelete }) {
               placeholder="Registrá decisiones, acciones o la resolución..."
               value={notesDraft}
               onChange={e => handleNotesChange(e.target.value)}
+              onBlur={commitNotes}
             />
           </div>
 

@@ -90,7 +90,7 @@ function renderMarkdown(text) {
 // Textarea que crece automáticamente con el contenido (sin scroll interno)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function AutoResizeTextarea({ value, onChange, placeholder, className }) {
+function AutoResizeTextarea({ value, onChange, onBlur, onKeyDown, placeholder, className }) {
   const ref = useRef(null)
 
   useLayoutEffect(() => {
@@ -104,6 +104,8 @@ function AutoResizeTextarea({ value, onChange, placeholder, className }) {
       ref={ref}
       value={value}
       onChange={e => onChange(e.target.value)}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
       placeholder={placeholder}
       rows={1}
       className={`${className} resize-none overflow-hidden`}
@@ -478,28 +480,40 @@ function StepItem({ step, isFirst, isLast, onUpdate, onDelete, onMoveUp, onMoveD
   const [showDesc,    setShowDesc]    = useState(!!step.description)
   const [editingDesc, setEditingDesc] = useState(false)
   const [confirmDel,  setConfirmDel]  = useState(false)
-  const titleTimer = useRef(null)
-  const descTimer  = useRef(null)
   const descRef    = useRef(null)
+  const titleDirty = useRef(false)
+  const descDirty  = useRef(false)
 
   // Sincronizar si el paso cambia desde afuera (ej: reordenamiento)
   useEffect(() => {
     setTitle(step.title)
     setDesc(step.description ?? '')
+    titleDirty.current = false
+    descDirty.current  = false
   }, [step.id])
 
   function handleTitleChange(val) {
     setTitle(val)
-    clearTimeout(titleTimer.current)
-    if (val.trim()) {
-      titleTimer.current = setTimeout(() => onUpdate(step.id, { title: val.trim() }), 700)
+    titleDirty.current = true
+  }
+
+  function commitTitle() {
+    if (titleDirty.current && title.trim()) {
+      titleDirty.current = false
+      onUpdate(step.id, { title: title.trim() })
     }
   }
 
   function handleDescChange(val) {
     setDesc(val)
-    clearTimeout(descTimer.current)
-    descTimer.current = setTimeout(() => onUpdate(step.id, { description: val.trim() || null }), 700)
+    descDirty.current = true
+  }
+
+  function commitDesc() {
+    if (descDirty.current) {
+      descDirty.current = false
+      onUpdate(step.id, { description: desc.trim() || null })
+    }
   }
 
   function toggleDesc() {
@@ -517,7 +531,7 @@ function StepItem({ step, isFirst, isLast, onUpdate, onDelete, onMoveUp, onMoveD
 
   function blurDesc() {
     setEditingDesc(false)
-    // Si no queda contenido, ocultamos también
+    commitDesc()
     if (!desc.trim()) setShowDesc(false)
   }
 
@@ -533,6 +547,8 @@ function StepItem({ step, isFirst, isLast, onUpdate, onDelete, onMoveUp, onMoveD
         <AutoResizeTextarea
           value={title}
           onChange={handleTitleChange}
+          onBlur={commitTitle}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitTitle() } }}
           placeholder="Título del paso…"
           className="w-full text-sm text-gray-800 dark:text-gray-200 bg-transparent border-none outline-none focus:bg-gray-50 dark:focus:bg-gray-700/50 rounded px-1.5 py-0.5 -mx-1.5 transition-colors leading-snug"
         />
@@ -558,7 +574,7 @@ function StepItem({ step, isFirst, isLast, onUpdate, onDelete, onMoveUp, onMoveD
 
         {showDesc && editingDesc && (
           <div className="mt-1.5 border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden focus-within:ring-1 focus-within:ring-primary-400 bg-gray-50 dark:bg-gray-700/50">
-            <FormatToolbar textareaRef={descRef} value={desc} onChange={val => handleDescChange(val)} />
+            <FormatToolbar textareaRef={descRef} value={desc} onChange={handleDescChange} />
             <textarea
               ref={descRef}
               value={desc}
@@ -601,18 +617,25 @@ function ProcessDetail({ process, roles, onUpdate, onStepCreate, onStepUpdate, o
   const [desc,       setDesc]       = useState(process.description ?? '')
   const [newStep,    setNewStep]    = useState('')
   const [addingStep, setAddingStep] = useState(false)
-  const descTimer  = useRef(null)
   const newStepRef = useRef(null)
+  const descDirty  = useRef(false)
 
   // Resetear al cambiar de proceso
   useEffect(() => {
     setDesc(process.description ?? '')
+    descDirty.current = false
   }, [process.id])
 
   function handleDescChange(val) {
     setDesc(val)
-    clearTimeout(descTimer.current)
-    descTimer.current = setTimeout(() => onUpdate(process.id, { description: val.trim() || null }), 800)
+    descDirty.current = true
+  }
+
+  function commitDesc() {
+    if (descDirty.current) {
+      descDirty.current = false
+      onUpdate(process.id, { description: desc.trim() || null })
+    }
   }
 
   function handleStatusChange(status) {
@@ -690,11 +713,11 @@ function ProcessDetail({ process, roles, onUpdate, onStepCreate, onStepUpdate, o
           <textarea
             value={desc}
             onChange={e => handleDescChange(e.target.value)}
+            onBlur={commitDesc}
             rows={3}
             placeholder="Describí el propósito de este proceso, cuándo aplica y qué resultado produce…"
             className="w-full px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-400 transition-colors placeholder-gray-400"
           />
-          <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">Se guarda automáticamente</p>
         </div>
 
         {/* Pasos */}
