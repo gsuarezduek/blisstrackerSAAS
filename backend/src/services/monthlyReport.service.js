@@ -49,12 +49,12 @@ function monthOfDate(d) {
  * Recopila todos los datos necesarios para el informe mensual de un proyecto.
  * Retorna un objeto estructurado con secciones condicionales.
  */
-async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null) {
+async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null, objectives = {}) {
   // El informe del mes X muestra datos del mes X-1.
   // Ej: "Informe de Mayo 2026" → período de datos: Abril 2026.
   const dataMonth = prevMonthStr(month)
   const prev      = prevMonthStr(dataMonth)   // mes anterior al período (para deltas)
-  const last3     = prevMonthsArr(dataMonth, 3)
+  const last6     = prevMonthsArr(dataMonth, 6)
 
   // Rango de fechas del período de datos (para tasks)
   const [y, mo] = dataMonth.split('-').map(Number)
@@ -114,11 +114,11 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       select:  { sessions: true, activeUsers: true, newUsers: true, pageviews: true,
                  bounceRate: true, avgDuration: true, conversions: true },
     }),
-    // Últimos 3 snapshots GA4 (evolución)
+    // Últimos 6 snapshots GA4 (evolución)
     prisma.analyticsSnapshot.findMany({
-      where:   { projectId, workspaceId, month: { in: last3 } },
+      where:   { projectId, workspaceId, month: { in: last6 } },
       orderBy: { month: 'asc' },
-      select:  { month: true, sessions: true, activeUsers: true, conversions: true },
+      select:  { month: true, sessions: true, activeUsers: true, newUsers: true, conversions: true },
     }),
 
     // Instagram snapshots
@@ -363,7 +363,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // Si ya existe un análisis cacheado, no se regenera
   const analysis = cachedAnalysis
     ? cachedAnalysis
-    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, keywords, seo, performance, workspaceId })
+    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, keywords, seo, performance, workspaceId, objectives, services })
 
   return {
     project: {
@@ -383,29 +383,47 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, seo, performance, workspaceId }) {
+async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, seo, performance, workspaceId, objectives = {}, services = [] }) {
+  // Calcular cumplimiento de objetivos si existen
+  const objCtx = []
+  if (objectives.sessions != null && analytics)
+    objCtx.push({ metrica: 'Sesiones', objetivo: objectives.sessions, real: analytics.sessions, pct: Math.round((analytics.sessions / objectives.sessions) * 100) })
+  if (objectives.newUsers != null && analytics)
+    objCtx.push({ metrica: 'Usuarios nuevos', objetivo: objectives.newUsers, real: analytics.newUsers, pct: Math.round((analytics.newUsers / objectives.newUsers) * 100) })
+  if (objectives.conversions != null && analytics)
+    objCtx.push({ metrica: 'Conversiones', objetivo: objectives.conversions, real: analytics.conversions, pct: Math.round((analytics.conversions / objectives.conversions) * 100) })
+  if (objectives.followersIg != null && instagram)
+    objCtx.push({ metrica: 'Seguidores Instagram', objetivo: objectives.followersIg, real: instagram.followersCount, pct: Math.round((instagram.followersCount / objectives.followersIg) * 100) })
+  if (objectives.followersTk != null && tiktok)
+    objCtx.push({ metrica: 'Seguidores TikTok', objetivo: objectives.followersTk, real: tiktok.followersCount, pct: Math.round((tiktok.followersCount / objectives.followersTk) * 100) })
+
   const dataCtx = JSON.stringify({
-    proyecto: project?.name,
-    mes:      month,
+    proyecto:          project?.name,
+    mes:               month,
+    serviciosContratados: services.length > 0 ? services : null,
     geo:      geo      ? { score: geo.score, band: geo.band } : null,
     analytics: analytics ? {
-      sesiones:    analytics.sessions,
-      deltaSeisones: analytics.delta?.sessions,
+      sesiones:       analytics.sessions,
+      deltaSesiones:  analytics.delta?.sessions,
       nuevosUsuarios: analytics.newUsers,
-      tasaRebote: analytics.bounceRate,
+      deltaNuevos:    analytics.delta?.newUsers,
+      conversiones:   analytics.conversions,
+      deltaConversiones: analytics.delta?.conversions,
+      tasaRebote:     analytics.bounceRate != null ? `${(analytics.bounceRate * 100).toFixed(1)}%` : null,
     } : null,
     instagram: instagram ? {
-      seguidores:  instagram.followersCount,
+      seguidores:      instagram.followersCount,
       deltaSeguidores: instagram.deltaFollowers,
-      engagement:  instagram.engagementRate,
+      engagement:      instagram.engagementRate != null ? `${instagram.engagementRate.toFixed(2)}%` : null,
+      posts:           instagram.postsCount,
     } : null,
     tiktok: tiktok ? {
-      seguidores:  tiktok.followersCount,
+      seguidores:      tiktok.followersCount,
       deltaSeguidores: tiktok.deltaFollowers,
-      engagement:  tiktok.engagementRate,
+      engagement:      tiktok.engagementRate != null ? `${tiktok.engagementRate.toFixed(2)}%` : null,
     } : null,
     posicionamiento: keywords ? {
-      posPromedio: keywords.avgPosition,
+      posPromedio:   keywords.avgPosition,
       totalKeywords: keywords.count,
       mejoraronTop3: keywords.improved.slice(0, 3).map(k => k.query),
     } : null,
@@ -422,23 +440,33 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
     } : null,
   }, null, 2)
 
+  const objetivosBloque = objCtx.length > 0
+    ? `\nCUMPLIMIENTO DE OBJETIVOS DEL MES (mencioná explícitamente qué se cumplió y qué no):\n${objCtx.map(o => `- ${o.metrica}: objetivo ${o.objetivo}, real ${o.real} (${o.pct}% de cumplimiento)`).join('\n')}\n`
+    : ''
+
+  const serviciosBloque = services.length > 0
+    ? `\nSERVICIOS CONTRATADOS (enfocá el análisis solo en estas áreas):\n${services.map(s => `- ${s}`).join('\n')}\n`
+    : ''
+
   const prompt = `Sos un analista de marketing digital experto en comunicación con clientes.
 Redactá un análisis mensual en español para el informe del proyecto "${project?.name}" correspondiente al período ${month}.
-
+${serviciosBloque}
 DATOS DEL MES:
 ${dataCtx}
-
+${objetivosBloque}
 INSTRUCCIONES DE TONO (MUY IMPORTANTE):
 - El informe tiene sesgo POSITIVO: destacá primero los logros y avances
+- Si hay objetivos definidos, mencioná explícitamente si se cumplieron o no, con el porcentaje de avance
 - Si hay métricas negativas o por debajo del objetivo, mencionálas brevemente y siempre con una propuesta de mejora concreta
 - Estilo motivador, profesional y constructivo — como un partner estratégico, no como un auditor
-- Si no hay datos de una área, mencionalo brevemente sin dramatizar
+- Si no hay datos de una área, omitila — no menciones ausencias a menos que sea relevante
+- Usá números concretos en el resumen y en los highlights
 
 Respondé SOLO con un JSON con esta estructura exacta:
 {
-  "resumen": "2-3 párrafos: primero los logros del mes, luego oportunidades de mejora con propuestas concretas",
-  "highlights": ["logro 1 concreto", "logro 2 concreto", "logro 3 concreto"],
-  "alertas": ["solo si hay algo importante que mejorar, máximo 2, siempre con propuesta de solución"],
+  "resumen": "2-3 párrafos: primero los logros del mes (con números), luego oportunidades de mejora con propuestas concretas",
+  "highlights": ["logro 1 concreto con número", "logro 2 concreto con número", "logro 3 concreto con número"],
+  "alertas": ["solo si hay algo importante que mejorar, máximo 2, siempre con propuesta de solución concreta"],
   "nextSteps": ["acción concreta 1", "acción concreta 2", "acción concreta 3"]
 }`
 

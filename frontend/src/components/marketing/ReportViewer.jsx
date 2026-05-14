@@ -14,6 +14,27 @@ import DOMPurify from 'dompurify'
 import RichTextEditor from '../RichTextEditor'
 import '../situation-editor.css'
 
+// ─── Print CSS (inyectado en el DOM, solo afecta cuando se imprime) ────────────
+
+const PRINT_STYLES = `
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .bg-gray-50, .dark\\:bg-gray-700\\/50 { background-color: #f9fafb !important; }
+  .bg-white { background-color: white !important; }
+  .border { border-color: #e5e7eb !important; }
+  .text-gray-900 { color: #111827 !important; }
+  .text-gray-700 { color: #374151 !important; }
+  .text-gray-600 { color: #4b5563 !important; }
+  .text-gray-500 { color: #6b7280 !important; }
+  .text-gray-400 { color: #9ca3af !important; }
+  svg { display: block; }
+  .rounded-2xl { border-radius: 1rem; border: 1px solid #e5e7eb; }
+  .space-y-5 > * + * { margin-top: 1.25rem; }
+  .print-break-avoid { break-inside: avoid; }
+}
+`
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n, decimals = 0) {
@@ -34,6 +55,12 @@ function monthLabel(month) {
   const [y, m] = month.split('-').map(Number)
   const date = new Date(y, m - 1, 1)
   return date.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+}
+
+function monthShort(month) {
+  if (!month) return ''
+  const [y, m] = month.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'short', year: '2-digit' })
 }
 
 function geoBandColor(band) {
@@ -81,7 +108,7 @@ function ScoreRing({ score, band }) {
   )
 }
 
-// Barra horizontal simple (SVG)
+// Barra horizontal simple
 function BarChart({ items, maxVal, color = '#f97316' }) {
   if (!items || items.length === 0) return null
   const max = maxVal || Math.max(...items.map(i => i.value), 1)
@@ -103,44 +130,67 @@ function BarChart({ items, maxVal, color = '#f97316' }) {
   )
 }
 
-// Línea SVG de evolución (mini line chart)
-function LineChart({ points, color = '#f97316', height = 60, showLabels = true }) {
+// Línea SVG — soporta una o dos series
+function LineChart({ points, color = '#f97316', height = 60, showLabels = true, secondPoints, secondColor = '#3b82f6' }) {
   if (!points || points.length < 2) return null
-  const values = points.map(p => p.value)
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const range = max - min || 1
+
+  const values1   = points.map(p => p.value)
+  const values2   = secondPoints ? secondPoints.map(p => p.value) : []
+  const allValues = [...values1, ...values2]
+  const min       = Math.min(...allValues)
+  const max       = Math.max(...allValues)
+  const range     = max - min || 1
   const w = 300
   const h = height
   const pad = 12
 
-  const coords = points.map((p, i) => {
-    const x = pad + (i / (points.length - 1)) * (w - pad * 2)
-    const y = h - pad - ((p.value - min) / range) * (h - pad * 2)
-    return { x, y, ...p }
-  })
+  function coordsFor(pts) {
+    return pts.map((p, i) => ({
+      x: pad + (i / (pts.length - 1)) * (w - pad * 2),
+      y: h - pad - ((p.value - min) / range) * (h - pad * 2),
+      ...p,
+    }))
+  }
 
-  const pathD = coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.x} ${c.y}`).join(' ')
-  const areaD = `${pathD} L ${coords[coords.length - 1].x} ${h - pad} L ${coords[0].x} ${h - pad} Z`
+  function pathD(coords) {
+    return coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.x} ${c.y}`).join(' ')
+  }
+  function areaD(coords) {
+    return `${pathD(coords)} L ${coords[coords.length - 1].x} ${h - pad} L ${coords[0].x} ${h - pad} Z`
+  }
+
+  const coords1 = coordsFor(points)
+  const coords2 = secondPoints ? coordsFor(secondPoints) : null
 
   return (
     <div>
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="none">
         <defs>
-          <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="cg1" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.2" />
             <stop offset="100%" stopColor={color} stopOpacity="0.02" />
           </linearGradient>
+          {coords2 && (
+            <linearGradient id="cg2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={secondColor} stopOpacity="0.15" />
+              <stop offset="100%" stopColor={secondColor} stopOpacity="0.02" />
+            </linearGradient>
+          )}
         </defs>
-        <path d={areaD} fill="url(#chartGrad)" />
-        <path d={pathD} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-        {coords.map((c, i) => (
-          <circle key={i} cx={c.x} cy={c.y} r="3" fill={color} />
-        ))}
+        <path d={areaD(coords1)} fill="url(#cg1)" />
+        <path d={pathD(coords1)} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+        {coords1.map((c, i) => <circle key={i} cx={c.x} cy={c.y} r="3" fill={color} />)}
+        {coords2 && (
+          <>
+            <path d={areaD(coords2)} fill="url(#cg2)" />
+            <path d={pathD(coords2)} fill="none" stroke={secondColor} strokeWidth="2" strokeLinejoin="round" />
+            {coords2.map((c, i) => <circle key={i} cx={c.x} cy={c.y} r="3" fill={secondColor} />)}
+          </>
+        )}
       </svg>
       {showLabels && (
         <div className="flex justify-between mt-1">
-          {coords.map((c, i) => (
+          {coords1.map((c, i) => (
             <span key={i} className="text-xs text-gray-400 dark:text-gray-500">{c.label}</span>
           ))}
         </div>
@@ -153,7 +203,7 @@ function LineChart({ points, color = '#f97316', height = 60, showLabels = true }
 
 function SectionCard({ title, icon, children, className = '', action }) {
   return (
-    <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 ${className}`}>
+    <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 print-break-avoid ${className}`}>
       <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center justify-between gap-2">
         <span className="flex items-center gap-2"><span>{icon}</span> {title}</span>
         {action}
@@ -258,60 +308,6 @@ function ObjectivesTable({ objectives, sections }) {
   )
 }
 
-// Bloque editable reutilizable (resumen y próximos pasos)
-function EditableSection({ title, icon, value, placeholder, isEditing, draft, onDraft, onEdit, onSave, onCancel, saving, isPublic, canEdit, isArray = false }) {
-  const hasContent = isArray ? value?.length > 0 : !!value
-  if (!hasContent && (isPublic || !canEdit)) return null
-
-  return (
-    <SectionCard
-      title={title}
-      icon={icon}
-      action={canEdit && !isEditing && (
-        <button
-          onClick={onEdit}
-          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
-        >
-          ✏️ Editar
-        </button>
-      )}
-    >
-      {isEditing ? (
-        <div className="space-y-3">
-          <textarea
-            value={draft}
-            onChange={e => onDraft(e.target.value)}
-            rows={8}
-            placeholder={placeholder}
-            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={onCancel}
-              className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={onSave}
-              disabled={saving}
-              className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        isArray ? null : (
-          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">
-            {value || <span className="text-gray-400 dark:text-gray-500 italic">{placeholder || 'Sin contenido todavía.'}</span>}
-          </p>
-        )
-      )}
-    </SectionCard>
-  )
-}
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function ReportViewer({ data, objectives = {}, isPublic = false, onSaveAnalysis }) {
@@ -323,12 +319,19 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
   const [nextStepsDraft,   setNextStepsDraft]   = useState('')
   const [savingNextSteps,  setSavingNextSteps]  = useState(false)
 
+  // Contexto editorial por sección: 'rrss' | 'sitio' | 'seo' | null
+  const [editingContext, setEditingContext] = useState(null)
+  const [contextDraft,   setContextDraft]  = useState('')
+  const [savingContext,  setSavingContext]  = useState(false)
+
   if (!data) return null
 
   const { project, month, dataMonth, sections, analysis } = data
   const displayMonth = dataMonth || month
   const s = sections
   const canEdit = !isPublic && !!onSaveAnalysis
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
   async function handleSaveResumen() {
     if (!onSaveAnalysis) return
@@ -352,6 +355,20 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
     }
   }
 
+  async function handleSaveContext(analysisKey) {
+    if (!onSaveAnalysis) return
+    setSavingContext(true)
+    try {
+      await onSaveAnalysis({ ...analysis, [analysisKey]: contextDraft })
+      setEditingContext(null)
+      setContextDraft('')
+    } finally {
+      setSavingContext(false)
+    }
+  }
+
+  // ── Valores computados ───────────────────────────────────────────────────────
+
   // Canales de tráfico para el chart
   const channels = (() => {
     try {
@@ -361,12 +378,20 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
     } catch { return [] }
   })()
 
-  // Evolución trimestral
+  // Evolución (sesiones + nuevos usuarios)
   const evolutionPoints = (() => {
     if (!s.evolution || s.evolution.length < 2) return null
     return s.evolution.map(snap => ({
-      label: snap.month?.slice(5) || '',
+      label: monthShort(snap.month),
       value: snap.sessions ?? 0,
+    }))
+  })()
+
+  const evolutionNewUsers = (() => {
+    if (!s.evolution || s.evolution.length < 2) return null
+    return s.evolution.map(snap => ({
+      label: monthShort(snap.month),
+      value: snap.newUsers ?? 0,
     }))
   })()
 
@@ -381,17 +406,103 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
     grok: 'Grok', metaAi: 'Meta AI', perplexity: 'Perplexity', copilot: 'Copilot',
   }
 
+  // Notas de contexto editorial por sección
+  const contextRRSS  = analysis?.contextRRSS  || ''
+  const contextSitio = analysis?.contextSitio || ''
+  const contextSEO   = analysis?.contextSEO   || ''
+
   // Flags de disponibilidad por grupo
-  const hasRRSS    = !!(s.instagram || s.tiktok)
-  const hasAds     = !!(s.metaAds || s.googleAds)
-  const hasSeoGeo  = !!(s.keywords || s.seo || s.geo || aiTrafficEntries)
-  const hasSitio   = !!(s.analytics || evolutionPoints || s.performance)
+  const hasRRSS   = !!(s.instagram || s.tiktok)
+  const hasAds    = !!(s.metaAds || s.googleAds)
+  const hasSeoGeo = !!(s.keywords || s.seo || s.geo || aiTrafficEntries)
+  const hasSitio  = !!(s.analytics || evolutionPoints || s.performance)
+
+  // ── Scorecard ejecutivo: métricas clave de todos los servicios ───────────────
+  const heroMetrics = (() => {
+    const items = []
+    if (s.analytics) {
+      items.push({ label: 'Sesiones web',    value: fmt(s.analytics.sessions), delta: s.analytics.delta?.sessions })
+      items.push({ label: 'Usuarios nuevos', value: fmt(s.analytics.newUsers), delta: s.analytics.delta?.newUsers })
+    }
+    if (s.instagram) {
+      items.push({ label: 'Seguidores IG', value: fmt(s.instagram.followersCount), delta: s.instagram.deltaFollowers })
+    } else if (s.tiktok) {
+      items.push({ label: 'Seguidores TK', value: fmt(s.tiktok.followersCount), delta: s.tiktok.deltaFollowers })
+    }
+    if (s.seo && s.seo.clicks > 0) {
+      items.push({ label: 'Clics orgánicos', value: fmt(s.seo.clicks), delta: s.seo.delta?.clicks })
+    }
+    if (s.geo) {
+      items.push({ label: 'Score GEO', value: `${s.geo.score}/100` })
+    }
+    if (s.performance?.mobile) {
+      items.push({ label: 'Performance', value: String(s.performance.mobile.score) })
+    }
+    return items.slice(0, 6)
+  })()
+
+  // ── Helpers de contexto editorial ───────────────────────────────────────────
+  function ContextNote({ sectionKey, analysisKey, contextValue }) {
+    if (!contextValue && !canEdit) return null
+    const isEditing = editingContext === sectionKey
+
+    return (
+      <SectionCard
+        title="Contexto del período"
+        icon="💬"
+        action={canEdit && !isEditing && (
+          <button
+            onClick={() => { setContextDraft(contextValue); setEditingContext(sectionKey) }}
+            className="no-print text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
+          >
+            ✏️ {contextValue ? 'Editar' : 'Agregar nota'}
+          </button>
+        )}
+      >
+        {isEditing ? (
+          <div className="space-y-3 no-print">
+            <textarea
+              value={contextDraft}
+              onChange={e => setContextDraft(e.target.value)}
+              rows={4}
+              placeholder="Explicá qué pasó en esta área: campañas lanzadas, factores externos, acciones realizadas, etc."
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setEditingContext(null); setContextDraft('') }}
+                className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleSaveContext(analysisKey)}
+                disabled={savingContext}
+                className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {savingContext ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        ) : contextValue ? (
+          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">{contextValue}</p>
+        ) : (
+          <p className="text-gray-400 dark:text-gray-500 italic text-sm">Sin nota del período.</p>
+        )}
+      </SectionCard>
+    )
+  }
+
+  // ── JSX ─────────────────────────────────────────────────────────────────────
 
   return (
     <div className={`space-y-5 ${isPublic ? 'max-w-3xl mx-auto' : ''}`}>
 
+      {/* Print CSS */}
+      <style>{PRINT_STYLES}</style>
+
       {/* ── Header ── */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 print-break-avoid">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
@@ -405,8 +516,34 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
               </a>
             )}
           </div>
+          {isPublic && (
+            <button
+              onClick={() => window.print()}
+              className="no-print flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
+            >
+              🖨️ Imprimir / PDF
+            </button>
+          )}
         </div>
       </div>
+
+      {/* ── 0. Scorecard ejecutivo ── */}
+      {heroMetrics.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-6 py-5 print-break-avoid">
+          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Resumen del período</p>
+          <div className={`grid gap-4 ${heroMetrics.length <= 3 ? 'grid-cols-3' : heroMetrics.length === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'}`}>
+            {heroMetrics.map((m, i) => (
+              <div key={i} className="text-center">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{m.value}</p>
+                <div className="h-4 flex items-center justify-center">
+                  {m.delta != null ? <DeltaChip delta={m.delta} invert={m.invertDelta} /> : <span />}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{m.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── 1. Resumen general ── */}
       {(analysis?.resumen || canEdit) && (
@@ -416,14 +553,14 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
           action={canEdit && !editingResumen && (
             <button
               onClick={() => { setResumenDraft(analysis?.resumen || ''); setEditingResumen(true) }}
-              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
+              className="no-print text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
             >
               ✏️ Editar
             </button>
           )}
         >
           {editingResumen ? (
-            <div className="space-y-3">
+            <div className="space-y-3 no-print">
               <RichTextEditor
                 defaultContent={resumenDraft}
                 onChange={setResumenDraft}
@@ -522,6 +659,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
               </SectionCard>
             )}
           </div>
+          <ContextNote sectionKey="rrss" analysisKey="contextRRSS" contextValue={contextRRSS} />
         </>
       )}
 
@@ -621,9 +759,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                 { label: 'Impresiones',      value: fmt(s.seo.impressions), delta: s.seo.delta?.impressions },
                 { label: 'CTR promedio',     value: s.seo.ctr != null ? `${(s.seo.ctr * 100).toFixed(2)}%` : '—' },
                 { label: 'Posición media',   value: s.seo.avgPosition != null ? String(s.seo.avgPosition) : '—',
-                  delta: s.seo.delta?.avgPosition != null
-                    ? (s.seo.delta.avgPosition > 0 ? s.seo.delta.avgPosition : s.seo.delta.avgPosition)
-                    : undefined,
+                  delta: s.seo.delta?.avgPosition != null ? s.seo.delta.avgPosition : undefined,
                   invertDelta: true,
                 },
               ]} />
@@ -750,6 +886,8 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
               </p>
             </SectionCard>
           )}
+
+          <ContextNote sectionKey="seo" analysisKey="contextSEO" contextValue={contextSEO} />
         </>
       )}
 
@@ -761,7 +899,6 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
           {/* Analytics GA4 */}
           {s.analytics && (
             <SectionCard title="Analytics web" icon="📊">
-              {/* KPIs principales */}
               <KpiGrid items={[
                 { label: 'Sesiones',        value: fmt(s.analytics.sessions),    delta: s.analytics.delta?.sessions },
                 { label: 'Usuarios nuevos', value: fmt(s.analytics.newUsers),    delta: s.analytics.delta?.newUsers },
@@ -844,11 +981,55 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
             </SectionCard>
           )}
 
-          {/* Evolución trimestral */}
+          {/* Evolución multi-mes (hasta 6 meses, sesiones + usuarios nuevos) */}
           {evolutionPoints && (
-            <SectionCard title="Evolución trimestral" icon="📈">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Sesiones — últimos 3 meses</p>
-              <LineChart points={evolutionPoints} color="#f97316" height={70} />
+            <SectionCard title="Evolución web" icon="📈">
+              {/* Leyenda */}
+              {evolutionNewUsers && (
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-block w-3 h-3 rounded-full bg-orange-500" />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Sesiones</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-block w-3 h-3 rounded-full bg-blue-500" />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Usuarios nuevos</span>
+                  </div>
+                </div>
+              )}
+              <LineChart
+                points={evolutionPoints}
+                color="#f97316"
+                height={80}
+                secondPoints={evolutionNewUsers}
+                secondColor="#3b82f6"
+              />
+
+              {/* Tabla mes a mes */}
+              {s.evolution?.length >= 2 && (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-700">
+                        <th className="text-left pb-2 text-gray-500 dark:text-gray-400 font-medium">Mes</th>
+                        <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Sesiones</th>
+                        <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Nuevos</th>
+                        <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Conversiones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...s.evolution].reverse().map((snap, i) => (
+                        <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                          <td className="py-1.5 text-gray-600 dark:text-gray-400 capitalize">{monthLabel(snap.month)}</td>
+                          <td className="py-1.5 text-right font-medium text-gray-900 dark:text-white">{fmt(snap.sessions)}</td>
+                          <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{fmt(snap.newUsers)}</td>
+                          <td className="py-1.5 text-right text-gray-600 dark:text-gray-400">{fmt(snap.conversions)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </SectionCard>
           )}
 
@@ -883,59 +1064,17 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                 )}
               </div>
 
-              {/* Core Web Vitals — usa métricas móvil como referencia */}
+              {/* Core Web Vitals */}
               {(() => {
                 const mm = s.performance.mobile?.metrics  || {}
                 const dm = s.performance.desktop?.metrics || {}
                 const cwv = [
-                  {
-                    label: 'LCP',
-                    desc: 'Largest Contentful Paint',
-                    mobile:  mm.lcp != null ? `${(Number(mm.lcp)/1000).toFixed(1)}s` : null,
-                    desktop: dm.lcp != null ? `${(Number(dm.lcp)/1000).toFixed(1)}s` : null,
-                    good: v => parseFloat(v) <= 2.5,
-                    warn: v => parseFloat(v) <= 4.0,
-                  },
-                  {
-                    label: 'CLS',
-                    desc: 'Cumulative Layout Shift',
-                    mobile:  mm.cls != null ? Number(mm.cls).toFixed(3) : null,
-                    desktop: dm.cls != null ? Number(dm.cls).toFixed(3) : null,
-                    good: v => parseFloat(v) <= 0.1,
-                    warn: v => parseFloat(v) <= 0.25,
-                  },
-                  {
-                    label: 'FCP',
-                    desc: 'First Contentful Paint',
-                    mobile:  mm.fcp != null ? `${(Number(mm.fcp)/1000).toFixed(1)}s` : null,
-                    desktop: dm.fcp != null ? `${(Number(dm.fcp)/1000).toFixed(1)}s` : null,
-                    good: v => parseFloat(v) <= 1.8,
-                    warn: v => parseFloat(v) <= 3.0,
-                  },
-                  {
-                    label: 'TBT',
-                    desc: 'Total Blocking Time',
-                    mobile:  mm.tbt != null ? `${Math.round(Number(mm.tbt))}ms` : null,
-                    desktop: dm.tbt != null ? `${Math.round(Number(dm.tbt))}ms` : null,
-                    good: v => parseInt(v) <= 200,
-                    warn: v => parseInt(v) <= 600,
-                  },
-                  {
-                    label: 'Speed Index',
-                    desc: 'Speed Index',
-                    mobile:  mm.speedIndex != null ? `${(Number(mm.speedIndex)/1000).toFixed(1)}s` : null,
-                    desktop: dm.speedIndex != null ? `${(Number(dm.speedIndex)/1000).toFixed(1)}s` : null,
-                    good: v => parseFloat(v) <= 3.4,
-                    warn: v => parseFloat(v) <= 5.8,
-                  },
-                  {
-                    label: 'TTI',
-                    desc: 'Time to Interactive',
-                    mobile:  mm.tti != null ? `${(Number(mm.tti)/1000).toFixed(1)}s` : null,
-                    desktop: dm.tti != null ? `${(Number(dm.tti)/1000).toFixed(1)}s` : null,
-                    good: v => parseFloat(v) <= 3.8,
-                    warn: v => parseFloat(v) <= 7.3,
-                  },
+                  { label: 'LCP',         desc: 'Largest Contentful Paint', mobile: mm.lcp != null ? `${(Number(mm.lcp)/1000).toFixed(1)}s` : null, desktop: dm.lcp != null ? `${(Number(dm.lcp)/1000).toFixed(1)}s` : null, good: v => parseFloat(v) <= 2.5, warn: v => parseFloat(v) <= 4.0 },
+                  { label: 'CLS',         desc: 'Cumulative Layout Shift',  mobile: mm.cls != null ? Number(mm.cls).toFixed(3) : null,                desktop: dm.cls != null ? Number(dm.cls).toFixed(3) : null,                good: v => parseFloat(v) <= 0.1, warn: v => parseFloat(v) <= 0.25 },
+                  { label: 'FCP',         desc: 'First Contentful Paint',   mobile: mm.fcp != null ? `${(Number(mm.fcp)/1000).toFixed(1)}s` : null, desktop: dm.fcp != null ? `${(Number(dm.fcp)/1000).toFixed(1)}s` : null, good: v => parseFloat(v) <= 1.8, warn: v => parseFloat(v) <= 3.0 },
+                  { label: 'TBT',         desc: 'Total Blocking Time',      mobile: mm.tbt != null ? `${Math.round(Number(mm.tbt))}ms` : null,       desktop: dm.tbt != null ? `${Math.round(Number(dm.tbt))}ms` : null,       good: v => parseInt(v) <= 200,  warn: v => parseInt(v) <= 600 },
+                  { label: 'Speed Index', desc: 'Speed Index',              mobile: mm.speedIndex != null ? `${(Number(mm.speedIndex)/1000).toFixed(1)}s` : null, desktop: dm.speedIndex != null ? `${(Number(dm.speedIndex)/1000).toFixed(1)}s` : null, good: v => parseFloat(v) <= 3.4, warn: v => parseFloat(v) <= 5.8 },
+                  { label: 'TTI',         desc: 'Time to Interactive',      mobile: mm.tti != null ? `${(Number(mm.tti)/1000).toFixed(1)}s` : null, desktop: dm.tti != null ? `${(Number(dm.tti)/1000).toFixed(1)}s` : null, good: v => parseFloat(v) <= 3.8, warn: v => parseFloat(v) <= 7.3 },
                 ].filter(v => v.mobile || v.desktop)
 
                 if (cwv.length === 0) return null
@@ -968,10 +1107,12 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
               })()}
             </SectionCard>
           )}
+
+          <ContextNote sectionKey="sitio" analysisKey="contextSitio" contextValue={contextSitio} />
         </>
       )}
 
-      {/* ── Próximos pasos (editable) ── */}
+      {/* ── Próximos pasos ── */}
       {(() => {
         const ns = analysis?.nextSteps
         const hasNextSteps = Array.isArray(ns) ? ns.length > 0 : !!ns
@@ -995,14 +1136,14 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
             action={canEdit && !editingNextSteps && (
               <button
                 onClick={openNextStepsEditor}
-                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
+                className="no-print text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
               >
                 ✏️ Editar
               </button>
             )}
           >
             {editingNextSteps ? (
-              <div className="space-y-3">
+              <div className="space-y-3 no-print">
                 <RichTextEditor
                   defaultContent={nextStepsDraft}
                   onChange={setNextStepsDraft}

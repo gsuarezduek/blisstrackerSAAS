@@ -62,9 +62,10 @@ async function getReport(req, res, next) {
 
     // Pasar análisis cacheado si ya existe (evita regenerar con Claude en cada carga)
     const cachedAnalysis = report.analysis ? safeParseObj(report.analysis) : null
+    const objectives     = safeParseObj(report.objectives)
 
     // Agregar todos los datos
-    const data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis)
+    const data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis, objectives)
 
     // Si se generó un análisis nuevo, guardarlo en DB para futuras cargas
     if (data._analysisIsNew && data.analysis) {
@@ -148,7 +149,8 @@ async function getPublicReport(req, res, next) {
     if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
 
     const cachedAnalysis = report.analysis ? safeParseObj(report.analysis) : null
-    const data = await aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis)
+    const objectives     = safeParseObj(report.objectives)
+    const data = await aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives)
 
     // Si se generó un análisis nuevo también lo guardamos (ej: primera vez que el cliente abre el link)
     if (data._analysisIsNew && data.analysis) {
@@ -207,7 +209,8 @@ async function regenerateReport(req, res, next) {
     }
 
     // Re-agregar todos los datos sin caché de análisis (fuerza regeneración con Claude)
-    const data = await aggregateReportData(projectId, workspaceId, month, null)
+    const objectives = report ? safeParseObj(report.objectives) : {}
+    const data = await aggregateReportData(projectId, workspaceId, month, null, objectives)
 
     // Guardar nuevo análisis en DB
     if (data.analysis) {
