@@ -527,7 +527,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden print-break-avoid">
         {/* Banner de la empresa (si existe), o barra de color de marca */}
         {workspace?.hasBanner && workspace?.slug ? (
-          <div className="h-32 w-full overflow-hidden">
+          <div className="h-48 w-full overflow-hidden">
             <img
               src={`${import.meta.env.VITE_API_URL}/api/public/banner/${workspace.slug}`}
               alt="Banner"
@@ -541,45 +541,29 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
 
         <div className="p-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              {/* Logo de la empresa (si existe) */}
-              {workspace?.hasLogo && workspace?.slug && (
-                <div className="flex-shrink-0 w-14 h-14 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
-                  <img
-                    src={`${import.meta.env.VITE_API_URL}/api/public/logo/${workspace.slug}`}
-                    alt="Logo"
-                    className="max-w-full max-h-full object-contain p-1"
-                    onError={e => { e.currentTarget.parentElement.style.display = 'none' }}
-                  />
-                </div>
-              )}
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {workspace?.companyName || project.name}
-                </h1>
-                {workspace?.companyName && workspace.companyName !== project.name && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{project.name}</p>
-                )}
-                <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">
-                  Informe mensual — {monthLabel(month)}
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {project.name}
+              </h1>
+              <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">
+                Informe mensual — {monthLabel(month)}
+              </p>
+              {dataMonth && dataMonth !== month && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 capitalize">
+                  {dataPeriodLabel(dataMonth)}
                 </p>
-                {dataMonth && dataMonth !== month && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 capitalize">
-                    {dataPeriodLabel(dataMonth)}
-                  </p>
-                )}
-                {(workspace?.companyWebsite || project.websiteUrl) && (
-                  <a
-                    href={workspace?.companyWebsite || project.websiteUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs hover:underline mt-1 block"
-                    style={{ color: brandPrimary }}
-                  >
-                    {workspace?.companyWebsite || project.websiteUrl}
-                  </a>
-                )}
-              </div>
+              )}
+              {project.websiteUrl && (
+                <a
+                  href={project.websiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs hover:underline mt-1 block"
+                  style={{ color: brandPrimary }}
+                >
+                  {project.websiteUrl}
+                </a>
+              )}
             </div>
             {isPublic && (
               <button

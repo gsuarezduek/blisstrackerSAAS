@@ -240,6 +240,65 @@ const PRIORITY_STYLES = {
   baja:  'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
 }
 
+function AllEventsBlock({ allEvents }) {
+  const [expanded, setExpanded] = useState(false)
+  if (!allEvents || allEvents.total === 0) return null
+
+  const maxCount = allEvents.events[0]?.eventCount || 1
+  const visible  = expanded ? allEvents.events : allEvents.events.slice(0, 5)
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <SectionTitle>Total de eventos</SectionTitle>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-bold text-gray-900 dark:text-white">
+              {fmt(allEvents.total)}
+            </span>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              eventos en el período
+            </span>
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            Suma de todos los tipos de eventos registrados
+          </p>
+        </div>
+        <span className="text-3xl">⚡</span>
+      </div>
+
+      <div className="space-y-2">
+        {visible.map((ev, i) => {
+          const p = Math.round((ev.eventCount / maxCount) * 100)
+          return (
+            <div key={i}>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="font-mono text-gray-700 dark:text-gray-300">{ev.eventName}</span>
+                <span className="text-gray-500 tabular-nums">{fmt(ev.eventCount)}</span>
+              </div>
+              <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-400 dark:bg-blue-500 rounded-full transition-all"
+                  style={{ width: `${p}%` }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {allEvents.events.length > 5 && (
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="mt-3 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        >
+          {expanded ? '▲ Ver menos' : `▼ Ver todos (${allEvents.events.length})`}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function ConversionsBlock({ conversions, sessions }) {
   if (!conversions) return null
 
@@ -249,7 +308,7 @@ function ConversionsBlock({ conversions, sessions }) {
       <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl p-5">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <SectionTitle>Conversiones</SectionTitle>
+            <SectionTitle>Eventos clave (conversiones)</SectionTitle>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold text-green-700 dark:text-green-300">
                 {fmt(conversions.total)}
@@ -297,7 +356,7 @@ function ConversionsBlock({ conversions, sessions }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-start justify-between mb-1">
-        <SectionTitle>Conversiones</SectionTitle>
+        <SectionTitle>Eventos clave (conversiones)</SectionTitle>
         <span className="text-2xl">🎯</span>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
@@ -1205,8 +1264,11 @@ export default function WebTab({ subtab = 'analytics', projectId, projects }) {
             </div>
           )}
 
-          {/* Conversiones */}
-          <ConversionsBlock conversions={analytics.conversions} sessions={ov.sessions} />
+          {/* Total de eventos + Eventos clave */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <AllEventsBlock allEvents={analytics.allEvents} />
+            <ConversionsBlock conversions={analytics.conversions} sessions={ov.sessions} />
+          </div>
 
           {/* Canales + Dispositivos */}
           <div className="grid sm:grid-cols-5 gap-4">

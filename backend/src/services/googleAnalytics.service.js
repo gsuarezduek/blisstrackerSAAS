@@ -84,7 +84,7 @@ async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 't
   if (!raw) throw new Error('propertyId no configurado para esta integración')
   const property = raw.startsWith('properties/') ? raw : `properties/${raw}`
 
-  const [overviewRes, topPagesRes, channelsRes, devicesRes, conversionsRes, sourcesRes] = await Promise.all([
+  const [overviewRes, topPagesRes, channelsRes, devicesRes, conversionsRes, sourcesRes, allEventsRes] = await Promise.all([
     analyticsClient.runReport({
       property,
       dateRanges: [{ startDate, endDate }],
@@ -95,6 +95,7 @@ async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 't
         { name: 'screenPageViews' },
         { name: 'bounceRate' },
         { name: 'averageSessionDuration' },
+        { name: 'eventCount' },
       ],
     }),
     analyticsClient.runReport({
@@ -143,6 +144,18 @@ async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 't
       console.warn('[GA4] trafficSources query failed (ignorado):', err.message)
       return [{ rows: [] }]
     }),
+    // Desglose de todos los eventos (no solo key events) por nombre de evento
+    analyticsClient.runReport({
+      property,
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: 'eventName' }],
+      metrics:    [{ name: 'eventCount' }],
+      orderBys:   [{ metric: { metricName: 'eventCount' }, desc: true }],
+      limit:      20,
+    }).catch(err => {
+      console.warn('[GA4] allEvents query failed (ignorado):', err.message)
+      return [{ rows: [] }]
+    }),
   ])
 
   const overview = parseOverview(overviewRes[0])
@@ -161,6 +174,7 @@ async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 't
           { name: 'screenPageViews' },
           { name: 'bounceRate' },
           { name: 'averageSessionDuration' },
+          { name: 'eventCount' },
         ],
       }),
       analyticsClient.runReport({
@@ -179,6 +193,7 @@ async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 't
       screenPageViewsDelta:      pctDelta(overview.screenPageViews,      prevOverview.screenPageViews),
       bounceRateDelta:           pctDelta(overview.bounceRate,           prevOverview.bounceRate),
       averageSessionDurationDelta: pctDelta(overview.averageSessionDuration, prevOverview.averageSessionDuration),
+      eventCountDelta:           pctDelta(overview.eventCount,           prevOverview.eventCount),
       prevOverview,
       prevChannels: parseChannels(prevChannelsRes[0]),
       prevStartDate: prev.startDate,
@@ -193,6 +208,7 @@ async function fetchGA4Report(integration, startDate = '30daysAgo', endDate = 't
     channels:     parseChannels(channelsRes[0]),
     devices:      parseChannels(devicesRes[0]),
     conversions:  parseConversions(conversionsRes),
+    allEvents:    parseAllEvents(allEventsRes),
     trafficSources: parseTrafficSources(sourcesRes, totalSessions),
     comparison,
     propertyId:   property,
@@ -245,6 +261,21 @@ function parseConversions(response) {
     total:          events.reduce((s, e) => s + e.conversions, 0),
     events,
     hasConversions: events.length > 0,
+  }
+}
+
+function parseAllEvents(response) {
+  const rows = response?.[0]?.rows ?? []
+  const events = rows
+    .map(row => ({
+      eventName:  row.dimensionValues?.[0]?.value ?? '',
+      eventCount: parseInt(row.metricValues?.[0]?.value, 10) || 0,
+    }))
+    .filter(e => e.eventName && e.eventCount > 0)
+
+  return {
+    total:  events.reduce((s, e) => s + e.eventCount, 0),
+    events,
   }
 }
 
