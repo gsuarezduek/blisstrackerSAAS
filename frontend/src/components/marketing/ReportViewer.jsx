@@ -9,9 +9,10 @@
  *   onSaveAnalysis   — función async(updatedAnalysis) — solo en vista interna
  */
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import DOMPurify from 'dompurify'
 import RichTextEditor from '../RichTextEditor'
+import api from '../../api/client'
 import '../situation-editor.css'
 
 // ─── Print CSS (inyectado en el DOM, solo afecta cuando se imprime) ────────────
@@ -332,12 +333,37 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
   const [contextDraft,   setContextDraft]  = useState('')
   const [savingContext,  setSavingContext]  = useState(false)
 
+  // Banner del informe
+  const [bannerUploading, setBannerUploading] = useState(false)
+  const [bannerKey,       setBannerKey]       = useState(0)   // fuerza recarga de img tras upload
+  const [hasBanner,       setHasBanner]       = useState(workspace?.hasBanner ?? false)
+  const bannerInputRef = useRef()
+
   if (!data) return null
 
   const { project, month, dataMonth, sections, analysis } = data
   const displayMonth = dataMonth || month
   const s = sections
   const canEdit = !isPublic && !!onSaveAnalysis
+
+  // ── Banner upload ────────────────────────────────────────────────────────────
+  async function handleBannerFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBannerUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('image', file)
+      await api.post('/workspaces/current/banner', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setHasBanner(true)
+      setBannerKey(k => k + 1)
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al subir la imagen')
+    } finally {
+      setBannerUploading(false)
+      e.target.value = ''
+    }
+  }
 
   // ── Colores de marca ─────────────────────────────────────────────────────────
   const brandColors = workspace?.brandColors || []
@@ -525,19 +551,52 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
 
       {/* ── Header ── */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden print-break-avoid">
-        {/* Banner de la empresa (si existe), o barra de color de marca */}
-        {workspace?.hasBanner && workspace?.slug ? (
-          <div className="h-48 w-full overflow-hidden">
+        {/* Banner del informe */}
+        {hasBanner && workspace?.slug ? (
+          <div className="relative w-full overflow-hidden group" style={{ height: isPublic ? '12rem' : '15rem' }}>
             <img
-              src={`${import.meta.env.VITE_API_URL}/api/public/banner/${workspace.slug}`}
+              key={bannerKey}
+              src={`${import.meta.env.VITE_API_URL}/api/public/banner/${workspace.slug}?t=${bannerKey}`}
               alt="Banner"
               className="w-full h-full object-cover"
-              onError={e => { e.currentTarget.parentElement.style.display = 'none' }}
+              onError={() => setHasBanner(false)}
             />
+            {!isPublic && (
+              <button
+                onClick={() => bannerInputRef.current?.click()}
+                disabled={bannerUploading}
+                className="no-print absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/0 group-hover:bg-black/40 transition-all duration-200 opacity-0 group-hover:opacity-100"
+              >
+                <span className="text-white text-2xl">{bannerUploading ? '⏳' : '🖼️'}</span>
+                <span className="text-white text-xs font-semibold drop-shadow">
+                  {bannerUploading ? 'Subiendo...' : 'Cambiar imagen'}
+                </span>
+              </button>
+            )}
           </div>
+        ) : !isPublic ? (
+          <button
+            onClick={() => bannerInputRef.current?.click()}
+            disabled={bannerUploading}
+            className="no-print w-full flex flex-col items-center justify-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            style={{ height: '15rem' }}
+          >
+            <span className="text-3xl text-gray-300 dark:text-gray-500">{bannerUploading ? '⏳' : '🖼️'}</span>
+            <span className="text-sm font-medium text-gray-400 dark:text-gray-500">
+              {bannerUploading ? 'Subiendo...' : 'Agregar imagen de fondo al informe'}
+            </span>
+            <span className="text-xs text-gray-300 dark:text-gray-600">PNG, JPG o WebP · máx. 5 MB</span>
+          </button>
         ) : (
           <div className="h-2 w-full" style={{ backgroundColor: brandPrimary }} />
         )}
+        <input
+          ref={bannerInputRef}
+          type="file"
+          accept=".png,.jpg,.jpeg,.webp"
+          className="hidden"
+          onChange={handleBannerFile}
+        />
 
         <div className="p-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
