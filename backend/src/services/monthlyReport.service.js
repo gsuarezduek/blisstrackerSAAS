@@ -3,6 +3,10 @@ const Anthropic = require('@anthropic-ai/sdk')
 const { logTokens } = require('../lib/logTokens')
 const { fetchGoogleAdsData }             = require('./googleAds.service')
 const { fetchMetaAdsData, getValidFbToken } = require('./metaAds.service')
+const { getValidMetaToken }              = require('./metaTokenRefresh.service')
+const { fetchInstagramMetrics }          = require('./instagram.service')
+const { getValidTikTokToken }            = require('./tiktokTokenRefresh.service')
+const { fetchTikTokMetrics }             = require('./tiktok.service')
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -208,7 +212,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.projectIntegration.findMany({
       where:  { projectId, status: 'active' },
       select: { id: true, type: true, status: true, customerId: true, propertyId: true,
-                accessToken: true, refreshToken: true, expiresAt: true },
+                accessToken: true, refreshToken: true, expiresAt: true, scopes: true },
     }),
 
     // Canibalización — reporte completado más reciente
@@ -346,28 +350,127 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Evolution (últimos 3 meses GA4) ─────────────────────────────────────────
   const evolution = analyticsEvolution.length >= 2 ? analyticsEvolution : null
 
-  // ── Instagram ────────────────────────────────────────────────────────────────
-  const instagram = instagramSnap ? {
-    followersCount: instagramSnap.followersCount,
-    engagementRate: instagramSnap.engagementRate,
-    avgLikes:       instagramSnap.avgLikes,
-    avgComments:    instagramSnap.avgComments,
-    postsCount:     instagramSnap.postsCount,
-    deltaFollowers: instagramPrev ? pct(instagramSnap.followersCount, instagramPrev.followersCount) : null,
-    deltaEngagement: instagramPrev ? pct(instagramSnap.engagementRate ?? 0, instagramPrev.engagementRate) : null,
-  } : null
+  // ── Instagram (con fallback a snapshot más reciente o datos en vivo) ──────────
+  let instagram = null
+  if (instagramSnap) {
+    instagram = {
+      followersCount:  instagramSnap.followersCount,
+      engagementRate:  instagramSnap.engagementRate,
+      avgLikes:        instagramSnap.avgLikes,
+      avgComments:     instagramSnap.avgComments,
+      postsCount:      instagramSnap.postsCount,
+      deltaFollowers:  instagramPrev ? pct(instagramSnap.followersCount, instagramPrev.followersCount) : null,
+      deltaEngagement: instagramPrev ? pct(instagramSnap.engagementRate ?? 0, instagramPrev.engagementRate) : null,
+    }
+  } else {
+    // Fallback 1: snapshot más reciente disponible (cualquier mes)
+    const recentIg = await prisma.instagramSnapshot.findFirst({
+      where:   { projectId, workspaceId },
+      orderBy: { month: 'desc' },
+      select:  { followersCount: true, engagementRate: true, avgLikes: true,
+                 avgComments: true, postsCount: true, mediaCount: true, month: true },
+    })
+    if (recentIg) {
+      const prevIg = await prisma.instagramSnapshot.findFirst({
+        where:  { projectId, workspaceId, month: prevMonthStr(recentIg.month) },
+        select: { followersCount: true, engagementRate: true },
+      })
+      instagram = {
+        followersCount:  recentIg.followersCount,
+        engagementRate:  recentIg.engagementRate,
+        avgLikes:        recentIg.avgLikes,
+        avgComments:     recentIg.avgComments,
+        postsCount:      recentIg.postsCount,
+        deltaFollowers:  prevIg ? pct(recentIg.followersCount, prevIg.followersCount) : null,
+        deltaEngagement: prevIg ? pct(recentIg.engagementRate ?? 0, prevIg.engagementRate) : null,
+        _fallbackMonth:  recentIg.month,
+      }
+    } else {
+      // Fallback 2: datos en vivo de la API
+      const igIntegration = integrations.find(i => i.type === 'instagram')
+      if (igIntegration) {
+        try {
+          const token      = await getValidMetaToken(igIntegration)
+          const useFbGraph = igIntegration.scopes?.startsWith('fb_graph')
+          const live       = await fetchInstagramMetrics(igIntegration.propertyId, token, null, useFbGraph)
+          instagram = {
+            followersCount:  live.followersCount,
+            engagementRate:  live.engagementRate,
+            avgLikes:        live.avgLikes,
+            avgComments:     live.avgComments,
+            postsCount:      live.postsThisMonth,
+            deltaFollowers:  null,
+            deltaEngagement: null,
+            _fallbackMonth:  'live',
+          }
+        } catch (err) {
+          console.warn('[MonthlyReport] Instagram live fallback fallido:', err.message)
+        }
+      }
+    }
+  }
 
-  // ── TikTok ───────────────────────────────────────────────────────────────────
-  const tiktok = tiktokSnap ? {
-    followersCount:  tiktokSnap.followersCount,
-    engagementRate:  tiktokSnap.engagementRate,
-    avgViews:        tiktokSnap.avgViews,
-    avgLikes:        tiktokSnap.avgLikes,
-    postsThisMonth:  tiktokSnap.postsThisMonth,
-    likesCount:      tiktokSnap.likesCount,
-    deltaFollowers:  tiktokPrev ? pct(tiktokSnap.followersCount, tiktokPrev.followersCount) : null,
-    deltaEngagement: tiktokPrev ? pct(tiktokSnap.engagementRate ?? 0, tiktokPrev.engagementRate) : null,
-  } : null
+  // ── TikTok (con fallback a snapshot más reciente o datos en vivo) ─────────────
+  let tiktok = null
+  if (tiktokSnap) {
+    tiktok = {
+      followersCount:  tiktokSnap.followersCount,
+      engagementRate:  tiktokSnap.engagementRate,
+      avgViews:        tiktokSnap.avgViews,
+      avgLikes:        tiktokSnap.avgLikes,
+      postsThisMonth:  tiktokSnap.postsThisMonth,
+      likesCount:      tiktokSnap.likesCount,
+      deltaFollowers:  tiktokPrev ? pct(tiktokSnap.followersCount, tiktokPrev.followersCount) : null,
+      deltaEngagement: tiktokPrev ? pct(tiktokSnap.engagementRate ?? 0, tiktokPrev.engagementRate) : null,
+    }
+  } else {
+    // Fallback 1: snapshot más reciente disponible (cualquier mes)
+    const recentTk = await prisma.tikTokSnapshot.findFirst({
+      where:   { projectId, workspaceId },
+      orderBy: { month: 'desc' },
+      select:  { followersCount: true, engagementRate: true, avgViews: true,
+                 avgLikes: true, postsThisMonth: true, likesCount: true, month: true },
+    })
+    if (recentTk) {
+      const prevTk = await prisma.tikTokSnapshot.findFirst({
+        where:  { projectId, workspaceId, month: prevMonthStr(recentTk.month) },
+        select: { followersCount: true, engagementRate: true },
+      })
+      tiktok = {
+        followersCount:  recentTk.followersCount,
+        engagementRate:  recentTk.engagementRate,
+        avgViews:        recentTk.avgViews,
+        avgLikes:        recentTk.avgLikes,
+        postsThisMonth:  recentTk.postsThisMonth,
+        likesCount:      recentTk.likesCount,
+        deltaFollowers:  prevTk ? pct(recentTk.followersCount, prevTk.followersCount) : null,
+        deltaEngagement: prevTk ? pct(recentTk.engagementRate ?? 0, prevTk.engagementRate) : null,
+        _fallbackMonth:  recentTk.month,
+      }
+    } else {
+      // Fallback 2: datos en vivo de la API
+      const tkIntegration = integrations.find(i => i.type === 'tiktok')
+      if (tkIntegration) {
+        try {
+          const token = await getValidTikTokToken(tkIntegration)
+          const live  = await fetchTikTokMetrics(token, null)
+          tiktok = {
+            followersCount:  live.followersCount,
+            engagementRate:  live.engagementRate,
+            avgViews:        live.avgViews,
+            avgLikes:        live.avgLikes,
+            postsThisMonth:  live.postsThisMonth,
+            likesCount:      live.likesCount,
+            deltaFollowers:  null,
+            deltaEngagement: null,
+            _fallbackMonth:  'live',
+          }
+        } catch (err) {
+          console.warn('[MonthlyReport] TikTok live fallback fallido:', err.message)
+        }
+      }
+    }
+  }
 
   // ── PageSpeed ─────────────────────────────────────────────────────────────────
   const performance = (pageSpeedMobile || pageSpeedDesktop) ? {
@@ -464,7 +567,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     sections: { geo, analytics, evolution, instagram, tiktok, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks },
     analysis,
     _analysisIsNew:  !cachedAnalysis && !!analysis?.resumen,
-    _dataCacheIsNew: true,
+    // No cachear si estamos usando datos en vivo (cambian a diario)
+    _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live',
   }
 }
 

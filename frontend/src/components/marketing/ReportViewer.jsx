@@ -667,6 +667,14 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                   { label: 'Avg. likes',  value: fmt(s.instagram.avgLikes, 0) },
                   { label: 'Posts / mes', value: fmt(s.instagram.postsCount) },
                 ]} />
+                {s.instagram._fallbackMonth && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
+                    {s.instagram._fallbackMonth === 'live'
+                      ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                      : `📅 Datos más recientes disponibles: ${monthLabel(s.instagram._fallbackMonth)}`
+                    }
+                  </p>
+                )}
               </SectionCard>
             )}
 
@@ -678,6 +686,14 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                   { label: 'Avg. views',  value: fmt(s.tiktok.avgViews, 0) },
                   { label: 'Posts / mes', value: fmt(s.tiktok.postsThisMonth) },
                 ]} />
+                {s.tiktok._fallbackMonth && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
+                    {s.tiktok._fallbackMonth === 'live'
+                      ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                      : `📅 Datos más recientes disponibles: ${monthLabel(s.tiktok._fallbackMonth)}`
+                    }
+                  </p>
+                )}
               </SectionCard>
             )}
           </div>
