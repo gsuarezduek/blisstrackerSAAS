@@ -19,6 +19,8 @@ export default function Preferences() {
   const [globalSettingsError, setGlobalSettingsError] = useState(false)
   const [aiUsage,             setAiUsage]             = useState(null)
   const [aiUsageError,        setAiUsageError]        = useState(false)
+  const [wsFeatures,          setWsFeatures]          = useState(null)
+  const [togglingFeature,     setTogglingFeature]     = useState(null)
 
   // Eliminación de workspace
   const [workspaceName,      setWorkspaceName]      = useState('')
@@ -58,6 +60,9 @@ export default function Preferences() {
     api.get('/projects/settings/ai-usage')
       .then(({ data }) => setAiUsage(data))
       .catch(() => setAiUsageError(true))
+    api.get('/workspaces/current/features')
+      .then(({ data }) => setWsFeatures(data))
+      .catch(() => setWsFeatures([]))
   }, [user?.isAdmin])
 
   useEffect(() => {
@@ -106,6 +111,16 @@ export default function Preferences() {
     } finally {
       setCancellingDel(false)
     }
+  }
+
+  async function handleToggleFeature(key, currentlyDisabled) {
+    const next = !currentlyDisabled
+    setTogglingFeature(key)
+    try {
+      await api.patch(`/workspaces/current/features/${key}`, { disabled: next })
+      setWsFeatures(prev => prev.map(f => f.key === key ? { ...f, disabled: next } : f))
+    } catch (_) {}
+    finally { setTogglingFeature(null) }
   }
 
   async function handleGlobalSetting(patch) {
@@ -309,6 +324,48 @@ export default function Preferences() {
                     <Toggle on={globalSettings.situationEnabled !== false} onToggle={() => handleGlobalSetting({ situationEnabled: !globalSettings.situationEnabled })} />
                   </div>
 
+                </div>
+              </div>
+            )}
+
+            {/* ── Módulos adicionales ── */}
+            {wsFeatures && wsFeatures.length > 0 && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-white">Módulos adicionales</h2>
+                  <span className="text-xs bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded-full px-2 py-0.5 font-medium">Admin</span>
+                </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
+                  Funcionalidades opcionales habilitadas para tu workspace. Podés desactivar las que no uses.
+                </p>
+                <div className="space-y-0">
+                  {wsFeatures.map((feat, idx) => {
+                    const MODULE_META = {
+                      marketing: { icon: '📊', detail: 'Incluye análisis GEO/SEO, métricas de redes sociales, informes mensuales para clientes, Google Analytics, Google Ads, Meta Ads y más.' },
+                      eos:       { icon: '🏢', detail: 'Sistema Operativo Empresarial basado en Traction (Gino Wickman). Incluye Visión, Personas, Datos, Scorecard, Asuntos, Procesos, Tracción y Evaluación.' },
+                    }
+                    const meta = MODULE_META[feat.key] ?? { icon: '🔧', detail: feat.description }
+                    const isLast = idx === wsFeatures.length - 1
+                    return (
+                      <div key={feat.key} className={`flex items-start gap-4 py-4 ${isLast ? '' : 'border-b dark:border-gray-700'}`}>
+                        <span className="text-2xl flex-shrink-0 mt-0.5">{meta.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{feat.name}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">{meta.detail}</p>
+                          {feat.disabled && (
+                            <span className="inline-block mt-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5">
+                              Desactivado en este workspace
+                            </span>
+                          )}
+                        </div>
+                        <Toggle
+                          on={!feat.disabled}
+                          onToggle={() => handleToggleFeature(feat.key, feat.disabled)}
+                          disabled={togglingFeature === feat.key}
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}

@@ -65,6 +65,12 @@ async function getReport(req, res, next) {
     const cachedData     = report.dataCache  ? safeParseObj(report.dataCache)  : null
     const objectives     = safeParseObj(report.objectives)
 
+    // Branding del workspace
+    const workspace = await prisma.workspace.findUnique({
+      where:  { id: workspaceId },
+      select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, bannerData: true },
+    })
+
     // Agregar todos los datos
     const data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis, objectives, cachedData)
 
@@ -94,6 +100,16 @@ async function getReport(req, res, next) {
         notes:      report.notes,
         createdAt:  report.createdAt,
       },
+      workspace: workspace ? {
+        slug:               workspace.slug,
+        name:               workspace.name,
+        companyName:        workspace.companyName,
+        companyDescription: workspace.companyDescription,
+        industry:           workspace.industry,
+        companyWebsite:     workspace.companyWebsite,
+        hasLogo:            !!workspace.logoData,
+        hasBanner:          !!workspace.bannerData,
+      } : null,
       data,
     })
   } catch (err) {
@@ -155,8 +171,15 @@ async function getPublicReport(req, res, next) {
     const report = await prisma.monthlyReport.findUnique({ where: { token } })
     if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
 
-    const cachedAnalysis = report.analysis ? safeParseObj(report.analysis) : null
-    const objectives     = safeParseObj(report.objectives)
+    const [cachedAnalysis, workspace] = await Promise.all([
+      Promise.resolve(report.analysis ? safeParseObj(report.analysis) : null),
+      prisma.workspace.findUnique({
+        where:  { id: report.workspaceId },
+        select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, bannerData: true },
+      }),
+    ])
+
+    const objectives = safeParseObj(report.objectives)
     const data = await aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives)
 
     // Si se generó un análisis nuevo también lo guardamos (ej: primera vez que el cliente abre el link)
@@ -174,6 +197,16 @@ async function getPublicReport(req, res, next) {
         objectives: safeParseObj(report.objectives),
         notes:      report.notes,
       },
+      workspace: workspace ? {
+        slug:               workspace.slug,
+        name:               workspace.name,
+        companyName:        workspace.companyName,
+        companyDescription: workspace.companyDescription,
+        industry:           workspace.industry,
+        companyWebsite:     workspace.companyWebsite,
+        hasLogo:            !!workspace.logoData,
+        hasBanner:          !!workspace.bannerData,
+      } : null,
       data,
     })
   } catch (err) {

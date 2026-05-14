@@ -75,6 +75,7 @@ async function remove(req, res, next) {
  * GET /api/feature-flags/:key
  * Endpoint autenticado (no superadmin) que el frontend usa para saber si un flag
  * está habilitado para el workspace actual.
+ * Respeta disabledFeatureKeys del workspace (opt-out del admin).
  */
 async function checkFlag(req, res, next) {
   try {
@@ -82,11 +83,98 @@ async function checkFlag(req, res, next) {
     if (!flag) return res.json({ enabled: false })
 
     const workspaceId = req.workspace?.id
-    const ids = JSON.parse(flag.enabledWorkspaceIds)
-    const enabled = flag.enabledGlobally || (workspaceId ? ids.includes(workspaceId) : false)
+    const ids        = JSON.parse(flag.enabledWorkspaceIds)
+    const grantedBySuper = flag.enabledGlobally || (workspaceId ? ids.includes(workspaceId) : false)
+    if (!grantedBySuper) return res.json({ enabled: false })
 
-    res.json({ enabled })
+    // Respetar opt-out del workspace admin
+    if (workspaceId) {
+      const workspace = await prisma.workspace.findUnique({
+        where:  { id: workspaceId },
+        select: { disabledFeatureKeys: true },
+      })
+      const disabled = JSON.parse(workspace?.disabledFeatureKeys ?? '[]')
+      if (disabled.includes(flag.key)) return res.json({ enabled: false })
+    }
+
+    res.json({ enabled: true })
   } catch (err) { next(err) }
 }
 
-module.exports = { list, create, update, remove, checkFlag }
+/**
+ * GET /api/workspaces/current/features
+ * Lista todos los feature flags habilitados para el workspace actual (por SuperAdmin),
+ * junto con la descripción y si el workspace los tiene desactivados (opt-out).
+ * Solo admins.
+ */
+async function listWorkspaceFeatures(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const [flags, workspace] = await Promise.all([
+      prisma.featureFlag.findMany({ orderBy: { key: 'asc' } }),
+      prisma.workspace.findUnique({ where: { id: workspaceId }, select: { disabledFeatureKeys: true } }),
+    ])
+
+    const disabled = JSON.parse(workspace?.disabledFeatureKeys ?? '[]')
+
+    const result = flags
+      .filter(f => {
+        const ids = JSON.parse(f.enabledWorkspaceIds)
+        return f.enabledGlobally || ids.includes(workspaceId)
+      })
+      .map(f => ({
+        key:         f.key,
+        name:        f.name,
+        description: f.description,
+        disabled:    disabled.includes(f.key),
+      }))
+
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
+/**
+ * PATCH /api/workspaces/current/features/:key
+ * Workspace admin activa/desactiva (opt-out) un feature flag habilitado por SuperAdmin.
+ * Body: { disabled: boolean }
+ */
+async function toggleWorkspaceFeature(req, res, next) {
+  try {
+    const { key } = req.params
+    const { disabled } = req.body
+    if (typeof disabled !== 'boolean') {
+      return res.status(400).json({ error: 'disabled (boolean) es requerido' })
+    }
+
+    const workspaceId = req.workspace.id
+
+    // Verificar que el flag existe y está habilitado para este workspace
+    const flag = await prisma.featureFlag.findUnique({ where: { key } })
+    if (!flag) return res.status(404).json({ error: 'Flag no encontrado' })
+
+    const ids = JSON.parse(flag.enabledWorkspaceIds)
+    const granted = flag.enabledGlobally || ids.includes(workspaceId)
+    if (!granted) return res.status(403).json({ error: 'Este módulo no está habilitado para el workspace' })
+
+    const workspace = await prisma.workspace.findUnique({
+      where:  { id: workspaceId },
+      select: { disabledFeatureKeys: true },
+    })
+    let disabledKeys = JSON.parse(workspace?.disabledFeatureKeys ?? '[]')
+
+    if (disabled) {
+      if (!disabledKeys.includes(key)) disabledKeys.push(key)
+    } else {
+      disabledKeys = disabledKeys.filter(k => k !== key)
+    }
+
+    await prisma.workspace.update({
+      where: { id: workspaceId },
+      data:  { disabledFeatureKeys: JSON.stringify(disabledKeys) },
+    })
+
+    res.json({ key, disabled })
+  } catch (err) { next(err) }
+}
+
+module.exports = { list, create, update, remove, checkFlag, listWorkspaceFeatures, toggleWorkspaceFeature }

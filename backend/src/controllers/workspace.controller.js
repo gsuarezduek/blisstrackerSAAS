@@ -52,20 +52,108 @@ async function getCurrent(req, res, next) {
 
 /**
  * PATCH /api/workspaces/current
- * Editar nombre, timezone. Solo admin/owner.
+ * Editar nombre, timezone y datos de empresa. Solo admin/owner.
  */
 async function updateCurrent(req, res, next) {
   try {
-    const { name, timezone } = req.body
+    const { name, timezone, companyName, companyDescription, industry, companyWebsite } = req.body
     const data = {}
     if (name) data.name = name
     if (timezone) data.timezone = timezone
+    if (companyName       !== undefined) data.companyName        = companyName
+    if (companyDescription !== undefined) data.companyDescription = companyDescription
+    if (industry          !== undefined) data.industry           = industry
+    if (companyWebsite    !== undefined) data.companyWebsite     = companyWebsite
 
     const workspace = await prisma.workspace.update({
       where: { id: req.workspace.id },
       data,
     })
     res.json(workspace)
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/workspaces/current/logo
+ * Sube el logo del workspace. Espera multipart con campo "image".
+ */
+async function uploadLogo(req, res, next) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Archivo requerido' })
+
+    const ext = require('path').extname(req.file.originalname).toLowerCase()
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.svg']
+    if (!allowed.includes(ext)) {
+      return res.status(400).json({ error: 'Formato no soportado. Usar PNG, JPG, WEBP o SVG.' })
+    }
+
+    const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml' }
+    const mimeType = mimeMap[ext] ?? req.file.mimetype
+
+    await prisma.workspace.update({
+      where: { id: req.workspace.id },
+      data: {
+        logoData:     req.file.buffer,
+        logoMimeType: mimeType,
+      },
+    })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/workspaces/current/logo
+ * Elimina el logo del workspace.
+ */
+async function deleteLogo(req, res, next) {
+  try {
+    await prisma.workspace.update({
+      where: { id: req.workspace.id },
+      data: { logoData: null, logoMimeType: null },
+    })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/workspaces/current/banner
+ * Sube el banner del workspace. Espera multipart con campo "image".
+ */
+async function uploadBanner(req, res, next) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Archivo requerido' })
+
+    const ext = require('path').extname(req.file.originalname).toLowerCase()
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp']
+    if (!allowed.includes(ext)) {
+      return res.status(400).json({ error: 'Formato no soportado. Usar PNG, JPG o WEBP.' })
+    }
+
+    const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
+    const mimeType = mimeMap[ext] ?? req.file.mimetype
+
+    await prisma.workspace.update({
+      where: { id: req.workspace.id },
+      data: {
+        bannerData:     req.file.buffer,
+        bannerMimeType: mimeType,
+      },
+    })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/workspaces/current/banner
+ * Elimina el banner del workspace.
+ */
+async function deleteBanner(req, res, next) {
+  try {
+    await prisma.workspace.update({
+      where: { id: req.workspace.id },
+      data: { bannerData: null, bannerMimeType: null },
+    })
+    res.json({ ok: true })
   } catch (err) { next(err) }
 }
 
@@ -794,4 +882,5 @@ module.exports = {
   createWorkspace, checkSlug, getInfo,
   inviteMember, getInvitation, joinWorkspace, listInvitations, cancelInvitation,
   getDeletionRequest, scheduleDeletion, cancelDeletion, executeWorkspaceDeletion,
+  uploadLogo, deleteLogo, uploadBanner, deleteBanner,
 }

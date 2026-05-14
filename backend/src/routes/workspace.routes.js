@@ -1,8 +1,15 @@
 const express = require('express')
-const router = express.Router()
+const router  = require('express').Router()
+const multer  = require('multer')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
-const c = require('../controllers/workspace.controller')
+const c  = require('../controllers/workspace.controller')
+const ff = require('../controllers/featureFlags.controller')
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 5 * 1024 * 1024 }, // 5 MB máximo
+})
 
 // Rutas públicas (sin auth)
 router.post('/',          c.createWorkspace)
@@ -35,5 +42,15 @@ router.delete('/current/invitations/:id', workspaceAdminOnly, c.cancelInvitation
 router.get('/current/deletion-request',    workspaceAdminOnly, c.getDeletionRequest)
 router.post('/current/deletion-request',   workspaceAdminOnly, c.scheduleDeletion)
 router.delete('/current/deletion-request', workspaceAdminOnly, c.cancelDeletion)
+
+// Branding: logo y banner
+router.post('/current/logo',   workspaceAdminOnly, upload.single('image'), c.uploadLogo)
+router.delete('/current/logo', workspaceAdminOnly, c.deleteLogo)
+router.post('/current/banner',   workspaceAdminOnly, upload.single('image'), c.uploadBanner)
+router.delete('/current/banner', workspaceAdminOnly, c.deleteBanner)
+
+// Feature flags: gestión de opt-out por parte del workspace admin
+router.get('/current/features',          workspaceAdminOnly, ff.listWorkspaceFeatures)
+router.patch('/current/features/:key',   workspaceAdminOnly, ff.toggleWorkspaceFeature)
 
 module.exports = router

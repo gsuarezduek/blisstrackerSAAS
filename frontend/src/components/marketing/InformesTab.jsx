@@ -109,6 +109,7 @@ export default function InformesTab({ projectId }) {
   const [month,       setMonth]       = useState(currentMonthStr())
   const [reportMeta,  setReportMeta]  = useState(null)
   const [reportData,  setReportData]  = useState(null)
+  const [reportWorkspace, setReportWorkspace] = useState(null)
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState(null)
   const [showObjModal, setShowObjModal] = useState(false)
@@ -126,6 +127,7 @@ export default function InformesTab({ projectId }) {
       .then(res => {
         setReportMeta(res.data.report)
         setReportData(res.data.data)
+        setReportWorkspace(res.data.workspace ?? null)
       })
       .catch(err => {
         if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
@@ -263,6 +265,7 @@ export default function InformesTab({ projectId }) {
           objectives={reportMeta?.objectives ?? {}}
           isPublic={false}
           onSaveAnalysis={handleSaveAnalysis}
+          workspace={reportWorkspace}
         />
       )}
 

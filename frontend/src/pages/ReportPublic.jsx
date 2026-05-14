@@ -7,10 +7,11 @@ const API = import.meta.env.VITE_API_URL || ''
 
 export default function ReportPublic() {
   const { token }            = useParams()
-  const [data,    setData]   = useState(null)
-  const [report,  setReport] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]  = useState(null)
+  const [data,      setData]      = useState(null)
+  const [report,    setReport]    = useState(null)
+  const [workspace, setWorkspace] = useState(null)
+  const [loading,   setLoading]   = useState(true)
+  const [error,     setError]     = useState(null)
 
   useEffect(() => {
     if (!token) return
@@ -19,6 +20,7 @@ export default function ReportPublic() {
       .then(r => {
         setData(r.data.data)
         setReport(r.data.report)
+        setWorkspace(r.data.workspace ?? null)
       })
       .catch(err => {
         const msg = err.response?.data?.error || 'No se pudo cargar el informe'
@@ -64,6 +66,7 @@ export default function ReportPublic() {
           data={data}
           objectives={report?.objectives ?? {}}
           isPublic={true}
+          workspace={workspace}
         />
       </div>
     </div>

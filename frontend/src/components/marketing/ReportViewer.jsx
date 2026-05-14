@@ -318,7 +318,7 @@ function ObjectivesTable({ objectives, sections }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function ReportViewer({ data, objectives = {}, isPublic = false, onSaveAnalysis }) {
+export default function ReportViewer({ data, objectives = {}, isPublic = false, onSaveAnalysis, workspace = null }) {
   const [editingResumen,   setEditingResumen]   = useState(false)
   const [resumenDraft,     setResumenDraft]     = useState('')
   const [savingResumen,    setSavingResumen]    = useState(false)
@@ -519,33 +519,60 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
       <style>{PRINT_STYLES}</style>
 
       {/* ── Header ── */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 print-break-avoid">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
-            <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">
-              Informe mensual — {monthLabel(month)}
-            </p>
-            {dataMonth && dataMonth !== month && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 capitalize">
-                {dataPeriodLabel(dataMonth)}
-              </p>
-            )}
-            {project.websiteUrl && (
-              <a href={project.websiteUrl} target="_blank" rel="noreferrer"
-                className="text-xs text-primary-600 dark:text-primary-400 hover:underline mt-1 block">
-                {project.websiteUrl}
-              </a>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden print-break-avoid">
+        {/* Banner de la empresa (si existe) */}
+        {workspace?.hasBanner && workspace?.slug && (
+          <div className="h-32 w-full overflow-hidden">
+            <img
+              src={`${import.meta.env.VITE_API_URL}/api/public/banner/${workspace.slug}`}
+              alt="Banner"
+              className="w-full h-full object-cover"
+              onError={e => { e.currentTarget.parentElement.style.display = 'none' }}
+            />
+          </div>
+        )}
+
+        <div className="p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              {/* Logo de la empresa (si existe) */}
+              {workspace?.hasLogo && workspace?.slug && (
+                <div className="flex-shrink-0 w-14 h-14 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={`${import.meta.env.VITE_API_URL}/api/public/logo/${workspace.slug}`}
+                    alt="Logo"
+                    className="max-w-full max-h-full object-contain p-1"
+                    onError={e => { e.currentTarget.parentElement.style.display = 'none' }}
+                  />
+                </div>
+              )}
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
+                <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">
+                  Informe mensual — {monthLabel(month)}
+                </p>
+                {dataMonth && dataMonth !== month && (
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 capitalize">
+                    {dataPeriodLabel(dataMonth)}
+                  </p>
+                )}
+                {project.websiteUrl && (
+                  <a href={project.websiteUrl} target="_blank" rel="noreferrer"
+                    className="text-xs text-primary-600 dark:text-primary-400 hover:underline mt-1 block">
+                    {project.websiteUrl}
+                  </a>
+                )}
+              </div>
+            </div>
+            {isPublic && (
+              <button
+                onClick={() => window.print()}
+                className="no-print flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
+              >
+                🖨️ Imprimir / PDF
+              </button>
             )}
           </div>
-          {isPublic && (
-            <button
-              onClick={() => window.print()}
-              className="no-print flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
-            >
-              🖨️ Imprimir / PDF
-            </button>
-          )}
         </div>
       </div>
 
