@@ -193,7 +193,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     // Integraciones activas del proyecto (incluyendo tokens para ads)
     prisma.projectIntegration.findMany({
       where:  { projectId, status: 'active' },
-      select: { type: true, status: true, customerId: true, propertyId: true,
+      select: { id: true, type: true, status: true, customerId: true, propertyId: true,
                 accessToken: true, refreshToken: true, expiresAt: true },
     }),
 
