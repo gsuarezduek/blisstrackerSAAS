@@ -21,6 +21,8 @@ const metaAds           = require('../controllers/metaAds.controller')
 const googleAds         = require('../controllers/googleAds.controller')
 const monthlyReport     = require('../controllers/monthlyReport.controller')
 const cannibalization   = require('../controllers/cannibalization.controller')
+const adsSnapshot       = require('../controllers/adsSnapshot.controller')
+const summary           = require('../controllers/marketingSummary.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -120,5 +122,17 @@ router.get('/projects/:id/keywords/:kwId/history',        keywords.getHistory)
 router.post('/projects/:id/keywords/:kwId/analysis',      keywords.generateAnalysis)
 router.get('/projects/:id/keywords/:kwId/serp',           keywords.getSerpSnapshot)
 router.post('/projects/:id/keywords/:kwId/serp/refresh',  keywords.refreshSerpSnapshot)
+
+// Ads Snapshots por proyecto
+router.post('/projects/:id/ads-snapshots',  adsSnapshot.saveSnapshot)
+router.get('/projects/:id/ads-snapshots',   adsSnapshot.listSnapshots)
+
+// Vistas cross-proyecto (sin proyecto seleccionado)
+router.get('/summary/analytics',   summary.getAnalyticsSummary)
+router.get('/summary/performance', summary.getPerformanceSummary)
+router.get('/summary/instagram',   summary.getInstagramSummary)
+router.get('/summary/tiktok',      summary.getTikTokSummary)
+router.get('/summary/ads',         summary.getAdsSummary)
+router.get('/summary/reports',     summary.getReportsSummary)
 
 module.exports = router

@@ -589,9 +589,82 @@ function ConnectPrompt({ projectId, onConnected }) {
   )
 }
 
+// ── Panel cross-proyecto ──────────────────────────────────────────────────────
+
+function CrossProjectInstagramPanel({ onSelectProject }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/marketing/summary/instagram')
+      .then(r => setData(r.data))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>
+  )
+  if (!data?.length) return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+      <div className="text-4xl mb-3">📸</div>
+      <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay snapshots de Instagram. Seleccioná un proyecto para empezar.</p>
+    </div>
+  )
+
+  const maxFollowers = Math.max(...data.map(p => p.followersCount), 1)
+
+  function engColor(rate) {
+    if (rate == null) return 'text-gray-400'
+    if (rate >= 3)    return 'text-green-600 dark:text-green-400'
+    if (rate >= 1)    return 'text-yellow-600 dark:text-yellow-400'
+    return 'text-red-500 dark:text-red-400'
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+        Instagram por proyecto ({data.length}) <span className="font-normal text-gray-400">· último snapshot disponible</span>
+      </h3>
+      <div className="space-y-3">
+        {data.map(p => (
+          <div key={p.projectId} className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <button
+                  onClick={() => onSelectProject?.(String(p.projectId))}
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                >
+                  {p.projectName}
+                </button>
+                <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                  <span className="text-xs text-gray-400">{p.month}</span>
+                  <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtK(p.followersCount)}</span>
+                </div>
+              </div>
+              <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                <div className="h-1.5 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" style={{ width: `${Math.round((p.followersCount / maxFollowers) * 100)}%` }} />
+              </div>
+              <div className="flex gap-3 mt-1 text-xs">
+                {p.engagementRate != null && (
+                  <span className={engColor(p.engagementRate)}>
+                    {p.engagementRate.toFixed(2)}% eng.
+                  </span>
+                )}
+                {p.avgLikes != null && <span className="text-gray-400">❤️ {fmtK(Math.round(p.avgLikes))}</span>}
+                {p.postsCount != null && <span className="text-gray-400">{p.postsCount} posts</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function InstagramTab({ projectId }) {
+export default function InstagramTab({ projectId, onSelectProject }) {
   const currentMonth = todayAR().slice(0, 7)
 
   const [integration,    setIntegration]    = useState(null)
@@ -661,7 +734,7 @@ export default function InstagramTab({ projectId }) {
   }
 
   if (!projectId) {
-    return <div className="text-center py-20 text-sm text-gray-400 dark:text-gray-500">Seleccioná un proyecto para ver las métricas de Instagram.</div>
+    return <CrossProjectInstagramPanel onSelectProject={onSelectProject} />
   }
 
   if (loading) {

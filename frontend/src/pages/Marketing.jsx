@@ -143,7 +143,7 @@ export default function Marketing() {
   const activeSub = activeNav.subs.find(s => s.id === sub) ?? activeNav.subs[0]
 
   function renderContent() {
-    if (tab === 'informes') return <InformesTab projectId={projectId} />
+    if (tab === 'informes') return <InformesTab projectId={projectId} onSelectProject={handleProjectChange} />
 
     if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />
     if (activeSub?.soon)                               return <ComingSoon label={activeSub.label} />
@@ -152,11 +152,11 @@ export default function Marketing() {
     if (tab === 'geo-seo' && sub === 'seo')            return <SeoTab            projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'keywords')       return <KeywordsTab       projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'canibalizacion') return <CanibalizacionTab projectId={projectId} />
-    if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} />
-    if (tab === 'rrss'     && sub === 'instagram') return <InstagramTab projectId={projectId} />
-    if (tab === 'rrss'     && sub === 'tiktok')    return <TikTokTab    projectId={projectId} />
-    if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} />
-    if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} />
+    if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
+    if (tab === 'rrss'     && sub === 'instagram') return <InstagramTab projectId={projectId} onSelectProject={handleProjectChange} />
+    if (tab === 'rrss'     && sub === 'tiktok')    return <TikTokTab    projectId={projectId} onSelectProject={handleProjectChange} />
+    if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} onSelectProject={handleProjectChange} />
+    if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} onSelectProject={handleProjectChange} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />
   }
@@ -176,13 +176,24 @@ export default function Marketing() {
               Herramientas de optimización y análisis para tus proyectos
             </p>
           </div>
-          <div className="w-64">
-            <ProjectSearchSelect
-              projects={projects}
-              value={projectId}
-              onChange={handleProjectChange}
-              placeholder="Seleccioná un proyecto…"
-            />
+          <div className="flex items-center gap-2">
+            <div className="w-64">
+              <ProjectSearchSelect
+                projects={projects}
+                value={projectId}
+                onChange={handleProjectChange}
+                placeholder="Todos los proyectos…"
+              />
+            </div>
+            {projectId && (
+              <button
+                onClick={() => handleProjectChange('')}
+                title="Ver todos los proyectos"
+                className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 

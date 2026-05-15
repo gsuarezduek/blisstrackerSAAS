@@ -303,9 +303,71 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
   )
 }
 
+// ── Panel cross-proyecto ──────────────────────────────────────────────────────
+
+function CrossProjectTikTokPanel({ onSelectProject }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/marketing/summary/tiktok')
+      .then(r => setData(r.data))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${TEAL} transparent ${TEAL} ${TEAL}` }} /></div>
+  )
+  if (!data?.length) return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+      <div className="text-4xl mb-3">🎵</div>
+      <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay snapshots de TikTok. Seleccioná un proyecto para empezar.</p>
+    </div>
+  )
+
+  const maxFollowers = Math.max(...data.map(p => p.followersCount), 1)
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+        TikTok por proyecto ({data.length}) <span className="font-normal text-gray-400">· último snapshot disponible</span>
+      </h3>
+      <div className="space-y-3">
+        {data.map(p => (
+          <div key={p.projectId} className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <button
+                  onClick={() => onSelectProject?.(String(p.projectId))}
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                >
+                  {p.projectName}
+                </button>
+                <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                  <span className="text-xs text-gray-400">{p.month}</span>
+                  <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtK(p.followersCount)}</span>
+                </div>
+              </div>
+              <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                <div className="h-1.5 rounded-full" style={{ width: `${Math.round((p.followersCount / maxFollowers) * 100)}%`, background: `linear-gradient(90deg, #000 0%, ${TEAL} 100%)` }} />
+              </div>
+              <div className="flex gap-3 mt-1 text-xs text-gray-400">
+                {p.avgViews != null && <span>👁 {fmtK(Math.round(p.avgViews))} vistas/video</span>}
+                {p.engagementRate != null && <span>{p.engagementRate.toFixed(2)}% eng.</span>}
+                {p.postsThisMonth != null && <span>{p.postsThisMonth} videos</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function TikTokTab({ projectId }) {
+export default function TikTokTab({ projectId, onSelectProject }) {
   const currentMonth = todayAR().slice(0, 7)
 
   const [integration,     setIntegration]    = useState(null)
@@ -377,7 +439,7 @@ export default function TikTokTab({ projectId }) {
     } finally { setDisconnecting(false) }
   }
 
-  if (!projectId) return <div className="text-center py-20 text-sm text-gray-400 dark:text-gray-500">Seleccioná un proyecto para ver las métricas de TikTok.</div>
+  if (!projectId) return <CrossProjectTikTokPanel onSelectProject={onSelectProject} />
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">

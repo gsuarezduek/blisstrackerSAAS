@@ -581,7 +581,7 @@ function AnalysisPanel({ analysis, loading, onGenerate, updatedAt }) {
 
 // ─── Fila expandible de keyword ───────────────────────────────────────────────
 
-function KeywordRow({ kw, isExpanded, onToggle, onRemove, onAddKeyword }) {
+function KeywordRow({ kw, serpSnap, isExpanded, onToggle, onRemove, onAddKeyword }) {
   const [history,         setHistory]         = useState(null)
   const [historyLoading,  setHistoryLoading]  = useState(false)
   const [analysis,        setAnalysis]        = useState(null)
@@ -638,6 +638,16 @@ function KeywordRow({ kw, isExpanded, onToggle, onRemove, onAddKeyword }) {
             : fmtPos(kw.currentPosition)
           }
         </td>
+        <td className="px-4 py-3 text-sm text-right tabular-nums">
+          {serpSnap
+            ? serpSnap.position != null
+              ? <span className={`font-semibold ${serpSnap.position <= 3 ? 'text-green-600 dark:text-green-400' : serpSnap.position <= 10 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  #{serpSnap.position}
+                </span>
+              : <span className="text-xs text-gray-400 italic">—</span>
+            : <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+          }
+        </td>
         <td className={`px-4 py-3 text-sm text-right tabular-nums font-medium ${deltaColor}`}>
           {deltaLabel}
         </td>
@@ -660,7 +670,7 @@ function KeywordRow({ kw, isExpanded, onToggle, onRemove, onAddKeyword }) {
 
       {isExpanded && (
         <tr>
-          <td colSpan={6} className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
+          <td colSpan={7} className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
             {/* Tabs internos */}
             <div className="flex gap-1 mb-4 border-b border-gray-100 dark:border-gray-700">
               {[
@@ -1130,8 +1140,17 @@ export default function KeywordsTab({ projectId, projects }) {
   const [integrationCountry, setIntegrationCountry] = useState('arg')
   const [liveMode,          setLiveMode]          = useState(false)
   const [savingDefault,     setSavingDefault]     = useState(false)
+  const [serpBatch,         setSerpBatch]         = useState({}) // { [kwId]: { position, serpFeatures, capturedAt } }
 
   const selectedProject = projects.find(p => String(p.id) === String(projectId))
+
+  const loadSerpBatch = useCallback((pid) => {
+    const id = pid ?? projectId
+    if (!id) return
+    api.get(`/marketing/projects/${id}/keywords/serp-batch`)
+      .then(r => setSerpBatch(r.data.snapshots ?? {}))
+      .catch(() => {})
+  }, [projectId]) // eslint-disable-line
 
   const loadKeywords = useCallback((overrideCountry) => {
     if (!projectId) return
@@ -1162,7 +1181,9 @@ export default function KeywordsTab({ projectId, projects }) {
     setIntegrationCountry('arg')
     setLiveMode(false)
     setExpanded(null)
+    setSerpBatch({})
     loadKeywords('arg')
+    loadSerpBatch(projectId)
   }, [projectId]) // eslint-disable-line
 
   function handleCountryChange(newCountry) {
@@ -1326,7 +1347,8 @@ export default function KeywordsTab({ projectId, projects }) {
             <thead>
               <tr className="border-b border-gray-100 dark:border-gray-700">
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-left">Keyword</th>
-                <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Posición</th>
+                <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">GSC ↕</th>
+                <th className="px-4 py-3 text-xs font-medium text-purple-400 dark:text-purple-400 text-right">SERP</th>
                 <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">
                   {liveMode ? <span className="text-orange-500">Cambio</span> : 'Cambio'}
                 </th>
@@ -1342,6 +1364,7 @@ export default function KeywordsTab({ projectId, projects }) {
                   <KeywordRow
                     key={kw.id}
                     kw={{ ...kw, projectId }}
+                    serpSnap={serpBatch[kw.id] ?? null}
                     isExpanded={expanded === kw.id}
                     onToggle={() => setExpanded(expanded === kw.id ? null : kw.id)}
                     onRemove={handleRemove}

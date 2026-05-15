@@ -101,9 +101,113 @@ function ObjectivesModal({ objectives, onSave, onClose, saving }) {
   )
 }
 
+// ─── Vista global de informes (sin proyecto seleccionado) ─────────────────────
+
+function AllReportsPanel({ onSelectProject }) {
+  const [reports, setReports]     = useState([])
+  const [total,   setTotal]       = useState(0)
+  const [loading, setLoading]     = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const PAGE = 20
+
+  useEffect(() => {
+    setLoading(true)
+    api.get(`/marketing/summary/reports?limit=${PAGE}&offset=0`)
+      .then(r => { setReports(r.data.reports); setTotal(r.data.total) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleLoadMore() {
+    setLoadingMore(true)
+    try {
+      const r = await api.get(`/marketing/summary/reports?limit=${PAGE}&offset=${reports.length}`)
+      setReports(prev => [...prev, ...r.data.reports])
+      setTotal(r.data.total)
+    } catch {}
+    finally { setLoadingMore(false) }
+  }
+
+  if (loading) return (
+    <div className="flex justify-center py-12">
+      <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
+  if (!reports.length) return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+      <p className="text-4xl mb-3">📊</p>
+      <p className="text-gray-500 dark:text-gray-400 text-sm">
+        Todavía no hay informes generados. Seleccioná un proyecto para crear el primer informe.
+      </p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          Todos los informes <span className="font-normal text-gray-400">({total} en total)</span>
+        </p>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
+        {reports.map(r => {
+          const [y, m] = r.month.split('-').map(Number)
+          const monthLabel = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+          const publicUrl  = `${window.location.origin}/report/${r.token}`
+
+          return (
+            <div key={r.id} className="flex items-center gap-4 px-5 py-3.5">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => onSelectProject?.(String(r.project.id))}
+                    className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                  >
+                    {r.project.name}
+                  </button>
+                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">{monthLabel}</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Generado: {new Date(r.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </p>
+              </div>
+              <a
+                href={publicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+              >
+                Ver informe →
+              </a>
+            </div>
+          )
+        })}
+      </div>
+
+      {reports.length < total && (
+        <div className="flex justify-center pt-2">
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            {loadingMore
+              ? <><span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Cargando…</>
+              : `Cargar más (${total - reports.length} restantes)`
+            }
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function InformesTab({ projectId }) {
+export default function InformesTab({ projectId, onSelectProject }) {
   // Default: informe del mes actual (que contiene datos del mes anterior)
   // Ej: "Informe de Mayo 2026" → muestra datos de Abril 2026
   const [month,       setMonth]       = useState(currentMonthStr())
@@ -198,12 +302,7 @@ export default function InformesTab({ projectId }) {
   const canGoNext = month < today
 
   if (!projectId) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-        <p className="text-4xl mb-3">📊</p>
-        <p className="text-gray-500 dark:text-gray-400 text-sm">Seleccioná un proyecto para ver el informe mensual.</p>
-      </div>
-    )
+    return <AllReportsPanel onSelectProject={onSelectProject} />
   }
 
   return (
