@@ -841,6 +841,7 @@ model TrackedKeyword {
   project   Project   @relation("ProjectTrackedKeywords",   fields: [projectId],   references: [id], onDelete: Cascade)
   workspace Workspace @relation("WorkspaceTrackedKeywords", fields: [workspaceId], references: [id], onDelete: Cascade)
   rankings  KeywordRanking[]
+  serpSnapshots SerpSnapshot[]
 
   @@unique([projectId, query])
   @@index([projectId, workspaceId])
@@ -863,6 +864,33 @@ model KeywordRanking {
   workspace      Workspace      @relation("WorkspaceKeywordRankings", fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([trackedKeywordId, month])
+  @@index([projectId, workspaceId])
+}
+
+// ─── SERP SNAPSHOTS ───────────────────────────────────────────────────────────
+
+model SerpSnapshot {
+  id               Int      @id @default(autoincrement())
+  trackedKeywordId Int
+  projectId        Int
+  workspaceId      Int
+  capturedAt       DateTime @default(now())
+
+  position         Int?     // null = no aparece en top 100
+  resultUrl        String?  // URL exacta que rankea
+
+  // JSON serializado (arrays)
+  serpFeatures     String   @default("[]") // ["featured_snippet", "ai_overview", ...]
+  competitors      String   @default("[]") // [{ position, domain, url, title }]
+  peopleAlsoAsk    String   @default("[]") // [string]
+  relatedSearches  String   @default("[]") // [string]
+
+  country          String   @default("ar") // código SerpAPI (gl)
+  totalResults     String?
+
+  trackedKeyword TrackedKeyword @relation(fields: [trackedKeywordId], references: [id], onDelete: Cascade)
+
+  @@index([trackedKeywordId, capturedAt])
   @@index([projectId, workspaceId])
 }
 

@@ -7,6 +7,9 @@ const {
   generateKeywordAnalysis,
   currentMonthStr,
 } = require('../services/keywordTracking.service')
+const {
+  captureAndSaveSerpSnapshot,
+} = require('../services/serpApi.service')
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -440,6 +443,135 @@ async function getHistoryBatch(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── GET /projects/:id/keywords/:kwId/serp ────────────────────────────────────
+// Devuelve el snapshot SERP más reciente. Si tiene <24h, lo reutiliza.
+// Si no existe o es viejo, dispara una nueva captura en SerpAPI.
+
+async function getSerpSnapshot(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const kwId        = Number(req.params.kwId)
+
+    if (!process.env.SERP_API_KEY) {
+      return res.status(503).json({ error: 'SerpAPI no está configurado en este servidor.' })
+    }
+
+    const kw = await prisma.trackedKeyword.findFirst({
+      where: { id: kwId, projectId, workspaceId },
+    })
+    if (!kw) return res.status(404).json({ error: 'Keyword no encontrada' })
+
+    // Buscar snapshot reciente (< 24h)
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const existing = await prisma.serpSnapshot.findFirst({
+      where: { trackedKeywordId: kwId, capturedAt: { gte: cutoff } },
+      orderBy: { capturedAt: 'desc' },
+    })
+
+    if (existing) {
+      return res.json({
+        snapshot: formatSnapshot(existing),
+        fresh: false,
+      })
+    }
+
+    const snapshot = await captureAndSaveSerpSnapshot(kwId, projectId, workspaceId)
+    res.json({ snapshot: formatSnapshot(snapshot), fresh: true })
+  } catch (err) { next(err) }
+}
+
+// ─── POST /projects/:id/keywords/:kwId/serp/refresh ──────────────────────────
+// Fuerza una nueva captura SERP. Cooldown de 15 minutos.
+
+async function refreshSerpSnapshot(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const kwId        = Number(req.params.kwId)
+
+    if (!process.env.SERP_API_KEY) {
+      return res.status(503).json({ error: 'SerpAPI no está configurado en este servidor.' })
+    }
+
+    const kw = await prisma.trackedKeyword.findFirst({
+      where: { id: kwId, projectId, workspaceId },
+    })
+    if (!kw) return res.status(404).json({ error: 'Keyword no encontrada' })
+
+    // Cooldown de 15 minutos
+    const cooldown = new Date(Date.now() - 15 * 60 * 1000)
+    const recent = await prisma.serpSnapshot.findFirst({
+      where: { trackedKeywordId: kwId, capturedAt: { gte: cooldown } },
+      orderBy: { capturedAt: 'desc' },
+    })
+    if (recent) {
+      const waitMins = Math.ceil((new Date(recent.capturedAt).getTime() + 15 * 60 * 1000 - Date.now()) / 60000)
+      return res.status(429).json({
+        error: `Snapshot actualizado recientemente. Podés actualizarlo en ${waitMins} min.`,
+        waitMins,
+      })
+    }
+
+    const snapshot = await captureAndSaveSerpSnapshot(kwId, projectId, workspaceId)
+    res.json({ snapshot: formatSnapshot(snapshot), fresh: true })
+  } catch (err) { next(err) }
+}
+
+// ─── GET /projects/:id/keywords/serp-batch ────────────────────────────────────
+// Devuelve el snapshot más reciente de TODAS las keywords en una sola query.
+// Usada por la vista "SERP Live" para mostrar tabla resumen.
+
+async function getSerpBatch(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId },
+      select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    // Snapshot más reciente por keyword (últimos 7 días)
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const rows = await prisma.serpSnapshot.findMany({
+      where: { projectId, workspaceId, capturedAt: { gte: since } },
+      orderBy: { capturedAt: 'desc' },
+      distinct: ['trackedKeywordId'],
+    })
+
+    const snapshots = {}
+    for (const row of rows) {
+      snapshots[row.trackedKeywordId] = {
+        position:     row.position,
+        serpFeatures: JSON.parse(row.serpFeatures),
+        capturedAt:   row.capturedAt,
+        resultUrl:    row.resultUrl,
+      }
+    }
+
+    res.json({ snapshots })
+  } catch (err) { next(err) }
+}
+
+// ─── Helper: formatear snapshot para respuesta ────────────────────────────────
+
+function formatSnapshot(s) {
+  return {
+    id:              s.id,
+    capturedAt:      s.capturedAt,
+    position:        s.position,
+    resultUrl:       s.resultUrl,
+    country:         s.country,
+    totalResults:    s.totalResults,
+    serpFeatures:    typeof s.serpFeatures    === 'string' ? JSON.parse(s.serpFeatures)    : s.serpFeatures,
+    competitors:     typeof s.competitors     === 'string' ? JSON.parse(s.competitors)     : s.competitors,
+    peopleAlsoAsk:   typeof s.peopleAlsoAsk   === 'string' ? JSON.parse(s.peopleAlsoAsk)   : s.peopleAlsoAsk,
+    relatedSearches: typeof s.relatedSearches === 'string' ? JSON.parse(s.relatedSearches) : s.relatedSearches,
+  }
+}
+
 module.exports = {
   listKeywords,
   addKeyword,
@@ -449,4 +581,7 @@ module.exports = {
   generateAnalysis,
   getHeatmap,
   getHistoryBatch,
+  getSerpSnapshot,
+  refreshSerpSnapshot,
+  getSerpBatch,
 }

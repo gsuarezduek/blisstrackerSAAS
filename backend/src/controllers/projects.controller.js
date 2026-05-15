@@ -387,11 +387,20 @@ async function getAiUsage(req, res, next) {
     // Período para el desglose por servicio
     const { period } = req.query
     let periodStart = null
-    if (period === '7d')  { periodStart = new Date(now); periodStart.setDate(now.getDate() - 7) }
-    if (period === '30d') { periodStart = new Date(now); periodStart.setDate(now.getDate() - 30) }
+    let periodEnd   = null
+    if (period === '7d')         { periodStart = new Date(now); periodStart.setDate(now.getDate() - 7) }
+    if (period === '30d')        { periodStart = new Date(now); periodStart.setDate(now.getDate() - 30) }
+    if (period === 'month')      { periodStart = new Date(now.getFullYear(), now.getMonth(), 1) }
+    if (period === 'prev_month') {
+      periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      periodEnd   = new Date(now.getFullYear(), now.getMonth(), 1)
+    }
     // 'all' o sin param: sin filtro de fecha (todo el tiempo)
 
-    const whereBase = { workspaceId, ...(periodStart ? { createdAt: { gte: periodStart } } : {}) }
+    const whereBase = {
+      workspaceId,
+      ...(periodStart ? { createdAt: { gte: periodStart, ...(periodEnd ? { lt: periodEnd } : {}) } } : {}),
+    }
 
     const [day, week, month, byServiceRaw, periodTotal, workspace] = await Promise.all([
       prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfDay } },   _sum: { inputTokens: true, outputTokens: true } }),

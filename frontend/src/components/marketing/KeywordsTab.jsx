@@ -29,6 +29,212 @@ function currentMonthStr() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
+// ─── SERP Features ────────────────────────────────────────────────────────────
+
+const SERP_FEATURE_LABELS = {
+  featured_snippet: { label: 'Featured Snippet', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' },
+  ai_overview:      { label: 'AI Overview',       color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' },
+  local_pack:       { label: 'Local Pack',         color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
+  shopping_results: { label: 'Shopping',           color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' },
+  knowledge_graph:  { label: 'Knowledge Graph',   color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' },
+  people_also_ask:  { label: 'People Also Ask',   color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' },
+  top_stories:      { label: 'Noticias',           color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
+  images:           { label: 'Imágenes',           color: 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300' },
+  videos:           { label: 'Videos',             color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300' },
+  site_links:       { label: 'Sitelinks',          color: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
+}
+
+function SerpFeatureBadge({ feature }) {
+  const meta = SERP_FEATURE_LABELS[feature]
+  if (!meta) return null
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${meta.color}`}>
+      {meta.label}
+    </span>
+  )
+}
+
+// ─── SerpPanel ────────────────────────────────────────────────────────────────
+
+function SerpPanel({ projectId, kwId, onAddKeyword }) {
+  const [snapshot,  setSnapshot]  = useState(null)
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const [waitMins,  setWaitMins]  = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setError('')
+    api.get(`/marketing/projects/${projectId}/keywords/${kwId}/serp`)
+      .then(r => setSnapshot(r.data.snapshot))
+      .catch(err => setError(err.response?.data?.error ?? 'Error al cargar datos SERP'))
+      .finally(() => setLoading(false))
+  }, [projectId, kwId])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    setError('')
+    setWaitMins(null)
+    try {
+      const r = await api.post(`/marketing/projects/${projectId}/keywords/${kwId}/serp/refresh`)
+      setSnapshot(r.data.snapshot)
+    } catch (err) {
+      const data = err.response?.data
+      if (err.response?.status === 429) {
+        setWaitMins(data?.waitMins ?? 15)
+      } else {
+        setError(data?.error ?? 'Error al actualizar')
+      }
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  if (loading) return (
+    <div className="flex items-center gap-2 text-sm text-gray-400 py-3">
+      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      Consultando SerpAPI…
+    </div>
+  )
+
+  if (error) return (
+    <div className="text-sm text-red-500 dark:text-red-400 py-2">{error}</div>
+  )
+
+  if (!snapshot) return null
+
+  const capturedDate = new Date(snapshot.capturedAt).toLocaleString('es-AR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+
+  return (
+    <div className="space-y-4">
+      {/* Posición + URL */}
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 dark:text-gray-400">Posición SERP:</span>
+          {snapshot.position != null
+            ? <span className={`text-2xl font-bold tabular-nums ${snapshot.position <= 3 ? 'text-green-600 dark:text-green-400' : snapshot.position <= 10 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                #{snapshot.position}
+              </span>
+            : <span className="text-sm text-gray-400 italic">No aparece en top 100</span>
+          }
+        </div>
+        {snapshot.resultUrl && (
+          <a
+            href={snapshot.resultUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary-600 dark:text-primary-400 hover:underline truncate max-w-xs"
+          >
+            {snapshot.resultUrl}
+          </a>
+        )}
+      </div>
+
+      {/* Features SERP */}
+      {snapshot.serpFeatures?.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Features en este SERP</p>
+          <div className="flex flex-wrap gap-1.5">
+            {snapshot.serpFeatures.map(f => <SerpFeatureBadge key={f} feature={f} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Competidores */}
+      {snapshot.competitors?.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Competidores orgánicos (top 10)</p>
+          <div className="rounded-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 dark:bg-gray-700/50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium w-10">#</th>
+                  <th className="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium">Dominio</th>
+                  <th className="px-3 py-2 text-left text-gray-500 dark:text-gray-400 font-medium hidden sm:table-cell">Título</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshot.competitors.map((c, i) => (
+                  <tr key={i} className="border-t border-gray-100 dark:border-gray-700/50">
+                    <td className="px-3 py-2 text-gray-500 dark:text-gray-400 tabular-nums">{c.position}</td>
+                    <td className="px-3 py-2">
+                      <a href={c.url} target="_blank" rel="noopener noreferrer"
+                        className="text-primary-600 dark:text-primary-400 hover:underline font-medium">
+                        {c.domain}
+                      </a>
+                    </td>
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400 hidden sm:table-cell truncate max-w-[240px]">
+                      {c.title}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* People Also Ask */}
+      {snapshot.peopleAlsoAsk?.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">People Also Ask</p>
+          <ul className="space-y-1">
+            {snapshot.peopleAlsoAsk.map((q, i) => (
+              <li key={i} className="flex items-center justify-between gap-2 py-1 border-b border-gray-100 dark:border-gray-700/50 last:border-0">
+                <span className="text-xs text-gray-700 dark:text-gray-300">{q}</span>
+                <button
+                  onClick={() => onAddKeyword(q)}
+                  className="shrink-0 text-xs px-2 py-0.5 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors"
+                >
+                  + Rastrear
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Related Searches */}
+      {snapshot.relatedSearches?.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Búsquedas relacionadas</p>
+          <div className="flex flex-wrap gap-2">
+            {snapshot.relatedSearches.map((q, i) => (
+              <button
+                key={i}
+                onClick={() => onAddKeyword(q)}
+                className="text-xs px-2.5 py-1 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 hover:border-primary-300 hover:text-primary-600 transition-colors"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Footer: timestamp + actualizar */}
+      <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-700/50">
+        <span className="text-xs text-gray-400">Datos capturados: {capturedDate}</span>
+        <div className="flex items-center gap-2">
+          {waitMins && (
+            <span className="text-xs text-orange-500">Disponible en {waitMins} min</span>
+          )}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || !!waitMins}
+            className="text-xs px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+          >
+            {refreshing ? 'Actualizando…' : '↻ Actualizar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Heatmap de keywords ──────────────────────────────────────────────────────
 
 const HM_COLORS = {
@@ -375,12 +581,13 @@ function AnalysisPanel({ analysis, loading, onGenerate, updatedAt }) {
 
 // ─── Fila expandible de keyword ───────────────────────────────────────────────
 
-function KeywordRow({ kw, isExpanded, onToggle, onRemove }) {
+function KeywordRow({ kw, isExpanded, onToggle, onRemove, onAddKeyword }) {
   const [history,         setHistory]         = useState(null)
   const [historyLoading,  setHistoryLoading]  = useState(false)
   const [analysis,        setAnalysis]        = useState(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [analysisError,   setAnalysisError]   = useState('')
+  const [innerTab,        setInnerTab]        = useState('gsc') // 'gsc' | 'ia' | 'serp'
 
   useEffect(() => {
     if (!isExpanded || history) return
@@ -454,62 +661,190 @@ function KeywordRow({ kw, isExpanded, onToggle, onRemove }) {
       {isExpanded && (
         <tr>
           <td colSpan={6} className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
-            {historyLoading ? (
-              <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
-                <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-                Cargando historial…
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {history?.rankings?.length > 1 && <PositionChart rankings={history.rankings} />}
+            {/* Tabs internos */}
+            <div className="flex gap-1 mb-4 border-b border-gray-100 dark:border-gray-700">
+              {[
+                { id: 'gsc',  label: 'Historial GSC' },
+                { id: 'ia',   label: 'Análisis IA' },
+                { id: 'serp', label: 'SERP Live' },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setInnerTab(t.id)}
+                  className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                    innerTab === t.id
+                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
 
-                {history?.rankings?.length > 0 ? (
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-gray-400 dark:text-gray-500">
-                        <th className="text-left pb-1 font-medium">Mes</th>
-                        <th className="text-right pb-1 font-medium">Posición</th>
-                        <th className="text-right pb-1 font-medium">Clicks</th>
-                        <th className="text-right pb-1 font-medium">Impresiones</th>
-                        <th className="text-right pb-1 font-medium">CTR</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...history.rankings].reverse().map(r => (
-                        <tr key={r.month} className="border-t border-gray-100 dark:border-gray-700/50">
-                          <td className="py-1.5 text-gray-600 dark:text-gray-400">{r.month}</td>
-                          <td className="py-1.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtPos(r.position)}</td>
-                          <td className="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmtNum(r.clicks)}</td>
-                          <td className="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmtNum(r.impressions)}</td>
-                          <td className="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmtPct(r.ctr)}</td>
+            {/* Tab: Historial GSC */}
+            {innerTab === 'gsc' && (
+              historyLoading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
+                  <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                  Cargando historial…
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {history?.rankings?.length > 1 && <PositionChart rankings={history.rankings} />}
+
+                  {history?.rankings?.length > 0 ? (
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-400 dark:text-gray-500">
+                          <th className="text-left pb-1 font-medium">Mes</th>
+                          <th className="text-right pb-1 font-medium">Posición</th>
+                          <th className="text-right pb-1 font-medium">Clicks</th>
+                          <th className="text-right pb-1 font-medium">Impresiones</th>
+                          <th className="text-right pb-1 font-medium">CTR</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="text-xs text-gray-400 italic">
-                    Aún no hay datos históricos. El ranking se guardará automáticamente a fin de mes.
-                  </p>
-                )}
+                      </thead>
+                      <tbody>
+                        {[...history.rankings].reverse().map(r => (
+                          <tr key={r.month} className="border-t border-gray-100 dark:border-gray-700/50">
+                            <td className="py-1.5 text-gray-600 dark:text-gray-400">{r.month}</td>
+                            <td className="py-1.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtPos(r.position)}</td>
+                            <td className="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmtNum(r.clicks)}</td>
+                            <td className="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmtNum(r.impressions)}</td>
+                            <td className="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-400">{fmtPct(r.ctr)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">
+                      Aún no hay datos históricos. El ranking se guardará automáticamente a fin de mes.
+                    </p>
+                  )}
+                </div>
+              )
+            )}
 
+            {/* Tab: Análisis IA */}
+            {innerTab === 'ia' && (
+              <div className="space-y-3">
                 {analysisError && (
                   <p className="text-xs text-red-500 dark:text-red-400">{analysisError}</p>
                 )}
-
-                <div className="border-t border-gray-100 dark:border-gray-700/50 pt-3">
-                  <AnalysisPanel
-                    analysis={analysis}
-                    loading={analysisLoading}
-                    onGenerate={handleGenerateAnalysis}
-                    updatedAt={history?.analysisUpdatedAt}
-                  />
-                </div>
+                <AnalysisPanel
+                  analysis={analysis}
+                  loading={analysisLoading}
+                  onGenerate={handleGenerateAnalysis}
+                  updatedAt={history?.analysisUpdatedAt}
+                />
               </div>
+            )}
+
+            {/* Tab: SERP Live */}
+            {innerTab === 'serp' && (
+              <SerpPanel
+                projectId={kw.projectId}
+                kwId={kw.id}
+                onAddKeyword={q => onAddKeyword(q)}
+              />
             )}
           </td>
         </tr>
       )}
     </>
+  )
+}
+
+// ─── Vista: SERP Overview ─────────────────────────────────────────────────────
+
+function SerpOverview({ projectId, keywords, onAddKeyword }) {
+  const [snapshots, setSnapshots] = useState({})
+  const [loading,   setLoading]   = useState(false)
+
+  useEffect(() => {
+    if (!projectId) return
+    setLoading(true)
+    api.get(`/marketing/projects/${projectId}/keywords/serp-batch`)
+      .then(r => setSnapshots(r.data.snapshots ?? {}))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [projectId])
+
+  if (loading) return (
+    <div className="flex justify-center py-12">
+      <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
+  const sorted = [...keywords].sort((a, b) => {
+    const pa = snapshots[a.id]?.position ?? 999
+    const pb = snapshots[b.id]?.position ?? 999
+    return pa - pb
+  })
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">SERP Live — Resumen</h3>
+        <p className="text-xs text-gray-400 mt-0.5">Snapshots de los últimos 7 días · Actualización automática cada lunes</p>
+      </div>
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
+            <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-left">Keyword</th>
+            <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-center">Pos. SERP</th>
+            <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-left">Features</th>
+            <th className="px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 text-right">Actualizado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(kw => {
+            const snap = snapshots[kw.id]
+            return (
+              <tr key={kw.id} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/20">
+                <td className="px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 font-medium">
+                  {kw.query}
+                </td>
+                <td className="px-4 py-2.5 text-center">
+                  {snap
+                    ? snap.position != null
+                      ? <span className={`text-sm font-bold tabular-nums ${snap.position <= 3 ? 'text-green-600 dark:text-green-400' : snap.position <= 10 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                          #{snap.position}
+                        </span>
+                      : <span className="text-xs text-gray-400 italic">no aparece</span>
+                    : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                  }
+                </td>
+                <td className="px-4 py-2.5">
+                  {snap?.serpFeatures?.length > 0
+                    ? <div className="flex flex-wrap gap-1">
+                        {snap.serpFeatures.slice(0, 3).map(f => <SerpFeatureBadge key={f} feature={f} />)}
+                        {snap.serpFeatures.length > 3 && (
+                          <span className="text-xs text-gray-400">+{snap.serpFeatures.length - 3}</span>
+                        )}
+                      </div>
+                    : snap
+                      ? <span className="text-xs text-gray-400">—</span>
+                      : <span className="text-xs text-gray-300 dark:text-gray-600">Sin datos</span>
+                  }
+                </td>
+                <td className="px-4 py-2.5 text-right text-xs text-gray-400">
+                  {snap
+                    ? new Date(snap.capturedAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+                    : '—'
+                  }
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {keywords.length === 0 && (
+        <div className="px-4 py-8 text-center text-sm text-gray-400">
+          No hay keywords rastreadas aún.
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -790,7 +1125,7 @@ export default function KeywordsTab({ projectId, projects }) {
   const [error,             setError]             = useState('')
   const [expanded,          setExpanded]          = useState(null)
   const [suggestOpen,       setSuggestOpen]       = useState(false)
-  const [view,              setView]              = useState('tabla') // 'tabla' | 'heatmap' | 'clusters'
+  const [view,              setView]              = useState('tabla') // 'tabla' | 'heatmap' | 'clusters' | 'serp'
   const [country,           setCountry]           = useState('arg')
   const [integrationCountry, setIntegrationCountry] = useState('arg')
   const [liveMode,          setLiveMode]          = useState(false)
@@ -922,6 +1257,7 @@ export default function KeywordsTab({ projectId, projects }) {
               { id: 'tabla',    label: 'Tabla' },
               { id: 'heatmap',  label: 'Heatmap' },
               { id: 'clusters', label: 'Clusters' },
+              { id: 'serp',     label: 'SERP Live' },
             ].map(v => (
               <button key={v.id} onClick={() => setView(v.id)}
                 className={`px-3 py-2 transition-colors ${
@@ -1009,6 +1345,10 @@ export default function KeywordsTab({ projectId, projects }) {
                     isExpanded={expanded === kw.id}
                     onToggle={() => setExpanded(expanded === kw.id ? null : kw.id)}
                     onRemove={handleRemove}
+                    onAddKeyword={async q => {
+                      await api.post(`/marketing/projects/${projectId}/keywords`, { query: q }).catch(() => {})
+                      loadKeywords(country)
+                    }}
                   />
                 ))
               }
@@ -1028,6 +1368,17 @@ export default function KeywordsTab({ projectId, projects }) {
           expanded={expanded}
           onToggle={id => setExpanded(expanded === id ? null : id)}
           onRemove={handleRemove}
+        />
+      )}
+
+      {view === 'serp' && (
+        <SerpOverview
+          projectId={projectId}
+          keywords={keywords}
+          onAddKeyword={async q => {
+            await api.post(`/marketing/projects/${projectId}/keywords`, { query: q }).catch(() => {})
+            loadKeywords(country)
+          }}
         />
       )}
 

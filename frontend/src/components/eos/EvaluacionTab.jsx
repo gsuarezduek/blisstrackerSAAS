@@ -480,6 +480,12 @@ export default function EvaluacionTab() {
               >
                 Iniciar nueva evaluación
               </button>
+
+              <blockquote className="max-w-xl mx-auto border-l-4 border-primary-400 bg-primary-50 dark:bg-primary-900/20 rounded-r-xl px-5 py-4 text-left">
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic">
+                  Los negocios exitosos operan con una visión cristalina que todos comparten. Tienen a las personas correctas en los puestos correctos. Sienten el pulso de sus operaciones observando y administrando una serie de números semanalmente. Identifican y resuelven problemas rápidamente, en un ambiente abierto y honesto. Documentan sus procesos y se aseguran de que todos los sigan. Establecen prioridades para cada empleado y se aseguran de que en cada equipo exista un nivel alto de confianza, comunicación y rendición de cuentas.
+                </p>
+              </blockquote>
             </div>
           )}
 

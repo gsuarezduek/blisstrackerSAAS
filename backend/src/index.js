@@ -37,6 +37,7 @@ const { updateAllMemories }             = require('./services/insightMemory.serv
 const { saveAllPreviousMonthSnapshots } = require('./services/analyticsSnapshot.service')
 const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service')
 const { saveAllKeywordRankings, saveCurrentMonthKeywordRankings } = require('./services/keywordTracking.service')
+const { captureAllSerpSnapshots } = require('./services/serpApi.service')
 const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.service')
 const { sendAllMonthlyMarketingReports }   = require('./services/monthlyMarketingReport.service')
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
@@ -55,6 +56,7 @@ let marketingReportRunning      = false
 let instagramSnapshotRunning    = false
 let tiktokSnapshotRunning       = false
 let seoSnapshotRunning          = false
+let serpSnapshotRunning         = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -109,6 +111,16 @@ cron.schedule('0 6 * * 1', async () => {
   try { await saveCurrentMonthKeywordRankings() }
   catch (err) { console.error('[KeywordTracking] Error en cron semanal:', err.message) }
   finally { keywordWeeklyRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: capturar SERP snapshots — lunes 06:30 ART (después del cron de keywords GSC)
+cron.schedule('30 6 * * 1', async () => {
+  if (serpSnapshotRunning) { console.log('[SerpAPI] Ya en ejecución, se omite.'); return }
+  serpSnapshotRunning = true
+  console.log('[SerpAPI] Iniciando captura semanal de SERP snapshots...')
+  try { await captureAllSerpSnapshots() }
+  catch (err) { console.error('[SerpAPI] Error en cron semanal:', err.message) }
+  finally { serpSnapshotRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: limpieza semanal de tablas de crecimiento ilimitado — domingos 03:00 hora Buenos Aires

@@ -55,6 +55,7 @@ STRIPE_PRICE_ID=price_...             # ID del precio por seat/mes en Stripe
 ENCRYPTION_KEY=<64 chars hex>         # AES-256-GCM key para cifrar tokens OAuth en DB (node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 BACKEND_URL=https://blisstrackersaas-production.up.railway.app  # URL pública del backend (para construir redirect URI de OAuth)
 PAGESPEED_API_KEY=...                 # Google Cloud API Key con acceso a PageSpeed Insights API
+SERP_API_KEY=...                      # SerpAPI key (serpapi.com) — SERP snapshots, features y competidores
 META_APP_ID=...                       # Facebook App ID (Meta for Developers)
 META_APP_SECRET=...                   # Facebook App Secret
 TIKTOK_CLIENT_KEY=...                 # TikTok App Client Key (TikTok for Developers)

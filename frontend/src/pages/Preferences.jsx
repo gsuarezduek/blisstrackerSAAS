@@ -24,7 +24,7 @@ export default function Preferences() {
 
   // Detalle de consumo de IA (desplegable)
   const [showAiDetail,   setShowAiDetail]   = useState(false)
-  const [aiDetailPeriod, setAiDetailPeriod] = useState('all')
+  const [aiDetailPeriod, setAiDetailPeriod] = useState('month')
   const [aiDetailData,   setAiDetailData]   = useState(null)
   const [aiDetailLoading,setAiDetailLoading]= useState(false)
 
@@ -266,9 +266,9 @@ export default function Preferences() {
               const barColor = monthPct >= 95 ? 'bg-red-500' : monthPct >= 90 ? 'bg-amber-400' : 'bg-primary-500'
               const maxSvc = aiDetailData?.byService?.[0]?.total ?? 1
               const PERIOD_TABS = [
-                { id: 'all', label: 'Todo el tiempo' },
-                { id: '30d', label: 'Últimos 30 días' },
-                { id: '7d',  label: 'Últimos 7 días'  },
+                { id: 'month',      label: 'Este mes'       },
+                { id: 'prev_month', label: 'Mes anterior'   },
+                { id: 'all',        label: 'Todo el tiempo' },
               ]
 
               return (

@@ -109,13 +109,16 @@ router.get('/projects/:id/seo/ai-insights',       searchConsole.getSeoAiInsights
 router.post('/projects/:id/seo/ai-insights',      searchConsole.createSeoAiInsights)
 
 // Keywords Tracking — rutas estáticas ANTES de las dinámicas /:kwId
-router.get('/projects/:id/keywords/suggest',         keywords.suggestKeywords)
-router.get('/projects/:id/keywords/heatmap',         keywords.getHeatmap)
-router.get('/projects/:id/keywords/history-batch',   keywords.getHistoryBatch)
-router.get('/projects/:id/keywords',                 keywords.listKeywords)
-router.post('/projects/:id/keywords',                keywords.addKeyword)
-router.delete('/projects/:id/keywords/:kwId',        keywords.removeKeyword)
-router.get('/projects/:id/keywords/:kwId/history',   keywords.getHistory)
-router.post('/projects/:id/keywords/:kwId/analysis', keywords.generateAnalysis)
+router.get('/projects/:id/keywords/suggest',              keywords.suggestKeywords)
+router.get('/projects/:id/keywords/heatmap',              keywords.getHeatmap)
+router.get('/projects/:id/keywords/history-batch',        keywords.getHistoryBatch)
+router.get('/projects/:id/keywords/serp-batch',           keywords.getSerpBatch)
+router.get('/projects/:id/keywords',                      keywords.listKeywords)
+router.post('/projects/:id/keywords',                     keywords.addKeyword)
+router.delete('/projects/:id/keywords/:kwId',             keywords.removeKeyword)
+router.get('/projects/:id/keywords/:kwId/history',        keywords.getHistory)
+router.post('/projects/:id/keywords/:kwId/analysis',      keywords.generateAnalysis)
+router.get('/projects/:id/keywords/:kwId/serp',           keywords.getSerpSnapshot)
+router.post('/projects/:id/keywords/:kwId/serp/refresh',  keywords.refreshSerpSnapshot)
 
 module.exports = router
