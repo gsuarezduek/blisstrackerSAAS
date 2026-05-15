@@ -170,6 +170,21 @@ export default function InformesTab({ projectId }) {
     setReportData(prev => prev ? { ...prev, analysis: updatedAnalysis } : prev)
   }
 
+  async function handleBannerUpload(file) {
+    const fd = new FormData()
+    fd.append('image', file)
+    const res = await api.post(`/marketing/projects/${projectId}/reports/${month}/banner`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    setReportMeta(prev => prev ? { ...prev, hasBanner: true } : prev)
+    return res.data
+  }
+
+  async function handleBannerDelete() {
+    await api.delete(`/marketing/projects/${projectId}/reports/${month}/banner`)
+    setReportMeta(prev => prev ? { ...prev, hasBanner: false } : prev)
+  }
+
   function handleCopyLink() {
     if (!reportMeta?.token) return
     const url = `${window.location.origin}/report/${reportMeta.token}`
@@ -265,6 +280,9 @@ export default function InformesTab({ projectId }) {
           objectives={reportMeta?.objectives ?? {}}
           isPublic={false}
           onSaveAnalysis={handleSaveAnalysis}
+          onBannerUpload={handleBannerUpload}
+          onBannerDelete={handleBannerDelete}
+          report={reportMeta}
           workspace={reportWorkspace}
         />
       )}

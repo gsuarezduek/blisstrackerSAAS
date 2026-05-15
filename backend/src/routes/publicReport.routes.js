@@ -25,20 +25,20 @@ router.get('/logo/:slug', async (req, res) => {
 })
 
 /**
- * GET /api/public/banner/:slug
- * Sirve el banner del workspace identificado por su slug. Sin auth.
+ * GET /api/public/report-banner/:token
+ * Sirve la imagen de portada de un informe mensual identificado por su token. Sin auth.
  */
-router.get('/banner/:slug', async (req, res) => {
+router.get('/report-banner/:token', async (req, res) => {
   try {
-    const workspace = await prisma.workspace.findUnique({
-      where:  { slug: req.params.slug },
+    const report = await prisma.monthlyReport.findUnique({
+      where:  { token: req.params.token },
       select: { bannerData: true, bannerMimeType: true },
     })
-    if (!workspace?.bannerData) return res.status(404).end()
+    if (!report?.bannerData) return res.status(404).end()
 
-    res.set('Content-Type', workspace.bannerMimeType)
+    res.set('Content-Type', report.bannerMimeType)
     res.set('Cache-Control', 'public, max-age=3600')
-    res.send(Buffer.from(workspace.bannerData))
+    res.send(Buffer.from(report.bannerData))
   } catch { res.status(500).end() }
 })
 

@@ -319,7 +319,7 @@ function ObjectivesTable({ objectives, sections }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function ReportViewer({ data, objectives = {}, isPublic = false, onSaveAnalysis, workspace = null }) {
+export default function ReportViewer({ data, objectives = {}, isPublic = false, onSaveAnalysis, onBannerUpload, onBannerDelete, report = null, workspace = null }) {
   const [editingResumen,   setEditingResumen]   = useState(false)
   const [resumenDraft,     setResumenDraft]     = useState('')
   const [savingResumen,    setSavingResumen]    = useState(false)
@@ -333,10 +333,10 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
   const [contextDraft,   setContextDraft]  = useState('')
   const [savingContext,  setSavingContext]  = useState(false)
 
-  // Banner del informe
+  // Banner del informe (por informe individual, no por workspace)
   const [bannerUploading, setBannerUploading] = useState(false)
   const [bannerKey,       setBannerKey]       = useState(0)   // fuerza recarga de img tras upload
-  const [hasBanner,       setHasBanner]       = useState(workspace?.hasBanner ?? false)
+  const [hasBanner,       setHasBanner]       = useState(report?.hasBanner ?? false)
   const bannerInputRef = useRef()
 
   if (!data) return null
@@ -350,11 +350,10 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
   async function handleBannerFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!onBannerUpload) return
     setBannerUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('image', file)
-      await api.post('/workspaces/current/banner', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      await onBannerUpload(file)
       setHasBanner(true)
       setBannerKey(k => k + 1)
     } catch (err) {
@@ -552,11 +551,11 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
       {/* ── Header ── */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden print-break-avoid">
         {/* Banner del informe */}
-        {hasBanner && workspace?.slug ? (
+        {hasBanner && (report?.token || isPublic) ? (
           <div className="relative w-full overflow-hidden group" style={{ height: isPublic ? '12rem' : '15rem' }}>
             <img
               key={bannerKey}
-              src={`${import.meta.env.VITE_API_URL}/api/public/banner/${workspace.slug}?t=${bannerKey}`}
+              src={`${import.meta.env.VITE_API_URL}/api/public/report-banner/${report?.token}?t=${bannerKey}`}
               alt="Banner"
               className="w-full h-full object-cover"
               onError={() => setHasBanner(false)}

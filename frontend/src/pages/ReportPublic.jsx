@@ -61,6 +61,7 @@ export default function ReportPublic() {
           data={data}
           objectives={report?.objectives ?? {}}
           isPublic={true}
+          report={report}
           workspace={workspace}
         />
       </div>

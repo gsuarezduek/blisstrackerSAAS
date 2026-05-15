@@ -1,7 +1,10 @@
 const express = require('express')
+const multer  = require('multer')
 const router  = express.Router()
 const { auth }             = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
+
+const uploadBanner = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 const geo               = require('../controllers/geo.controller')
 const integrations      = require('../controllers/integrations.controller')
 const analytics         = require('../controllers/analytics.controller')
@@ -86,10 +89,12 @@ router.get('/projects/:id/pagespeed',             pageSpeed.listResults)
 router.get('/projects/:id/pagespeed/:resultId',   pageSpeed.getResult)
 
 // Informes mensuales
-router.get('/projects/:id/reports',                     monthlyReport.listReports)
-router.get('/projects/:id/reports/:month',              monthlyReport.getReport)
-router.patch('/projects/:id/reports/:month',            monthlyReport.updateReport)
-router.post('/projects/:id/reports/:month/regenerate',  monthlyReport.regenerateReport)
+router.get('/projects/:id/reports',                                            monthlyReport.listReports)
+router.get('/projects/:id/reports/:month',                                     monthlyReport.getReport)
+router.patch('/projects/:id/reports/:month',                                   monthlyReport.updateReport)
+router.post('/projects/:id/reports/:month/regenerate',                         monthlyReport.regenerateReport)
+router.post('/projects/:id/reports/:month/banner', uploadBanner.single('image'), monthlyReport.uploadReportBanner)
+router.delete('/projects/:id/reports/:month/banner',                           monthlyReport.deleteReportBanner)
 
 // Canibalización SEO
 router.post('/projects/:id/cannibal',         cannibalization.runAnalysis)

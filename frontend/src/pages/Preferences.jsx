@@ -22,6 +22,12 @@ export default function Preferences() {
   const [wsFeatures,          setWsFeatures]          = useState(null)
   const [togglingFeature,     setTogglingFeature]     = useState(null)
 
+  // Detalle de consumo de IA (desplegable)
+  const [showAiDetail,   setShowAiDetail]   = useState(false)
+  const [aiDetailPeriod, setAiDetailPeriod] = useState('all')
+  const [aiDetailData,   setAiDetailData]   = useState(null)
+  const [aiDetailLoading,setAiDetailLoading]= useState(false)
+
   // Eliminación de workspace
   const [workspaceName,      setWorkspaceName]      = useState('')
   const [deletionRequest,    setDeletionRequest]    = useState(null)   // null | { scheduledAt, requestedBy }
@@ -64,6 +70,15 @@ export default function Preferences() {
       .then(({ data }) => setWsFeatures(data))
       .catch(() => setWsFeatures([]))
   }, [user?.isAdmin])
+
+  useEffect(() => {
+    if (!showAiDetail || !user?.isAdmin) return
+    setAiDetailLoading(true)
+    api.get(`/projects/settings/ai-usage?period=${aiDetailPeriod}`)
+      .then(({ data }) => setAiDetailData(data))
+      .catch(() => setAiDetailData(null))
+      .finally(() => setAiDetailLoading(false))
+  }, [showAiDetail, aiDetailPeriod, user?.isAdmin])
 
   useEffect(() => {
     if (!user?.isAdmin) return
@@ -231,53 +246,149 @@ export default function Preferences() {
         {user?.isAdmin && prefTab === 'global' && (
           <>
             {/* Consumo de IA */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
-              <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Consumo de IA</h2>
-                <span className="text-xs bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded-full px-2 py-0.5 font-medium">Admin</span>
-              </div>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">Tokens usados en llamadas a Claude (insights, reportes semanales, memoria).</p>
+            {(() => {
+              const fmtN = n => n >= 1_000_000 ? `${(n/1_000_000).toFixed(2)}M` : n >= 1_000 ? `${(n/1_000).toFixed(1)}K` : String(n)
+              const SERVICE_LABELS = {
+                insight:          'Insight diario',
+                weeklyReport:     'Resumen semanal',
+                insightMemory:    'Memoria de insights',
+                geoAudit:         'Auditoría GEO',
+                analyticsInsight: 'Análisis Analytics',
+                seoAiInsight:     'Análisis SEO',
+                pageSpeed:        'PageSpeed',
+                orgAssessment:    'Evaluación EOS',
+                keywordAnalysis:  'Análisis keyword',
+              }
+              const svcLabel = k => SERVICE_LABELS[k] || k
+              const limit = globalSettings?.aiWeeklyTokenLimit ?? 500000
+              const weekPct = aiUsage && limit > 0 ? Math.min(100, Math.round((aiUsage.week.total / limit) * 100)) : 0
+              const barColor = weekPct >= 90 ? 'bg-red-500' : weekPct >= 70 ? 'bg-amber-400' : 'bg-primary-500'
+              const maxSvc = aiDetailData?.byService?.[0]?.total ?? 1
+              const PERIOD_TABS = [
+                { id: 'all', label: 'Todo el tiempo' },
+                { id: '30d', label: 'Últimos 30 días' },
+                { id: '7d',  label: 'Últimos 7 días'  },
+              ]
 
-              {aiUsageError ? (
-                <p className="text-sm text-red-500 dark:text-red-400">No se pudieron cargar las estadísticas.</p>
-              ) : !aiUsage ? (
-                <LoadingSpinner size="sm" className="py-2" />
-              ) : (() => {
-                const limit = globalSettings?.aiWeeklyTokenLimit ?? 500000
-                const weekPct = limit > 0 ? Math.min(100, Math.round((aiUsage.week.total / limit) * 100)) : 0
-                const barColor = weekPct >= 90 ? 'bg-red-500' : weekPct >= 70 ? 'bg-amber-400' : 'bg-primary-500'
-                const fmtN = n => n >= 1000000 ? `${(n/1000000).toFixed(2)}M` : n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n)
-                return (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-3">
-                      {[
-                        { label: 'Hoy',    data: aiUsage.day },
-                        { label: 'Semana', data: aiUsage.week },
-                        { label: 'Mes',    data: aiUsage.month },
-                      ].map(({ label, data }) => (
-                        <div key={label} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
-                          <p className="text-lg font-bold text-gray-800 dark:text-white">{fmtN(data.total)}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                            <span className="text-blue-500">{fmtN(data.input)}</span> in · <span className="text-green-500">{fmtN(data.output)}</span> out
-                          </p>
+              return (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Consumo de IA</h2>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">Tokens usados en llamadas a Claude (insights, reportes semanales, memoria).</p>
+
+                  {aiUsageError ? (
+                    <p className="text-sm text-red-500 dark:text-red-400">No se pudieron cargar las estadísticas.</p>
+                  ) : !aiUsage ? (
+                    <LoadingSpinner size="sm" className="py-2" />
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Cards resumen */}
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { label: 'Hoy',    data: aiUsage.day },
+                          { label: 'Semana', data: aiUsage.week },
+                          { label: 'Mes',    data: aiUsage.month },
+                        ].map(({ label, data }) => (
+                          <div key={label} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+                            <p className="text-lg font-bold text-gray-800 dark:text-white">{fmtN(data.total)}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                              <span className="text-blue-500">{fmtN(data.input)}</span> in · <span className="text-green-500">{fmtN(data.output)}</span> out
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Barra límite semanal */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Límite semanal</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{fmtN(aiUsage.week.total)} / {fmtN(limit)} ({weekPct}%)</p>
                         </div>
-                      ))}
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Límite semanal</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{fmtN(aiUsage.week.total)} / {fmtN(limit)} ({weekPct}%)</p>
+                        <div className="w-full h-2.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${weekPct}%` }} />
+                        </div>
+                        {weekPct >= 90 && <p className="text-xs text-red-500 mt-1.5">⚠️ Estás cerca del límite semanal de referencia.</p>}
                       </div>
-                      <div className="w-full h-2.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${weekPct}%` }} />
-                      </div>
-                      {weekPct >= 90 && <p className="text-xs text-red-500 mt-1.5">⚠️ Estás cerca del límite semanal de referencia.</p>}
+
+                      {/* Botón desplegable */}
+                      <button
+                        onClick={() => setShowAiDetail(v => !v)}
+                        className="flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
+                      >
+                        <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${showAiDetail ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                        {showAiDetail ? 'Ocultar detalle' : 'Ver detalle por servicio'}
+                      </button>
+
+                      {/* Sección desplegable */}
+                      {showAiDetail && (
+                        <div className="space-y-4 pt-1">
+                          {/* Selector de período */}
+                          <div className="flex gap-1.5 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl w-fit">
+                            {PERIOD_TABS.map(t => (
+                              <button
+                                key={t.id}
+                                onClick={() => setAiDetailPeriod(t.id)}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                                  aiDetailPeriod === t.id
+                                    ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                }`}
+                              >
+                                {t.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {aiDetailLoading ? (
+                            <div className="flex justify-center py-6">
+                              <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          ) : !aiDetailData || aiDetailData.byService?.length === 0 ? (
+                            <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-6">Sin actividad para este período.</p>
+                          ) : (
+                            <div className="rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                              {/* Total del período */}
+                              <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/40 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                                <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Total del período</p>
+                                <div className="text-right">
+                                  <span className="text-sm font-bold text-gray-900 dark:text-white">{fmtN(aiDetailData.periodTotal.total)}</span>
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">
+                                    <span className="text-blue-500">{fmtN(aiDetailData.periodTotal.input)}</span> in · <span className="text-green-500">{fmtN(aiDetailData.periodTotal.output)}</span> out
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Filas por servicio */}
+                              <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                                {aiDetailData.byService.map(svc => {
+                                  const pct = maxSvc > 0 ? Math.max(2, Math.round((svc.total / maxSvc) * 100)) : 0
+                                  return (
+                                    <div key={svc.service} className="px-4 py-3 flex items-center gap-3">
+                                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300 w-36 shrink-0">{svcLabel(svc.service)}</p>
+                                      <div className="flex-1 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                        <div className="h-full bg-primary-500 rounded-full" style={{ width: `${pct}%` }} />
+                                      </div>
+                                      <div className="text-right shrink-0 w-28">
+                                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{fmtN(svc.total)}</p>
+                                        <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                                          <span className="text-blue-500">{fmtN(svc.inputTokens)}</span> in · <span className="text-green-500">{fmtN(svc.outputTokens)}</span> out
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )
-              })()}
-            </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Proyectos */}
             {globalSettingsError ? (
@@ -333,7 +444,6 @@ export default function Preferences() {
               <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
                 <div className="flex items-center gap-2 mb-1">
                   <h2 className="text-base font-semibold text-gray-900 dark:text-white">Módulos adicionales</h2>
-                  <span className="text-xs bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded-full px-2 py-0.5 font-medium">Admin</span>
                 </div>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
                   Funcionalidades opcionales habilitadas para tu workspace. Podés desactivar las que no uses.

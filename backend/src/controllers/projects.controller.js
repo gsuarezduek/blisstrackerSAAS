@@ -384,17 +384,39 @@ async function getAiUsage(req, res, next) {
     const startOfWeek  = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0, 0, 0, 0)
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    const [day, week, month] = await Promise.all([
-      prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfDay } }, _sum: { inputTokens: true, outputTokens: true } }),
-      prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfWeek } }, _sum: { inputTokens: true, outputTokens: true } }),
+    // Período para el desglose por servicio
+    const { period } = req.query
+    let periodStart = null
+    if (period === '7d')  { periodStart = new Date(now); periodStart.setDate(now.getDate() - 7) }
+    if (period === '30d') { periodStart = new Date(now); periodStart.setDate(now.getDate() - 30) }
+    // 'all' o sin param: sin filtro de fecha (todo el tiempo)
+
+    const whereBase = { workspaceId, ...(periodStart ? { createdAt: { gte: periodStart } } : {}) }
+
+    const [day, week, month, byServiceRaw, periodTotal] = await Promise.all([
+      prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfDay } },   _sum: { inputTokens: true, outputTokens: true } }),
+      prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfWeek } },  _sum: { inputTokens: true, outputTokens: true } }),
       prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfMonth } }, _sum: { inputTokens: true, outputTokens: true } }),
+      prisma.aiTokenLog.groupBy({ by: ['service'], where: whereBase, _sum: { inputTokens: true, outputTokens: true }, orderBy: { _sum: { inputTokens: 'desc' } } }),
+      prisma.aiTokenLog.aggregate({ where: whereBase, _sum: { inputTokens: true, outputTokens: true } }),
     ])
 
     const toTotal = (agg) => (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0)
+
+    const byService = byServiceRaw.map(r => ({
+      service:      r.service,
+      inputTokens:  r._sum.inputTokens  ?? 0,
+      outputTokens: r._sum.outputTokens ?? 0,
+      total:        (r._sum.inputTokens ?? 0) + (r._sum.outputTokens ?? 0),
+    })).sort((a, b) => b.total - a.total)
+
     res.json({
-      day:   { input: day._sum.inputTokens ?? 0,   output: day._sum.outputTokens ?? 0,   total: toTotal(day) },
-      week:  { input: week._sum.inputTokens ?? 0,  output: week._sum.outputTokens ?? 0,  total: toTotal(week) },
-      month: { input: month._sum.inputTokens ?? 0, output: month._sum.outputTokens ?? 0, total: toTotal(month) },
+      day:          { input: day._sum.inputTokens   ?? 0, output: day._sum.outputTokens   ?? 0, total: toTotal(day) },
+      week:         { input: week._sum.inputTokens  ?? 0, output: week._sum.outputTokens  ?? 0, total: toTotal(week) },
+      month:        { input: month._sum.inputTokens ?? 0, output: month._sum.outputTokens ?? 0, total: toTotal(month) },
+      byService,
+      periodTotal:  { input: periodTotal._sum.inputTokens ?? 0, output: periodTotal._sum.outputTokens ?? 0, total: toTotal(periodTotal) },
+      period:       period || 'all',
     })
   } catch (err) { next(err) }
 }

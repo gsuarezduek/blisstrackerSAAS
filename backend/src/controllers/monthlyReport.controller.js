@@ -2,6 +2,8 @@ const { randomUUID }           = require('crypto')
 const prisma                   = require('../lib/prisma')
 const { aggregateReportData }  = require('../services/monthlyReport.service')
 
+const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function currentMonthStr() {
@@ -55,8 +57,17 @@ async function getReport(req, res, next) {
     // Obtener o crear el registro de informe
     let report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month } })
     if (!report) {
+      // Heredar banner del informe más reciente del mismo proyecto
+      const prevReport = await prisma.monthlyReport.findFirst({
+        where:   { projectId, workspaceId, bannerData: { not: null } },
+        orderBy: { month: 'desc' },
+        select:  { bannerData: true, bannerMimeType: true },
+      })
       report = await prisma.monthlyReport.create({
-        data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}' },
+        data: {
+          projectId, workspaceId, month, token: randomUUID(), objectives: '{}',
+          ...(prevReport?.bannerData ? { bannerData: prevReport.bannerData, bannerMimeType: prevReport.bannerMimeType } : {}),
+        },
       })
     }
 
@@ -98,6 +109,7 @@ async function getReport(req, res, next) {
         token:      report.token,
         objectives: safeParseObj(report.objectives),
         notes:      report.notes,
+        hasBanner:  !!report.bannerData,
         createdAt:  report.createdAt,
       },
       workspace: workspace ? {
@@ -108,7 +120,6 @@ async function getReport(req, res, next) {
         industry:           workspace.industry,
         companyWebsite:     workspace.companyWebsite,
         hasLogo:            !!workspace.logoData,
-        hasBanner:          !!workspace.bannerData,
         brandColors:        workspace.brandColors ? JSON.parse(workspace.brandColors) : [],
         brandFonts:         workspace.brandFonts  ? JSON.parse(workspace.brandFonts)  : [],
       } : null,
@@ -177,7 +188,7 @@ async function getPublicReport(req, res, next) {
       Promise.resolve(report.analysis ? safeParseObj(report.analysis) : null),
       prisma.workspace.findUnique({
         where:  { id: report.workspaceId },
-        select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, bannerData: true, brandColors: true, brandFonts: true },
+        select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, brandColors: true, brandFonts: true },
       }),
     ])
 
@@ -196,8 +207,10 @@ async function getPublicReport(req, res, next) {
     res.json({
       report: {
         month:      report.month,
+        token:      report.token,
         objectives: safeParseObj(report.objectives),
         notes:      report.notes,
+        hasBanner:  !!report.bannerData,
       },
       workspace: workspace ? {
         slug:               workspace.slug,
@@ -207,12 +220,75 @@ async function getPublicReport(req, res, next) {
         industry:           workspace.industry,
         companyWebsite:     workspace.companyWebsite,
         hasLogo:            !!workspace.logoData,
-        hasBanner:          !!workspace.bannerData,
         brandColors:        workspace.brandColors ? JSON.parse(workspace.brandColors) : [],
         brandFonts:         workspace.brandFonts  ? JSON.parse(workspace.brandFonts)  : [],
       } : null,
       data,
     })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * POST /api/marketing/projects/:id/reports/:month/banner
+ * Sube o reemplaza la imagen de portada del informe (solo afecta este mes).
+ */
+async function uploadReportBanner(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.params
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
+    }
+
+    if (!req.file) return res.status(400).json({ error: 'No se recibió ninguna imagen' })
+
+    const mimeType = req.file.mimetype
+    if (!ALLOWED_BANNER_TYPES.includes(mimeType)) {
+      return res.status(400).json({ error: 'Formato no soportado. Usá PNG, JPG o WebP.' })
+    }
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const report = await prisma.monthlyReport.upsert({
+      where:  { projectId_month: { projectId, month } },
+      update: { bannerData: req.file.buffer, bannerMimeType: mimeType },
+      create: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}', bannerData: req.file.buffer, bannerMimeType: mimeType },
+    })
+
+    res.json({ hasBanner: true, token: report.token })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * DELETE /api/marketing/projects/:id/reports/:month/banner
+ * Elimina la imagen de portada del informe.
+ */
+async function deleteReportBanner(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.params
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
+    }
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    await prisma.monthlyReport.updateMany({
+      where: { projectId, workspaceId, month },
+      data:  { bannerData: null, bannerMimeType: null },
+    })
+
+    res.json({ hasBanner: false })
   } catch (err) {
     next(err)
   }
@@ -290,4 +366,4 @@ async function regenerateReport(req, res, next) {
   }
 }
 
-module.exports = { listReports, getReport, updateReport, getPublicReport, regenerateReport }
+module.exports = { listReports, getReport, updateReport, getPublicReport, regenerateReport, uploadReportBanner, deleteReportBanner }
