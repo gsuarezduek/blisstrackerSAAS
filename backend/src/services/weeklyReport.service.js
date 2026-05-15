@@ -511,6 +511,11 @@ function buildWeeklyEmailHtml(user, data, analysis) {
 async function sendWeeklyReportForUser(user, workspace) {
   try {
     const workspaceId = workspace.id
+    const { hasTokenBudget } = require('../lib/tokenBudget')
+    if (!(await hasTokenBudget(workspaceId))) {
+      console.log(`[WeeklyReport] Workspace ${workspaceId} superó el límite mensual de tokens — omitiendo usuario ${user.id}`)
+      return
+    }
     const [data, roleExpectation, memory] = await Promise.all([
       getWeeklyData(user.id, workspace),
       user.role

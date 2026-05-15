@@ -8,30 +8,50 @@ const stripe = require('../lib/stripe')
  */
 async function listWorkspaces(req, res, next) {
   try {
-    const workspaces = await prisma.workspace.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        _count: {
-          select: {
-            members: { where: { active: true } },
-            projects: { where: { active: true } },
+    const { startOfCurrentMonth } = require('../lib/tokenBudget')
+    const monthStart = startOfCurrentMonth()
+
+    const [workspaces, tokenUsageRaw] = await Promise.all([
+      prisma.workspace.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: {
+            select: {
+              members: { where: { active: true } },
+              projects: { where: { active: true } },
+            },
           },
+          subscription: { select: { status: true, planName: true, periodEnd: true } },
         },
-        subscription: { select: { status: true, planName: true, periodEnd: true } },
-      },
-    })
+      }),
+      prisma.aiTokenLog.groupBy({
+        by:      ['workspaceId'],
+        where:   { createdAt: { gte: monthStart } },
+        _sum:    { inputTokens: true, outputTokens: true },
+      }),
+    ])
+
+    // Mapear consumo mensual por workspaceId
+    const tokenByWs = {}
+    for (const r of tokenUsageRaw) {
+      if (r.workspaceId) {
+        tokenByWs[r.workspaceId] = (r._sum.inputTokens ?? 0) + (r._sum.outputTokens ?? 0)
+      }
+    }
 
     res.json(workspaces.map(w => ({
-      id:           w.id,
-      name:         w.name,
-      slug:         w.slug,
-      status:       w.status,
-      timezone:     w.timezone,
-      trialEndsAt:  w.trialEndsAt,
-      createdAt:    w.createdAt,
-      memberCount:  w._count.members,
-      projectCount: w._count.projects,
-      subscription: w.subscription,
+      id:                w.id,
+      name:              w.name,
+      slug:              w.slug,
+      status:            w.status,
+      timezone:          w.timezone,
+      trialEndsAt:       w.trialEndsAt,
+      createdAt:         w.createdAt,
+      memberCount:       w._count.members,
+      projectCount:      w._count.projects,
+      subscription:      w.subscription,
+      monthlyTokenLimit: w.monthlyTokenLimit,
+      monthlyTokenUsed:  tokenByWs[w.id] ?? 0,
     })))
   } catch (err) { next(err) }
 }
@@ -44,7 +64,9 @@ async function getWorkspace(req, res, next) {
   try {
     const id = Number(req.params.id)
 
-    const [workspace, members, projects, tokenStats] = await Promise.all([
+    const { startOfCurrentMonth } = require('../lib/tokenBudget')
+
+    const [workspace, members, projects, tokenStats, monthlyUsageAgg] = await Promise.all([
       prisma.workspace.findUnique({
         where: { id },
         include: { subscription: true },
@@ -60,13 +82,19 @@ async function getWorkspace(req, res, next) {
         orderBy: { createdAt: 'desc' },
       }),
       prisma.aiTokenLog.groupBy({
-        by: ['service'],
+        by:    ['service'],
         where: { workspaceId: id },
-        _sum: { inputTokens: true, outputTokens: true },
+        _sum:  { inputTokens: true, outputTokens: true },
+      }),
+      prisma.aiTokenLog.aggregate({
+        where: { workspaceId: id, createdAt: { gte: startOfCurrentMonth() } },
+        _sum:  { inputTokens: true, outputTokens: true },
       }),
     ])
 
     if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
+
+    const monthlyTokenUsed = (monthlyUsageAgg._sum.inputTokens ?? 0) + (monthlyUsageAgg._sum.outputTokens ?? 0)
 
     res.json({
       ...workspace,
@@ -79,7 +107,29 @@ async function getWorkspace(req, res, next) {
       })),
       projects,
       tokenStats,
+      monthlyTokenUsed,
     })
+  } catch (err) { next(err) }
+}
+
+/**
+ * PATCH /api/superadmin/workspaces/:id/token-limit
+ * Actualiza el límite mensual de tokens del workspace.
+ * Body: { monthlyTokenLimit: number }
+ */
+async function updateTokenLimit(req, res, next) {
+  try {
+    const id    = Number(req.params.id)
+    const limit = Number(req.body.monthlyTokenLimit)
+    if (!Number.isInteger(limit) || limit < 0) {
+      return res.status(400).json({ error: 'monthlyTokenLimit debe ser un entero ≥ 0 (0 = ilimitado)' })
+    }
+    const workspace = await prisma.workspace.update({
+      where: { id },
+      data:  { monthlyTokenLimit: limit },
+      select: { id: true, name: true, monthlyTokenLimit: true },
+    })
+    res.json(workspace)
   } catch (err) { next(err) }
 }
 
@@ -503,4 +553,4 @@ async function getAiTokenStats(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats }
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats }

@@ -58,6 +58,11 @@ function fmtMins(m) {
 async function generateMemoryForUser(userId, workspace) {
   const tz          = workspace.timezone
   const workspaceId = workspace.id
+  const { hasTokenBudget } = require('../lib/tokenBudget')
+  if (!(await hasTokenBudget(workspaceId))) {
+    console.log(`[InsightMemory] Workspace ${workspaceId} superó el límite mensual de tokens — omitiendo usuario ${userId}`)
+    return
+  }
   const offset      = tzOffsetStr(tz)
   const fourWeeksAgo  = getNWeeksAgoMonday(4, tz)
   const today         = todayString(tz)

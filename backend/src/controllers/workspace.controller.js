@@ -890,10 +890,23 @@ async function executeWorkspaceDeletion(workspaceId) {
   console.log(`[deletion] Workspace ${workspaceId} eliminado.`)
 }
 
+/**
+ * GET /api/workspaces/current/token-budget
+ * Devuelve el consumo mensual de tokens vs el límite del workspace.
+ */
+async function getTokenBudgetStatus(req, res, next) {
+  try {
+    const { getTokenBudget } = require('../lib/tokenBudget')
+    const budget = await getTokenBudget(req.workspace.id)
+    res.json(budget)
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   getMine, getCurrent, updateCurrent, listMembers, addMember, updateMember, toggleMemberActive,
   createWorkspace, checkSlug, getInfo,
   inviteMember, getInvitation, joinWorkspace, listInvitations, cancelInvitation,
   getDeletionRequest, scheduleDeletion, cancelDeletion, executeWorkspaceDeletion,
   uploadLogo, deleteLogo, uploadBanner, deleteBanner,
+  getTokenBudgetStatus,
 }

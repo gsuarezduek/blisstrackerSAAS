@@ -393,12 +393,13 @@ async function getAiUsage(req, res, next) {
 
     const whereBase = { workspaceId, ...(periodStart ? { createdAt: { gte: periodStart } } : {}) }
 
-    const [day, week, month, byServiceRaw, periodTotal] = await Promise.all([
+    const [day, week, month, byServiceRaw, periodTotal, workspace] = await Promise.all([
       prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfDay } },   _sum: { inputTokens: true, outputTokens: true } }),
       prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfWeek } },  _sum: { inputTokens: true, outputTokens: true } }),
       prisma.aiTokenLog.aggregate({ where: { workspaceId, createdAt: { gte: startOfMonth } }, _sum: { inputTokens: true, outputTokens: true } }),
       prisma.aiTokenLog.groupBy({ by: ['service'], where: whereBase, _sum: { inputTokens: true, outputTokens: true }, orderBy: { _sum: { inputTokens: 'desc' } } }),
       prisma.aiTokenLog.aggregate({ where: whereBase, _sum: { inputTokens: true, outputTokens: true } }),
+      prisma.workspace.findUnique({ where: { id: workspaceId }, select: { monthlyTokenLimit: true } }),
     ])
 
     const toTotal = (agg) => (agg._sum.inputTokens ?? 0) + (agg._sum.outputTokens ?? 0)
@@ -411,12 +412,13 @@ async function getAiUsage(req, res, next) {
     })).sort((a, b) => b.total - a.total)
 
     res.json({
-      day:          { input: day._sum.inputTokens   ?? 0, output: day._sum.outputTokens   ?? 0, total: toTotal(day) },
-      week:         { input: week._sum.inputTokens  ?? 0, output: week._sum.outputTokens  ?? 0, total: toTotal(week) },
-      month:        { input: month._sum.inputTokens ?? 0, output: month._sum.outputTokens ?? 0, total: toTotal(month) },
+      day:               { input: day._sum.inputTokens   ?? 0, output: day._sum.outputTokens   ?? 0, total: toTotal(day) },
+      week:              { input: week._sum.inputTokens  ?? 0, output: week._sum.outputTokens  ?? 0, total: toTotal(week) },
+      month:             { input: month._sum.inputTokens ?? 0, output: month._sum.outputTokens ?? 0, total: toTotal(month) },
       byService,
-      periodTotal:  { input: periodTotal._sum.inputTokens ?? 0, output: periodTotal._sum.outputTokens ?? 0, total: toTotal(periodTotal) },
-      period:       period || 'all',
+      periodTotal:       { input: periodTotal._sum.inputTokens ?? 0, output: periodTotal._sum.outputTokens ?? 0, total: toTotal(periodTotal) },
+      period:            period || 'all',
+      monthlyTokenLimit: workspace?.monthlyTokenLimit ?? 1000000,
     })
   } catch (err) { next(err) }
 }

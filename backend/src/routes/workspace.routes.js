@@ -53,4 +53,7 @@ router.delete('/current/banner', workspaceAdminOnly, c.deleteBanner)
 router.get('/current/features',          workspaceAdminOnly, ff.listWorkspaceFeatures)
 router.patch('/current/features/:key',   workspaceAdminOnly, ff.toggleWorkspaceFeature)
 
+// Token budget: presupuesto mensual de IA (requiere auth, cualquier miembro)
+router.get('/current/token-budget', c.getTokenBudgetStatus)
+
 module.exports = router

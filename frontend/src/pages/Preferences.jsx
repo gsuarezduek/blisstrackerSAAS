@@ -260,9 +260,10 @@ export default function Preferences() {
                 keywordAnalysis:  'Análisis keyword',
               }
               const svcLabel = k => SERVICE_LABELS[k] || k
-              const limit = globalSettings?.aiWeeklyTokenLimit ?? 500000
+              const limit = aiUsage?.monthlyTokenLimit ?? 1000000
+              const monthPct = aiUsage && limit > 0 ? Math.min(100, Math.round((aiUsage.month.total / limit) * 100)) : 0
               const weekPct = aiUsage && limit > 0 ? Math.min(100, Math.round((aiUsage.week.total / limit) * 100)) : 0
-              const barColor = weekPct >= 90 ? 'bg-red-500' : weekPct >= 70 ? 'bg-amber-400' : 'bg-primary-500'
+              const barColor = monthPct >= 95 ? 'bg-red-500' : monthPct >= 90 ? 'bg-amber-400' : 'bg-primary-500'
               const maxSvc = aiDetailData?.byService?.[0]?.total ?? 1
               const PERIOD_TABS = [
                 { id: 'all', label: 'Todo el tiempo' },
@@ -298,16 +299,17 @@ export default function Preferences() {
                         ))}
                       </div>
 
-                      {/* Barra límite semanal */}
+                      {/* Barra límite mensual */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Límite semanal</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{fmtN(aiUsage.week.total)} / {fmtN(limit)} ({weekPct}%)</p>
+                          <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Límite mensual</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{fmtN(aiUsage.month.total)} / {fmtN(limit)} ({monthPct}%)</p>
                         </div>
                         <div className="w-full h-2.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${weekPct}%` }} />
+                          <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${monthPct}%` }} />
                         </div>
-                        {weekPct >= 90 && <p className="text-xs text-red-500 mt-1.5">⚠️ Estás cerca del límite semanal de referencia.</p>}
+                        {monthPct >= 95 && <p className="text-xs text-red-500 mt-1.5">🚫 Límite mensual alcanzado — las funcionalidades de IA están deshabilitadas.</p>}
+                        {monthPct >= 90 && monthPct < 95 && <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">⚠️ Cerca del límite mensual — quedan {fmtN(limit - aiUsage.month.total)} tokens.</p>}
                       </div>
 
                       {/* Botón desplegable */}

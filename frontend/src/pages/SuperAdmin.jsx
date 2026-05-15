@@ -41,11 +41,11 @@ function StatusBadge({ status }) {
   )
 }
 
-function StatCard({ label, value, sub }) {
+function StatCard({ label, value, sub, valueColor }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
       <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{value ?? '—'}</p>
+      <p className={`text-2xl font-bold mt-1 ${valueColor || 'text-gray-900 dark:text-white'}`}>{value ?? '—'}</p>
       {sub && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{sub}</p>}
     </div>
   )
@@ -54,18 +54,36 @@ function StatCard({ label, value, sub }) {
 // ─── Workspace Detail Modal ───────────────────────────────────────────────────
 
 function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
-  const [detail,       setDetail]       = useState(null)
-  const [loading,      setLoading]      = useState(true)
-  const [newStatus,    setNewStatus]    = useState('')
-  const [saving,       setSaving]       = useState(false)
+  const [detail,        setDetail]        = useState(null)
+  const [loading,       setLoading]       = useState(true)
+  const [newStatus,     setNewStatus]     = useState('')
+  const [saving,        setSaving]        = useState(false)
   const [impersonating, setImpersonating] = useState(false)
+  const [tokenLimit,    setTokenLimit]    = useState('')
+  const [savingLimit,   setSavingLimit]   = useState(false)
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
 
   useEffect(() => {
     api.get(`/superadmin/workspaces/${workspace.id}`)
-      .then(r => { setDetail(r.data); setLoading(false) })
+      .then(r => {
+        setDetail(r.data)
+        setTokenLimit(String(r.data.monthlyTokenLimit ?? 1000000))
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
   }, [workspace.id])
+
+  async function handleSaveTokenLimit() {
+    const limit = parseInt(tokenLimit, 10)
+    if (isNaN(limit) || limit < 0) return alert('Ingresá un número válido (0 = ilimitado)')
+    setSavingLimit(true)
+    try {
+      await api.patch(`/superadmin/workspaces/${workspace.id}/token-limit`, { monthlyTokenLimit: limit })
+      setDetail(prev => ({ ...prev, monthlyTokenLimit: limit }))
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al guardar')
+    } finally { setSavingLimit(false) }
+  }
 
   async function handleStatusChange() {
     if (!newStatus || newStatus === workspace.status) return
@@ -124,6 +142,21 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                 {saving ? '...' : 'Aplicar'}
               </button>
             </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Tokens/mes:</label>
+              <input
+                type="number"
+                min="0"
+                value={tokenLimit}
+                onChange={e => setTokenLimit(e.target.value)}
+                placeholder="1000000"
+                className="w-32 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <button onClick={handleSaveTokenLimit} disabled={savingLimit}
+                className="px-3 py-2 bg-gray-600 hover:bg-gray-700 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-colors">
+                {savingLimit ? '...' : 'Guardar'}
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -134,7 +167,20 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
               <div className="grid grid-cols-3 gap-3">
                 <StatCard label="Miembros activos" value={detail.members?.filter(m => m.active).length ?? 0} />
                 <StatCard label="Proyectos" value={detail.projects?.length ?? 0} />
-                <StatCard label="Tokens AI" value={totalTokens.toLocaleString()} sub="total acumulado" />
+                {(() => {
+                  const used  = detail.monthlyTokenUsed  ?? 0
+                  const limit = detail.monthlyTokenLimit  ?? 1000000
+                  const pct   = limit > 0 ? Math.round((used / limit) * 100) : 0
+                  const valColor = pct >= 100 ? 'text-red-500' : pct >= 80 ? 'text-amber-500' : undefined
+                  return (
+                    <StatCard
+                      label="Tokens IA (mes)"
+                      value={fmtTokens(used)}
+                      sub={`de ${fmtTokens(limit)} (${pct}%)`}
+                      valueColor={valColor}
+                    />
+                  )
+                })()}
               </div>
 
               {/* Suscripción / Billing */}
@@ -354,6 +400,22 @@ function SectionDashboard({ stats, workspaces, loading, onSelectWorkspace }) {
                   <div className="hidden sm:block">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{w.projectCount}</p>
                     <p className="text-xs text-gray-400">proyectos</p>
+                  </div>
+                  <div className="hidden md:block text-right min-w-[80px]">
+                    {(() => {
+                      const used  = w.monthlyTokenUsed  ?? 0
+                      const limit = w.monthlyTokenLimit  ?? 1000000
+                      const pct   = limit > 0 ? Math.round((used / limit) * 100) : 0
+                      const color = pct >= 100 ? 'text-red-500 dark:text-red-400'
+                                  : pct >= 80  ? 'text-amber-500 dark:text-amber-400'
+                                  : 'text-gray-700 dark:text-gray-300'
+                      return (
+                        <>
+                          <p className={`text-sm font-medium ${color}`}>{fmtTokens(used)}</p>
+                          <p className="text-xs text-gray-400">de {fmtTokens(limit)}</p>
+                        </>
+                      )
+                    })()}
                   </div>
                   <p className="text-xs text-gray-400">
                     {new Date(w.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}

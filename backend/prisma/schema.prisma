@@ -27,7 +27,8 @@ model Workspace {
   bannerData         Bytes?
   bannerMimeType     String?
   // Feature flags: keys que este workspace optó por desactivar (aunque estén habilitados globalmente o en su lista)
-  disabledFeatureKeys String @default("[]")
+  disabledFeatureKeys  String @default("[]")
+  monthlyTokenLimit    Int    @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
   // Identidad de marca
   brandColors         String @default("[]")  // JSON: [{ hex, name? }]
   brandFonts          String @default("[]")  // JSON: [{ name, role }] role: heading|body|accent

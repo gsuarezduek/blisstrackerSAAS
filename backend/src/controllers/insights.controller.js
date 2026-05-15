@@ -240,6 +240,8 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
 async function generateInsight(userId, workspace, member) {
   const tz = workspace.timezone
   const workspaceId = workspace.id
+  const { assertTokenBudget } = require('../lib/tokenBudget')
+  await assertTokenBudget(workspaceId)
   const today     = todayString(tz)
   const yesterday = dateNDaysAgo(1, tz)
   const weekStart = getWeekStart(tz)

@@ -396,6 +396,13 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
       data:  { status: 'running', errorMsg: 'Conectando con el sitio…' },
     })
 
+    // Verificar presupuesto mensual antes de llamar a Claude
+    const { hasTokenBudget } = require('../lib/tokenBudget')
+    if (!(await hasTokenBudget(workspaceId))) {
+      await prisma.geoAudit.update({ where: { id: auditId }, data: { status: 'error', errorMsg: 'Límite mensual de tokens de IA alcanzado.' } })
+      return
+    }
+
     // 2. Fetch todo en paralelo
     const origin = new URL(url).origin
     const [html, robotsTxt, llmsData, aiDiscovery] = await Promise.all([
