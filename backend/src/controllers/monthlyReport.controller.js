@@ -66,6 +66,7 @@ async function getReport(req, res, next) {
       report = await prisma.monthlyReport.create({
         data: {
           projectId, workspaceId, month, token: randomUUID(), objectives: '{}',
+          generatedById: req.user?.userId ?? null,
           ...(prevReport?.bannerData ? { bannerData: prevReport.bannerData, bannerMimeType: prevReport.bannerMimeType } : {}),
         },
       })
@@ -320,11 +321,15 @@ async function regenerateReport(req, res, next) {
 
     // Limpiar análisis cacheado (o crear el registro si no existe)
     let report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month } })
+    const userId = req.user?.userId ?? null
     if (report) {
-      await prisma.monthlyReport.update({ where: { id: report.id }, data: { analysis: null, dataCache: null } })
+      await prisma.monthlyReport.update({
+        where: { id: report.id },
+        data:  { analysis: null, dataCache: null, generatedById: userId },
+      })
     } else {
       report = await prisma.monthlyReport.create({
-        data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}' },
+        data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}', generatedById: userId },
       })
     }
 

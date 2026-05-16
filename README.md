@@ -58,6 +58,7 @@ STRIPE_PRICE_ID=price_...
 ENCRYPTION_KEY=<64 chars hex — AES-256-GCM para cifrar tokens OAuth en DB>
 BACKEND_URL=http://localhost:3001
 PAGESPEED_API_KEY=<API key de Google Cloud para PageSpeed Insights>
+SERP_API_KEY=<API key de SerpAPI (serpapi.com) — snapshots SERP, features y competidores>
 META_APP_ID=<Facebook App ID — Meta for Developers>
 META_APP_SECRET=<Facebook App Secret>
 TIKTOK_CLIENT_KEY=<TikTok App Key — TikTok for Developers>
@@ -300,7 +301,11 @@ team-tracker/
 | `UserLogin` | Historial de logins (método, timestamp) |
 | `Feedback` | Sugerencias y bugs enviados por usuarios |
 | `PasswordResetToken` | Tokens de un solo uso para reset de contraseña |
-| `MonthlyReport` | Informe mensual por proyecto con token UUID para URL pública. `dataCache` guarda secciones agregadas (analytics, ads, instagram, etc.) para evitar llamadas repetidas a APIs. Incluye datos de branding del workspace. |
+| `MonthlyReport` | Informe mensual por proyecto con token UUID para URL pública. `dataCache` guarda secciones agregadas (analytics, ads, instagram, etc.) para evitar llamadas repetidas a APIs. Incluye datos de branding del workspace y banner opcional propio del informe (`bannerData` + `bannerMimeType`). |
+| `AdsSnapshot` | Snapshot mensual de Meta Ads o Google Ads por proyecto+mes+tipo: spend, impressions, clicks, ctr, top campañas. |
+| `SerpSnapshot` | Snapshot SERP de SerpAPI por keyword: posición, features, competidores top, "People Also Ask", "Related Searches". |
+| `LegalDocument` | Documentos legales por key (`terms_of_service`, `privacy_policy`) editados desde SuperAdmin. |
+| `EOSData`, `EOSIssue`, `EOSProcess`, `EOSScorecardMetric/Entry`, `EOSRock`, `EOSTodo`, `EOSMeeting`, `EOSPersonNode`, `EOSPersonRating`, `EOSPersonStrike`, `OrgAssessmentRound`, `OrgAssessmentResponse` | Modelos del módulo EOS — feature flag `eos`. |
 
 ---
 
@@ -318,7 +323,7 @@ Los arrays `links`, `adminSublinks` y `profileSections` en `Navbar.jsx` son la f
 | Detalle de proyecto | `/my-projects/:id` |
 | Mis Reportes | `/my-reports` |
 | Actividad | `/realtime` |
-| Marketing (GEO) | `/marketing` — requiere feature flag `marketing` |
+| Marketing | `/marketing` — requiere feature flag `marketing`. Tabs: GEO, Web, SEO, Keywords, Canibalización, Instagram, TikTok, Meta Ads, Google Ads, Salud, Informes |
 | Perfil | `/profile` |
 | Preferencias | `/preferences` |
 | Facturación | `/billing` |
@@ -331,6 +336,7 @@ Los arrays `links`, `adminSublinks` y `profileSections` en `Navbar.jsx` son la f
 | Panel Admin | `/admin?tab=` |
 | Productividad | `/admin/productivity` |
 | RRHH | `/admin/rrhh` |
+| EOS | `/admin/eos` — requiere feature flag `eos`. 7 tabs: Visión, Personas, Datos, Asuntos, Procesos, Tracción, Evaluación |
 
 **Tabs del panel Admin** (query param `?tab=`): `projects`, `team`, `services`, `roles`, `role-ai`, `empresa`. La pestaña **Empresa** (`EmpresaTab.jsx`) gestiona el perfil de la empresa (nombre, descripción, industria, sitio web), logo, banner, paleta de colores de marca y tipografías.
 
@@ -339,7 +345,7 @@ Los arrays `links`, `adminSublinks` y `profileSections` en `Navbar.jsx` son la f
 |----------|------|
 | Panel Super Admin | `/superadmin` |
 
-El panel super admin tiene sidebar con: Dashboard (stats + workspaces), **Billing** (MRR/ARR + tabla de suscripciones), Feedback, Emails, Announcements, Avatares, Feature Flags.
+El panel super admin tiene sidebar con: Dashboard (stats + workspaces + edición del límite mensual de tokens IA), **Billing** (MRR/ARR + tabla de suscripciones), **Pagos** (invoices reales de Stripe), **AI Tokens** (uso de tokens IA por workspace), Feedback, Emails, Announcements, Avatares, Feature Flags, **Legal** (edición de Términos de servicio y Política de privacidad).
 
 Los workspace admins también pueden hacer **opt-out** de módulos habilitados desde Preferencias → Módulos adicionales (usa `PATCH /api/workspaces/current/features/:key`).
 
@@ -349,7 +355,7 @@ Los workspace admins también pueden hacer **opt-out** de módulos habilitados d
 
 ### Backend (Railway)
 
-1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`, `META_APP_ID`, `META_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`
+1. Variables de entorno en Railway: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`, `SERP_API_KEY`, `META_APP_ID`, `META_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`
 2. Railway ejecuta `npm run db:migrate` automáticamente al deployar
 3. Seed manual una vez desde Railway Shell
 
@@ -377,6 +383,22 @@ El módulo GEO (Generative Engine Optimization) analiza qué tan bien posicionad
 - **Items unificados:** lista de hallazgos + señales negativas con severidad/prioridad.
 - **Crear tarea:** desde cualquier item se puede crear una tarea en el proyecto con prefijo "GEO - ".
 - **Feature flag:** requiere `marketing` activado en SuperAdmin → Feature Flags.
+
+---
+
+## Marketing — Salud, SEO y Canibalización
+
+### Salud (Health Score)
+Pestaña **Salud** (`SaludTab.jsx`): score compuesto que agrega el último audit GEO, posiciones promedio de keywords del mes actual, deltas del último snapshot GA4 y resultados de PageSpeed (mobile + desktop) en un único indicador. No persiste — se calcula en cada request a `GET /api/marketing/projects/:id/health-score`.
+
+### SEO (Google Search Console)
+Pestaña **SEO** (`SeoTab.jsx`): conecta Google Search Console con OAuth y muestra impresiones, clicks, CTR y posición promedio. Análisis IA mensual con Claude Haiku. Snapshots persistidos en `SEOSnapshot`.
+
+### Keywords (SERP Tracking)
+Pestaña **Keywords** (`KeywordsTab.jsx`): tracking de keywords con ranking histórico (Google Search Console) y snapshots SERP completos (SerpAPI: posición, features del SERP, competidores, "People Also Ask"). Snapshot reciente reutilizado si <24h; refresh manual con cooldown de 15min.
+
+### Canibalización
+Pestaña **Canibalización** (`CanibalizacionTab.jsx`): detecta páginas del sitio compitiendo por la misma keyword usando datos de Search Console + análisis Claude. Reportes persistidos con detalle, eliminables individualmente.
 
 ---
 
@@ -468,6 +490,9 @@ DATABASE_URL="..." ENCRYPTION_KEY="..." SYSTEM_TOKEN="EAF..." AD_ACCOUNT_ID="act
 
 ## Sistema de IA
 
+### Presupuesto de tokens por workspace
+Cada workspace tiene un `monthlyTokenLimit` (default 1.000.000 tokens/mes, `0` = ilimitado). Toda llamada a Claude se valida primero contra el presupuesto vía `assertTokenBudget(workspaceId)`; si está superado, el endpoint responde **429** con `code: TOKEN_BUDGET_EXCEEDED`. El consumo se calcula sumando `inputTokens + outputTokens` de `AiTokenLog` del mes calendario. El componente `TokenBudgetBanner` lo muestra en la app cuando el uso supera el 90%. Los SuperAdmins editan el límite desde **SuperAdmin → Dashboard → Token limit** o vía `PATCH /api/superadmin/workspaces/:id/token-limit`.
+
 ### Insight diario
 Generado por Claude Haiku al abrir el Dashboard. Cacheado una vez por día. Incluye: estado real de las tareas, memoria de productividad histórica, expectativas del rol y análisis GTD. El usuario puede refrescarlo (cooldown 1h) y dar feedback 👍/👎.
 
@@ -492,6 +517,15 @@ Tipos de email: `passwordReset` · `welcome` · `weeklySummary` · `testSettings
 15 avatares disponibles en `frontend/public/perfiles/`. Avatar por defecto: `2bee.png`. Validados en backend contra lista `ALLOWED_AVATARS`. Clickear en cualquier avatar abre un lightbox fullscreen.
 
 Avatares: `2bee.png`, `bee.png`, `bee2.png`, `babee.png`, `beeartist.png`, `beecoffee.png`, `beecorp.png`, `beecypher.png`, `beefitness.png`, `beegamer.png`, `beehacker.png`, `beeloween.png`, `beenfluencer.png`, `beepunk.png`, `beezen.png`, `beezombie.png`
+
+---
+
+## Páginas públicas
+
+- **Landing** (`Landing.jsx`): se muestra en el dominio raíz `blisstracker.app` cuando no hay subdominio de workspace.
+- **Términos de servicio** (`/condiciones`) y **Política de privacidad** (`/privacidad`): renderizan documentos guardados en `LegalDocument`, editables desde **SuperAdmin → Legal**.
+- **OAuth helpers**: `/oauth` (`OAuthPopup`), `/auth` (`AuthCallback`) y `/oauth-result` (`OAuthResult`) — utilizadas en flujos de Google/Meta/TikTok.
+- **Informe público de cliente**: `/report/:token` (`ReportPublic`) — informe mensual identificado por token UUID, sin auth.
 
 ---
 

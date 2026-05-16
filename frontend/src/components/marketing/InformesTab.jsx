@@ -172,6 +172,7 @@ function AllReportsPanel({ onSelectProject }) {
                 </div>
                 <p className="text-xs text-gray-400 mt-0.5">
                   Generado: {new Date(r.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {r.generatedBy?.name && <>, por <span className="text-gray-500 dark:text-gray-300">{r.generatedBy.name}</span></>}
                 </p>
               </div>
               <a

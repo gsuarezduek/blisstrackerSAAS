@@ -103,7 +103,14 @@ Full-stack SaaS task tracker. Multi-tenant: each workspace is a separate subdoma
 - **Weekly AI report** at `src/services/weeklyReport.service.js` — generates productivity analysis with Claude Haiku, sent every Friday at 14:00 ART via `node-cron`. Sequential processing with 3s delay between users.
 - **Insight memory** at `src/services/insightMemory.service.js` — weekly learning profile per user (tendencias, fortalezas, areasDeAtencion, estadisticas) using Claude Haiku. Updated every Saturday at 00:00 ART.
 - **GEO audit** at `src/services/geoAudit.service.js` — fetches URL with axios + cheerio, analyzes with Claude (claude-haiku), stores result in `GeoAudit`. Async: controller returns auditId immediately, analysis runs via `setImmediate`. Progress tracked via `errorMsg` field during `running` status. Score 0–100 with 4 bands (Crítico/Base/Bueno/Excelente). Checks 23 AI crawlers (citation vs training), llms.txt, robots.txt, JSON-LD schema.
-- **Feature flag catalog** at `src/config/featureFlags.js` — array of `{ key, name, description }`. On server start, all flags are upserted to DB automatically. Never create flags manually from SuperAdmin UI — define them in code.
+- **Feature flag catalog** at `src/config/featureFlags.js` — array of `{ key, name, description }`. On server start, all flags are upserted to DB automatically. Never create flags manually from SuperAdmin UI — define them in code. Flags actuales: `marketing` (sección Marketing) y `eos` (Sistema EOS).
+- **Token budget** at `src/lib/tokenBudget.js` — presupuesto mensual de tokens de IA por workspace. `Workspace.monthlyTokenLimit` (default `1000000`, `0` = ilimitado). Funciones:
+  - `getTokenBudget(workspaceId)` → `{ used, limit, pct, exceeded, status }` (status: `ok` | `warning` ≥90% | `critical` ≥95% | `exceeded`).
+  - `assertTokenBudget(workspaceId)` — lanza `err.status = 429` + `code: TOKEN_BUDGET_EXCEEDED` si superado. Llamar antes de toda invocación a Claude.
+  - `hasTokenBudget(workspaceId)` — versión booleana para crons (no lanza).
+  - Se acumula vía `AiTokenLog` (inputTokens + outputTokens) en el mes calendario actual. Configurable por workspace desde SuperAdmin (`PATCH /api/superadmin/workspaces/:id/token-limit`).
+- **SerpAPI service** at `src/services/serpApi.service.js` — captura snapshots SERP (posición, features, competidores, "People Also Ask", "Related Searches") usando `SERP_API_KEY` (serpapi.com). Cooldown de 15 minutos para refresh manual; reutiliza snapshot si <24h.
+- **Cannibalization service** at `src/services/cannibalization.service.js` — detecta canibalización de keywords entre páginas del mismo sitio usando datos de Google Search Console + análisis IA.
 
 ### Frontend (`frontend/src/`)
 - **React 18 + Vite + Tailwind CSS + React Router v6.**
@@ -158,7 +165,18 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 
 **Feature flags:** Defined in `src/config/featureFlags.js`. Auto-upserted on server startup. SuperAdmin manages which workspaces have access (enabledGlobally or per-workspace list). Frontend uses `useFeatureFlag(key)` hook — cached in memory per session. Never create flags manually from the UI. **Workspace opt-out:** even if a flag is enabled by SuperAdmin, a workspace admin can disable it for their workspace via `PATCH /api/workspaces/current/features/:key` (stored in `Workspace.disabledFeatureKeys`). Visible in Preferencias → Módulos adicionales.
 
-**GEO Audit (Marketing):** `GeoAudit` model stores per-project AI analysis results. Score 0–100, 6 components (citability, brandAuthority, eeat, technical, schema, platforms), unified items list, negative signals. Async pattern: `POST /api/marketing/geo/audit` creates record with `status: 'running'` and returns `auditId` immediately; frontend polls `GET /api/marketing/geo/audits/:id` every 3s. Progress steps stored in `errorMsg` during running, cleared on completion. Tasks can be created directly from audit items with "GEO - " prefix.
+**GEO Audit (Marketing):** `GeoAudit` model stores per-project AI analysis results. Score 0–100, 6 components (citability, brandAuthority, eeat, technical, schema, platforms), unified items list, negative signals. Async pattern: `POST /api/marketing/geo/audit` creates record with `status: 'running'` and returns `auditId` immediately; frontend polls `GET /api/marketing/geo/audits/:id` every 3s. Progress steps stored in `errorMsg` during running, cleared on completion. Tasks can be created directly from audit items with "GEO - " prefix. Generación adicional: `GET /api/marketing/geo/audits/:id/llms-txt` produce un archivo `llms.txt` estándar; `POST /api/marketing/geo/audits/:id/schema` genera JSON-LD Schema.org sugerido.
+
+**Health Score (Marketing):** `GET /api/marketing/projects/:id/health-score` agrega métricas de GEO (último audit), Keywords (posición promedio mes actual), GA4 (snapshots con deltas vs mes anterior) y PageSpeed (mobile + desktop) en un score unificado. Visible en la pestaña **Salud** (`SaludTab.jsx`). No persiste — se calcula en cada request.
+
+**Cannibalization (Marketing):** Detección de canibalización SEO usando datos de Google Search Console. Rutas: `POST /api/marketing/projects/:id/cannibal` dispara análisis; `GET .../cannibal` lista reportes; `GET .../cannibal/:rid` detalle; `DELETE .../cannibal/:rid` elimina. Visible en la pestaña **Canibalización** (`CanibalizacionTab.jsx`).
+
+**SERP snapshots (Marketing):** `SerpSnapshot` model captura snapshot completo de SerpAPI por keyword (posición, features del SERP, competidores top, "People Also Ask", "Related Searches"). Rutas:
+- `GET /api/marketing/projects/:id/keywords/:kwId/serp` — devuelve snapshot reciente (reutiliza si <24h).
+- `POST /api/marketing/projects/:id/keywords/:kwId/serp/refresh` — fuerza nueva captura (cooldown 15min).
+- `GET /api/marketing/projects/:id/keywords/serp-batch` — tabla resumen "SERP Live" cross-keyword.
+
+Requiere `SERP_API_KEY` configurado. Los snapshots SE GUARDAN aunque sólo se use el más reciente — útiles para análisis histórico futuro.
 
 **Roles:** `WorkspaceMember.teamRole` is a plain `String` referencing `UserRole.name`. Admin access is `WorkspaceMember.role === 'admin' | 'owner'`, fully decoupled from team role.
 
@@ -190,13 +208,16 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 - **Ingresos tab** — date range filter + person filter, login history grouped by user, sort by avg time.
 
 **Super Admin panel (`/superadmin`):** Internal panel for the BlissTracker team (requires `User.isSuperAdmin`). Sidebar navigation:
-- **Dashboard** — global stats (workspaces, users, AI tokens) + workspace list with search + status management + impersonation.
+- **Dashboard** — global stats (workspaces, users, AI tokens) + workspace list con búsqueda + edición de status + impersonación + edición del `monthlyTokenLimit` por workspace.
 - **Billing** — MRR, ARR, conteos por estado (activos/trial/past_due), tabla de todos los workspaces con filtros. Precio base `$10 USD/seat/mes` hardcodeado en `superadmin.controller.js`.
+- **Pagos** — historial de invoices reales de Stripe (`GET /api/superadmin/payments`) con paginación.
+- **AI Tokens** — uso de tokens de IA agregado por workspace/mes (`GET /api/superadmin/ai-tokens`).
 - **Feedback** — all feedback from all workspaces with read/unread filtering.
 - **Emails** — full `EmailLog` history with type/status filters and pagination.
 - **Announcements** — banners globales visibles en la app.
 - **Avatares** — gestión de fotos de perfil disponibles.
 - **Feature Flags** — toggle de flags por workspace o globalmente. Los flags se definen en código, no se crean desde la UI.
+- **Legal** — edición de los documentos legales (`terms_of_service`, `privacy_policy`) servidos en `/condiciones` y `/privacidad`.
 
 **Email logging:** All emails (sent or failed) are written to `EmailLog` with: workspaceId?, to, subject, type, status, errorMsg?, createdAt. The `email.service.js` wraps every send in try/catch and logs both outcomes. Visible in the Super Admin panel → Emails section.
 
@@ -206,12 +227,12 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 
 **AI insight context — backlog separation:** Backlog tasks are explicitly separated from pending tasks in the Claude prompt to prevent suggesting their removal.
 
-**EOS module (`/admin/eos`):** Sistema Operativo Empresarial basado en *Traction* de Gino Wickman. Seis componentes implementados:
+**EOS module (`/admin/eos`):** Sistema Operativo Empresarial basado en *Traction* de Gino Wickman. Requiere feature flag `eos` habilitado para el workspace. Seis componentes implementados:
 - **Visión** — datos estratégicos del workspace (valores, misión, BHAG, estrategia, metas 1 año). Toggle "Ver VTO" muestra el Vision/Traction Organizer en formato del libro.
 - **Personas** — People Analyzer (ratings GWC por persona) + Accountability Chart (árbol de responsabilidades jerárquico) + Strikes.
 - **Datos** — Scorecard semanal con métricas numéricas, responsables y objetivos. Períodos: `YYYY-Www` (ISO week).
 - **Asuntos** — Issues IDS (Identify-Discuss-Solve). Tipos: `weekly` | `quarterly`. Estados: `open` | `solved`. Prioridades: `high` | `medium` | `low`.
-- **Procesos** — Documentación de procesos con pasos ordenados.
+- **Procesos** — Documentación de procesos con pasos ordenados. `EOSProcess.ownerRole` referencia el nombre del rol (no un User específico).
 - **Tracción** — Rocks trimestrales (`YYYY-Q1..Q4`) + reuniones L10 semanales (ISO week) + To-Dos de la reunión.
 - **Evaluación** — 18 preguntas (6 componentes EOS × 3) calificadas 1–5 por cada admin. Genera resultado grupal promediado con análisis Claude Haiku. Modelos: `OrgAssessmentRound` (estado `open`/`closed`) + `OrgAssessmentResponse` (única por round+user). Ruta: `GET/POST /api/eos/assessment`.
 
@@ -228,7 +249,7 @@ Todos los modelos EOS tienen `workspaceId` como scope. Las rutas `/api/eos/*` re
 - `ProjectIntegration.propertyId` tiene distintos usos según `type`: GA4 → Property ID numérico; `google_ads` → Manager Account ID (MCC) si la cuenta es cliente de un manager; Meta Ads → no usado; TikTok → no usado.
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_project_member_notification`, `add_task_comments`, `v1_5`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_memory_history`, `add_role_structure`, `add_user_login_history`, `add_vacation_days`, `add_bank_name`, `add_task_sessions`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_email_log`, `add_vacation_management` (VacationRequest + VacationAdjustment), `add_workspace_deletion_request`, `add_announcements`, `add_avatars`, `fix_vacation_schema`, `add_feature_flags`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `add_project_connections` (Project.connections JSON), `fix_service_unique_index`, `add_legal_document`, `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique`, `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_instagram_snapshot`, `add_integration_country`, `add_keyword_tracking` (TrackedKeyword + KeywordRanking), `add_pagespeed_result` (PageSpeedResult), `add_instagram_follower_log`, `add_tiktok` (TikTokSnapshot + TikTokFollowerLog), `add_monthly_report` (MonthlyReport — token UUID para URL pública), `add_monthly_report_analysis`, `add_seo_snapshot` (SEOSnapshot para Google Search Console), `add_ai_traffic_snapshot`, `add_cannibal_report`, `add_eos_data`, `add_eos_focus`, `add_eos_ten_year_target`, `add_eos_vision_remaining`, `add_eos_issues` (EOSIssue), `add_eos_personas`, `add_eos_processes`, `add_eos_scorecard`, `add_eos_traction` (EOSRock + EOSTodo + EOSMeeting), `add_org_assessment` (OrgAssessmentRound + OrgAssessmentResponse), `add_workspace_branding` (companyName, companyDescription, industry, companyWebsite, logoData, bannerData + brandColors, brandFonts), `add_workspace_brand_identity` (disabledFeatureKeys en Workspace + dataCache en MonthlyReport), `add_ads_snapshot` (AdsSnapshot — spend/impressions/clicks/ctr/conversions por proyecto+mes+tipo: meta_ads|google_ads).
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_project_member_notification`, `add_task_comments`, `v1_5`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_memory_history`, `add_role_structure`, `add_user_login_history`, `add_vacation_days`, `add_bank_name`, `add_task_sessions`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_email_log`, `add_vacation_management` (VacationRequest + VacationAdjustment), `add_workspace_deletion_request`, `add_announcements`, `add_avatars`, `fix_vacation_schema`, `add_feature_flags`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `add_project_connections` (Project.connections JSON), `fix_service_unique_index`, `add_legal_document`, `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique`, `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_instagram_snapshot`, `add_integration_country`, `add_keyword_tracking` (TrackedKeyword + KeywordRanking), `add_pagespeed_result` (PageSpeedResult), `add_instagram_follower_log`, `add_tiktok` (TikTokSnapshot + TikTokFollowerLog), `add_monthly_report` (MonthlyReport — token UUID para URL pública), `add_monthly_report_analysis`, `add_seo_snapshot` (SEOSnapshot para Google Search Console), `add_ai_traffic_snapshot`, `add_cannibal_report`, `add_eos_data`, `add_eos_focus`, `add_eos_ten_year_target`, `add_eos_vision_remaining`, `add_eos_issues` (EOSIssue), `add_eos_personas`, `add_eos_processes`, `add_eos_scorecard`, `add_eos_traction` (EOSRock + EOSTodo + EOSMeeting), `add_org_assessment` (OrgAssessmentRound + OrgAssessmentResponse), `update_eos_process_owner_role` (EOSProcess.ownerId → ownerRole String), `add_analytics_top_pages` (AnalyticsSnapshot.topPages + topSources), `add_monthly_report_data_cache` (MonthlyReport.dataCache), `add_workspace_branding` (companyName, companyDescription, industry, companyWebsite, logoData, bannerData), `add_workspace_brand_identity` (Workspace.brandColors + brandFonts), `add_workspace_disabled_features` (Workspace.disabledFeatureKeys), `add_report_banner` (MonthlyReport.bannerData + bannerMimeType — banner por informe), `add_serp_snapshot` (SerpSnapshot — snapshots SERP de SerpAPI por keyword), `add_workspace_monthly_token_limit` (Workspace.monthlyTokenLimit — presupuesto mensual de tokens de IA), `add_ads_snapshot` (AdsSnapshot — spend/impressions/clicks/ctr/conversions por proyecto+mes+tipo: meta_ads|google_ads).
 - `TaskComment.content` is the text field (not `text`). The `parentId` self-relation exists for future threading but is not used by the UI yet.
 
 ### API routes summary
@@ -370,9 +391,12 @@ GET    /api/role-expectations/:roleName
 PUT    /api/role-expectations/:roleName
 
 # Marketing (requiere feature flag 'marketing')
-POST   /api/marketing/geo/audit          # dispara audit async, devuelve { auditId }
-GET    /api/marketing/geo/audits         # lista audits del workspace (?projectId=)
-GET    /api/marketing/geo/audits/:id     # detalle completo de un audit
+POST   /api/marketing/geo/audit                  # dispara audit async, devuelve { auditId }
+GET    /api/marketing/geo/audits                 # lista audits del workspace (?projectId=)
+GET    /api/marketing/geo/audits/:id             # detalle completo de un audit
+DELETE /api/marketing/geo/audits/:id             # elimina audit
+GET    /api/marketing/geo/audits/:id/llms-txt    # genera contenido llms.txt con Claude
+POST   /api/marketing/geo/audits/:id/schema      # genera JSON-LD Schema.org sugerido
 
 # Marketing — OAuth callbacks (sin auth — vienen de Google/Meta/TikTok)
 GET    /api/marketing/integrations/google/callback          # callback Google OAuth
@@ -385,13 +409,18 @@ GET    /api/marketing/integrations/google/auth-url          # ?projectId=&type=g
 GET    /api/marketing/integrations/meta/auth-url            # ?projectId=
 GET    /api/marketing/integrations/meta-ads/auth-url        # ?projectId=
 GET    /api/marketing/integrations/tiktok/auth-url          # ?projectId=
-POST   /api/marketing/projects/:id/integrations/connect-existing  # reutiliza tokens vigentes del workspace (mismo type)
+POST   /api/marketing/projects/:id/integrations/connect-existing      # reutiliza tokens vigentes del workspace (mismo type)
+POST   /api/marketing/projects/:id/integrations/instagram/connect-token  # conectar Instagram con token manual
+POST   /api/marketing/projects/:id/integrations/meta-ads/connect-token   # conectar Meta Ads con System User Token
 GET    /api/marketing/projects/:id/integrations             # lista integraciones del proyecto
 PATCH  /api/marketing/projects/:id/integrations/:type       # actualizar propertyId / customerId
 DELETE /api/marketing/projects/:id/integrations/:type       # desconectar integración + revocar token
 
 # Marketing — Analytics GA4
 GET    /api/marketing/projects/:id/analytics                # ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+GET    /api/marketing/projects/:id/ads                      # datos de ads agregados (Meta + Google)
+GET    /api/marketing/projects/:id/ai-traffic               # tráfico desde fuentes AI (Perplexity, ChatGPT, etc.)
+GET    /api/marketing/projects/:id/health-score             # score compuesto: GEO + keywords + GA4 + PageSpeed
 
 # Marketing — Google Ads
 GET    /api/marketing/projects/:id/google-ads               # ?datePreset= — requiere customerId en integration + GOOGLE_ADS_DEVELOPER_TOKEN
@@ -431,14 +460,23 @@ GET    /api/marketing/projects/:id/seo/ai-insights          # análisis IA SEO d
 POST   /api/marketing/projects/:id/seo/ai-insights          # generar análisis IA SEO
 
 # Marketing — Keyword Tracking
-GET    /api/marketing/projects/:id/keywords                 # lista keywords trackeadas (?country=)
-POST   /api/marketing/projects/:id/keywords                 # body: { query } — agregar keyword
-DELETE /api/marketing/projects/:id/keywords/:kwId           # eliminar keyword
-GET    /api/marketing/projects/:id/keywords/suggest         # sugerencias GSC (?country=)
-GET    /api/marketing/projects/:id/keywords/heatmap         # heatmap de posiciones (últimos 6 meses)
-GET    /api/marketing/projects/:id/keywords/history-batch   # ?months=6 — historial de múltiples keywords
-GET    /api/marketing/projects/:id/keywords/:kwId/history   # historial de una keyword
-POST   /api/marketing/projects/:id/keywords/:kwId/analysis  # análisis IA de una keyword
+GET    /api/marketing/projects/:id/keywords                       # lista keywords trackeadas (?country=)
+POST   /api/marketing/projects/:id/keywords                       # body: { query } — agregar keyword
+DELETE /api/marketing/projects/:id/keywords/:kwId                 # eliminar keyword
+GET    /api/marketing/projects/:id/keywords/suggest               # sugerencias GSC (?country=)
+GET    /api/marketing/projects/:id/keywords/heatmap               # heatmap de posiciones (últimos 6 meses)
+GET    /api/marketing/projects/:id/keywords/history-batch         # ?months=6 — historial de múltiples keywords
+GET    /api/marketing/projects/:id/keywords/serp-batch            # snapshots SERP recientes para todas las keywords
+GET    /api/marketing/projects/:id/keywords/:kwId/history         # historial de una keyword
+POST   /api/marketing/projects/:id/keywords/:kwId/analysis        # análisis IA de una keyword
+GET    /api/marketing/projects/:id/keywords/:kwId/serp            # snapshot SERP más reciente (reutiliza si <24h)
+POST   /api/marketing/projects/:id/keywords/:kwId/serp/refresh    # fuerza nueva captura SERP (cooldown 15min)
+
+# Marketing — Cannibalization (canibalización SEO)
+POST   /api/marketing/projects/:id/cannibal                 # dispara análisis async
+GET    /api/marketing/projects/:id/cannibal                 # lista reportes
+GET    /api/marketing/projects/:id/cannibal/:rid            # detalle de un reporte
+DELETE /api/marketing/projects/:id/cannibal/:rid            # eliminar reporte
 
 # Marketing — Ads Snapshots
 POST   /api/marketing/projects/:id/ads-snapshots            # body: { month, type: "meta_ads"|"google_ads" } — guardar snapshot manual
@@ -453,12 +491,18 @@ GET    /api/marketing/summary/ads                           # AdsSnapshot más r
 GET    /api/marketing/summary/reports                       # todos los MonthlyReport del workspace, ?limit=20&offset=0
 
 # Marketing — Informes mensuales (autenticados)
-GET    /api/marketing/projects/:id/reports                  # lista informes del proyecto
-GET    /api/marketing/projects/:id/reports/:month           # obtiene/crea informe (YYYY-MM) + agrega datos
-PATCH  /api/marketing/projects/:id/reports/:month           # actualiza objectives y notes
+GET    /api/marketing/projects/:id/reports                          # lista informes del proyecto
+GET    /api/marketing/projects/:id/reports/:month                   # obtiene/crea informe (YYYY-MM) + agrega datos
+PATCH  /api/marketing/projects/:id/reports/:month                   # actualiza objectives y notes
+POST   /api/marketing/projects/:id/reports/:month/regenerate        # fuerza regeneración del informe (limpia dataCache)
+POST   /api/marketing/projects/:id/reports/:month/banner            # multipart image — banner del informe (max 5MB)
+DELETE /api/marketing/projects/:id/reports/:month/banner            # elimina banner del informe
 
 # Informes — acceso público (sin auth)
 GET    /api/public/report/:token                            # datos completos del informe para el cliente
+
+# Documentos legales — acceso público (sin auth)
+GET    /api/legal/:key                                      # devuelve documento legal (terms_of_service, privacy_policy)
 
 # Billing
 GET    /api/billing/status               # estado trial/suscripción del workspace
@@ -468,10 +512,13 @@ POST   /api/billing/webhook              # webhook Stripe (raw body, no auth)
 
 # Super Admin (requiere isSuperAdmin)
 GET    /api/superadmin/stats
-GET    /api/superadmin/billing           # MRR, ARR, tabla de todos los workspaces
+GET    /api/superadmin/billing                          # MRR, ARR, tabla de todos los workspaces
+GET    /api/superadmin/payments                         # historial de pagos (Stripe invoices)
+GET    /api/superadmin/ai-tokens                        # uso de tokens IA por workspace/mes
 GET    /api/superadmin/workspaces
 GET    /api/superadmin/workspaces/:id
 PATCH  /api/superadmin/workspaces/:id/status
+PATCH  /api/superadmin/workspaces/:id/token-limit       # body: { monthlyTokenLimit }
 POST   /api/superadmin/impersonate
 GET    /api/superadmin/feedback
 PUT    /api/superadmin/feedback/:id/read
@@ -480,17 +527,22 @@ GET    /api/superadmin/feature-flags
 POST   /api/superadmin/feature-flags
 PATCH  /api/superadmin/feature-flags/:id
 DELETE /api/superadmin/feature-flags/:id
-GET    /api/feature-flags/:key           # check flag para workspace actual (autenticado)
+GET    /api/superadmin/legal/:key                       # editar documento legal
+PUT    /api/superadmin/legal/:key                       # upsert documento legal
+GET    /api/feature-flags/:key                          # check flag para workspace actual (autenticado)
 ```
 
 ### Frontend routes
 ```
+/                 → Landing.jsx          (pública, sólo en dominio raíz blisstracker.app sin subdominio)
+                  → Dashboard.jsx        (PrivateRoute, en subdominio de workspace)
 /login            → Login2.jsx
-/register         → Register.jsx        (crear workspace)
-/join             → Join.jsx            (aceptar invitación, ?token=)
+/register         → Register.jsx         (crear workspace)
+/join             → JoinWorkspace.jsx    (aceptar invitación, ?token=)
 /forgot-password  → ForgotPassword.jsx
 /reset-password   → ResetPassword.jsx
-/                 → Dashboard.jsx        (PrivateRoute)
+/condiciones      → TermsPage.jsx        (pública) — Términos de servicio
+/privacidad       → TermsPage.jsx        (pública) — Política de privacidad
 /my-reports       → MyReports.jsx        (PrivateRoute)
 /my-projects      → MyProjects.jsx       (PrivateRoute)
 /my-projects/:id  → ProjectDetail.jsx    (PrivateRoute)
@@ -498,15 +550,17 @@ GET    /api/feature-flags/:key           # check flag para workspace actual (aut
 /preferences      → Preferences.jsx      (PrivateRoute)
 /realtime         → RealTime.jsx         (PrivateRoute)
 /docs             → Docs.jsx             (PrivateRoute)
-/marketing        → Marketing.jsx        (PrivateRoute) — tabs GEO y Web operativos; Informes con informe mensual consolidado
+/marketing        → Marketing.jsx        (PrivateRoute) — tabs: GEO, Web, SEO, Keywords, Canibalización, Instagram, TikTok, Meta Ads, Google Ads, Salud, Informes
 /report/:token    → ReportPublic.jsx     (pública, sin auth) — informe mensual para clientes identificado por token UUID
+/oauth            → OAuthPopup.jsx       (pública) — popup OAuth (Google/Meta/TikTok)
+/auth             → AuthCallback.jsx     (pública) — callback de Google Sign-In
 /oauth-result     → OAuthResult.jsx      (pública) — puente de callback OAuth: postMessage al opener y cierra popup
 /billing          → Billing.jsx          (PrivateRoute) — visible para todos; acciones solo admin/owner
 /reports             → Reports.jsx          (AdminRoute)
 /admin               → Admin.jsx            (AdminRoute)  — ?tab= query param
 /admin/productivity  → Productivity.jsx     (AdminRoute)
 /admin/rrhh          → RRHH.jsx             (AdminRoute)
-/admin/eos           → EOS.jsx              (AdminRoute)  — 7 tabs: Visión, Personas, Datos, Asuntos, Procesos, Tracción, Evaluación
+/admin/eos           → EOS.jsx              (AdminRoute)  — 7 tabs: Visión, Personas, Datos, Asuntos, Procesos, Tracción, Evaluación. Requiere feature flag `eos`.
 /superadmin          → SuperAdmin.jsx        (SuperAdminRoute — requiere isSuperAdmin)
 ```
 
