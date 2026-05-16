@@ -36,6 +36,10 @@ router.put('/feedback/:id/read',        c.markFeedbackRead)
 router.get('/email-logs',               c.listEmailLogs)
 router.get('/ai-tokens',                c.getAiTokenStats)
 
+// Usuarios (lista global cross-workspace)
+router.get('/users',                    c.listUsers)
+router.patch('/users/:id/toggle-active', c.toggleUserActive)
+
 // Anuncios
 router.get('/announcements',              ann.listAll)
 router.post('/announcements',             ann.create)

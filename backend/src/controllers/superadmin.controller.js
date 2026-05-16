@@ -553,4 +553,113 @@ async function getAiTokenStats(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats }
+/**
+ * GET /api/superadmin/users
+ * Lista global de usuarios con búsqueda y paginación.
+ * Query: ?search=&limit=50&offset=0&status=all|active|inactive|orphan
+ */
+async function listUsers(req, res, next) {
+  try {
+    const { search = '', status = 'all' } = req.query
+    const limit  = Math.min(Number(req.query.limit)  || 50, 200)
+    const offset = Math.max(Number(req.query.offset) || 0, 0)
+
+    const where = search.trim()
+      ? {
+          OR: [
+            { email: { contains: search.trim(), mode: 'insensitive' } },
+            { name:  { contains: search.trim(), mode: 'insensitive' } },
+          ],
+        }
+      : {}
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        select: {
+          id:           true,
+          name:         true,
+          email:        true,
+          avatar:       true,
+          isSuperAdmin: true,
+          createdAt:    true,
+          workspaceMembers: {
+            select: {
+              active:      true,
+              role:        true,
+              workspace:   { select: { id: true, name: true, slug: true } },
+            },
+          },
+          loginEvents: {
+            select:  { loginAt: true },
+            orderBy: { loginAt: 'desc' },
+            take:    1,
+          },
+        },
+      }),
+      prisma.user.count({ where }),
+    ])
+
+    const rows = users.map(u => {
+      const totalMemberships  = u.workspaceMembers.length
+      const activeMemberships = u.workspaceMembers.filter(m => m.active).length
+      const lastLoginAt       = u.loginEvents[0]?.loginAt ?? null
+      return {
+        id:                 u.id,
+        name:               u.name,
+        email:              u.email,
+        avatar:             u.avatar,
+        isSuperAdmin:       u.isSuperAdmin,
+        createdAt:          u.createdAt,
+        totalMemberships,
+        activeMemberships,
+        lastLoginAt,
+        workspaces: u.workspaceMembers.map(m => ({
+          id:     m.workspace.id,
+          name:   m.workspace.name,
+          slug:   m.workspace.slug,
+          role:   m.role,
+          active: m.active,
+        })),
+      }
+    })
+
+    const filtered = rows.filter(u => {
+      if (status === 'active')   return u.activeMemberships > 0
+      if (status === 'inactive') return u.totalMemberships > 0 && u.activeMemberships === 0
+      if (status === 'orphan')   return u.totalMemberships === 0
+      return true
+    })
+
+    res.json({ users: filtered, total })
+  } catch (err) { next(err) }
+}
+
+/**
+ * PATCH /api/superadmin/users/:id/toggle-active
+ * Body: { active: boolean }
+ * Si active === false: desactiva todas las memberships del usuario (kill switch global).
+ * Si active === true:  reactiva todas las memberships del usuario.
+ * Nunca aplica a memberships dentro de un workspace cancelado/suspendido.
+ */
+async function toggleUserActive(req, res, next) {
+  try {
+    const userId = Number(req.params.id)
+    const active = Boolean(req.body.active)
+
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
+
+    const result = await prisma.workspaceMember.updateMany({
+      where: { userId },
+      data:  { active },
+    })
+
+    res.json({ userId, active, affectedMemberships: result.count })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive }

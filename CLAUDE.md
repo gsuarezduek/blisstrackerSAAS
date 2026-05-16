@@ -209,6 +209,7 @@ Requiere `SERP_API_KEY` configurado. Los snapshots SE GUARDAN aunque sólo se us
 
 **Super Admin panel (`/superadmin`):** Internal panel for the BlissTracker team (requires `User.isSuperAdmin`). Sidebar navigation:
 - **Dashboard** — global stats (workspaces, users, AI tokens) + workspace list con búsqueda + edición de status + impersonación + edición del `monthlyTokenLimit` por workspace.
+- **Usuarios** — lista global cross-workspace con búsqueda por email/nombre, filtros (todos / activos / desactivados / huérfanos sin workspace), badge de SuperAdmin, último login, y toggle global de activación (desactiva TODAS las `WorkspaceMember.active` del usuario — kill switch operativo sin migración). Los SuperAdmins no pueden desactivarse desde acá.
 - **Billing** — MRR, ARR, conteos por estado (activos/trial/past_due), tabla de todos los workspaces con filtros. Precio base `$10 USD/seat/mes` hardcodeado en `superadmin.controller.js`.
 - **Pagos** — historial de invoices reales de Stripe (`GET /api/superadmin/payments`) con paginación.
 - **AI Tokens** — uso de tokens de IA agregado por workspace/mes (`GET /api/superadmin/ai-tokens`).
@@ -519,6 +520,8 @@ GET    /api/superadmin/workspaces
 GET    /api/superadmin/workspaces/:id
 PATCH  /api/superadmin/workspaces/:id/status
 PATCH  /api/superadmin/workspaces/:id/token-limit       # body: { monthlyTokenLimit }
+GET    /api/superadmin/users                            # ?search=&limit=&offset=&status=all|active|inactive|orphan
+PATCH  /api/superadmin/users/:id/toggle-active          # body: { active } — toggle de TODAS las memberships
 POST   /api/superadmin/impersonate
 GET    /api/superadmin/feedback
 PUT    /api/superadmin/feedback/:id/read
