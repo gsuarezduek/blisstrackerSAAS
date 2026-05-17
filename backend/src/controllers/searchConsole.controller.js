@@ -3,6 +3,7 @@ const { fetchSearchConsoleData, fetchQueryPages, querySearchConsole } = require(
 const { getValidAccessToken } = require('../services/tokenRefresh.service')
 const { normalizeSiteUrl } = require('../utils/seo')
 const { saveMonthSnapshot, generateSeoAiInsights } = require('../services/searchConsoleSnapshot.service')
+const { getSetting } = require('../lib/platformSettings')
 
 // Acepta 'YYYY-MM-DD' solamente (Search Console no acepta 'NdaysAgo')
 const VALID_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -228,8 +229,9 @@ async function getSeoAiInsights(req, res, next) {
 
     if (!existing) return res.json({ insight: null, cooldownRemaining: 0 })
 
+    const cooldownMs = (await getSetting('aiCooldownMinutes')) * 60 * 1000
     const ageMs   = Date.now() - new Date(existing.generatedAt).getTime()
-    const cooldown = Math.max(0, 60 * 60 * 1000 - ageMs)
+    const cooldown = Math.max(0, cooldownMs - ageMs)
 
     res.json({
       insight:           JSON.parse(existing.content),
@@ -248,12 +250,13 @@ async function createSeoAiInsights(req, res, next) {
     const projectId   = Number(req.params.id)
     const workspaceId = req.workspace.id
 
-    // Cooldown de 1 hora
+    // Cooldown configurable desde SuperAdmin → Configuración (aiCooldownMinutes)
     const existing = await prisma.seoAiInsight.findUnique({ where: { projectId } })
     if (existing) {
+      const cooldownMs = (await getSetting('aiCooldownMinutes')) * 60 * 1000
       const ageMs = Date.now() - new Date(existing.generatedAt).getTime()
-      if (ageMs < 60 * 60 * 1000) {
-        const waitMins = Math.ceil((60 * 60 * 1000 - ageMs) / 60000)
+      if (ageMs < cooldownMs) {
+        const waitMins = Math.ceil((cooldownMs - ageMs) / 60000)
         return res.status(429).json({ error: `Esperá ${waitMins} min antes de regenerar.`, waitMins })
       }
     }

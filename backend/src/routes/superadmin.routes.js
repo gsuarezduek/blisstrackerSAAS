@@ -7,6 +7,7 @@ const ann   = require('../controllers/announcements.controller')
 const av    = require('../controllers/avatars.controller')
 const ff    = require('../controllers/featureFlags.controller')
 const legal = require('../controllers/legal.controller')
+const ps    = require('../controllers/platformSettings.controller')
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -39,6 +40,13 @@ router.get('/ai-tokens',                c.getAiTokenStats)
 // Usuarios (lista global cross-workspace)
 router.get('/users',                    c.listUsers)
 router.patch('/users/:id/toggle-active', c.toggleUserActive)
+
+// Configuración global de la plataforma
+router.get('/settings',                 ps.listSettings)
+router.put('/settings',                 ps.updateSettings)
+router.get('/settings/log',             ps.listLog)
+router.get('/settings/cleanup-preview', ps.previewCleanup)
+router.post('/settings/cleanup-now',    ps.runCleanup)
 
 // Anuncios
 router.get('/announcements',              ann.listAll)

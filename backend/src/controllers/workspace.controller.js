@@ -4,6 +4,7 @@ const prisma = require('../lib/prisma')
 const stripe  = require('../lib/stripe')
 const { sendWelcomeEmail, sendInvitationEmail, sendWorkspaceDeletionWarning } = require('../services/email.service')
 const { syncSeatsToStripe } = require('./billing.controller')
+const { getSetting } = require('../lib/platformSettings')
 
 const MEMBER_SELECT = {
   userId: true,
@@ -379,8 +380,12 @@ async function createWorkspace(req, res, next) {
       return res.status(400).json({ error: 'El slug solo puede contener letras minúsculas, números y guiones (2-30 caracteres)' })
     }
 
+    const [trialDays, defaultTokenLimit] = await Promise.all([
+      getSetting('trialDays'),
+      getSetting('defaultMonthlyTokenLimit'),
+    ])
     const trialEndsAt = new Date()
-    trialEndsAt.setDate(trialEndsAt.getDate() + 14)
+    trialEndsAt.setDate(trialEndsAt.getDate() + trialDays)
 
     // Si el email ya tiene cuenta, verificar que la contraseña sea correcta
     const existingOwner = await prisma.user.findUnique({ where: { email: ownerEmail } })
@@ -396,7 +401,7 @@ async function createWorkspace(req, res, next) {
     const result = await prisma.$transaction(async (tx) => {
       // Crear workspace
       const workspace = await tx.workspace.create({
-        data: { name: workspaceName, slug, status: 'trialing', trialEndsAt },
+        data: { name: workspaceName, slug, status: 'trialing', trialEndsAt, monthlyTokenLimit: defaultTokenLimit },
       })
 
       // Upsert owner (puede ya tener cuenta global en otro workspace)

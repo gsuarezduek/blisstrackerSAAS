@@ -1,4 +1,5 @@
 const prisma = require('./prisma')
+const { getSettings } = require('./platformSettings')
 
 /**
  * Devuelve el inicio del mes actual en UTC.
@@ -24,20 +25,23 @@ async function getMonthlyTokenUsed(workspaceId) {
  * @returns {{ used: number, limit: number, pct: number, exceeded: boolean, status: 'ok'|'warning'|'critical'|'exceeded' }}
  */
 async function getTokenBudget(workspaceId) {
-  const ws = await prisma.workspace.findUnique({
-    where:  { id: workspaceId },
-    select: { monthlyTokenLimit: true },
-  })
-  const limit = ws?.monthlyTokenLimit ?? 1000000
-  const used  = await getMonthlyTokenUsed(workspaceId)
+  const [ws, settings, used] = await Promise.all([
+    prisma.workspace.findUnique({
+      where:  { id: workspaceId },
+      select: { monthlyTokenLimit: true },
+    }),
+    getSettings(['defaultMonthlyTokenLimit', 'tokenWarningPct', 'tokenCriticalPct']),
+    getMonthlyTokenUsed(workspaceId),
+  ])
+  const limit = ws?.monthlyTokenLimit ?? settings.defaultMonthlyTokenLimit
   const pct   = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
 
   let status = 'ok'
-  if (used >= limit)           status = 'exceeded'
-  else if (pct >= 95)          status = 'critical'
-  else if (pct >= 90)          status = 'warning'
+  if (limit > 0 && used >= limit)              status = 'exceeded'
+  else if (pct >= settings.tokenCriticalPct)   status = 'critical'
+  else if (pct >= settings.tokenWarningPct)    status = 'warning'
 
-  return { used, limit, pct, exceeded: used >= limit, status }
+  return { used, limit, pct, exceeded: limit > 0 && used >= limit, status }
 }
 
 /**

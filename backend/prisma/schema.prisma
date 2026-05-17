@@ -10,79 +10,79 @@ datasource db {
 // ─── WORKSPACE ───────────────────────────────────────────────────────────────
 
 model Workspace {
-  id               Int      @id @default(autoincrement())
-  name             String
-  slug             String   @unique   // subdominio, ej: "bliss"
-  timezone         String   @default("America/Argentina/Buenos_Aires")
-  status           String   @default("trialing") // trialing | active | past_due | suspended | cancelled
-  trialEndsAt      DateTime?
-  stripeCustomerId String?
+  id                  Int       @id @default(autoincrement())
+  name                String
+  slug                String    @unique // subdominio, ej: "bliss"
+  timezone            String    @default("America/Argentina/Buenos_Aires")
+  status              String    @default("trialing") // trialing | active | past_due | suspended | cancelled
+  trialEndsAt         DateTime?
+  stripeCustomerId    String?
   // Branding / perfil de empresa
-  companyName        String?
-  companyDescription String?
-  industry           String?
-  companyWebsite     String?
-  logoData           Bytes?
-  logoMimeType       String?
-  bannerData         Bytes?
-  bannerMimeType     String?
+  companyName         String?
+  companyDescription  String?
+  industry            String?
+  companyWebsite      String?
+  logoData            Bytes?
+  logoMimeType        String?
+  bannerData          Bytes?
+  bannerMimeType      String?
   // Feature flags: keys que este workspace optó por desactivar (aunque estén habilitados globalmente o en su lista)
-  disabledFeatureKeys  String @default("[]")
-  monthlyTokenLimit    Int    @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
+  disabledFeatureKeys String    @default("[]")
+  monthlyTokenLimit   Int       @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
   // Identidad de marca
-  brandColors         String @default("[]")  // JSON: [{ hex, name? }]
-  brandFonts          String @default("[]")  // JSON: [{ name, role }] role: heading|body|accent
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  brandColors         String    @default("[]") // JSON: [{ hex, name? }]
+  brandFonts          String    @default("[]") // JSON: [{ name, role }] role: heading|body|accent
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  members          WorkspaceMember[]
-  projects         Project[]
-  userRoles        UserRole[]
-  services         Service[]
-  roleExpectations RoleExpectation[]
-  aiTokenLogs      AiTokenLog[]
-  dailyInsights    DailyInsight[]
-  insightMemories  UserInsightMemory[]
-  notifications    Notification[]
-  workDays         WorkDay[]
-  subscription     Subscription?
-  loginEvents      UserLogin[]
-  feedbacks        Feedback[]
-  invitations      WorkspaceInvitation[]
-  deletionRequest  WorkspaceDeletionRequest?
-  emailLogs            EmailLog[]
-  vacationAdjustments  VacationAdjustment[]
-  vacationRequests     VacationRequest[]
-  geoAudits            GeoAudit[]
-  integrations         ProjectIntegration[]
-  analyticsSnapshots   AnalyticsSnapshot[]
-  analyticsInsights    AnalyticsInsight[]
-  pageSpeedResults     PageSpeedResult[]
-  trackedKeywords      TrackedKeyword[]   @relation("WorkspaceTrackedKeywords")
-  keywordRankings      KeywordRanking[]   @relation("WorkspaceKeywordRankings")
-  instagramSnapshots        InstagramSnapshot[]
-  instagramFollowerLogs     InstagramFollowerLog[]
-  tiktokSnapshots           TikTokSnapshot[]
-  tiktokFollowerLogs        TikTokFollowerLog[]
-  monthlyReports            MonthlyReport[]
-  searchConsoleSnapshots    SearchConsoleSnapshot[]
-  seoAiInsights             SeoAiInsight[]
-  cannibalReports           CannibalReport[]
-  adsSnapshots              AdsSnapshot[]
-  eosData                   EOSData?
-  peopleAnalyzerRatings     PeopleAnalyzerRating[]
-  eosStrikes                EOSStrike[]
-  accountabilityNodes       AccountabilityNode[]
-  scorecardMetrics          ScorecardMetric[]
-  scorecardEntries          ScorecardEntry[]
-  eosProcesses              EOSProcess[]
-  eosProcessSteps           EOSProcessStep[]
-  eosIssues                 EOSIssue[]
-  eosRocks                  EOSRock[]
-  eosTodos                  EOSTodo[]
-  eosMeetings               EOSMeeting[]
-  orgAssessmentRounds       OrgAssessmentRound[]
-  orgAssessmentResponses    OrgAssessmentResponse[]
+  members                WorkspaceMember[]
+  projects               Project[]
+  userRoles              UserRole[]
+  services               Service[]
+  roleExpectations       RoleExpectation[]
+  aiTokenLogs            AiTokenLog[]
+  dailyInsights          DailyInsight[]
+  insightMemories        UserInsightMemory[]
+  notifications          Notification[]
+  workDays               WorkDay[]
+  subscription           Subscription?
+  loginEvents            UserLogin[]
+  feedbacks              Feedback[]
+  invitations            WorkspaceInvitation[]
+  deletionRequest        WorkspaceDeletionRequest?
+  emailLogs              EmailLog[]
+  vacationAdjustments    VacationAdjustment[]
+  vacationRequests       VacationRequest[]
+  geoAudits              GeoAudit[]
+  integrations           ProjectIntegration[]
+  analyticsSnapshots     AnalyticsSnapshot[]
+  analyticsInsights      AnalyticsInsight[]
+  pageSpeedResults       PageSpeedResult[]
+  trackedKeywords        TrackedKeyword[]          @relation("WorkspaceTrackedKeywords")
+  keywordRankings        KeywordRanking[]          @relation("WorkspaceKeywordRankings")
+  instagramSnapshots     InstagramSnapshot[]
+  instagramFollowerLogs  InstagramFollowerLog[]
+  tiktokSnapshots        TikTokSnapshot[]
+  tiktokFollowerLogs     TikTokFollowerLog[]
+  monthlyReports         MonthlyReport[]
+  searchConsoleSnapshots SearchConsoleSnapshot[]
+  seoAiInsights          SeoAiInsight[]
+  cannibalReports        CannibalReport[]
+  adsSnapshots           AdsSnapshot[]
+  eosData                EOSData?
+  peopleAnalyzerRatings  PeopleAnalyzerRating[]
+  eosStrikes             EOSStrike[]
+  accountabilityNodes    AccountabilityNode[]
+  scorecardMetrics       ScorecardMetric[]
+  scorecardEntries       ScorecardEntry[]
+  eosProcesses           EOSProcess[]
+  eosProcessSteps        EOSProcessStep[]
+  eosIssues              EOSIssue[]
+  eosRocks               EOSRock[]
+  eosTodos               EOSTodo[]
+  eosMeetings            EOSMeeting[]
+  orgAssessmentRounds    OrgAssessmentRound[]
+  orgAssessmentResponses OrgAssessmentResponse[]
 
   @@index([slug])
 }
@@ -93,18 +93,18 @@ model WorkspaceMember {
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   user        User      @relation(fields: [userId], references: [id])
 
-  role        String    @default("member")   // "owner" | "admin" | "member"
-  teamRole    String    @default("")          // ej: "DESIGNER", "CM" (referencia a UserRole.name)
-  active      Boolean   @default(true)
-  vacationDays Int      @default(0)
+  role         String  @default("member") // "owner" | "admin" | "member"
+  teamRole     String  @default("") // ej: "DESIGNER", "CM" (referencia a UserRole.name)
+  active       Boolean @default(true)
+  vacationDays Int     @default(0)
 
   // Preferencias IA (por workspace)
-  weeklyEmailEnabled    Boolean @default(true)
-  dailyInsightEnabled   Boolean @default(true)
-  insightMemoryEnabled  Boolean @default(true)
-  taskQualityEnabled    Boolean @default(true)
+  weeklyEmailEnabled   Boolean @default(true)
+  dailyInsightEnabled  Boolean @default(true)
+  insightMemoryEnabled Boolean @default(true)
+  taskQualityEnabled   Boolean @default(true)
 
-  joinedAt    DateTime  @default(now())
+  joinedAt DateTime @default(now())
 
   @@id([workspaceId, userId])
   @@index([workspaceId])
@@ -112,17 +112,17 @@ model WorkspaceMember {
 }
 
 model Subscription {
-  id             Int      @id @default(autoincrement())
-  workspaceId    Int      @unique
-  workspace      Workspace @relation(fields: [workspaceId], references: [id])
-  stripeSubId    String?  @unique
-  planName       String   @default("pro")
-  status         String   // active | past_due | cancelled | trialing
-  seats          Int      @default(0)
-  periodStart    DateTime?
-  periodEnd      DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id          Int       @id @default(autoincrement())
+  workspaceId Int       @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  stripeSubId String?   @unique
+  planName    String    @default("pro")
+  status      String // active | past_due | cancelled | trialing
+  seats       Int       @default(0)
+  periodStart DateTime?
+  periodEnd   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 // ─── USER (global — datos personales, no workspace-specific) ─────────────────
@@ -154,22 +154,22 @@ model User {
   medicalConditions String?
   healthInsurance   String?
   emergencyContact  String?
-  avatar            String   @default("2bee.png")
+  avatar            String    @default("2bee.png")
 
   // Relaciones
-  workspaceMembers      WorkspaceMember[]
-  workDays              WorkDay[]
-  tasks                 Task[]
-  tasksCreated          Task[]         @relation("TaskCreatedBy")
-  taskComments          TaskComment[]
-  dailyInsights         DailyInsight[]
-  insightMemories       UserInsightMemory[]
-  feedbacks             Feedback[]
-  projects              ProjectMember[]
-  notifications         Notification[] @relation("NotificationRecipient")
-  notificationsAsActor  Notification[] @relation("NotificationActor")
-  passwordResetTokens   PasswordResetToken[]
-  loginEvents           UserLogin[]
+  workspaceMembers          WorkspaceMember[]
+  workDays                  WorkDay[]
+  tasks                     Task[]
+  tasksCreated              Task[]                     @relation("TaskCreatedBy")
+  taskComments              TaskComment[]
+  dailyInsights             DailyInsight[]
+  insightMemories           UserInsightMemory[]
+  feedbacks                 Feedback[]
+  projects                  ProjectMember[]
+  notifications             Notification[]             @relation("NotificationRecipient")
+  notificationsAsActor      Notification[]             @relation("NotificationActor")
+  passwordResetTokens       PasswordResetToken[]
+  loginEvents               UserLogin[]
   sentInvitations           WorkspaceInvitation[]      @relation("InvitedByUser")
   deletionRequestsMade      WorkspaceDeletionRequest[] @relation("DeletionRequestedBy")
   deletionRequestsCancelled WorkspaceDeletionRequest[] @relation("DeletionCancelledBy")
@@ -189,16 +189,17 @@ model User {
   ownedTodos                EOSTodo[]                  @relation("TodoOwner")
   orgAssessmentResponses    OrgAssessmentResponse[]
   generatedReports          MonthlyReport[]            @relation("ReportGeneratedBy")
+  platformSettingChanges    PlatformSettingLog[]       @relation("SettingChangedBy")
 }
 
 model UserLogin {
-  id          Int       @id @default(autoincrement())
+  id          Int        @id @default(autoincrement())
   userId      Int
-  user        User      @relation(fields: [userId], references: [id])
+  user        User       @relation(fields: [userId], references: [id])
   workspaceId Int?
   workspace   Workspace? @relation(fields: [workspaceId], references: [id])
-  loginAt     DateTime  @default(now())
-  method      String    // "email" | "google"
+  loginAt     DateTime   @default(now())
+  method      String // "email" | "google"
 
   @@index([userId])
   @@index([workspaceId])
@@ -235,68 +236,68 @@ enum FeedbackType {
 // ─── WORKSPACE-SCOPED: ROLES, PROYECTOS, SERVICIOS ───────────────────────────
 
 model UserRole {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   workspaceId Int
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  name        String   // identificador interno, ej: "DESIGNER"
-  label       String   // nombre para mostrar, ej: "Diseñador"
-  createdAt   DateTime @default(now())
+  name        String // identificador interno, ej: "DESIGNER"
+  label       String // nombre para mostrar, ej: "Diseñador"
+  createdAt   DateTime  @default(now())
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
 }
 
 model Project {
-  id          Int      @id @default(autoincrement())
-  workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  name        String
-  active      Boolean  @default(true)
-  situation        String?
-  timezone         String  @default("America/Argentina/Buenos_Aires")
-  linksEnabled     Boolean @default(true)
-  situationEnabled Boolean @default(true)
-  emailFrom           String?
-  aiWeeklyTokenLimit  Int     @default(500000)
-  websiteUrl          String?
-  connections         String   @default("{}")  // JSON: { instagram, facebook, ... }
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 Int       @id @default(autoincrement())
+  workspaceId        Int
+  workspace          Workspace @relation(fields: [workspaceId], references: [id])
+  name               String
+  active             Boolean   @default(true)
+  situation          String?
+  timezone           String    @default("America/Argentina/Buenos_Aires")
+  linksEnabled       Boolean   @default(true)
+  situationEnabled   Boolean   @default(true)
+  emailFrom          String?
+  aiWeeklyTokenLimit Int       @default(500000)
+  websiteUrl         String?
+  connections        String    @default("{}") // JSON: { instagram, facebook, ... }
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  tasks         Task[]
-  services      ProjectService[]
-  members       ProjectMember[]
-  notifications Notification[]
-  links         ProjectLink[]
-  geoAudits          GeoAudit[]
-  integrations       ProjectIntegration[]
-  analyticsSnapshots AnalyticsSnapshot[]
-  analyticsInsights  AnalyticsInsight[]
-  pageSpeedResults   PageSpeedResult[]
-  trackedKeywords    TrackedKeyword[] @relation("ProjectTrackedKeywords")
-  keywordRankings           KeywordRanking[] @relation("ProjectKeywordRankings")
-  instagramSnapshots        InstagramSnapshot[]
-  instagramFollowerLogs     InstagramFollowerLog[]
-  tiktokSnapshots           TikTokSnapshot[]
-  tiktokFollowerLogs        TikTokFollowerLog[]
-  monthlyReports            MonthlyReport[]
-  searchConsoleSnapshots    SearchConsoleSnapshot[]
-  seoAiInsights             SeoAiInsight[]
-  cannibalReports           CannibalReport[]
-  adsSnapshots              AdsSnapshot[]
+  tasks                  Task[]
+  services               ProjectService[]
+  members                ProjectMember[]
+  notifications          Notification[]
+  links                  ProjectLink[]
+  geoAudits              GeoAudit[]
+  integrations           ProjectIntegration[]
+  analyticsSnapshots     AnalyticsSnapshot[]
+  analyticsInsights      AnalyticsInsight[]
+  pageSpeedResults       PageSpeedResult[]
+  trackedKeywords        TrackedKeyword[]        @relation("ProjectTrackedKeywords")
+  keywordRankings        KeywordRanking[]        @relation("ProjectKeywordRankings")
+  instagramSnapshots     InstagramSnapshot[]
+  instagramFollowerLogs  InstagramFollowerLog[]
+  tiktokSnapshots        TikTokSnapshot[]
+  tiktokFollowerLogs     TikTokFollowerLog[]
+  monthlyReports         MonthlyReport[]
+  searchConsoleSnapshots SearchConsoleSnapshot[]
+  seoAiInsights          SeoAiInsight[]
+  cannibalReports        CannibalReport[]
+  adsSnapshots           AdsSnapshot[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
 }
 
 model Service {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   workspaceId Int
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   name        String
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   projects ProjectService[]
 
@@ -341,7 +342,7 @@ model WorkDay {
   user        User      @relation(fields: [userId], references: [id])
   workspaceId Int
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  date        String    // "YYYY-MM-DD"
+  date        String // "YYYY-MM-DD"
   startedAt   DateTime  @default(now())
   endedAt     DateTime?
   createdAt   DateTime  @default(now())
@@ -363,28 +364,28 @@ enum TaskStatus {
 }
 
 model Task {
-  id          Int        @id @default(autoincrement())
-  workDayId   Int
-  workDay     WorkDay    @relation(fields: [workDayId], references: [id])
-  userId      Int
-  user        User       @relation(fields: [userId], references: [id])
-  createdById Int?
-  createdBy   User?      @relation("TaskCreatedBy", fields: [createdById], references: [id])
-  projectId   Int
-  project     Project    @relation(fields: [projectId], references: [id])
-  description   String
-  status        TaskStatus @default(PENDING)
-  blockedReason String?
-  startedAt     DateTime?
-  pausedAt      DateTime?
-  pausedMinutes   Int        @default(0)
-  completedAt     DateTime?
-  minutesOverride Int?
-  starred              Int        @default(0)
-  isBacklog            Boolean    @default(false)
-  dismissedByCreator   Boolean    @default(false)
-  createdAt            DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id                 Int        @id @default(autoincrement())
+  workDayId          Int
+  workDay            WorkDay    @relation(fields: [workDayId], references: [id])
+  userId             Int
+  user               User       @relation(fields: [userId], references: [id])
+  createdById        Int?
+  createdBy          User?      @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  projectId          Int
+  project            Project    @relation(fields: [projectId], references: [id])
+  description        String
+  status             TaskStatus @default(PENDING)
+  blockedReason      String?
+  startedAt          DateTime?
+  pausedAt           DateTime?
+  pausedMinutes      Int        @default(0)
+  completedAt        DateTime?
+  minutesOverride    Int?
+  starred            Int        @default(0)
+  isBacklog          Boolean    @default(false)
+  dismissedByCreator Boolean    @default(false)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
   notifications Notification[]
   comments      TaskComment[]
@@ -407,16 +408,16 @@ model TaskSession {
 }
 
 model TaskComment {
-  id        Int          @id @default(autoincrement())
+  id        Int           @id @default(autoincrement())
   taskId    Int
-  task      Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task      Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
   userId    Int
-  user      User         @relation(fields: [userId], references: [id])
+  user      User          @relation(fields: [userId], references: [id])
   content   String
   parentId  Int?
-  parent    TaskComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  parent    TaskComment?  @relation("CommentReplies", fields: [parentId], references: [id])
   replies   TaskComment[] @relation("CommentReplies")
-  createdAt DateTime     @default(now())
+  createdAt DateTime      @default(now())
 
   @@index([taskId])
 }
@@ -458,21 +459,21 @@ model Notification {
 // ─── AI: INSIGHTS, MEMORY, TOKENS ────────────────────────────────────────────
 
 model DailyInsight {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   userId      Int
-  user        User     @relation(fields: [userId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
   workspaceId Int
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  date        String   // "YYYY-MM-DD" en timezone del workspace
+  date        String // "YYYY-MM-DD" en timezone del workspace
   titulo      String
   mensaje     String
   sugerencia  String?
   alertaRol   String?
   alertaGTD   String?
-  tono        String   // warning | alert | positive | neutral
-  feedback    String?  // "up" | "down" | null
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  tono        String // warning | alert | positive | neutral
+  feedback    String? // "up" | "down" | null
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@unique([userId, workspaceId, date])
   @@index([userId])
@@ -480,18 +481,18 @@ model DailyInsight {
 }
 
 model UserInsightMemory {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   userId          Int
-  user            User     @relation(fields: [userId], references: [id])
+  user            User      @relation(fields: [userId], references: [id])
   workspaceId     Int
   workspace       Workspace @relation(fields: [workspaceId], references: [id])
-  tendencias      String   @default("")
-  fortalezas      String   @default("")
-  areasDeAtencion String   @default("")
-  estadisticas    Json     @default("{}")
-  weekStart       String   @default("") // YYYY-MM-DD
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  tendencias      String    @default("")
+  fortalezas      String    @default("")
+  areasDeAtencion String    @default("")
+  estadisticas    Json      @default("{}")
+  weekStart       String    @default("") // YYYY-MM-DD
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([userId, workspaceId, weekStart])
   @@index([userId])
@@ -499,14 +500,14 @@ model UserInsightMemory {
 }
 
 model AiTokenLog {
-  id           Int      @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   workspaceId  Int?
   workspace    Workspace? @relation(fields: [workspaceId], references: [id])
-  service      String   // "insight" | "weeklyReport" | "insightMemory"
+  service      String // "insight" | "weeklyReport" | "insightMemory"
   userId       Int?
-  inputTokens  Int      @default(0)
-  outputTokens Int      @default(0)
-  createdAt    DateTime @default(now())
+  inputTokens  Int        @default(0)
+  outputTokens Int        @default(0)
+  createdAt    DateTime   @default(now())
 
   @@index([createdAt])
   @@index([workspaceId])
@@ -515,17 +516,17 @@ model AiTokenLog {
 // ─── ROLES IA ─────────────────────────────────────────────────────────────────
 
 model RoleExpectation {
-  id                          Int      @id @default(autoincrement())
+  id                          Int       @id @default(autoincrement())
   workspaceId                 Int
   workspace                   Workspace @relation(fields: [workspaceId], references: [id])
   roleName                    String
-  description                 String   @default("")
-  expectedResults             Json     @default("[]")
-  operationalResponsibilities Json     @default("[]")
-  recurrentTasks              Json     @default("[]")
-  dependencies                Json     @default("[]")
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  description                 String    @default("")
+  expectedResults             Json      @default("[]")
+  operationalResponsibilities Json      @default("[]")
+  recurrentTasks              Json      @default("[]")
+  dependencies                Json      @default("[]")
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
 
   @@unique([workspaceId, roleName])
   @@index([workspaceId])
@@ -537,9 +538,9 @@ model EmailLog {
   id          Int        @id @default(autoincrement())
   workspaceId Int?
   workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  to          String     // destinatario(s), puede ser comma-separated
+  to          String // destinatario(s), puede ser comma-separated
   subject     String
-  type        String     // passwordReset | welcome | weeklySummary | testSettings | invitation | deletionWarning
+  type        String // passwordReset | welcome | weeklySummary | testSettings | invitation | deletionWarning
   status      String     @default("sent") // sent | failed
   errorMsg    String?
   createdAt   DateTime   @default(now())
@@ -557,7 +558,7 @@ model WorkspaceDeletionRequest {
   workspace     Workspace @relation(fields: [workspaceId], references: [id])
   requestedById Int
   requestedBy   User      @relation("DeletionRequestedBy", fields: [requestedById], references: [id])
-  scheduledAt   DateTime  // requestedAt + 48h
+  scheduledAt   DateTime // requestedAt + 48h
   cancelledAt   DateTime?
   cancelledById Int?
   cancelledBy   User?     @relation("DeletionCancelledBy", fields: [cancelledById], references: [id])
@@ -574,7 +575,7 @@ model WorkspaceInvitation {
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   email       String
   token       String    @unique
-  memberRole  String    @default("member")   // "admin" | "member"
+  memberRole  String    @default("member") // "admin" | "member"
   teamRole    String    @default("")
   invitedById Int
   invitedBy   User      @relation("InvitedByUser", fields: [invitedById], references: [id])
@@ -593,7 +594,7 @@ model VacationAdjustment {
   workspaceId Int
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   userId      Int
-  user        User      @relation("VacationAdjustmentUser",  fields: [userId],  references: [id])
+  user        User      @relation("VacationAdjustmentUser", fields: [userId], references: [id])
   adminId     Int
   admin       User      @relation("VacationAdjustmentAdmin", fields: [adminId], references: [id])
   prevDays    Int
@@ -605,22 +606,22 @@ model VacationAdjustment {
 }
 
 model VacationRequest {
-  id          Int       @id @default(autoincrement())
-  workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  userId      Int
-  user        User      @relation("VacationRequestUser",     fields: [userId],     references: [id])
-  startDate   String    // YYYY-MM-DD
-  endDate     String    // YYYY-MM-DD
-  type        String    // "vacaciones" | "estudio" | "maternidad" | "paternidad" | "enfermedad" | "duelo" | "mudanza" | "otro"
-  observation String?
-  status      String    @default("pending")  // "pending" | "approved" | "rejected"
+  id           Int       @id @default(autoincrement())
+  workspaceId  Int
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+  userId       Int
+  user         User      @relation("VacationRequestUser", fields: [userId], references: [id])
+  startDate    String // YYYY-MM-DD
+  endDate      String // YYYY-MM-DD
+  type         String // "vacaciones" | "estudio" | "maternidad" | "paternidad" | "enfermedad" | "duelo" | "mudanza" | "otro"
+  observation  String?
+  status       String    @default("pending") // "pending" | "approved" | "rejected"
   reviewedById Int?
-  reviewedBy  User?     @relation("VacationRequestReviewer", fields: [reviewedById], references: [id])
-  reviewedAt  DateTime?
-  reviewNote  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  reviewedBy   User?     @relation("VacationRequestReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([workspaceId, userId])
   @@index([workspaceId, status])
@@ -632,9 +633,9 @@ model Announcement {
   id                 Int       @id @default(autoincrement())
   title              String
   body               String
-  type               String    @default("info")   // "info" | "warning" | "maintenance" | "feature"
+  type               String    @default("info") // "info" | "warning" | "maintenance" | "feature"
   targetAll          Boolean   @default(true)
-  targetWorkspaceIds String    @default("[]")      // JSON: [1, 2, 3] — usado cuando targetAll = false
+  targetWorkspaceIds String    @default("[]") // JSON: [1, 2, 3] — usado cuando targetAll = false
   active             Boolean   @default(false)
   startsAt           DateTime?
   endsAt             DateTime?
@@ -649,25 +650,25 @@ model Announcement {
 // ─── MARKETING / GEO ─────────────────────────────────────────────────────────
 
 model GeoAudit {
-  id             Int      @id @default(autoincrement())
-  workspaceId    Int
-  projectId      Int
-  url            String
-  status         String   @default("pending") // pending | running | completed | failed
-  score          Int?
-  citability     Int?
-  brandAuthority Int?
-  eeat           Int?
-  technical      Int?
-  schema         Int?
-  platforms      Int?
-  findings       String   @default("[]")       // JSON: [{severity, component, title, description}]
-  recommendations String  @default("[]")       // JSON: [{priority, action, impact}]
-  rawData        String?
-  errorMsg       String?
-  tokensUsed     Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  workspaceId     Int
+  projectId       Int
+  url             String
+  status          String   @default("pending") // pending | running | completed | failed
+  score           Int?
+  citability      Int?
+  brandAuthority  Int?
+  eeat            Int?
+  technical       Int?
+  schema          Int?
+  platforms       Int?
+  findings        String   @default("[]") // JSON: [{severity, component, title, description}]
+  recommendations String   @default("[]") // JSON: [{priority, action, impact}]
+  rawData         String?
+  errorMsg        String?
+  tokensUsed      Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id])
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -679,14 +680,14 @@ model GeoAudit {
 // ─── FEATURE FLAGS ───────────────────────────────────────────────────────────
 
 model FeatureFlag {
-  id                 Int      @id @default(autoincrement())
-  key                String   @unique   // ej: "vacation_requests"
-  name               String             // nombre legible, ej: "Solicitud de vacaciones"
-  description        String   @default("")
-  enabledGlobally    Boolean  @default(false)
-  enabledWorkspaceIds String  @default("[]") // JSON: [1, 2] — workspaces con acceso cuando !enabledGlobally
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                  Int      @id @default(autoincrement())
+  key                 String   @unique // ej: "vacation_requests"
+  name                String // nombre legible, ej: "Solicitud de vacaciones"
+  description         String   @default("")
+  enabledGlobally     Boolean  @default(false)
+  enabledWorkspaceIds String   @default("[]") // JSON: [1, 2] — workspaces con acceso cuando !enabledGlobally
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@index([key])
 }
@@ -694,21 +695,21 @@ model FeatureFlag {
 // ─── INTEGRACIONES EXTERNAS ──────────────────────────────────────────────────
 
 model ProjectIntegration {
-  id          Int      @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   workspaceId Int
   projectId   Int
-  type        String   // "google_analytics" | "google_ads"
-  status      String   @default("active") // "active" | "error" | "revoked"
+  type        String // "google_analytics" | "google_ads"
+  status      String @default("active") // "active" | "error" | "revoked"
 
-  propertyId   String?  // GA4: "properties/123456789"
-  customerId   String?  // Google Ads: "123-456-7890"
-  country      String   @default("arg") // ISO 3166-1 alpha-3 lowercase (arg, mex, esp…) — país de referencia para keywords
+  propertyId String? // GA4: "properties/123456789"
+  customerId String? // Google Ads: "123-456-7890"
+  country    String  @default("arg") // ISO 3166-1 alpha-3 lowercase (arg, mex, esp…) — país de referencia para keywords
 
   // Tokens cifrados (AES-256-GCM, formato "iv:tag:ciphertext" hex)
   accessToken  String?
   refreshToken String?
   expiresAt    DateTime?
-  scopes       String   @default("")
+  scopes       String    @default("")
 
   connectedById Int?
   connectedAt   DateTime @default(now())
@@ -743,7 +744,7 @@ model Avatar {
 
 model LegalDocument {
   id        Int      @id @default(autoincrement())
-  key       String   @unique  // e.g. "terms_of_service"
+  key       String   @unique // e.g. "terms_of_service"
   title     String
   content   String   @default("")
   updatedAt DateTime @updatedAt
@@ -753,28 +754,28 @@ model LegalDocument {
 // ─── ANALYTICS SNAPSHOTS ──────────────────────────────────────────────────────
 
 model AnalyticsSnapshot {
-  id          Int      @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   workspaceId Int
   projectId   Int
-  month       String   // "2026-04" (YYYY-MM)
+  month       String // "2026-04" (YYYY-MM)
 
-  sessions    Int      @default(0)
-  activeUsers Int      @default(0)
-  newUsers    Int      @default(0)
-  pageviews   Int      @default(0)
-  bounceRate  Float    @default(0)
-  avgDuration Float    @default(0)   // segundos
-  conversions Int      @default(0)
-  topChannels String   @default("[]") // JSON: [{channel, sessions, users}]
-  topPages    String   @default("[]") // JSON: [{path, title, pageviews, sessions}]
-  topSources  String   @default("[]") // JSON: [{source, medium, sessions, pct}]
-  aiTraffic   String   @default("{}") // JSON: { chatgpt, claude, gemini, grok, metaAi, perplexity, copilot, other }
+  sessions    Int    @default(0)
+  activeUsers Int    @default(0)
+  newUsers    Int    @default(0)
+  pageviews   Int    @default(0)
+  bounceRate  Float  @default(0)
+  avgDuration Float  @default(0) // segundos
+  conversions Int    @default(0)
+  topChannels String @default("[]") // JSON: [{channel, sessions, users}]
+  topPages    String @default("[]") // JSON: [{path, title, pageviews, sessions}]
+  topSources  String @default("[]") // JSON: [{source, medium, sessions, pct}]
+  aiTraffic   String @default("{}") // JSON: { chatgpt, claude, gemini, grok, metaAi, perplexity, copilot, other }
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, month])
   @@index([workspaceId])
@@ -782,17 +783,17 @@ model AnalyticsSnapshot {
 }
 
 model AnalyticsInsight {
-  id          Int      @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   workspaceId Int
   projectId   Int
-  month       String   // "2026-04"
+  month       String // "2026-04"
 
   // JSON: { titulo, resumen, tendencias: [{metrica, delta, positivo}], recomendaciones: [string] }
   content     String
   generatedAt DateTime @default(now())
 
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, month])
   @@index([workspaceId])
@@ -802,29 +803,29 @@ model AnalyticsInsight {
 // ─── PAGESPEED RESULTS ────────────────────────────────────────────────────────
 
 model PageSpeedResult {
-  id          Int      @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   workspaceId Int
   projectId   Int
   url         String
-  strategy    String   @default("mobile")  // "mobile" | "desktop"
-  status      String   @default("running") // "running" | "done" | "error"
+  strategy    String @default("mobile") // "mobile" | "desktop"
+  status      String @default("running") // "running" | "done" | "error"
 
-  performanceScore Int?   // 0-100
+  performanceScore Int? // 0-100
 
   // JSON: { lcp, fcp, tbt, cls, si, ttfb } con { displayValue, numericValue, score, rating }
-  metrics      String  @default("{}")
+  metrics String @default("{}")
 
   // JSON: [{ id, title, description, savingsMs, score }]
   opportunities String @default("[]")
 
   // JSON: [{ id, title, description, score }]
-  diagnostics   String @default("[]")
+  diagnostics String @default("[]")
 
-  errorMsg    String?
-  createdAt   DateTime @default(now())
+  errorMsg  String?
+  createdAt DateTime @default(now())
 
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([projectId])
@@ -837,13 +838,13 @@ model TrackedKeyword {
   projectId         Int
   workspaceId       Int
   query             String
-  analysisContent   String?   // JSON output de Claude (cacheado)
+  analysisContent   String? // JSON output de Claude (cacheado)
   analysisUpdatedAt DateTime?
   createdAt         DateTime  @default(now())
 
-  project   Project   @relation("ProjectTrackedKeywords",   fields: [projectId],   references: [id], onDelete: Cascade)
-  workspace Workspace @relation("WorkspaceTrackedKeywords", fields: [workspaceId], references: [id], onDelete: Cascade)
-  rankings  KeywordRanking[]
+  project       Project          @relation("ProjectTrackedKeywords", fields: [projectId], references: [id], onDelete: Cascade)
+  workspace     Workspace        @relation("WorkspaceTrackedKeywords", fields: [workspaceId], references: [id], onDelete: Cascade)
+  rankings      KeywordRanking[]
   serpSnapshots SerpSnapshot[]
 
   @@unique([projectId, query])
@@ -855,7 +856,7 @@ model KeywordRanking {
   trackedKeywordId Int
   projectId        Int
   workspaceId      Int
-  month            String   // "2026-04"
+  month            String // "2026-04"
   clicks           Int      @default(0)
   impressions      Int      @default(0)
   ctr              Float    @default(0)
@@ -863,7 +864,7 @@ model KeywordRanking {
   createdAt        DateTime @default(now())
 
   trackedKeyword TrackedKeyword @relation(fields: [trackedKeywordId], references: [id], onDelete: Cascade)
-  project        Project        @relation("ProjectKeywordRankings",   fields: [projectId],   references: [id], onDelete: Cascade)
+  project        Project        @relation("ProjectKeywordRankings", fields: [projectId], references: [id], onDelete: Cascade)
   workspace      Workspace      @relation("WorkspaceKeywordRankings", fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([trackedKeywordId, month])
@@ -879,17 +880,17 @@ model SerpSnapshot {
   workspaceId      Int
   capturedAt       DateTime @default(now())
 
-  position         Int?     // null = no aparece en top 100
-  resultUrl        String?  // URL exacta que rankea
+  position  Int? // null = no aparece en top 100
+  resultUrl String? // URL exacta que rankea
 
   // JSON serializado (arrays)
-  serpFeatures     String   @default("[]") // ["featured_snippet", "ai_overview", ...]
-  competitors      String   @default("[]") // [{ position, domain, url, title }]
-  peopleAlsoAsk    String   @default("[]") // [string]
-  relatedSearches  String   @default("[]") // [string]
+  serpFeatures    String @default("[]") // ["featured_snippet", "ai_overview", ...]
+  competitors     String @default("[]") // [{ position, domain, url, title }]
+  peopleAlsoAsk   String @default("[]") // [string]
+  relatedSearches String @default("[]") // [string]
 
-  country          String   @default("ar") // código SerpAPI (gl)
-  totalResults     String?
+  country      String  @default("ar") // código SerpAPI (gl)
+  totalResults String?
 
   trackedKeyword TrackedKeyword @relation(fields: [trackedKeywordId], references: [id], onDelete: Cascade)
 
@@ -903,16 +904,16 @@ model InstagramSnapshot {
   id             Int      @id @default(autoincrement())
   projectId      Int
   workspaceId    Int
-  month          String   // "YYYY-MM"
+  month          String // "YYYY-MM"
   followersCount Int      @default(0)
   mediaCount     Int?
   avgLikes       Float?
   avgComments    Float?
   engagementRate Float?
-  postsCount     Int?     // publicaciones nuevas en ese mes
+  postsCount     Int? // publicaciones nuevas en ese mes
   createdAt      DateTime @default(now())
 
-  project   Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, month])
@@ -925,11 +926,11 @@ model InstagramFollowerLog {
   id             Int      @id @default(autoincrement())
   projectId      Int
   workspaceId    Int
-  date           String   // "YYYY-MM-DD" en horario ART
+  date           String // "YYYY-MM-DD" en horario ART
   followersCount Int
   createdAt      DateTime @default(now())
 
-  project   Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, date])
@@ -942,10 +943,10 @@ model TikTokSnapshot {
   id             Int      @id @default(autoincrement())
   projectId      Int
   workspaceId    Int
-  month          String   // "YYYY-MM"
+  month          String // "YYYY-MM"
   followersCount Int      @default(0)
   videoCount     Int?
-  likesCount     Float?   // total likes acumulados de la cuenta
+  likesCount     Float? // total likes acumulados de la cuenta
   avgViews       Float?
   avgLikes       Float?
   avgComments    Float?
@@ -954,7 +955,7 @@ model TikTokSnapshot {
   engagementRate Float?
   createdAt      DateTime @default(now())
 
-  project   Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, month])
@@ -967,11 +968,11 @@ model TikTokFollowerLog {
   id             Int      @id @default(autoincrement())
   projectId      Int
   workspaceId    Int
-  date           String   // "YYYY-MM-DD" en horario ART
+  date           String // "YYYY-MM-DD" en horario ART
   followersCount Int
   createdAt      DateTime @default(now())
 
-  project   Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, date])
@@ -981,26 +982,26 @@ model TikTokFollowerLog {
 // ─── ADS SNAPSHOTS ───────────────────────────────────────────────────────────
 
 model AdsSnapshot {
-  id          Int      @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   workspaceId Int
   projectId   Int
-  month       String   // "YYYY-MM"
-  type        String   // "meta_ads" | "google_ads"
+  month       String // "YYYY-MM"
+  type        String // "meta_ads" | "google_ads"
 
   // Métricas comunes
-  spend       Float    @default(0)   // gasto total en USD
-  impressions Int      @default(0)
-  clicks      Int      @default(0)
-  ctr         Float    @default(0)   // porcentaje (ej: 2.5 = 2.5%)
+  spend       Float @default(0) // gasto total en USD
+  impressions Int   @default(0)
+  clicks      Int   @default(0)
+  ctr         Float @default(0) // porcentaje (ej: 2.5 = 2.5%)
 
   // Meta Ads específico
-  reach       Int?                   // alcance único
-  cpm         Float?                 // costo por 1000 impresiones
-  cpc         Float?                 // costo por click
+  reach Int? // alcance único
+  cpm   Float? // costo por 1000 impresiones
+  cpc   Float? // costo por click
 
   // Google Ads específico
-  conversions Float?                 // conversiones totales
-  avgCpc      Float?                 // CPC promedio
+  conversions Float? // conversiones totales
+  avgCpc      Float? // CPC promedio
 
   // Top campañas (JSON): [{ id, name, spend, impressions, clicks, ctr }]
   topCampaigns String @default("[]")
@@ -1013,7 +1014,7 @@ model AdsSnapshot {
   updatedAt DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project   Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, month, type])
   @@index([workspaceId])
@@ -1023,23 +1024,23 @@ model AdsSnapshot {
 // ─── MONTHLY REPORT ──────────────────────────────────────────────────────────
 
 model MonthlyReport {
-  id              Int      @id @default(autoincrement())
-  projectId       Int
-  workspaceId     Int
-  month           String   // "YYYY-MM"
-  token           String   @unique
-  objectives      String   @default("{}")  // JSON: { sessions, followersIg, followersTk, ... }
-  notes           String?
-  analysis        String?  // JSON: { resumen, highlights, alertas, nextSteps } — cacheado, no se regenera
-  dataCache       String?  // JSON: secciones agregadas (analytics, ads, instagram, seo, etc.) — caché para evitar llamadas repetidas a APIs
-  bannerData      Bytes?   // Imagen de portada del informe (PNG/JPG/WebP, max 5MB)
-  bannerMimeType  String?  // ej: "image/jpeg"
-  generatedById   Int?     // usuario que generó o regeneró el informe por última vez
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  projectId      Int
+  workspaceId    Int
+  month          String // "YYYY-MM"
+  token          String   @unique
+  objectives     String   @default("{}") // JSON: { sessions, followersIg, followersTk, ... }
+  notes          String?
+  analysis       String? // JSON: { resumen, highlights, alertas, nextSteps } — cacheado, no se regenera
+  dataCache      String? // JSON: secciones agregadas (analytics, ads, instagram, seo, etc.) — caché para evitar llamadas repetidas a APIs
+  bannerData     Bytes? // Imagen de portada del informe (PNG/JPG/WebP, max 5MB)
+  bannerMimeType String? // ej: "image/jpeg"
+  generatedById  Int? // usuario que generó o regeneró el informe por última vez
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  project     Project   @relation(fields: [projectId],     references: [id], onDelete: Cascade)
-  workspace   Workspace @relation(fields: [workspaceId],   references: [id], onDelete: Cascade)
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   generatedBy User?     @relation("ReportGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
 
   @@unique([projectId, month])
@@ -1049,25 +1050,25 @@ model MonthlyReport {
 // ─── SEO SNAPSHOTS ────────────────────────────────────────────────────────────
 
 model SearchConsoleSnapshot {
-  id          Int      @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   projectId   Int
   workspaceId Int
-  month       String   // "YYYY-MM"
+  month       String // "YYYY-MM"
 
-  clicks      Int      @default(0)
-  impressions Int      @default(0)
-  ctr         Float    @default(0)
-  avgPosition Float    @default(0)
-  devices     String   @default("{}") // JSON: {DESKTOP:{clicks,impressions}, MOBILE:{...}, TABLET:{...}}
-  countries   String   @default("[]") // JSON: [{country, clicks, impressions}]
-  topQueries  String   @default("[]") // JSON: [{query, clicks, impressions, ctr, position}]
-  topPages    String   @default("[]") // JSON: [{page, clicks, impressions, ctr, position}]
+  clicks      Int    @default(0)
+  impressions Int    @default(0)
+  ctr         Float  @default(0)
+  avgPosition Float  @default(0)
+  devices     String @default("{}") // JSON: {DESKTOP:{clicks,impressions}, MOBILE:{...}, TABLET:{...}}
+  countries   String @default("[]") // JSON: [{country, clicks, impressions}]
+  topQueries  String @default("[]") // JSON: [{query, clicks, impressions, ctr, position}]
+  topPages    String @default("[]") // JSON: [{page, clicks, impressions, ctr, position}]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, month])
   @@index([workspaceId])
@@ -1082,8 +1083,8 @@ model SeoAiInsight {
   content     String
   generatedAt DateTime @default(now())
 
-  project     Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
 }
@@ -1091,28 +1092,28 @@ model SeoAiInsight {
 // ─── CANIBALIZACIÓN SEO ──────────────────────────────────────────────────────
 
 model CannibalReport {
-  id              Int      @id @default(autoincrement())
-  projectId       Int
-  workspaceId     Int
-  status          String   @default("pending") // pending | running | completed | failed
-  dateRange       String   @default("90d")     // "30d" | "90d" | "180d"
+  id          Int    @id @default(autoincrement())
+  projectId   Int
+  workspaceId Int
+  status      String @default("pending") // pending | running | completed | failed
+  dateRange   String @default("90d") // "30d" | "90d" | "180d"
 
-  totalConflicts  Int?
-  criticalCount   Int?
-  warningCount    Int?
-  lowCount        Int?
-  trafficAtRisk   Int?     // impresiones en riesgo (suma de conflictos críticos + warning)
+  totalConflicts Int?
+  criticalCount  Int?
+  warningCount   Int?
+  lowCount       Int?
+  trafficAtRisk  Int? // impresiones en riesgo (suma de conflictos críticos + warning)
 
   // JSON: [{ query, urls:[{url,clicks,impressions,ctr,position}], severity, severityScore,
   //          totalImpressions, totalClicks, positionSpread, recommendation }]
-  conflicts       String   @default("[]")
+  conflicts String @default("[]")
 
-  resumenGeneral  String?  // análisis IA resumido
-  errorMsg        String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  resumenGeneral String? // análisis IA resumido
+  errorMsg       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  project   Project   @relation(fields: [projectId],   references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([projectId, workspaceId])
@@ -1122,35 +1123,35 @@ model CannibalReport {
 // ─── EOS (Entrepreneurial Operating System) ──────────────────────────────────
 
 model EOSData {
-  id          Int      @id @default(autoincrement())
-  workspaceId Int      @unique
-  coreValues  String   @default("[]")   // JSON: string[]
+  id          Int     @id @default(autoincrement())
+  workspaceId Int     @unique
+  coreValues  String  @default("[]") // JSON: string[]
   // Visión — Enfoque Medular
-  purpose       String?                 // Propósito / Causa / Pasión
-  niche         String?                 // Nicho de la organización
+  purpose     String? // Propósito / Causa / Pasión
+  niche       String? // Nicho de la organización
 
   // Visión — Meta a 10 años
   tenYearTarget String?
 
   // Visión — Estrategia de Marketing
-  marketingTarget    String?            // Cliente ideal / La Lista
-  marketingUniques   String   @default("[]")  // JSON: string[] — 3 diferenciadores
-  marketingProcess   String?            // Proceso probado
-  marketingGuarantee String?            // Garantía
+  marketingTarget    String? // Cliente ideal / La Lista
+  marketingUniques   String  @default("[]") // JSON: string[] — 3 diferenciadores
+  marketingProcess   String? // Proceso probado
+  marketingGuarantee String? // Garantía
 
   // Visión — Imagen a 3 años
   threeYearRevenue     String?
   threeYearProfit      String?
   threeYearHeadcount   String?
   threeYearDescription String?
-  threeYearGoals       String   @default("[]")  // JSON: string[]
+  threeYearGoals       String  @default("[]") // JSON: string[]
 
   // Visión — Plan a 1 año
   oneYearRevenue String?
   oneYearProfit  String?
-  oneYearGoals   String   @default("[]")  // JSON: string[] (Rocks)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  oneYearGoals   String   @default("[]") // JSON: string[] (Rocks)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -1163,8 +1164,8 @@ model PeopleAnalyzerRating {
   id          Int      @id @default(autoincrement())
   workspaceId Int
   userId      Int
-  valueKey    String   // texto del valor medular o 'gwc_get'/'gwc_want'/'gwc_capacity'
-  rating      String   // '+' | '+/-' | '-'
+  valueKey    String // texto del valor medular o 'gwc_get'/'gwc_want'/'gwc_capacity'
+  rating      String // '+' | '+/-' | '-'
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1180,14 +1181,14 @@ model EOSStrike {
   id           Int      @id @default(autoincrement())
   workspaceId  Int
   userId       Int
-  strikeNumber Int      // 1, 2 o 3 (asignado automáticamente)
+  strikeNumber Int // 1, 2 o 3 (asignado automáticamente)
   reason       String
   createdById  Int
   createdAt    DateTime @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId],  references: [id], onDelete: Cascade)
-  user      User      @relation("StrikedPerson", fields: [userId],       references: [id], onDelete: Cascade)
-  createdBy User      @relation("StrikeCreator", fields: [createdById],  references: [id])
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation("StrikedPerson", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("StrikeCreator", fields: [createdById], references: [id])
 
   @@index([workspaceId])
   @@index([userId])
@@ -1199,14 +1200,14 @@ model AccountabilityNode {
   parentId         Int?
   seat             String
   userId           Int?
-  accountabilities String   @default("[]")  // JSON: string[]
+  accountabilities String   @default("[]") // JSON: string[]
   order            Int      @default(0)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User?               @relation("SeatHolder", fields: [userId],   references: [id], onDelete: SetNull)
-  parent    AccountabilityNode? @relation("NodeHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?                @relation("SeatHolder", fields: [userId], references: [id], onDelete: SetNull)
+  parent    AccountabilityNode?  @relation("NodeHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children  AccountabilityNode[] @relation("NodeHierarchy")
 
   @@index([workspaceId])
@@ -1216,16 +1217,16 @@ model AccountabilityNode {
 // ─── EOS SCORECARD ────────────────────────────────────────────────────────────
 
 model ScorecardMetric {
-  id          Int              @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   workspaceId Int
   name        String
   ownerId     Int?
   goal        Float?
   unit        String?
-  frequency   String           @default("weekly")   // 'weekly' | 'monthly'
-  order       Int              @default(0)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  frequency   String   @default("weekly") // 'weekly' | 'monthly'
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   owner     User?            @relation("MetricOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -1235,15 +1236,15 @@ model ScorecardMetric {
 }
 
 model ScorecardEntry {
-  id          Int             @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   metricId    Int
   workspaceId Int
-  period      String          // 'YYYY-Www' semanal | 'YYYY-MM' mensual
+  period      String // 'YYYY-Www' semanal | 'YYYY-MM' mensual
   value       Float?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  metric    ScorecardMetric @relation(fields: [metricId],    references: [id], onDelete: Cascade)
+  metric    ScorecardMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
   workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([metricId, period])
@@ -1254,15 +1255,15 @@ model ScorecardEntry {
 // ─── EOS PROCESOS ─────────────────────────────────────────────────────────────
 
 model EOSProcess {
-  id          Int              @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   workspaceId Int
   name        String
-  ownerRole   String?                                     // nombre del rol responsable (referencia a UserRole.name)
-  status      String           @default("not_started")   // 'not_started' | 'documented' | 'followed'
+  ownerRole   String? // nombre del rol responsable (referencia a UserRole.name)
+  status      String   @default("not_started") // 'not_started' | 'documented' | 'followed'
   description String?
-  order       Int              @default(0)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   steps     EOSProcessStep[]
@@ -1271,16 +1272,16 @@ model EOSProcess {
 }
 
 model EOSProcessStep {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   processId   Int
   workspaceId Int
   title       String
   description String?
-  order       Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  process   EOSProcess @relation(fields: [processId],   references: [id], onDelete: Cascade)
+  process   EOSProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
   workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([processId])
@@ -1294,35 +1295,35 @@ model EOSIssue {
   description String?
   ownerId     Int?
   createdById Int?
-  type        String    @default("weekly")   // 'weekly' | 'quarterly'
-  status      String    @default("open")     // 'open' | 'solved'
-  priority    String    @default("medium")   // 'high' | 'medium' | 'low'
+  type        String    @default("weekly") // 'weekly' | 'quarterly'
+  status      String    @default("open") // 'open' | 'solved'
+  priority    String    @default("medium") // 'high' | 'medium' | 'low'
   notes       String?
   solvedAt    DateTime?
   order       Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  owner       User?     @relation("IssueOwner",     fields: [ownerId],     references: [id], onDelete: SetNull)
-  createdBy   User?     @relation("IssueCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner     User?     @relation("IssueOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy User?     @relation("IssueCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([type, status])
 }
 
 model EOSRock {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   workspaceId Int
   title       String
   description String?
   ownerId     Int?
-  quarter     String    // "2026-Q2"
-  status      String    @default("not_started")  // not_started | on_track | off_track | complete
+  quarter     String // "2026-Q2"
+  status      String   @default("not_started") // not_started | on_track | off_track | complete
   notes       String?
-  order       Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   owner     User?     @relation("RockOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -1336,7 +1337,7 @@ model EOSTodo {
   workspaceId Int
   title       String
   ownerId     Int?
-  week        String    // "2026-W18" ISO
+  week        String // "2026-W18" ISO
   done        Boolean   @default(false)
   completedAt DateTime?
   order       Int       @default(0)
@@ -1350,14 +1351,14 @@ model EOSTodo {
 }
 
 model EOSMeeting {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   workspaceId Int
-  week        String    // "2026-W18"
-  date        String?   // "2026-05-06"
-  rating      Int?      // 1-10
+  week        String // "2026-W18"
+  date        String? // "2026-05-06"
+  rating      Int? // 1-10
   notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -1368,8 +1369,8 @@ model EOSMeeting {
 model OrgAssessmentRound {
   id          Int       @id @default(autoincrement())
   workspaceId Int
-  status      String    @default("open")  // open | closed
-  resultData  String?   // JSON: { scores, categoryAverages, totalAverage, analysis, respondentCount }
+  status      String    @default("open") // open | closed
+  resultData  String? // JSON: { scores, categoryAverages, totalAverage, analysis, respondentCount }
   closedAt    DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1385,7 +1386,7 @@ model OrgAssessmentResponse {
   roundId     Int
   workspaceId Int
   userId      Int
-  answers     String   @default("[]")  // JSON: [{questionId, score}]
+  answers     String   @default("[]") // JSON: [{questionId, score}]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1397,4 +1398,27 @@ model OrgAssessmentResponse {
   @@index([roundId])
   @@index([workspaceId])
   @@index([userId])
+}
+
+// ─── CONFIGURACIÓN GLOBAL DE LA PLATAFORMA ────────────────────────────────────
+
+model PlatformSetting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       Json
+  description String   @default("")
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+model PlatformSettingLog {
+  id          Int      @id @default(autoincrement())
+  settingKey  String
+  oldValue    Json?
+  newValue    Json
+  changedById Int
+  changedBy   User     @relation("SettingChangedBy", fields: [changedById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([settingKey, createdAt])
 }

@@ -16,6 +16,7 @@ if (missing.length) {
 const app = require('./app')
 const prisma = require('./lib/prisma')
 const { FEATURE_FLAGS } = require('./config/featureFlags')
+const { PLATFORM_SETTINGS } = require('./config/platformSettings')
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, async () => {
@@ -29,6 +30,17 @@ app.listen(PORT, async () => {
     }).catch(err => console.error(`[FeatureFlags] Error sync '${key}':`, err.message))
   }
   console.log(`[FeatureFlags] ${FEATURE_FLAGS.length} flag(s) sincronizado(s).`)
+
+  // Sincronizar catálogo de platform settings — solo CREA si no existe.
+  // Nunca pisar `value` en update: si el SuperAdmin cambió un valor, no queremos resetearlo al reiniciar.
+  for (const setting of PLATFORM_SETTINGS) {
+    await prisma.platformSetting.upsert({
+      where:  { key: setting.key },
+      create: { key: setting.key, value: { value: setting.default }, description: setting.help },
+      update: { description: setting.help },
+    }).catch(err => console.error(`[PlatformSettings] Error sync '${setting.key}':`, err.message))
+  }
+  console.log(`[PlatformSettings] ${PLATFORM_SETTINGS.length} setting(s) sincronizado(s).`)
 })
 
 const cron = require('node-cron')
@@ -126,50 +138,13 @@ cron.schedule('30 6 * * 1', async () => {
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: limpieza semanal de tablas de crecimiento ilimitado — domingos 03:00 hora Buenos Aires
+const { runWeeklyCleanup } = require('./services/cleanup.service')
 cron.schedule('0 3 * * 0', async () => {
   try {
-    const prisma = require('./lib/prisma')
-    const now    = new Date()
-    const days   = d => new Date(now - d * 24 * 60 * 60 * 1000)
-
-    // Notificaciones: leídas >30d, no leídas >90d
-    const { count: notifCount } = await prisma.notification.deleteMany({
-      where: {
-        OR: [
-          { read: true,  createdAt: { lt: days(30)  } },
-          { read: false, createdAt: { lt: days(90)  } },
-        ],
-      },
-    })
-
-    // Logs de tokens IA: >90d (solo son estadísticas históricas)
-    const { count: tokenCount } = await prisma.aiTokenLog.deleteMany({
-      where: { createdAt: { lt: days(90) } },
-    })
-
-    // Historial de logins: >180d
-    const { count: loginCount } = await prisma.userLogin.deleteMany({
-      where: { loginAt: { lt: days(180) } },
-    })
-
-    // Insights diarios: >365d (se usan para contexto de IA hasta hace ~30d, los viejos no sirven)
-    const { count: insightCount } = await prisma.dailyInsight.deleteMany({
-      where: { createdAt: { lt: days(365) } },
-    })
-
-    // Email logs: >180d
-    const { count: emailCount } = await prisma.emailLog.deleteMany({
-      where: { createdAt: { lt: days(180) } },
-    })
-
-    const totals = [
-      notifCount  && `${notifCount} notif.`,
-      tokenCount  && `${tokenCount} token logs`,
-      loginCount  && `${loginCount} logins`,
-      insightCount && `${insightCount} insights`,
-      emailCount  && `${emailCount} email logs`,
-    ].filter(Boolean)
-
+    const result = await runWeeklyCleanup()
+    const totals = Object.entries(result)
+      .filter(([, count]) => count > 0)
+      .map(([table, count]) => `${count} ${table}`)
     console.log(totals.length
       ? `[WeeklyCleanup] Eliminados: ${totals.join(', ')}`
       : '[WeeklyCleanup] Nada que limpiar.'

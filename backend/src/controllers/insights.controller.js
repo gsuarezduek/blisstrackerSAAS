@@ -6,7 +6,7 @@ const { parseAIJson } = require('../utils/parseAIJson')
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const AI_TIMEOUT_MS = 20000
 const { logTokens } = require('../lib/logTokens')
-const COOLDOWN_MS = 60 * 60 * 1000
+const { getSetting } = require('../lib/platformSettings')
 
 function fmtMins(m) {
   if (m < 60) return `${m}m`
@@ -407,9 +407,10 @@ async function refreshDailyInsight(req, res, next) {
     })
 
     if (existing) {
+      const cooldownMs = (await getSetting('aiCooldownMinutes')) * 60 * 1000
       const age = Date.now() - new Date(existing.updatedAt).getTime()
-      if (age < COOLDOWN_MS) {
-        const waitMins = Math.ceil((COOLDOWN_MS - age) / 60000)
+      if (age < cooldownMs) {
+        const waitMins = Math.ceil((cooldownMs - age) / 60000)
         return res.status(429).json({
           error: `Podés regenerar en ${waitMins} minuto${waitMins !== 1 ? 's' : ''}`,
           waitMins,

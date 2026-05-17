@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const jwt = require('jsonwebtoken')
 const stripe = require('../lib/stripe')
+const { getSettings } = require('../lib/platformSettings')
 
 /**
  * GET /api/superadmin/workspaces
@@ -295,21 +296,22 @@ async function listEmailLogs(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Pricing por volumen — debe coincidir con lo configurado en Stripe
-const PRICING_TIERS = [
-  { upTo: 19, pricePerSeat: 3 },   // 1–19 seats: $3/seat
-  { upTo: Infinity, pricePerSeat: 2 }, // 20+ seats: $2/seat
-]
+// Pricing — funciones puras. Los tiers vienen de PlatformSetting 'pricingTiers'.
+// Pre-cargar al inicio del handler para evitar contagio async dentro de loops.
+function findTier(seats, tiers) {
+  return tiers.find(t => t.upTo == null || seats <= t.upTo) ?? tiers[tiers.length - 1]
+}
 
-function calcMrr(seats) {
-  if (seats <= 0) return 0
-  const tier = PRICING_TIERS.find(t => seats <= t.upTo)
+function calcMrr(seats, tiers) {
+  if (seats <= 0 || !tiers?.length) return 0
+  const tier = findTier(seats, tiers)
   return seats * tier.pricePerSeat
 }
 
-function priceLabel(seats) {
-  const tier = PRICING_TIERS.find(t => seats <= t.upTo)
-  return tier ? `$${tier.pricePerSeat}` : `$${PRICING_TIERS.at(-1).pricePerSeat}`
+function priceLabel(seats, tiers) {
+  if (!tiers?.length) return null
+  const tier = findTier(seats, tiers)
+  return tier ? `$${tier.pricePerSeat}` : null
 }
 
 /**
@@ -318,6 +320,10 @@ function priceLabel(seats) {
  */
 async function getBillingOverview(req, res, next) {
   try {
+    // Pre-cargar settings necesarios — calc functions quedan puras y sync
+    const settings = await getSettings(['pricingTiers', 'trialingSoonDays'])
+    const pricingTiers = settings.pricingTiers
+
     const workspaces = await prisma.workspace.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -331,7 +337,7 @@ async function getBillingOverview(req, res, next) {
     const rows = workspaces.map(w => {
       const seats = w._count.members
       const isActive = w.status === 'active'
-      const mrr = isActive ? calcMrr(seats) : 0
+      const mrr = isActive ? calcMrr(seats, pricingTiers) : 0
 
       let trialDaysLeft = null
       if (w.status === 'trialing' && w.trialEndsAt) {
@@ -354,21 +360,18 @@ async function getBillingOverview(req, res, next) {
           planName:    w.subscription.planName,
         } : null,
         mrr,
-      pricePerSeat: isActive ? priceLabel(seats) : null,
+        pricePerSeat: isActive ? priceLabel(seats, pricingTiers) : null,
       }
     })
 
     const activeRows   = rows.filter(w => w.status === 'active')
     const mrr          = activeRows.reduce((sum, w) => sum + w.mrr, 0)
-    const trialingSoon = rows.filter(w => w.status === 'trialing' && w.trialDaysLeft != null && w.trialDaysLeft <= 7)
+    const trialingSoon = rows.filter(w => w.status === 'trialing' && w.trialDaysLeft != null && w.trialDaysLeft <= settings.trialingSoonDays)
 
     res.json({
       mrr,
       arr:          mrr * 12,
-      pricingTiers: PRICING_TIERS.map(t => ({
-        upTo:         t.upTo === Infinity ? null : t.upTo,
-        pricePerSeat: t.pricePerSeat,
-      })),
+      pricingTiers,
       activeCount:     rows.filter(w => w.status === 'active').length,
       trialingCount:   rows.filter(w => w.status === 'trialing').length,
       pastDueCount:    rows.filter(w => w.status === 'past_due').length,
@@ -434,13 +437,10 @@ async function listPayments(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Pricing de Claude Haiku (modelo usado para todos los servicios de IA)
-const HAIKU_INPUT_COST_PER_1M  = 0.80   // USD por 1M input tokens
-const HAIKU_OUTPUT_COST_PER_1M = 4.00   // USD por 1M output tokens
-
-function calcTokenCost(inputTokens, outputTokens) {
-  return (inputTokens / 1_000_000) * HAIKU_INPUT_COST_PER_1M
-       + (outputTokens / 1_000_000) * HAIKU_OUTPUT_COST_PER_1M
+// Pricing de Claude Haiku — funciones puras; los costos vienen de PlatformSetting.
+function calcTokenCost(inputTokens, outputTokens, costs) {
+  return (inputTokens / 1_000_000) * costs.haikuInputCostPer1M
+       + (outputTokens / 1_000_000) * costs.haikuOutputCostPer1M
 }
 
 /**
@@ -460,6 +460,8 @@ async function getAiTokenStats(req, res, next) {
       const from = new Date(); from.setDate(from.getDate() - 7)
       dateFilter = { createdAt: { gte: from } }
     }
+
+    const costs = await getSettings(['haikuInputCostPer1M', 'haikuOutputCostPer1M'])
 
     const [globalByService, workspaces, byWorkspaceAndService, dailySeries] = await Promise.all([
       // Totales globales agrupados por servicio
@@ -502,7 +504,7 @@ async function getAiTokenStats(req, res, next) {
       inputTokens:   r._sum.inputTokens  || 0,
       outputTokens:  r._sum.outputTokens || 0,
       total:         (r._sum.inputTokens || 0) + (r._sum.outputTokens || 0),
-      estimatedCost: calcTokenCost(r._sum.inputTokens || 0, r._sum.outputTokens || 0),
+      estimatedCost: calcTokenCost(r._sum.inputTokens || 0, r._sum.outputTokens || 0, costs),
     }))
 
     // Agrupar por workspace
@@ -527,13 +529,13 @@ async function getAiTokenStats(req, res, next) {
       byWorkspaceMap[wid].inputTokens  += inp
       byWorkspaceMap[wid].outputTokens += out
       byWorkspaceMap[wid].total        += inp + out
-      byWorkspaceMap[wid].estimatedCost += calcTokenCost(inp, out)
+      byWorkspaceMap[wid].estimatedCost += calcTokenCost(inp, out, costs)
       byWorkspaceMap[wid].byService.push({
         service:       row.service,
         inputTokens:   inp,
         outputTokens:  out,
         total:         inp + out,
-        estimatedCost: calcTokenCost(inp, out),
+        estimatedCost: calcTokenCost(inp, out, costs),
       })
     }
 
@@ -546,7 +548,7 @@ async function getAiTokenStats(req, res, next) {
       totalInputTokens:  totalInput,
       totalOutputTokens: totalOutput,
       totalTokens:       totalInput + totalOutput,
-      estimatedCostUsd:  calcTokenCost(totalInput, totalOutput),
+      estimatedCostUsd:  calcTokenCost(totalInput, totalOutput, costs),
       byService,
       byWorkspace,
     })
