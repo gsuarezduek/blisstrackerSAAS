@@ -1,6 +1,13 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
+import { Helmet } from 'react-helmet-async'
 import BlissLogo from '../components/BlissLogo'
+import { trackEvent } from '../lib/analytics'
+import TrustedByBar from '../components/landing/TrustedByBar'
+import SegmentCards from '../components/landing/SegmentCards'
+import ComparisonTable from '../components/landing/ComparisonTable'
+import TestimonialsSection from '../components/landing/TestimonialsSection'
+import FounderBio from '../components/landing/FounderBio'
 
 // ─── App Mockup ───────────────────────────────────────────────────────────────
 
@@ -200,31 +207,108 @@ export default function Landing() {
     },
   ]
 
-  const faqs = [
+  const faqGroups = [
     {
-      q: '¿Es gratis para siempre hasta 3 usuarios?',
-      a: 'Sí. Podés usar BlissTracker sin costo con hasta 3 usuarios, sin límite de tiempo y sin tarjeta de crédito.',
+      group: 'Producto',
+      items: [
+        { q: '¿Cómo se compara con Asana, Notion o SEMrush?',
+          a: 'Asana y Notion son para organizar tareas; SEMrush es para SEO suelto. BlissTracker integra ambos lados — ejecución del equipo + toolkit de marketing — más reportes con URL pública para clientes. Es un reemplazo para agencias, no un complemento.' },
+        { q: '¿Cómo funciona el coach de IA?',
+          a: 'Cada mañana, Claude Haiku analiza tus tareas pendientes, historial reciente y expectativas de rol para sugerirte prioridades. No es un chat genérico: aprende tus patrones semanales y los aplica al contexto del día.' },
+        { q: '¿Qué incluye el toolkit de marketing?',
+          a: 'GEO Audit (AI Overviews + ChatGPT + Perplexity), SEO con Google Search Console, keyword tracking + SERP snapshots, Meta Ads, Google Ads, Instagram, TikTok, PageSpeed, canibalización SEO, y reportes mensuales con URL pública.' },
+        { q: '¿Puedo manejar múltiples clientes y proyectos?',
+          a: 'Sí, ilimitados. Cada proyecto tiene su equipo, sus integraciones (GA4, Search Console, Ads) y sus informes. Las URL públicas de cliente son por proyecto.' },
+      ],
     },
     {
-      q: '¿Cómo funciona el coach de IA?',
-      a: 'Cada mañana, el coach analiza tus tareas pendientes, tu historial de trabajo y tu rol para sugerirte en qué enfocarte primero. No es un chat genérico: conoce tu contexto real y aprende semana a semana.',
+      group: 'Pricing y trial',
+      items: [
+        { q: '¿Es gratis para siempre hasta 3 usuarios?',
+          a: 'Sí. Hasta 3 usuarios, sin límite de tiempo y sin tarjeta de crédito. Acceso al core del producto: tareas, coach IA, resúmenes semanales.' },
+        { q: '¿Qué pasa cuando termina el trial de 14 días?',
+          a: 'Si tenés hasta 3 usuarios, seguís en Gratis. Si tenés más, podés activar Pro ($3/seat/mes) o quedarte en past_due hasta que actives la suscripción. Los datos se mantienen siempre.' },
+        { q: '¿Hay descuento anual?',
+          a: 'Sí, ~15% (los meses 11 y 12 gratis). Se selecciona al activar el plan desde Stripe Checkout.' },
+      ],
     },
     {
-      q: '¿Puedo tener múltiples proyectos y clientes?',
-      a: 'Sí. Podés crear todos los proyectos que necesites, asignar miembros del equipo y ver el trabajo organizado por cliente. Sin mezclas.',
+      group: 'Setup y datos',
+      items: [
+        { q: '¿Cuánto tarda el setup?',
+          a: 'Crear el workspace toma menos de 60 segundos. Conectar Google Analytics y Search Console son ~3 minutos. Tu primer informe a cliente está listo en ~10 minutos.' },
+        { q: '¿Mis datos son míos?',
+          a: 'Sí. Exportás todo en JSON desde Preferencias en cualquier momento. Si cancelás, programás eliminación con 48h de gracia (cancelable). Sin lock-in.' },
+        { q: '¿Cómo manejan los tokens OAuth de mis clientes?',
+          a: 'Cifrados con AES-256-GCM en la base. Cada integración (GA4, Ads, Meta, TikTok) tiene auto-refresh y status visible. Si un token expira, te avisamos para reconectar.' },
+      ],
     },
     {
-      q: '¿Cómo se compara con Asana, Trello o Notion?',
-      a: 'Esas herramientas son para organizar. BlissTracker es para ejecutar. Menos configuración, más foco en lo que importa hoy. Especialmente para agencias y equipos de servicio.',
-    },
-    {
-      q: '¿Qué pasa cuando termina el trial de 14 días?',
-      a: 'Si tenés hasta 3 usuarios, seguís gratis para siempre. Si tenés más, activás el plan Pro: USD 3 por usuario por mes. Podés cancelar cuando quieras.',
+      group: 'Equipo y permisos',
+      items: [
+        { q: '¿Cómo invito a mi equipo?',
+          a: 'Desde Admin → Equipo enviás invitaciones por email. Cada persona acepta y empieza a trabajar. Sin alta manual, sin gestión de contraseñas.' },
+        { q: '¿Hay roles y permisos granulares?',
+          a: 'Sí. Tres roles a nivel workspace (owner, admin, member) más un teamRole operativo libre (ej: DESIGNER, PM). Los miembros solo ven proyectos donde están asignados.' },
+      ],
     },
   ]
 
+  // Para JSON-LD y rendering, aplanar.
+  const faqs = faqGroups.flatMap(g => g.items)
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'SoftwareApplication',
+        '@id': 'https://blisstracker.app/#software',
+        name: 'BlissTracker',
+        applicationCategory: 'BusinessApplication',
+        operatingSystem: 'Web',
+        description: 'Sistema operativo para agencias de marketing: gestión de tareas con foco forzado + toolkit GEO/SEO/Ads/Social + reportes para clientes con URL pública, integrados con coaching de IA contextual.',
+        url: 'https://blisstracker.app/',
+        offers: {
+          '@type': 'Offer',
+          price: '0',
+          priceCurrency: 'USD',
+          description: 'Plan Gratis hasta 3 usuarios. Trial de 14 días para Pro y Scale.',
+        },
+        publisher: { '@id': 'https://blisstracker.app/#org' },
+      },
+      {
+        '@type': 'Organization',
+        '@id': 'https://blisstracker.app/#org',
+        name: 'BlissTracker',
+        url: 'https://blisstracker.app/',
+        logo: 'https://blisstracker.app/blisstracker_logo.svg',
+        founder: { '@type': 'Person', name: 'Gastón Suárez Duek' },
+        email: 'gaston@blissmkt.ar',
+        sameAs: ['https://blissmkt.ar'],
+      },
+      {
+        '@type': 'FAQPage',
+        mainEntity: faqs.map(f => ({
+          '@type': 'Question',
+          name: f.q,
+          acceptedAnswer: { '@type': 'Answer', text: f.a },
+        })),
+      },
+    ],
+  }
+
   return (
     <div className="min-h-screen bg-white text-gray-900 antialiased">
+
+      <Helmet>
+        <title>BlissTracker — El sistema operativo de tu agencia</title>
+        <meta name="description" content="GEO, SEO, Ads y reportes para clientes integrados con la gestión real de tu equipo. Un dashboard reemplaza Asana + SEMrush + 6 spreadsheets. 14 días gratis, sin tarjeta." />
+        <link rel="canonical" href="https://blisstracker.app/" />
+        <meta property="og:url" content="https://blisstracker.app/" />
+        <meta property="og:title" content="BlissTracker — El sistema operativo de tu agencia" />
+        <meta property="og:description" content="GEO, SEO, Ads y reportes para clientes integrados con la gestión real de tu equipo. Un dashboard reemplaza Asana + SEMrush + 6 spreadsheets." />
+        <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
+      </Helmet>
 
       {/* ── Navbar ── */}
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-100">
@@ -233,6 +317,12 @@ export default function Landing() {
             <BlissLogo variant="lockup" dark={false} className="h-8 w-auto" />
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              to="/pricing"
+              className="text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors hidden sm:block"
+            >
+              Pricing
+            </Link>
             <Link
               to="/login"
               className="text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors hidden sm:block"
@@ -254,70 +344,85 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-primary-50 border border-primary-100 text-primary-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-8">
             <span className="w-1.5 h-1.5 bg-primary-500 rounded-full" />
-            Gratis hasta 3 usuarios — sin tarjeta de crédito
+            Hecho para agencias de marketing · Gratis hasta 3 usuarios
           </div>
 
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-gray-900 leading-[1.08] tracking-tight mb-6">
-            Menos ruido.<br />
-            <span className="text-primary-500">Más ejecución.</span>
+            El sistema operativo<br />
+            <span className="text-primary-500">de tu agencia.</span>
           </h1>
 
           <p className="text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            BlissTracker le da a tu equipo el foco que las hojas de cálculo, los chats
-            y las reuniones les robaron.
+            GEO, SEO, Ads y reportes para clientes, integrados con la gestión real de tu equipo.
+            Un dashboard reemplaza Asana + SEMrush + 6 spreadsheets.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-4">
             <Link
               to="/register"
+              onClick={() => trackEvent('landing_cta_click', { location: 'hero' })}
               className="w-full sm:w-auto bg-primary-500 hover:bg-primary-600 text-white text-base font-semibold px-8 py-4 rounded-xl transition-colors shadow-lg shadow-primary-100"
             >
-              Crear cuenta gratis →
+              Probá 14 días gratis →
             </Link>
             <a
-              href="#como-funciona"
-              className="w-full sm:w-auto text-gray-700 hover:text-gray-900 text-base font-medium px-8 py-4 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors"
+              href="#demo"
+              onClick={() => trackEvent('landing_cta_click', { location: 'hero_demo' })}
+              className="w-full sm:w-auto text-gray-700 hover:text-gray-900 text-base font-medium px-8 py-4 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors inline-flex items-center justify-center gap-2"
             >
-              Ver cómo funciona
+              <span>▶</span> Ver demo (90s)
             </a>
           </div>
-          <p className="text-xs text-gray-400">14 días de trial gratuito · Sin configuración complicada</p>
+          <p className="text-xs text-gray-400">Sin tarjeta de crédito · Cancelás cuando quieras</p>
         </div>
 
-        {/* App mockup */}
-        <div className="max-w-5xl mx-auto mt-16 px-2 sm:px-0">
+        {/* Video demo o mockup. Cuando Gastón suba el Loom, descomentar el iframe y dejar el AppMockup como fallback. */}
+        <div id="demo" className="max-w-5xl mx-auto mt-16 px-2 sm:px-0">
+          {/*
+            TODO: cuando esté el Loom, reemplazar AppMockup por:
+            <div className="relative aspect-video rounded-2xl overflow-hidden shadow-2xl shadow-gray-300 border border-gray-200">
+              <iframe
+                src="https://www.loom.com/embed/<LOOM_ID>?autoplay=0&hideEmbedTopBar=true"
+                allowFullScreen
+                className="absolute inset-0 w-full h-full"
+              />
+            </div>
+          */}
           <AppMockup />
         </div>
       </section>
+
+      {/* ── Trusted by ── */}
+      <TrustedByBar />
 
       {/* ── Problem ── */}
       <section className="py-24 px-4 sm:px-6 bg-gray-900">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
-              Reconocés esto, ¿no?
+              Tu agencia merece dejar de hacer esto.
             </h2>
             <p className="text-gray-400 text-lg max-w-xl mx-auto">
-              El problema no es que tu equipo no trabaja. Es que trabaja en lo que no importa.
+              Cuando reportar a un cliente se vuelve más caro que ejecutar para él, algo está roto.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {[
               {
-                emoji: '📋',
-                title: 'Demasiadas listas, ningún avance',
-                desc: 'Tenés Notion, Trello y un Excel compartido. Las tareas se crean. Las tareas... se quedan ahí.',
+                emoji: '🪟',
+                title: '7 pestañas para reportar un mes',
+                desc: 'GA4, Search Console, Ads, Meta, TikTok, Excel, PowerPoint. Tu PM pierde 4 horas armando lo que el cliente lee en 4 minutos.',
               },
               {
                 emoji: '🤷',
-                title: '¿En qué está trabajando cada uno?',
-                desc: 'Para saber en qué está alguien, hay que preguntarle. Eso no escala. Y nadie lo reconoce hasta que es tarde.',
+                title: '¿En qué está cada cuenta?',
+                desc: 'Sin reunión de status, nadie sabe el avance. Con reunión, perdés 30 min × persona × semana. Y tampoco quedan respuestas.',
               },
               {
                 emoji: '🔥',
-                title: 'Todo es urgente, nada es prioritario',
-                desc: 'Sin foco claro, el equipo trabaja lo que llega primero. No lo que mueve la aguja del negocio.',
+                title: 'Lo urgente del cliente come tu roadmap',
+                desc: 'Cada cliente cree que es prioritario. Sin foco explícito, el equipo apaga incendios y el trabajo planificado queda para "después".',
               },
             ].map((item, i) => (
               <div key={i} className="bg-gray-800 border border-gray-700 rounded-2xl p-6">
@@ -352,6 +457,9 @@ export default function Landing() {
           </p>
         </div>
       </section>
+
+      {/* ── Para quién es ── */}
+      <SegmentCards />
 
       {/* ── Features ── */}
       <section className="py-24 px-4 sm:px-6 bg-gray-50">
@@ -407,6 +515,12 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* ── Comparativa ── */}
+      <ComparisonTable />
+
+      {/* ── Testimonios ── */}
+      <TestimonialsSection />
 
       {/* ── Benefits ── */}
       <section className="py-24 px-4 sm:px-6 bg-primary-500">
@@ -533,37 +647,66 @@ export default function Landing() {
                 </ul>
               </div>
               <div className="mt-auto">
-                <Link
-                  to="/register"
+                <a
+                  href="mailto:gaston@blissmkt.ar?subject=BlissTracker%20Scale"
                   className="block w-full text-center border border-gray-300 hover:border-gray-400 text-gray-700 hover:text-gray-900 font-semibold py-3 rounded-xl transition-colors"
                 >
-                  Contactar ventas
-                </Link>
+                  Hablemos
+                </a>
               </div>
             </div>
+          </div>
+
+          {/* Link a pricing page con tabla comparativa */}
+          <div className="text-center mt-10">
+            <Link
+              to="/pricing"
+              className="inline-flex items-center gap-2 text-primary-600 hover:text-primary-700 font-medium text-sm"
+            >
+              Ver tabla comparativa completa y calculadora
+              <span>→</span>
+            </Link>
           </div>
         </div>
       </section>
 
+      {/* ── Hecho por ── */}
+      <FounderBio />
+
       {/* ── FAQ ── */}
-      <section className="py-24 px-4 sm:px-6 bg-gray-50">
+      <section id="faq" className="py-24 px-4 sm:px-6 bg-gray-50">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900">
+            <p className="text-primary-500 font-semibold text-xs uppercase tracking-widest mb-4">
               Preguntas frecuentes
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900">
+              Lo que más nos preguntan.
             </h2>
           </div>
-          <div className="space-y-3">
-            {faqs.map((faq, i) => (
-              <FaqItem
-                key={i}
-                q={faq.q}
-                a={faq.a}
-                open={openFaq === i}
-                onClick={() => setOpenFaq(openFaq === i ? null : i)}
-              />
-            ))}
-          </div>
+
+          {faqGroups.map((g, gi) => {
+            const itemsBefore = faqGroups.slice(0, gi).reduce((acc, gg) => acc + gg.items.length, 0)
+            return (
+              <div key={g.group} className="mb-8">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3 px-1">{g.group}</h3>
+                <div className="space-y-3">
+                  {g.items.map((faq, i) => {
+                    const idx = itemsBefore + i
+                    return (
+                      <FaqItem
+                        key={idx}
+                        q={faq.q}
+                        a={faq.a}
+                        open={openFaq === idx}
+                        onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </section>
 
@@ -579,6 +722,7 @@ export default function Landing() {
           </p>
           <Link
             to="/register"
+            onClick={() => trackEvent('landing_cta_click', { location: 'final' })}
             className="inline-block bg-primary-500 hover:bg-primary-600 text-white text-base font-semibold px-10 py-4 rounded-xl transition-colors shadow-lg shadow-primary-900/30"
           >
             Crear cuenta gratis →
@@ -587,19 +731,47 @@ export default function Landing() {
       </section>
 
       {/* ── Footer ── */}
-      <footer className="py-8 px-4 sm:px-6 bg-gray-950 border-t border-gray-800">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
-          <div className="flex items-center gap-2">
-            <BlissLogo variant="icon" className="w-5 h-5 opacity-60" alt="" />
-            <span>BlissTracker &copy; {new Date().getFullYear()}</span>
+      <footer className="bg-gray-950 border-t border-gray-800 text-gray-400">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
+            <div className="col-span-2 sm:col-span-1">
+              <BlissLogo variant="lockup" dark className="h-8 w-auto mb-3" />
+              <p className="text-xs text-gray-500 leading-relaxed">
+                El sistema operativo de las agencias de marketing modernas.
+                Hecho en Argentina 🇦🇷
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-3">Producto</p>
+              <ul className="space-y-2 text-sm">
+                <li><Link to="/pricing"     className="hover:text-white transition-colors">Pricing</Link></li>
+                <li><a   href="#demo"       className="hover:text-white transition-colors">Ver demo</a></li>
+                <li><a   href="#testimonios" className="hover:text-white transition-colors">Testimonios</a></li>
+                <li><a   href="#faq"         className="hover:text-white transition-colors">FAQ</a></li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-3">Empresa</p>
+              <ul className="space-y-2 text-sm">
+                <li><a href="#hecho-por"     className="hover:text-white transition-colors">Sobre el founder</a></li>
+                <li><a href="mailto:gaston@blissmkt.ar" className="hover:text-white transition-colors">Contacto</a></li>
+                <li><a href="https://blissmkt.ar" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">BlissMKT ↗</a></li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-3">Legal</p>
+              <ul className="space-y-2 text-sm">
+                <li><Link to="/condiciones" className="hover:text-white transition-colors">Condiciones de uso</Link></li>
+                <li><Link to="/privacidad"  className="hover:text-white transition-colors">Política de privacidad</Link></li>
+                <li><Link to="/login"       className="hover:text-white transition-colors">Iniciar sesión</Link></li>
+                <li><Link to="/register"    className="hover:text-white transition-colors">Crear cuenta</Link></li>
+              </ul>
+            </div>
           </div>
-          <div className="flex items-center gap-6">
-            <Link to="/condiciones" className="hover:text-gray-300 transition-colors">Condiciones de uso</Link>
-            <Link to="/privacidad"  className="hover:text-gray-300 transition-colors">Política de privacidad</Link>
-          </div>
-          <div className="flex items-center gap-6">
-            <Link to="/login"    className="hover:text-gray-300 transition-colors">Iniciar sesión</Link>
-            <Link to="/register" className="hover:text-gray-300 transition-colors">Crear cuenta</Link>
+
+          <div className="border-t border-gray-800 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+            <span>&copy; {new Date().getFullYear()} BlissTracker — Todos los derechos reservados</span>
+            <span>Hecho con foco en Buenos Aires</span>
           </div>
         </div>
       </footer>

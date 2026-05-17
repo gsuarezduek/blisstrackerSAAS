@@ -5,6 +5,7 @@ const stripe  = require('../lib/stripe')
 const { sendWelcomeEmail, sendInvitationEmail, sendWorkspaceDeletionWarning } = require('../services/email.service')
 const { syncSeatsToStripe } = require('./billing.controller')
 const { getSetting } = require('../lib/platformSettings')
+const { seedWorkspace, removeDemoProject } = require('../services/workspaceSeed.service')
 
 const MEMBER_SELECT = {
   userId: true,
@@ -438,6 +439,12 @@ async function createWorkspace(req, res, next) {
           name: workspaceName,
           members: { create: [{ userId: owner.id }] },
         },
+      })
+
+      // Seed: proyecto "Demo — Aprendé BlissTracker" con 8 tareas variadas para que el primer login
+      // no sea un dashboard vacío. Si falla, no rompe el registro (proyecto principal ya creado).
+      await seedWorkspace(workspace.id, owner.id, tx).catch(err => {
+        console.error('[Workspace] Error en seed demo:', err.message)
       })
 
       return { workspace, owner }
@@ -907,6 +914,21 @@ async function getTokenBudgetStatus(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * DELETE /api/workspaces/current/demo-project
+ * Elimina el proyecto "Demo — Aprendé BlissTracker" + sus tareas.
+ * Solo admin/owner. No regenera (Workspace.demoSeeded queda en true).
+ */
+async function deleteDemoProject(req, res, next) {
+  try {
+    if (!['admin', 'owner'].includes(req.workspaceMember?.role)) {
+      return res.status(403).json({ error: 'Solo admin u owner pueden eliminar el proyecto demo' })
+    }
+    const result = await removeDemoProject(req.workspace.id)
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   getMine, getCurrent, updateCurrent, listMembers, addMember, updateMember, toggleMemberActive,
   createWorkspace, checkSlug, getInfo,
@@ -914,4 +936,5 @@ module.exports = {
   getDeletionRequest, scheduleDeletion, cancelDeletion, executeWorkspaceDeletion,
   uploadLogo, deleteLogo, uploadBanner, deleteBanner,
   getTokenBudgetStatus,
+  deleteDemoProject,
 }

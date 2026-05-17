@@ -1,0 +1,42 @@
+# BlissTracker
+
+> El sistema operativo de tu agencia. Un dashboard unificado para gestión de equipo + marketing (GEO, SEO, Ads, Social) + reportes para clientes, con coaching de IA contextual.
+
+BlissTracker es un SaaS B2B argentino que reemplaza Asana + SEMrush + 6 spreadsheets para agencias de marketing. Combina task management con foco forzado (una tarea activa a la vez), un toolkit de marketing completo (GEO audits para AI Overviews, SEO con Google Search Console, keyword tracking + SERP snapshots, GA4, Meta Ads, Google Ads, Instagram, TikTok), y reportes mensuales con URL pública para entregar a clientes sin que se loguen.
+
+## Diferenciadores únicos
+
+- **GEO Audit (Generative Engine Optimization)**: análisis de 23 crawlers de IA (Perplexity, Claude, ChatGPT, Gemini), llms.txt generation, JSON-LD schema sugerido. Primero en mercado en optimizar para AI Overviews.
+- **Reportes públicos con token UUID**: cada informe mensual tiene URL shareable sin login para que los clientes vean métricas sin fricción.
+- **AI Coaching contextual**: Claude Haiku genera insights diarios con memoria semanal del perfil del usuario + expectativas de rol. No es coaching genérico.
+- **EOS / Traction nativo**: módulos Visión, Personas, Datos, Asuntos, Procesos, Tracción y Evaluación integrados al mismo task tracker.
+- **Foco forzado**: solo una tarea IN_PROGRESS por persona, auto-pausa por inactividad, bloqueos con razón y notificación.
+
+## Pricing
+
+- **Gratis**: hasta 3 usuarios, sin tarjeta de crédito, todas las funcionalidades core.
+- **Pro**: USD 3 por usuario / mes. Marketing toolkit, reportes públicos, RRHH, integraciones ilimitadas.
+- **Scale**: USD 2 por usuario / mes desde 20 usuarios. Onboarding personalizado.
+
+Trial: 14 días sin tarjeta.
+
+## Para quién es
+
+- **Agencias de marketing**: el toolkit GEO+SEO+Ads+Social+Reportes públicos es el caso de uso primario.
+- **Equipos con sistema EOS (Traction)**: implementación EOS nativa, alternativa más barata a Ninety.io.
+- **Equipos técnicos**: foco forzado + AI coaching contextual.
+
+## Páginas
+
+- Landing: https://blisstracker.app/
+- Pricing: https://blisstracker.app/pricing
+- Registro: https://blisstracker.app/register
+- Login: https://blisstracker.app/login
+- Términos: https://blisstracker.app/condiciones
+- Privacidad: https://blisstracker.app/privacidad
+
+## Empresa
+
+- Hecho en Argentina por Gastón Suárez Duek.
+- Contacto: gaston@blissmkt.ar
+- Sitio del creador: https://blissmkt.ar

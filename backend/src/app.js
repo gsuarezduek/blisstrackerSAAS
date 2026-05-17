@@ -127,6 +127,10 @@ app.use('/api/feature-flags',    featureFlagsRoutes)
 app.use('/api/marketing',        marketingRoutes)
 app.use('/api/public',           publicReportRoutes)
 
+// Tracking de eventos de conversión (público, sin auth — captura signups, CTA clicks, etc.)
+const eventsController = require('./controllers/events.controller')
+app.post('/api/events', eventsController.track)
+
 // Verificación de webhook de Instagram (GET sin auth)
 app.get('/api/marketing/integrations/meta/webhook', (req, res) => {
   const mode      = req.query['hub.mode']

@@ -56,4 +56,7 @@ router.patch('/current/features/:key',   workspaceAdminOnly, ff.toggleWorkspaceF
 // Token budget: presupuesto mensual de IA (requiere auth, cualquier miembro)
 router.get('/current/token-budget', c.getTokenBudgetStatus)
 
+// Eliminar proyecto demo (admin u owner)
+router.delete('/current/demo-project', c.deleteDemoProject)
+
 module.exports = router

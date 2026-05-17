@@ -154,6 +154,22 @@ cron.schedule('0 3 * * 0', async () => {
   }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
+// Cron: email lifecycle del trial — diario a 09:00 ART (días 3, 7, 12, 13)
+let trialLifecycleRunning = false
+const { runTrialLifecycle } = require('./services/trialLifecycle.service')
+cron.schedule('0 9 * * *', async () => {
+  if (trialLifecycleRunning) return
+  trialLifecycleRunning = true
+  try {
+    const result = await runTrialLifecycle()
+    console.log(`[TrialLifecycle] ${result.workspacesChecked} workspace(s) revisado(s), ${result.emailsSent} email(s) enviado(s).`)
+  } catch (err) {
+    console.error('[TrialLifecycle] Error:', err.message)
+  } finally {
+    trialLifecycleRunning = false
+  }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
 // Cron: auto-pausar tareas EN CURSO al final del día — medianoche hora Buenos Aires
 cron.schedule('0 0 * * *', async () => {
   console.log('[AutoPause] Pausando tareas en curso al cierre del día...')

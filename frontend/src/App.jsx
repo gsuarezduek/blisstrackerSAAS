@@ -31,6 +31,7 @@ class ErrorBoundary extends React.Component {
 }
 import { getWorkspaceSlug } from './api/client'
 import Landing from './pages/Landing'
+import Pricing from './pages/Pricing'
 import Login2 from './pages/Login2'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
@@ -96,6 +97,7 @@ export default function App() {
         <Routes>
           <Route path="/login"    element={<Login2     />} />
           <Route path="/register" element={<Register   />} />
+          <Route path="/pricing"  element={<Pricing    />} />
           <Route path="/oauth"        element={<OAuthPopup    />} />
           <Route path="/auth"         element={<AuthCallback  />} />
           <Route path="/oauth-result" element={<OAuthResult   />} />

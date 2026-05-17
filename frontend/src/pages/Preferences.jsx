@@ -37,6 +37,8 @@ export default function Preferences() {
   const [deletingWS,         setDeletingWS]         = useState(false)
   const [cancellingDel,      setCancellingDel]      = useState(false)
   const [deletionMsg,        setDeletionMsg]        = useState({ text: '', error: false })
+  const [demoSeeded,         setDemoSeeded]         = useState(false)
+  const [removingDemo,       setRemovingDemo]       = useState(false)
 
 
   const TIMEZONES = [
@@ -93,13 +95,28 @@ export default function Preferences() {
     api.get('/workspaces/current/deletion-request')
       .then(({ data }) => { setDeletionRequest(data); setDeletionLoaded(true) })
       .catch(() => setDeletionLoaded(true))
-    // Nombre del workspace — solo owners lo necesitan para el modal de confirmación
-    if (user?.role === 'owner' || user?.isSuperAdmin) {
-      api.get('/workspaces/current')
-        .then(({ data }) => setWorkspaceName(data.name || ''))
-        .catch(() => {})
-    }
+    // Nombre del workspace + flag demoSeeded
+    api.get('/workspaces/current')
+      .then(({ data }) => {
+        if (user?.role === 'owner' || user?.isSuperAdmin) setWorkspaceName(data.name || '')
+        setDemoSeeded(!!data.demoSeeded)
+      })
+      .catch(() => {})
   }, [user?.isAdmin, user?.role, user?.isSuperAdmin])
+
+  async function handleRemoveDemo() {
+    if (!window.confirm('Eliminar el proyecto "Demo — Aprendé BlissTracker" y sus tareas? Esta acción no se puede deshacer.')) return
+    setRemovingDemo(true)
+    try {
+      const { data } = await api.delete('/workspaces/current/demo-project')
+      setDemoSeeded(false) // ocultar el botón aunque el proyecto pueda haber sido ya borrado
+      window.alert(data.removed ? 'Proyecto demo eliminado correctamente.' : 'El proyecto demo ya no estaba en este workspace.')
+    } catch (err) {
+      window.alert(`Error: ${err.response?.data?.error || err.message}`)
+    } finally {
+      setRemovingDemo(false)
+    }
+  }
 
   async function handleScheduleDeletion() {
     setDeletingWS(true)
@@ -520,6 +537,31 @@ export default function Preferences() {
                           <p className="mt-2 text-xs text-red-600 dark:text-red-400">{deletionMsg.text}</p>
                         )}
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Proyecto demo del onboarding — solo si está activo */}
+                {demoSeeded && (user?.isAdmin || user?.isSuperAdmin) && (
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 mb-4">
+                    <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Proyecto demo</h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
+                      "Demo — Aprendé BlissTracker" es el proyecto de ejemplo que se crea al registrarse. Cuando ya conozcas el flujo, podés eliminarlo (no afecta a otros proyectos).
+                    </p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Eliminar proyecto demo</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          Borra el proyecto demo y sus tareas. No se vuelve a crear.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleRemoveDemo}
+                        disabled={removingDemo}
+                        className="flex-shrink-0 text-sm font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-2 transition-colors disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {removingDemo ? 'Eliminando…' : 'Eliminar demo'}
+                      </button>
                     </div>
                   </div>
                 )}

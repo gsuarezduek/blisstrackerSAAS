@@ -1,0 +1,32 @@
+# BlissTracker robots.txt
+# Permitimos rastreo libre de la landing pública y bloqueamos endpoints internos.
+
+User-agent: *
+Allow: /
+Allow: /pricing
+Allow: /condiciones
+Allow: /privacidad
+
+# Bloquear subdominios de workspaces (datos privados, requieren JWT igualmente)
+# La regla de subdominio se aplica per-host, no acá.
+
+# Crawlers de IA — explicitos para evitar dudas (todos permitidos para citation).
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://blisstracker.app/sitemap.xml

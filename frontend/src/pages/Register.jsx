@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
+import { trackEvent } from '../lib/analytics'
 
 function SlugPreview({ slug }) {
   const domain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
@@ -33,6 +34,11 @@ export default function Register() {
   const [acceptedTerms,  setAcceptedTerms]  = useState(true)
   const [slugStatus,     setSlugStatus]     = useState(SLUG_STATUS.idle)
   const navigate = useNavigate()
+
+  // Track inicio del signup flow (mount)
+  useEffect(() => {
+    trackEvent('signup_started')
+  }, [])
 
   // Verificar disponibilidad de slug (con debounce)
   useEffect(() => {
@@ -92,7 +98,8 @@ export default function Register() {
     try {
       await api.post('/workspaces', { workspaceName, slug, ownerName, ownerEmail, ownerPassword })
 
-      // Conversión GA4: registro de workspace
+      // Conversión GA4 + backend (ConversionEvent)
+      trackEvent('signup_completed', { method: 'email', workspace_slug: slug })
       if (typeof window.gtag === 'function') {
         window.gtag('event', 'sign_up', { method: 'email', workspace_slug: slug })
       }

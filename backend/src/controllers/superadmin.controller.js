@@ -664,4 +664,70 @@ async function toggleUserActive(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive }
+/**
+ * GET /api/superadmin/conversion-funnel
+ * Agregados de los últimos 30 días: signups, trials activos, conversiones a paid.
+ * Lee de ConversionEvent (eventos instrumentados desde frontend) + Workspace/Subscription.
+ */
+async function getConversionFunnel(req, res, next) {
+  try {
+    const days = Math.max(1, Math.min(Number(req.query.days) || 30, 365))
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+    const [
+      ctaClicks,
+      pricingViews,
+      signupStarted,
+      signupCompleted,
+      workspacesNew,
+      workspacesActive,
+      workspacesTrialing,
+      checkoutStarted,
+      subscriptionActive,
+    ] = await Promise.all([
+      prisma.conversionEvent.count({ where: { name: 'landing_cta_click', createdAt: { gte: since } } }),
+      prisma.conversionEvent.count({ where: { name: 'pricing_page_viewed', createdAt: { gte: since } } }),
+      prisma.conversionEvent.count({ where: { name: 'signup_started', createdAt: { gte: since } } }),
+      prisma.conversionEvent.count({ where: { name: 'signup_completed', createdAt: { gte: since } } }),
+      prisma.workspace.count({ where: { createdAt: { gte: since } } }),
+      prisma.workspace.count({ where: { status: 'active',   createdAt: { gte: since } } }),
+      prisma.workspace.count({ where: { status: 'trialing', createdAt: { gte: since } } }),
+      prisma.conversionEvent.count({ where: { name: 'checkout_started', createdAt: { gte: since } } }),
+      prisma.conversionEvent.count({ where: { name: 'subscription_active', createdAt: { gte: since } } }),
+    ])
+
+    // Eventos top de los últimos N días (para diagnosticar qué se está clickeando)
+    const topEvents = await prisma.conversionEvent.groupBy({
+      by:    ['name'],
+      where: { createdAt: { gte: since } },
+      _count: { name: true },
+      orderBy: { _count: { name: 'desc' } },
+      take:    20,
+    })
+
+    res.json({
+      windowDays: days,
+      since,
+      funnel: {
+        ctaClicks,
+        pricingViews,
+        signupStarted,
+        signupCompleted,
+        workspacesNew,
+        workspacesTrialing,
+        workspacesActive,
+        checkoutStarted,
+        subscriptionActive,
+      },
+      // Conversion rates (cuando hay denominador)
+      rates: {
+        ctaToSignupStarted:  ctaClicks       > 0 ? Math.round((signupStarted   / ctaClicks)       * 1000) / 10 : null,
+        signupStartedToDone: signupStarted   > 0 ? Math.round((signupCompleted / signupStarted)   * 1000) / 10 : null,
+        trialingToActive:    workspacesNew   > 0 ? Math.round((workspacesActive / workspacesNew)  * 1000) / 10 : null,
+      },
+      topEvents: topEvents.map(e => ({ name: e.name, count: e._count.name })),
+    })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, getConversionFunnel }
