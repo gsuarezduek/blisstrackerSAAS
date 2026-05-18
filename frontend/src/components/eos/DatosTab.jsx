@@ -45,14 +45,19 @@ function weekLabel(period) {
   return 'S' + parseInt(period.split('-W')[1], 10)
 }
 
-function weekTooltip(period) {
+function weekRange(period) {
   const [y, ws] = period.split('-W')
   const year = parseInt(y), week = parseInt(ws)
   const jan4 = new Date(Date.UTC(year, 0, 4))
   const dow4 = jan4.getUTCDay() || 7
   const mon  = new Date(Date.UTC(year, 0, 4 - dow4 + 1 + (week - 1) * 7))
   const sun  = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6)
-  const fmt  = d => `${d.getUTCDate()} ${WEEK_MONTHS[d.getUTCMonth()]}`
+  return { mon, sun }
+}
+
+function weekTooltip(period) {
+  const { mon, sun } = weekRange(period)
+  const fmt = d => `${d.getUTCDate()} ${WEEK_MONTHS[d.getUTCMonth()]}`
   return `${fmt(mon)} – ${fmt(sun)}`
 }
 
@@ -92,6 +97,15 @@ function formatVal(v) {
   return String(parseFloat(n.toFixed(2)))
 }
 
+/** Formatea valor con unidad. `$` va antes; el resto va después. */
+function formatWithUnit(v, unit) {
+  if (v === null || v === undefined) return ''
+  const formatted = formatVal(v)
+  if (!unit) return formatted
+  if (unit === '$') return `$${formatted}`
+  return `${formatted} ${unit}`
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // YearNav — navegación de año con botón "Hoy"
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -125,10 +139,134 @@ function YearNav({ year, onPrev, onNext, isCurrentYear, onToday }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ScoreCell — celda editable de scorecard
+// QuickEntryCard — tarjeta de carga del período actual
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ScoreCell({ metricId, period, initialValue, goal, isCurrent, isWeekly, onSave }) {
+function QuickEntryCard({ metric, owner, initialValue, onSave }) {
+  const [val, setVal]       = useState(initialValue != null ? formatVal(initialValue) : '')
+  const lastSaved           = useRef(initialValue ?? null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setVal(initialValue != null ? formatVal(initialValue) : '')
+    lastSaved.current = initialValue ?? null
+  }, [initialValue])
+
+  const numVal   = val === '' ? null : parseFloat(val)
+  const hasGoal  = metric.goal != null
+  const onTrack  = hasGoal && numVal != null && numVal >= metric.goal
+  const offTrack = hasGoal && numVal != null && numVal < metric.goal
+  const showDollar = metric.unit === '$'
+
+  async function save() {
+    const newVal = val === '' ? null : parseFloat(val)
+    if (isNaN(newVal) && val !== '') { setVal(formatVal(lastSaved.current)); return }
+    if (newVal === lastSaved.current) return
+    setSaving(true)
+    await onSave(newVal)
+    lastSaved.current = newVal
+    setSaving(false)
+  }
+
+  const inputBorder = onTrack  ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                    : offTrack ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:border-primary-400'
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3.5 shadow-sm">
+      <div className="flex items-start justify-between gap-2 mb-2 min-h-[36px]">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight line-clamp-2">{metric.name}</p>
+          {owner && (
+            <div className="flex items-center gap-1 mt-1">
+              <img src={avatarUrl(owner.avatar)} alt={owner.name}
+                className="w-4 h-4 rounded-full object-cover border border-gray-200 dark:border-gray-600" />
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{owner.name.split(' ')[0]}</span>
+            </div>
+          )}
+        </div>
+        {hasGoal && (
+          <div className="text-right shrink-0">
+            <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-medium">Meta</div>
+            <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+              {formatWithUnit(metric.goal, metric.unit)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="relative">
+        {showDollar && (
+          <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-base font-semibold pointer-events-none ${
+            onTrack ? 'text-green-600 dark:text-green-400'
+            : offTrack ? 'text-red-500 dark:text-red-400'
+            : 'text-gray-400 dark:text-gray-500'
+          }`}>$</span>
+        )}
+        <input
+          type="number"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onBlur={save}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+          placeholder="Cargar valor"
+          className={`w-full text-right text-base font-semibold tabular-nums border-2 rounded-lg py-2 pr-3 transition-all ${
+            showDollar ? 'pl-8' : 'pl-3'
+          } ${inputBorder} focus:outline-none focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-900 ${saving ? 'opacity-50' : ''}`}
+        />
+        {hasGoal && numVal != null && (
+          <span className="absolute -top-2 -right-1.5 text-base bg-white dark:bg-gray-800 rounded-full leading-none">
+            {onTrack ? '✅' : '🔴'}
+          </span>
+        )}
+      </div>
+
+      {!hasGoal && (
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5">Sin meta definida</p>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CurrentPeriodPanel — panel destacado del período actual
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function CurrentPeriodPanel({ metrics, entriesMap, members, currentPeriod, title, subtitle, onEntryChange }) {
+  if (metrics.length === 0 || !currentPeriod) return null
+
+  return (
+    <div className="bg-gradient-to-br from-primary-50/80 via-white to-white dark:from-primary-900/20 dark:via-gray-800 dark:to-gray-800 border-2 border-primary-200 dark:border-primary-800/60 rounded-2xl p-5 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <span className="px-2 py-0.5 bg-primary-600 text-white text-[10px] font-bold uppercase tracking-wider rounded">Ahora</span>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+        {subtitle && <span className="text-xs text-gray-500 dark:text-gray-400">· {subtitle}</span>}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {metrics.map(metric => {
+          const owner = metric.ownerId ? members.find(m => m.id === metric.ownerId) : null
+          const currentVal = entriesMap[metric.id]?.[currentPeriod] ?? null
+          return (
+            <QuickEntryCard
+              key={metric.id}
+              metric={metric}
+              owner={owner}
+              initialValue={currentVal}
+              onSave={(value) => onEntryChange(metric.id, currentPeriod, value)}
+            />
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ScoreCell — celda editable de scorecard (tabla histórica)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function ScoreCell({ metricId, period, initialValue, goal, unit, isCurrent, isWeekly, onSave }) {
   const [val, setVal]       = useState(initialValue != null ? formatVal(initialValue) : '')
   const lastSaved           = useRef(initialValue ?? null)
   const [saving, setSaving] = useState(false)
@@ -142,6 +280,7 @@ function ScoreCell({ metricId, period, initialValue, goal, isCurrent, isWeekly, 
   const hasGoal  = goal != null
   const onTrack  = hasGoal && numVal != null && numVal >= goal
   const offTrack = hasGoal && numVal != null && numVal < goal
+  const showDollar = unit === '$' && val !== ''
 
   async function save() {
     const newVal = val === '' ? null : parseFloat(val)
@@ -161,17 +300,28 @@ function ScoreCell({ metricId, period, initialValue, goal, isCurrent, isWeekly, 
                   : offTrack ? 'text-red-700 dark:text-red-400'
                   : 'text-gray-700 dark:text-gray-300'
 
+  const dollarColor = onTrack  ? 'text-green-600 dark:text-green-400'
+                    : offTrack ? 'text-red-500 dark:text-red-400'
+                    : 'text-gray-400 dark:text-gray-500'
+
   return (
-    <td className={`p-0 ${isCurrent ? 'border-l-2 border-primary-300 dark:border-primary-700' : ''}`}>
+    <td className={`p-0 ${isCurrent ? 'bg-primary-50/40 dark:bg-primary-900/15 border-x-2 border-primary-400 dark:border-primary-600' : ''}`}>
       <div className={`relative ${bg} transition-colors`}>
+        {showDollar && (
+          <span className={`absolute left-1 top-1/2 -translate-y-1/2 text-[11px] font-medium pointer-events-none ${dollarColor}`}>$</span>
+        )}
         <input
           type="number"
           value={val}
           onChange={e => setVal(e.target.value)}
           onBlur={save}
           onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-          placeholder="—"
-          className={`w-full text-right text-xs bg-transparent focus:outline-none focus:bg-primary-50 dark:focus:bg-primary-900/20 transition-colors ${textColor} ${saving ? 'opacity-40' : ''} ${isWeekly ? 'px-1 py-2' : 'px-2 py-2'}`}
+          placeholder={isCurrent ? '✎' : '—'}
+          className={`w-full text-right bg-transparent focus:outline-none focus:bg-primary-50 dark:focus:bg-primary-900/20 transition-colors ${textColor} ${saving ? 'opacity-40' : ''} ${
+            isWeekly
+              ? `text-xs py-2 ${showDollar ? 'pl-4 pr-1' : 'px-1'}`
+              : `text-sm py-3 ${showDollar ? 'pl-5 pr-2' : 'px-2'}`
+          } ${isCurrent ? 'placeholder:text-primary-500 placeholder:font-bold' : ''}`}
           style={{ minWidth: isWeekly ? 34 : 88 }}
         />
       </div>
@@ -312,15 +462,23 @@ function ScorecardTable({
         <thead>
           <tr className="bg-gray-50 dark:bg-gray-900/60">
             {/* Columna métrica sticky */}
-            <th className="sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 text-left px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 min-w-[180px]">
+            <th className={`sticky left-0 z-10 bg-gray-50 dark:bg-gray-900 text-left px-4 py-2.5 text-xs font-semibold text-gray-600 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 ${
+              isWeekly ? 'min-w-[180px]' : 'min-w-[220px]'
+            }`}>
               Métrica
             </th>
-            <th className="px-2 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-center min-w-[72px]">
-              Resp.
-            </th>
-            <th className="px-3 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-right min-w-[58px]">
-              Meta
-            </th>
+
+            {/* En semanal mantenemos columnas separadas; en mensual se fusionan dentro de la columna métrica */}
+            {isWeekly && (
+              <>
+                <th className="px-2 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-center min-w-[72px]">
+                  Resp.
+                </th>
+                <th className="px-3 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-right min-w-[58px]">
+                  Meta
+                </th>
+              </>
+            )}
 
             {/* Columnas de período */}
             {periods.map(p => (
@@ -330,7 +488,7 @@ function ScorecardTable({
                 title={tooltipFn ? tooltipFn(p) : undefined}
                 className={`px-1 py-2.5 text-xs font-medium border-b border-gray-200 dark:border-gray-700 text-right ${colW} ${
                   p === currentPeriod
-                    ? 'text-primary-600 dark:text-primary-400 font-bold border-l-2 border-primary-300 dark:border-primary-700'
+                    ? 'text-primary-700 dark:text-primary-300 font-bold bg-primary-100 dark:bg-primary-900/40 border-x-2 border-primary-400 dark:border-primary-600'
                     : 'text-gray-400 dark:text-gray-500'
                 }`}
               >
@@ -359,35 +517,59 @@ function ScorecardTable({
 
             return (
               <tr key={metric.id} className="group hover:bg-gray-50/50 dark:hover:bg-gray-700/20">
-                {/* Nombre sticky */}
-                <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20 px-4 py-2 transition-colors">
-                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{metric.name}</span>
-                </td>
-
-                {/* Responsable */}
-                <td className="px-2 py-2 text-center">
-                  {owner ? (
-                    <div className="flex items-center justify-center gap-1">
-                      <img src={avatarUrl(owner.avatar)} alt={owner.name}
-                        className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
-                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[44px] hidden md:inline">{owner.name.split(' ')[0]}</span>
+                {/* Métrica sticky — en mensual lleva nombre + meta + responsable apilados */}
+                <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20 px-4 py-2 transition-colors align-top">
+                  {isWeekly ? (
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{metric.name}</span>
+                  ) : (
+                    <div className="flex flex-col gap-1 py-1">
+                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight">{metric.name}</span>
+                      {hasGoal && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-medium">Meta</span>
+                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                            {formatWithUnit(metric.goal, metric.unit)}
+                          </span>
+                        </div>
+                      )}
+                      {owner ? (
+                        <div className="flex items-center gap-1.5">
+                          <img src={avatarUrl(owner.avatar)} alt={owner.name}
+                            className="w-4 h-4 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{owner.name}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-gray-300 dark:text-gray-600 italic">Sin responsable</span>
+                      )}
                     </div>
-                  ) : (
-                    <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
                   )}
                 </td>
 
-                {/* Meta */}
-                <td className="px-3 py-2 text-right">
-                  {metric.goal != null ? (
-                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      {formatVal(metric.goal)}
-                      {metric.unit ? <span className="font-normal text-gray-400 dark:text-gray-500 ml-0.5">{metric.unit}</span> : null}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
-                  )}
-                </td>
+                {/* En semanal: columnas separadas de Responsable y Meta */}
+                {isWeekly && (
+                  <>
+                    <td className="px-2 py-2 text-center">
+                      {owner ? (
+                        <div className="flex items-center justify-center gap-1">
+                          <img src={avatarUrl(owner.avatar)} alt={owner.name}
+                            className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
+                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[44px] hidden md:inline">{owner.name.split(' ')[0]}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {hasGoal ? (
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {formatWithUnit(metric.goal, metric.unit)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                      )}
+                    </td>
+                  </>
+                )}
 
                 {/* Celdas de período */}
                 {periods.map(period => (
@@ -397,6 +579,7 @@ function ScorecardTable({
                     period={period}
                     initialValue={entriesMap[metric.id]?.[period] ?? null}
                     goal={metric.goal}
+                    unit={metric.unit}
                     isCurrent={period === currentPeriod}
                     isWeekly={isWeekly}
                     onSave={onEntryChange}
@@ -408,12 +591,12 @@ function ScorecardTable({
                   !isWeekly ? 'sticky right-10 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20 border-l border-gray-100 dark:border-gray-700' : ''
                 }`}>
                   {avgVal != null ? (
-                    <span className={`text-xs font-medium ${
+                    <span className={`text-xs font-medium whitespace-nowrap ${
                       avgOK  ? 'text-green-600 dark:text-green-400'
                     : avgBAD ? 'text-red-600 dark:text-red-400'
                     : 'text-gray-500 dark:text-gray-400'
                     }`}>
-                      {formatVal(avgVal)}
+                      {metric.unit === '$' ? `$${formatVal(avgVal)}` : formatVal(avgVal)}
                     </span>
                   ) : (
                     <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
@@ -511,13 +694,12 @@ export default function DatosTab() {
         const target = container.scrollLeft + thRect.left - cRect.left - cRect.width / 2 + thRect.width / 2
         container.scrollLeft = Math.max(0, target)
       } else {
-        // Para años que no son el actual: ir al inicio (S1)
         container.scrollLeft = 0
       }
     })
   }, [weekYear, loading])
 
-  // Auto-scroll mensual: posiciona el mes actual con 3 anteriores visibles a la izquierda
+  // Auto-scroll mensual
   useEffect(() => {
     if (loading) return
     const container = monthContainerRef.current
@@ -528,7 +710,6 @@ export default function DatosTab() {
       if (curTh) {
         const cRect  = container.getBoundingClientRect()
         const thRect = curTh.getBoundingClientRect()
-        // Centrar el mes actual en el viewport
         const target = container.scrollLeft + thRect.left - cRect.left - cRect.width / 2 + thRect.width / 2
         container.scrollLeft = Math.max(0, target)
       } else {
@@ -577,6 +758,20 @@ export default function DatosTab() {
   const weeklyMetrics  = metrics.filter(m => m.frequency === 'weekly')
   const monthlyMetrics = metrics.filter(m => m.frequency === 'monthly')
 
+  // Subtítulos para el panel actual
+  const weekSubtitle = useMemo(() => {
+    if (!curWeek) return null
+    const { mon, sun } = weekRange(curWeek)
+    const fmt = d => `${d.getUTCDate()} ${WEEK_MONTHS[d.getUTCMonth()]}`
+    return `${fmt(mon)} – ${fmt(sun)}`
+  }, [curWeek])
+
+  const monthSubtitle = useMemo(() => {
+    if (!curMonth) return null
+    const [year, m] = curMonth.split('-')
+    return `${MONTH_LONG[parseInt(m, 10) - 1]} ${year}`
+  }, [curMonth])
+
   if (loading) {
     return (
       <div className="flex justify-center py-16">
@@ -620,9 +815,6 @@ export default function DatosTab() {
             <span className="w-0.5 h-5 bg-primary-400 dark:bg-primary-600 rounded" />
             <span className="text-xs text-gray-500 dark:text-gray-400">Período actual</span>
           </div>
-          <div className="flex items-center gap-1.5 ml-2 pl-4 border-l border-gray-200 dark:border-gray-700">
-            <span className="text-xs text-gray-400 dark:text-gray-500 italic">Hover en encabezados semanales para ver fecha exacta</span>
-          </div>
         </div>
       </div>
 
@@ -643,13 +835,13 @@ export default function DatosTab() {
         </div>
       )}
 
-      {/* ── Tabla semanal ── */}
+      {/* ── Sección semanal: panel rápido + histórico ── */}
       {weeklyMetrics.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Semanales</span>
-              <span className="text-xs text-gray-400 dark:text-gray-500">· {weeklyPeriods.length} semanas · scroll horizontal</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">· {weeklyPeriods.length} semanas</span>
             </div>
             <YearNav
               year={weekYear}
@@ -659,25 +851,42 @@ export default function DatosTab() {
               onToday={() => setWeekYear(TODAY_WEEK_YEAR)}
             />
           </div>
-          <ScorecardTable
+
+          <CurrentPeriodPanel
             metrics={weeklyMetrics}
             entriesMap={entriesMap}
             members={members}
-            periods={weeklyPeriods}
             currentPeriod={curWeek}
-            labelFn={weekLabel}
-            tooltipFn={weekTooltip}
+            title={curWeek ? `Datos de esta semana (${weekLabel(curWeek)})` : null}
+            subtitle={weekSubtitle}
             onEntryChange={handleEntryChange}
-            onEdit={metric => setModalMetric({ mode: 'edit', metric })}
-            onDelete={id => setConfirmDel({ id })}
-            containerRef={weekContainerRef}
-            currentPeriodRef={weekCurrentThRef}
-            isWeekly={true}
           />
+
+          <details className="group" open>
+            <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-3 select-none flex items-center gap-1.5">
+              <span className="transition-transform group-open:rotate-90 inline-block">›</span>
+              Histórico semanal (scroll horizontal)
+            </summary>
+            <ScorecardTable
+              metrics={weeklyMetrics}
+              entriesMap={entriesMap}
+              members={members}
+              periods={weeklyPeriods}
+              currentPeriod={curWeek}
+              labelFn={weekLabel}
+              tooltipFn={weekTooltip}
+              onEntryChange={handleEntryChange}
+              onEdit={metric => setModalMetric({ mode: 'edit', metric })}
+              onDelete={id => setConfirmDel({ id })}
+              containerRef={weekContainerRef}
+              currentPeriodRef={weekCurrentThRef}
+              isWeekly={true}
+            />
+          </details>
         </div>
       )}
 
-      {/* ── Tabla mensual ── */}
+      {/* ── Sección mensual: panel rápido + histórico ── */}
       {monthlyMetrics.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -693,21 +902,38 @@ export default function DatosTab() {
               onToday={() => setMonthYear(TODAY_MONTH_YEAR)}
             />
           </div>
-          <ScorecardTable
+
+          <CurrentPeriodPanel
             metrics={monthlyMetrics}
             entriesMap={entriesMap}
             members={members}
-            periods={monthlyPeriods}
             currentPeriod={curMonth}
-            labelFn={monthLabel}
-            tooltipFn={monthTooltip}
+            title={curMonth ? `Datos de este mes` : null}
+            subtitle={monthSubtitle}
             onEntryChange={handleEntryChange}
-            onEdit={metric => setModalMetric({ mode: 'edit', metric })}
-            onDelete={id => setConfirmDel({ id })}
-            containerRef={monthContainerRef}
-            currentPeriodRef={monthCurrentThRef}
-            isWeekly={false}
           />
+
+          <details className="group" open>
+            <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-3 select-none flex items-center gap-1.5">
+              <span className="transition-transform group-open:rotate-90 inline-block">›</span>
+              Histórico mensual (scroll horizontal)
+            </summary>
+            <ScorecardTable
+              metrics={monthlyMetrics}
+              entriesMap={entriesMap}
+              members={members}
+              periods={monthlyPeriods}
+              currentPeriod={curMonth}
+              labelFn={monthLabel}
+              tooltipFn={monthTooltip}
+              onEntryChange={handleEntryChange}
+              onEdit={metric => setModalMetric({ mode: 'edit', metric })}
+              onDelete={id => setConfirmDel({ id })}
+              containerRef={monthContainerRef}
+              currentPeriodRef={monthCurrentThRef}
+              isWeekly={false}
+            />
+          </details>
         </div>
       )}
 
