@@ -7,7 +7,10 @@ import { avatarUrl } from '../../utils/avatarUrl'
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function getISOWeek(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  // Reinterpretar el Date como UTC del mismo día calendario (componentes UTC).
+  // Si el Date ya estaba en UTC, no hay cambio; si vino con componentes locales,
+  // se normaliza al día que el usuario "ve" sin desfase de huso horario.
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
   const dayNum = d.getUTCDay() || 7
   d.setUTCDate(d.getUTCDate() + 4 - dayNum)
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
