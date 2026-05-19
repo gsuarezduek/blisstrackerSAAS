@@ -85,6 +85,20 @@ function todayMonthPeriod() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
+function shiftWeekPeriod(period, delta) {
+  const { mon } = weekRange(period)
+  const d = new Date(mon)
+  d.setUTCDate(d.getUTCDate() + delta * 7)
+  const [y, w] = getISOWeek(d)
+  return `${y}-W${String(w).padStart(2, '0')}`
+}
+
+function shiftMonthPeriod(period, delta) {
+  const [y, m] = period.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 const TODAY_WEEK       = todayWeekPeriod()
 const TODAY_MONTH      = todayMonthPeriod()
 const TODAY_WEEK_YEAR  = parseInt(TODAY_WEEK.split('-W')[0])
@@ -232,28 +246,59 @@ function QuickEntryCard({ metric, owner, initialValue, onSave }) {
 // CurrentPeriodPanel — panel destacado del período actual
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function CurrentPeriodPanel({ metrics, entriesMap, members, currentPeriod, title, subtitle, onEntryChange }) {
-  if (metrics.length === 0 || !currentPeriod) return null
+function CurrentPeriodPanel({
+  metrics, entriesMap, members, period, title, subtitle, onEntryChange,
+  isCurrent, canGoForward, onPrev, onNext, onToday,
+}) {
+  if (metrics.length === 0 || !period) return null
 
   return (
     <div className="bg-gradient-to-br from-primary-50/80 via-white to-white dark:from-primary-900/20 dark:via-gray-800 dark:to-gray-800 border-2 border-primary-200 dark:border-primary-800/60 rounded-2xl p-5 mb-4">
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <span className="px-2 py-0.5 bg-primary-600 text-white text-[10px] font-bold uppercase tracking-wider rounded">Ahora</span>
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
-        {subtitle && <span className="text-xs text-gray-500 dark:text-gray-400">· {subtitle}</span>}
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <span className={`px-2 py-0.5 text-white text-[10px] font-bold uppercase tracking-wider rounded ${
+            isCurrent ? 'bg-primary-600' : 'bg-gray-500 dark:bg-gray-600'
+          }`}>
+            {isCurrent ? 'Ahora' : 'Cargar atrasado'}
+          </span>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+          {subtitle && <span className="text-xs text-gray-500 dark:text-gray-400">· {subtitle}</span>}
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={onPrev}
+            title="Período anterior"
+            className="w-7 h-7 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-white dark:hover:bg-gray-700 transition-colors text-sm font-semibold"
+          >‹</button>
+          {!isCurrent && (
+            <button
+              onClick={onToday}
+              className="px-2.5 py-1 text-xs font-medium text-primary-700 dark:text-primary-300 bg-white dark:bg-gray-800 hover:bg-primary-50 dark:hover:bg-primary-900/30 border border-primary-300 dark:border-primary-700 rounded-lg transition-colors"
+            >
+              Hoy
+            </button>
+          )}
+          <button
+            onClick={onNext}
+            disabled={!canGoForward}
+            title={canGoForward ? 'Período siguiente' : 'No se puede avanzar al futuro'}
+            className="w-7 h-7 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-white dark:hover:bg-gray-700 transition-colors text-sm font-semibold disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+          >›</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {metrics.map(metric => {
           const owner = metric.ownerId ? members.find(m => m.id === metric.ownerId) : null
-          const currentVal = entriesMap[metric.id]?.[currentPeriod] ?? null
+          const currentVal = entriesMap[metric.id]?.[period] ?? null
           return (
             <QuickEntryCard
-              key={metric.id}
+              key={`${metric.id}-${period}`}
               metric={metric}
               owner={owner}
               initialValue={currentVal}
-              onSave={(value) => onEntryChange(metric.id, currentPeriod, value)}
+              onSave={(value) => onEntryChange(metric.id, period, value)}
             />
           )
         })}
@@ -655,6 +700,8 @@ export default function DatosTab() {
   const [confirmDel,  setConfirmDel]  = useState(null)
   const [weekYear,    setWeekYear]    = useState(TODAY_WEEK_YEAR)
   const [monthYear,   setMonthYear]   = useState(TODAY_MONTH_YEAR)
+  const [panelWeek,   setPanelWeek]   = useState(TODAY_WEEK)
+  const [panelMonth,  setPanelMonth]  = useState(TODAY_MONTH)
 
   // Refs para auto-scroll de tablas
   const weekContainerRef  = useRef(null)
@@ -758,19 +805,36 @@ export default function DatosTab() {
   const weeklyMetrics  = metrics.filter(m => m.frequency === 'weekly')
   const monthlyMetrics = metrics.filter(m => m.frequency === 'monthly')
 
-  // Subtítulos para el panel actual
-  const weekSubtitle = useMemo(() => {
-    if (!curWeek) return null
-    const { mon, sun } = weekRange(curWeek)
-    const fmt = d => `${d.getUTCDate()} ${WEEK_MONTHS[d.getUTCMonth()]}`
-    return `${fmt(mon)} – ${fmt(sun)}`
-  }, [curWeek])
+  // Título + subtítulo del panel semanal según el período seleccionado
+  const weekPanelTitle = useMemo(() => {
+    if (panelWeek === TODAY_WEEK) return `Datos de esta semana (${weekLabel(panelWeek)})`
+    return `Datos de ${weekLabel(panelWeek)}`
+  }, [panelWeek])
 
-  const monthSubtitle = useMemo(() => {
-    if (!curMonth) return null
-    const [year, m] = curMonth.split('-')
-    return `${MONTH_LONG[parseInt(m, 10) - 1]} ${year}`
-  }, [curMonth])
+  const weekPanelSubtitle = useMemo(() => {
+    const { mon, sun } = weekRange(panelWeek)
+    const fmt = d => `${d.getUTCDate()} ${WEEK_MONTHS[d.getUTCMonth()]}`
+    const [y] = panelWeek.split('-W')
+    const yearLabel = parseInt(y) !== TODAY_WEEK_YEAR ? ` ${y}` : ''
+    return `${fmt(mon)} – ${fmt(sun)}${yearLabel}`
+  }, [panelWeek])
+
+  const monthPanelTitle = useMemo(() => {
+    if (panelMonth === TODAY_MONTH) return 'Datos de este mes'
+    const [year, m] = panelMonth.split('-')
+    return `Datos de ${MONTH_LONG[parseInt(m, 10) - 1]}${parseInt(year) !== TODAY_MONTH_YEAR ? ` ${year}` : ''}`
+  }, [panelMonth])
+
+  const monthPanelSubtitle = useMemo(() => {
+    if (panelMonth === TODAY_MONTH) {
+      const [year, m] = panelMonth.split('-')
+      return `${MONTH_LONG[parseInt(m, 10) - 1]} ${year}`
+    }
+    return null
+  }, [panelMonth])
+
+  const canGoForwardWeek  = panelWeek  < TODAY_WEEK
+  const canGoForwardMonth = panelMonth < TODAY_MONTH
 
   if (loading) {
     return (
@@ -856,10 +920,15 @@ export default function DatosTab() {
             metrics={weeklyMetrics}
             entriesMap={entriesMap}
             members={members}
-            currentPeriod={curWeek}
-            title={curWeek ? `Datos de esta semana (${weekLabel(curWeek)})` : null}
-            subtitle={weekSubtitle}
+            period={panelWeek}
+            title={weekPanelTitle}
+            subtitle={weekPanelSubtitle}
             onEntryChange={handleEntryChange}
+            isCurrent={panelWeek === TODAY_WEEK}
+            canGoForward={canGoForwardWeek}
+            onPrev={() => setPanelWeek(p => shiftWeekPeriod(p, -1))}
+            onNext={() => setPanelWeek(p => shiftWeekPeriod(p, +1))}
+            onToday={() => setPanelWeek(TODAY_WEEK)}
           />
 
           <details className="group" open>
@@ -907,10 +976,15 @@ export default function DatosTab() {
             metrics={monthlyMetrics}
             entriesMap={entriesMap}
             members={members}
-            currentPeriod={curMonth}
-            title={curMonth ? `Datos de este mes` : null}
-            subtitle={monthSubtitle}
+            period={panelMonth}
+            title={monthPanelTitle}
+            subtitle={monthPanelSubtitle}
             onEntryChange={handleEntryChange}
+            isCurrent={panelMonth === TODAY_MONTH}
+            canGoForward={canGoForwardMonth}
+            onPrev={() => setPanelMonth(p => shiftMonthPeriod(p, -1))}
+            onNext={() => setPanelMonth(p => shiftMonthPeriod(p, +1))}
+            onToday={() => setPanelMonth(TODAY_MONTH)}
           />
 
           <details className="group" open>
