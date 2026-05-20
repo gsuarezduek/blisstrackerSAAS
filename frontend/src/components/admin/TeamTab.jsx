@@ -56,6 +56,7 @@ export default function TeamTab() {
   const [editError, setEditError]   = useState('')
   const [editLoading, setEditLoading] = useState(false)
   const [showInactive, setShowInactive] = useState(false)
+  const [deactivate, setDeactivate]     = useState(null) // { user, tasks, action, reassignTo, loading, error }
 
   useEffect(() => {
     api.get('/workspaces/current/members').then(r => setUsers(r.data)).catch(() => {})
@@ -121,9 +122,55 @@ export default function TeamTab() {
 
   // ── Activar / desactivar ──────────────────────────────────────────────────
 
-  async function toggleActive(u) {
-    const { data } = await api.patch(`/workspaces/current/members/${u.id}/toggle-active`)
+  async function applyToggle(userId, body) {
+    const { data } = await api.patch(
+      `/workspaces/current/members/${userId}/toggle-active`,
+      body || {},
+    )
     setUsers(prev => prev.map(x => x.id === data.id ? data : x))
+  }
+
+  async function toggleActive(u) {
+    // Activar es directo
+    if (!u.active) {
+      await applyToggle(u.id)
+      return
+    }
+    // Desactivar: revisar primero si tiene tareas no-completadas
+    try {
+      const { data } = await api.get(`/workspaces/current/members/${u.id}/pending-tasks`)
+      if (!data.length) {
+        await applyToggle(u.id)
+        return
+      }
+      setDeactivate({ user: u, tasks: data, action: 'reassign', reassignTo: '', loading: false, error: '' })
+    } catch (err) {
+      // Si el endpoint falla, fallback al flujo original
+      await applyToggle(u.id)
+    }
+  }
+
+  async function confirmDeactivate() {
+    if (!deactivate) return
+    const { user, action, reassignTo } = deactivate
+    if (action === 'reassign' && !reassignTo) {
+      setDeactivate(d => ({ ...d, error: 'Elegí un miembro destinatario' }))
+      return
+    }
+    setDeactivate(d => ({ ...d, loading: true, error: '' }))
+    try {
+      const body = action === 'reassign'
+        ? { taskAction: 'reassign', reassignToUserId: Number(reassignTo) }
+        : { taskAction: 'complete' }
+      await applyToggle(user.id, body)
+      setDeactivate(null)
+    } catch (err) {
+      setDeactivate(d => ({
+        ...d,
+        loading: false,
+        error: err.response?.data?.error || 'Error al desactivar',
+      }))
+    }
   }
 
   function labelFor(roleName) {
@@ -292,6 +339,96 @@ export default function TeamTab() {
           )
         })}
       </div>
+
+      {/* ── Modal de desactivación con tareas pendientes ─────────────────── */}
+      {deactivate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                Desactivar a {deactivate.user.name}
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Tiene {deactivate.tasks.length} {deactivate.tasks.length === 1 ? 'tarea sin completar' : 'tareas sin completar'}. Elegí qué hacer antes de desactivar.
+              </p>
+            </div>
+
+            <div className="px-5 py-4 overflow-y-auto flex-1">
+              <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-1">
+                {deactivate.tasks.map(t => (
+                  <div key={t.id} className="text-xs bg-gray-50 dark:bg-gray-900/40 rounded px-3 py-2">
+                    <p className="font-medium text-gray-800 dark:text-gray-200 truncate">{t.description}</p>
+                    <p className="text-gray-400 dark:text-gray-500 mt-0.5">
+                      {t.project?.name || 'Sin proyecto'} · {t.isBacklog ? 'Backlog' : t.status}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio" name="task-action" value="reassign"
+                    checked={deactivate.action === 'reassign'}
+                    onChange={() => setDeactivate(d => ({ ...d, action: 'reassign', error: '' }))}
+                    className="mt-1"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Reasignar a otro miembro</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Las tareas pasan a otro miembro del equipo manteniendo su estado.</p>
+                    {deactivate.action === 'reassign' && (
+                      <select
+                        value={deactivate.reassignTo}
+                        onChange={e => setDeactivate(d => ({ ...d, reassignTo: e.target.value, error: '' }))}
+                        className="mt-2 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Elegí un miembro…</option>
+                        {users.filter(x => x.active && x.id !== deactivate.user.id).map(x => (
+                          <option key={x.id} value={x.id}>{x.name} ({x.email})</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio" name="task-action" value="complete"
+                    checked={deactivate.action === 'complete'}
+                    onChange={() => setDeactivate(d => ({ ...d, action: 'complete', error: '' }))}
+                    className="mt-1"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Pasar a completadas</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Todas las tareas se marcan como completadas con la fecha de hoy.</p>
+                  </div>
+                </label>
+              </div>
+
+              {deactivate.error && (
+                <p className="mt-3 text-sm text-red-500">{deactivate.error}</p>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-2">
+              <button
+                onClick={() => setDeactivate(null)}
+                disabled={deactivate.loading}
+                className="text-sm px-3 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeactivate}
+                disabled={deactivate.loading}
+                className="text-sm px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:opacity-60"
+              >
+                {deactivate.loading ? 'Procesando…' : 'Desactivar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Historial de usuarios inactivos ──────────────────────────────── */}
       {users.some(u => !u.active) && (

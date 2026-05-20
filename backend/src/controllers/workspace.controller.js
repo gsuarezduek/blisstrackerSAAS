@@ -308,13 +308,50 @@ async function updateMember(req, res, next) {
 }
 
 /**
+ * GET /api/workspaces/current/members/:userId/pending-tasks
+ * Devuelve las tareas no completadas del miembro en el workspace actual.
+ * Usado antes de desactivar para decidir qué hacer (reasignar o completar).
+ */
+async function listMemberPendingTasks(req, res, next) {
+  try {
+    const userId = Number(req.params.userId)
+    const workspaceId = req.workspace.id
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        userId,
+        status: { not: 'COMPLETED' },
+        project: { workspaceId },
+      },
+      select: {
+        id: true,
+        description: true,
+        status: true,
+        isBacklog: true,
+        starred: true,
+        createdAt: true,
+        project: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    res.json(tasks)
+  } catch (err) { next(err) }
+}
+
+/**
  * PATCH /api/workspaces/current/members/:userId/toggle-active
  * Activar / desactivar miembro.
+ * Al desactivar acepta opcionalmente:
+ *   - taskAction: 'reassign' | 'complete'
+ *   - reassignToUserId: number (requerido si taskAction === 'reassign')
+ * para manejar las tareas no completadas del usuario.
  */
 async function toggleMemberActive(req, res, next) {
   try {
     const userId = Number(req.params.userId)
     const workspaceId = req.workspace.id
+    const { taskAction, reassignToUserId } = req.body || {}
 
     const member = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
@@ -323,8 +360,54 @@ async function toggleMemberActive(req, res, next) {
 
     const newActive = !member.active
 
+    // Validación: si se está desactivando y se eligió reasignar, el destino debe existir y estar activo
+    if (!newActive && taskAction === 'reassign') {
+      const targetId = Number(reassignToUserId)
+      if (!targetId || targetId === userId) {
+        return res.status(400).json({ error: 'Debe elegir un destinatario válido para reasignar las tareas' })
+      }
+      const target = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: targetId } },
+      })
+      if (!target || !target.active) {
+        return res.status(400).json({ error: 'El destinatario debe ser un miembro activo del workspace' })
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       if (!newActive) {
+        // Manejar tareas no completadas del usuario en el workspace
+        if (taskAction === 'complete') {
+          await tx.task.updateMany({
+            where: {
+              userId,
+              status: { not: 'COMPLETED' },
+              project: { workspaceId },
+            },
+            data: { status: 'COMPLETED', completedAt: new Date() },
+          })
+        } else if (taskAction === 'reassign') {
+          const targetId = Number(reassignToUserId)
+          // Pausar las IN_PROGRESS antes de reasignar para no dejar la tarea activa
+          // a nombre de otro usuario (que ya podría tener una IN_PROGRESS).
+          await tx.task.updateMany({
+            where: {
+              userId,
+              status: 'IN_PROGRESS',
+              project: { workspaceId },
+            },
+            data: { status: 'PAUSED', pausedAt: new Date() },
+          })
+          await tx.task.updateMany({
+            where: {
+              userId,
+              status: { not: 'COMPLETED' },
+              project: { workspaceId },
+            },
+            data: { userId: targetId },
+          })
+        }
+
         // Al desactivar, remover de todos los proyectos del workspace
         const projectIds = (await tx.project.findMany({
           where: { workspaceId },
@@ -931,6 +1014,7 @@ async function deleteDemoProject(req, res, next) {
 
 module.exports = {
   getMine, getCurrent, updateCurrent, listMembers, addMember, updateMember, toggleMemberActive,
+  listMemberPendingTasks,
   createWorkspace, checkSlug, getInfo,
   inviteMember, getInvitation, joinWorkspace, listInvitations, cancelInvitation,
   getDeletionRequest, scheduleDeletion, cancelDeletion, executeWorkspaceDeletion,

@@ -5,6 +5,18 @@ const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
+const jwt = require('jsonwebtoken')
+
+const userOrIpKey = (req) => {
+  const auth = req.headers.authorization || ''
+  if (auth.startsWith('Bearer ')) {
+    try {
+      const payload = jwt.verify(auth.slice(7), process.env.JWT_SECRET)
+      if (payload?.userId) return `u:${payload.userId}`
+    } catch {}
+  }
+  return `ip:${req.ip}`
+}
 
 const authRoutes              = require('./routes/auth.routes')
 const workspaceRoutes         = require('./routes/workspace.routes')
@@ -69,7 +81,8 @@ app.set('trust proxy', 1)
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: 1000,
+  keyGenerator: userOrIpKey,
   message: { error: 'Demasiadas solicitudes. Intentá de nuevo en 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,

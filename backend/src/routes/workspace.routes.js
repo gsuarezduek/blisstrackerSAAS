@@ -33,6 +33,7 @@ router.patch('/current', workspaceAdminOnly, c.updateCurrent)
 router.get('/current/members', c.listMembers)
 router.post('/current/members', workspaceAdminOnly, c.addMember)
 router.put('/current/members/:userId', workspaceAdminOnly, c.updateMember)
+router.get('/current/members/:userId/pending-tasks', workspaceAdminOnly, c.listMemberPendingTasks)
 router.patch('/current/members/:userId/toggle-active', workspaceAdminOnly, c.toggleMemberActive)
 
 router.get('/current/invitations',       workspaceAdminOnly, c.listInvitations)
