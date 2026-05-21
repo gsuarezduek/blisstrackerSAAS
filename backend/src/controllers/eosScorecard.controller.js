@@ -49,6 +49,7 @@ async function getScorecard(req, res, next) {
         where:   { workspaceId, active: true },
         include: { user: { select: { id: true, name: true, avatar: true } } },
         orderBy: { user: { name: 'asc' } },
+        // role incluido para que el frontend filtre el select a admins/owners
       }),
       prisma.scorecardMetric.findMany({
         where:   { workspaceId },
@@ -72,6 +73,7 @@ async function getScorecard(req, res, next) {
         id:     m.user.id,
         name:   m.user.name,
         avatar: m.user.avatar,
+        role:   m.role,
       })),
       metrics: metrics.map(m => ({
         id:        m.id,

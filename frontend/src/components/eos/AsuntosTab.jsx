@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
+import { adminMemberOptions } from '../../utils/adminMembers'
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ function IssueCard({ issue, members, onUpdate, onDelete }) {
               className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-primary-400"
             >
               <option value="">Sin responsable</option>
-              {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              {adminMemberOptions(members, issue.ownerId).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
 
             <div className="flex-1" />

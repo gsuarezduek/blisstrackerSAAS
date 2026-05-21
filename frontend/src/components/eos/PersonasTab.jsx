@@ -94,7 +94,16 @@ function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
   }
 
   const allColumns = [
-    ...coreValues.map(v => ({ key: v, label: v.length > 12 ? v.slice(0, 11) + '…' : v, title: v, isGwc: false })),
+    ...coreValues.map(v => {
+      const name = typeof v === 'string' ? v : v?.name ?? ''
+      const desc = typeof v === 'object' && v?.description ? ` — ${v.description}` : ''
+      return {
+        key:   name,
+        label: name.length > 12 ? name.slice(0, 11) + '…' : name,
+        title: name + desc,
+        isGwc: false,
+      }
+    }),
     ...GWC_COLUMNS.map(g => ({ ...g, isGwc: true })),
   ]
 

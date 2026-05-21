@@ -1358,6 +1358,7 @@ model EOSMeeting {
   date        String? // "2026-05-06"
   rating      Int? // 1-10
   notes       String?
+  type        String   @default("weekly") // 'weekly' | 'quarterly' | 'annual'
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
+import { adminMemberOptions } from '../../utils/adminMembers'
+import RichTextEditor from '../RichTextEditor'
+import DOMPurify from 'dompurify'
+import '../situation-editor.css'
 
 // ─── Constantes de status ─────────────────────────────────────────────────────
 
@@ -238,7 +242,7 @@ function RockCard({ rock, members, onUpdate, onDelete }) {
                 className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-primary-400"
               >
                 <option value="">Sin responsable</option>
-                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {adminMemberOptions(members, rock.ownerId).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
 
@@ -537,7 +541,7 @@ function TodoItem({ todo, members, onUpdate, onDelete }) {
         className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-400 max-w-[120px]"
       >
         <option value="">—</option>
-        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        {adminMemberOptions(members, todo.ownerId).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
       </select>
 
       {/* Owner avatar */}
@@ -595,43 +599,83 @@ function QuickAddTodo({ onAdd }) {
 
 // ─── MeetingCard ──────────────────────────────────────────────────────────────
 
+const MEETING_TYPES = [
+  { value: 'weekly',    label: 'Semanal' },
+  { value: 'quarterly', label: 'Trimestral' },
+  { value: 'annual',    label: 'Anual' },
+]
+
 function MeetingCard({ week, meeting, onSave }) {
-  const [date, setDate]   = useState(meeting?.date || '')
+  const [date, setDate]     = useState(meeting?.date || '')
   const [rating, setRating] = useState(meeting?.rating ?? null)
-  const [notes, setNotes] = useState(meeting?.notes || '')
-  const notesDirty = useRef(false)
+  const [type, setType]     = useState(meeting?.type || 'weekly')
+  const notes               = meeting?.notes || ''
+
+  // Edit/Save/Cancel del WYSIWYG (sólo para las notas)
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [notesDraft,   setNotesDraft]   = useState(notes)
+  const [savingNotes,  setSavingNotes]  = useState(false)
 
   useEffect(() => {
     setDate(meeting?.date || '')
     setRating(meeting?.rating ?? null)
-    setNotes(meeting?.notes || '')
-    notesDirty.current = false
+    setType(meeting?.type || 'weekly')
+    setEditingNotes(false)
+    setNotesDraft(meeting?.notes || '')
   }, [week, meeting?.id])
 
   function save(patch) {
     const payload = {
-      date:   date,
-      rating: rating,
-      notes:  notes,
+      date,
+      rating,
+      type,
       ...patch,
     }
     onSave(payload)
   }
 
-  function handleNotesChange(val) {
-    setNotes(val)
-    notesDirty.current = true
+  function handleEditNotes() {
+    setNotesDraft(notes)
+    setEditingNotes(true)
   }
 
-  function commitNotes() {
-    if (notesDirty.current) { notesDirty.current = false; save({ notes }) }
+  async function handleSaveNotes() {
+    setSavingNotes(true)
+    try {
+      await onSave({ date, rating, type, notes: notesDraft })
+      setEditingNotes(false)
+    } finally {
+      setSavingNotes(false)
+    }
   }
+
+  function handleCancelNotes() {
+    setNotesDraft(notes)
+    setEditingNotes(false)
+  }
+
+  const notesIsEmpty = !notes || notes === '<p></p>'
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        Registro de reunión
-      </h4>
+    <div className={`bg-white dark:bg-gray-800 border rounded-xl p-4 space-y-3 ${
+      type === 'annual'    ? 'border-purple-300 dark:border-purple-700' :
+      type === 'quarterly' ? 'border-amber-300 dark:border-amber-700' :
+                             'border-gray-200 dark:border-gray-700'
+    }`}>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          Registro de reunión
+        </h4>
+        {type !== 'weekly' && (
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+            type === 'annual'
+              ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
+              : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+          }`}>
+            {type === 'annual' ? '🎯 Reunión Anual' : '📊 Reunión Trimestral'}
+          </span>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-6 items-start">
         {/* Fecha */}
@@ -643,6 +687,18 @@ function MeetingCard({ week, meeting, onSave }) {
             onChange={e => { setDate(e.target.value); save({ date: e.target.value }) }}
             className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400"
           />
+        </div>
+
+        {/* Tipo */}
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tipo</label>
+          <select
+            value={type}
+            onChange={e => { setType(e.target.value); save({ type: e.target.value }) }}
+            className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400"
+          >
+            {MEETING_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
         </div>
 
         {/* Rating */}
@@ -666,15 +722,51 @@ function MeetingCard({ week, meeting, onSave }) {
 
       {/* Notas */}
       <div>
-        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Notas / Decisiones / Compromisos</label>
-        <textarea
-          className="w-full text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-gray-800 dark:text-gray-200 resize-none focus:outline-none focus:ring-1 focus:ring-primary-400"
-          rows={2}
-          placeholder="Registrá decisiones clave, acuerdos o temas que necesitan seguimiento..."
-          value={notes}
-          onChange={e => handleNotesChange(e.target.value)}
-          onBlur={commitNotes}
-        />
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs text-gray-500 dark:text-gray-400">Notas / Decisiones / Compromisos</label>
+          {!editingNotes && (
+            <button
+              onClick={handleEditNotes}
+              className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+            >
+              {notesIsEmpty ? '+ Agregar' : 'Editar'}
+            </button>
+          )}
+        </div>
+
+        {editingNotes ? (
+          <div>
+            <RichTextEditor
+              defaultContent={notesDraft}
+              onChange={setNotesDraft}
+              minHeight={220}
+            />
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                onClick={handleSaveNotes}
+                disabled={savingNotes}
+                className="text-sm px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+              >
+                {savingNotes ? 'Guardando...' : 'Guardar'}
+              </button>
+              <button
+                onClick={handleCancelNotes}
+                className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : notesIsEmpty ? (
+          <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+            Sin notas registradas todavía.
+          </p>
+        ) : (
+          <div
+            className="situation-content text-sm text-gray-700 dark:text-gray-300"
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(notes) }}
+          />
+        )}
       </div>
     </div>
   )
@@ -683,14 +775,17 @@ function MeetingCard({ week, meeting, onSave }) {
 // ─── MeetingSection ───────────────────────────────────────────────────────────
 
 function MeetingSection() {
-  const [week, setWeek]       = useState(currentWeekStr)
-  const [todos, setTodos]     = useState([])
-  const [meeting, setMeeting] = useState(null)
-  const [members, setMembers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
+  const [week, setWeek]                  = useState(currentWeekStr)
+  const [todos, setTodos]                = useState([])
+  const [meeting, setMeeting]            = useState(null)
+  const [members, setMembers]            = useState([])
+  const [specialMeetings, setSpecialMeetings] = useState([])
+  const [showSpecials, setShowSpecials]  = useState(false)
+  const [loading, setLoading]            = useState(true)
+  const [error, setError]                = useState(null)
 
   useEffect(() => { loadWeek() }, [week])
+  useEffect(() => { loadSpecials() }, [])
 
   async function loadWeek() {
     try {
@@ -705,6 +800,13 @@ function MeetingSection() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function loadSpecials() {
+    try {
+      const { data } = await api.get('/eos/traction/meetings/special')
+      setSpecialMeetings(data.meetings || [])
+    } catch {}
   }
 
   async function handleAddTodo(title) {
@@ -733,6 +835,8 @@ function MeetingSection() {
     try {
       const { data } = await api.put(`/eos/traction/meetings/${week}`, patch)
       setMeeting(data)
+      // Si el tipo cambió, refresco la lista de especiales
+      if (patch.type !== undefined) loadSpecials()
     } catch {}
   }
 
@@ -745,6 +849,23 @@ function MeetingSection() {
     if (a.done !== b.done) return a.done ? 1 : -1
     return a.order - b.order
   })
+
+  // ── Navegación entre reuniones del mismo tipo (cuando estás en una trimestral/anual)
+  const currentType = meeting?.type || 'weekly'
+  const isSpecial   = currentType !== 'weekly'
+
+  function specialNeighbors() {
+    // Asume specialMeetings ordenadas por week DESC (lo devuelve el backend).
+    const sameType = specialMeetings.filter(m => m.type === currentType)
+    const idx      = sameType.findIndex(m => m.week === week)
+    if (idx === -1) return { prev: null, next: null }
+    return {
+      prev: sameType[idx + 1]?.week ?? null, // más vieja (DESC)
+      next: sameType[idx - 1]?.week ?? null, // más nueva
+    }
+  }
+
+  const { prev: prevSpecialWeek, next: nextSpecialWeek } = isSpecial ? specialNeighbors() : { prev: null, next: null }
 
   return (
     <div className="space-y-5">
@@ -769,29 +890,100 @@ function MeetingSection() {
         </button>
 
         {/* Pills de navegación rápida */}
-        <div className="flex items-center gap-1 ml-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
-          {[
-            { label: 'Anterior', delta: -1 },
-            { label: 'Hoy',      delta:  0 },
-            { label: 'Próxima',  delta:  1 },
-          ].map(({ label, delta }) => {
-            const target   = delta === 0 ? currentWeekStr() : adjWeek(currentWeekStr(), delta)
-            const isActive = week === target
-            return (
-              <button
-                key={label}
-                onClick={() => setWeek(target)}
-                className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
+        {isSpecial ? (
+          <div className="flex items-center gap-1 ml-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+            <button
+              onClick={() => prevSpecialWeek && setWeek(prevSpecialWeek)}
+              disabled={!prevSpecialWeek}
+              className="px-3 py-1 text-xs font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              ← {currentType === 'annual' ? 'Anual' : 'Trimestral'} anterior
+            </button>
+            <button
+              onClick={() => nextSpecialWeek && setWeek(nextSpecialWeek)}
+              disabled={!nextSpecialWeek}
+              className="px-3 py-1 text-xs font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Próxima {currentType === 'annual' ? 'anual' : 'trimestral'} →
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 ml-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+            {[
+              { label: 'Anterior', delta: -1 },
+              { label: 'Hoy',      delta:  0 },
+              { label: 'Próxima',  delta:  1 },
+            ].map(({ label, delta }) => {
+              const target   = delta === 0 ? currentWeekStr() : adjWeek(currentWeekStr(), delta)
+              const isActive = week === target
+              return (
+                <button
+                  key={label}
+                  onClick={() => setWeek(target)}
+                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                    isActive
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Dropdown reuniones especiales */}
+        {specialMeetings.length > 0 && (
+          <div className="relative ml-2">
+            <button
+              onClick={() => setShowSpecials(v => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800 transition-colors"
+            >
+              📋 Trimestrales / Anuales
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-3 h-3 transition-transform ${showSpecials ? 'rotate-180' : ''}`}>
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+              </svg>
+            </button>
+            {showSpecials && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowSpecials(false)} />
+                <div className="absolute right-0 mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg w-72 max-h-80 overflow-y-auto py-1">
+                  {specialMeetings.map(m => {
+                    const isActive = m.week === week
+                    return (
+                      <button
+                        key={m.week}
+                        onClick={() => { setWeek(m.week); setShowSpecials(false) }}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between gap-2 ${
+                          isActive ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+                            m.type === 'annual'
+                              ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
+                              : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+                          }`}>
+                            {m.type === 'annual' ? 'Anual' : 'Trim.'}
+                          </span>
+                          <span className="text-gray-800 dark:text-gray-200">{weekLabel(m.week)}</span>
+                        </div>
+                        {m.rating && (
+                          <span className={`text-xs font-semibold ${
+                            m.rating >= 8 ? 'text-green-600 dark:text-green-400'
+                            : m.rating >= 5 ? 'text-yellow-600 dark:text-yellow-400'
+                            : 'text-red-600 dark:text-red-400'
+                          }`}>{m.rating}/10</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {loading && <p className="text-sm text-gray-400 py-4 text-center">Cargando semana...</p>}

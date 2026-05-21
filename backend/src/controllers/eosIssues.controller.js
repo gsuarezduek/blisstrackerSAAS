@@ -23,7 +23,7 @@ async function getIssues(req, res, next) {
     ])
 
     res.json({
-      members: members.map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar })),
+      members: members.map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar, role: m.role })),
       issues:  issues.map(formatIssue),
     })
   } catch (err) { next(err) }

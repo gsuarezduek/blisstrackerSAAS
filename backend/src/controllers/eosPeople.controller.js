@@ -2,6 +2,23 @@ const prisma = require('../lib/prisma')
 
 function safeArr(str) { try { return JSON.parse(str || '[]') } catch { return [] } }
 
+// Normaliza coreValues — soporta legacy (strings) y nuevo formato ({name, description})
+function parseCoreValues(raw) {
+  return safeArr(raw).map(item => {
+    if (typeof item === 'string') {
+      const name = item.trim()
+      return name ? { name, description: '' } : null
+    }
+    if (item && typeof item === 'object' && typeof item.name === 'string' && item.name.trim()) {
+      return {
+        name: item.name.trim(),
+        description: typeof item.description === 'string' ? item.description : '',
+      }
+    }
+    return null
+  }).filter(Boolean)
+}
+
 // ─── GET /api/eos/personas ────────────────────────────────────────────────────
 // Devuelve todo lo necesario para el tab Personas en una sola llamada.
 
@@ -33,7 +50,7 @@ async function getPersonas(req, res, next) {
       }),
     ])
 
-    const coreValues = safeArr(eosData?.coreValues)
+    const coreValues = parseCoreValues(eosData?.coreValues)
 
     // Ratings indexados: { [userId]: { [valueKey]: rating } }
     const ratingsMap = {}

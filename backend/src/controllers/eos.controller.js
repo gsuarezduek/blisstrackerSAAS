@@ -6,6 +6,31 @@ function safeParseArr(str) {
   try { return JSON.parse(str || '[]') } catch { return [] }
 }
 
+// coreValues se almacena como JSON [{name, description}]. Para datos legacy
+// (strings sueltos), se normaliza al leer y al guardar.
+function normalizeCoreValue(item) {
+  if (typeof item === 'string') {
+    const name = item.trim()
+    return name ? { name, description: '' } : null
+  }
+  if (item && typeof item === 'object') {
+    const name = typeof item.name === 'string' ? item.name.trim().slice(0, 200) : ''
+    if (!name) return null
+    const description = typeof item.description === 'string' ? item.description.trim().slice(0, 1000) : ''
+    return { name, description }
+  }
+  return null
+}
+
+function parseCoreValues(raw) {
+  return safeParseArr(raw).map(normalizeCoreValue).filter(Boolean)
+}
+
+function coreValuesArr(v, max = 7) {
+  if (!Array.isArray(v)) return undefined
+  return JSON.stringify(v.map(normalizeCoreValue).filter(Boolean).slice(0, max))
+}
+
 function str(v, max = 500)  { return v !== undefined ? String(v).slice(0, max) : undefined }
 function arr(v, max = 7)    {
   if (!Array.isArray(v)) return undefined
@@ -17,7 +42,7 @@ function arr(v, max = 7)    {
 function formatRecord(r) {
   return {
     // Enfoque Medular
-    coreValues:    safeParseArr(r.coreValues),
+    coreValues:    parseCoreValues(r.coreValues),
     purpose:       r.purpose ?? '',
     niche:         r.niche   ?? '',
     // Meta a 10 años
@@ -58,7 +83,7 @@ async function updateEOS(req, res, next) {
     const u = {}
 
     // Enfoque Medular
-    if (Array.isArray(b.coreValues))    u.coreValues    = arr(b.coreValues, 7)
+    if (Array.isArray(b.coreValues))    u.coreValues    = coreValuesArr(b.coreValues, 7)
     if (b.purpose       !== undefined)  u.purpose       = str(b.purpose, 500)
     if (b.niche         !== undefined)  u.niche         = str(b.niche,   500)
     // Meta a 10 años

@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 
 const VALID_ROCK_STATUS = ['not_started', 'on_track', 'off_track', 'complete']
+const VALID_MEETING_TYPE = ['weekly', 'quarterly', 'annual']
 const QUARTER_RE = /^\d{4}-Q[1-4]$/
 const WEEK_RE    = /^\d{4}-W\d{2}$/
 
@@ -12,7 +13,7 @@ async function getMembers(workspaceId) {
     include: { user: { select: { id: true, name: true, avatar: true } } },
     orderBy: { user: { name: 'asc' } },
   })
-  return rows.map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar }))
+  return rows.map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar, role: m.role }))
 }
 
 function formatRock(r) {
@@ -49,6 +50,7 @@ function formatMeeting(m) {
     date:   m.date,
     rating: m.rating,
     notes:  m.notes,
+    type:   m.type ?? 'weekly',
   }
 }
 
@@ -239,12 +241,12 @@ async function deleteTodo(req, res, next) {
 }
 
 // PUT /api/eos/traction/meetings/:week
-// body: { date?, rating?, notes? }
+// body: { date?, rating?, notes?, type? }
 async function upsertMeeting(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const { week } = req.params
-    const { date, rating, notes } = req.body
+    const { date, rating, notes, type } = req.body
 
     if (!WEEK_RE.test(week)) return res.status(400).json({ error: 'week inválida' })
 
@@ -258,6 +260,12 @@ async function upsertMeeting(req, res, next) {
       }
       data.rating = r
     }
+    if (type !== undefined) {
+      if (!VALID_MEETING_TYPE.includes(type)) {
+        return res.status(400).json({ error: 'type inválido' })
+      }
+      data.type = type
+    }
 
     const meeting = await prisma.eOSMeeting.upsert({
       where:  { workspaceId_week: { workspaceId, week } },
@@ -269,8 +277,27 @@ async function upsertMeeting(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// GET /api/eos/traction/meetings/special?type=quarterly|annual
+// Lista reuniones especiales ordenadas por week DESC, para navegación rápida.
+async function listSpecialMeetings(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const { type } = req.query
+
+    const where = { workspaceId, type: { in: ['quarterly', 'annual'] } }
+    if (type === 'quarterly' || type === 'annual') where.type = type
+
+    const meetings = await prisma.eOSMeeting.findMany({
+      where,
+      orderBy: { week: 'desc' },
+    })
+
+    res.json({ meetings: meetings.map(formatMeeting) })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   getRocks, createRock, updateRock, deleteRock,
   getWeek, createTodo, updateTodo, deleteTodo,
-  upsertMeeting,
+  upsertMeeting, listSpecialMeetings,
 }
