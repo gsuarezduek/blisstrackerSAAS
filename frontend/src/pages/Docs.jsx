@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { renderMarkdown } from '../utils/processMarkdown'
+import { printProcess } from '../utils/printProcess'
 
-const TABS = [
+const BASE_TABS = [
   { id: 'filosofia', label: 'Filosofía' },
   { id: 'manual',    label: 'Manual de Uso' },
   { id: 'roles',     label: 'Roles' },
@@ -273,7 +275,7 @@ const FREQ_GROUPS = {
   monthly:    { label: 'Mensual',              icon: '📊', color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' },
 }
 
-function RolesTab() {
+function RolesTab({ processes, onOpenProcess }) {
   const { user } = useAuth()
   const { labelFor } = useRoles()
   const [expectations, setExpectations] = useState([])
@@ -288,6 +290,16 @@ function RolesTab() {
       else if (r.data.length > 0) setExpanded(r.data[0].roleName)
     }).finally(() => setLoading(false))
   }, [user])
+
+  const processesByRole = useMemo(() => {
+    const map = new Map()
+    for (const p of processes) {
+      if (!p.ownerRole) continue
+      if (!map.has(p.ownerRole)) map.set(p.ownerRole, [])
+      map.get(p.ownerRole).push(p)
+    }
+    return map
+  }, [processes])
 
   if (loading) return (
     <LoadingSpinner className="py-16" />
@@ -309,7 +321,8 @@ function RolesTab() {
         const results = Array.isArray(exp.expectedResults) ? exp.expectedResults : []
         const resps   = Array.isArray(exp.operationalResponsibilities) ? exp.operationalResponsibilities : []
         const tasks   = Array.isArray(exp.recurrentTasks) ? exp.recurrentTasks : []
-        const hasContent = exp.description || results.length > 0 || resps.length > 0 || tasks.length > 0
+        const roleProcesses = processesByRole.get(exp.roleName) ?? []
+        const hasContent = exp.description || results.length > 0 || resps.length > 0 || tasks.length > 0 || roleProcesses.length > 0
 
         return (
           <div
@@ -358,6 +371,9 @@ function RolesTab() {
                     {results.length > 0 && (
                       <span className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full px-2 py-0.5">{results.length} resultados</span>
                     )}
+                    {roleProcesses.length > 0 && (
+                      <span className="text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-full px-2 py-0.5">{roleProcesses.length} procesos</span>
+                    )}
                     {tasks.length > 0 && (
                       <span className="text-xs bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded-full px-2 py-0.5">{tasks.length} tareas</span>
                     )}
@@ -388,6 +404,36 @@ function RolesTab() {
                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic border-l-2 border-gray-200 dark:border-gray-600 pl-3">
                       {exp.description}
                     </p>
+                  </div>
+                )}
+
+                {/* Procesos asociados */}
+                {roleProcesses.length > 0 && (
+                  <div className="px-5 pt-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">⚙️</span>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Procesos asociados</p>
+                    </div>
+                    <div className="space-y-2">
+                      {roleProcesses.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => onOpenProcess(p.id)}
+                          className="w-full flex items-center justify-between gap-3 bg-emerald-50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 rounded-xl px-3 py-2.5 transition-colors text-left"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="text-emerald-500 dark:text-emerald-400 flex-shrink-0">⚙️</span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200 truncate">{p.name}</p>
+                              <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70">{p.steps.length} paso{p.steps.length !== 1 ? 's' : ''}</p>
+                            </div>
+                          </div>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0">
+                            <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -472,6 +518,149 @@ function RolesTab() {
   )
 }
 
+// ── Procesos ───────────────────────────────────────────────────────────────
+
+function ProcesosTab({ processes, roles, expandedId, onExpand, onOpenRole }) {
+  const { user } = useAuth()
+  const isAdmin = user?.isAdmin === true
+
+  const sorted = [...processes].sort((a, b) => a.order - b.order)
+  const roleOf = roleName => roles.find(r => r.name === roleName)?.label ?? roleName
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 mb-4">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-base">⚙️</span>
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wide">Procesos del negocio</h2>
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Cómo hacemos las cosas. Los procesos centrales que todos seguimos para que el negocio funcione bien.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {sorted.map(p => {
+          const isOpen = expandedId === p.id
+          const roleLabel = p.ownerRole ? roleOf(p.ownerRole) : null
+          const steps = [...p.steps].sort((a, b) => a.order - b.order)
+
+          return (
+            <div key={p.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+              {/* Header */}
+              <button
+                onClick={() => onExpand(isOpen ? null : p.id)}
+                className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 text-lg">
+                    ⚙️
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-base font-semibold text-gray-900 dark:text-white truncate">{p.name}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      {roleLabel ? (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{roleLabel}</span>
+                      ) : (
+                        <span className="text-xs text-gray-300 dark:text-gray-600 italic">Sin rol asignado</span>
+                      )}
+                      <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">{steps.length} paso{steps.length !== 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                  className={`w-5 h-5 text-gray-400 flex-shrink-0 ml-2 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                </svg>
+              </button>
+
+              {/* Contenido */}
+              {isOpen && (
+                <div className="border-t border-gray-100 dark:border-gray-700 px-5 pt-5 pb-5 space-y-5">
+                  {/* Meta: rol + acciones */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {roleLabel && p.ownerRole ? (
+                      <button
+                        onClick={() => onOpenRole(p.ownerRole)}
+                        className="inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                          <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12.735 14c.618 0 1.093-.561.872-1.139a6.002 6.002 0 0 0-11.215 0c-.22.578.254 1.139.872 1.139h9.47Z" />
+                        </svg>
+                        Rol: <span className="font-medium underline-offset-2 hover:underline">{roleLabel}</span>
+                      </button>
+                    ) : <span />}
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => printProcess(p, roles)}
+                        className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 px-2.5 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        title="Imprimir / Guardar como PDF"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                          <path fillRule="evenodd" d="M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75v3.552c.377.046.752.097 1.126.153A2.212 2.212 0 0 1 18 8.653v4.097A2.25 2.25 0 0 1 15.75 15h-.241l.305 1.984A1.75 1.75 0 0 1 14.084 19H5.915a1.75 1.75 0 0 1-1.73-2.016L4.49 15H4.25A2.25 2.25 0 0 1 2 12.75V8.653c0-1.082.775-2.034 1.874-2.198.374-.056.749-.107 1.126-.153V2.75Zm4.5 13.5h1l-.307-2H9.807l-.307 2Z" clipRule="evenodd" />
+                        </svg>
+                        Imprimir
+                      </button>
+                      {isAdmin && (
+                        <a
+                          href="/admin/eos?tab=procesos"
+                          className="inline-flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 px-2.5 py-1 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                          title="Editar este proceso en el módulo EOS"
+                        >
+                          Editar en EOS →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Descripción */}
+                  {p.description?.trim() && (
+                    <div className="bg-gray-50 dark:bg-gray-700/40 border border-gray-100 dark:border-gray-700 rounded-xl px-4 py-3">
+                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+                        {p.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Pasos */}
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">
+                      Pasos del proceso
+                    </p>
+                    {steps.length === 0 ? (
+                      <p className="text-sm text-gray-400 dark:text-gray-500 italic">Sin pasos documentados todavía.</p>
+                    ) : (
+                      <ol className="space-y-3">
+                        {steps.map((s, i) => (
+                          <li key={s.id} className="flex items-start gap-3">
+                            <span className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                              {i + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug">{s.title}</p>
+                              {s.description?.trim() && (
+                                <div className="mt-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 px-3 py-2">
+                                  {renderMarkdown(s.description)}
+                                </div>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function DocCard({ title, icon, children }) {
@@ -505,10 +694,50 @@ function SectionPill({ color = 'gray', children }) {
 
 export default function Docs() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = TABS.find(t => t.id === searchParams.get('tab')) ? searchParams.get('tab') : 'filosofia'
+  const [processes, setProcesses] = useState([])
+  const [processRoles, setProcessRoles] = useState([])
+  const [procesosLoaded, setProcesosLoaded] = useState(false)
 
-  function setTab(id) {
-    setSearchParams({ tab: id })
+  useEffect(() => {
+    api.get('/processes').then(r => {
+      setProcesses(r.data.processes ?? [])
+      setProcessRoles(r.data.roles ?? [])
+    }).catch(() => {
+      setProcesses([])
+      setProcessRoles([])
+    }).finally(() => setProcesosLoaded(true))
+  }, [])
+
+  const tabs = useMemo(() => (
+    processes.length > 0
+      ? [...BASE_TABS, { id: 'procesos', label: 'Procesos' }]
+      : BASE_TABS
+  ), [processes.length])
+
+  const requestedTab = searchParams.get('tab')
+  const tab = tabs.find(t => t.id === requestedTab) ? requestedTab : 'filosofia'
+
+  const expandedProcessId = Number(searchParams.get('id')) || null
+
+  function setTab(id, extra) {
+    const next = { tab: id }
+    if (extra) Object.assign(next, extra)
+    setSearchParams(next)
+  }
+
+  function openProcess(id) {
+    setSearchParams({ tab: 'procesos', id: String(id) })
+  }
+
+  function openRole(/* roleName */) {
+    // El estado del rol expandido vive dentro de RolesTab y se auto-abre al de la sesión actual.
+    // Simplemente saltamos al tab Roles — el usuario localiza el rol en la lista.
+    setSearchParams({ tab: 'roles' })
+  }
+
+  function setExpandedProcess(id) {
+    if (id == null) setSearchParams({ tab: 'procesos' })
+    else            setSearchParams({ tab: 'procesos', id: String(id) })
   }
 
   return (
@@ -523,8 +752,8 @@ export default function Docs() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 mb-8 w-fit">
-          {TABS.map(t => (
+        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 mb-8 w-fit flex-wrap">
+          {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -542,7 +771,20 @@ export default function Docs() {
         {/* Content */}
         {tab === 'filosofia' && <FilosofiaTab />}
         {tab === 'manual'    && <ManualTab />}
-        {tab === 'roles'     && <RolesTab />}
+        {tab === 'roles'     && (
+          procesosLoaded
+            ? <RolesTab processes={processes} onOpenProcess={openProcess} />
+            : <LoadingSpinner className="py-16" />
+        )}
+        {tab === 'procesos'  && (
+          <ProcesosTab
+            processes={processes}
+            roles={processRoles}
+            expandedId={expandedProcessId}
+            onExpand={setExpandedProcess}
+            onOpenRole={openRole}
+          />
+        )}
       </div>
     </div>
   )

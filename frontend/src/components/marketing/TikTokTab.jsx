@@ -128,6 +128,21 @@ function KpiCard({ icon, label, value, sub, valueClass = '' }) {
   )
 }
 
+function FollowersCard({ followersCount, videoCount, monthlyGain }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-xs"><span>👥</span><span>Seguidores</span></div>
+      <div className="text-2xl font-bold text-gray-900 dark:text-white">{fmtK(followersCount)}</div>
+      {monthlyGain != null && (
+        <div className={`text-xs font-semibold ${monthlyGain > 0 ? 'text-green-600 dark:text-green-400' : monthlyGain < 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>
+          {monthlyGain > 0 ? '+' : ''}{fmtNum(monthlyGain)} este mes
+        </div>
+      )}
+      {videoCount != null && <div className="text-xs text-gray-400 dark:text-gray-500">{fmtNum(videoCount)} videos</div>}
+    </div>
+  )
+}
+
 // ── TOP del mes ───────────────────────────────────────────────────────────────
 
 function TopVideoCard({ video, medal, category, categoryIcon }) {
@@ -375,6 +390,7 @@ export default function TikTokTab({ projectId, onSelectProject }) {
   const [snapshots,       setSnapshots]      = useState([])
   const [selectedMonth,   setSelectedMonth]  = useState(currentMonth)
   const [followerLogs,    setFollowerLogs]   = useState([])
+  const [monthStartFollowers, setMonthStartFollowers] = useState(null)
   const [followerFilter,  setFollowerFilter] = useState('30d')
   const [followerLoading, setFollowerLoading]= useState(false)
   const [loading,         setLoading]        = useState(false)
@@ -404,7 +420,13 @@ export default function TikTokTab({ projectId, onSelectProject }) {
 
       if (metricsRes.status   === 'fulfilled') setMetrics(metricsRes.value.data)
       if (snapshotsRes.status === 'fulfilled') setSnapshots(snapshotsRes.value.data.snapshots ?? [])
-      if (logsRes.status      === 'fulfilled') setFollowerLogs(logsRes.value.data.logs ?? [])
+      if (logsRes.status      === 'fulfilled') {
+        const logs = logsRes.value.data.logs ?? []
+        setFollowerLogs(logs)
+        const monthStart = todayAR().slice(0, 7) + '-01'
+        const firstInMonth = logs.find(l => l.date >= monthStart)
+        setMonthStartFollowers(firstInMonth?.followersCount ?? null)
+      }
       if (metricsRes.status   === 'rejected')  setError(metricsRes.reason?.response?.data?.error || 'No se pudieron cargar las métricas.')
     } catch (err) {
       setError(err.response?.data?.error || 'Error al cargar datos de TikTok.')
@@ -465,6 +487,11 @@ export default function TikTokTab({ projectId, onSelectProject }) {
   const isCurrentMonth  = selectedMonth === currentMonth
   const displayData     = isCurrentMonth ? metrics : (snapshots.find(s => s.month === selectedMonth) ?? null)
 
+  // Seguidores ganados en el mes actual: primer log del mes (fijado en la carga inicial) vs. valor actual
+  const monthlyGain = (isCurrentMonth && displayData?.followersCount != null && monthStartFollowers != null)
+    ? displayData.followersCount - monthStartFollowers
+    : null
+
   return (
     <div className="space-y-4">
 
@@ -480,9 +507,10 @@ export default function TikTokTab({ projectId, onSelectProject }) {
 
       {displayData && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <KpiCard icon="👥" label="Seguidores"
-            value={fmtK(displayData.followersCount)}
-            sub={displayData.videoCount != null ? `${fmtNum(displayData.videoCount)} videos` : undefined}
+          <FollowersCard
+            followersCount={displayData.followersCount}
+            videoCount={displayData.videoCount}
+            monthlyGain={monthlyGain}
           />
           <KpiCard icon="⚡" label="Engagement"
             value={displayData.engagementRate != null ? `${displayData.engagementRate}%` : '—'}
