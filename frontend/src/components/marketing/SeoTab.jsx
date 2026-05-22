@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
+import { useGoogleIntegration } from '../../hooks/useGoogleIntegration'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtNum = n => (n ?? 0).toLocaleString('es-AR')
@@ -112,6 +113,105 @@ function DeltaBadge({ delta }) {
     }`}>
       {improved ? '↑' : '↓'} {Math.abs(delta).toFixed(1)}
     </span>
+  )
+}
+
+// ─── Panel de error de Search Console (con acciones inline) ──────────────────
+function GscErrorPanel({ error, loading, saving, siteUrlInput, setSiteUrlInput, onReconnect, onSaveSiteUrl }) {
+  const code = error.code
+  const type = error.type
+
+  // Tipos donde mostramos botón de reconectar OAuth
+  const canReconnect = ['no_integration', 'no_access', 'revoked', 'api_disabled'].includes(type)
+  // Tipos donde mostramos opción de cambiar Site URL
+  const canEditSiteUrl = ['no_access', 'bad_url', 'no_site_url'].includes(type)
+
+  const title = {
+    no_integration: 'Search Console no conectado',
+    no_access:      'Sin acceso a esta propiedad',
+    revoked:        'Token de Google expirado',
+    bad_url:        'URL de sitio inválida',
+    no_site_url:    'Falta configurar el Site URL',
+    api_disabled:   'API de Search Console deshabilitada',
+    generic:        'Error al cargar Search Console',
+  }[type] ?? 'Error al cargar Search Console'
+
+  return (
+    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-3">
+      <div className="flex items-start gap-3">
+        <span className="text-lg flex-shrink-0 mt-0.5">⚠️</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">{title}</p>
+          <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">{error.msg}</p>
+          {error.siteUrl && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              Site URL probado: <span className="font-mono">{error.siteUrl}</span>
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Acciones */}
+      <div className="flex flex-wrap gap-2 pl-8">
+        {canReconnect && (
+          <button
+            onClick={onReconnect}
+            disabled={loading}
+            className="px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+          >
+            {loading ? 'Conectando…' : type === 'no_integration' ? 'Conectar Search Console' : 'Reconectar con otra cuenta'}
+          </button>
+        )}
+        {canEditSiteUrl && siteUrlInput === null && (
+          <button
+            onClick={() => setSiteUrlInput(error.siteUrl ?? '')}
+            className="px-3 py-1.5 text-xs font-medium border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-200 rounded-lg transition-colors"
+          >
+            Cambiar Site URL
+          </button>
+        )}
+      </div>
+
+      {/* Input inline para Site URL */}
+      {siteUrlInput !== null && (
+        <div className="pl-8 space-y-2">
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            Probá una variante: con/sin <code className="font-mono">www</code>, con barra final, o como{' '}
+            <code className="font-mono">sc-domain:ejemplo.com</code> (Domain property).
+          </p>
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              type="text"
+              value={siteUrlInput}
+              onChange={e => setSiteUrlInput(e.target.value)}
+              placeholder="https://ejemplo.com/ o sc-domain:ejemplo.com"
+              className="flex-1 border border-amber-300 dark:border-amber-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+              onKeyDown={e => { if (e.key === 'Enter' && siteUrlInput.trim()) onSaveSiteUrl(siteUrlInput) }}
+            />
+            <button
+              onClick={() => onSaveSiteUrl(siteUrlInput)}
+              disabled={saving || !siteUrlInput.trim()}
+              className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+            >
+              {saving ? '…' : 'Guardar'}
+            </button>
+            <button
+              onClick={() => setSiteUrlInput(null)}
+              className="px-2 py-1.5 text-xs text-amber-700 dark:text-amber-300 hover:text-amber-900 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {code === 'TOKEN_EXPIRED' && (
+        <p className="text-[11px] text-amber-600 dark:text-amber-400 pl-8">
+          Si esto te pasa con frecuencia, verificá que la app OAuth de Google esté publicada (no en "Testing") — Google expira refresh tokens cada 7 días en modo Testing.
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -285,6 +385,18 @@ export default function SeoTab({ projectId, projects }) {
   const [liveLoading, setLiveLoading] = useState(false)
   const [liveError,   setLiveError]   = useState(null)
 
+  // Integraciones Google — hook compartido para reconectar/editar Site URL inline
+  const {
+    connect: connectGoogle,
+    savePropertyId,
+    loading: integLoading,
+    propSaving: integSaving,
+  } = useGoogleIntegration(projectId, { enabled: true })
+
+  // Reload trigger — incrementar para refetch de Search Console tras reconectar/cambiar Site URL
+  const [reloadTick, setReloadTick] = useState(0)
+  const [siteUrlInput, setSiteUrlInput] = useState(null)  // null = oculto, string = mostrando input
+
   // Snapshot data
   const [snap,       setSnap]       = useState(null)
   const [snapLoad,   setSnapLoad]   = useState(false)
@@ -321,18 +433,20 @@ export default function SeoTab({ projectId, projects }) {
       .then(r => setLiveData(r.data))
       .catch(err => {
         if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return
-        const status = err.response?.data?.status
-        if (status === 'no_site_url') {
-          setLiveError({ type: 'no_site_url', msg: 'Este proyecto no tiene URL de sitio configurada. Agregala en la tab Info del proyecto.' })
-        } else if (status === 'no_integration') {
-          setLiveError({ type: 'no_integration', msg: err.response?.data?.error ?? 'Google Search Console no conectado.' })
-        } else {
-          setLiveError({ type: 'generic', msg: err.response?.data?.error ?? 'Error al cargar datos de Search Console.' })
-        }
+        const data = err.response?.data ?? {}
+        const status = data.status
+        const code   = data.code
+        const knownTypes = ['no_site_url', 'no_integration', 'no_access', 'revoked', 'bad_url', 'api_disabled']
+        setLiveError({
+          type: knownTypes.includes(status) ? status : 'generic',
+          code,
+          siteUrl: data.siteUrl ?? null,
+          msg: data.error ?? 'Error al cargar datos de Search Console.',
+        })
       })
       .finally(() => setLiveLoading(false))
     return () => ctrl.abort()
-  }, [projectId])
+  }, [projectId, reloadTick])
 
   // ── Fetch AI insights ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -486,12 +600,25 @@ export default function SeoTab({ projectId, projects }) {
 
       {/* ── Error (modo live) ────────────────────────────────────────────────── */}
       {isLive && liveError && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3 text-sm text-red-600 dark:text-red-400">
-          {liveError.msg}
-          {liveError.type === 'no_integration' && (
-            <span className="ml-1">Conectalo en <strong>Proyectos → Info → Integraciones Google</strong>.</span>
-          )}
-        </div>
+        <GscErrorPanel
+          error={liveError}
+          loading={integLoading.google_search_console}
+          saving={integSaving.google_search_console}
+          siteUrlInput={siteUrlInput}
+          setSiteUrlInput={setSiteUrlInput}
+          onReconnect={async () => {
+            const res = await connectGoogle('google_search_console', { forceOAuth: true })
+            if (res?.ok) setReloadTick(t => t + 1)
+          }}
+          onSaveSiteUrl={async value => {
+            const res = await savePropertyId('google_search_console', value.trim())
+            if (res?.ok) {
+              setSiteUrlInput(null)
+              setReloadTick(t => t + 1)
+            }
+            return res
+          }}
+        />
       )}
 
       {/* ── Loading ──────────────────────────────────────────────────────────── */}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import { useGoogleIntegration } from '../hooks/useGoogleIntegration'
 
 const CONNECTIONS = [
   { key: 'instagram', label: 'Instagram', placeholder: 'https://instagram.com/usuario',    icon: '📸' },
@@ -74,93 +75,33 @@ export default function ProjectInfoTab({ project, onSave }) {
   const [error, setError]           = useState('')
 
   // Integraciones (Google + Sociales — misma lista de la API)
-  const [integrations,  setIntegrations]  = useState([])
-  const [integLoading,  setIntegLoading]  = useState({})
+  const {
+    integrations,
+    setIntegrations,
+    loading: integLoading,
+    propSaving,
+    getIntegration,
+    reload: reloadIntegrations,
+    connect: connectGoogle,
+    disconnect: disconnectIntegration,
+    savePropertyId,
+    saveCustomerId,
+  } = useGoogleIntegration(project.id, { enabled: marketingEnabled })
+
   const [propertyInput, setPropertyInput] = useState({})
   const [managerInput,  setManagerInput]  = useState({})   // Google Ads: Manager/MCC ID
-  const [propSaving,    setPropSaving]    = useState({})
-
-  // Cargar integraciones solo si marketing está habilitado
-  useEffect(() => {
-    if (!marketingEnabled) return
-    api.get(`/marketing/projects/${project.id}/integrations`)
-      .then(r => setIntegrations(r.data))
-      .catch(() => {})
-  }, [project.id, marketingEnabled])
-
-  function getIntegration(type) {
-    return integrations.find(i => i.type === type)
-  }
+  const [socialLoading, setSocialLoading] = useState({})
 
   async function handleConnect(type) {
-    setIntegLoading(prev => ({ ...prev, [type]: true }))
-    try {
-      const { data } = await api.get(
-        `/marketing/integrations/google/auth-url?projectId=${project.id}&type=${type}`
-      )
-
-      // Si el workspace ya tiene tokens de otro proyecto, intentar reutilizarlos
-      // Solo si no se está forzando reconexión (forceOAuth)
-      if (data.hasExistingTokens && !data.forceOAuth) {
-        try {
-          const r = await api.post(
-            `/marketing/projects/${project.id}/integrations/connect-existing?type=${type}`
-          )
-          setIntegrations(prev => {
-            const others = prev.filter(i => i.type !== type)
-            return [...others, r.data]
-          })
-          setIntegLoading(prev => ({ ...prev, [type]: false }))
-          return
-        } catch {
-          // Si falla la reutilización, caer al flujo OAuth completo
-        }
-      }
-
-      // Primera vez: flujo OAuth con popup
-      localStorage.removeItem('__ga_oauth_result')
-      window.open(data.url, 'google_oauth', 'width=520,height=660,left=200,top=80')
-
-      const TIMEOUT_MS = 5 * 60 * 1000
-      const startedAt  = Date.now()
-      const poll = setInterval(() => {
-        const stored = localStorage.getItem('__ga_oauth_result')
-        if (stored) {
-          clearInterval(poll)
-          localStorage.removeItem('__ga_oauth_result')
-          try {
-            const result = JSON.parse(stored)
-            setIntegLoading(prev => ({ ...prev, [type]: false }))
-            if (result.success) {
-              api.get(`/marketing/projects/${project.id}/integrations`)
-                .then(r => setIntegrations(r.data))
-                .catch(() => {})
-            }
-          } catch { /* ignorar JSON inválido */ }
-          return
-        }
-        if (Date.now() - startedAt > TIMEOUT_MS) {
-          clearInterval(poll)
-          setIntegLoading(prev => ({ ...prev, [type]: false }))
-        }
-      }, 600)
-    } catch {
-      setIntegLoading(prev => ({ ...prev, [type]: false }))
-    }
+    await connectGoogle(type)
   }
 
   async function handleDisconnect(type) {
-    setIntegLoading(prev => ({ ...prev, [type]: true }))
-    try {
-      await api.delete(`/marketing/projects/${project.id}/integrations/${type}`)
-      setIntegrations(prev => prev.filter(i => i.type !== type))
-    } finally {
-      setIntegLoading(prev => ({ ...prev, [type]: false }))
-    }
+    await disconnectIntegration(type)
   }
 
   async function handleConnectSocial(integ) {
-    setIntegLoading(prev => ({ ...prev, [integ.key]: true }))
+    setSocialLoading(prev => ({ ...prev, [integ.key]: true }))
     try {
       const { data } = await api.get(integ.authPath(project.id))
       localStorage.removeItem('__ga_oauth_result')
@@ -175,70 +116,39 @@ export default function ProjectInfoTab({ project, onSave }) {
           localStorage.removeItem('__ga_oauth_result')
           try {
             const result = JSON.parse(stored)
-            setIntegLoading(prev => ({ ...prev, [integ.key]: false }))
-            if (result.success) {
-              api.get(`/marketing/projects/${project.id}/integrations`)
-                .then(r => setIntegrations(r.data))
-                .catch(() => {})
-            }
+            setSocialLoading(prev => ({ ...prev, [integ.key]: false }))
+            if (result.success) reloadIntegrations()
           } catch { /* ignorar */ }
           return
         }
         if (Date.now() - startedAt > TIMEOUT_MS) {
           clearInterval(poll)
-          setIntegLoading(prev => ({ ...prev, [integ.key]: false }))
+          setSocialLoading(prev => ({ ...prev, [integ.key]: false }))
         }
       }, 600)
     } catch {
-      setIntegLoading(prev => ({ ...prev, [integ.key]: false }))
+      setSocialLoading(prev => ({ ...prev, [integ.key]: false }))
     }
   }
 
   async function handleSavePropertyId(type) {
     const val = propertyInput[type]?.trim()
     if (!val) return
-    setPropSaving(prev => ({ ...prev, [type]: true }))
-    try {
-      const { data } = await api.patch(
-        `/marketing/projects/${project.id}/integrations/${type}`,
-        { propertyId: val }
-      )
-      setIntegrations(prev => prev.map(i => i.type === type ? { ...i, ...data } : i))
-      setPropertyInput(prev => ({ ...prev, [type]: '' }))
-    } finally {
-      setPropSaving(prev => ({ ...prev, [type]: false }))
-    }
+    const res = await savePropertyId(type, val)
+    if (res.ok) setPropertyInput(prev => ({ ...prev, [type]: '' }))
   }
 
   async function handleSaveCustomerId(type) {
     const val = propertyInput[type]?.trim()
     if (!val) return
-    setPropSaving(prev => ({ ...prev, [type]: true }))
-    try {
-      const { data } = await api.patch(
-        `/marketing/projects/${project.id}/integrations/${type}`,
-        { customerId: val }
-      )
-      setIntegrations(prev => prev.map(i => i.type === type ? { ...i, ...data } : i))
-      setPropertyInput(prev => ({ ...prev, [type]: undefined }))
-    } finally {
-      setPropSaving(prev => ({ ...prev, [type]: false }))
-    }
+    const res = await saveCustomerId(type, val)
+    if (res.ok) setPropertyInput(prev => ({ ...prev, [type]: undefined }))
   }
 
   async function handleSaveManagerId(type) {
     const val = managerInput[type]?.trim()
-    setPropSaving(prev => ({ ...prev, [`${type}_mgr`]: true }))
-    try {
-      const { data } = await api.patch(
-        `/marketing/projects/${project.id}/integrations/${type}`,
-        { propertyId: val || null }        // vacío = limpiar el Manager ID
-      )
-      setIntegrations(prev => prev.map(i => i.type === type ? { ...i, ...data } : i))
-      setManagerInput(prev => ({ ...prev, [type]: undefined }))
-    } finally {
-      setPropSaving(prev => ({ ...prev, [`${type}_mgr`]: false }))
-    }
+    const res = await savePropertyId(type, val || null)
+    if (res.ok) setManagerInput(prev => ({ ...prev, [type]: undefined }))
   }
 
   function isDirty() {
@@ -657,7 +567,7 @@ export default function ProjectInfoTab({ project, onSave }) {
         <div className="space-y-3">
           {SOCIAL_INTEGRATIONS.map(integ => {
             const connected = getIntegration(integ.key)
-            const isLoading = integLoading[integ.key]
+            const isLoading = socialLoading[integ.key] || integLoading[integ.key]
             const isExpired = connected?.status === 'expired'
             const isError   = connected?.status === 'error'
 

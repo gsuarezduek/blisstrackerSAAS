@@ -63,6 +63,7 @@ async function getSearchConsoleData(req, res, next) {
       return res.status(400).json({
         error: 'No hay URL de sitio configurada. Agregá la URL en la tab Info del proyecto.',
         status: 'no_site_url',
+        code:   'NO_SITE_URL',
       })
     }
 
@@ -74,20 +75,28 @@ async function getSearchConsoleData(req, res, next) {
     const status = err.httpStatus ?? err.response?.status
     console.error('[searchConsole] error HTTP %s: %s', status ?? '?', err.message)
 
+    const projectId = Number(req.params.id)
+    const triedSiteUrl = (await prisma.projectIntegration.findUnique({
+      where: { projectId_type: { projectId, type: 'google_search_console' } },
+      select: { propertyId: true },
+    }).catch(() => null))?.propertyId ?? null
+
     // Token revocado / expirado
     if (
       status === 401 ||
+      err.code === 'TOKEN_EXPIRED' ||
       err.message?.includes('invalid_grant') ||
       err.message?.includes('Token has been expired') ||
       err.message?.includes('UNAUTHENTICATED')
     ) {
       await prisma.projectIntegration.update({
-        where: { projectId_type: { projectId: Number(req.params.id), type: 'google_search_console' } },
-        data:  { status: 'error' },
-      }).catch(err => console.error('[SearchConsole] Error al marcar integración como error:', err.message))
-      return res.status(401).json({
-        error: 'Token revocado. Desconectá y volvé a conectar Search Console.',
+        where: { projectId_type: { projectId, type: 'google_search_console' } },
+        data:  { status: 'expired' },
+      }).catch(err => console.error('[SearchConsole] Error al marcar integración como expirada:', err.message))
+      return res.status(400).json({
+        error: 'El token de Google expiró. Reconectá la integración.',
         status: 'revoked',
+        code:   'TOKEN_EXPIRED',
       })
     }
 
@@ -101,11 +110,14 @@ async function getSearchConsoleData(req, res, next) {
         return res.status(400).json({
           error: 'La Google Search Console API no está habilitada en Google Cloud Console. Habilitala en APIs y servicios → Biblioteca.',
           status: 'api_disabled',
+          code:   'API_DISABLED',
         })
       }
       return res.status(403).json({
-        error: 'Sin acceso a esta propiedad de Search Console. Verificá que la cuenta conectada tiene permisos sobre el sitio.',
+        error: 'Sin acceso a esta propiedad de Search Console. Verificá que la cuenta conectada tiene permisos sobre el sitio o cambiá el Site URL.',
         status: 'no_access',
+        code:   'NO_ACCESS',
+        siteUrl: triedSiteUrl,
       })
     }
 
@@ -114,6 +126,8 @@ async function getSearchConsoleData(req, res, next) {
       return res.status(400).json({
         error: `URL de sitio inválida para Search Console: ${err.message}`,
         status: 'bad_url',
+        code:   'BAD_URL',
+        siteUrl: triedSiteUrl,
       })
     }
 
