@@ -11,6 +11,7 @@ import CanibalizacionTab from '../components/marketing/CanibalizacionTab'
 import InformesTab  from '../components/marketing/InformesTab'
 import InstagramTab from '../components/marketing/InstagramTab'
 import TikTokTab    from '../components/marketing/TikTokTab'
+import LinkedinTab  from '../components/marketing/LinkedinTab'
 import MetaAdsTab    from '../components/marketing/MetaAdsTab'
 import GoogleAdsTab  from '../components/marketing/GoogleAdsTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
@@ -42,6 +43,7 @@ const NAV = [
     subs: [
       { id: 'instagram', label: '📸 Instagram' },
       { id: 'tiktok',    label: '🎵 TikTok' },
+      { id: 'linkedin',  label: '💼 LinkedIn' },
       { id: 'youtube',   label: '▶️ YouTube',  soon: true },
     ],
   },
@@ -155,6 +157,7 @@ export default function Marketing() {
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
     if (tab === 'rrss'     && sub === 'instagram') return <InstagramTab projectId={projectId} onSelectProject={handleProjectChange} />
     if (tab === 'rrss'     && sub === 'tiktok')    return <TikTokTab    projectId={projectId} onSelectProject={handleProjectChange} />
+    if (tab === 'rrss'     && sub === 'linkedin')  return <LinkedinTab  projectId={projectId} onSelectProject={handleProjectChange} />
     if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} onSelectProject={handleProjectChange} />
     if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} onSelectProject={handleProjectChange} />
 

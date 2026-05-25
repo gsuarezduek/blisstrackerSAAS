@@ -60,6 +60,8 @@ META_APP_ID=...                       # Facebook App ID (Meta for Developers)
 META_APP_SECRET=...                   # Facebook App Secret
 TIKTOK_CLIENT_KEY=...                 # TikTok App Client Key (TikTok for Developers)
 TIKTOK_CLIENT_SECRET=...              # TikTok App Client Secret
+LINKEDIN_CLIENT_ID=...                # LinkedIn App Client ID (developer.linkedin.com)
+LINKEDIN_CLIENT_SECRET=...            # LinkedIn App Client Secret
 ```
 
 **frontend/.env.development**
@@ -171,6 +173,8 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 
 **Cannibalization (Marketing):** Detección de canibalización SEO usando datos de Google Search Console. Rutas: `POST /api/marketing/projects/:id/cannibal` dispara análisis; `GET .../cannibal` lista reportes; `GET .../cannibal/:rid` detalle; `DELETE .../cannibal/:rid` elimina. Visible en la pestaña **Canibalización** (`CanibalizacionTab.jsx`).
 
+**LinkedIn (Marketing):** `LinkedinSnapshot` y `LinkedinFollowerLog` por proyecto. Captura mensual de seguidores, impresiones, clicks, CTR, engagement rate, total likes/comments/shares, posts del mes (`postsThisMonth`), top 5 posts (JSON con likes/comments/shares/impressions), y demographics (industry, seniority, function, region — JSON con conteos absolutos). Patrón idéntico a TikTok/Instagram: `GET /api/marketing/projects/:id/linkedin` devuelve datos en vivo + auto-snapshot mensual + log diario; cron mensual `45 5 1 * *` ART persiste snapshot del mes anterior. `propertyId` es el `Organization ID` numérico de la Company Page (auto-detectado tras OAuth, o elegido por el admin desde un dropdown si tiene varias páginas). Tab `LinkedinTab.jsx` en RRSS. Visible en informes mensuales (sección `linkedin` en `aggregateReportData`).
+
 **SERP snapshots (Marketing):** `SerpSnapshot` model captura snapshot completo de SerpAPI por keyword (posición, features del SERP, competidores top, "People Also Ask", "Related Searches"). Rutas:
 - `GET /api/marketing/projects/:id/keywords/:kwId/serp` — devuelve snapshot reciente (reutiliza si <24h).
 - `POST /api/marketing/projects/:id/keywords/:kwId/serp/refresh` — fuerza nueva captura (cooldown 15min).
@@ -258,10 +262,10 @@ Todos los modelos EOS tienen `workspaceId` como scope. Las rutas `/api/eos/*` re
 - `User.isSuperAdmin Boolean @default(false)` — global flag for the BlissTracker internal team only.
 - `User.avatar String @default("2bee.png")` — filename, validated against `ALLOWED_AVATARS`.
 - When a model has two relations to the same model, named relations are required (e.g. `Task.createdBy` / `Task.user` both pointing to `User`).
-- `ProjectIntegration.propertyId` tiene distintos usos según `type`: GA4 → Property ID numérico; `google_ads` → Manager Account ID (MCC) si la cuenta es cliente de un manager; Meta Ads → no usado; TikTok → no usado.
+- `ProjectIntegration.propertyId` tiene distintos usos según `type`: GA4 → Property ID numérico; `google_ads` → Manager Account ID (MCC) si la cuenta es cliente de un manager; Meta Ads → no usado; TikTok → no usado; LinkedIn → Organization ID numérico de la Company Page (URN derivado: `urn:li:organization:{id}`).
 - Migrations live in `backend/prisma/migrations/`. Always use `migrate dev` locally and `migrate deploy` in production.
 - `prisma migrate dev` fails in non-interactive shells. Workaround: manually create the migration directory + SQL file, then run `prisma migrate deploy` + `prisma generate`.
-- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_project_member_notification`, `add_task_comments`, `v1_5`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_memory_history`, `add_role_structure`, `add_user_login_history`, `add_vacation_days`, `add_bank_name`, `add_task_sessions`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_email_log`, `add_vacation_management` (VacationRequest + VacationAdjustment), `add_workspace_deletion_request`, `add_announcements`, `add_avatars`, `fix_vacation_schema`, `add_feature_flags`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `add_project_connections` (Project.connections JSON), `fix_service_unique_index`, `add_legal_document`, `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique`, `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_instagram_snapshot`, `add_integration_country`, `add_keyword_tracking` (TrackedKeyword + KeywordRanking), `add_pagespeed_result` (PageSpeedResult), `add_instagram_follower_log`, `add_tiktok` (TikTokSnapshot + TikTokFollowerLog), `add_monthly_report` (MonthlyReport — token UUID para URL pública), `add_monthly_report_analysis`, `add_seo_snapshot` (SEOSnapshot para Google Search Console), `add_ai_traffic_snapshot`, `add_cannibal_report`, `add_eos_data`, `add_eos_focus`, `add_eos_ten_year_target`, `add_eos_vision_remaining`, `add_eos_issues` (EOSIssue), `add_eos_personas`, `add_eos_processes`, `add_eos_scorecard`, `add_eos_traction` (EOSRock + EOSTodo + EOSMeeting), `add_org_assessment` (OrgAssessmentRound + OrgAssessmentResponse), `update_eos_process_owner_role` (EOSProcess.ownerId → ownerRole String), `add_analytics_top_pages` (AnalyticsSnapshot.topPages + topSources), `add_monthly_report_data_cache` (MonthlyReport.dataCache), `add_workspace_branding` (companyName, companyDescription, industry, companyWebsite, logoData, bannerData), `add_workspace_brand_identity` (Workspace.brandColors + brandFonts), `add_workspace_disabled_features` (Workspace.disabledFeatureKeys), `add_report_banner` (MonthlyReport.bannerData + bannerMimeType — banner por informe), `add_serp_snapshot` (SerpSnapshot — snapshots SERP de SerpAPI por keyword), `add_workspace_monthly_token_limit` (Workspace.monthlyTokenLimit — presupuesto mensual de tokens de IA), `add_ads_snapshot` (AdsSnapshot — spend/impressions/clicks/ctr/conversions por proyecto+mes+tipo: meta_ads|google_ads), `add_platform_settings` (PlatformSetting + PlatformSettingLog — configuración global del SaaS editable desde SuperAdmin → Configuración), `add_landing_funnel` (Workspace.demoSeeded flag + ConversionEvent — instrumentación del funnel signup→trial→paid y seed del proyecto demo de onboarding).
+- Current migrations (in order): `add_missing_indexes`, `add_task_starred`, `add_user_avatar`, `add_notification_type`, `add_weekly_email_preference`, `add_project_links`, `add_daily_insight_preference`, `add_is_admin`, `add_daily_insight_cache`, `add_role_expectation`, `add_alerta_rol_to_insight`, `add_insight_memory`, `add_task_quality`, `add_task_backlog`, `add_project_member_notification`, `add_task_comments`, `v1_5`, `add_project_situation`, `add_project_settings`, `add_missing_indexes` (2nd), `add_project_email_from`, `add_one_active_task_constraint`, `add_ai_token_log`, `add_task_mention_type`, `add_workday_composite_index`, `add_memory_history`, `add_role_structure`, `add_user_login_history`, `add_vacation_days`, `add_bank_name`, `add_task_sessions`, `add_saas_multitenancy` (Workspace + WorkspaceMember + Subscription + scoped all tables), `add_workspace_invitation`, `add_email_log`, `add_vacation_management` (VacationRequest + VacationAdjustment), `add_workspace_deletion_request`, `add_announcements`, `add_avatars`, `fix_vacation_schema`, `add_feature_flags`, `add_marketing_geo` (GeoAudit + Project.websiteUrl), `add_project_connections` (Project.connections JSON), `fix_service_unique_index`, `add_legal_document`, `add_project_integration` (ProjectIntegration — tokens OAuth cifrados), `fix_project_name_unique`, `add_analytics_snapshot` (AnalyticsSnapshot + AnalyticsInsight), `add_instagram_snapshot`, `add_integration_country`, `add_keyword_tracking` (TrackedKeyword + KeywordRanking), `add_pagespeed_result` (PageSpeedResult), `add_instagram_follower_log`, `add_tiktok` (TikTokSnapshot + TikTokFollowerLog), `add_monthly_report` (MonthlyReport — token UUID para URL pública), `add_monthly_report_analysis`, `add_seo_snapshot` (SEOSnapshot para Google Search Console), `add_ai_traffic_snapshot`, `add_cannibal_report`, `add_eos_data`, `add_eos_focus`, `add_eos_ten_year_target`, `add_eos_vision_remaining`, `add_eos_issues` (EOSIssue), `add_eos_personas`, `add_eos_processes`, `add_eos_scorecard`, `add_eos_traction` (EOSRock + EOSTodo + EOSMeeting), `add_org_assessment` (OrgAssessmentRound + OrgAssessmentResponse), `update_eos_process_owner_role` (EOSProcess.ownerId → ownerRole String), `add_analytics_top_pages` (AnalyticsSnapshot.topPages + topSources), `add_monthly_report_data_cache` (MonthlyReport.dataCache), `add_workspace_branding` (companyName, companyDescription, industry, companyWebsite, logoData, bannerData), `add_workspace_brand_identity` (Workspace.brandColors + brandFonts), `add_workspace_disabled_features` (Workspace.disabledFeatureKeys), `add_report_banner` (MonthlyReport.bannerData + bannerMimeType — banner por informe), `add_serp_snapshot` (SerpSnapshot — snapshots SERP de SerpAPI por keyword), `add_workspace_monthly_token_limit` (Workspace.monthlyTokenLimit — presupuesto mensual de tokens de IA), `add_ads_snapshot` (AdsSnapshot — spend/impressions/clicks/ctr/conversions por proyecto+mes+tipo: meta_ads|google_ads), `add_platform_settings` (PlatformSetting + PlatformSettingLog — configuración global del SaaS editable desde SuperAdmin → Configuración), `add_landing_funnel` (Workspace.demoSeeded flag + ConversionEvent — instrumentación del funnel signup→trial→paid y seed del proyecto demo de onboarding), `add_linkedin_integration` (LinkedinSnapshot + LinkedinFollowerLog — métricas mensuales de Company Page de LinkedIn por proyecto).
 - `TaskComment.content` is the text field (not `text`). The `parentId` self-relation exists for future threading but is not used by the UI yet.
 
 ### API routes summary
@@ -452,6 +456,15 @@ GET    /api/marketing/projects/:id/tiktok/snapshots         # ?months=12
 POST   /api/marketing/projects/:id/tiktok/snapshots         # body: { month }
 GET    /api/marketing/projects/:id/tiktok/followers         # ?from=YYYY-MM-DD&to=YYYY-MM-DD
 
+# Marketing — LinkedIn (Company Page)
+GET    /api/marketing/integrations/linkedin/auth-url        # ?projectId=
+GET    /api/marketing/integrations/linkedin/callback        # callback OAuth (sin auth)
+GET    /api/marketing/projects/:id/linkedin                 # métricas del mes actual (auto-snapshot + follower log)
+GET    /api/marketing/projects/:id/linkedin/orgs            # lista pages donde el user es admin (selector post-OAuth)
+GET    /api/marketing/projects/:id/linkedin/snapshots       # ?months=12
+POST   /api/marketing/projects/:id/linkedin/snapshots       # body: { month }
+GET    /api/marketing/projects/:id/linkedin/followers       # ?from=YYYY-MM-DD&to=YYYY-MM-DD
+
 # Marketing — Snapshots GA4 e Insights IA
 GET    /api/marketing/projects/:id/snapshots                # ?month=YYYY-MM
 POST   /api/marketing/projects/:id/snapshots                # body: { month } — guarda snapshot GA4 del mes
@@ -499,6 +512,7 @@ GET    /api/marketing/summary/analytics                     # AnalyticsSnapshot 
 GET    /api/marketing/summary/performance                   # PageSpeedResult más reciente por proyecto, ordenado por score desc
 GET    /api/marketing/summary/instagram                     # InstagramSnapshot más reciente por proyecto, ordenado por seguidores desc
 GET    /api/marketing/summary/tiktok                        # TikTokSnapshot más reciente por proyecto, ordenado por seguidores desc
+GET    /api/marketing/summary/linkedin                      # LinkedinSnapshot más reciente por proyecto, ordenado por seguidores desc
 GET    /api/marketing/summary/ads                           # AdsSnapshot más reciente por proyecto, ?type=meta_ads|google_ads, ordenado por spend desc
 GET    /api/marketing/summary/reports                       # todos los MonthlyReport del workspace, ?limit=20&offset=0
 
@@ -601,6 +615,7 @@ GET    /api/feature-flags/:key                          # check flag para worksp
 | `30 4 1 * *` (1° mes 04:30) | ART | Guarda snapshot de Instagram del mes anterior |
 | `0 5 1 * *` (1° mes 05:00) | ART | Envía informe mensual de marketing (legacy service) |
 | `30 5 1 * *` (1° mes 05:30) | ART | Guarda snapshot de TikTok del mes anterior |
+| `45 5 1 * *` (1° mes 05:45) | ART | Guarda snapshot de LinkedIn (Company Page) del mes anterior |
 | `0 6 1 * *` (1° mes 06:00) | ART | Guarda snapshot de Ads (Meta + Google) del mes anterior |
 | `0 6 * * 1` (lunes 06:00) | ART | Actualiza rankings de keywords del mes actual (upsert semanal) |
 | `0 3 * * *` (diario 03:00) | ART | Marca trials expirados como `past_due` |
@@ -642,7 +657,7 @@ frontend/
 ```
 
 ### Deploy
-- **Backend:** Railway (auto-runs `npm run db:migrate` on deploy; seed must be run manually once). Required env vars: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`, `META_APP_ID`, `META_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`.
+- **Backend:** Railway (auto-runs `npm run db:migrate` on deploy; seed must be run manually once). Required env vars: `DATABASE_URL`, `JWT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_DOMAIN`, `GOOGLE_CLIENT_ID`, `ANTHROPIC_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `GOOGLE_CLIENT_SECRET`, `ENCRYPTION_KEY`, `BACKEND_URL`, `PAGESPEED_API_KEY`, `META_APP_ID`, `META_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`.
 - **Scripts de utilidad:** `backend/scripts/` — scripts de uso único para operaciones directas en DB (ej: `insert-meta-ads-token.js`, `create-test-user.js`). Ejecutar con `DATABASE_URL=... ENCRYPTION_KEY=... node scripts/<nombre>.js`.
 - **Frontend:** Vercel Pro (root: `/frontend`; `vercel.json` rewrites all paths to `index.html`). Add `*.blisstracker.app` as Custom Domain. Required env vars: `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`.
 - **DNS (Cloudflare):** `A blisstracker.app → Vercel` + `A *.blisstracker.app → Vercel` (wildcard requires Vercel Pro).
@@ -681,6 +696,10 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 - `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/tiktok/callback`
 - `http://localhost:3001/api/marketing/integrations/tiktok/callback`
 
+**Redirect URIs registradas en LinkedIn Developer Portal:**
+- `https://blisstrackersaas-production.up.railway.app/api/marketing/integrations/linkedin/callback`
+- `http://localhost:3001/api/marketing/integrations/linkedin/callback`
+
 **OAuth Consent Screen scopes habilitados (Google):**
 - `https://www.googleapis.com/auth/analytics.readonly` — verificación en curso
 - `https://www.googleapis.com/auth/adwords` — pendiente Standard Access approval de Google Ads
@@ -699,6 +718,13 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 - `user.info.basic`, `user.info.profile`, `user.info.stats`, `video.list` — App Review en curso
 - OAuth v2 requiere PKCE obligatorio: `code_verifier` generado con `crypto.randomBytes(32).toString('base64url')`, `code_challenge = base64url(sha256(codeVerifier))`. El `codeVerifier` se almacena en el JWT state (10min) y se recupera en el callback.
 - Access tokens duran 24h, refresh tokens duran 365 días. `tiktokTokenRefresh.service.js` renueva automáticamente.
+
+**Permisos requeridos en LinkedIn App (Marketing Developer Platform / Community Management API):**
+- Scopes: `r_organization_social`, `r_organization_admin`, `rw_organization_admin`, `r_basicprofile` — requieren aprobación de LinkedIn Marketing Developer Platform.
+- Access tokens duran 60 días (5184000 s); refresh tokens duran 365 días. `linkedinTokenRefresh.service.js` renueva silenciosamente con `expiresAt < now + 5min`. Si el refresh falla, la integración se marca como `status: 'expired'` y el frontend muestra prompt de reconexión (`code: TOKEN_EXPIRED`).
+- API REST versionada en `https://api.linkedin.com/rest/*` con header `LinkedIn-Version: 202410` (actualizar trimestralmente) + `X-Restli-Protocol-Version: 2.0.0`.
+- Auto-detección de Company Page: tras OAuth, el callback llama a `/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR`. Si hay 1 sola org, se auto-asigna como `propertyId`; si hay >1, la integración se guarda sin `propertyId` y el frontend muestra un dropdown (`GET /projects/:id/linkedin/orgs`).
+- Endpoints utilizados: `/rest/networkSizes/{urn}` (followers), `/rest/organizationPageStatistics` (page views, visitors), `/rest/organizationalEntityShareStatistics` (impressions, clicks, engagement agregado), `/rest/organizationalEntityFollowerStatistics` (demographics: industry, seniority, function, region), `/rest/posts` + batch stats (top posts del mes).
 
 **Token expiry — patrón unificado:**
 - Todos los servicios de integración detectan tokens expirados y marcan `ProjectIntegration.status = 'expired'`

@@ -182,6 +182,44 @@ async function getTikTokSummary(req, res, next) {
 }
 
 /**
+ * GET /api/marketing/summary/linkedin
+ * Snapshot de LinkedIn más reciente por proyecto, ordenado por followersCount desc.
+ */
+async function getLinkedinSummary(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+
+    const snapshots = await prisma.linkedinSnapshot.findMany({
+      where:   { workspaceId },
+      orderBy: { month: 'desc' },
+      include: { project: { select: { id: true, name: true } } },
+    })
+
+    const seen = new Set()
+    const result = []
+    for (const s of snapshots) {
+      if (seen.has(s.projectId)) continue
+      seen.add(s.projectId)
+      result.push({
+        projectId:      s.projectId,
+        projectName:    s.project.name,
+        month:          s.month,
+        followersCount: s.followersCount,
+        engagementRate: s.engagementRate ?? null,
+        impressions:    s.impressions    ?? null,
+        clicks:         s.clicks         ?? null,
+        postsThisMonth: s.postsThisMonth ?? null,
+      })
+    }
+
+    result.sort((a, b) => b.followersCount - a.followersCount)
+    res.json(result)
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * GET /api/marketing/summary/ads
  * Snapshot de Ads más reciente por proyecto y tipo, ordenado por spend desc.
  * Query: ?type=meta_ads|google_ads
@@ -273,6 +311,7 @@ module.exports = {
   getPerformanceSummary,
   getInstagramSummary,
   getTikTokSummary,
+  getLinkedinSummary,
   getAdsSummary,
   getReportsSummary,
 }

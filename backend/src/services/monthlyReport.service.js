@@ -7,6 +7,8 @@ const { getValidMetaToken }              = require('./metaTokenRefresh.service')
 const { fetchInstagramMetrics }          = require('./instagram.service')
 const { getValidTikTokToken }            = require('./tiktokTokenRefresh.service')
 const { fetchTikTokMetrics }             = require('./tiktok.service')
+const { getValidLinkedinToken }          = require('./linkedinTokenRefresh.service')
+const { fetchLinkedinMetrics }           = require('./linkedin.service')
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -102,6 +104,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     instagramPrev,
     tiktokSnap,
     tiktokPrev,
+    linkedinSnap,
+    linkedinPrev,
     pageSpeedMobile,
     pageSpeedDesktop,
     allKeywords,
@@ -172,6 +176,18 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.tikTokSnapshot.findFirst({
       where:   { projectId, workspaceId, month: prev },
       select:  { followersCount: true, engagementRate: true },
+    }),
+
+    // LinkedIn snapshots
+    prisma.linkedinSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: dataMonth },
+      select:  { followersCount: true, engagementRate: true, impressions: true,
+                 clicks: true, ctr: true, totalLikes: true, totalComments: true,
+                 totalShares: true, postsThisMonth: true, topPosts: true, demographics: true },
+    }),
+    prisma.linkedinSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: prev },
+      select:  { followersCount: true, engagementRate: true, impressions: true },
     }),
 
     // PageSpeed
@@ -475,6 +491,98 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     }
   }
 
+  // ── LinkedIn (con fallback a snapshot más reciente o datos en vivo) ──────────
+  function parseLi(snap) {
+    if (!snap) return null
+    return {
+      ...snap,
+      topPosts:     (() => { try { return JSON.parse(snap.topPosts     ?? '[]') } catch { return [] } })(),
+      demographics: (() => { try { return JSON.parse(snap.demographics ?? '{}') } catch { return {} } })(),
+    }
+  }
+
+  let linkedin = null
+  if (linkedinSnap) {
+    const s = parseLi(linkedinSnap)
+    linkedin = {
+      followersCount:  s.followersCount,
+      engagementRate:  s.engagementRate,
+      impressions:     s.impressions,
+      clicks:          s.clicks,
+      ctr:             s.ctr,
+      totalLikes:      s.totalLikes,
+      totalComments:   s.totalComments,
+      totalShares:     s.totalShares,
+      postsThisMonth:  s.postsThisMonth,
+      topPosts:        s.topPosts,
+      demographics:    s.demographics,
+      deltaFollowers:  linkedinPrev ? pct(s.followersCount, linkedinPrev.followersCount) : null,
+      deltaEngagement: linkedinPrev ? pct(s.engagementRate ?? 0, linkedinPrev.engagementRate) : null,
+      deltaImpressions: linkedinPrev ? pct(s.impressions ?? 0, linkedinPrev.impressions) : null,
+    }
+  } else {
+    // Fallback 1: snapshot más reciente disponible
+    const recentLi = await prisma.linkedinSnapshot.findFirst({
+      where:   { projectId, workspaceId },
+      orderBy: { month: 'desc' },
+      select:  { followersCount: true, engagementRate: true, impressions: true,
+                 clicks: true, ctr: true, totalLikes: true, totalComments: true,
+                 totalShares: true, postsThisMonth: true, topPosts: true, demographics: true, month: true },
+    })
+    if (recentLi) {
+      const prevLi = await prisma.linkedinSnapshot.findFirst({
+        where:  { projectId, workspaceId, month: prevMonthStr(recentLi.month) },
+        select: { followersCount: true, engagementRate: true, impressions: true },
+      })
+      const s = parseLi(recentLi)
+      linkedin = {
+        followersCount:  s.followersCount,
+        engagementRate:  s.engagementRate,
+        impressions:     s.impressions,
+        clicks:          s.clicks,
+        ctr:             s.ctr,
+        totalLikes:      s.totalLikes,
+        totalComments:   s.totalComments,
+        totalShares:     s.totalShares,
+        postsThisMonth:  s.postsThisMonth,
+        topPosts:        s.topPosts,
+        demographics:    s.demographics,
+        deltaFollowers:  prevLi ? pct(s.followersCount, prevLi.followersCount) : null,
+        deltaEngagement: prevLi ? pct(s.engagementRate ?? 0, prevLi.engagementRate) : null,
+        deltaImpressions: prevLi ? pct(s.impressions ?? 0, prevLi.impressions) : null,
+        _fallbackMonth:  s.month,
+      }
+    } else {
+      // Fallback 2: datos en vivo
+      const liIntegration = integrations.find(i => i.type === 'linkedin' && i.propertyId)
+      if (liIntegration) {
+        try {
+          const token = await getValidLinkedinToken(liIntegration)
+          const live  = await fetchLinkedinMetrics(liIntegration.propertyId, token, null)
+          linkedin = {
+            followersCount:  live.followersCount,
+            engagementRate:  live.engagementRate,
+            impressions:     live.impressions,
+            clicks:          live.clicks,
+            ctr:             live.ctr,
+            totalLikes:      live.totalLikes,
+            totalComments:   live.totalComments,
+            totalShares:     live.totalShares,
+            postsThisMonth:  live.postsThisMonth,
+            topPosts:        live.topPosts,
+            demographics:    live.demographics,
+            deltaFollowers:  null,
+            deltaEngagement: null,
+            deltaImpressions: null,
+            _fallbackMonth:  'live',
+          }
+        } catch (err) {
+          console.warn('[MonthlyReport] LinkedIn live fallback fallido:', err.message)
+        }
+      }
+    }
+  }
+
   // ── PageSpeed ─────────────────────────────────────────────────────────────────
   const performance = (pageSpeedMobile || pageSpeedDesktop) ? {
     mobile:  pageSpeedMobile  ? {
@@ -555,7 +663,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // Si ya existe un análisis cacheado con resumen válido, no se regenera
   const analysis = validCachedAnalysis
     ? validCachedAnalysis
-    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, keywords, seo, performance, googleAds, metaAds, workspaceId, objectives, services })
+    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, workspaceId, objectives, services })
 
   return {
     project: {
@@ -567,17 +675,17 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     month,        // mes del informe (ej: "2026-05") — para identificación/navegación
     dataMonth,    // período de los datos (ej: "2026-04") — para mostrar al usuario
     connectedTypes: [...connectedTypes],
-    sections: { geo, analytics, evolution, instagram, tiktok, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks },
+    sections: { geo, analytics, evolution, instagram, tiktok, linkedin, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks },
     analysis,
     _analysisIsNew:  !validCachedAnalysis && !!analysis?.resumen,
     // No cachear si estamos usando datos en vivo (cambian a diario)
-    _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live',
+    _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live' && linkedin?._fallbackMonth !== 'live',
   }
 }
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, keywords, seo, performance, googleAds, metaAds, workspaceId, objectives = {}, services = [] }) {
+async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, workspaceId, objectives = {}, services = [] }) {
   // Calcular cumplimiento de objetivos si existen
   const objCtx = []
   if (objectives.sessions != null && analytics)
@@ -590,6 +698,8 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
     objCtx.push({ metrica: 'Seguidores Instagram', objetivo: objectives.followersIg, real: instagram.followersCount, pct: Math.round((instagram.followersCount / objectives.followersIg) * 100) })
   if (objectives.followersTk != null && tiktok)
     objCtx.push({ metrica: 'Seguidores TikTok', objetivo: objectives.followersTk, real: tiktok.followersCount, pct: Math.round((tiktok.followersCount / objectives.followersTk) * 100) })
+  if (objectives.followersLi != null && linkedin)
+    objCtx.push({ metrica: 'Seguidores LinkedIn', objetivo: objectives.followersLi, real: linkedin.followersCount, pct: Math.round((linkedin.followersCount / objectives.followersLi) * 100) })
 
   const dataCtx = JSON.stringify({
     proyecto:          project?.name,
@@ -615,6 +725,15 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
       seguidores:      tiktok.followersCount,
       deltaSeguidores: tiktok.deltaFollowers,
       engagement:      tiktok.engagementRate != null ? `${tiktok.engagementRate.toFixed(2)}%` : null,
+    } : null,
+    linkedin: linkedin ? {
+      seguidores:       linkedin.followersCount,
+      deltaSeguidores:  linkedin.deltaFollowers,
+      impresiones:      linkedin.impressions,
+      deltaImpresiones: linkedin.deltaImpressions,
+      clicks:           linkedin.clicks,
+      engagement:       linkedin.engagementRate != null ? `${linkedin.engagementRate.toFixed(2)}%` : null,
+      posts:            linkedin.postsThisMonth,
     } : null,
     posicionamiento: keywords ? {
       posPromedio:   keywords.avgPosition,

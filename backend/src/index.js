@@ -56,6 +56,7 @@ const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.servic
 const { sendAllMonthlyMarketingReports }   = require('./services/monthlyMarketingReport.service')
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
 const { saveAllMonthlyTikTokSnapshots }    = require('./services/tiktokSnapshot.service')
+const { saveAllMonthlyLinkedinSnapshots }  = require('./services/linkedinSnapshot.service')
 const { saveAllSearchConsoleSnapshots }   = require('./services/searchConsoleSnapshot.service')
 const { saveAllAdsSnapshots }             = require('./services/adsSnapshot.service')
 
@@ -70,6 +71,7 @@ let geoMonthlyRunning           = false
 let marketingReportRunning      = false
 let instagramSnapshotRunning    = false
 let tiktokSnapshotRunning       = false
+let linkedinSnapshotRunning     = false
 let seoSnapshotRunning          = false
 let serpSnapshotRunning         = false
 let adsSnapshotRunning          = false
@@ -251,6 +253,16 @@ cron.schedule('30 5 1 * *', async () => {
   try { await saveAllMonthlyTikTokSnapshots() }
   catch (err) { console.error('[TikTokSnapshot] Error en cron mensual:', err.message) }
   finally { tiktokSnapshotRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: snapshot LinkedIn mensual — 1° de cada mes a las 05:45 ART
+cron.schedule('45 5 1 * *', async () => {
+  if (linkedinSnapshotRunning) { console.log('[LinkedinSnapshot] Ya en ejecución, se omite.'); return }
+  linkedinSnapshotRunning = true
+  console.log('[LinkedinSnapshot] Iniciando guardado mensual automático...')
+  try { await saveAllMonthlyLinkedinSnapshots() }
+  catch (err) { console.error('[LinkedinSnapshot] Error en cron mensual:', err.message) }
+  finally { linkedinSnapshotRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: snapshot de Ads (Meta + Google) mensual — 1° de cada mes a las 06:00 ART
