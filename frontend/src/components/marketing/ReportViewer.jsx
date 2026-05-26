@@ -246,6 +246,49 @@ function KpiGrid({ items }) {
   )
 }
 
+// Mejor publicación del mes (Instagram)
+function BestInstagramPost({ post }) {
+  if (!post) return null
+  const score = (post.likeCount ?? 0) + (post.commentsCount ?? 0)
+  const inner = (
+    <div className="flex items-stretch gap-3">
+      <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+        {post.imgSrc ? (
+          <img src={post.imgSrc} alt="" className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400" />
+        )}
+        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide">
+          Mejor publicación del mes
+        </p>
+        <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400 mt-1">
+          {post.likeCount     != null && <span>❤️ {fmt(post.likeCount)}</span>}
+          {post.commentsCount != null && <span>💬 {fmt(post.commentsCount)}</span>}
+          {score > 0 && <span className="text-gray-400">· {fmt(score)} interacciones</span>}
+        </div>
+        {post.caption && (
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight mt-1">
+            {post.caption}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="mt-4 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 p-3">
+      {post.permalink ? (
+        <a href={post.permalink} target="_blank" rel="noopener noreferrer" className="block hover:opacity-90 transition-opacity">
+          {inner}
+        </a>
+      ) : inner}
+    </div>
+  )
+}
+
 // Tabla de objetivos vs real
 function ObjectivesTable({ objectives, sections }) {
   const rows = []
@@ -753,6 +796,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                   { label: 'Avg. likes',  value: fmt(s.instagram.avgLikes, 0) },
                   { label: 'Posts / mes', value: fmt(s.instagram.postsCount) },
                 ]} />
+                {s.instagram.bestPost && <BestInstagramPost post={s.instagram.bestPost} />}
                 {s.instagram._fallbackMonth && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
                     {s.instagram._fallbackMonth === 'live'

@@ -590,9 +590,10 @@ async function listUsers(req, res, next) {
           createdAt:    true,
           workspaceMembers: {
             select: {
-              active:      true,
-              role:        true,
-              workspace:   { select: { id: true, name: true, slug: true } },
+              active:              true,
+              role:                true,
+              dailyInsightEnabled: true,
+              workspace:           { select: { id: true, name: true, slug: true } },
             },
           },
           loginEvents: {
@@ -609,6 +610,15 @@ async function listUsers(req, res, next) {
       const totalMemberships  = u.workspaceMembers.length
       const activeMemberships = u.workspaceMembers.filter(m => m.active).length
       const lastLoginAt       = u.loginEvents[0]?.loginAt ?? null
+
+      let dailyInsightStatus = 'none'
+      if (totalMemberships > 0) {
+        const onCount = u.workspaceMembers.filter(m => m.dailyInsightEnabled).length
+        if (onCount === totalMemberships)      dailyInsightStatus = 'on'
+        else if (onCount === 0)                dailyInsightStatus = 'off'
+        else                                   dailyInsightStatus = 'mixed'
+      }
+
       return {
         id:                 u.id,
         name:               u.name,
@@ -619,12 +629,14 @@ async function listUsers(req, res, next) {
         totalMemberships,
         activeMemberships,
         lastLoginAt,
+        dailyInsightStatus,
         workspaces: u.workspaceMembers.map(m => ({
-          id:     m.workspace.id,
-          name:   m.workspace.name,
-          slug:   m.workspace.slug,
-          role:   m.role,
-          active: m.active,
+          id:                  m.workspace.id,
+          name:                m.workspace.name,
+          slug:                m.workspace.slug,
+          role:                m.role,
+          active:              m.active,
+          dailyInsightEnabled: m.dailyInsightEnabled,
         })),
       }
     })
@@ -661,6 +673,34 @@ async function toggleUserActive(req, res, next) {
     })
 
     res.json({ userId, active, affectedMemberships: result.count })
+  } catch (err) { next(err) }
+}
+
+/**
+ * PATCH /api/superadmin/users/:id/toggle-daily-insight
+ * Body: { enabled: boolean }
+ * Aplica el cambio a TODAS las memberships del usuario (en todos sus workspaces).
+ * Si enabled === false, también desactiva insightMemoryEnabled y taskQualityEnabled
+ * (subordinados al master toggle, ver Preferences.jsx).
+ */
+async function toggleUserDailyInsight(req, res, next) {
+  try {
+    const userId  = Number(req.params.id)
+    const enabled = Boolean(req.body.enabled)
+
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
+
+    const data = enabled
+      ? { dailyInsightEnabled: true }
+      : { dailyInsightEnabled: false, insightMemoryEnabled: false, taskQualityEnabled: false }
+
+    const result = await prisma.workspaceMember.updateMany({
+      where: { userId },
+      data,
+    })
+
+    res.json({ userId, enabled, affectedMemberships: result.count })
   } catch (err) { next(err) }
 }
 
@@ -730,4 +770,4 @@ async function getConversionFunnel(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, getConversionFunnel }
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, toggleUserDailyInsight, getConversionFunnel }

@@ -916,6 +916,7 @@ model InstagramSnapshot {
   avgComments    Float?
   engagementRate Float?
   postsCount     Int? // publicaciones nuevas en ese mes
+  topPosts       String   @default("[]") // JSON: [{ id, likeCount, commentsCount, imgSrc, permalink, mediaType, caption, timestamp }]
   createdAt      DateTime @default(now())
 
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

@@ -679,6 +679,33 @@ function SectionUsers() {
     return () => clearTimeout(t)
   }, [search, filter])
 
+  async function handleToggleDailyInsight(user) {
+    const desired = user.dailyInsightStatus !== 'on'
+    const verb    = desired ? 'activar' : 'desactivar'
+    const wsCount = user.totalMemberships
+    const msg = desired
+      ? `Activar insight diario para ${user.email} en ${wsCount} workspace(s)?`
+      : `Desactivar insight diario (e insight memory + task quality) para ${user.email} en ${wsCount} workspace(s)?`
+    if (!window.confirm(msg)) return
+
+    setBusyId(`di-${user.id}`)
+    try {
+      await api.patch(`/superadmin/users/${user.id}/toggle-daily-insight`, { enabled: desired })
+      setUsers(prev => prev.map(u => u.id === user.id
+        ? {
+            ...u,
+            dailyInsightStatus: desired ? 'on' : 'off',
+            workspaces: u.workspaces.map(w => ({ ...w, dailyInsightEnabled: desired })),
+          }
+        : u
+      ))
+    } catch (err) {
+      window.alert(`Error al ${verb} insight diario: ${err.response?.data?.error || err.message}`)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function handleToggleActive(user) {
     const desired = user.activeMemberships === 0
     const verb = desired ? 'reactivar' : 'desactivar'
@@ -814,22 +841,51 @@ function SectionUsers() {
                         <>
                           <span>·</span>
                           <span>{u.activeMemberships}/{u.totalMemberships} activas</span>
+                          <span>·</span>
+                          <span
+                            title={
+                              u.dailyInsightStatus === 'on'    ? 'Insight diario activado en todos los workspaces' :
+                              u.dailyInsightStatus === 'off'   ? 'Insight diario desactivado en todos los workspaces' :
+                              u.dailyInsightStatus === 'mixed' ? 'Insight diario mixto entre workspaces' :
+                                                                  'Sin workspaces'
+                            }
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium ${
+                              u.dailyInsightStatus === 'on'    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                              u.dailyInsightStatus === 'off'   ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' :
+                              u.dailyInsightStatus === 'mixed' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
+                                                                  'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+                            }`}>
+                            🧠 Insight {u.dailyInsightStatus === 'on' ? 'ON' : u.dailyInsightStatus === 'off' ? 'OFF' : u.dailyInsightStatus === 'mixed' ? 'mixto' : '—'}
+                          </span>
                         </>
                       )}
                     </div>
                   </div>
 
                   {!u.isSuperAdmin && u.totalMemberships > 0 && (
-                    <button
-                      onClick={() => handleToggleActive(u)}
-                      disabled={busyId === u.id}
-                      className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                        isDisabled
-                          ? 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-300'
-                          : 'bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300'
-                      }`}>
-                      {busyId === u.id ? '…' : isDisabled ? 'Reactivar' : 'Desactivar'}
-                    </button>
+                    <div className="flex-shrink-0 flex flex-col gap-1.5 items-stretch">
+                      <button
+                        onClick={() => handleToggleDailyInsight(u)}
+                        disabled={busyId === `di-${u.id}`}
+                        title={u.dailyInsightStatus === 'on' ? 'Desactivar insight diario' : 'Activar insight diario'}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                          u.dailyInsightStatus === 'on'
+                            ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200'
+                            : 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-300'
+                        }`}>
+                        {busyId === `di-${u.id}` ? '…' : u.dailyInsightStatus === 'on' ? 'IA: Desactivar' : 'IA: Activar'}
+                      </button>
+                      <button
+                        onClick={() => handleToggleActive(u)}
+                        disabled={busyId === u.id}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                          isDisabled
+                            ? 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-300'
+                            : 'bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300'
+                        }`}>
+                        {busyId === u.id ? '…' : isDisabled ? 'Reactivar' : 'Desactivar'}
+                      </button>
+                    </div>
                   )}
                 </div>
               )

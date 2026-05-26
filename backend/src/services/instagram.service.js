@@ -65,7 +65,6 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
   })
   const monthWithLikes    = monthPosts.filter(m => m.like_count     != null)
   const monthWithComments = monthPosts.filter(m => m.comments_count != null)
-  const monthWithBoth     = monthPosts.filter(m => m.like_count != null && m.comments_count != null)
   const postsThisMonth    = monthPosts.length
 
   // ── Promedios del mes ─────────────────────────────────────────────────────
@@ -83,21 +82,34 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
     ? parseFloat((((avgLikes ?? 0) + (avgComments ?? 0)) / followersCount * 100).toFixed(2))
     : null
 
-  // ── Mejor publicación del mes ─────────────────────────────────────────────
+  // ── Top publicaciones del mes (ranking unificado) ─────────────────────────
+  // Score = likes + comments. Si el post no tiene comments, vale solo los likes.
+  // Devuelve hasta 3 (#1, #2, #3) ordenadas. bestPost es el #1 (compatibilidad).
 
-  const bestPostRaw = monthWithLikes.length > 0
-    ? monthWithLikes.reduce((best, m) => m.like_count > best.like_count ? m : best)
-    : null
+  function postScore(m) {
+    return (m.like_count ?? 0) + (m.comments_count ?? 0)
+  }
 
-  const bestPost = bestPostRaw ? {
-    id:            bestPostRaw.id,
-    likeCount:     bestPostRaw.like_count,
-    commentsCount: bestPostRaw.comments_count ?? null,
-    imgSrc:        bestPostRaw.thumbnail_url ?? bestPostRaw.media_url ?? null,
-    permalink:     bestPostRaw.permalink ?? null,
-    mediaType:     bestPostRaw.media_type ?? null,
-    caption:       bestPostRaw.caption   ?? null,
-  } : null
+  const topRanked = monthPosts
+    .filter(m => m.like_count != null || m.comments_count != null)
+    .sort((a, b) => postScore(b) - postScore(a))
+    .slice(0, 3)
+
+  function toBestPost(m) {
+    return {
+      id:            m.id,
+      likeCount:     m.like_count        ?? null,
+      commentsCount: m.comments_count    ?? null,
+      imgSrc:        m.thumbnail_url ?? m.media_url ?? null,
+      permalink:     m.permalink         ?? null,
+      mediaType:     m.media_type        ?? null,
+      caption:       m.caption           ?? null,
+      timestamp:     m.timestamp         ?? null,
+    }
+  }
+
+  const topPosts = topRanked.map(toBestPost)
+  const bestPost = topPosts[0] ?? null
 
   // ── Breakdown por tipo de contenido (del mes) ─────────────────────────────
 
@@ -134,28 +146,6 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
     .map(([h, { likes, count }]) => ({ hour: Number(h), avgLikes: parseFloat((likes / count).toFixed(1)), count }))
     .sort((a, b) => b.avgLikes - a.avgLikes)[0] ?? null
 
-  // ── TOP del mes ────────────────────────────────────────────────────────────
-
-  function toPostCard(m) {
-    if (!m) return null
-    return {
-      id:            m.id,
-      mediaType:     m.media_type        ?? 'IMAGE',
-      imgSrc:        m.thumbnail_url ?? m.media_url ?? null,
-      permalink:     m.permalink         ?? null,
-      likeCount:     m.like_count        ?? null,
-      commentsCount: m.comments_count    ?? null,
-      timestamp:     m.timestamp         ?? null,
-      caption:       m.caption           ?? null,
-    }
-  }
-
-  const topLikes      = monthWithLikes.length    > 0 ? toPostCard(monthWithLikes.reduce((b, m)    => m.like_count > b.like_count ? m : b))        : null
-  const topComments   = monthWithComments.length > 0 ? toPostCard(monthWithComments.reduce((b, m) => m.comments_count > b.comments_count ? m : b)) : null
-  const topEngagement = monthWithBoth.length     > 0 ? toPostCard(monthWithBoth.reduce((b, m)     => (m.like_count + m.comments_count) > (b.like_count + b.comments_count) ? m : b)) : null
-
-  const topOfMonth = { topLikes, topComments, topEngagement, postsThisMonth }
-
   // ── Últimas 9 publicaciones para la grilla ────────────────────────────────
 
   const recentMedia = media.slice(0, 9).map(m => ({
@@ -182,9 +172,9 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
     engagementRate,
     postsThisMonth,
     bestPost,
+    topPosts,
     byType,
     bestHour,
-    topOfMonth,
     recentMedia,
   }
 }

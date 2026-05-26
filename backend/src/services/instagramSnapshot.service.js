@@ -38,6 +38,8 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
     metrics          = await fetchInstagramMetrics(integration.propertyId, token, month, useFbGraph)
   }
 
+  const topPostsJson = JSON.stringify(metrics.topPosts ?? [])
+
   await prisma.instagramSnapshot.upsert({
     where: { projectId_month: { projectId, month } },
     update: {
@@ -47,6 +49,7 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
       avgComments:    metrics.avgComments    ?? null,
       engagementRate: metrics.engagementRate ?? null,
       postsCount:     metrics.postsThisMonth ?? null,
+      topPosts:       topPostsJson,
     },
     create: {
       projectId,
@@ -58,6 +61,7 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
       avgComments:    metrics.avgComments    ?? null,
       engagementRate: metrics.engagementRate ?? null,
       postsCount:     metrics.postsThisMonth ?? null,
+      topPosts:       topPostsJson,
     },
   })
 

@@ -202,20 +202,32 @@ function KpiCard({ icon, label, value, sub, valueClass = '' }) {
 
 // ── TOP del mes ───────────────────────────────────────────────────────────────
 
-function TopPostCard({ post, medal, category, categoryIcon }) {
+const RANK_META = [
+  { medal: '🥇', label: 'Mejor publicación',  highlight: true  },
+  { medal: '🥈', label: '2ª mejor del mes',   highlight: false },
+  { medal: '🥉', label: '3ª mejor del mes',   highlight: false },
+]
+
+function TopPostCard({ post, medal, label, highlight }) {
   if (!post) return (
     <div className="bg-white dark:bg-gray-800 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col items-center justify-center gap-2 min-h-[160px]">
-      <span className="text-2xl opacity-30">{categoryIcon}</span>
-      <p className="text-xs text-gray-400 text-center">Sin publicaciones este mes</p>
+      <span className="text-2xl opacity-30">📭</span>
+      <p className="text-xs text-gray-400 text-center">Sin más publicaciones este mes</p>
     </div>
   )
+
+  const score = (post.likeCount ?? 0) + (post.commentsCount ?? 0)
 
   return (
     <a
       href={post.permalink ?? '#'}
       target="_blank"
       rel="noopener noreferrer"
-      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden flex flex-col group hover:border-purple-300 dark:hover:border-purple-700 transition-colors"
+      className={`bg-white dark:bg-gray-800 rounded-xl overflow-hidden flex flex-col group transition-colors ${
+        highlight
+          ? 'border-2 border-purple-400 dark:border-purple-500 shadow-md hover:border-purple-500 dark:hover:border-purple-400'
+          : 'border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
+      }`}
     >
       {/* Imagen */}
       <div className="relative aspect-square bg-gray-100 dark:bg-gray-700">
@@ -231,12 +243,19 @@ function TopPostCard({ post, medal, category, categoryIcon }) {
 
       {/* Info */}
       <div className="p-3 space-y-1.5">
-        <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
-          {categoryIcon} {category}
+        <p className={`text-[10px] font-semibold uppercase tracking-wide ${
+          highlight ? 'text-purple-700 dark:text-purple-300' : 'text-gray-500 dark:text-gray-400'
+        }`}>
+          {label}
         </p>
         <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
           {post.likeCount     != null && <span>❤️ {fmtK(post.likeCount)}</span>}
           {post.commentsCount != null && <span>💬 {fmtK(post.commentsCount)}</span>}
+          {score > 0 && (
+            <span className="ml-auto text-[10px] text-gray-400">
+              {fmtK(score)} interacciones
+            </span>
+          )}
         </div>
         {post.caption && (
           <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight">
@@ -248,21 +267,8 @@ function TopPostCard({ post, medal, category, categoryIcon }) {
   )
 }
 
-function TopOfMonth({ topOfMonth }) {
-  if (!topOfMonth) return null
-
-  const { topLikes, topComments, topEngagement, postsThisMonth } = topOfMonth
-
-  // Deduplicar: si dos categorías apuntan al mismo post, la segunda queda en null
-  const ids = new Set()
-  function dedup(post) {
-    if (!post || ids.has(post.id)) return null
-    ids.add(post.id)
-    return post
-  }
-  const p1 = dedup(topLikes)
-  const p2 = dedup(topComments)
-  const p3 = dedup(topEngagement)
+function TopOfMonth({ topPosts, postsThisMonth }) {
+  const list = Array.isArray(topPosts) ? topPosts : []
 
   const currentMonth = new Date().toLocaleString('es-AR', { month: 'long', timeZone: 'America/Argentina/Buenos_Aires' })
 
@@ -271,25 +277,31 @@ function TopOfMonth({ topOfMonth }) {
       <div className="flex items-center justify-between mb-4">
         <div>
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-            🏆 TOP del mes — {currentMonth}
+            🏆 Mejores publicaciones — {currentMonth}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
             {postsThisMonth > 0
-              ? `${postsThisMonth} publicación${postsThisMonth !== 1 ? 'es' : ''} este mes`
+              ? `${postsThisMonth} publicación${postsThisMonth !== 1 ? 'es' : ''} este mes · ranking por likes + comentarios`
               : 'Sin publicaciones en lo que va del mes'}
           </p>
         </div>
       </div>
 
-      {postsThisMonth === 0 ? (
+      {list.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">
-          Aún no hay publicaciones este mes. El ranking se actualizará con la primera.
+          Aún no hay publicaciones con datos de interacción este mes.
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <TopPostCard post={p1} medal="🥇" category="Más likes"    categoryIcon="❤️" />
-          <TopPostCard post={p2} medal="🥈" category="Más comentarios" categoryIcon="💬" />
-          <TopPostCard post={p3} medal="🥉" category="Más interacciones" categoryIcon="⚡" />
+          {[0, 1, 2].map(i => (
+            <TopPostCard
+              key={list[i]?.id ?? `slot-${i}`}
+              post={list[i] ?? null}
+              medal={RANK_META[i].medal}
+              label={RANK_META[i].label}
+              highlight={RANK_META[i].highlight}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -828,7 +840,9 @@ export default function InstagramTab({ projectId, onSelectProject }) {
       {isCurrentMonth && metrics && <ContentInsights byType={metrics.byType} bestHour={metrics.bestHour} />}
 
       {/* TOP del mes — solo mes actual (datos en vivo) */}
-      {isCurrentMonth && metrics?.topOfMonth && <TopOfMonth topOfMonth={metrics.topOfMonth} />}
+      {isCurrentMonth && metrics?.topPosts && (
+        <TopOfMonth topPosts={metrics.topPosts} postsThisMonth={metrics.postsThisMonth} />
+      )}
 
       {/* Evolución de seguidores */}
       {integration && (() => {

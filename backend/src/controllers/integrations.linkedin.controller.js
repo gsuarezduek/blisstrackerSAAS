@@ -7,8 +7,8 @@ const { listAdminOrganizations } = require('../services/linkedin.service')
 const LINKEDIN_AUTH_URL  = 'https://www.linkedin.com/oauth/v2/authorization'
 const LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
 
-// Scopes para administración de páginas de empresa
-const LINKEDIN_SCOPES = 'r_organization_social r_organization_admin rw_organization_admin r_basicprofile'
+// Scopes mínimos de sólo lectura para Company Page (Community Management API)
+const LINKEDIN_SCOPES = 'r_organization_social r_organization_admin'
 
 function buildLinkedinRedirectUri() {
   const base = process.env.BACKEND_URL || 'http://localhost:3001'

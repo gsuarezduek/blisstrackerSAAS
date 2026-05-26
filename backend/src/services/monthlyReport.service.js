@@ -160,7 +160,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.instagramSnapshot.findFirst({
       where:   { projectId, workspaceId, month: dataMonth },
       select:  { followersCount: true, engagementRate: true, avgLikes: true,
-                 avgComments: true, postsCount: true, mediaCount: true },
+                 avgComments: true, postsCount: true, mediaCount: true, topPosts: true },
     }),
     prisma.instagramSnapshot.findFirst({
       where:   { projectId, workspaceId, month: prev },
@@ -370,14 +370,23 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   const evolution = analyticsEvolution.length >= 2 ? analyticsEvolution : null
 
   // ── Instagram (con fallback a snapshot más reciente o datos en vivo) ──────────
+  function parseIgTopPosts(json) {
+    if (!json) return []
+    try { const v = JSON.parse(json); return Array.isArray(v) ? v : [] }
+    catch { return [] }
+  }
+
   let instagram = null
   if (instagramSnap) {
+    const topPosts = parseIgTopPosts(instagramSnap.topPosts)
     instagram = {
       followersCount:  instagramSnap.followersCount,
       engagementRate:  instagramSnap.engagementRate,
       avgLikes:        instagramSnap.avgLikes,
       avgComments:     instagramSnap.avgComments,
       postsCount:      instagramSnap.postsCount,
+      topPosts,
+      bestPost:        topPosts[0] ?? null,
       deltaFollowers:  instagramPrev ? pct(instagramSnap.followersCount, instagramPrev.followersCount) : null,
       deltaEngagement: instagramPrev ? pct(instagramSnap.engagementRate ?? 0, instagramPrev.engagementRate) : null,
     }
@@ -387,19 +396,22 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       where:   { projectId, workspaceId },
       orderBy: { month: 'desc' },
       select:  { followersCount: true, engagementRate: true, avgLikes: true,
-                 avgComments: true, postsCount: true, mediaCount: true, month: true },
+                 avgComments: true, postsCount: true, mediaCount: true, topPosts: true, month: true },
     })
     if (recentIg) {
       const prevIg = await prisma.instagramSnapshot.findFirst({
         where:  { projectId, workspaceId, month: prevMonthStr(recentIg.month) },
         select: { followersCount: true, engagementRate: true },
       })
+      const topPosts = parseIgTopPosts(recentIg.topPosts)
       instagram = {
         followersCount:  recentIg.followersCount,
         engagementRate:  recentIg.engagementRate,
         avgLikes:        recentIg.avgLikes,
         avgComments:     recentIg.avgComments,
         postsCount:      recentIg.postsCount,
+        topPosts,
+        bestPost:        topPosts[0] ?? null,
         deltaFollowers:  prevIg ? pct(recentIg.followersCount, prevIg.followersCount) : null,
         deltaEngagement: prevIg ? pct(recentIg.engagementRate ?? 0, prevIg.engagementRate) : null,
         _fallbackMonth:  recentIg.month,
@@ -418,6 +430,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
             avgLikes:        live.avgLikes,
             avgComments:     live.avgComments,
             postsCount:      live.postsThisMonth,
+            topPosts:        live.topPosts ?? [],
+            bestPost:        live.bestPost ?? null,
             deltaFollowers:  null,
             deltaEngagement: null,
             _fallbackMonth:  'live',
