@@ -260,6 +260,8 @@ model Project {
   timezone           String    @default("America/Argentina/Buenos_Aires")
   linksEnabled       Boolean   @default(true)
   situationEnabled   Boolean   @default(true)
+  hoursEnabled       Boolean   @default(false)
+  monthlyHours       Int?
   emailFrom          String?
   aiWeeklyTokenLimit Int       @default(500000)
   websiteUrl         String?

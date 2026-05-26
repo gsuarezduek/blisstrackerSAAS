@@ -30,3 +30,13 @@ export function completedDuration(task) {
   if (mins == null) return null
   return fmtMins(mins)
 }
+
+// Fracción de meses entre dos fechas "YYYY-MM-DD" (inclusive ambos extremos).
+// Usa 30.4375 días/mes (365.25 / 12) para que la proporción sea estable.
+export function monthsInRange(from, to) {
+  if (!from || !to) return 1
+  const d1 = new Date(`${from}T00:00:00Z`)
+  const d2 = new Date(`${to}T00:00:00Z`)
+  const days = Math.max(1, Math.round((d2 - d1) / 86400000) + 1)
+  return days / 30.4375
+}

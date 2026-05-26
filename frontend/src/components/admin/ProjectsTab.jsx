@@ -160,6 +160,93 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
   )
 }
 
+// ── Hours Modal ────────────────────────────────────────────────────────────────
+
+function HoursModal({ project, onClose, onUpdate }) {
+  const [hours, setHours] = useState(project.monthlyHours ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSave() {
+    setError('')
+    const trimmed = String(hours).trim()
+    const payload = trimmed === '' ? null : Number(trimmed)
+    if (payload !== null && (!Number.isInteger(payload) || payload < 0)) {
+      setError('Ingresá un número entero positivo o dejá vacío.')
+      return
+    }
+    setSaving(true)
+    try {
+      const { data } = await api.put(`/projects/${project.id}`, { monthlyHours: payload })
+      onUpdate(data)
+      onClose()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al guardar las horas.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md flex flex-col">
+
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b dark:border-gray-700">
+          <div>
+            <h2 className="text-base font-bold text-gray-900 dark:text-white">Horas disponibles</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate max-w-xs">{project.name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors ml-4">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Horas por mes</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={hours}
+                onChange={e => setHours(e.target.value)}
+                placeholder="Ej. 40"
+                className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-500 dark:text-gray-400">hs/mes</span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Presupuesto de horas mensuales del proyecto. Dejá vacío para indicar que el proyecto no tiene presupuesto definido.
+            </p>
+          </div>
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+        </div>
+
+        <div className="px-5 py-4 border-t dark:border-gray-700 flex items-center gap-2">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl py-2.5 text-sm transition-colors disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl py-2.5 text-sm transition-colors disabled:opacity-60"
+          >
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Services checkbox (still used in create/edit) ──────────────────────────────
 
 function ServiceCheckboxList({ allServices, selectedIds, onChange }) {
@@ -198,6 +285,8 @@ export default function ProjectsTab() {
   const [editingId,   setEditingId]   = useState(null)
   const [edit,        setEdit]        = useState({})
   const [teamProject, setTeamProject] = useState(null)
+  const [hoursProject, setHoursProject] = useState(null)
+  const [hoursEnabled, setHoursEnabled] = useState(false)
   const [search,      setSearch]      = useState('')
 
   useEffect(() => {
@@ -205,10 +294,12 @@ export default function ProjectsTab() {
       api.get('/projects/all'),
       api.get('/services/all'),
       api.get('/users'),
-    ]).then(([proj, svc, usr]) => {
+      api.get('/projects/settings').catch(() => ({ data: {} })),
+    ]).then(([proj, svc, usr, settings]) => {
       setProjects(proj.data)
       setAllServices(svc.data)
       setAllUsers(usr.data.filter(u => u.active))
+      setHoursEnabled(!!settings.data?.hoursEnabled)
     })
   }, [])
 
@@ -258,6 +349,10 @@ export default function ProjectsTab() {
     setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p))
     // keep modal open — update the project reference so it shows latest state
     setTeamProject(updatedProject)
+  }
+
+  function handleHoursUpdate(updatedProject) {
+    setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p))
   }
 
   return (
@@ -368,6 +463,14 @@ export default function ProjectsTab() {
                           >
                             👥 {p.members.length > 0 ? `Equipo (${p.members.length})` : 'Equipo'}
                           </button>
+                          {hoursEnabled && (
+                            <button
+                              onClick={() => setHoursProject(p)}
+                              className="text-xs px-3 py-1.5 rounded-lg font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors"
+                            >
+                              ⏱️ {p.monthlyHours != null ? `Horas (${p.monthlyHours}h)` : 'Horas'}
+                            </button>
+                          )}
                           <button
                             onClick={() => startEdit(p)}
                             className="text-xs px-3 py-1.5 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
@@ -460,6 +563,15 @@ export default function ProjectsTab() {
           allUsers={allUsers}
           onClose={() => setTeamProject(null)}
           onUpdate={handleTeamUpdate}
+        />
+      )}
+
+      {/* Hours modal */}
+      {hoursProject && (
+        <HoursModal
+          project={hoursProject}
+          onClose={() => setHoursProject(null)}
+          onUpdate={handleHoursUpdate}
         />
       )}
     </div>

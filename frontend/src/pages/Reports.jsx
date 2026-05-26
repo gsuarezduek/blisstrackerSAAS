@@ -6,14 +6,15 @@ import DateRangeFilter from '../components/DateRangeFilter'
 import EditDurationModal from '../components/EditDurationModal'
 import api from '../api/client'
 import useRoles from '../hooks/useRoles'
-import { fmtMins } from '../utils/format'
+import { fmtMins, monthsInRange } from '../utils/format'
 
 // ── By Project View ────────────────────────────────────────────────────────────
 
-function ByProjectView({ data, loading, onEditTask }) {
+function ByProjectView({ data, from, to, loading, onEditTask }) {
   const [expandedProject, setExpandedProject] = useState(null)
   const [expandedUser, setExpandedUser] = useState(null)
   const totalMins = data.reduce((s, d) => s + d.totalMinutes, 0)
+  const months = monthsInRange(from, to)
 
   function toggleProject(id) {
     setExpandedProject(expandedProject === id ? null : id)
@@ -36,7 +37,18 @@ function ByProjectView({ data, loading, onEditTask }) {
       )}
 
       <div className="space-y-3">
-        {data.map(d => (
+        {data.map(d => {
+          const hoursEnabled = d.project.hoursEnabled
+          const monthlyHours = d.project.monthlyHours
+          const useBudget    = hoursEnabled && monthlyHours != null
+          const noBudget     = hoursEnabled && monthlyHours == null
+          const budgetMins   = useBudget ? monthlyHours * 60 * months : 0
+          const pctRaw       = useBudget
+            ? (budgetMins > 0 ? (d.totalMinutes / budgetMins) * 100 : 0)
+            : (totalMins   > 0 ? (d.totalMinutes / totalMins)   * 100 : 0)
+          const pct          = Math.min(100, pctRaw)
+          const overBudget   = useBudget && pctRaw > 100
+          return (
           <div key={d.project.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-hidden">
             <button
               className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -48,17 +60,34 @@ function ByProjectView({ data, loading, onEditTask }) {
               </div>
               <div className="flex items-center gap-3">
                 <span className="font-bold text-primary-600">{fmtMins(d.totalMinutes)}</span>
+                {useBudget && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">/ {monthlyHours}h{months >= 1.5 || months < 0.95 ? ` × ${months.toFixed(1)} mes` : '/mes'}</span>
+                )}
                 <span className="text-gray-400 dark:text-gray-500 text-sm">{expandedProject === d.project.id ? '▲' : '▼'}</span>
               </div>
             </button>
 
             <div className="px-4 pb-3">
-              <div className="w-full bg-gray-100 rounded-full h-1.5">
-                <div
-                  className="bg-primary-500 h-1.5 rounded-full"
-                  style={{ width: totalMins ? `${(d.totalMinutes / totalMins) * 100}%` : '0%' }}
-                />
-              </div>
+              {noBudget ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-1.5" />
+                  <span className="text-xs text-gray-400 dark:text-gray-500">Sin presupuesto</span>
+                </div>
+              ) : (
+                <>
+                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${overBudget ? 'bg-red-500' : 'bg-primary-500'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  {useBudget && (
+                    <div className="text-xs text-right mt-1 text-gray-500 dark:text-gray-400">
+                      {Math.round(pctRaw)}% del presupuesto
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {expandedProject === d.project.id && (
@@ -106,7 +135,8 @@ function ByProjectView({ data, loading, onEditTask }) {
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {data.length === 0 && (
@@ -240,6 +270,7 @@ export default function Reports() {
   const { labelFor } = useRoles()
   const [view, setView] = useState('project') // 'project' | 'person'
   const [projectData, setProjectData] = useState([])
+  const [projectRange, setProjectRange] = useState({ from: null, to: null })
   const [personData, setPersonData] = useState([])
   const [loading, setLoading] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
@@ -261,7 +292,9 @@ export default function Reports() {
         api.get(`/reports/by-project?${params}`),
         api.get(`/reports/by-user-summary?${params}`),
       ])
-      setProjectData(proj.data.sort((a, b) => b.totalMinutes - a.totalMinutes))
+      const projects = Array.isArray(proj.data) ? proj.data : proj.data.projects
+      setProjectData(projects.sort((a, b) => b.totalMinutes - a.totalMinutes))
+      setProjectRange({ from: proj.data.from ?? f, to: proj.data.to ?? t })
       setPersonData(person.data)
     } finally {
       setLoading(false)
@@ -303,7 +336,7 @@ export default function Reports() {
         </div>
 
         {view === 'project'
-          ? <ByProjectView data={projectData} loading={loading} onEditTask={setEditingTask} />
+          ? <ByProjectView data={projectData} from={projectRange.from} to={projectRange.to} loading={loading} onEditTask={setEditingTask} />
           : <ByPersonView data={personData} loading={loading} onEditTask={setEditingTask} />
         }
       </main>

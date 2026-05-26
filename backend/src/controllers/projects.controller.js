@@ -153,12 +153,21 @@ async function update(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const { id } = req.params
-    const { name, active, serviceIds, memberIds, websiteUrl, connections } = req.body
+    const { name, active, serviceIds, memberIds, websiteUrl, connections, monthlyHours } = req.body
     const data = {}
     if (name        !== undefined) data.name       = name
     if (active      !== undefined) data.active     = active
     if (websiteUrl  !== undefined) data.websiteUrl = websiteUrl || null
     if (connections !== undefined) data.connections = typeof connections === 'string' ? connections : JSON.stringify(connections)
+    if (monthlyHours !== undefined) {
+      if (monthlyHours === null || monthlyHours === '') {
+        data.monthlyHours = null
+      } else {
+        const h = Number(monthlyHours)
+        if (!Number.isInteger(h) || h < 0) return res.status(400).json({ error: 'monthlyHours debe ser un entero positivo' })
+        data.monthlyHours = h
+      }
+    }
 
     if (serviceIds !== undefined) {
       await prisma.projectService.deleteMany({ where: { projectId: Number(id) } })
@@ -362,7 +371,7 @@ async function getGlobalSettings(req, res, next) {
     const workspace = req.workspace
     const first = await prisma.project.findFirst({
       where: { workspaceId: workspace.id },
-      select: { linksEnabled: true, situationEnabled: true, emailFrom: true, aiWeeklyTokenLimit: true },
+      select: { linksEnabled: true, situationEnabled: true, hoursEnabled: true, emailFrom: true, aiWeeklyTokenLimit: true },
       orderBy: { id: 'asc' },
     })
     const effectiveEmailFrom = first?.emailFrom ?? process.env.EMAIL_FROM ?? null
@@ -370,6 +379,7 @@ async function getGlobalSettings(req, res, next) {
       timezone: workspace.timezone,
       linksEnabled: first?.linksEnabled ?? true,
       situationEnabled: first?.situationEnabled ?? true,
+      hoursEnabled: first?.hoursEnabled ?? false,
       emailFrom: effectiveEmailFrom,
       aiWeeklyTokenLimit: first?.aiWeeklyTokenLimit ?? 500000,
     })
@@ -434,7 +444,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -445,6 +455,7 @@ async function saveGlobalSettings(req, res, next) {
     }
     if (linksEnabled !== undefined)    projectData.linksEnabled    = Boolean(linksEnabled)
     if (situationEnabled !== undefined) projectData.situationEnabled = Boolean(situationEnabled)
+    if (hoursEnabled !== undefined)    projectData.hoursEnabled    = Boolean(hoursEnabled)
     if (aiWeeklyTokenLimit !== undefined) {
       const limit = Number(aiWeeklyTokenLimit)
       if (!Number.isInteger(limit) || limit < 0) {

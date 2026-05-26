@@ -37,7 +37,7 @@ const taskSelect = {
   completedAt:     true,
   pausedMinutes:   true,
   minutesOverride: true,
-  project: { select: { id: true, name: true } },
+  project: { select: { id: true, name: true, hoursEnabled: true, monthlyHours: true } },
   user:    { select: { id: true, name: true } },
 }
 
@@ -83,7 +83,7 @@ async function byProject(req, res, next) {
       byUser: Object.values(byUser),
     }))
 
-    res.json(result)
+    res.json({ from, to, projects: result })
   } catch (err) { next(err) }
 }
 

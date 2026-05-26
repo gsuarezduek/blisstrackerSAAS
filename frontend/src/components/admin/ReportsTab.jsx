@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
-import { fmtMins } from '../../utils/format'
+import { fmtMins, monthsInRange } from '../../utils/format'
 
 function thisWeekRange() {
   const now = new Date()
@@ -15,6 +15,7 @@ function thisWeekRange() {
 
 export default function ReportsTab() {
   const [data, setData] = useState([])
+  const [range, setRange] = useState({ from: null, to: null })
   const [loading, setLoading] = useState(false)
   const [from, setFrom] = useState(thisWeekRange().from)
   const [to, setTo] = useState(thisWeekRange().to)
@@ -27,7 +28,9 @@ export default function ReportsTab() {
       if (from) params.append('from', from)
       if (to) params.append('to', to)
       const { data: res } = await api.get(`/reports/by-project?${params}`)
-      setData(res.sort((a, b) => b.totalMinutes - a.totalMinutes))
+      const projects = Array.isArray(res) ? res : res.projects
+      setData(projects.sort((a, b) => b.totalMinutes - a.totalMinutes))
+      setRange({ from: res.from ?? from, to: res.to ?? to })
     } finally {
       setLoading(false)
     }
@@ -36,6 +39,7 @@ export default function ReportsTab() {
   useEffect(() => { loadReport() }, [])
 
   const totalMins = data.reduce((s, d) => s + d.totalMinutes, 0)
+  const months = monthsInRange(range.from, range.to)
 
   return (
     <div>
@@ -69,7 +73,18 @@ export default function ReportsTab() {
 
       {/* Per project */}
       <div className="space-y-3">
-        {data.map(d => (
+        {data.map(d => {
+          const hoursEnabled = d.project.hoursEnabled
+          const monthlyHours = d.project.monthlyHours
+          const useBudget    = hoursEnabled && monthlyHours != null
+          const noBudget     = hoursEnabled && monthlyHours == null
+          const budgetMins   = useBudget ? monthlyHours * 60 * months : 0
+          const pctRaw       = useBudget
+            ? (budgetMins > 0 ? (d.totalMinutes / budgetMins) * 100 : 0)
+            : (totalMins   > 0 ? (d.totalMinutes / totalMins)   * 100 : 0)
+          const pct          = Math.min(100, pctRaw)
+          const overBudget   = useBudget && pctRaw > 100
+          return (
           <div key={d.project.id} className="bg-white border rounded-xl overflow-hidden">
             <button
               className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
@@ -81,18 +96,35 @@ export default function ReportsTab() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="font-bold text-primary-600">{fmtMins(d.totalMinutes)}</span>
+                {useBudget && (
+                  <span className="text-xs text-gray-500">/ {monthlyHours}h{months >= 1.5 || months < 0.95 ? ` × ${months.toFixed(1)} mes` : '/mes'}</span>
+                )}
                 <span className="text-gray-400 text-sm">{expanded === d.project.id ? '▲' : '▼'}</span>
               </div>
             </button>
 
             {/* Progress bar */}
             <div className="px-4 pb-3">
-              <div className="w-full bg-gray-100 rounded-full h-1.5">
-                <div
-                  className="bg-primary-500 h-1.5 rounded-full"
-                  style={{ width: totalMins ? `${(d.totalMinutes / totalMins) * 100}%` : '0%' }}
-                />
-              </div>
+              {noBudget ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 bg-gray-100 rounded-full h-1.5" />
+                  <span className="text-xs text-gray-400">Sin presupuesto</span>
+                </div>
+              ) : (
+                <>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${overBudget ? 'bg-red-500' : 'bg-primary-500'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  {useBudget && (
+                    <div className="text-xs text-right mt-1 text-gray-500">
+                      {Math.round(pctRaw)}% del presupuesto
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Breakdown by user */}
@@ -110,7 +142,8 @@ export default function ReportsTab() {
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {data.length === 0 && !loading && (
