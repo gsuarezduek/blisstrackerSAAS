@@ -5,6 +5,7 @@ const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
+const { ipKeyGenerator } = rateLimit
 const jwt = require('jsonwebtoken')
 
 const userOrIpKey = (req) => {
@@ -15,7 +16,7 @@ const userOrIpKey = (req) => {
       if (payload?.userId) return `u:${payload.userId}`
     } catch {}
   }
-  return `ip:${req.ip}`
+  return `ip:${ipKeyGenerator(req.ip)}`
 }
 
 const authRoutes              = require('./routes/auth.routes')

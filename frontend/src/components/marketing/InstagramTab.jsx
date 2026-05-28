@@ -578,7 +578,7 @@ function ConnectPrompt({ projectId, onConnected }) {
                     <li>Usuarios del sistema → Agregar usuario del sistema (rol: Empleado o Admin)</li>
                     <li>Asegurate de que las cuentas de Instagram estén asignadas al usuario del sistema</li>
                     <li>Hacé clic en el usuario del sistema → <strong>Generar nuevo token de acceso</strong></li>
-                    <li>Seleccioná la app <strong>BlissTracker</strong> y activá: <span className="font-mono">instagram_basic</span>, <span className="font-mono">instagram_manage_insights</span>, <span className="font-mono">pages_show_list</span></li>
+                    <li>Seleccioná la app <strong>BlissTracker</strong> y activá: <span className="font-mono">business_management</span>, <span className="font-mono">instagram_basic</span>, <span className="font-mono">instagram_manage_insights</span>, <span className="font-mono">pages_show_list</span>. <strong>El permiso <span className="font-mono">business_management</span> es clave</strong> para ver las cuentas de clientes administradas vía Business Manager.</li>
                     <li>Copiá el token y pegalo abajo</li>
                   </ol>
                 </div>
