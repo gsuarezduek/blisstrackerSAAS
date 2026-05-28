@@ -59,6 +59,7 @@ const { saveAllMonthlyTikTokSnapshots }    = require('./services/tiktokSnapshot.
 const { saveAllMonthlyLinkedinSnapshots }  = require('./services/linkedinSnapshot.service')
 const { saveAllSearchConsoleSnapshots }   = require('./services/searchConsoleSnapshot.service')
 const { saveAllAdsSnapshots }             = require('./services/adsSnapshot.service')
+const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnapshot.service')
 
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
 let weeklyReportRunning         = false
@@ -75,6 +76,7 @@ let linkedinSnapshotRunning     = false
 let seoSnapshotRunning          = false
 let serpSnapshotRunning         = false
 let adsSnapshotRunning          = false
+let competitorSnapshotRunning   = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -273,6 +275,16 @@ cron.schedule('0 6 1 * *', async () => {
   try { await saveAllAdsSnapshots() }
   catch (err) { console.error('[AdsSnapshot] Error en cron mensual:', err.message) }
   finally { adsSnapshotRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: snapshot mensual de competidores (Instagram) — 1° de cada mes a las 06:15 ART
+cron.schedule('15 6 1 * *', async () => {
+  if (competitorSnapshotRunning) { console.log('[CompetitorSnapshot] Ya en ejecución, se omite.'); return }
+  competitorSnapshotRunning = true
+  console.log('[CompetitorSnapshot] Iniciando guardado mensual automático...')
+  try { await saveAllMonthlyCompetitorSnapshots() }
+  catch (err) { console.error('[CompetitorSnapshot] Error en cron mensual:', err.message) }
+  finally { competitorSnapshotRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: eliminar workspaces vencidos — cada 15 minutos

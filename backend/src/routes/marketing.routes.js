@@ -23,6 +23,7 @@ const metaAds           = require('../controllers/metaAds.controller')
 const googleAds         = require('../controllers/googleAds.controller')
 const monthlyReport     = require('../controllers/monthlyReport.controller')
 const cannibalization   = require('../controllers/cannibalization.controller')
+const competitors       = require('../controllers/competitors.controller')
 const adsSnapshot       = require('../controllers/adsSnapshot.controller')
 const summary           = require('../controllers/marketingSummary.controller')
 
@@ -49,6 +50,7 @@ router.get('/integrations/google/auth-url',                    integrations.getA
 router.get('/integrations/meta/auth-url',                      metaIntegrations.getMetaAuthUrl)
 router.get('/integrations/meta-ads/auth-url',                  metaIntegrations.getMetaAdsAuthUrl)
 router.post('/projects/:id/integrations/instagram/connect-token',  metaIntegrations.connectInstagramToken)
+router.post('/projects/:id/integrations/instagram/connect-scrape', instagram.connectScrape)
 router.post('/projects/:id/integrations/meta-ads/connect-token',   metaIntegrations.connectMetaAdsToken)
 router.post('/projects/:id/integrations/connect-existing',    integrations.connectExisting)
 router.get('/projects/:id/integrations',                      integrations.listIntegrations)
@@ -73,7 +75,15 @@ router.get('/projects/:id/google-ads',  googleAds.getGoogleAdsData)
 router.get('/projects/:id/instagram/snapshots',  instagram.getSnapshots)
 router.post('/projects/:id/instagram/snapshots', instagram.saveSnapshot)
 router.get('/projects/:id/instagram/followers',  instagram.getFollowerLog)
+router.post('/projects/:id/instagram/scrape/refresh', instagram.refreshScrape)
 router.get('/projects/:id/instagram',            instagram.getMetrics)
+
+// Competidores (RRSS) — scraping de cuentas de la competencia
+router.get('/projects/:id/competitors',                  competitors.listCompetitors)
+router.post('/projects/:id/competitors',                 competitors.addCompetitor)
+router.get('/projects/:id/competitors/:cid/history',     competitors.getCompetitorHistory)
+router.post('/projects/:id/competitors/:cid/refresh',    competitors.refreshCompetitor)
+router.delete('/projects/:id/competitors/:cid',          competitors.deleteCompetitor)
 
 // TikTok
 router.get('/integrations/tiktok/auth-url',              tiktokIntegrations.getTikTokAuthUrl)

@@ -46,6 +46,17 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
   const profile = profileRes.data
   const media   = mediaRes.data?.data ?? []
 
+  return computeInstagramMetrics(profile, media, targetMonth)
+}
+
+/**
+ * Calcula el bloque de métricas a partir de un perfil + media ya normalizados.
+ * Compartido entre la API oficial (fetchInstagramMetrics) y el scraping (socialScrape.service).
+ * @param {object} profile     — { followers_count, media_count, name, username, profile_picture_url, biography, website }
+ * @param {Array}  media       — [{ id, like_count, comments_count, timestamp, media_type, media_url, thumbnail_url, permalink, caption }]
+ * @param {string} targetMonth — 'YYYY-MM' opcional; si null usa el mes actual ART
+ */
+function computeInstagramMetrics(profile, media = [], targetMonth = null) {
   const followersCount = profile.followers_count ?? 0
   const mediaCount     = profile.media_count     ?? 0
 
@@ -179,4 +190,4 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
   }
 }
 
-module.exports = { fetchInstagramMetrics }
+module.exports = { fetchInstagramMetrics, computeInstagramMetrics }

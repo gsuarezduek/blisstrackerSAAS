@@ -2,6 +2,11 @@ const prisma  = require('../lib/prisma')
 const { getValidMetaToken }        = require('../services/metaTokenRefresh.service')
 const { fetchInstagramMetrics }    = require('../services/instagram.service')
 const { saveInstagramSnapshot }    = require('../services/instagramSnapshot.service')
+const { scrapeInstagramProfile, parseInstagramUsername } = require('../services/socialScrape.service')
+
+// Cooldown en memoria para el refresh manual de scraping (protege costo del proveedor).
+const SCRAPE_REFRESH_COOLDOWN_MS = 30 * 60 * 1000
+const scrapeCooldownMap = new Map() // integrationId → timestamp del último scrape
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -11,6 +16,46 @@ function currentMonthStr() {
 function todayStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+// Persiste snapshot mensual + log diario de seguidores a partir de métricas ya obtenidas.
+async function persistScrapeData(projectId, workspaceId, metrics) {
+  const month = currentMonthStr()
+  const date  = todayStr()
+  await Promise.allSettled([
+    saveInstagramSnapshot(projectId, workspaceId, month, metrics),
+    prisma.instagramFollowerLog.upsert({
+      where:  { projectId_date: { projectId, date } },
+      update: { followersCount: metrics.followersCount },
+      create: { projectId, workspaceId, date, followersCount: metrics.followersCount },
+    }),
+  ])
+}
+
+// Reconstruye el shape de métricas a partir de un snapshot guardado (modo scraping cacheado).
+function snapshotToMetrics(snap, integration, lastScrapedAt = null) {
+  let topPosts = []
+  try { topPosts = JSON.parse(snap.topPosts || '[]') } catch { topPosts = [] }
+  return {
+    followersCount: snap.followersCount,
+    mediaCount:     snap.mediaCount ?? null,
+    name:           null,
+    username:       integration.propertyId ?? null,
+    profilePicUrl:  null,
+    biography:      null,
+    website:        null,
+    avgLikes:       snap.avgLikes ?? null,
+    avgComments:    snap.avgComments ?? null,
+    engagementRate: snap.engagementRate ?? null,
+    postsThisMonth: snap.postsCount ?? 0,
+    bestPost:       topPosts[0] ?? null,
+    topPosts,
+    byType:         [],
+    bestHour:       null,
+    recentMedia:    topPosts,
+    scraped:        true,
+    lastScrapedAt:  lastScrapedAt ?? snap.createdAt,
+  }
 }
 
 /**
@@ -34,6 +79,23 @@ async function getMetrics(req, res, next) {
     })
     if (!integration) {
       return res.status(404).json({ error: 'Sin integración de Instagram', code: 'NOT_CONNECTED' })
+    }
+
+    // ── Modo scraping ─────────────────────────────────────────────────────────
+    // No le pega a Apify en cada visita (costo): devuelve el último snapshot
+    // cacheado. El refresh manual (POST .../scrape/refresh) trae datos frescos.
+    if (integration.scopes === 'scrape') {
+      const [snap, lastLog] = await Promise.all([
+        prisma.instagramSnapshot.findFirst({ where: { projectId }, orderBy: { month: 'desc' } }),
+        prisma.instagramFollowerLog.findFirst({ where: { projectId }, orderBy: { date: 'desc' } }),
+      ])
+      if (!snap) {
+        return res.json({
+          scraped: true, username: integration.propertyId, followersCount: 0,
+          needsRefresh: true,
+        })
+      }
+      return res.json(snapshotToMetrics(snap, integration, lastLog?.createdAt ?? null))
     }
 
     let token
@@ -176,4 +238,89 @@ async function getFollowerLog(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, getFollowerLog }
+/**
+ * POST /api/marketing/projects/:id/integrations/instagram/connect-scrape
+ * Conecta Instagram por scraping (sin token). Body: { url | username }.
+ * Valida con un scrape inicial y guarda snapshot + log de seguidores.
+ */
+async function connectScrape(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const username    = parseInstagramUsername(req.body.url || req.body.username)
+    if (!username) return res.status(400).json({ error: 'Usuario o URL de Instagram inválido.' })
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    let metrics
+    try {
+      metrics = await scrapeInstagramProfile(username, { targetMonth: currentMonthStr() })
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code })
+    }
+
+    await prisma.projectIntegration.upsert({
+      where:  { projectId_type: { projectId, type: 'instagram' } },
+      update: {
+        workspaceId, status: 'active', scopes: 'scrape', propertyId: username,
+        accessToken: null, refreshToken: null, expiresAt: null,
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+      create: {
+        projectId, workspaceId, type: 'instagram', status: 'active',
+        scopes: 'scrape', propertyId: username,
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+    })
+
+    await persistScrapeData(projectId, workspaceId, metrics)
+
+    res.json({ ok: true, username, followersCount: metrics.followersCount, isPrivate: metrics.isPrivate })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/instagram/scrape/refresh
+ * Fuerza un scrape fresco (cooldown 30 min) y actualiza snapshot + log.
+ */
+async function refreshScrape(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const integration = await prisma.projectIntegration.findUnique({
+      where: { projectId_type: { projectId, type: 'instagram' } },
+    })
+    if (!integration || integration.scopes !== 'scrape') {
+      return res.status(400).json({ error: 'Este proyecto no está conectado por scraping.', code: 'NOT_SCRAPE' })
+    }
+
+    const last = scrapeCooldownMap.get(integration.id)
+    if (last && Date.now() - last < SCRAPE_REFRESH_COOLDOWN_MS) {
+      const waitMins = Math.ceil((SCRAPE_REFRESH_COOLDOWN_MS - (Date.now() - last)) / 60000)
+      return res.status(429).json({ error: `Esperá ${waitMins} min para actualizar de nuevo.`, code: 'COOLDOWN', waitMins })
+    }
+
+    let metrics
+    try {
+      metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: currentMonthStr() })
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code })
+    }
+
+    scrapeCooldownMap.set(integration.id, Date.now())
+    await persistScrapeData(projectId, workspaceId, metrics)
+
+    res.json({ ...metrics, username: integration.propertyId, lastScrapedAt: new Date() })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetrics, getSnapshots, saveSnapshot, getFollowerLog, connectScrape, refreshScrape }

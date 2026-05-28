@@ -293,6 +293,7 @@ model Project {
   seoAiInsights          SeoAiInsight[]
   cannibalReports        CannibalReport[]
   adsSnapshots           AdsSnapshot[]
+  competitors            CompetitorAccount[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -944,6 +945,64 @@ model InstagramFollowerLog {
 
   @@unique([projectId, date])
   @@index([workspaceId])
+}
+
+// Competidores de RRSS — cuentas de la competencia que se trackean por scraping.
+// Por ahora solo Instagram (platform = "instagram").
+model CompetitorAccount {
+  id            Int      @id @default(autoincrement())
+  projectId     Int
+  workspaceId   Int
+  platform      String   @default("instagram")
+  username      String // handle sin @
+  displayName   String?
+  profilePicUrl String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project      Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  snapshots    CompetitorSnapshot[]
+  followerLogs CompetitorFollowerLog[]
+
+  @@unique([projectId, platform, username])
+  @@index([workspaceId])
+  @@index([projectId])
+}
+
+model CompetitorSnapshot {
+  id             Int      @id @default(autoincrement())
+  competitorId   Int
+  workspaceId    Int
+  month          String // "YYYY-MM"
+  followersCount Int      @default(0)
+  mediaCount     Int?
+  postsCount     Int? // publicaciones nuevas en ese mes
+  avgLikes       Float?
+  avgComments    Float?
+  engagementRate Float?
+  topPosts       String   @default("[]") // JSON con top publicaciones
+  createdAt      DateTime @default(now())
+
+  competitor CompetitorAccount @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@unique([competitorId, month])
+  @@index([workspaceId])
+  @@index([competitorId])
+}
+
+model CompetitorFollowerLog {
+  id             Int      @id @default(autoincrement())
+  competitorId   Int
+  workspaceId    Int
+  date           String // "YYYY-MM-DD" en horario ART
+  followersCount Int
+  createdAt      DateTime @default(now())
+
+  competitor CompetitorAccount @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@unique([competitorId, date])
+  @@index([workspaceId])
+  @@index([competitorId])
 }
 
 // ─── TIKTOK SNAPSHOTS ─────────────────────────────────────────────────────────

@@ -369,8 +369,9 @@ function ContentInsights({ byType, bestHour }) {
 
 // ── Header de cuenta ──────────────────────────────────────────────────────────
 
-function AccountHeader({ metrics, integration, onDisconnect, disconnecting }) {
+function AccountHeader({ metrics, integration, onDisconnect, disconnecting, onRefresh, refreshing }) {
   const [imgError, setImgError] = useState(false)
+  const isScrape = integration?.scopes === 'scrape' || metrics?.scraped
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
@@ -393,20 +394,38 @@ function AccountHeader({ metrics, integration, onDisconnect, disconnecting }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="font-semibold text-gray-900 dark:text-white">
-                {metrics?.username ? `@${metrics.username}` : (metrics?.name ?? 'Instagram')}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-gray-900 dark:text-white">
+                  {metrics?.username ? `@${metrics.username}` : (metrics?.name ?? 'Instagram')}
+                </p>
+                {isScrape && (
+                  <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-medium">
+                    scraping
+                  </span>
+                )}
+              </div>
               {metrics?.name && metrics?.username && (
                 <p className="text-xs text-gray-500 dark:text-gray-400">{metrics.name}</p>
               )}
             </div>
-            <button
-              onClick={onDisconnect}
-              disabled={disconnecting}
-              className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50 shrink-0"
-            >
-              {disconnecting ? 'Desconectando…' : 'Desconectar'}
-            </button>
+            <div className="flex items-center gap-3 shrink-0">
+              {isScrape && onRefresh && (
+                <button
+                  onClick={onRefresh}
+                  disabled={refreshing}
+                  className="text-xs text-purple-500 hover:text-purple-600 dark:text-purple-400 transition-colors disabled:opacity-50"
+                >
+                  {refreshing ? 'Actualizando…' : '↻ Actualizar'}
+                </button>
+              )}
+              <button
+                onClick={onDisconnect}
+                disabled={disconnecting}
+                className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+              >
+                {disconnecting ? 'Desconectando…' : 'Desconectar'}
+              </button>
+            </div>
           </div>
 
           {metrics?.biography && (
@@ -426,6 +445,9 @@ function AccountHeader({ metrics, integration, onDisconnect, disconnecting }) {
           )}
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             Conectado el {new Date(integration.connectedAt).toLocaleDateString('es-AR')}
+            {isScrape && metrics?.lastScrapedAt && (
+              <> · datos del {new Date(metrics.lastScrapedAt).toLocaleDateString('es-AR')}</>
+            )}
           </p>
         </div>
       </div>
@@ -438,11 +460,32 @@ function AccountHeader({ metrics, integration, onDisconnect, disconnecting }) {
 function ConnectPrompt({ projectId, onConnected }) {
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState(null)
-  const [showManual,    setShowManual]    = useState(false)
+  const [expanded,      setExpanded]      = useState('token') // 'official' | 'token' | 'scrape' | null
   const [manualToken,   setManualToken]   = useState('')
   const [manualLoading, setManualLoading] = useState(false)
   const [accounts,      setAccounts]      = useState(null) // lista cuando hay múltiples
+  const [scrapeInput,   setScrapeInput]   = useState('')
+  const [scrapeLoading, setScrapeLoading] = useState(false)
   const pollRef = useRef(null)
+
+  const toggle = (key) => { setExpanded(prev => prev === key ? null : key); setError(null) }
+
+  const handleScrapeConnect = async () => {
+    if (!scrapeInput.trim()) { setError('Pegá el usuario o la URL del perfil.'); return }
+    setScrapeLoading(true)
+    setError(null)
+    try {
+      await api.post(
+        `/marketing/projects/${projectId}/integrations/instagram/connect-scrape`,
+        { url: scrapeInput.trim() },
+      )
+      onConnected()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo conectar por scraping.')
+    } finally {
+      setScrapeLoading(false)
+    }
+  }
 
   const handleConnect = async () => {
     if (!projectId) { setError('Seleccioná un proyecto primero.'); return }
@@ -504,103 +547,163 @@ function ConnectPrompt({ projectId, onConnected }) {
     }
   }
 
+  const chevron = (open) => (
+    <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+  )
+
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-3xl mb-4">📸</div>
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Conectá tu cuenta de Instagram</h3>
-      <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs mb-6">Necesitás una cuenta de Instagram Business o Creator.</p>
+    <div className="max-w-lg mx-auto py-10">
+      <div className="text-center mb-6">
+        <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-3xl mb-4 mx-auto">📸</div>
+        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Conectá Instagram</h3>
+        <p className="text-sm text-gray-400 dark:text-gray-500">Elegí cómo querés traer los datos de la cuenta.</p>
+      </div>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400 mb-4 max-w-sm">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400 mb-4 text-center">{error}</p>}
+      {!projectId && <p className="text-xs text-gray-400 mb-4 text-center">Seleccioná un proyecto para continuar.</p>}
 
-      <button
-        onClick={handleConnect}
-        disabled={loading || !projectId}
-        className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-      >
-        {loading ? 'Conectando…' : 'Conectar con Instagram'}
-      </button>
+      <div className="space-y-3">
 
-      {!projectId && <p className="text-xs text-gray-400 mt-2">Seleccioná un proyecto para continuar.</p>}
-
-      {/* Opción manual — System User Token */}
-      <div className="mt-6 w-full max-w-sm">
-        <button
-          onClick={() => { setShowManual(v => !v); setError(null) }}
-          className="text-xs text-gray-400 dark:text-gray-500 hover:text-purple-500 dark:hover:text-purple-400 transition-colors underline underline-offset-2"
-        >
-          {showManual ? 'Ocultar' : '¿Tenés un token de Business Manager?'}
-        </button>
-
-        {showManual && (
-          <div className="mt-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-left space-y-3">
-
-            {/* Picker de cuentas (paso 2 cuando hay múltiples) */}
-            {accounts ? (
-              <>
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                  Encontramos {accounts.length} cuentas. Elegí cuál conectar a este proyecto:
-                </p>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {accounts.map(acc => (
-                    <button
-                      key={acc.id}
-                      onClick={() => handleManualConnect(acc.id)}
-                      disabled={manualLoading}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-left disabled:opacity-50"
-                    >
-                      <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                        {(acc.username || acc.name || '?')[0].toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">
-                          {acc.username ? `@${acc.username}` : acc.name || acc.id}
-                        </p>
-                        {acc.username && acc.name && acc.name !== acc.username && (
-                          <p className="text-[10px] text-gray-400 truncate">{acc.name}</p>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={() => setAccounts(null)}
-                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline underline-offset-2"
-                >
-                  ← Usar otro token
-                </button>
-              </>
-            ) : (
-              <>
-                <div>
-                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Cómo obtener el token desde Business Manager:</p>
-                  <ol className="text-xs text-gray-500 dark:text-gray-400 list-decimal list-inside space-y-1 leading-relaxed">
-                    <li>Abrí <span className="font-mono">business.facebook.com</span> → Configuración del negocio</li>
-                    <li>Usuarios del sistema → Agregar usuario del sistema (rol: Empleado o Admin)</li>
-                    <li>Asegurate de que las cuentas de Instagram estén asignadas al usuario del sistema</li>
-                    <li>Hacé clic en el usuario del sistema → <strong>Generar nuevo token de acceso</strong></li>
-                    <li>Seleccioná la app <strong>BlissTracker</strong> y activá: <span className="font-mono">business_management</span>, <span className="font-mono">instagram_basic</span>, <span className="font-mono">instagram_manage_insights</span>, <span className="font-mono">pages_show_list</span>. <strong>El permiso <span className="font-mono">business_management</span> es clave</strong> para ver las cuentas de clientes administradas vía Business Manager.</li>
-                    <li>Copiá el token y pegalo abajo</li>
-                  </ol>
-                </div>
-                <textarea
-                  value={manualToken}
-                  onChange={e => setManualToken(e.target.value)}
-                  placeholder="EAABwz..."
-                  rows={3}
-                  className="w-full text-xs font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
-                />
-                <button
-                  onClick={() => handleManualConnect()}
-                  disabled={manualLoading || !manualToken.trim()}
-                  className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {manualLoading ? 'Verificando…' : 'Conectar con token'}
-                </button>
-              </>
-            )}
-
+        {/* Método 1 — Conexión oficial (deshabilitada hasta aprobación de Meta) */}
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden opacity-70">
+          <div className="w-full flex items-center gap-3 px-4 py-3">
+            <span className="text-xl shrink-0">🔗</span>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Conexión oficial</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">Instagram Business Login — directo, sin tokens</p>
+            </div>
+            <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-1 rounded-full shrink-0">En revisión</span>
           </div>
-        )}
+          <div className="px-4 pb-3 -mt-1">
+            <button disabled className="w-full py-2 bg-gray-200 dark:bg-gray-700 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed">
+              Disponible cuando Meta apruebe la app
+            </button>
+          </div>
+        </div>
+
+        {/* Método 2 — Token de Business Manager (recomendado) */}
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+          <button
+            onClick={() => toggle('token')}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+          >
+            <span className="text-xl shrink-0">🔑</span>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Token de Business Manager</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">System User Token — datos completos vía API</p>
+            </div>
+            <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-2 py-1 rounded-full shrink-0">Recomendado</span>
+            {chevron(expanded === 'token')}
+          </button>
+
+          {expanded === 'token' && (
+            <div className="px-4 pb-4 pt-1 text-left space-y-3 border-t border-gray-100 dark:border-gray-700/50">
+              {/* Picker de cuentas (paso 2 cuando hay múltiples) */}
+              {accounts ? (
+                <>
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                    Encontramos {accounts.length} cuentas. Elegí cuál conectar a este proyecto:
+                  </p>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {accounts.map(acc => (
+                      <button
+                        key={acc.id}
+                        onClick={() => handleManualConnect(acc.id)}
+                        disabled={manualLoading}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors text-left disabled:opacity-50"
+                      >
+                        <span className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                          {(acc.username || acc.name || '?')[0].toUpperCase()}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">
+                            {acc.username ? `@${acc.username}` : acc.name || acc.id}
+                          </p>
+                          {acc.username && acc.name && acc.name !== acc.username && (
+                            <p className="text-[10px] text-gray-400 truncate">{acc.name}</p>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setAccounts(null)}
+                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline underline-offset-2"
+                  >
+                    ← Usar otro token
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Cómo obtener el token desde Business Manager:</p>
+                    <ol className="text-xs text-gray-500 dark:text-gray-400 list-decimal list-inside space-y-1 leading-relaxed">
+                      <li>Abrí <span className="font-mono">business.facebook.com</span> → Configuración del negocio</li>
+                      <li>Usuarios del sistema → Agregar usuario del sistema (rol: Empleado o Admin)</li>
+                      <li>Asegurate de que las cuentas de Instagram estén asignadas al usuario del sistema</li>
+                      <li>Hacé clic en el usuario del sistema → <strong>Generar nuevo token de acceso</strong></li>
+                      <li>Seleccioná la app <strong>BlissTracker</strong> y activá: <span className="font-mono">business_management</span>, <span className="font-mono">instagram_basic</span>, <span className="font-mono">instagram_manage_insights</span>, <span className="font-mono">pages_show_list</span>. <strong>El permiso <span className="font-mono">business_management</span> es clave</strong> para ver las cuentas de clientes administradas vía Business Manager.</li>
+                      <li>Copiá el token y pegalo abajo</li>
+                    </ol>
+                  </div>
+                  <textarea
+                    value={manualToken}
+                    onChange={e => setManualToken(e.target.value)}
+                    placeholder="EAABwz..."
+                    rows={3}
+                    className="w-full text-xs font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+                  />
+                  <button
+                    onClick={() => handleManualConnect()}
+                    disabled={manualLoading || !manualToken.trim()}
+                    className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {manualLoading ? 'Verificando…' : 'Conectar con token'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Método 3 — Scraping */}
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+          <button
+            onClick={() => toggle('scrape')}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+          >
+            <span className="text-xl shrink-0">🔎</span>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Scraping</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">Sin conexión — datos públicos del perfil</p>
+            </div>
+            {chevron(expanded === 'scrape')}
+          </button>
+
+          {expanded === 'scrape' && (
+            <div className="px-4 pb-4 pt-1 text-left space-y-3 border-t border-gray-100 dark:border-gray-700/50">
+              <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                Pegá el usuario o la URL del perfil <strong>público</strong>. Traemos seguidores, publicaciones e interacciones por scraping. Ideal cuando no podés usar la API. Las cuentas privadas no se pueden analizar.
+              </p>
+              <input
+                type="text"
+                value={scrapeInput}
+                onChange={e => setScrapeInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleScrapeConnect() }}
+                placeholder="@usuario o https://instagram.com/usuario"
+                className="w-full text-xs bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+              <button
+                onClick={handleScrapeConnect}
+                disabled={scrapeLoading || !scrapeInput.trim()}
+                className="w-full py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+              >
+                {scrapeLoading ? 'Analizando perfil…' : 'Conectar por scraping'}
+              </button>
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   )
@@ -757,6 +860,21 @@ export default function InstagramTab({ projectId, onSelectProject }) {
     } finally { setDisconnecting(false) }
   }
 
+  const [refreshing, setRefreshing] = useState(false)
+  async function handleRefreshScrape() {
+    setRefreshing(true)
+    setError(null)
+    try {
+      const { data } = await api.post(`/marketing/projects/${projectId}/instagram/scrape/refresh`)
+      setMetrics(data)
+      // Refrescar snapshots y logs de seguidores en segundo plano
+      fetchData()
+    } catch (err) {
+      const code = err.response?.data?.code
+      setError(err.response?.data?.error || (code === 'COOLDOWN' ? 'Esperá un momento para actualizar de nuevo.' : 'No se pudo actualizar.'))
+    } finally { setRefreshing(false) }
+  }
+
   if (!projectId) {
     return <CrossProjectInstagramPanel onSelectProject={onSelectProject} />
   }
@@ -790,7 +908,7 @@ export default function InstagramTab({ projectId, onSelectProject }) {
     <div className="space-y-4">
 
       {/* Header con perfil */}
-      <AccountHeader metrics={metrics} integration={integration} onDisconnect={handleDisconnect} disconnecting={disconnecting} />
+      <AccountHeader metrics={metrics} integration={integration} onDisconnect={handleDisconnect} disconnecting={disconnecting} onRefresh={handleRefreshScrape} refreshing={refreshing} />
 
       {/* Error */}
       {error && (

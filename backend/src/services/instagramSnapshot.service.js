@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
-const { getValidMetaToken }     = require('./metaTokenRefresh.service')
-const { fetchInstagramMetrics } = require('./instagram.service')
+const { getValidMetaToken }       = require('./metaTokenRefresh.service')
+const { fetchInstagramMetrics }   = require('./instagram.service')
+const { scrapeInstagramProfile }  = require('./socialScrape.service')
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -33,9 +34,13 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
     if (!integration || integration.status !== 'active') {
       throw new Error(`Proyecto ${projectId}: no tiene integración de Instagram activa`)
     }
-    const token      = await getValidMetaToken(integration)
-    const useFbGraph = integration.scopes?.startsWith('fb_graph')
-    metrics          = await fetchInstagramMetrics(integration.propertyId, token, month, useFbGraph)
+    if (integration.scopes === 'scrape') {
+      metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: month })
+    } else {
+      const token      = await getValidMetaToken(integration)
+      const useFbGraph = integration.scopes?.startsWith('fb_graph')
+      metrics          = await fetchInstagramMetrics(integration.propertyId, token, month, useFbGraph)
+    }
   }
 
   const topPostsJson = JSON.stringify(metrics.topPosts ?? [])
