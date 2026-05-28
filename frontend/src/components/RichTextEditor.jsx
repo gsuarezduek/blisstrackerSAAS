@@ -113,12 +113,15 @@ export function Toolbar({ editor }) {
   )
 }
 
-export default function RichTextEditor({ defaultContent = '', onChange, minHeight = 140 }) {
+export default function RichTextEditor({ defaultContent = '', onChange, onBlur, minHeight = 140, autoFocus = true, resizable = false }) {
   const editor = useEditor({
     extensions: [StarterKit, TextStyle, Color],
     content: defaultContent,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())
+    },
+    onBlur: () => {
+      onBlur?.()
     },
   })
 
@@ -132,10 +135,14 @@ export default function RichTextEditor({ defaultContent = '', onChange, minHeigh
   }, [defaultContent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (editor) {
+    if (editor && autoFocus) {
       setTimeout(() => editor.commands.focus('end'), 0)
     }
-  }, [editor])
+  }, [editor, autoFocus])
+
+  const contentStyle = resizable
+    ? { minHeight, maxHeight: 800, height: minHeight, resize: 'vertical', overflow: 'auto' }
+    : { minHeight }
 
   return (
     <div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
@@ -143,7 +150,7 @@ export default function RichTextEditor({ defaultContent = '', onChange, minHeigh
       <EditorContent
         editor={editor}
         className="situation-editor p-3 text-sm text-gray-800 dark:text-gray-200 focus:outline-none"
-        style={{ minHeight }}
+        style={contentStyle}
       />
     </div>
   )

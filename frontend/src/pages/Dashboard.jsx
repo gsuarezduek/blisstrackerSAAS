@@ -337,7 +337,9 @@ export default function Dashboard() {
   // Sections from focus tasks
   const { inProgress, completed, starred, paused, blocked, pending, totalMins, activeFocusCount } = useMemo(() => {
     const inProgress = focusTasks.filter(t => t.status === 'IN_PROGRESS')
-    const completed  = focusTasks.filter(t => t.status === 'COMPLETED')
+    const completed  = focusTasks
+      .filter(t => t.status === 'COMPLETED')
+      .sort((a, b) => new Date(b.completedAt ?? 0) - new Date(a.completedAt ?? 0))
     const starred    = focusTasks.filter(t => (t.starred ?? 0) > 0 && t.status !== 'COMPLETED' && t.status !== 'IN_PROGRESS')
     const starredIds = new Set(starred.map(t => t.id))
     const paused     = focusTasks.filter(t => t.status === 'PAUSED'  && !starredIds.has(t.id))

@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import DOMPurify from 'dompurify'
 import api from '../../api/client'
 import { useWorkspace } from '../../context/WorkspaceContext'
+import RichTextEditor from '../RichTextEditor'
+
+// Detecta si un string contiene HTML (vs. texto plano legado)
+function isHtml(value) {
+  return typeof value === 'string' && /<\/?[a-z][\s\S]*>/i.test(value)
+}
 
 // ─── Helpers de tiempo (para VTO) ────────────────────────────────────────────
 
@@ -39,6 +46,7 @@ function printVTO(data, workspaceName, rocks, members, issues, quarter) {
 
   function textHtml(value, empty = 'No definido') {
     if (!value?.trim()) return `<span class="empty">${empty}</span>`
+    if (isHtml(value)) return DOMPurify.sanitize(value)
     return `<p>${value.replace(/\n/g, '<br>')}</p>`
   }
 
@@ -260,6 +268,14 @@ function CoreValuesVTOList({ items, empty = 'No definido' }) {
 
 function VTOText({ value, empty = 'No definido' }) {
   if (!value?.trim()) return <span className="text-gray-400 italic text-xs">{empty}</span>
+  if (isHtml(value)) {
+    return (
+      <div
+        className="situation-content text-xs leading-relaxed"
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(value) }}
+      />
+    )
+  }
   return <p className="text-xs leading-relaxed whitespace-pre-wrap">{value}</p>
 }
 
@@ -1207,13 +1223,18 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
             <InlineField label="N.° de empleados"   value={threeYearHeadcount.value} onChange={threeYearHeadcount.handleChange} onBlur={threeYearHeadcount.handleBlur} onKeyDown={threeYearHeadcount.handleKeyDown} placeholder="Ej: 20 personas" />
           </div>
 
-          <SubField
-            label="Descripción general"
-            hint="¿Cómo se ve, se siente y actúa la organización en 3 años?"
-            value={threeYearDescription.value} onChange={threeYearDescription.handleChange} onBlur={threeYearDescription.handleBlur}
-            rows={4} maxLength={2000}
-            placeholder="Ej: Somos reconocidos como la agencia de referencia en marketing para e-commerce en Argentina. Tenemos 80 clientes activos, operamos desde Buenos Aires y Montevideo, y el equipo está compuesto por 20 personas..."
-          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">Descripción general</label>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">¿Cómo se ve, se siente y actúa la organización en 3 años? Arrastrá el borde inferior para agrandar.</p>
+            <RichTextEditor
+              defaultContent={threeYearDescription.value}
+              onChange={threeYearDescription.handleChange}
+              onBlur={threeYearDescription.handleBlur}
+              autoFocus={false}
+              resizable
+              minHeight={280}
+            />
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">Objetivos específicos</label>
