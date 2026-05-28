@@ -18,6 +18,24 @@ const SCOPES = {
 // Tipos que comparten tokens entre sí
 const GOOGLE_LINKED_TYPES = ['google_analytics', 'google_search_console']
 
+// IDs recordados por tipo (Project.integrationDefaults, JSON guardado como string).
+// Permiten repoblar propertyId/customerId/country al reconectar sin volver a buscarlos.
+function parseIntegrationDefaults(raw) {
+  if (!raw) return {}
+  if (typeof raw === 'object') return raw
+  try { return JSON.parse(raw) } catch { return {} }
+}
+
+// Campos de ID a aplicar al CREAR una integración nueva, según lo recordado para ese tipo.
+function rememberedFieldsFor(defaults, type) {
+  const d = defaults?.[type] || {}
+  const out = {}
+  if (d.propertyId) out.propertyId = d.propertyId
+  if (d.customerId) out.customerId = d.customerId
+  if (d.country)    out.country    = d.country
+  return out
+}
+
 function buildRedirectUri() {
   const base = process.env.BACKEND_URL || 'http://localhost:3001'
   return `${base}/api/marketing/integrations/google/callback`
@@ -98,7 +116,7 @@ async function connectExisting(req, res, next) {
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, workspaceId: req.workspace.id },
-      select: { id: true },
+      select: { id: true, integrationDefaults: true },
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
@@ -137,6 +155,7 @@ async function connectExisting(req, res, next) {
         scopes:       source.scopes,
         connectedById: req.user.userId,
         connectedAt:  new Date(),
+        ...rememberedFieldsFor(parseIntegrationDefaults(project.integrationDefaults), type),
       },
       select: { type: true, status: true, propertyId: true, customerId: true, scopes: true, connectedAt: true },
     })
@@ -199,11 +218,19 @@ async function handleCallback(req, res, next) {
       ? GOOGLE_LINKED_TYPES
       : [type]
 
+    // IDs recordados de una conexión anterior — solo se aplican al CREAR la fila
+    // (en el update se preservan los que ya tenga la integración existente).
+    const projForDefaults = await prisma.project.findUnique({
+      where:  { id: projectId },
+      select: { integrationDefaults: true },
+    })
+    const defaults = parseIntegrationDefaults(projForDefaults?.integrationDefaults)
+
     for (const t of typesToSave) {
       await prisma.projectIntegration.upsert({
         where:  { projectId_type: { projectId, type: t } },
         update: baseData,
-        create: { projectId, type: t, ...baseData },
+        create: { projectId, type: t, ...baseData, ...rememberedFieldsFor(defaults, t) },
       })
     }
 
@@ -337,6 +364,24 @@ async function disconnect(req, res, next) {
         client.setCredentials({ access_token: decrypt(integration.accessToken) })
         await client.revokeCredentials()
       } catch { /* ignorar si ya estaba revocado */ }
+    }
+
+    // Recordar los IDs configurados para no tener que volver a buscarlos al reconectar.
+    const remembered = {}
+    if (integration?.propertyId) remembered.propertyId = integration.propertyId
+    if (integration?.customerId) remembered.customerId = integration.customerId
+    if (integration?.country)    remembered.country    = integration.country
+    if (Object.keys(remembered).length > 0) {
+      const proj = await prisma.project.findUnique({
+        where:  { id: projectId },
+        select: { integrationDefaults: true },
+      })
+      const defaults = parseIntegrationDefaults(proj?.integrationDefaults)
+      defaults[type] = { ...(defaults[type] || {}), ...remembered }
+      await prisma.project.update({
+        where: { id: projectId },
+        data:  { integrationDefaults: JSON.stringify(defaults) },
+      })
     }
 
     await prisma.projectIntegration.delete({
