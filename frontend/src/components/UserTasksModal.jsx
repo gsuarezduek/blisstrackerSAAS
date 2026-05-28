@@ -152,6 +152,10 @@ export default function UserTasksModal({ user, onClose }) {
           task={commentTask}
           onClose={() => setCommentTask(null)}
           onCommentAdded={count => setCommentTask(prev => ({ ...prev, _count: { ...prev._count, comments: count } }))}
+          onTaskDeleted={id => {
+            setByProject(prev => prev.map(g => ({ ...g, tasks: g.tasks.filter(t => t.id !== id) })))
+            setCompletedThisWeek(prev => prev.filter(t => t.id !== id))
+          }}
         />
       )}
     </div>

@@ -1025,6 +1025,15 @@ export default function ProjectDetail() {
               })),
             }))
           }}
+          onTaskDeleted={id => {
+            setData(prev => ({
+              ...prev,
+              byUser: prev.byUser.map(u => ({
+                ...u,
+                tasks: u.tasks.filter(t => t.id !== id),
+              })),
+            }))
+          }}
         />
       )}
     </div>

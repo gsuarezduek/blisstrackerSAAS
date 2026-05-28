@@ -1005,6 +1005,7 @@ export default function Dashboard() {
           onClose={() => setCommentTask(null)}
           onCommentAdded={count => handleCommentAdded(commentTask.id, count)}
           onTaskEdited={updated => { handleUpdateTask(updated); setCommentTask(updated) }}
+          onTaskDeleted={id => { handleDeleteTask(id); setDelegated(prev => prev.filter(t => t.id !== id)) }}
         />
       )}
 

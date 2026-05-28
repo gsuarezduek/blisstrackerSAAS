@@ -1276,6 +1276,7 @@ model ScorecardMetric {
   name        String
   ownerId     Int?
   goal        Float?
+  lowerIsBetter Boolean @default(false) // true = menor es mejor (ej: tardanzas); verde cuando value <= goal
   unit        String?
   frequency   String   @default("weekly") // 'weekly' | 'monthly'
   order       Int      @default(0)

@@ -54,7 +54,7 @@ const STATUS_CLASS = {
   COMPLETED:   'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400',
 }
 
-export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTaskEdited }) {
+export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTaskEdited, onTaskDeleted }) {
   const { user } = useAuth()
   const [comments, setComments]   = useState([])
   const [loading, setLoading]     = useState(true)
@@ -81,7 +81,13 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   const [currentDesc, setCurrentDesc] = useState(task.description)
   const editRef                       = useRef(null)
 
-  const canEdit = user && (user.isAdmin || user.id === task.userId)
+  // Delete state
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleting, setDeleting]           = useState(false)
+  const [deleteError, setDeleteError]     = useState('')
+
+  // Admin/owner del workspace, dueño de la tarea, o quien la delegó (creador)
+  const canEdit = user && (user.isAdmin || user.id === task.userId || user.id === task.createdById)
 
   useEffect(() => {
     api.get(`/tasks/${task.id}/comments`)
@@ -153,6 +159,20 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
       setEditError(err.response?.data?.error || 'Error al guardar')
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (deleting) return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await api.delete(`/tasks/${task.id}`)
+      onTaskDeleted?.(task.id)
+      onClose()
+    } catch (err) {
+      setDeleteError(err.response?.data?.error || 'Error al eliminar la tarea')
+      setDeleting(false)
     }
   }
 
@@ -270,16 +290,50 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                 {linkify(currentDesc)}
               </p>
               {canEdit && (
-                <button
-                  onClick={() => { setEditDesc(currentDesc); setEditing(true) }}
-                  title="Editar descripción"
-                  className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-all rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                    <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
-                  </svg>
-                </button>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => { setEditDesc(currentDesc); setEditing(true) }}
+                    title="Editar descripción"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-all rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                      <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => { setDeleteConfirm(true); setDeleteError('') }}
+                    title="Eliminar tarea"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                      <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 3.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
               )}
+            </div>
+          )}
+
+          {/* Confirmación de borrado */}
+          {deleteConfirm && (
+            <div className="mt-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
+              <p className="text-xs text-red-700 dark:text-red-300 mb-2">¿Eliminar esta tarea? No se puede deshacer.</p>
+              {deleteError && <p className="text-xs text-red-500 mb-2">{deleteError}</p>}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="text-xs px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+                >
+                  {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+                </button>
+                <button
+                  onClick={() => { setDeleteConfirm(false); setDeleteError('') }}
+                  className="text-xs px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
           )}
 

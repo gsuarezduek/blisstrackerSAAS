@@ -76,13 +76,14 @@ async function getScorecard(req, res, next) {
         role:   m.role,
       })),
       metrics: metrics.map(m => ({
-        id:        m.id,
-        name:      m.name,
-        ownerId:   m.ownerId,
-        goal:      m.goal,
-        unit:      m.unit,
-        frequency: m.frequency,
-        order:     m.order,
+        id:            m.id,
+        name:          m.name,
+        ownerId:       m.ownerId,
+        goal:          m.goal,
+        lowerIsBetter: m.lowerIsBetter,
+        unit:          m.unit,
+        frequency:     m.frequency,
+        order:         m.order,
       })),
       entriesMap,
     })
@@ -95,7 +96,7 @@ async function getScorecard(req, res, next) {
 async function createMetric(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { name, ownerId, goal, unit, frequency } = req.body
+    const { name, ownerId, goal, lowerIsBetter, unit, frequency } = req.body
 
     if (!name?.trim()) return res.status(400).json({ error: 'name es requerido' })
     if (!['weekly', 'monthly'].includes(frequency)) {
@@ -107,12 +108,13 @@ async function createMetric(req, res, next) {
     const metric = await prisma.scorecardMetric.create({
       data: {
         workspaceId,
-        name:      name.trim().slice(0, 200),
-        ownerId:   ownerId   ? Number(ownerId)     : null,
-        goal:      goal      != null ? Number(goal) : null,
-        unit:      unit?.trim().slice(0, 20) || null,
-        frequency: frequency,
-        order:     count,
+        name:          name.trim().slice(0, 200),
+        ownerId:       ownerId   ? Number(ownerId)     : null,
+        goal:          goal      != null ? Number(goal) : null,
+        lowerIsBetter: Boolean(lowerIsBetter),
+        unit:          unit?.trim().slice(0, 20) || null,
+        frequency:     frequency,
+        order:         count,
       },
     })
 
@@ -127,7 +129,7 @@ async function updateMetric(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const id = Number(req.params.id)
-    const { name, ownerId, goal, unit, frequency, order } = req.body
+    const { name, ownerId, goal, lowerIsBetter, unit, frequency, order } = req.body
 
     const existing = await prisma.scorecardMetric.findFirst({ where: { id, workspaceId } })
     if (!existing) return res.status(404).json({ error: 'Métrica no encontrada' })
@@ -137,12 +139,13 @@ async function updateMetric(req, res, next) {
     }
 
     const data = {}
-    if (name      !== undefined) data.name      = name.trim().slice(0, 200)
-    if (ownerId   !== undefined) data.ownerId   = ownerId ? Number(ownerId) : null
-    if (goal      !== undefined) data.goal      = goal != null ? Number(goal) : null
-    if (unit      !== undefined) data.unit      = unit?.trim().slice(0, 20) || null
-    if (frequency !== undefined) data.frequency = frequency
-    if (order     !== undefined) data.order     = Number(order)
+    if (name          !== undefined) data.name          = name.trim().slice(0, 200)
+    if (ownerId       !== undefined) data.ownerId       = ownerId ? Number(ownerId) : null
+    if (goal          !== undefined) data.goal          = goal != null ? Number(goal) : null
+    if (lowerIsBetter !== undefined) data.lowerIsBetter = Boolean(lowerIsBetter)
+    if (unit          !== undefined) data.unit          = unit?.trim().slice(0, 20) || null
+    if (frequency     !== undefined) data.frequency     = frequency
+    if (order         !== undefined) data.order         = Number(order)
 
     const metric = await prisma.scorecardMetric.update({ where: { id }, data })
     res.json(formatMetric(metric))
@@ -204,13 +207,14 @@ async function upsertEntry(req, res, next) {
 
 function formatMetric(m) {
   return {
-    id:        m.id,
-    name:      m.name,
-    ownerId:   m.ownerId,
-    goal:      m.goal,
-    unit:      m.unit,
-    frequency: m.frequency,
-    order:     m.order,
+    id:            m.id,
+    name:          m.name,
+    ownerId:       m.ownerId,
+    goal:          m.goal,
+    lowerIsBetter: m.lowerIsBetter,
+    unit:          m.unit,
+    frequency:     m.frequency,
+    order:         m.order,
   }
 }
 

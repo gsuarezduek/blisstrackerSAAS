@@ -328,7 +328,20 @@ async function editTask(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    await prisma.task.delete({ where: { id: Number(req.params.id), userId: req.user.userId } })
+    const id = Number(req.params.id)
+    const task = await prisma.task.findFirst({
+      where: { id, workDay: { workspaceId: req.workspace.id } },
+    })
+    if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
+    // Puede borrar: admin/owner del workspace, el dueño de la tarea, o quien la delegó (creador)
+    if (!isAdmin(req) && task.userId !== req.user.userId && task.createdById !== req.user.userId) {
+      return res.status(403).json({ error: 'No tenés permiso para eliminar esta tarea' })
+    }
+    // Notification no tiene cascade sobre Task — borrarlas antes para evitar el FK constraint
+    await prisma.$transaction([
+      prisma.notification.deleteMany({ where: { taskId: id } }),
+      prisma.task.delete({ where: { id } }),
+    ])
     res.json({ ok: true })
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
