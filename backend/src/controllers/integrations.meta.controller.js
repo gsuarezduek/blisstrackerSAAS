@@ -313,65 +313,101 @@ async function handleMetaAdsCallback(req, res, next) {
   }
 }
 
+const GRAPH_BASE = 'https://graph.facebook.com/v21.0'
+
+/**
+ * Recorre todas las páginas de un edge de la Graph API siguiendo `paging.next`.
+ * El cursor `next` ya trae embebidos access_token, fields y after, así que se
+ * sigue la URL tal cual. Tope de seguridad para no colgarse en un loop.
+ */
+async function fetchAllGraphPages(url, params) {
+  const out = []
+  let nextUrl = url
+  let nextParams = params
+  for (let page = 0; nextUrl && page < 50; page++) {
+    const { data } = await axios.get(nextUrl, nextParams ? { params: nextParams } : undefined)
+    if (Array.isArray(data?.data)) out.push(...data.data)
+    nextUrl = data?.paging?.next || null
+    nextParams = null // la URL de `next` ya incluye todos los parámetros
+  }
+  return out
+}
+
 /**
  * Recoge todas las cuentas de Instagram accesibles para un token de Facebook.
- * Prueba dos fuentes en paralelo:
- *   a) me/instagram_accounts  — cuentas de IG conectadas directamente al Business Manager
- *   b) me/accounts (páginas)  — cuentas de IG vinculadas a Páginas de Facebook
+ * Combina cuatro fuentes (deduplicadas por id) y sigue la paginación de cada una:
+ *   a) me/instagram_accounts                  — IG asignadas directamente al usuario/system user
+ *   b) me/accounts                            — IG vinculadas a Páginas de Facebook
+ *   c) {business}/owned_instagram_accounts    — IG propiedad de cada Business Manager
+ *   d) {business}/client_instagram_accounts   — IG de clientes administradas por cada Business Manager
+ * Las fuentes c/d cubren el caso agencia: assets accesibles vía Business Manager
+ * que no aparecen en /me/* por no estar asignados directamente al token.
  * Devuelve array deduplicado de { id, username, name }.
  */
 async function fetchFbInstagramAccounts(accessToken) {
   const tokenSnippet = accessToken ? accessToken.slice(0, 12) + '…' : '(vacío)'
   console.log(`[MetaToken] fetchFbInstagramAccounts — token: ${tokenSnippet}`)
 
-  const [directRes, pagesRes] = await Promise.allSettled([
-    axios.get('https://graph.facebook.com/v21.0/me/instagram_accounts', {
-      params: { fields: 'id,username,name', access_token: accessToken },
-    }),
-    axios.get('https://graph.facebook.com/v21.0/me/accounts', {
-      params: { fields: 'id,name,instagram_business_account{id,username,name}', access_token: accessToken },
-    }),
-  ])
-
-  // Log fuente a
-  if (directRes.status === 'fulfilled') {
-    const raw = directRes.value.data?.data ?? []
-    console.log(`[MetaToken] /me/instagram_accounts → ${raw.length} cuenta(s):`, raw.map(a => `${a.id} @${a.username}`))
-  } else {
-    console.warn('[MetaToken] /me/instagram_accounts falló:', directRes.reason?.response?.data?.error ?? directRes.reason?.message)
-  }
-
-  // Log fuente b
-  if (pagesRes.status === 'fulfilled') {
-    const pages = pagesRes.value.data?.data ?? []
-    const withIg = pages.filter(p => p.instagram_business_account?.id)
-    console.log(`[MetaToken] /me/accounts → ${pages.length} página(s), ${withIg.length} con Instagram vinculado:`,
-      withIg.map(p => `Página "${p.name}" → IG ${p.instagram_business_account.id} @${p.instagram_business_account.username}`))
-  } else {
-    console.warn('[MetaToken] /me/accounts falló:', pagesRes.reason?.response?.data?.error ?? pagesRes.reason?.message)
-  }
-
   const accounts = new Map()
-
-  // Fuente a: /me/instagram_accounts
-  if (directRes.status === 'fulfilled') {
-    for (const ig of (directRes.value.data?.data ?? [])) {
-      if (ig.id) accounts.set(ig.id, { id: ig.id, username: ig.username ?? null, name: ig.name ?? null })
+  let authError = null
+  const add = (ig) => {
+    const id = ig?.id ? String(ig.id) : null
+    if (id && !accounts.has(id)) {
+      accounts.set(id, { id, username: ig.username ?? null, name: ig.name ?? null })
     }
   }
+  const onError = (label, e) => {
+    const err = e.response?.data?.error
+    if (err?.code === 190) authError = authError || e // token inválido/expirado
+    console.warn(`[MetaToken] ${label} falló:`, err ?? e.message)
+  }
 
-  // Fuente b: /me/accounts → instagram_business_account
-  if (pagesRes.status === 'fulfilled') {
-    for (const page of (pagesRes.value.data?.data ?? [])) {
-      const ig = page.instagram_business_account
-      if (ig?.id && !accounts.has(ig.id)) {
-        accounts.set(ig.id, { id: ig.id, username: ig.username ?? null, name: ig.name ?? null })
+  // Fuente a: IG asignadas directamente al usuario/system user del token
+  try {
+    const direct = await fetchAllGraphPages(`${GRAPH_BASE}/me/instagram_accounts`, {
+      fields: 'id,username,name', access_token: accessToken, limit: 100,
+    })
+    console.log(`[MetaToken] /me/instagram_accounts → ${direct.length} cuenta(s)`)
+    direct.forEach(add)
+  } catch (e) { onError('/me/instagram_accounts', e) }
+
+  // Fuente b: Páginas de FB con instagram_business_account vinculado
+  try {
+    const pages = await fetchAllGraphPages(`${GRAPH_BASE}/me/accounts`, {
+      fields: 'id,name,instagram_business_account{id,username,name}', access_token: accessToken, limit: 100,
+    })
+    const withIg = pages.filter(p => p.instagram_business_account?.id)
+    console.log(`[MetaToken] /me/accounts → ${pages.length} página(s), ${withIg.length} con IG vinculado`)
+    withIg.forEach(p => add(p.instagram_business_account))
+  } catch (e) { onError('/me/accounts', e) }
+
+  // Fuentes c/d: assets propios y de clientes de cada Business Manager accesible
+  try {
+    const businesses = await fetchAllGraphPages(`${GRAPH_BASE}/me/businesses`, {
+      fields: 'id,name', access_token: accessToken, limit: 100,
+    })
+    console.log(`[MetaToken] /me/businesses → ${businesses.length} business(es)`)
+    for (const biz of businesses) {
+      for (const edge of ['owned_instagram_accounts', 'client_instagram_accounts']) {
+        try {
+          const igs = await fetchAllGraphPages(`${GRAPH_BASE}/${biz.id}/${edge}`, {
+            fields: 'id,username,name', access_token: accessToken, limit: 100,
+          })
+          console.log(`[MetaToken] ${biz.id}/${edge} ("${biz.name}") → ${igs.length} cuenta(s)`)
+          igs.forEach(add)
+        } catch (e) { onError(`${biz.id}/${edge}`, e) }
       }
     }
-  }
+  } catch (e) { onError('/me/businesses', e) }
 
   const result = [...accounts.values()]
   console.log(`[MetaToken] Total cuentas IG encontradas: ${result.length}`, result.map(a => `${a.id} @${a.username}`))
+
+  // Si no se obtuvo ninguna cuenta y la causa fue un token inválido/expirado,
+  // propagar el error para que el caller muestre "Token inválido" en vez de
+  // "verificá la asignación en Business Manager".
+  if (result.length === 0 && authError) throw authError
+
   return result
 }
 
