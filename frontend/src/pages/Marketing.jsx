@@ -44,7 +44,7 @@ const NAV = [
     subs: [
       { id: 'instagram',    label: '📸 Instagram' },
       { id: 'tiktok',       label: '🎵 TikTok' },
-      { id: 'linkedin',     label: '💼 LinkedIn' },
+      { id: 'linkedin',     label: '💼 LinkedIn', soon: true },
       { id: 'competidores', label: '🏁 Competidores' },
       { id: 'youtube',      label: '▶️ YouTube',  soon: true },
     ],

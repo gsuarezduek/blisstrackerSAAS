@@ -50,6 +50,59 @@ function pct(curr, prev) {
   return parseFloat(((curr - prev) / prev * 100).toFixed(1))
 }
 
+// Compara la cuenta propia de Instagram (snapshot del período) contra los competidores.
+// Solo devuelve datos si la cuenta propia LIDERA (rank #1, estrictamente mejor que TODOS)
+// en al menos una métrica elegida (engagement, crecimiento de seguidores, avg likes).
+// Caso contrario devuelve null → la sección se omite del informe ("solo si hay algo bueno").
+function buildCompetitorComparison({ ownSnap, ownPrev, competitorAccounts, dataMonth, prev, ownLabel }) {
+  if (!ownSnap || !competitorAccounts || competitorAccounts.length === 0) return null
+
+  const competitors = competitorAccounts.map(c => {
+    const cur = c.snapshots.find(s => s.month === dataMonth)
+    if (!cur) return null
+    const prv = c.snapshots.find(s => s.month === prev)
+    return {
+      name:       c.displayName || `@${c.username}`,
+      engagement: cur.engagementRate ?? null,
+      avgLikes:   cur.avgLikes ?? null,
+      growth:     prv ? pct(cur.followersCount, prv.followersCount) : null,
+    }
+  }).filter(Boolean)
+
+  if (competitors.length === 0) return null
+
+  const own = {
+    name:       ownLabel,
+    engagement: ownSnap.engagementRate ?? null,
+    avgLikes:   ownSnap.avgLikes ?? null,
+    growth:     ownPrev ? pct(ownSnap.followersCount, ownPrev.followersCount) : null,
+  }
+
+  const METRICS = [
+    { key: 'engagement', label: 'Engagement',                unit: '%', decimals: 2 },
+    { key: 'growth',     label: 'Crecimiento de seguidores', unit: '%', decimals: 1 },
+    { key: 'avgLikes',   label: 'Promedio de likes',         unit: '',  decimals: 0 },
+  ]
+
+  const wins = []
+  for (const m of METRICS) {
+    const ownVal = own[m.key]
+    if (ownVal == null) continue
+    const withMetric = competitors.filter(c => c[m.key] != null)
+    if (withMetric.length === 0) continue
+    // rank #1: estrictamente mayor que todos los competidores
+    if (!withMetric.every(c => ownVal > c[m.key])) continue
+    const ranking = [
+      { name: own.name, value: ownVal, isOwn: true },
+      ...withMetric.map(c => ({ name: c.name, value: c[m.key], isOwn: false })),
+    ].sort((a, b) => b.value - a.value)
+    wins.push({ metric: m.key, label: m.label, unit: m.unit, decimals: m.decimals, ranking })
+  }
+
+  if (wins.length === 0) return null
+  return { month: dataMonth, ownLabel, competitorsCount: competitors.length, wins }
+}
+
 // Mes en el que cae una fecha UTC
 function monthOfDate(d) {
   const date = new Date(d)
@@ -114,6 +167,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     cannibalSnap,
     seoSnap,
     seoPrev,
+    competitorAccounts,
   ] = await Promise.all([
     // Proyecto
     prisma.project.findUnique({
@@ -251,6 +305,18 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.searchConsoleSnapshot.findFirst({
       where:   { projectId, workspaceId, month: prev },
       select:  { clicks: true, impressions: true, ctr: true, avgPosition: true },
+    }),
+
+    // Competidores de Instagram — snapshots del período (dataMonth) + mes anterior (para crecimiento)
+    prisma.competitorAccount.findMany({
+      where:  { projectId, platform: 'instagram' },
+      select: {
+        username: true, displayName: true,
+        snapshots: {
+          where:  { month: { in: [dataMonth, prev] } },
+          select: { month: true, followersCount: true, engagementRate: true, avgLikes: true },
+        },
+      },
     }),
   ])
 
@@ -442,6 +508,17 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       }
     }
   }
+
+  // ── Comparación con competidores (solo si lideramos en alguna métrica) ────────
+  // Usa el snapshot propio del período (instagramSnap) para comparar mes contra mes.
+  const competitors = buildCompetitorComparison({
+    ownSnap:  instagramSnap,
+    ownPrev:  instagramPrev,
+    competitorAccounts,
+    dataMonth,
+    prev,
+    ownLabel: project?.name || 'Tu cuenta',
+  })
 
   // ── TikTok (con fallback a snapshot más reciente o datos en vivo) ─────────────
   let tiktok = null
@@ -677,7 +754,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // Si ya existe un análisis cacheado con resumen válido, no se regenera
   const analysis = validCachedAnalysis
     ? validCachedAnalysis
-    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, workspaceId, objectives, services })
+    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives, services })
 
   return {
     project: {
@@ -689,7 +766,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     month,        // mes del informe (ej: "2026-05") — para identificación/navegación
     dataMonth,    // período de los datos (ej: "2026-04") — para mostrar al usuario
     connectedTypes: [...connectedTypes],
-    sections: { geo, analytics, evolution, instagram, tiktok, linkedin, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks },
+    sections: { geo, analytics, evolution, instagram, tiktok, linkedin, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks, competitors },
     analysis,
     _analysisIsNew:  !validCachedAnalysis && !!analysis?.resumen,
     // No cachear si estamos usando datos en vivo (cambian a diario)
@@ -699,7 +776,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, workspaceId, objectives = {}, services = [] }) {
+async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = {}, services = [] }) {
   // Calcular cumplimiento de objetivos si existen
   const objCtx = []
   if (objectives.sessions != null && analytics)
@@ -734,6 +811,11 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
       deltaSeguidores: instagram.deltaFollowers,
       engagement:      instagram.engagementRate != null ? `${instagram.engagementRate.toFixed(2)}%` : null,
       posts:           instagram.postsCount,
+    } : null,
+    // Solo se incluye cuando la cuenta propia LIDERA frente a competidores (rank #1).
+    competidores: competitors ? {
+      vsCompetidores: competitors.competitorsCount,
+      lideramosEn:    competitors.wins.map(w => w.label),
     } : null,
     tiktok: tiktok ? {
       seguidores:      tiktok.followersCount,

@@ -360,6 +360,47 @@ function ObjectivesTable({ objectives, sections }) {
   )
 }
 
+// Comparación con competidores — solo se renderiza cuando la cuenta propia lidera (rank #1)
+function CompetitorComparison({ data }) {
+  if (!data || !data.wins?.length) return null
+  const fmtVal = (v, w) => w.metric === 'avgLikes'
+    ? fmt(Math.round(v), 0)
+    : `${Number(v).toFixed(w.decimals ?? 1)}${w.unit ?? ''}`
+
+  return (
+    <SectionCard title="Comparación con competidores" icon="🏁" className="mt-5">
+      <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+        Frente a {data.competitorsCount} competidor{data.competitorsCount > 1 ? 'es' : ''} analizado{data.competitorsCount > 1 ? 's' : ''}, la cuenta lidera en:
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {data.wins.map(w => (
+          <div key={w.metric} className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3.5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{w.label}</span>
+              <span className="text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full">#1</span>
+            </div>
+            <div className="space-y-1">
+              {w.ranking.map((r, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center justify-between text-xs rounded-lg px-2 py-1.5 ${
+                    r.isOwn
+                      ? 'bg-emerald-50 dark:bg-emerald-900/20 font-semibold text-emerald-800 dark:text-emerald-300'
+                      : 'text-gray-600 dark:text-gray-400'
+                  }`}
+                >
+                  <span className="truncate">{i + 1}. {r.name}</span>
+                  <span className="tabular-nums shrink-0 ml-2">{fmtVal(r.value, w)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function ReportViewer({ data, objectives = {}, isPublic = false, onSaveAnalysis, onBannerUpload, onBannerDelete, report = null, workspace = null }) {
@@ -827,6 +868,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
               </SectionCard>
             )}
           </div>
+          {s.competitors && <CompetitorComparison data={s.competitors} />}
           <ContextNote sectionKey="rrss" analysisKey="contextRRSS" contextValue={contextRRSS} />
         </>
       )}

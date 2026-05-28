@@ -232,7 +232,7 @@ function TopPostCard({ post, medal, label, highlight }) {
       {/* Imagen */}
       <div className="relative aspect-square bg-gray-100 dark:bg-gray-700">
         {post.imgSrc ? (
-          <img src={post.imgSrc} alt="" className="w-full h-full object-cover" loading="lazy" />
+          <img src={post.imgSrc} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400" />
         )}
@@ -382,6 +382,7 @@ function AccountHeader({ metrics, integration, onDisconnect, disconnecting, onRe
               src={metrics.profilePicUrl}
               alt={metrics.username ?? 'Instagram'}
               onError={() => setImgError(true)}
+              referrerPolicy="no-referrer"
               className="w-14 h-14 rounded-full object-cover border-2 border-purple-200 dark:border-purple-800"
             />
           ) : (

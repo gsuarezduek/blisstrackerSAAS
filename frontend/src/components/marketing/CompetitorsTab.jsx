@@ -50,7 +50,7 @@ function FollowerSparkline({ logs }) {
 function Avatar({ url, fallback }) {
   const [err, setErr] = useState(false)
   if (url && !err) {
-    return <img src={url} alt="" onError={() => setErr(true)} className="w-11 h-11 rounded-full object-cover border border-purple-200 dark:border-purple-800" />
+    return <img src={url} alt="" onError={() => setErr(true)} referrerPolicy="no-referrer" className="w-11 h-11 rounded-full object-cover border border-purple-200 dark:border-purple-800" />
   }
   return (
     <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold">
