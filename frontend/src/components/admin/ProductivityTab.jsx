@@ -28,12 +28,6 @@ const STATUS = {
 
 const PRIORITY = { inactive: 0, down: 1, stuck: 2, ok: 3, up: 4, nodata: 5 }
 
-const ALERT_STYLE = {
-  critical: 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200',
-  warn:     'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200',
-  info:     'border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200',
-}
-
 // Δ porcentual (tareas / horas)
 function DeltaPct({ value }) {
   if (value === null || value === undefined) return <span className="text-gray-300 dark:text-gray-600">—</span>
@@ -182,11 +176,53 @@ function PersonRow({ m, expanded, onToggle, onRefresh, refreshing }) {
   )
 }
 
+// Encabezado de columna ordenable
+function SortTh({ label, col, sortBy, sortDir, onSort, align = 'center', className = '' }) {
+  const active = sortBy === col
+  const alignCls = align === 'left' ? 'text-left' : align === 'right' ? 'text-right' : 'text-center'
+  return (
+    <th className={`py-2 px-3 font-semibold ${alignCls} ${className}`}>
+      <button
+        onClick={() => onSort(col)}
+        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors ${
+          active ? 'text-gray-700 dark:text-gray-200' : 'hover:text-gray-600 dark:hover:text-gray-300'
+        }`}
+      >
+        {label}
+        <span className={active ? 'opacity-100' : 'opacity-0'}>{sortDir === 'asc' ? '▲' : '▼'}</span>
+      </button>
+    </th>
+  )
+}
+
+// Valor de ordenamiento por columna
+function sortValue(m, col) {
+  switch (col) {
+    case 'name':      return m.name
+    case 'completed': return m.stats.completed
+    case 'hours':     return m.stats.hours
+    case 'tasa':      return m.stats.hasData ? m.stats.tasaCompletado : -1
+    case 'delta':     return m.stats.delta?.tareasPct ?? 0
+    case 'status':    return PRIORITY[m.status] ?? 3
+    default:          return 0
+  }
+}
+
+// Dirección por defecto al activar una columna
+const DEFAULT_DIR = { name: 'asc', status: 'asc', completed: 'desc', hours: 'desc', tasa: 'desc', delta: 'desc' }
+
 function ByPersonView() {
   const [data, setData]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState(null)
   const [refreshing, setRefreshing] = useState({})
+  const [sortBy, setSortBy]   = useState('status')
+  const [sortDir, setSortDir] = useState('asc')
+
+  function handleSort(col) {
+    if (col === sortBy) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortBy(col); setSortDir(DEFAULT_DIR[col] || 'desc') }
+  }
 
   const fetchData = useCallback(async () => {
     try {
@@ -216,12 +252,26 @@ function ByPersonView() {
 
   const sorted = useMemo(() => {
     if (!data) return []
-    return [...data.members].sort((a, b) => {
-      const pa = PRIORITY[a.status] ?? 3, pb = PRIORITY[b.status] ?? 3
-      if (pa !== pb) return pa - pb
-      const da = a.stats.delta?.tareasPct ?? 0, db = b.stats.delta?.tareasPct ?? 0
-      return da - db
+    const arr = [...data.members].sort((a, b) => {
+      const va = sortValue(a, sortBy), vb = sortValue(b, sortBy)
+      const cmp = typeof va === 'string' ? va.localeCompare(vb, 'es') : va - vb
+      return sortDir === 'asc' ? cmp : -cmp
     })
+    return arr
+  }, [data, sortBy, sortDir])
+
+  // Promedio del equipo (sólo miembros con actividad)
+  const avg = useMemo(() => {
+    if (!data) return null
+    const withData = data.members.filter(m => m.stats.hasData)
+    if (withData.length === 0) return null
+    const n = withData.length
+    return {
+      n,
+      completed: withData.reduce((s, m) => s + m.stats.completed, 0) / n,
+      hours:     withData.reduce((s, m) => s + m.stats.hours, 0) / n,
+      tasa:      withData.reduce((s, m) => s + m.stats.tasaCompletado, 0) / n,
+    }
   }, [data])
 
   if (loading) return <LoadingSpinner className="py-16" />
@@ -233,30 +283,17 @@ function ByPersonView() {
     )
   }
 
-  const b = data.benchmark
+  const fmtD  = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  const fmtDY = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
+  const p = data.period
 
   return (
     <div>
-      {/* Banda de alertas */}
-      {data.alerts.length > 0 && (
-        <div className="mb-5 space-y-2">
-          {data.alerts.map((a, i) => (
-            <button
-              key={i}
-              onClick={() => setExpandedId(a.userId)}
-              className={`w-full text-left flex items-start gap-2 border rounded-lg px-3 py-2 text-sm transition-opacity hover:opacity-80 ${ALERT_STYLE[a.severity]}`}
-            >
-              <span className="font-bold leading-tight">{a.severity === 'info' ? '↑' : '!'}</span>
-              <span className="leading-snug">{a.text}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Benchmark del equipo */}
-      {b && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
-          Mediana del equipo ({b.teamSize} con actividad): <strong className="text-gray-500 dark:text-gray-400">{Math.round(b.tasaCompletado * 100)}%</strong> completado · <strong className="text-gray-500 dark:text-gray-400">{b.tareasPorDia}</strong> tareas/día · <strong className="text-gray-500 dark:text-gray-400">{b.horas}h</strong>
+      {/* Período analizado */}
+      {p && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          Período: <strong className="text-gray-700 dark:text-gray-200">{fmtD(p.curStart)} – {fmtDY(p.curEnd)}</strong>
+          <span className="text-gray-400 dark:text-gray-500"> · comparado con {fmtD(p.prevStart)} – {fmtDY(p.prevEnd)}</span>
         </p>
       )}
 
@@ -264,14 +301,14 @@ function ByPersonView() {
       <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-x-auto">
         <table className="w-full min-w-[640px]">
           <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              <th className="py-2 px-3 text-left font-semibold">Persona</th>
-              <th className="py-2 px-3 text-center font-semibold">Hechas</th>
-              <th className="py-2 px-3 text-center font-semibold">Horas</th>
-              <th className="py-2 px-3 text-center font-semibold">Tasa</th>
-              <th className="py-2 px-3 text-center font-semibold">Δ tareas</th>
-              <th className="py-2 px-3 text-left font-semibold hidden sm:table-cell">Top proyecto</th>
-              <th className="py-2 px-3 text-center font-semibold">Estado</th>
+            <tr className="text-[11px] text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+              <SortTh label="Persona"   col="name"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} align="left" />
+              <SortTh label="Hechas"    col="completed" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Horas"     col="hours"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Tasa"      col="tasa"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Δ tareas"  col="delta"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <th className="py-2 px-3 text-left font-semibold uppercase tracking-wide hidden sm:table-cell">Top proyecto</th>
+              <SortTh label="Estado"    col="status"    sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
             </tr>
           </thead>
           <tbody>
@@ -286,10 +323,23 @@ function ByPersonView() {
               />
             ))}
           </tbody>
+          {avg && (
+            <tfoot>
+              <tr className="border-t-2 border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/60 font-medium">
+                <td className="py-2.5 px-3 text-xs text-gray-500 dark:text-gray-400">Promedio equipo ({avg.n})</td>
+                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{avg.completed.toFixed(1)}</td>
+                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{fmtHours(Math.round(avg.hours * 10) / 10)}</td>
+                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{Math.round(avg.tasa * 100)}%</td>
+                <td className="py-2.5 px-3 text-center text-gray-300 dark:text-gray-600">—</td>
+                <td className="py-2.5 px-3 hidden sm:table-cell" />
+                <td className="py-2.5 px-3" />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
       <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">
-        Métricas de las últimas 4 semanas vs las 4 previas. El análisis IA se actualiza cada sábado o al regenerarlo.
+        El promedio del equipo considera sólo a quienes tuvieron actividad. El análisis IA se actualiza cada sábado o al regenerarlo.
       </p>
     </div>
   )
