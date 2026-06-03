@@ -52,16 +52,15 @@ async function create(req, res, next) {
     const userId = targetUserId ? Number(targetUserId) : requesterId
 
     if (userId !== requesterId) {
-      if (!isAdmin(req)) {
-        const requesterMember = await prisma.projectMember.findUnique({
-          where: { projectId_userId: { projectId: Number(projectId), userId: requesterId } },
-        })
-        if (!requesterMember) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
-
-        const targetMember = await prisma.projectMember.findUnique({
-          where: { projectId_userId: { projectId: Number(projectId), userId } },
-        })
-        if (!targetMember) return res.status(400).json({ error: 'El usuario no pertenece a este proyecto' })
+      // El equipo del proyecto (ProjectMember) es solo una etiqueta de "trabajan
+      // principalmente acá": cualquier integrante del workspace puede aportar o
+      // recibir tareas en cualquier proyecto sin pasar a formar parte del equipo.
+      // Única validación: el destinatario debe ser un miembro activo del workspace.
+      const targetMember = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+      })
+      if (!targetMember || !targetMember.active) {
+        return res.status(400).json({ error: 'El usuario no pertenece a este workspace' })
       }
     }
 

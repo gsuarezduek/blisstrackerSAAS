@@ -102,6 +102,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
   const [description, setDescription] = useState('')
   const [projectId, setProjectId] = useState(lockedProject ? String(lockedProject.id) : '')
   const [projects, setProjects] = useState([])
+  const [members, setMembers] = useState([])
   const [assigneeId, setAssigneeId] = useState('')
   const [loading, setLoading] = useState(false)
   const [showGtdWarning, setShowGtdWarning] = useState(false)
@@ -116,16 +117,28 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
     })
   }, [lockedProject])
 
+  // Todos los integrantes activos del workspace: cualquiera puede ser asignado,
+  // sea o no del equipo del proyecto.
+  useEffect(() => {
+    api.get('/workspaces/current/members')
+      .then(r => setMembers(r.data.filter(m => m.active)))
+      .catch(() => {})
+  }, [])
+
   // Reset assignee to self when project changes
   useEffect(() => {
     setAssigneeId(user ? String(user.id) : '')
   }, [projectId, user])
 
-  // Siempre mostrar solo los miembros del proyecto seleccionado
-  const assigneeOptions = (lockedProject
+  // Separar el equipo del proyecto (los que trabajan principalmente acá) del
+  // resto del workspace, sin impedir asignar a estos últimos.
+  const projectMemberIds = new Set((lockedProject
     ? (lockedProject.members ?? [])
     : (projects.find(p => String(p.id) === projectId)?.members ?? [])
-  ).map(pm => ({ id: pm.user.id, name: pm.user.name }))
+  ).map(pm => pm.user.id))
+
+  const teamOptions  = members.filter(m => projectMemberIds.has(m.id))
+  const otherOptions = members.filter(m => !projectMemberIds.has(m.id))
 
   async function doSubmit() {
     setLoading(true)
@@ -200,7 +213,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
             )}
           </div>
 
-          {assigneeOptions.length > 1 && (
+          {members.length > 1 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asignar a</label>
               <select
@@ -208,11 +221,24 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
                 onChange={e => setAssigneeId(e.target.value)}
                 className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                {assigneeOptions.map(u => (
-                  <option key={u.id} value={String(u.id)}>
-                    {u.name}{String(u.id) === String(user?.id) ? ' (yo)' : ''}
-                  </option>
-                ))}
+                {teamOptions.length > 0 && (
+                  <optgroup label="Equipo del proyecto">
+                    {teamOptions.map(u => (
+                      <option key={u.id} value={String(u.id)}>
+                        {u.name}{String(u.id) === String(user?.id) ? ' (yo)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {otherOptions.length > 0 && (
+                  <optgroup label="Otros del workspace">
+                    {otherOptions.map(u => (
+                      <option key={u.id} value={String(u.id)}>
+                        {u.name}{String(u.id) === String(user?.id) ? ' (yo)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           )}

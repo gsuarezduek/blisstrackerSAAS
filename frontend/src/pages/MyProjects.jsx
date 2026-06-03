@@ -154,8 +154,6 @@ export default function MyProjects() {
       .finally(() => setLoading(false))
   }, [])
 
-  const isAdmin = user?.role === 'ADMIN'
-
   // Derivar listas únicas de servicios y personas del workspace
   const allServices = [...new Map(
     projects.flatMap(p => (p.services ?? []).map(ps => [ps.service.id, ps.service]))
@@ -175,8 +173,74 @@ export default function MyProjects() {
     sort
   )
 
+  // Separar "Mis proyectos" (donde soy del equipo) de "Otros proyectos del workspace".
+  // ProjectMember es solo la etiqueta de equipo; ver y aportar tareas está abierto a todos.
+  const myId = user?.id
+  const isMine = p => (p.members ?? []).some(pm => pm.user.id === myId)
+  const mineProjects  = filtered.filter(isMine)
+  const otherProjects = filtered.filter(p => !isMine(p))
+
   // Para "bloqueadas primero": resaltar el borde si tiene bloqueadas
   const hasBlocked = sort === 'blocked'
+
+  const renderCard = p => {
+    const counts      = p.taskCounts ?? {}
+    const activePills = COUNT_CONFIG.filter(c => counts[c.key] > 0)
+    const isBlocked   = (counts.BLOCKED ?? 0) > 0
+    const integTypes  = (p.integrations ?? []).map(i => i.type)
+
+    return (
+      <div
+        key={p.id}
+        onClick={() => navigate(`/my-projects/${encodeURIComponent(p.name)}`)}
+        className={`bg-white dark:bg-gray-800 rounded-2xl border p-5 flex flex-col gap-4 cursor-pointer hover:shadow-md transition-all ${
+          hasBlocked && isBlocked
+            ? 'border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600'
+            : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700'
+        }`}
+      >
+        {/* Nombre + flecha */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isBlocked ? 'bg-red-500' : 'bg-green-500'}`} />
+            <h2 className="font-bold text-gray-900 dark:text-white text-lg leading-tight">{p.name}</h2>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
+            <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+          </svg>
+        </div>
+
+        {/* Pills de tareas */}
+        {activePills.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {activePills.map(c => (
+              <span key={c.key} className={`text-xs font-semibold px-2.5 py-1 rounded-full ${c.bg} ${c.text}`}>
+                {counts[c.key]} {c.label}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin tareas pendientes esta semana</p>
+        )}
+
+        {/* Iconos de integraciones */}
+        {integTypes.length > 0 && (
+          <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-700">
+            {integTypes.map(type => {
+              const cfg = INTEGRATION_ICONS[type]
+              if (!cfg) return null
+              const { Icon, label } = cfg
+              return (
+                <span key={type} title={label} className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-50 dark:bg-gray-700 hover:scale-110 transition-transform">
+                  <Icon />
+                </span>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -185,9 +249,7 @@ export default function MyProjects() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mis Proyectos</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {isAdmin
-              ? `${projects.length} proyectos activos`
-              : `Participás en ${projects.length} proyecto${projects.length !== 1 ? 's' : ''}`}
+            {projects.length} proyecto{projects.length !== 1 ? 's' : ''} en el workspace
           </p>
         </div>
 
@@ -196,8 +258,8 @@ export default function MyProjects() {
         {!loading && projects.length === 0 && (
           <div className="text-center py-16 text-gray-400">
             <p className="text-4xl mb-3">📂</p>
-            <p className="font-medium">No estás asignado a ningún proyecto todavía</p>
-            <p className="text-sm mt-1">Pedile a un administrador que te agregue a un proyecto</p>
+            <p className="font-medium">No hay proyectos en este workspace todavía</p>
+            <p className="text-sm mt-1">Pedile a un administrador que cree el primero</p>
           </div>
         )}
 
@@ -311,66 +373,27 @@ export default function MyProjects() {
           <p className="text-sm text-gray-400 text-center py-8">Sin resultados para los filtros aplicados</p>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map(p => {
-            const counts      = p.taskCounts ?? {}
-            const activePills = COUNT_CONFIG.filter(c => counts[c.key] > 0)
-            const isBlocked   = (counts.BLOCKED ?? 0) > 0
-            const integTypes  = (p.integrations ?? []).map(i => i.type)
+        {mineProjects.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+              Mis proyectos
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {mineProjects.map(renderCard)}
+            </div>
+          </section>
+        )}
 
-            return (
-              <div
-                key={p.id}
-                onClick={() => navigate(`/my-projects/${encodeURIComponent(p.name)}`)}
-                className={`bg-white dark:bg-gray-800 rounded-2xl border p-5 flex flex-col gap-4 cursor-pointer hover:shadow-md transition-all ${
-                  hasBlocked && isBlocked
-                    ? 'border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700'
-                }`}
-              >
-                {/* Nombre + flecha */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isBlocked ? 'bg-red-500' : 'bg-green-500'}`} />
-                    <h2 className="font-bold text-gray-900 dark:text-white text-lg leading-tight">{p.name}</h2>
-                  </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
-                    <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
-                  </svg>
-                </div>
-
-                {/* Pills de tareas */}
-                {activePills.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {activePills.map(c => (
-                      <span key={c.key} className={`text-xs font-semibold px-2.5 py-1 rounded-full ${c.bg} ${c.text}`}>
-                        {counts[c.key]} {c.label}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin tareas pendientes esta semana</p>
-                )}
-
-                {/* Iconos de integraciones */}
-                {integTypes.length > 0 && (
-                  <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-700">
-                    {integTypes.map(type => {
-                      const cfg = INTEGRATION_ICONS[type]
-                      if (!cfg) return null
-                      const { Icon, label } = cfg
-                      return (
-                        <span key={type} title={label} className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-50 dark:bg-gray-700 hover:scale-110 transition-transform">
-                          <Icon />
-                        </span>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        {otherProjects.length > 0 && (
+          <section>
+            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+              Otros proyectos del workspace
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {otherProjects.map(renderCard)}
+            </div>
+          </section>
+        )}
       </main>
     </div>
   )

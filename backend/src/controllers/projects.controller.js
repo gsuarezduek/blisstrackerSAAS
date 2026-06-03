@@ -40,13 +40,12 @@ const includeDetails = {
 async function list(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const userId = req.user.userId
-    const admin = isAdmin(req)
     const tz = req.workspace.timezone
 
-    const where = admin
-      ? { active: true, workspaceId }
-      : { active: true, workspaceId, members: { some: { userId } } }
+    // Todos los integrantes del workspace ven todos los proyectos activos. La
+    // membresía (ProjectMember) ya no filtra acá: el frontend la usa para separar
+    // "Mis proyectos" (donde soy del equipo) de "Otros proyectos del workspace".
+    const where = { active: true, workspaceId }
 
     const projects = await prisma.project.findMany({ where, orderBy: { name: 'asc' }, include: includeDetails })
     const projectIds = projects.map(p => p.id)
@@ -97,13 +96,8 @@ async function getMembers(req, res, next) {
     const id = await resolveProjectId(req.params.id, workspaceId)
     if (!id) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    if (!isAdmin(req)) {
-      const member = await prisma.projectMember.findUnique({
-        where: { projectId_userId: { projectId: id, userId: req.user.userId } },
-      })
-      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
-    }
-
+    // Lectura abierta a cualquier integrante del workspace (el proyecto ya está
+    // scopeado por workspaceId vía resolveProjectId).
     const members = await prisma.projectMember.findMany({
       where: { projectId: id },
       include: { user: { select: { id: true, name: true, avatar: true } } },
@@ -218,16 +212,8 @@ async function projectTasks(req, res, next) {
     const tz = req.workspace.timezone
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const userId = req.user.userId
-    const admin = isAdmin(req)
 
-    if (!admin) {
-      const member = await prisma.projectMember.findUnique({
-        where: { projectId_userId: { projectId, userId } },
-      })
-      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
-    }
-
+    // Lectura abierta a cualquier integrante del workspace (proyecto scopeado por workspaceId).
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: {
@@ -299,17 +285,10 @@ async function projectCompletedHistory(req, res, next) {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const userId = req.user.userId
     const skip = Math.max(0, Number(req.query.skip ?? 0))
     const TAKE = 20
 
-    if (!isAdmin(req)) {
-      const member = await prisma.projectMember.findUnique({
-        where: { projectId_userId: { projectId, userId } },
-      })
-      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
-    }
-
+    // Lectura abierta a cualquier integrante del workspace (proyecto scopeado por workspaceId).
     const tasks = await prisma.task.findMany({
       where: { projectId, status: 'COMPLETED' },
       include: { user: { select: { id: true, name: true, avatar: true } } },
