@@ -336,8 +336,9 @@ DELETE /api/tasks/:id
 GET    /api/tasks/:id/comments
 POST   /api/tasks/:id/comments
 
-GET    /api/projects
+GET    /api/projects                     # todos los proyectos activos del workspace (incluye starred del usuario)
 PUT    /api/projects/:id                 # admin: editar nombre, websiteUrl, connections, serviceIds, memberIds
+PATCH  /api/projects/:id/star            # toggle destacado del proyecto para el usuario actual (preferencia personal)
 GET    /api/projects/:id/members
 GET    /api/projects/:id/tasks
 GET    /api/projects/:id/completed       # ?skip=N

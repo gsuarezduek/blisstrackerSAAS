@@ -40,6 +40,7 @@ const includeDetails = {
 async function list(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const userId = req.user.userId
     const tz = req.workspace.timezone
 
     // Todos los integrantes del workspace ven todos los proyectos activos. La
@@ -53,7 +54,7 @@ async function list(req, res, next) {
 
     const monday = weekMondayStr(tz)
 
-    const [activeCounts, completedWeekRaw] = await Promise.all([
+    const [activeCounts, completedWeekRaw, starredRows] = await Promise.all([
       prisma.task.groupBy({
         by: ['projectId', 'status'],
         where: { projectId: { in: projectIds }, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] } },
@@ -63,7 +64,13 @@ async function list(req, res, next) {
         where: { projectId: { in: projectIds }, status: 'COMPLETED', workDay: { date: { gte: monday } } },
         select: { projectId: true },
       }),
+      prisma.projectStar.findMany({
+        where: { userId, projectId: { in: projectIds } },
+        select: { projectId: true },
+      }),
     ])
+
+    const starredSet = new Set(starredRows.map(r => r.projectId))
 
     const countsMap = {}
     for (const row of activeCounts) {
@@ -77,6 +84,7 @@ async function list(req, res, next) {
 
     const result = projects.map(p => ({
       ...p,
+      starred: starredSet.has(p.id),
       taskCounts: {
         IN_PROGRESS:    countsMap[p.id]?.IN_PROGRESS    ?? 0,
         PENDING:        countsMap[p.id]?.PENDING        ?? 0,
@@ -87,6 +95,26 @@ async function list(req, res, next) {
     }))
 
     res.json(result)
+  } catch (err) { next(err) }
+}
+
+// PATCH /api/projects/:id/star — destaca/quita destacado del proyecto para el
+// usuario actual (preferencia personal). Devuelve { starred }.
+async function toggleStar(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const userId = req.user.userId
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const key = { projectId_userId: { projectId, userId } }
+    const existing = await prisma.projectStar.findUnique({ where: key })
+    if (existing) {
+      await prisma.projectStar.delete({ where: key })
+      return res.json({ starred: false })
+    }
+    await prisma.projectStar.create({ data: { projectId, userId } })
+    res.json({ starred: true })
   } catch (err) { next(err) }
 }
 
@@ -546,4 +574,4 @@ async function saveInfo(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, sendTestEmail, getAiUsage, getMembers }
+module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, sendTestEmail, getAiUsage, getMembers, toggleStar }

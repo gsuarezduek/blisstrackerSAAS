@@ -37,6 +37,7 @@ router.put('/feedback/:id/read',        c.markFeedbackRead)
 router.get('/email-logs',               c.listEmailLogs)
 router.get('/ai-tokens',                c.getAiTokenStats)
 router.get('/conversion-funnel',        c.getConversionFunnel)
+router.get('/metrics',                  c.getMetrics)
 
 // Usuarios (lista global cross-workspace)
 router.get('/users',                    c.listUsers)

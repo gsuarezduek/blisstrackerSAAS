@@ -770,4 +770,108 @@ async function getConversionFunnel(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, toggleUserDailyInsight, getConversionFunnel }
+/**
+ * GET /api/superadmin/metrics?days=N
+ * Métricas de uso de la plataforma: series diarias (DAU, workspaces activos,
+ * tareas, signups, tokens IA), KPIs (WAU/MAU/stickiness) y retención por
+ * cohortes semanales. Todo agrupado por día calendario en ART (UTC-3).
+ */
+const METRICS_TZ = 'America/Argentina/Buenos_Aires'
+const num = v => Number(v ?? 0)
+
+async function getMetrics(req, res, next) {
+  try {
+    const days = Math.max(7, Math.min(Number(req.query.days) || 30, 365))
+
+    // Eje de días en ART (sin DST en Argentina → paso de 24h estable).
+    const artDay = d => new Intl.DateTimeFormat('en-CA', { timeZone: METRICS_TZ }).format(d)
+    const axis = []
+    for (let i = days - 1; i >= 0; i--) axis.push(artDay(new Date(Date.now() - i * 86400000)))
+    const since = new Date(`${axis[0]}T00:00:00-03:00`)
+    const cohortSince = new Date(Date.now() - 8 * 7 * 86400000) // 8 semanas
+
+    // Helper: convierte filas [{ day, ... }] en un array alineado al eje.
+    const toSeries = (rows, key = 'n') => {
+      const map = Object.fromEntries(rows.map(r => [r.day, num(r[key])]))
+      return axis.map(d => map[d] ?? 0)
+    }
+
+    const [
+      activity, tasksCreated, tasksCompleted, signups, newUsers, tokens,
+      mauRow, wauRow, cohortRows,
+    ] = await Promise.all([
+      prisma.$queryRaw`
+        SELECT (("loginAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day,
+               COUNT(DISTINCT "userId") AS users, COUNT(DISTINCT "workspaceId") AS workspaces
+        FROM "UserLogin" WHERE "loginAt" >= ${since} GROUP BY 1`,
+      prisma.$queryRaw`
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day, COUNT(*) AS n
+        FROM "Task" WHERE "createdAt" >= ${since} GROUP BY 1`,
+      prisma.$queryRaw`
+        SELECT (("completedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day, COUNT(*) AS n
+        FROM "Task" WHERE "completedAt" >= ${since} GROUP BY 1`,
+      prisma.$queryRaw`
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day, COUNT(*) AS n
+        FROM "Workspace" WHERE "createdAt" >= ${since} GROUP BY 1`,
+      prisma.$queryRaw`
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day, COUNT(*) AS n
+        FROM "User" WHERE "createdAt" >= ${since} GROUP BY 1`,
+      prisma.$queryRaw`
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day,
+               COALESCE(SUM("inputTokens" + "outputTokens"), 0) AS n
+        FROM "AiTokenLog" WHERE "createdAt" >= ${since} GROUP BY 1`,
+      prisma.$queryRaw`SELECT COUNT(DISTINCT "userId") AS n FROM "UserLogin" WHERE "loginAt" >= now() - interval '30 days'`,
+      prisma.$queryRaw`SELECT COUNT(DISTINCT "userId") AS n FROM "UserLogin" WHERE "loginAt" >= now() - interval '7 days'`,
+      // Cohortes semanales: workspaces por semana de alta + cuántos siguen activos (login en últimos 14d)
+      prisma.$queryRaw`
+        WITH cohort AS (
+          SELECT id, to_char(("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires'), 'IYYY-"W"IW') AS week
+          FROM "Workspace" WHERE "createdAt" >= ${cohortSince}
+        ),
+        act AS (
+          SELECT DISTINCT "workspaceId" AS id FROM "UserLogin"
+          WHERE "loginAt" >= now() - interval '14 days' AND "workspaceId" IS NOT NULL
+        )
+        SELECT c.week AS week, COUNT(*) AS size, COUNT(a.id) AS active
+        FROM cohort c LEFT JOIN act a ON a.id = c.id
+        GROUP BY c.week ORDER BY c.week`,
+    ])
+
+    const activeUsers      = toSeries(activity, 'users')
+    const activeWorkspaces = toSeries(activity, 'workspaces')
+    const sum = arr => arr.reduce((a, b) => a + b, 0)
+    const dauAvg = activeUsers.length ? Math.round(sum(activeUsers) / activeUsers.length) : 0
+    const mau = num(mauRow[0]?.n)
+
+    res.json({
+      range: { days, since },
+      axis,
+      series: {
+        activeUsers,
+        activeWorkspaces,
+        tasksCreated:   toSeries(tasksCreated),
+        tasksCompleted: toSeries(tasksCompleted),
+        newWorkspaces:  toSeries(signups),
+        newUsers:       toSeries(newUsers),
+        aiTokens:       toSeries(tokens),
+      },
+      summary: {
+        dauAvg,
+        dauToday:   activeUsers[activeUsers.length - 1] ?? 0,
+        wau:        num(wauRow[0]?.n),
+        mau,
+        stickiness: mau > 0 ? Math.round((dauAvg / mau) * 1000) / 10 : null, // %
+        newWorkspaces:  sum(toSeries(signups)),
+        newUsers:       sum(toSeries(newUsers)),
+        tasksCreated:   sum(toSeries(tasksCreated)),
+        tasksCompleted: sum(toSeries(tasksCompleted)),
+      },
+      cohorts: cohortRows.map(c => {
+        const size = num(c.size), active = num(c.active)
+        return { week: c.week, size, active, rate: size > 0 ? Math.round((active / size) * 1000) / 10 : 0 }
+      }),
+    })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, toggleUserDailyInsight, getConversionFunnel, getMetrics }

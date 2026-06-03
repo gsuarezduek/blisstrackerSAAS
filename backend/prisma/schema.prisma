@@ -170,6 +170,7 @@ model User {
   insightMemories           UserInsightMemory[]
   feedbacks                 Feedback[]
   projects                  ProjectMember[]
+  starredProjects           ProjectStar[]
   notifications             Notification[]             @relation("NotificationRecipient")
   notificationsAsActor      Notification[]             @relation("NotificationActor")
   passwordResetTokens       PasswordResetToken[]
@@ -274,6 +275,7 @@ model Project {
   tasks                  Task[]
   services               ProjectService[]
   members                ProjectMember[]
+  stars                  ProjectStar[]
   notifications          Notification[]
   links                  ProjectLink[]
   geoAudits              GeoAudit[]
@@ -331,6 +333,18 @@ model ProjectMember {
   user      User    @relation(fields: [userId], references: [id])
 
   @@id([projectId, userId])
+}
+
+// Proyectos destacados por usuario (preferencia personal en "Mis Proyectos").
+model ProjectStar {
+  projectId Int
+  userId    Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([projectId, userId])
+  @@index([userId])
 }
 
 model ProjectLink {
