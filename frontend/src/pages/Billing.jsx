@@ -116,6 +116,8 @@ export default function Billing() {
   const isAdmin = billing?.isAdmin
   const status  = billing?.status
   const sub     = billing?.subscription
+  const isFree   = status === 'active' && !sub          // plan Gratis: activo sin suscripción
+  const planName = sub ? 'Pro' : status === 'trialing' ? 'Pro (trial)' : 'Gratis'
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -157,7 +159,7 @@ export default function Billing() {
                 Estado del plan
               </p>
               <div className="flex items-center gap-3">
-                <p className="text-lg font-bold text-gray-900 dark:text-white">Pro</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{planName}</p>
                 {billing && <StatusBadge status={status} />}
               </div>
             </div>
@@ -191,6 +193,18 @@ export default function Billing() {
             </div>
           )}
 
+          {/* Plan Gratis (activo, sin suscripción) */}
+          {isFree && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg px-4 py-3 text-sm text-green-700 dark:text-green-300">
+              Estás en el <span className="font-semibold">plan Gratis</span>
+              {billing?.freeSeatLimit > 0 && (
+                <> — hasta {billing.freeSeatLimit} usuario{billing.freeSeatLimit !== 1 ? 's' : ''} sin costo
+                  {' '}({billing.seats}/{billing.freeSeatLimit} en uso)</>
+              )}
+              . Si sumás más usuarios podés activar el plan Pro.
+            </div>
+          )}
+
           {/* Suscripción activa */}
           {status === 'active' && sub && (
             <div className="grid grid-cols-2 gap-4">
@@ -210,7 +224,9 @@ export default function Billing() {
           {/* Pago pendiente */}
           {status === 'past_due' && (
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-              Hay un pago pendiente en tu cuenta. Regularizá tu método de pago para evitar la suspensión del workspace.
+              {sub
+                ? 'Hay un pago pendiente en tu cuenta. Regularizá tu método de pago para evitar la suspensión del workspace.'
+                : <>Superaste el límite del plan Gratis{billing?.freeSeatLimit > 0 ? ` (${billing.freeSeatLimit} usuario${billing.freeSeatLimit !== 1 ? 's' : ''})` : ''} — tenés {billing?.seats} usuarios activos. Activá el plan Pro para seguir usando el workspace con todo el equipo.</>}
             </div>
           )}
 
@@ -230,7 +246,7 @@ export default function Billing() {
                   disabled={redirecting}
                   className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
                 >
-                  {redirecting ? 'Redirigiendo…' : status === 'trialing' ? 'Suscribirse ahora' : 'Reactivar suscripción'}
+                  {redirecting ? 'Redirigiendo…' : sub?.stripeSubId ? 'Reactivar suscripción' : 'Activar plan Pro'}
                 </button>
               )}
 

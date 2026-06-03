@@ -27,6 +27,16 @@ const PLATFORM_SETTINGS = [
     help:    'Cantidad de días que duran los trials de los nuevos workspaces. Los workspaces existentes mantienen su trialEndsAt actual.',
   },
   {
+    key:     'freeSeatLimit',
+    type:    'integer',
+    default: 3,
+    min:     0,
+    max:     1000,
+    group:   'commercial',
+    label:   'Usuarios gratis (plan Gratis)',
+    help:    'Cantidad máxima de usuarios activos que un workspace puede tener sin pagar. Al vencer el trial, los workspaces con esta cantidad o menos pasan al plan Gratis (acceso completo al core, sin suscripción); los que superan el límite quedan en past_due hasta activar Pro. 0 = no hay plan gratis (todos deben pagar al vencer el trial).',
+  },
+  {
     key:     'defaultMonthlyTokenLimit',
     type:    'integer',
     default: 1_000_000,

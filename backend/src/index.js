@@ -191,22 +191,33 @@ cron.schedule('0 0 * * *', async () => {
   }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
-// Cron: marcar trials expirados como past_due — diariamente a las 03:00 ART
+// Cron: reconciliar tier de billing (free tier ⇄ past_due) — diariamente 03:00 ART.
+// Aplica la regla "hasta N usuarios gratis": trials vencidos con ≤ límite pasan a
+// plan Gratis (active); los que superan el límite quedan en past_due. También
+// rescata workspaces past_due que ahora califican para gratis (ej: bajaron usuarios
+// o se subió el límite desde SuperAdmin).
 cron.schedule('0 3 * * *', async () => {
   try {
-    const expired = await prisma.workspace.findMany({
-      where: { status: 'trialing', trialEndsAt: { lt: new Date() } },
+    const { reconcileWorkspaceTier } = require('./services/billingTier.service')
+    const now = new Date()
+    const candidates = await prisma.workspace.findMany({
+      where: {
+        billingExempt: false,
+        OR: [
+          { status: 'trialing', trialEndsAt: { lt: now } },
+          { status: 'past_due' },
+          { status: 'active' }, // re-evaluar gratis por si bajaron usuarios o cambió el límite
+        ],
+      },
       select: { id: true },
     })
-    if (expired.length === 0) return
-    const ids = expired.map(w => w.id)
-    const { count } = await prisma.workspace.updateMany({
-      where: { id: { in: ids } },
-      data:  { status: 'past_due' },
-    })
-    console.log(`[TrialExpiry] ${count} workspace(s) marcado(s) como past_due.`)
+    for (const w of candidates) {
+      try { await reconcileWorkspaceTier(w.id) }
+      catch (e) { console.error(`[BillingTier] Error reconciliando workspace ${w.id}:`, e.message) }
+    }
+    console.log(`[BillingTier] Reconciliados ${candidates.length} workspace(s).`)
   } catch (err) {
-    console.error('[TrialExpiry] Error al marcar trials expirados:', err.message)
+    console.error('[BillingTier] Error en cron de reconciliación de tiers:', err.message)
   }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 

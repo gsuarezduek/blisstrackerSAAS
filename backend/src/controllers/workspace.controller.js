@@ -4,6 +4,7 @@ const prisma = require('../lib/prisma')
 const stripe  = require('../lib/stripe')
 const { sendWelcomeEmail, sendInvitationEmail, sendWorkspaceDeletionWarning } = require('../services/email.service')
 const { syncSeatsToStripe } = require('./billing.controller')
+const { reconcileWorkspaceTier } = require('../services/billingTier.service')
 const { getSetting } = require('../lib/platformSettings')
 const { seedWorkspace, removeDemoProject } = require('../services/workspaceSeed.service')
 
@@ -436,6 +437,8 @@ async function toggleMemberActive(req, res, next) {
 
     // Sincronizar cantidad de seats en Stripe (fire-and-forget)
     syncSeatsToStripe(workspaceId).catch(err => console.error('[Workspace] Error sincronizando seats (member update):', err.message))
+    // Reconciliar free tier: activar/desactivar usuarios puede cruzar el límite gratis (fire-and-forget)
+    reconcileWorkspaceTier(workspaceId).catch(err => console.error('[Workspace] Error reconciliando tier (member update):', err.message))
 
     res.json({
       ...user,
@@ -764,6 +767,8 @@ async function joinWorkspace(req, res, next) {
 
     // Sincronizar seats en Stripe (fire-and-forget)
     syncSeatsToStripe(workspaceId).catch(err => console.error('[Workspace] Error sincronizando seats (join):', err.message))
+    // Reconciliar free tier: sumar un miembro puede superar el límite gratis y pasar a past_due (fire-and-forget)
+    reconcileWorkspaceTier(workspaceId).catch(err => console.error('[Workspace] Error reconciliando tier (join):', err.message))
 
     res.json({
       token:  jwtToken,

@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const stripe  = require('../lib/stripe')
+const { getSetting } = require('../lib/platformSettings')
 
 // ── Status map compartido con el webhook ─────────────────────────────────────
 const STRIPE_STATUS_MAP = {
@@ -42,6 +43,7 @@ async function getStatus(req, res, next) {
     const seats = await prisma.workspaceMember.count({
       where: { workspaceId: workspace.id, active: true },
     })
+    const freeSeatLimit = await getSetting('freeSeatLimit')
 
     let trialDaysLeft = null
     if (workspace.status === 'trialing' && workspace.trialEndsAt) {
@@ -49,11 +51,20 @@ async function getStatus(req, res, next) {
       trialDaysLeft = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)))
     }
 
+    // Plan derivado: Pro si hay suscripción paga; si no, Gratis (post-trial) o trial en curso.
+    const plan = sub?.stripeSubId
+      ? 'pro'
+      : workspace.status === 'trialing'
+        ? 'trial'
+        : 'free'
+
     res.json({
       status:       workspace.status,       // trialing | active | past_due | suspended | cancelled
+      plan,                                  // pro | free | trial
       trialEndsAt:  workspace.trialEndsAt,
       trialDaysLeft,
       seats,
+      freeSeatLimit,                         // límite del plan Gratis (0 = sin plan gratis)
       subscription: sub,
       isAdmin:      req.workspaceMember?.role === 'owner' || req.workspaceMember?.role === 'admin',
     })

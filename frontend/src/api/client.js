@@ -39,6 +39,13 @@ api.interceptors.response.use(
         window.location.href = '/login'
       }
     }
+    // Pago vencido: el backend bloquea toda escritura. Empujamos a Facturación
+    // para forzar la activación del plan (salvo que ya estemos ahí).
+    if (err.response?.status === 402 && err.response?.data?.code === 'BILLING_PAST_DUE') {
+      if (!window.location.pathname.startsWith('/billing')) {
+        window.location.href = '/billing'
+      }
+    }
     return Promise.reject(err)
   }
 )
