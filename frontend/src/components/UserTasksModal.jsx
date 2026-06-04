@@ -51,11 +51,11 @@ export default function UserTasksModal({ user, onClose }) {
               <img
                 src={avatarUrl(user.avatar)}
                 alt={user.name}
-                className="w-10 h-10 rounded-full object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
+                className="w-16 h-16 rounded-full object-cover border border-gray-200 dark:border-gray-600 hover:opacity-90 transition-opacity cursor-zoom-in"
               />
             </button>
             <div>
-              <h2 className="text-base font-bold text-gray-900 dark:text-white">{user.name}</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">{user.name}</h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">{labelFor(user.role)}</p>
             </div>
           </div>

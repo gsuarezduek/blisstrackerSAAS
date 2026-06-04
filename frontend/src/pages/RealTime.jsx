@@ -6,6 +6,7 @@ import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import useRoles from '../hooks/useRoles'
 import UserTasksModal from '../components/UserTasksModal'
+import TaskCommentsModal from '../components/TaskCommentsModal'
 import { fmtMins } from '../utils/format'
 
 const ROLE_COLORS_LIST = [
@@ -48,17 +49,17 @@ function elapsed(startedAt, now, pausedMinutes = 0) {
   return `${s}s`
 }
 
-function Avatar({ user }) {
+function Avatar({ user, size = 'w-10 h-10' }) {
   return (
     <img
       src={avatarUrl(user.avatar)}
       alt={user.name}
-      className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
+      className={`${size} rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0`}
     />
   )
 }
 
-function UserCard({ entry, now }) {
+function UserCard({ entry, now, onOpenUser, onOpenTask }) {
   const { user, workDay, currentTask, stats } = entry
   const { labelFor } = useRoles()
   const isActive = !workDay.endedAt
@@ -69,21 +70,27 @@ function UserCard({ entry, now }) {
       hasTask ? 'border-primary-300 shadow-md shadow-primary-50/30' :
       isActive ? 'border-gray-200 dark:border-gray-600' : 'border-gray-100 dark:border-gray-700 opacity-60'
     }`}>
-      {/* User header */}
+      {/* User header — click en avatar/nombre → lista de tareas del usuario */}
       <div className="flex items-center gap-3">
-        <div className="relative">
-          <Avatar user={user} />
-          <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-800 ${
-            !isActive ? 'bg-gray-300' :
-            hasTask ? 'bg-primary-500 animate-pulse' : 'bg-green-400'
-          }`} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 dark:text-white truncate">{user.name}</p>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(user.role)}`}>
-            {labelFor(user.role)}
-          </span>
-        </div>
+        <button
+          onClick={() => onOpenUser(user)}
+          className="flex items-center gap-3.5 flex-1 min-w-0 text-left group rounded-xl -m-1 p-1 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+          title="Ver tareas de esta persona"
+        >
+          <div className="relative flex-shrink-0">
+            <Avatar user={user} size="w-16 h-16" />
+            <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-white dark:border-gray-800 ${
+              !isActive ? 'bg-gray-300' :
+              hasTask ? 'bg-primary-500 animate-pulse' : 'bg-green-400'
+            }`} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-gray-900 dark:text-white truncate group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">{user.name}</p>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(user.role)}`}>
+              {labelFor(user.role)}
+            </span>
+          </div>
+        </button>
         <div className="text-right flex-shrink-0">
           {!isActive && <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">Finalizó</span>}
           {isActive && !hasTask && <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">Disponible</span>}
@@ -96,19 +103,23 @@ function UserCard({ entry, now }) {
         </div>
       </div>
 
-      {/* Current task */}
+      {/* Current task — click → comentarios de la tarea */}
       {hasTask && (
-        <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl px-4 py-3">
+        <button
+          onClick={() => onOpenTask(currentTask)}
+          className="bg-primary-50 dark:bg-primary-900/20 rounded-xl px-4 py-3 text-left w-full hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
+          title="Ver comentarios de la tarea"
+        >
           <div className="flex items-start gap-2">
             <span className="text-primary-400 mt-0.5">▶</span>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-medium text-primary-900 dark:text-primary-300">{linkify(currentTask.description)}</p>
               <span className="text-xs bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-700 rounded px-2 py-0.5 mt-1 inline-block">
                 {currentTask.project.name}
               </span>
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {!hasTask && isActive && (
@@ -147,6 +158,7 @@ export default function RealTime() {
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [selectedUser, setSelectedUser] = useState(null)
+  const [commentTask, setCommentTask] = useState(null)
   const [search, setSearch] = useState('')
   const now = useNow()
 
@@ -280,9 +292,13 @@ export default function RealTime() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Activos ahora</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {active.map(entry => (
-                <button key={entry.user.id} className="text-left" onClick={() => setSelectedUser(entry.user)}>
-                  <UserCard entry={entry} now={now} />
-                </button>
+                <UserCard
+                  key={entry.user.id}
+                  entry={entry}
+                  now={now}
+                  onOpenUser={setSelectedUser}
+                  onOpenTask={setCommentTask}
+                />
               ))}
             </div>
           </section>
@@ -294,9 +310,13 @@ export default function RealTime() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Finalizaron jornada</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {finished.map(entry => (
-                <button key={entry.user.id} className="text-left" onClick={() => setSelectedUser(entry.user)}>
-                  <UserCard entry={entry} now={now} />
-                </button>
+                <UserCard
+                  key={entry.user.id}
+                  entry={entry}
+                  now={now}
+                  onOpenUser={setSelectedUser}
+                  onOpenTask={setCommentTask}
+                />
               ))}
             </div>
           </section>
@@ -308,9 +328,9 @@ export default function RealTime() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">No iniciaron jornada</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredNotStarted.map(user => (
-                <button key={user.id} className="text-left" onClick={() => setSelectedUser(user)}>
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl border-2 border-gray-100 dark:border-gray-700 opacity-50 p-5 flex items-center gap-3">
-                    <Avatar user={user} />
+                <button key={user.id} className="text-left" onClick={() => setSelectedUser(user)} title="Ver tareas de esta persona">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border-2 border-gray-100 dark:border-gray-700 opacity-50 p-5 flex items-center gap-3.5 hover:opacity-70 transition-opacity">
+                    <Avatar user={user} size="w-14 h-14" />
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-900 dark:text-white truncate">{user.name}</p>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(user.role)}`}>
@@ -328,6 +348,13 @@ export default function RealTime() {
 
       {selectedUser && (
         <UserTasksModal user={selectedUser} onClose={() => setSelectedUser(null)} />
+      )}
+
+      {commentTask && (
+        <TaskCommentsModal
+          task={commentTask}
+          onClose={() => setCommentTask(null)}
+        />
       )}
     </div>
   )
