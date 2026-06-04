@@ -35,6 +35,8 @@ async function saveTikTokSnapshot(projectId, workspaceId, month, preloaded = nul
     metrics     = await fetchTikTokMetrics(token, month)
   }
 
+  const topVideosJson = JSON.stringify(metrics.topVideos ?? [])
+
   await prisma.tikTokSnapshot.upsert({
     where:  { projectId_month: { projectId, month } },
     update: {
@@ -47,6 +49,7 @@ async function saveTikTokSnapshot(projectId, workspaceId, month, preloaded = nul
       avgShares:      metrics.avgShares      ?? null,
       postsThisMonth: metrics.postsThisMonth ?? null,
       engagementRate: metrics.engagementRate ?? null,
+      topVideos:      topVideosJson,
     },
     create: {
       projectId,
@@ -61,6 +64,7 @@ async function saveTikTokSnapshot(projectId, workspaceId, month, preloaded = nul
       avgShares:      metrics.avgShares      ?? null,
       postsThisMonth: metrics.postsThisMonth ?? null,
       engagementRate: metrics.engagementRate ?? null,
+      topVideos:      topVideosJson,
     },
   })
 

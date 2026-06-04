@@ -101,6 +101,112 @@ function ObjectivesModal({ objectives, onSave, onClose, saving }) {
   )
 }
 
+// ─── Modal de generación (selección de secciones) ──────────────────────────────
+
+// Catálogo de secciones (las claves coinciden con sections del backend / ReportViewer)
+const SECTION_CATALOG = [
+  { key: 'analytics',       label: 'Analítica web (GA4)',  icon: '📊' },
+  { key: 'performance',     label: 'Performance web',       icon: '⚡' },
+  { key: 'geo',             label: 'Presencia en IA (GEO)', icon: '🤖' },
+  { key: 'seo',             label: 'SEO / Search Console',  icon: '🔍' },
+  { key: 'keywords',        label: 'Keywords',              icon: '🎯' },
+  { key: 'cannibalization', label: 'Canibalización SEO',    icon: '⚔️' },
+  { key: 'instagram',       label: 'Instagram',             icon: '📸' },
+  { key: 'tiktok',          label: 'TikTok',                icon: '🎵' },
+  { key: 'linkedin',        label: 'LinkedIn',              icon: '💼' },
+  { key: 'metaAds',         label: 'Meta Ads',              icon: '📣' },
+  { key: 'googleAds',       label: 'Google Ads',            icon: '🔎' },
+  { key: 'competitors',     label: 'Competidores',          icon: '🏁' },
+  { key: 'tasks',           label: 'Trabajo realizado',     icon: '✅' },
+]
+
+function GenerateModal({ availableSections, initialSelected, onGenerate, onClose, generating }) {
+  // Solo se ofrecen las secciones con datos/fuente disponible
+  const offered = SECTION_CATALOG.filter(s => availableSections?.[s.key])
+
+  const [selected, setSelected] = useState(() => {
+    const base = Array.isArray(initialSelected)
+      ? offered.filter(s => initialSelected.includes(s.key)).map(s => s.key)
+      : offered.map(s => s.key)   // por defecto: todas las disponibles
+    return new Set(base)
+  })
+
+  function toggle(key) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
+  const allChecked = offered.length > 0 && offered.every(s => selected.has(s.key))
+  function toggleAll() {
+    setSelected(allChecked ? new Set() : new Set(offered.map(s => s.key)))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">📄 Generar informe</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
+        </div>
+
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Elegí qué secciones querés incluir. Solo se muestran las que tienen datos o una fuente conectada. Las que dejes sin marcar no se generan ni aparecen en el link del cliente.
+        </p>
+
+        {offered.length === 0 ? (
+          <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            Este proyecto todavía no tiene datos ni integraciones para armar un informe.
+            <br />Conectá una fuente (web, RRSS, Ads…) y volvé a intentarlo.
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={toggleAll}
+              className="self-start mb-2 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline"
+            >
+              {allChecked ? 'Desmarcar todas' : 'Marcar todas'}
+            </button>
+
+            <div className="space-y-1 overflow-y-auto pr-1">
+              {offered.map(s => (
+                <label
+                  key={s.key}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(s.key)}
+                    onChange={() => toggle(s.key)}
+                    className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-base leading-none">{s.icon}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{s.label}</span>
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="flex gap-2 mt-6">
+          <button onClick={onClose} className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            Cancelar
+          </button>
+          <button
+            onClick={() => onGenerate([...selected])}
+            disabled={generating || selected.size === 0}
+            className="flex-1 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+          >
+            {generating ? 'Generando…' : 'Generar informe'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Vista global de informes (sin proyecto seleccionado) ─────────────────────
 
 function AllReportsPanel({ onSelectProject }) {
@@ -221,17 +327,23 @@ export default function InformesTab({ projectId, onSelectProject }) {
   const [savingObjs,  setSavingObjs]  = useState(false)
   const [copied,        setCopied]        = useState(false)
   const [retryKey,      setRetryKey]      = useState(0)
-  const [regenerating,  setRegenerating]  = useState(false)
+  const [availableSections, setAvailableSections] = useState(null)
+  const [showGenModal, setShowGenModal] = useState(false)
+  const [generating,   setGenerating]   = useState(false)
+
+  const isGenerated = !!reportMeta?.isGenerated
 
   useEffect(() => {
     if (!projectId) return
     const controller = new AbortController()
     setLoading(true)
     setError(null)
+    setReportData(null)
     api.get(`/marketing/projects/${projectId}/reports/${month}`, { signal: controller.signal })
       .then(res => {
         setReportMeta(res.data.report)
-        setReportData(res.data.data)
+        setReportData(res.data.data)   // null si el informe aún no fue generado
+        setAvailableSections(res.data.availableSections ?? null)
         setReportWorkspace(res.data.workspace ?? null)
       })
       .catch(err => {
@@ -241,6 +353,21 @@ export default function InformesTab({ projectId, onSelectProject }) {
       .finally(() => setLoading(false))
     return () => controller.abort()
   }, [projectId, month, retryKey])
+
+  async function handleGenerate(enabledSections) {
+    setGenerating(true)
+    setError(null)
+    try {
+      const res = await api.post(`/marketing/projects/${projectId}/reports/${month}/regenerate`, { enabledSections })
+      setReportMeta(res.data.report)
+      setReportData(res.data.data)
+      setShowGenModal(false)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al generar el informe')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   async function handleSaveObjectives(objectives) {
     setSavingObjs(true)
@@ -252,21 +379,6 @@ export default function InformesTab({ projectId, onSelectProject }) {
       alert(err.response?.data?.error || 'Error al guardar objetivos')
     } finally {
       setSavingObjs(false)
-    }
-  }
-
-  async function handleRegenerate() {
-    if (!window.confirm('¿Regenerar el informe? Se volverán a leer todos los datos y se creará un nuevo análisis con IA. El texto editado de Resumen y Próximos pasos se perderá.')) return
-    setRegenerating(true)
-    setError(null)
-    try {
-      const res = await api.post(`/marketing/projects/${projectId}/reports/${month}/regenerate`)
-      setReportMeta(res.data.report)
-      setReportData(res.data.data)
-    } catch (err) {
-      setError(err.response?.data?.error || 'Error al regenerar el informe')
-    } finally {
-      setRegenerating(false)
     }
   }
 
@@ -331,32 +443,31 @@ export default function InformesTab({ projectId, onSelectProject }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleRegenerate}
-            disabled={regenerating || loading}
-            title="Vuelve a leer todos los datos y regenera el análisis IA"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
-          >
-            {regenerating ? (
-              <>
-                <span className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-                Regenerando…
-              </>
-            ) : '🔄 Regenerar'}
-          </button>
+          {isGenerated && (
+            <button
+              onClick={() => setShowGenModal(true)}
+              disabled={generating || loading}
+              title="Elegí las secciones y regenerá el informe (relee los datos y el análisis IA)"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
+            >
+              🔄 Regenerar
+            </button>
+          )}
           <button
             onClick={() => setShowObjModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             🎯 Objetivos
           </button>
-          <button
-            onClick={handleCopyLink}
-            disabled={!reportMeta?.token}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-40"
-          >
-            {copied ? '✓ Copiado' : '📋 Link del cliente'}
-          </button>
+          {isGenerated && (
+            <button
+              onClick={handleCopyLink}
+              disabled={!reportMeta?.token}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-40"
+            >
+              {copied ? '✓ Copiado' : '📋 Link del cliente'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -374,6 +485,27 @@ export default function InformesTab({ projectId, onSelectProject }) {
         </div>
       )}
 
+      {!loading && !error && reportData?.analysisError && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
+          <span className="text-lg leading-none mt-0.5">⚠️</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              No se pudo generar el texto del análisis con IA
+            </p>
+            <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
+              {reportData.analysisError}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowGenModal(true)}
+            disabled={generating}
+            className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            🔄 Regenerar
+          </button>
+        </div>
+      )}
+
       {!loading && !error && reportData && (
         <ReportViewer
           data={reportData}
@@ -387,6 +519,28 @@ export default function InformesTab({ projectId, onSelectProject }) {
         />
       )}
 
+      {/* ── Estado vacío: informe todavía no generado ── */}
+      {!loading && !error && !reportData && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+          <p className="text-5xl mb-4">📄</p>
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+            Todavía no generaste el informe de {monthLabel(month)}
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-6">
+            Elegí qué secciones querés incluir y generamos el informe con los datos del período y el análisis con IA.
+          </p>
+          <button
+            onClick={() => setShowGenModal(true)}
+            disabled={generating}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-xl transition-colors disabled:opacity-50"
+          >
+            {generating
+              ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Generando…</>
+              : '📄 Generar informe'}
+          </button>
+        </div>
+      )}
+
       {/* ── Modal de objetivos ── */}
       {showObjModal && (
         <ObjectivesModal
@@ -394,6 +548,17 @@ export default function InformesTab({ projectId, onSelectProject }) {
           onSave={handleSaveObjectives}
           onClose={() => setShowObjModal(false)}
           saving={savingObjs}
+        />
+      )}
+
+      {/* ── Modal de generación (selección de secciones) ── */}
+      {showGenModal && (
+        <GenerateModal
+          availableSections={availableSections}
+          initialSelected={reportMeta?.enabledSections ?? null}
+          onGenerate={handleGenerate}
+          onClose={() => setShowGenModal(false)}
+          generating={generating}
         />
       )}
     </div>

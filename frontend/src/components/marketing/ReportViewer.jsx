@@ -289,6 +289,49 @@ function BestInstagramPost({ post }) {
   )
 }
 
+// Mejor video del mes (TikTok)
+function BestTikTokVideo({ video }) {
+  if (!video) return null
+  const inner = (
+    <div className="flex items-stretch gap-3">
+      <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+        {video.coverUrl ? (
+          <img src={video.coverUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-cyan-400 to-pink-500" />
+        )}
+        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-semibold text-cyan-700 dark:text-cyan-300 uppercase tracking-wide">
+          Mejor video del mes
+        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400 mt-1">
+          {video.viewCount    != null && <span>▶️ {fmt(video.viewCount)}</span>}
+          {video.likeCount    != null && <span>❤️ {fmt(video.likeCount)}</span>}
+          {video.commentCount != null && <span>💬 {fmt(video.commentCount)}</span>}
+          {video.shareCount   != null && <span>🔁 {fmt(video.shareCount)}</span>}
+        </div>
+        {video.title && (
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight mt-1">
+            {video.title}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="mt-4 rounded-xl border border-cyan-200 dark:border-cyan-800 bg-cyan-50/50 dark:bg-cyan-900/10 p-3">
+      {video.shareUrl ? (
+        <a href={video.shareUrl} target="_blank" rel="noopener noreferrer" className="block hover:opacity-90 transition-opacity">
+          {inner}
+        </a>
+      ) : inner}
+    </div>
+  )
+}
+
 // Tabla de objetivos vs real
 function ObjectivesTable({ objectives, sections }) {
   const rows = []
@@ -857,6 +900,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
                   { label: 'Avg. views',  value: fmt(s.tiktok.avgViews, 0) },
                   { label: 'Posts / mes', value: fmt(s.tiktok.postsThisMonth) },
                 ]} />
+                {s.tiktok.bestVideo && <BestTikTokVideo video={s.tiktok.bestVideo} />}
                 {s.tiktok._fallbackMonth && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
                     {s.tiktok._fallbackMonth === 'live'

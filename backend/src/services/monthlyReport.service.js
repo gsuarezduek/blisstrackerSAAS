@@ -117,7 +117,7 @@ function monthOfDate(d) {
  * Recopila todos los datos necesarios para el informe mensual de un proyecto.
  * Retorna un objeto estructurado con secciones condicionales.
  */
-async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null, objectives = {}, cachedData = null) {
+async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null, objectives = {}, cachedData = null, enabledSections = null) {
   // El informe del mes X muestra datos del mes X-1.
   // Ej: "Informe de Mayo 2026" → período de datos: Abril 2026.
   const dataMonth = prevMonthStr(month)
@@ -134,10 +134,16 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       connectedTypes: cachedData.connectedTypes,
       sections:       cachedData.sections,
       analysis:       validCachedAnalysis,
+      analysisError:  null,
       _analysisIsNew:  false,
       _dataCacheIsNew: false,
     }
   }
+  // Secciones habilitadas para este informe. null = todas (compatibilidad con informes legacy).
+  // `evolution` se rige por `analytics` (es la serie histórica del mismo dato).
+  const enabledSet = Array.isArray(enabledSections) ? new Set(enabledSections) : null
+  const wants = (key) => !enabledSet || enabledSet.has(key === 'evolution' ? 'analytics' : key)
+
   const prev      = prevMonthStr(dataMonth)   // mes anterior al período (para deltas)
   const last6     = prevMonthsArr(dataMonth, 6)
 
@@ -225,7 +231,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.tikTokSnapshot.findFirst({
       where:   { projectId, workspaceId, month: dataMonth },
       select:  { followersCount: true, engagementRate: true, avgViews: true,
-                 avgLikes: true, postsThisMonth: true, likesCount: true },
+                 avgLikes: true, postsThisMonth: true, likesCount: true, topVideos: true },
     }),
     prisma.tikTokSnapshot.findFirst({
       where:   { projectId, workspaceId, month: prev },
@@ -331,13 +337,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   const metaIntegration = integrations.find(i => i.type === 'meta_ads')
 
   const [googleAdsRaw, metaAdsRaw] = await Promise.all([
-    gadsIntegration && gadsIntegration.customerId && process.env.GOOGLE_ADS_DEVELOPER_TOKEN
+    wants('googleAds') && gadsIntegration && gadsIntegration.customerId && process.env.GOOGLE_ADS_DEVELOPER_TOKEN
       ? fetchGoogleAdsData(gadsIntegration, 'this_month', dateRange).catch(err => {
           console.warn('[MonthlyReport] Google Ads fetch fallido (ignorado):', err.message)
           return null
         })
       : Promise.resolve(null),
-    metaIntegration && metaIntegration.propertyId
+    wants('metaAds') && metaIntegration && metaIntegration.propertyId
       ? getValidFbToken(metaIntegration)
           .then(token => fetchMetaAdsData(metaIntegration.propertyId, token, 'this_month', dateRange))
           .catch(err => {
@@ -485,7 +491,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     } else {
       // Fallback 2: datos en vivo de la API
       const igIntegration = integrations.find(i => i.type === 'instagram')
-      if (igIntegration) {
+      if (igIntegration && wants('instagram')) {
         try {
           const token      = await getValidMetaToken(igIntegration)
           const useFbGraph = igIntegration.scopes?.startsWith('fb_graph')
@@ -521,8 +527,15 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   })
 
   // ── TikTok (con fallback a snapshot más reciente o datos en vivo) ─────────────
+  function parseTkTopVideos(json) {
+    if (!json) return []
+    try { const v = JSON.parse(json); return Array.isArray(v) ? v : [] }
+    catch { return [] }
+  }
+
   let tiktok = null
   if (tiktokSnap) {
+    const topVideos = parseTkTopVideos(tiktokSnap.topVideos)
     tiktok = {
       followersCount:  tiktokSnap.followersCount,
       engagementRate:  tiktokSnap.engagementRate,
@@ -530,6 +543,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       avgLikes:        tiktokSnap.avgLikes,
       postsThisMonth:  tiktokSnap.postsThisMonth,
       likesCount:      tiktokSnap.likesCount,
+      topVideos,
+      bestVideo:       topVideos[0] ?? null,
       deltaFollowers:  tiktokPrev ? pct(tiktokSnap.followersCount, tiktokPrev.followersCount) : null,
       deltaEngagement: tiktokPrev ? pct(tiktokSnap.engagementRate ?? 0, tiktokPrev.engagementRate) : null,
     }
@@ -539,13 +554,14 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       where:   { projectId, workspaceId },
       orderBy: { month: 'desc' },
       select:  { followersCount: true, engagementRate: true, avgViews: true,
-                 avgLikes: true, postsThisMonth: true, likesCount: true, month: true },
+                 avgLikes: true, postsThisMonth: true, likesCount: true, topVideos: true, month: true },
     })
     if (recentTk) {
       const prevTk = await prisma.tikTokSnapshot.findFirst({
         where:  { projectId, workspaceId, month: prevMonthStr(recentTk.month) },
         select: { followersCount: true, engagementRate: true },
       })
+      const topVideos = parseTkTopVideos(recentTk.topVideos)
       tiktok = {
         followersCount:  recentTk.followersCount,
         engagementRate:  recentTk.engagementRate,
@@ -553,6 +569,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         avgLikes:        recentTk.avgLikes,
         postsThisMonth:  recentTk.postsThisMonth,
         likesCount:      recentTk.likesCount,
+        topVideos,
+        bestVideo:       topVideos[0] ?? null,
         deltaFollowers:  prevTk ? pct(recentTk.followersCount, prevTk.followersCount) : null,
         deltaEngagement: prevTk ? pct(recentTk.engagementRate ?? 0, prevTk.engagementRate) : null,
         _fallbackMonth:  recentTk.month,
@@ -560,7 +578,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     } else {
       // Fallback 2: datos en vivo de la API
       const tkIntegration = integrations.find(i => i.type === 'tiktok')
-      if (tkIntegration) {
+      if (tkIntegration && wants('tiktok')) {
         try {
           const token = await getValidTikTokToken(tkIntegration)
           const live  = await fetchTikTokMetrics(token, null)
@@ -571,6 +589,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
             avgLikes:        live.avgLikes,
             postsThisMonth:  live.postsThisMonth,
             likesCount:      live.likesCount,
+            topVideos:       live.topVideos ?? [],
+            bestVideo:       live.bestVideo ?? null,
             deltaFollowers:  null,
             deltaEngagement: null,
             _fallbackMonth:  'live',
@@ -646,7 +666,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     } else {
       // Fallback 2: datos en vivo
       const liIntegration = integrations.find(i => i.type === 'linkedin' && i.propertyId)
-      if (liIntegration) {
+      if (liIntegration && wants('linkedin')) {
         try {
           const token = await getValidLinkedinToken(liIntegration)
           const live  = await fetchLinkedinMetrics(liIntegration.propertyId, token, null)
@@ -750,11 +770,26 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Servicios del proyecto ────────────────────────────────────────────────────
   const services = project?.services?.map(ps => ps.service.name) ?? []
 
+  // ── Secciones (filtradas según enabledSections) ───────────────────────────────
+  // Si el informe define secciones habilitadas, las demás se excluyen por completo
+  // (no se guardan en el caché ni viajan al link público del cliente).
+  const allSections = { geo, analytics, evolution, instagram, tiktok, linkedin, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks, competitors }
+  const sections = {}
+  for (const [key, val] of Object.entries(allSections)) {
+    sections[key] = wants(key) ? val : null
+  }
+
   // ── Análisis IA ──────────────────────────────────────────────────────────────
-  // Si ya existe un análisis cacheado con resumen válido, no se regenera
+  // Si ya existe un análisis cacheado con resumen válido, no se regenera.
+  // El análisis solo considera las secciones habilitadas.
   const analysis = validCachedAnalysis
     ? validCachedAnalysis
-    : await generateAnalysis({ project, month: dataMonth, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives, services })
+    : await generateAnalysis({ project, month: dataMonth,
+        geo: sections.geo, analytics: sections.analytics, instagram: sections.instagram,
+        tiktok: sections.tiktok, linkedin: sections.linkedin, keywords: sections.keywords,
+        seo: sections.seo, performance: sections.performance, googleAds: sections.googleAds,
+        metaAds: sections.metaAds, competitors: sections.competitors,
+        workspaceId, objectives, services })
 
   return {
     project: {
@@ -766,8 +801,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     month,        // mes del informe (ej: "2026-05") — para identificación/navegación
     dataMonth,    // período de los datos (ej: "2026-04") — para mostrar al usuario
     connectedTypes: [...connectedTypes],
-    sections: { geo, analytics, evolution, instagram, tiktok, linkedin, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks, competitors },
+    sections,
     analysis,
+    analysisError:  analysis?._error ?? null,
     _analysisIsNew:  !validCachedAnalysis && !!analysis?.resumen,
     // No cachear si estamos usando datos en vivo (cambian a diario)
     _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live' && linkedin?._fallbackMonth !== 'live',
@@ -891,29 +927,117 @@ Respondé SOLO con un JSON con esta estructura exacta:
   "nextSteps": ["acción concreta 1", "acción concreta 2", "acción concreta 3"]
 }`
 
+  const tag = `Proyecto "${project?.name}" (${month})`
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error(`[MonthlyReport] ${tag}: ANTHROPIC_API_KEY no configurada — no se puede generar el análisis IA`)
+    return emptyAnalysis('Falta configurar la IA en el servidor (ANTHROPIC_API_KEY). Avisá al equipo técnico.')
+  }
+
   try {
     const message = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 800,
+      max_tokens: 1500,
       messages:   [{ role: 'user', content: prompt }],
     })
 
     logTokens('monthly_report', null, message.usage, workspaceId ?? null)
       .catch(err => console.error('[MonthlyReport] Error al registrar tokens de IA:', err.message))
 
-    const raw       = message.content[0].text.trim()
-    const jsonMatch = raw.match(/\{[\s\S]*\}/)
-    if (jsonMatch) return JSON.parse(jsonMatch[0])
-  } catch (err) {
-    console.error('[MonthlyReport] Error generando análisis IA:', err.message)
-  }
+    const stopReason = message.stop_reason
+    const raw        = (message.content?.[0]?.text ?? '').trim()
 
-  return {
-    resumen:    '',
-    highlights: [],
-    alertas:    [],
-    nextSteps:  [],
+    if (stopReason === 'max_tokens') {
+      console.error(`[MonthlyReport] ${tag}: respuesta IA TRUNCADA por max_tokens (largo recibido: ${raw.length} chars)`)
+    }
+
+    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.error(`[MonthlyReport] ${tag}: la IA no devolvió JSON. stop_reason=${stopReason}. Raw: ${raw.slice(0, 800)}`)
+      return emptyAnalysis(stopReason === 'max_tokens'
+        ? 'La IA quedó sin espacio y devolvió una respuesta truncada. Probá regenerar.'
+        : 'La IA no devolvió un análisis con el formato esperado. Probá regenerar.')
+    }
+
+    let parsed
+    try {
+      parsed = JSON.parse(jsonMatch[0])
+    } catch (parseErr) {
+      console.error(`[MonthlyReport] ${tag}: no se pudo parsear el JSON de la IA. stop_reason=${stopReason}. ${parseErr.message}. Raw: ${raw.slice(0, 800)}`)
+      return emptyAnalysis(stopReason === 'max_tokens'
+        ? 'La respuesta de la IA quedó cortada y no se pudo leer. Probá regenerar.'
+        : `No se pudo interpretar la respuesta de la IA (${parseErr.message}). Probá regenerar.`)
+    }
+
+    if (!parsed?.resumen || !String(parsed.resumen).trim()) {
+      console.error(`[MonthlyReport] ${tag}: la IA devolvió un análisis sin resumen. Parsed: ${JSON.stringify(parsed).slice(0, 400)}`)
+      return emptyAnalysis('La IA devolvió un análisis vacío (sin resumen). Probá regenerar.')
+    }
+
+    return {
+      resumen:    String(parsed.resumen),
+      highlights: Array.isArray(parsed.highlights) ? parsed.highlights : [],
+      alertas:    Array.isArray(parsed.alertas)    ? parsed.alertas    : [],
+      nextSteps:  Array.isArray(parsed.nextSteps)  ? parsed.nextSteps  : [],
+    }
+  } catch (err) {
+    const detail = err.status ? `HTTP ${err.status}` : (err.message || 'error desconocido')
+    console.error(`[MonthlyReport] ${tag}: error llamando a la IA — ${detail}`, err.stack || '')
+    let msg = `No se pudo generar el análisis con IA (${detail}). Probá regenerar.`
+    if (err.status === 429)      msg = 'La IA está saturada o se alcanzó el límite de uso (429). Esperá unos minutos y regenerá.'
+    else if (err.status === 401) msg = 'Error de autenticación con la IA (401). Revisá la API key del servidor.'
+    else if (err.status === 529) msg = 'El servicio de IA está sobrecargado (529). Reintentá en unos minutos.'
+    return emptyAnalysis(msg)
   }
 }
 
-module.exports = { aggregateReportData }
+// Análisis vacío con motivo de falla (se propaga al front como `analysisError`).
+// El `_error` nunca se cachea porque solo se persiste el análisis cuando hay `resumen`.
+function emptyAnalysis(error) {
+  return { resumen: '', highlights: [], alertas: [], nextSteps: [], _error: error }
+}
+
+// ─── Detección de secciones disponibles ───────────────────────────────────────
+// Determina qué secciones tienen datos (o una fuente conectada) para ofrecerlas
+// en el modal de "Generar Informe". Solo queries livianas a la DB — sin APIs
+// externas ni IA. Devuelve un objeto { sectionKey: boolean }.
+async function getAvailableSections(projectId, workspaceId) {
+  const [
+    integrations, project, analyticsSnap, pageSpeed, geoAudit, seoSnap,
+    keyword, cannibal, igSnap, tkSnap, liSnap, metaAdsSnap, googleAdsSnap, competitor,
+  ] = await Promise.all([
+    prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true } }),
+    prisma.analyticsSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.pageSpeedResult.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.geoAudit.findFirst({ where: { projectId, workspaceId, status: 'completed' }, select: { id: true } }),
+    prisma.searchConsoleSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.trackedKeyword.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.cannibalReport.findFirst({ where: { projectId, workspaceId, status: 'completed' }, select: { id: true } }),
+    prisma.instagramSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.tikTokSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.linkedinSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'meta_ads' }, select: { id: true } }),
+    prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'google_ads' }, select: { id: true } }),
+    prisma.competitorAccount.findFirst({ where: { projectId, platform: 'instagram' }, select: { id: true } }),
+  ])
+
+  const t = new Set(integrations.map(i => i.type))
+  return {
+    analytics:       t.has('google_analytics')      || !!analyticsSnap,
+    performance:     !!project?.websiteUrl          || !!pageSpeed,
+    geo:             !!project?.websiteUrl          || !!geoAudit,
+    seo:             t.has('google_search_console') || !!seoSnap,
+    keywords:        t.has('google_search_console') || !!keyword,
+    cannibalization: t.has('google_search_console') || !!cannibal,
+    instagram:       t.has('instagram')             || !!igSnap,
+    tiktok:          t.has('tiktok')                || !!tkSnap,
+    linkedin:        t.has('linkedin')              || !!liSnap,
+    metaAds:         t.has('meta_ads')              || !!metaAdsSnap,
+    googleAds:       t.has('google_ads')            || !!googleAdsSnap,
+    competitors:     !!competitor,
+    tasks:           true,
+  }
+}
+
+module.exports = { aggregateReportData, getAvailableSections }

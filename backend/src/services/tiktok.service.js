@@ -127,6 +127,20 @@ async function fetchTikTokMetrics(accessToken, targetMonth = null) {
 
   const topOfMonth = { topViews, topLikes, topShares, postsThisMonth }
 
+  // ── Top videos del mes (ranking unificado, igual que Instagram) ─────────────
+  // Score = likes + comments + shares. Devuelve hasta 3 ordenados; bestVideo es el #1.
+  function videoScore(v) {
+    return (v.like_count ?? 0) + (v.comment_count ?? 0) + (v.share_count ?? 0)
+  }
+
+  const topVideos = monthVideos
+    .filter(v => v.like_count != null || v.comment_count != null || v.share_count != null)
+    .sort((a, b) => videoScore(b) - videoScore(a))
+    .slice(0, 3)
+    .map(toVideoCard)
+
+  const bestVideo = topVideos[0] ?? null
+
   // ── Últimos 9 videos para grilla ──────────────────────────────────────────
   const recentVideos = videos.slice(0, 9).map(toVideoCard)
 
@@ -147,6 +161,8 @@ async function fetchTikTokMetrics(accessToken, targetMonth = null) {
     engagementRate,
     postsThisMonth,
     topOfMonth,
+    topVideos,
+    bestVideo,
     recentVideos,
   }
 }

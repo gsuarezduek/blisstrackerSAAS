@@ -1,8 +1,25 @@
 const { randomUUID }           = require('crypto')
 const prisma                   = require('../lib/prisma')
-const { aggregateReportData }  = require('../services/monthlyReport.service')
+const { aggregateReportData, getAvailableSections }  = require('../services/monthlyReport.service')
 
 const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+
+// Claves de sección válidas para `enabledSections` (deben coincidir con las del servicio/ReportViewer)
+const SECTION_KEYS = [
+  'analytics', 'performance', 'geo', 'seo', 'keywords', 'cannibalization',
+  'instagram', 'tiktok', 'linkedin', 'metaAds', 'googleAds', 'competitors', 'tasks',
+]
+
+// Normaliza un array de claves de sección recibido del cliente (filtra inválidas)
+function sanitizeSections(arr) {
+  if (!Array.isArray(arr)) return null
+  const clean = arr.filter(k => SECTION_KEYS.includes(k))
+  return clean
+}
+
+function safeParseArr(str) {
+  try { const v = JSON.parse(str); return Array.isArray(v) ? v : null } catch { return null }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -72,10 +89,15 @@ async function getReport(req, res, next) {
       })
     }
 
-    // Pasar cachés si ya existen (evita queries + llamadas a APIs externas en cada carga)
-    const cachedAnalysis = report.analysis   ? safeParseObj(report.analysis)   : null
-    const cachedData     = report.dataCache  ? safeParseObj(report.dataCache)  : null
-    const objectives     = safeParseObj(report.objectives)
+    // Secciones disponibles para ofrecer en el modal de "Generar Informe" (siempre, es liviano)
+    const availableSections = await getAvailableSections(projectId, workspaceId)
+
+    // El informe se considera "generado" una vez que se eligieron secciones.
+    // Compatibilidad: informes previos a esta feature (sin enabledSections) pero con
+    // análisis o caché ya armado también cuentan como generados (secciones = todas).
+    // Si nunca se generó, NO se agregan datos al entrar — se espera el botón "Generar Informe".
+    const enabledSections = report.enabledSections ? safeParseArr(report.enabledSections) : null
+    const isGenerated     = enabledSections !== null || !!report.dataCache || !!report.analysis
 
     // Branding del workspace
     const workspace = await prisma.workspace.findUnique({
@@ -83,36 +105,46 @@ async function getReport(req, res, next) {
       select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, bannerData: true, brandColors: true, brandFonts: true },
     })
 
-    // Agregar todos los datos
-    const data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis, objectives, cachedData)
+    let data = null
+    if (isGenerated) {
+      // Pasar cachés si ya existen (evita queries + llamadas a APIs externas en cada carga)
+      const cachedAnalysis = report.analysis   ? safeParseObj(report.analysis)   : null
+      const cachedData     = report.dataCache  ? safeParseObj(report.dataCache)  : null
+      const objectives     = safeParseObj(report.objectives)
 
-    // Persistir cachés nuevos en DB
-    const dbUpdate = {}
-    if (data._analysisIsNew  && data.analysis)  dbUpdate.analysis  = JSON.stringify(data.analysis)
-    if (data._dataCacheIsNew)                    dbUpdate.dataCache = JSON.stringify({
-      project:        data.project,
-      dataMonth:      data.dataMonth,
-      connectedTypes: data.connectedTypes,
-      sections:       data.sections,
-    })
-    if (Object.keys(dbUpdate).length > 0) {
-      await prisma.monthlyReport.update({ where: { id: report.id }, data: dbUpdate })
+      data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis, objectives, cachedData, enabledSections)
+
+      // Persistir cachés nuevos en DB
+      const dbUpdate = {}
+      if (data._analysisIsNew  && data.analysis)  dbUpdate.analysis  = JSON.stringify(data.analysis)
+      if (data._dataCacheIsNew)                    dbUpdate.dataCache = JSON.stringify({
+        project:        data.project,
+        dataMonth:      data.dataMonth,
+        connectedTypes: data.connectedTypes,
+        sections:       data.sections,
+      })
+      if (Object.keys(dbUpdate).length > 0) {
+        await prisma.monthlyReport.update({ where: { id: report.id }, data: dbUpdate })
+      }
+
+      // No exponer flags internos al cliente
+      delete data._analysisIsNew
+      delete data._dataCacheIsNew
     }
-
-    // No exponer flags internos al cliente
-    delete data._analysisIsNew
-    delete data._dataCacheIsNew
 
     res.json({
       report: {
-        id:         report.id,
-        month:      report.month,
-        token:      report.token,
-        objectives: safeParseObj(report.objectives),
-        notes:      report.notes,
-        hasBanner:  !!report.bannerData,
-        createdAt:  report.createdAt,
+        id:              report.id,
+        month:           report.month,
+        token:           report.token,
+        objectives:      safeParseObj(report.objectives),
+        notes:           report.notes,
+        hasBanner:       !!report.bannerData,
+        createdAt:       report.createdAt,
+        enabledSections,
+        isGenerated,
       },
+      availableSections,
       workspace: workspace ? {
         slug:               workspace.slug,
         name:               workspace.name,
@@ -193,8 +225,10 @@ async function getPublicReport(req, res, next) {
       }),
     ])
 
-    const objectives = safeParseObj(report.objectives)
-    const data = await aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives)
+    const objectives      = safeParseObj(report.objectives)
+    const enabledSections = report.enabledSections ? safeParseArr(report.enabledSections) : null
+    const cachedData      = report.dataCache ? safeParseObj(report.dataCache) : null
+    const data = await aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives, cachedData, enabledSections)
 
     // Si se generó un análisis nuevo también lo guardamos (ej: primera vez que el cliente abre el link)
     if (data._analysisIsNew && data.analysis) {
@@ -322,20 +356,28 @@ async function regenerateReport(req, res, next) {
     // Limpiar análisis cacheado (o crear el registro si no existe)
     let report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month } })
     const userId = req.user?.userId ?? null
+
+    // Secciones a incluir: las del body (modal "Generar Informe") tienen prioridad;
+    // si no se envían, se reutilizan las del informe existente (regeneración simple).
+    const fromBody  = sanitizeSections(req.body?.enabledSections)
+    const existing  = report?.enabledSections ? safeParseArr(report.enabledSections) : null
+    const sectionsToUse = fromBody ?? existing
+    const sectionsJson  = sectionsToUse ? JSON.stringify(sectionsToUse) : null
+
     if (report) {
       await prisma.monthlyReport.update({
         where: { id: report.id },
-        data:  { analysis: null, dataCache: null, generatedById: userId },
+        data:  { analysis: null, dataCache: null, generatedById: userId, ...(sectionsJson != null ? { enabledSections: sectionsJson } : {}) },
       })
     } else {
       report = await prisma.monthlyReport.create({
-        data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}', generatedById: userId },
+        data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}', generatedById: userId, enabledSections: sectionsJson },
       })
     }
 
-    // Re-agregar todos los datos sin caché de análisis (fuerza regeneración con Claude)
+    // Re-agregar los datos de las secciones elegidas sin caché de análisis (fuerza regeneración con Claude)
     const objectives = report ? safeParseObj(report.objectives) : {}
-    const data = await aggregateReportData(projectId, workspaceId, month, null, objectives)
+    const data = await aggregateReportData(projectId, workspaceId, month, null, objectives, null, sectionsToUse)
 
     // Guardar nuevo análisis y caché de datos en DB
     const regenUpdate = {}
@@ -357,12 +399,15 @@ async function regenerateReport(req, res, next) {
 
     res.json({
       report: {
-        id:         updatedReport.id,
-        month:      updatedReport.month,
-        token:      updatedReport.token,
-        objectives: safeParseObj(updatedReport.objectives),
-        notes:      updatedReport.notes,
-        createdAt:  updatedReport.createdAt,
+        id:              updatedReport.id,
+        month:           updatedReport.month,
+        token:           updatedReport.token,
+        objectives:      safeParseObj(updatedReport.objectives),
+        notes:           updatedReport.notes,
+        hasBanner:       !!updatedReport.bannerData,
+        createdAt:       updatedReport.createdAt,
+        enabledSections: updatedReport.enabledSections ? safeParseArr(updatedReport.enabledSections) : null,
+        isGenerated:     updatedReport.enabledSections != null,
       },
       data,
     })
