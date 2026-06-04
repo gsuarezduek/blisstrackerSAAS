@@ -164,6 +164,26 @@ async function getReport(req, res, next) {
 }
 
 /**
+ * GET /api/marketing/projects/:id/report-sections
+ * Devuelve el estado de cada sección (disponible + estado de integración) sin
+ * agregar el informe. Liviano — para refrescar el modal de "Generar Informe".
+ */
+async function getSectionsStatus(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const availableSections = await getAvailableSections(projectId, workspaceId)
+    res.json({ availableSections })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * PATCH /api/marketing/projects/:id/reports/:month
  * Actualiza objetivos y/o notas del informe.
  */
@@ -416,4 +436,4 @@ async function regenerateReport(req, res, next) {
   }
 }
 
-module.exports = { listReports, getReport, updateReport, getPublicReport, regenerateReport, uploadReportBanner, deleteReportBanner }
+module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, regenerateReport, uploadReportBanner, deleteReportBanner }

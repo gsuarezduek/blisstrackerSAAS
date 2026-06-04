@@ -998,15 +998,22 @@ function emptyAnalysis(error) {
 }
 
 // ─── Detección de secciones disponibles ───────────────────────────────────────
-// Determina qué secciones tienen datos (o una fuente conectada) para ofrecerlas
-// en el modal de "Generar Informe". Solo queries livianas a la DB — sin APIs
-// externas ni IA. Devuelve un objeto { sectionKey: boolean }.
+// Determina, por sección, si hay datos/fuente disponible y el estado de su
+// integración (para avisar en el modal de "Generar Informe" si algo está
+// desconectado y conviene reconectarlo antes de generar). Solo queries livianas
+// a la DB — sin APIs externas ni IA.
+//
+// Devuelve { sectionKey: { available: bool, integration: 'active'|'expired'|'missing'|null } }
+//   - integration null    → la sección no depende de una integración (GEO, performance, competidores, tareas)
+//   - integration 'active' → integración conectada y vigente
+//   - integration 'expired' → existe la integración pero su token se cayó (hay que reconectar)
+//   - integration 'missing' → no hay integración, solo datos históricos guardados
 async function getAvailableSections(projectId, workspaceId) {
   const [
     integrations, project, analyticsSnap, pageSpeed, geoAudit, seoSnap,
     keyword, cannibal, igSnap, tkSnap, liSnap, metaAdsSnap, googleAdsSnap, competitor,
   ] = await Promise.all([
-    prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true } }),
+    prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true, status: true } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true } }),
     prisma.analyticsSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.pageSpeedResult.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
@@ -1022,21 +1029,31 @@ async function getAvailableSections(projectId, workspaceId) {
     prisma.competitorAccount.findFirst({ where: { projectId, platform: 'instagram' }, select: { id: true } }),
   ])
 
-  const t = new Set(integrations.map(i => i.type))
+  const intgByType = new Map(integrations.map(i => [i.type, i.status]))
+
+  // Arma el objeto de estado de una sección. `type` = tipo de integración del que depende (o null).
+  function build(available, type) {
+    if (!available) return { available: false, integration: null }
+    if (!type)      return { available: true,  integration: null }
+    if (!intgByType.has(type)) return { available: true, integration: 'missing' }
+    return { available: true, integration: intgByType.get(type) === 'active' ? 'active' : 'expired' }
+  }
+
+  const has = (type) => intgByType.has(type)
   return {
-    analytics:       t.has('google_analytics')      || !!analyticsSnap,
-    performance:     !!project?.websiteUrl          || !!pageSpeed,
-    geo:             !!project?.websiteUrl          || !!geoAudit,
-    seo:             t.has('google_search_console') || !!seoSnap,
-    keywords:        t.has('google_search_console') || !!keyword,
-    cannibalization: t.has('google_search_console') || !!cannibal,
-    instagram:       t.has('instagram')             || !!igSnap,
-    tiktok:          t.has('tiktok')                || !!tkSnap,
-    linkedin:        t.has('linkedin')              || !!liSnap,
-    metaAds:         t.has('meta_ads')              || !!metaAdsSnap,
-    googleAds:       t.has('google_ads')            || !!googleAdsSnap,
-    competitors:     !!competitor,
-    tasks:           true,
+    analytics:       build(has('google_analytics')      || !!analyticsSnap, 'google_analytics'),
+    performance:     build(!!project?.websiteUrl        || !!pageSpeed,     null),
+    geo:             build(!!project?.websiteUrl        || !!geoAudit,      null),
+    seo:             build(has('google_search_console') || !!seoSnap,       'google_search_console'),
+    keywords:        build(has('google_search_console') || !!keyword,       'google_search_console'),
+    cannibalization: build(has('google_search_console') || !!cannibal,      'google_search_console'),
+    instagram:       build(has('instagram')             || !!igSnap,        'instagram'),
+    tiktok:          build(has('tiktok')                || !!tkSnap,        'tiktok'),
+    linkedin:        build(has('linkedin')              || !!liSnap,        'linkedin'),
+    metaAds:         build(has('meta_ads')              || !!metaAdsSnap,   'meta_ads'),
+    googleAds:       build(has('google_ads')            || !!googleAdsSnap, 'google_ads'),
+    competitors:     build(!!competitor, null),
+    tasks:           build(true, null),
   }
 }
 

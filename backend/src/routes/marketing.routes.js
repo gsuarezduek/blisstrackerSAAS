@@ -113,6 +113,7 @@ router.get('/projects/:id/pagespeed/:resultId',   pageSpeed.getResult)
 
 // Informes mensuales
 router.get('/projects/:id/reports',                                            monthlyReport.listReports)
+router.get('/projects/:id/report-sections',                                    monthlyReport.getSectionsStatus)
 router.get('/projects/:id/reports/:month',                                     monthlyReport.getReport)
 router.patch('/projects/:id/reports/:month',                                   monthlyReport.updateReport)
 router.post('/projects/:id/reports/:month/regenerate',                         monthlyReport.regenerateReport)

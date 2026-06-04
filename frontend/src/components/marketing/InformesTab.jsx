@@ -120,14 +120,41 @@ const SECTION_CATALOG = [
   { key: 'tasks',           label: 'Trabajo realizado',     icon: '✅' },
 ]
 
-function GenerateModal({ availableSections, initialSelected, onGenerate, onClose, generating }) {
+// Chip de estado de conexión de la integración de una sección
+function IntegrationChip({ integration }) {
+  if (!integration) return null
+  if (integration === 'active') {
+    return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">● Conectado</span>
+  }
+  if (integration === 'expired') {
+    return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">● Desconectado</span>
+  }
+  // missing: no hay integración pero existen datos históricos guardados
+  return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Datos guardados</span>
+}
+
+function GenerateModal({ projectId, availableSections: initialAvailable, initialSelected, onGenerate, onClose, generating }) {
+  const [available, setAvailable]   = useState(initialAvailable)
+  const [refreshing, setRefreshing] = useState(false)
+
+  // Refresca el estado de conexión al abrir (por si se reconectó algo en otra pestaña)
+  async function refreshStatus() {
+    setRefreshing(true)
+    try {
+      const res = await api.get(`/marketing/projects/${projectId}/report-sections`)
+      setAvailable(res.data.availableSections)
+    } catch { /* mantenemos el estado inicial */ }
+    finally { setRefreshing(false) }
+  }
+  useEffect(() => { refreshStatus() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
   // Solo se ofrecen las secciones con datos/fuente disponible
-  const offered = SECTION_CATALOG.filter(s => availableSections?.[s.key])
+  const offered = SECTION_CATALOG.filter(s => available?.[s.key]?.available)
 
   const [selected, setSelected] = useState(() => {
     const base = Array.isArray(initialSelected)
-      ? offered.filter(s => initialSelected.includes(s.key)).map(s => s.key)
-      : offered.map(s => s.key)   // por defecto: todas las disponibles
+      ? SECTION_CATALOG.filter(s => initialSelected.includes(s.key)).map(s => s.key)
+      : SECTION_CATALOG.filter(s => initialAvailable?.[s.key]?.available).map(s => s.key)  // por defecto: todas las disponibles
     return new Set(base)
   })
 
@@ -144,6 +171,9 @@ function GenerateModal({ availableSections, initialSelected, onGenerate, onClose
     setSelected(allChecked ? new Set() : new Set(offered.map(s => s.key)))
   }
 
+  // Secciones seleccionadas cuya integración está caída → aviso para reconectar
+  const expiredSelected = offered.filter(s => selected.has(s.key) && available?.[s.key]?.integration === 'expired')
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col">
@@ -152,7 +182,7 @@ function GenerateModal({ availableSections, initialSelected, onGenerate, onClose
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
         </div>
 
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
           Elegí qué secciones querés incluir. Solo se muestran las que tienen datos o una fuente conectada. Las que dejes sin marcar no se generan ni aparecen en el link del cliente.
         </p>
 
@@ -163,29 +193,48 @@ function GenerateModal({ availableSections, initialSelected, onGenerate, onClose
           </div>
         ) : (
           <>
-            <button
-              onClick={toggleAll}
-              className="self-start mb-2 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline"
-            >
-              {allChecked ? 'Desmarcar todas' : 'Marcar todas'}
-            </button>
+            {expiredSelected.length > 0 && (
+              <div className="mb-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-700 dark:text-red-400">
+                ⚠️ Hay secciones desconectadas: <strong>{expiredSelected.map(s => s.label).join(', ')}</strong>. Reconectalas desde su pestaña en Marketing para incluir datos actualizados (sin reconectar, el informe usa los últimos datos guardados o queda incompleto).
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mb-2">
+              <button
+                onClick={toggleAll}
+                className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                {allChecked ? 'Desmarcar todas' : 'Marcar todas'}
+              </button>
+              <button
+                onClick={refreshStatus}
+                disabled={refreshing}
+                className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-50"
+              >
+                {refreshing ? 'Actualizando…' : '🔄 Actualizar estado'}
+              </button>
+            </div>
 
             <div className="space-y-1 overflow-y-auto pr-1">
-              {offered.map(s => (
-                <label
-                  key={s.key}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(s.key)}
-                    onChange={() => toggle(s.key)}
-                    className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500"
-                  />
-                  <span className="text-base leading-none">{s.icon}</span>
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{s.label}</span>
-                </label>
-              ))}
+              {offered.map(s => {
+                const integration = available?.[s.key]?.integration
+                return (
+                  <label
+                    key={s.key}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(s.key)}
+                      onChange={() => toggle(s.key)}
+                      className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="text-base leading-none">{s.icon}</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0">{s.label}</span>
+                    <IntegrationChip integration={integration} />
+                  </label>
+                )
+              })}
             </div>
           </>
         )}
@@ -554,6 +603,7 @@ export default function InformesTab({ projectId, onSelectProject }) {
       {/* ── Modal de generación (selección de secciones) ── */}
       {showGenModal && (
         <GenerateModal
+          projectId={projectId}
           availableSections={availableSections}
           initialSelected={reportMeta?.enabledSections ?? null}
           onGenerate={handleGenerate}
