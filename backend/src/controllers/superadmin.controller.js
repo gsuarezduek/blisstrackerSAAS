@@ -157,6 +157,43 @@ async function updateWorkspaceStatus(req, res, next) {
 }
 
 /**
+ * PATCH /api/superadmin/workspaces/:id/billing-exempt
+ * Marcar/desmarcar un workspace como exento de billing.
+ * Body: { billingExempt: boolean }
+ *
+ * Un workspace exento nunca es tocado por el cron de reconciliación de tiers
+ * (billingTier.service) — queda fuera del ciclo trial→past_due de forma
+ * permanente. Al activar la exención forzamos status='active' para que el
+ * cambio tenga efecto inmediato (si no, un workspace en past_due quedaría
+ * exento pero seguiría mostrándose como vencido).
+ */
+async function updateWorkspaceBillingExempt(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    const { billingExempt } = req.body
+    if (typeof billingExempt !== 'boolean') {
+      return res.status(400).json({ error: 'billingExempt debe ser boolean' })
+    }
+
+    const data = { billingExempt }
+    // Al eximir, dejarlo activo de inmediato (salvo suspensiones/cancelaciones manuales).
+    if (billingExempt) {
+      const current = await prisma.workspace.findUnique({ where: { id }, select: { status: true } })
+      if (current && current.status !== 'suspended' && current.status !== 'cancelled') {
+        data.status = 'active'
+      }
+    }
+
+    const workspace = await prisma.workspace.update({
+      where: { id },
+      data,
+      select: { id: true, name: true, status: true, billingExempt: true },
+    })
+    res.json(workspace)
+  } catch (err) { next(err) }
+}
+
+/**
  * POST /api/superadmin/impersonate
  * Genera un JWT para entrar a un workspace como su owner/admin.
  * Body: { workspaceId }
@@ -874,4 +911,4 @@ async function getMetrics(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, toggleUserDailyInsight, getConversionFunnel, getMetrics }
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, toggleUserDailyInsight, getConversionFunnel, getMetrics }

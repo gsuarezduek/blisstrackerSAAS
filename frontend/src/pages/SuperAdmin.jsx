@@ -61,6 +61,7 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
   const [impersonating, setImpersonating] = useState(false)
   const [tokenLimit,    setTokenLimit]    = useState('')
   const [savingLimit,   setSavingLimit]   = useState(false)
+  const [savingExempt,  setSavingExempt]  = useState(false)
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
 
   useEffect(() => {
@@ -83,6 +84,19 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
     } catch (err) {
       alert(err.response?.data?.error || 'Error al guardar')
     } finally { setSavingLimit(false) }
+  }
+
+  async function handleToggleExempt() {
+    const next = !detail?.billingExempt
+    if (next && !confirm('Eximir este workspace de billing. Quedará activo de forma permanente y el cron de free tier nunca lo pasará a vencido. ¿Continuar?')) return
+    setSavingExempt(true)
+    try {
+      const { data } = await api.patch(`/superadmin/workspaces/${workspace.id}/billing-exempt`, { billingExempt: next })
+      setDetail(prev => ({ ...prev, billingExempt: data.billingExempt, status: data.status }))
+      if (data.status !== workspace.status) onStatusChange(workspace.id, data.status)
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al guardar')
+    } finally { setSavingExempt(false) }
   }
 
   async function handleStatusChange() {
@@ -157,6 +171,15 @@ function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                 {savingLimit ? '...' : 'Guardar'}
               </button>
             </div>
+            <button onClick={handleToggleExempt} disabled={savingExempt || loading}
+              title="Un workspace exento queda activo de forma permanente y nunca es marcado como vencido por el cron de free tier."
+              className={`px-3 py-2 text-sm font-medium rounded-xl transition-colors disabled:opacity-40 ${
+                detail?.billingExempt
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
+              }`}>
+              {savingExempt ? '...' : detail?.billingExempt ? '✓ Exento de billing' : 'Eximir de billing'}
+            </button>
           </div>
 
           {loading ? (
