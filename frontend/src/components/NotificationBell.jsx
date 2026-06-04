@@ -3,14 +3,18 @@ import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 
+// Las completadas no cuentan como "destacadas": no suman al badge ni a los
+// contadores de los pills. Van al final del listado y del array de filtros.
+const MUTED_TYPES = ['COMPLETED']
+
 const FILTERS = [
-  { key: 'all',              label: 'Todas',       types: null },
-  { key: 'TASK_MENTION',     label: '@',           types: ['TASK_MENTION'] },
-  { key: 'TASK_COMMENT',     label: '💬',          types: ['TASK_COMMENT'] },
-  { key: 'BLOCKED',          label: '🔒',          types: ['BLOCKED'] },
-  { key: 'COMPLETED',        label: '✓',           types: ['COMPLETED'] },
-  { key: 'ADDED_TO_PROJECT', label: '＋',          types: ['ADDED_TO_PROJECT'] },
-  { key: 'VACATION',         label: '🏖️',          types: ['VACATION_REQUEST', 'VACATION_REVIEWED'] },
+  { key: 'all',              label: 'Todas',  title: 'Todas',                    types: null },
+  { key: 'TASK_MENTION',     label: '@',      title: 'Asignaciones y menciones', types: ['TASK_MENTION'] },
+  { key: 'TASK_COMMENT',     label: '💬',     title: 'Comentarios',              types: ['TASK_COMMENT'] },
+  { key: 'BLOCKED',          label: '🔒',     title: 'Bloqueos',                 types: ['BLOCKED'] },
+  { key: 'ADDED_TO_PROJECT', label: '＋',     title: 'Agregado a proyecto',      types: ['ADDED_TO_PROJECT'] },
+  { key: 'VACATION',         label: '🏖️',     title: 'Licencias',                types: ['VACATION_REQUEST', 'VACATION_REVIEWED'] },
+  { key: 'COMPLETED',        label: '✓',      title: 'Completadas',              types: ['COMPLETED'] },
 ]
 
 function timeAgo(dateStr) {
@@ -27,18 +31,28 @@ export default function NotificationBell() {
   const [activeFilter,  setActiveFilter]  = useState('all')
   const containerRef = useRef(null)
 
-  const unreadCount = notifications.filter(n => !n.read).length
+  // El badge destacado ignora las completadas (no son prioritarias)
+  const unreadCount = notifications.filter(n => !n.read && !MUTED_TYPES.includes(n.type)).length
+  // Para decidir si marcar todo como leído al abrir, sí contamos todo
+  const anyUnread = notifications.some(n => !n.read)
 
   const filtered = useMemo(() => {
     const f = FILTERS.find(f => f.key === activeFilter)
-    if (!f?.types) return notifications
-    return notifications.filter(n => f.types.includes(n.type))
+    const list = !f?.types ? notifications : notifications.filter(n => f.types.includes(n.type))
+    // En la vista "Todas", las completadas van al final (el backend ya ordena
+    // por fecha desc; sort es estable, así que se preserva ese orden por grupo)
+    if (!f?.types) {
+      return [...list].sort(
+        (a, b) => (MUTED_TYPES.includes(a.type) ? 1 : 0) - (MUTED_TYPES.includes(b.type) ? 1 : 0)
+      )
+    }
+    return list
   }, [notifications, activeFilter])
 
   const unreadByType = useMemo(() => {
     const counts = {}
     for (const f of FILTERS) {
-      if (!f.types) continue
+      if (!f.types || f.types.every(t => MUTED_TYPES.includes(t))) continue
       counts[f.key] = notifications.filter(n => !n.read && f.types.includes(n.type)).length
     }
     return counts
@@ -77,7 +91,7 @@ export default function NotificationBell() {
     if (wasOpen) setActiveFilter('all')
 
     // Mark all as read when opening
-    if (!wasOpen && unreadCount > 0) {
+    if (!wasOpen && anyUnread) {
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       try { await api.post('/notifications/read-all') } catch {}
     }
@@ -116,19 +130,23 @@ export default function NotificationBell() {
             {/* Filter pills */}
             <div className="flex gap-1 flex-wrap">
               {FILTERS.map(f => {
-                const badge = f.types ? unreadByType[f.key] : 0
+                const badge = unreadByType[f.key] ?? 0
                 const isActive = activeFilter === f.key
+                const showTitle = isActive && f.key !== 'all'
                 return (
                   <button
                     key={f.key}
                     onClick={() => setActiveFilter(f.key)}
-                    className={`relative text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                    title={f.title}
+                    aria-label={f.title}
+                    className={`relative text-xs px-2.5 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1 ${
                       isActive
                         ? 'bg-primary-600 text-white'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
-                    {f.label}
+                    <span>{f.label}</span>
+                    {showTitle && <span>{f.title}</span>}
                     {badge > 0 && (
                       <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none">
                         {badge > 9 ? '9+' : badge}
@@ -155,8 +173,11 @@ export default function NotificationBell() {
                 const isComment      = n.type === 'TASK_COMMENT'
                 const isMention      = n.type === 'TASK_MENTION'
                 const isVacation     = n.type === 'VACATION_REQUEST' || n.type === 'VACATION_REVIEWED'
+                const isCompleted    = n.type === 'COMPLETED'
 
-                const bgClass = isBlocked
+                const bgClass = isCompleted
+                  ? 'bg-gray-50 dark:bg-gray-800/60'
+                  : isBlocked
                   ? (!n.read ? 'bg-red-100 dark:bg-red-900/40'      : 'bg-red-50 dark:bg-red-900/20')
                   : isAddedProject
                     ? (!n.read ? 'bg-green-100 dark:bg-green-900/40' : 'bg-green-50 dark:bg-green-900/20')
@@ -169,7 +190,9 @@ export default function NotificationBell() {
                           : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
 
                 const dotClass = isBlocked ? 'bg-red-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : isMention ? 'bg-purple-500' : isVacation ? 'bg-amber-500' : 'bg-primary-500'
-                const textClass = isBlocked
+                const textClass = isCompleted
+                  ? 'text-gray-500 dark:text-gray-400'
+                  : isBlocked
                   ? 'text-red-800 dark:text-red-200'
                   : isAddedProject
                     ? 'text-green-800 dark:text-green-200'
@@ -211,6 +234,9 @@ export default function NotificationBell() {
                         )}
                         {isVacation && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🏖</span>
+                        )}
+                        {isCompleted && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-gray-400 dark:bg-gray-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">✓</span>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
