@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import ReportViewer from './ReportViewer'
+import ObjectivesManager from './ObjectivesManager'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -29,87 +30,16 @@ function monthLabel(month) {
   return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 }
 
-// ─── Modal de objetivos ───────────────────────────────────────────────────────
-
-const OBJECTIVE_FIELDS = [
-  { key: 'sessions',      label: 'Sesiones web',          placeholder: '20000' },
-  { key: 'newUsers',      label: 'Usuarios nuevos',       placeholder: '8000'  },
-  { key: 'conversions',   label: 'Conversiones',          placeholder: '150'   },
-  { key: 'followersIg',   label: 'Seguidores Instagram',  placeholder: '15000' },
-  { key: 'engagementIg',  label: 'Engagement IG (%)',     placeholder: '3.5'   },
-  { key: 'followersTk',   label: 'Seguidores TikTok',     placeholder: '5000'  },
-]
-
-function ObjectivesModal({ objectives, onSave, onClose, saving }) {
-  const [draft, setDraft] = useState(
-    OBJECTIVE_FIELDS.reduce((acc, f) => ({
-      ...acc,
-      [f.key]: objectives[f.key] != null ? String(objectives[f.key]) : '',
-    }), {})
-  )
-
-  function handleSave() {
-    const parsed = {}
-    OBJECTIVE_FIELDS.forEach(f => {
-      const v = parseFloat(draft[f.key])
-      if (!isNaN(v) && v > 0) parsed[f.key] = v
-    })
-    onSave(parsed)
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">🎯 Objetivos del mes</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
-        </div>
-
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-          Definí las metas para este mes. Solo se muestran las métricas con datos disponibles.
-        </p>
-
-        <div className="space-y-3">
-          {OBJECTIVE_FIELDS.map(f => (
-            <div key={f.key} className="flex items-center gap-3">
-              <label className="text-sm text-gray-700 dark:text-gray-300 w-44 shrink-0">{f.label}</label>
-              <input
-                type="number"
-                value={draft[f.key]}
-                onChange={e => setDraft(d => ({ ...d, [f.key]: e.target.value }))}
-                placeholder={f.placeholder}
-                className="flex-1 px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-          ))}
-        </div>
-
-        <div className="flex gap-2 mt-6">
-          <button onClick={onClose} className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Guardando...' : 'Guardar objetivos'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Modal de generación (selección de secciones) ──────────────────────────────
 
 // Catálogo de secciones (las claves coinciden con sections del backend / ReportViewer)
 const SECTION_CATALOG = [
+  { key: 'objectives',      label: 'Objetivos',             icon: '🎯' },
   { key: 'analytics',       label: 'Analítica web (GA4)',  icon: '📊' },
   { key: 'performance',     label: 'Performance web',       icon: '⚡' },
   { key: 'geo',             label: 'Presencia en IA (GEO)', icon: '🤖' },
   { key: 'seo',             label: 'SEO / Search Console',  icon: '🔍' },
-  { key: 'keywords',        label: 'Keywords',              icon: '🎯' },
+  { key: 'keywords',        label: 'Keywords',              icon: '🔑' },
   { key: 'cannibalization', label: 'Canibalización SEO',    icon: '⚔️' },
   { key: 'instagram',       label: 'Instagram',             icon: '📸' },
   { key: 'tiktok',          label: 'TikTok',                icon: '🎵' },
@@ -373,7 +303,6 @@ export default function InformesTab({ projectId, onSelectProject }) {
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState(null)
   const [showObjModal, setShowObjModal] = useState(false)
-  const [savingObjs,  setSavingObjs]  = useState(false)
   const [copied,        setCopied]        = useState(false)
   const [retryKey,      setRetryKey]      = useState(0)
   const [availableSections, setAvailableSections] = useState(null)
@@ -418,18 +347,6 @@ export default function InformesTab({ projectId, onSelectProject }) {
     }
   }
 
-  async function handleSaveObjectives(objectives) {
-    setSavingObjs(true)
-    try {
-      const res = await api.patch(`/marketing/projects/${projectId}/reports/${month}`, { objectives })
-      setReportMeta(prev => ({ ...prev, objectives: res.data.report.objectives }))
-      setShowObjModal(false)
-    } catch (err) {
-      alert(err.response?.data?.error || 'Error al guardar objetivos')
-    } finally {
-      setSavingObjs(false)
-    }
-  }
 
   async function handleSaveAnalysis(updatedAnalysis) {
     await api.patch(`/marketing/projects/${projectId}/reports/${month}`, { analysis: updatedAnalysis })
@@ -558,7 +475,6 @@ export default function InformesTab({ projectId, onSelectProject }) {
       {!loading && !error && reportData && (
         <ReportViewer
           data={reportData}
-          objectives={reportMeta?.objectives ?? {}}
           isPublic={false}
           onSaveAnalysis={handleSaveAnalysis}
           onBannerUpload={handleBannerUpload}
@@ -590,13 +506,11 @@ export default function InformesTab({ projectId, onSelectProject }) {
         </div>
       )}
 
-      {/* ── Modal de objetivos ── */}
+      {/* ── Gestor de objetivos (CRUD, nivel proyecto) ── */}
       {showObjModal && (
-        <ObjectivesModal
-          objectives={reportMeta?.objectives ?? {}}
-          onSave={handleSaveObjectives}
+        <ObjectivesManager
+          projectId={projectId}
           onClose={() => setShowObjModal(false)}
-          saving={savingObjs}
         />
       )}
 

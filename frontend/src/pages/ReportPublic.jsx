@@ -59,7 +59,6 @@ export default function ReportPublic() {
       <div className="max-w-3xl mx-auto">
         <ReportViewer
           data={data}
-          objectives={report?.objectives ?? {}}
           isPublic={true}
           report={report}
           workspace={workspace}

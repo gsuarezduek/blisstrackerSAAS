@@ -333,71 +333,137 @@ function BestTikTokVideo({ video }) {
 }
 
 // Tabla de objetivos vs real
-function ObjectivesTable({ objectives, sections }) {
-  const rows = []
+// Formatea un valor de objetivo según la unidad
+function fmtObjVal(value, unit) {
+  if (value == null) return '—'
+  if (unit === '$')   return `$${fmt(value)}`
+  if (unit === '%')   return `${value}%`
+  if (unit === 'pos') return `#${value}`
+  return fmt(value)
+}
 
-  if (objectives.sessions != null && sections.analytics) {
-    const real = sections.analytics.sessions ?? 0
-    const pct  = Math.round((real / objectives.sessions) * 100)
-    rows.push({ label: 'Sesiones web', target: fmt(objectives.sessions), real: fmt(real), pct })
-  }
-  if (objectives.newUsers != null && sections.analytics) {
-    const real = sections.analytics.newUsers ?? 0
-    const pct  = Math.round((real / objectives.newUsers) * 100)
-    rows.push({ label: 'Usuarios nuevos', target: fmt(objectives.newUsers), real: fmt(real), pct })
-  }
-  if (objectives.followersIg != null && sections.instagram) {
-    const real = sections.instagram.followersCount ?? 0
-    const pct  = Math.round((real / objectives.followersIg) * 100)
-    rows.push({ label: 'Seguidores Instagram', target: fmt(objectives.followersIg), real: fmt(real), pct })
-  }
-  if (objectives.followersTk != null && sections.tiktok) {
-    const real = sections.tiktok.followersCount ?? 0
-    const pct  = Math.round((real / objectives.followersTk) * 100)
-    rows.push({ label: 'Seguidores TikTok', target: fmt(objectives.followersTk), real: fmt(real), pct })
-  }
-  if (objectives.engagementIg != null && sections.instagram) {
-    const real = sections.instagram.engagementRate ?? 0
-    const pct  = Math.round((real / objectives.engagementIg) * 100)
-    rows.push({ label: 'Engagement Instagram', target: `${objectives.engagementIg}%`, real: `${real?.toFixed(2) ?? '—'}%`, pct })
-  }
-  if (objectives.conversions != null && sections.analytics) {
-    const real = sections.analytics.conversions ?? 0
-    const pct  = Math.round((real / objectives.conversions) * 100)
-    rows.push({ label: 'Conversiones', target: fmt(objectives.conversions), real: fmt(real), pct })
-  }
+// Mensajes y colores por estado de un objetivo
+const OBJ_STATUS = {
+  ok:           { label: 'Cumplido',     bar: 'bg-green-500',  chip: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  partial:      { label: 'En camino',    bar: 'bg-yellow-500', chip: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
+  fail:         { label: 'Por debajo',   bar: 'bg-red-500',    chip: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
+  info:         { label: 'Informativo',  bar: 'bg-blue-500',   chip: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  no_data:      { label: 'Sin datos',    bar: 'bg-gray-300',   chip: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
+  orphaned:     { label: 'Sin referencia', bar: 'bg-gray-300', chip: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
+  disconnected: { label: 'Desconectado', bar: 'bg-amber-400',  chip: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+}
 
-  if (rows.length === 0) return null
+// Head-to-head propio vs competidor (objetivo "superar competidor")
+function CompetitorHeadToHead({ h2h }) {
+  if (!h2h) return null
+  return (
+    <div className="mt-2 rounded-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400">
+            <th className="text-left py-1.5 px-2 font-medium">Métrica</th>
+            <th className="text-right py-1.5 px-2 font-medium">{h2h.ownLabel}</th>
+            <th className="text-right py-1.5 px-2 font-medium">{h2h.competitorLabel}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {h2h.metrics.map((m, i) => (
+            <tr key={i} className="border-t border-gray-50 dark:border-gray-700/50">
+              <td className="py-1.5 px-2 text-gray-600 dark:text-gray-300">{m.label}</td>
+              <td className={`py-1.5 px-2 text-right font-semibold ${m.won === true ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                {m.own != null ? `${m.own}${m.unit}` : '—'}{m.won === true && ' 🏆'}
+              </td>
+              <td className={`py-1.5 px-2 text-right ${m.won === false ? 'text-green-600 dark:text-green-400 font-semibold' : 'text-gray-500 dark:text-gray-400'}`}>
+                {m.competitor != null ? `${m.competitor}${m.unit}` : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ObjectiveCard({ obj }) {
+  const st = OBJ_STATUS[obj.status] || OBJ_STATUS.no_data
+  const pct = obj.pct
+  const barPct = pct == null ? 0 : Math.max(0, Math.min(100, pct))
+  const isCompetitor = obj.metric === 'competidores'
+  const bd = obj.detail?.breakdown
+  const partial = obj.detail?.monthsExpected > 1 && obj.detail?.monthsWithData != null && obj.detail.monthsWithData < obj.detail.monthsExpected
 
   return (
-    <SectionCard title="Objetivos del mes" icon="🎯">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 dark:border-gray-700">
-              <th className="text-left pb-2 text-gray-500 dark:text-gray-400 font-medium">Métrica</th>
-              <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Objetivo</th>
-              <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Real</th>
-              <th className="text-right pb-2 text-gray-500 dark:text-gray-400 font-medium">Cumplimiento</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
-                <td className="py-2.5 text-gray-700 dark:text-gray-300">{row.label}</td>
-                <td className="py-2.5 text-right text-gray-500 dark:text-gray-400">{row.target}</td>
-                <td className="py-2.5 text-right font-semibold text-gray-900 dark:text-white">{row.real}</td>
-                <td className="py-2.5 text-right">
-                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
-                    row.pct >= 90 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                    : row.pct >= 70 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                  }`}>{row.pct}%</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="rounded-xl border border-gray-100 dark:border-gray-700 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{obj.label}</p>
+          <p className="text-[11px] text-gray-400">{obj.periodLabel}</p>
+        </div>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${st.chip}`}>
+          {pct != null ? `${pct}%` : st.label}
+        </span>
+      </div>
+
+      {/* Estados sin comparación numérica */}
+      {(obj.status === 'no_data' || obj.status === 'orphaned' || obj.status === 'disconnected') && !isCompetitor && (
+        <p className="text-xs text-gray-400 mt-2">
+          {obj.status === 'orphaned'     && 'La keyword o competidor asociado fue eliminado. Editá el objetivo.'}
+          {obj.status === 'disconnected' && 'Sin datos ni conexión activa para este período.'}
+          {obj.status === 'no_data'      && 'Todavía no hay datos para comparar en este período.'}
+        </p>
+      )}
+
+      {/* Comparación numérica estándar */}
+      {!isCompetitor && obj.actual != null && (
+        <>
+          <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mt-2 mb-1">
+            <span>Real: <strong className="text-gray-800 dark:text-gray-200">{fmtObjVal(obj.actual, obj.unit)}</strong></span>
+            <span>{obj.status === 'info' ? 'Presupuesto' : 'Objetivo'}: {fmtObjVal(obj.target, obj.unit)}</span>
+          </div>
+          {obj.status !== 'info' && (
+            <div className="h-1.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+              <div className={`h-full ${st.bar}`} style={{ width: `${barPct}%` }} />
+            </div>
+          )}
+          {obj.status === 'info' && obj.detail?.delta != null && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {obj.detail.delta >= 0 ? `Se invirtió $${fmt(Math.abs(obj.detail.delta))} más que lo presupuestado` : `Se invirtió $${fmt(Math.abs(obj.detail.delta))} menos que lo presupuestado`}
+            </p>
+          )}
+          {partial && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">Datos parciales ({obj.detail.monthsWithData} de {obj.detail.monthsExpected} meses)</p>
+          )}
+          {bd && (
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[11px] text-gray-400">
+              {bd.filter(n => n.value != null).map((n, i) => (
+                <span key={i} className="capitalize">{n.network}: {n.approx ? '≈' : ''}{fmt(n.value)}</span>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Performance: aclaración de que es el último valor global */}
+      {obj.metric === 'performance' && obj.detail?.latestGlobal && obj.actual != null && (
+        <p className="text-[11px] text-gray-400 mt-1">Último análisis disponible (PageSpeed desktop)</p>
+      )}
+
+      {/* Competidor: head-to-head siempre visible */}
+      {isCompetitor && (
+        obj.detail?.headToHead
+          ? <CompetitorHeadToHead h2h={obj.detail.headToHead} />
+          : <p className="text-xs text-gray-400 mt-2">{obj.status === 'orphaned' ? 'El competidor fue eliminado. Editá el objetivo.' : 'Todavía no hay datos para comparar contra el competidor.'}</p>
+      )}
+    </div>
+  )
+}
+
+function ObjectivesResults({ objectives }) {
+  if (!objectives || objectives.length === 0) return null
+  return (
+    <SectionCard title="Objetivos" icon="🎯">
+      <div className="grid sm:grid-cols-2 gap-3">
+        {objectives.map(o => <ObjectiveCard key={o.id} obj={o} />)}
       </div>
     </SectionCard>
   )
@@ -446,7 +512,7 @@ function CompetitorComparison({ data }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function ReportViewer({ data, objectives = {}, isPublic = false, onSaveAnalysis, onBannerUpload, onBannerDelete, report = null, workspace = null }) {
+export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onBannerUpload, onBannerDelete, report = null, workspace = null }) {
   const [editingResumen,   setEditingResumen]   = useState(false)
   const [resumenDraft,     setResumenDraft]     = useState('')
   const [savingResumen,    setSavingResumen]    = useState(false)
@@ -469,6 +535,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
   if (!data) return null
 
   const { project, month, dataMonth, sections, analysis } = data
+  const objectives = data.objectives || []
   const displayMonth = dataMonth || month
   const s = sections
   const canEdit = !isPublic && !!onSaveAnalysis
@@ -863,9 +930,7 @@ export default function ReportViewer({ data, objectives = {}, isPublic = false, 
       )}
 
       {/* ── Objetivos ── */}
-      {Object.keys(objectives).length > 0 && (
-        <ObjectivesTable objectives={objectives} sections={s} />
-      )}
+      <ObjectivesResults objectives={objectives} />
 
       {/* ── 2. Redes Sociales ── */}
       {hasRRSS && (

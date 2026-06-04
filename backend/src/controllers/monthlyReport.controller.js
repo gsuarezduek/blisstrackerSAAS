@@ -6,7 +6,7 @@ const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 // Claves de sección válidas para `enabledSections` (deben coincidir con las del servicio/ReportViewer)
 const SECTION_KEYS = [
-  'analytics', 'performance', 'geo', 'seo', 'keywords', 'cannibalization',
+  'objectives', 'analytics', 'performance', 'geo', 'seo', 'keywords', 'cannibalization',
   'instagram', 'tiktok', 'linkedin', 'metaAds', 'googleAds', 'competitors', 'tasks',
 ]
 

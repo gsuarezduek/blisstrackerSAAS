@@ -26,6 +26,7 @@ const cannibalization   = require('../controllers/cannibalization.controller')
 const competitors       = require('../controllers/competitors.controller')
 const adsSnapshot       = require('../controllers/adsSnapshot.controller')
 const summary           = require('../controllers/marketingSummary.controller')
+const objectives        = require('../controllers/marketingObjectives.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -119,6 +120,12 @@ router.patch('/projects/:id/reports/:month',                                   m
 router.post('/projects/:id/reports/:month/regenerate',                         monthlyReport.regenerateReport)
 router.post('/projects/:id/reports/:month/banner', uploadBanner.single('image'), monthlyReport.uploadReportBanner)
 router.delete('/projects/:id/reports/:month/banner',                           monthlyReport.deleteReportBanner)
+
+// Objetivos de marketing (estructurados, persistentes por proyecto)
+router.get('/projects/:id/objectives',            objectives.listObjectives)
+router.post('/projects/:id/objectives',           objectives.createObjective)
+router.patch('/projects/:id/objectives/:oid',     objectives.updateObjective)
+router.delete('/projects/:id/objectives/:oid',    objectives.deleteObjective)
 
 // Canibalización SEO
 router.post('/projects/:id/cannibal',         cannibalization.runAnalysis)

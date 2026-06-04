@@ -9,34 +9,12 @@ const { getValidTikTokToken }            = require('./tiktokTokenRefresh.service
 const { fetchTikTokMetrics }             = require('./tiktok.service')
 const { getValidLinkedinToken }          = require('./linkedinTokenRefresh.service')
 const { fetchLinkedinMetrics }           = require('./linkedin.service')
+const { computeObjectives }              = require('./marketingObjectives.service')
+const { monthBounds, prevMonthStr, prevMonthsArr } = require('../lib/monthUtils')
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function monthBounds(month) {
-  const [y, m] = month.split('-').map(Number)
-  const pad     = n => String(n).padStart(2, '0')
-  const lastDay = new Date(y, m, 0).getDate()
-  return { startDate: `${y}-${pad(m)}-01`, endDate: `${y}-${pad(m)}-${pad(lastDay)}` }
-}
-
-function prevMonthStr(month) {
-  const [y, m] = month.split('-').map(Number)
-  const pm = m === 1 ? 12 : m - 1
-  const py = m === 1 ? y - 1 : y
-  return `${py}-${String(pm).padStart(2, '0')}`
-}
-
-function prevMonthsArr(month, count) {
-  const months = []
-  let cur = month
-  for (let i = 0; i < count; i++) {
-    months.unshift(cur)
-    cur = prevMonthStr(cur)
-  }
-  return months
-}
 
 function geoBand(score) {
   if (score >= 86) return 'Excelente'
@@ -125,24 +103,35 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // Ignorar análisis cacheado sin resumen válido (ej: guardado vacío tras un error de Claude)
   const validCachedAnalysis = cachedAnalysis?.resumen ? cachedAnalysis : null
 
-  // Caché completo disponible: retornar sin queries ni llamadas a APIs externas
+  // Secciones habilitadas para este informe. null = todas (compatibilidad con informes legacy).
+  // `evolution` se rige por `analytics` (es la serie histórica del mismo dato).
+  const enabledSet = Array.isArray(enabledSections) ? new Set(enabledSections) : null
+  const wants = (key) => !enabledSet || enabledSet.has(key === 'evolution' ? 'analytics' : key)
+
+  // Caché completo disponible: retornar sin queries ni llamadas a APIs externas.
+  // Los OBJETIVOS no se cachean — se recalculan siempre (queries livianas a snapshots)
+  // para reflejar al instante cualquier target editado.
   if (cachedData && validCachedAnalysis) {
+    const objectivesResults = wants('objectives')
+      ? await computeObjectives({
+          projectId, workspaceId, dataMonth,
+          googleAds: cachedData.sections?.googleAds ?? null,
+          metaAds:   cachedData.sections?.metaAds   ?? null,
+        })
+      : []
     return {
       project:        cachedData.project,
       month,
       dataMonth:      cachedData.dataMonth,
       connectedTypes: cachedData.connectedTypes,
       sections:       cachedData.sections,
+      objectives:     objectivesResults,
       analysis:       validCachedAnalysis,
       analysisError:  null,
       _analysisIsNew:  false,
       _dataCacheIsNew: false,
     }
   }
-  // Secciones habilitadas para este informe. null = todas (compatibilidad con informes legacy).
-  // `evolution` se rige por `analytics` (es la serie histórica del mismo dato).
-  const enabledSet = Array.isArray(enabledSections) ? new Set(enabledSections) : null
-  const wants = (key) => !enabledSet || enabledSet.has(key === 'evolution' ? 'analytics' : key)
 
   const prev      = prevMonthStr(dataMonth)   // mes anterior al período (para deltas)
   const last6     = prevMonthsArr(dataMonth, 6)
@@ -779,6 +768,14 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     sections[key] = wants(key) ? val : null
   }
 
+  // ── Objetivos (persistentes, recalculados siempre, NO se cachean) ─────────────
+  const objectivesResults = wants('objectives')
+    ? await computeObjectives({
+        projectId, workspaceId, dataMonth,
+        googleAds: sections.googleAds, metaAds: sections.metaAds,
+      })
+    : []
+
   // ── Análisis IA ──────────────────────────────────────────────────────────────
   // Si ya existe un análisis cacheado con resumen válido, no se regenera.
   // El análisis solo considera las secciones habilitadas.
@@ -789,7 +786,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         tiktok: sections.tiktok, linkedin: sections.linkedin, keywords: sections.keywords,
         seo: sections.seo, performance: sections.performance, googleAds: sections.googleAds,
         metaAds: sections.metaAds, competitors: sections.competitors,
-        workspaceId, objectives, services })
+        workspaceId, objectives: objectivesResults, services })
 
   return {
     project: {
@@ -802,6 +799,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     dataMonth,    // período de los datos (ej: "2026-04") — para mostrar al usuario
     connectedTypes: [...connectedTypes],
     sections,
+    objectives: objectivesResults,
     analysis,
     analysisError:  analysis?._error ?? null,
     _analysisIsNew:  !validCachedAnalysis && !!analysis?.resumen,
@@ -812,21 +810,18 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = {}, services = [] }) {
-  // Calcular cumplimiento de objetivos si existen
-  const objCtx = []
-  if (objectives.sessions != null && analytics)
-    objCtx.push({ metrica: 'Sesiones', objetivo: objectives.sessions, real: analytics.sessions, pct: Math.round((analytics.sessions / objectives.sessions) * 100) })
-  if (objectives.newUsers != null && analytics)
-    objCtx.push({ metrica: 'Usuarios nuevos', objetivo: objectives.newUsers, real: analytics.newUsers, pct: Math.round((analytics.newUsers / objectives.newUsers) * 100) })
-  if (objectives.conversions != null && analytics)
-    objCtx.push({ metrica: 'Conversiones', objetivo: objectives.conversions, real: analytics.conversions, pct: Math.round((analytics.conversions / objectives.conversions) * 100) })
-  if (objectives.followersIg != null && instagram)
-    objCtx.push({ metrica: 'Seguidores Instagram', objetivo: objectives.followersIg, real: instagram.followersCount, pct: Math.round((instagram.followersCount / objectives.followersIg) * 100) })
-  if (objectives.followersTk != null && tiktok)
-    objCtx.push({ metrica: 'Seguidores TikTok', objetivo: objectives.followersTk, real: tiktok.followersCount, pct: Math.round((tiktok.followersCount / objectives.followersTk) * 100) })
-  if (objectives.followersLi != null && linkedin)
-    objCtx.push({ metrica: 'Seguidores LinkedIn', objetivo: objectives.followersLi, real: linkedin.followersCount, pct: Math.round((linkedin.followersCount / objectives.followersLi) * 100) })
+async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = [], services = [] }) {
+  // Cumplimiento de objetivos (array calculado por computeObjectives)
+  const fmtVal = (v, unit) => v == null ? '—' : (unit === '$' ? `$${v}` : unit === '%' ? `${v}%` : unit === 'pos' ? `#${v}` : `${v}`)
+  const objCtx = (Array.isArray(objectives) ? objectives : [])
+    .filter(o => o.status !== 'orphaned')
+    .map(o => ({
+      metrica:  `${o.label} (${o.periodLabel})`,
+      objetivo: o.metric === 'competidores' ? 'superar competidor' : fmtVal(o.target, o.unit),
+      real:     fmtVal(o.actual, o.unit),
+      pct:      o.pct,
+      status:   o.status,
+    }))
 
   const dataCtx = JSON.stringify({
     proyecto:          project?.name,
@@ -898,7 +893,7 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
   }, null, 2)
 
   const objetivosBloque = objCtx.length > 0
-    ? `\nCUMPLIMIENTO DE OBJETIVOS DEL MES (mencioná explícitamente qué se cumplió y qué no):\n${objCtx.map(o => `- ${o.metrica}: objetivo ${o.objetivo}, real ${o.real} (${o.pct}% de cumplimiento)`).join('\n')}\n`
+    ? `\nCUMPLIMIENTO DE OBJETIVOS (mencioná explícitamente qué se cumplió y qué no):\n${objCtx.map(o => `- ${o.metrica}: objetivo ${o.objetivo}, real ${o.real}${o.pct != null ? ` (${o.pct}% de cumplimiento)` : ''}`).join('\n')}\n`
     : ''
 
   const serviciosBloque = services.length > 0
@@ -1011,7 +1006,7 @@ function emptyAnalysis(error) {
 async function getAvailableSections(projectId, workspaceId) {
   const [
     integrations, project, analyticsSnap, pageSpeed, geoAudit, seoSnap,
-    keyword, cannibal, igSnap, tkSnap, liSnap, metaAdsSnap, googleAdsSnap, competitor,
+    keyword, cannibal, igSnap, tkSnap, liSnap, metaAdsSnap, googleAdsSnap, competitor, objective,
   ] = await Promise.all([
     prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true, status: true } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true } }),
@@ -1027,6 +1022,7 @@ async function getAvailableSections(projectId, workspaceId) {
     prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'meta_ads' }, select: { id: true } }),
     prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'google_ads' }, select: { id: true } }),
     prisma.competitorAccount.findFirst({ where: { projectId, platform: 'instagram' }, select: { id: true } }),
+    prisma.marketingObjective.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
   ])
 
   const intgByType = new Map(integrations.map(i => [i.type, i.status]))
@@ -1053,6 +1049,7 @@ async function getAvailableSections(projectId, workspaceId) {
     metaAds:         build(has('meta_ads')              || !!metaAdsSnap,   'meta_ads'),
     googleAds:       build(has('google_ads')            || !!googleAdsSnap, 'google_ads'),
     competitors:     build(!!competitor, null),
+    objectives:      build(!!objective, null),
     tasks:           build(true, null),
   }
 }
