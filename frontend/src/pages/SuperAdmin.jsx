@@ -2537,6 +2537,7 @@ function SectionAvatars() {
 
   const active   = avatars.filter(a => a.active)
   const inactive = avatars.filter(a => !a.active)
+  const inUse    = avatars.filter(a => (a.usageCount ?? 0) > 0).length
 
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" /></div>
 
@@ -2547,7 +2548,7 @@ function SectionAvatars() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Fotos de perfil</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            {active.length} activas · {inactive.length} inactivas · {avatars.length} total
+            {active.length} activas · {inactive.length} inactivas · {avatars.length} total · {inUse} en uso
           </p>
         </div>
         <div>
@@ -2633,6 +2634,21 @@ function SectionAvatars() {
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{av.filename}</p>
               </div>
 
+              {/* Usuarios que lo usan ahora */}
+              <span
+                title={`${av.usageCount ?? 0} usuario${(av.usageCount ?? 0) !== 1 ? 's' : ''} usa${(av.usageCount ?? 0) !== 1 ? 'n' : ''} este avatar`}
+                className={`flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 flex-shrink-0 ${
+                  (av.usageCount ?? 0) > 0
+                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                    : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                  <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                </svg>
+                {av.usageCount ?? 0}
+              </span>
+
               {/* Orden + acciones */}
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button onClick={() => move(av.id, 'up')} disabled={idx === 0} title="Subir" className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors">
@@ -2679,6 +2695,17 @@ function SectionAvatars() {
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{av.label}</p>
                   <p className="text-xs text-gray-400 dark:text-gray-500">{av.filename}</p>
                 </div>
+                {(av.usageCount ?? 0) > 0 && (
+                  <span
+                    title={`${av.usageCount} usuario${av.usageCount !== 1 ? 's' : ''} todavía usa${av.usageCount !== 1 ? 'n' : ''} este avatar`}
+                    className="flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 flex-shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                      <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                    </svg>
+                    {av.usageCount}
+                  </span>
+                )}
                 <button onClick={() => handleToggle(av.id)} className="text-xs text-primary-600 hover:underline font-medium">Reactivar</button>
                 <button onClick={() => setDeleteId(av.id)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 hover:text-red-600 transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
@@ -3626,7 +3653,7 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: 'Tenants',
+    label: 'Clientes',
     items: [
       {
         id: 'workspaces',
@@ -3649,6 +3676,11 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
+    ],
+  },
+  {
+    label: 'Negocio',
+    items: [
       {
         id: 'billing',
         label: 'Billing',
@@ -3657,6 +3689,17 @@ const NAV_GROUPS = [
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path fillRule="evenodd" d="M1 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-1 1H2a1 1 0 01-1-1V4zm0 6a1 1 0 011-1h16a1 1 0 011 1v6a1 1 0 01-1 1H2a1 1 0 01-1-1v-6zm8 4a1 1 0 100-2 1 1 0 000 2zm3 1a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+          </svg>
+        ),
+      },
+      {
+        id: 'ai-tokens',
+        label: 'IA & Tokens',
+        implemented: true,
+        description: 'Uso de tokens de IA por workspace y usuario, costo estimado acumulado, anomalías de consumo y configuración de límites por workspace.',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path d="M15.98 1.804a1 1 0 00-1.96 0l-.24 1.192a1 1 0 01-.784.785l-1.192.238a1 1 0 000 1.962l1.192.238a1 1 0 01.785.785l.238 1.192a1 1 0 001.962 0l.238-1.192a1 1 0 01.785-.785l1.192-.238a1 1 0 000-1.962l-1.192-.238a1 1 0 01-.785-.785l-.238-1.192zM6.949 5.684a1 1 0 00-1.898 0l-.683 2.051a1 1 0 01-.633.633l-2.051.683a1 1 0 000 1.898l2.051.684a1 1 0 01.633.632l.683 2.051a1 1 0 001.898 0l.683-2.051a1 1 0 01.633-.633l2.051-.683a1 1 0 000-1.898l-2.051-.683a1 1 0 01-.633-.633L6.95 5.684z" />
           </svg>
         ),
       },
@@ -3687,33 +3730,6 @@ const NAV_GROUPS = [
         ),
       },
       {
-        id: 'ai-tokens',
-        label: 'IA & Tokens',
-        implemented: true,
-        description: 'Uso de tokens de IA por workspace y usuario, costo estimado acumulado, anomalías de consumo y configuración de límites por workspace.',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path d="M15.98 1.804a1 1 0 00-1.96 0l-.24 1.192a1 1 0 01-.784.785l-1.192.238a1 1 0 000 1.962l1.192.238a1 1 0 01.785.785l.238 1.192a1 1 0 001.962 0l.238-1.192a1 1 0 01.785-.785l1.192-.238a1 1 0 000-1.962l-1.192-.238a1 1 0 01-.785-.785l-.238-1.192zM6.949 5.684a1 1 0 00-1.898 0l-.683 2.051a1 1 0 01-.633.633l-2.051.683a1 1 0 000 1.898l2.051.684a1 1 0 01.633.632l.683 2.051a1 1 0 001.898 0l.683-2.051a1 1 0 01.633-.633l2.051-.683a1 1 0 000-1.898l-2.051-.683a1 1 0 01-.633-.633L6.95 5.684z" />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    label: 'Sistema',
-    items: [
-      {
-        id: 'avatars',
-        label: 'Avatares',
-        implemented: true,
-        description: 'Gestionar las fotos de perfil disponibles en la plataforma.',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-5.5-2.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zM10 12a5.99 5.99 0 00-4.793 2.39A6.483 6.483 0 0010 16.5a6.483 6.483 0 004.793-2.11A5.99 5.99 0 0010 12z" clipRule="evenodd" />
-          </svg>
-        ),
-      },
-      {
         id: 'announcements',
         label: 'Anuncios',
         implemented: true,
@@ -3724,6 +3740,11 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
+    ],
+  },
+  {
+    label: 'Plataforma',
+    items: [
       {
         id: 'feature-flags',
         label: 'Feature Flags',
@@ -3753,6 +3774,17 @@ const NAV_GROUPS = [
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+          </svg>
+        ),
+      },
+      {
+        id: 'avatars',
+        label: 'Avatares',
+        implemented: true,
+        description: 'Gestionar las fotos de perfil disponibles en la plataforma.',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-5.5-2.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zM10 12a5.99 5.99 0 00-4.793 2.39A6.483 6.483 0 0010 16.5a6.483 6.483 0 004.793-2.11A5.99 5.99 0 0010 12z" clipRule="evenodd" />
           </svg>
         ),
       },

@@ -51,7 +51,17 @@ async function listAll(req, res, next) {
       orderBy: { order: 'asc' },
       select:  { id: true, filename: true, label: true, order: true, active: true, createdAt: true },
     })
-    res.json(avatars)
+
+    // Cuántos usuarios usan cada avatar ahora mismo (User.avatar = filename).
+    const usage = await prisma.user.groupBy({
+      by:     ['avatar'],
+      _count: { _all: true },
+    })
+    const usageByFilename = Object.fromEntries(
+      usage.map(u => [u.avatar, u._count._all])
+    )
+
+    res.json(avatars.map(a => ({ ...a, usageCount: usageByFilename[a.filename] ?? 0 })))
   } catch (err) { next(err) }
 }
 
