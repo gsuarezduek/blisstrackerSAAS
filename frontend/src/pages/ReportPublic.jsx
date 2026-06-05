@@ -1,26 +1,57 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import ReportViewer from '../components/marketing/ReportViewer'
 
 const API = import.meta.env.VITE_API_URL || ''
 
+// Selector de informes del mismo proyecto (navegación entre meses)
+function ReportSwitcher({ siblings, currentToken, onSelect }) {
+  if (!siblings || siblings.length < 2) return null
+  return (
+    <div className="max-w-3xl mx-auto mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 px-3 py-2 flex items-center gap-2 overflow-x-auto">
+        <span className="text-xs text-gray-400 shrink-0 pr-1">Informes:</span>
+        {siblings.map(s => {
+          const active = s.token === currentToken
+          return (
+            <button
+              key={s.token}
+              onClick={() => !active && onSelect(s.token)}
+              className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg capitalize transition-colors ${
+                active
+                  ? 'bg-orange-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+            >
+              {s.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function ReportPublic() {
   const { token }            = useParams()
+  const navigate             = useNavigate()
   const [data,      setData]      = useState(null)
   const [report,    setReport]    = useState(null)
   const [workspace, setWorkspace] = useState(null)
+  const [siblings,  setSiblings]  = useState([])
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState(null)
 
   useEffect(() => {
     if (!token) return
     setLoading(true)
+    window.scrollTo(0, 0)
     axios.get(`${API}/api/public/report/${token}`)
       .then(r => {
         setData(r.data.data)
         setReport(r.data.report)
         setWorkspace(r.data.workspace ?? null)
+        setSiblings(r.data.siblings ?? [])
       })
       .catch(err => {
         const msg = err.response?.data?.error || 'No se pudo cargar el informe'
@@ -56,6 +87,7 @@ export default function ReportPublic() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <ReportSwitcher siblings={siblings} currentToken={token} onSelect={(t) => navigate(`/report/${t}`)} />
       <div className="max-w-3xl mx-auto">
         <ReportViewer
           data={data}

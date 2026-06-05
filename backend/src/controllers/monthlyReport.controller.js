@@ -1,6 +1,16 @@
 const { randomUUID }           = require('crypto')
 const prisma                   = require('../lib/prisma')
 const { aggregateReportData, getAvailableSections }  = require('../services/monthlyReport.service')
+const { monthLabel }           = require('../lib/monthUtils')
+
+// Filtro Prisma para informes "generados" (no placeholders vacíos)
+const GENERATED_WHERE = {
+  OR: [
+    { enabledSections: { not: null } },
+    { dataCache:       { not: null } },
+    { analysis:        { not: null } },
+  ],
+}
 
 const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
@@ -248,7 +258,16 @@ async function getPublicReport(req, res, next) {
     const objectives      = safeParseObj(report.objectives)
     const enabledSections = report.enabledSections ? safeParseArr(report.enabledSections) : null
     const cachedData      = report.dataCache ? safeParseObj(report.dataCache) : null
-    const data = await aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives, cachedData, enabledSections)
+    const [data, siblingRows] = await Promise.all([
+      aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives, cachedData, enabledSections),
+      // Otros informes generados del mismo proyecto, para navegar desde el link público
+      prisma.monthlyReport.findMany({
+        where:   { projectId: report.projectId, workspaceId: report.workspaceId, ...GENERATED_WHERE },
+        select:  { token: true, month: true },
+        orderBy: { month: 'desc' },
+      }),
+    ])
+    const siblings = siblingRows.map(r => ({ token: r.token, month: r.month, label: monthLabel(r.month) }))
 
     // Si se generó un análisis nuevo también lo guardamos (ej: primera vez que el cliente abre el link)
     if (data._analysisIsNew && data.analysis) {
@@ -278,7 +297,39 @@ async function getPublicReport(req, res, next) {
         brandColors:        workspace.brandColors ? JSON.parse(workspace.brandColors) : [],
         brandFonts:         workspace.brandFonts  ? JSON.parse(workspace.brandFonts)  : [],
       } : null,
+      siblings,
       data,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * GET /api/public/report/:token/meta
+ * Metadata liviana del informe para armar los Open Graph tags (preview de WhatsApp,
+ * etc.) desde la función serverless de Vercel. Sin auth, sin agregación pesada.
+ */
+async function getPublicReportMeta(req, res, next) {
+  try {
+    const report = await prisma.monthlyReport.findUnique({
+      where:  { token: req.params.token },
+      select: {
+        month:          true,
+        bannerMimeType: true,
+        project:        { select: { name: true } },
+        workspace:      { select: { name: true, companyName: true } },
+      },
+    })
+    if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
+
+    res.set('Cache-Control', 'public, max-age=300')
+    res.json({
+      projectName:   report.project?.name ?? 'Proyecto',
+      month:         report.month,
+      monthLabel:    monthLabel(report.month),
+      workspaceName: report.workspace?.companyName || report.workspace?.name || 'BlissTracker',
+      hasBanner:     !!report.bannerMimeType,
     })
   } catch (err) {
     next(err)
@@ -436,4 +487,4 @@ async function regenerateReport(req, res, next) {
   }
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, regenerateReport, uploadReportBanner, deleteReportBanner }
+module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, uploadReportBanner, deleteReportBanner }
