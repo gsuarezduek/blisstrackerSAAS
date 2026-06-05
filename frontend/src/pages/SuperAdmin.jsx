@@ -2573,6 +2573,7 @@ function SectionAvatars() {
               </svg>Subir imagen</>
             )}
           </button>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 text-right">PNG, JPG, WEBP o GIF · máx 2 MB</p>
         </div>
       </div>
 

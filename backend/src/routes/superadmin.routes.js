@@ -9,10 +9,28 @@ const ff    = require('../controllers/featureFlags.controller')
 const legal = require('../controllers/legal.controller')
 const ps    = require('../controllers/platformSettings.controller')
 
+const AVATAR_MAX_MB = 2
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits:  { fileSize: 2 * 1024 * 1024 }, // 2MB
+  limits:  { fileSize: AVATAR_MAX_MB * 1024 * 1024 },
 })
+
+// Corre multer y traduce sus errores a respuestas claras para el usuario.
+// Sin esto, exceder el límite cae en el handler global → 500 "Internal Server Error".
+function uploadAvatar(req, res, next) {
+  upload.single('image')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+          error: `La imagen supera el tamaño máximo de ${AVATAR_MAX_MB} MB. Probá con una más liviana o comprimila antes de subirla.`,
+        })
+      }
+      return res.status(400).json({ error: `No se pudo subir la imagen: ${err.message}` })
+    }
+    if (err) return next(err)
+    next()
+  })
+}
 
 function superAdminOnly(req, res, next) {
   if (!req.user?.isSuperAdmin) {
@@ -71,7 +89,7 @@ router.put('/legal/:key',  legal.upsertDocument)
 
 // Avatares
 router.get('/avatars',                      av.listAll)
-router.post('/avatars',                     upload.single('image'), av.upload)
+router.post('/avatars',                     uploadAvatar, av.upload)
 router.patch('/avatars/reorder',            av.reorder)
 router.patch('/avatars/:id',                av.update)
 router.patch('/avatars/:id/toggle',         av.toggle)
