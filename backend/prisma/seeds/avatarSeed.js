@@ -1,10 +1,11 @@
 /**
- * Seed de avatares: lee los archivos PNG de frontend/public/perfiles/
- * y los inserta en la tabla Avatar de la DB.
+ * Seed de avatares: lee los archivos PNG de prisma/seeds/perfiles/
+ * y los inserta/actualiza en la tabla Avatar de la DB.
  *
  * Uso: node prisma/seeds/avatarSeed.js
  *
- * Idempotente: si un avatar ya existe (por filename), lo actualiza solo si la imagen cambió.
+ * A diferencia de seedAvatarsIfEmpty.js (que solo corre si la tabla está vacía),
+ * este script siempre upsertea — útil para refrescar imágenes cambiadas.
  */
 
 const { PrismaClient } = require('@prisma/client')
@@ -39,8 +40,8 @@ const AVATARS = [
   { filename: '36beecodelica.png',  label: 'Bee-codelica',    order: 23 },
 ]
 
-// Ruta al directorio de imágenes (relativo al repo root)
-const IMAGES_DIR = path.join(__dirname, '../../../frontend/public/perfiles')
+// Las imágenes están en prisma/seeds/perfiles/ (copia canónica, disponible en Railway)
+const IMAGES_DIR = path.join(__dirname, 'perfiles')
 
 async function run() {
   console.log('Seeding avatares...')

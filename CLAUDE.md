@@ -206,7 +206,7 @@ Requiere `SERP_API_KEY` configurado. Los snapshots SE GUARDAN aunque sólo se us
 
 **Roles:** `WorkspaceMember.teamRole` is a plain `String` referencing `UserRole.name`. Admin access is `WorkspaceMember.role === 'admin' | 'owner'`, fully decoupled from team role.
 
-**Avatars:** Stored as filenames in `User.avatar`. Default: `2bee.png`. Images live in `frontend/public/perfiles/`. Validated against `ALLOWED_AVATARS` in `profile.controller.js`. Clicking opens a fullscreen lightbox.
+**Avatars:** `User.avatar` stores a filename. Default: `2bee.png`. The image bytes live in the DB (`Avatar` model: `imageData` + `mimeType`) and are served via `GET /api/avatars/img/:filename` (public, 24h cache). The frontend builds URLs with `utils/avatarUrl.js`. Validation on `PATCH /api/profile/avatar` checks the filename exists in the `Avatar` table and is `active` (no static `ALLOWED_AVATARS` list anymore). Avatars are managed from SuperAdmin → Avatares (upload/rename/reorder/toggle/delete; delete blocked while any user still uses it; `listAll` returns `usageCount` = users currently on each avatar). Seeds: `backend/prisma/seeds/seedAvatarsIfEmpty.js` (runs on Railway start only if the table is empty) and `avatarSeed.js` (manual force-upsert); both read PNGs from `backend/prisma/seeds/perfiles/`. Clicking an avatar opens a fullscreen lightbox.
 
 **User preferences:** Four boolean flags on `WorkspaceMember`, all `@default(true)`:
 - `weeklyEmailEnabled` — AI weekly email every Friday 14:00 ART.

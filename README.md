@@ -514,9 +514,9 @@ Tipos de email: `passwordReset` · `welcome` · `weeklySummary` · `testSettings
 
 ## Fotos de perfil
 
-15 avatares disponibles en `frontend/public/perfiles/`. Avatar por defecto: `2bee.png`. Validados en backend contra lista `ALLOWED_AVATARS`. Clickear en cualquier avatar abre un lightbox fullscreen.
+Los avatares se almacenan en la DB (modelo `Avatar`: `imageData` + `mimeType`) y se sirven vía `GET /api/avatars/img/:filename`. Avatar por defecto: `2bee.png`. La validación al cambiar de avatar verifica que el `filename` exista en la tabla `Avatar` y esté `active`. Se administran desde **SuperAdmin → Avatares** (subir/renombrar/reordenar/activar/eliminar). Clickear en cualquier avatar abre un lightbox fullscreen.
 
-Avatares: `2bee.png`, `bee.png`, `bee2.png`, `babee.png`, `beeartist.png`, `beecoffee.png`, `beecorp.png`, `beecypher.png`, `beefitness.png`, `beegamer.png`, `beehacker.png`, `beeloween.png`, `beenfluencer.png`, `beepunk.png`, `beezen.png`, `beezombie.png`
+El seed inicial (`backend/prisma/seeds/seedAvatarsIfEmpty.js`, automático en Railway si la tabla está vacía; o `avatarSeed.js` manual) carga los PNGs de `backend/prisma/seeds/perfiles/`.
 
 ---
 

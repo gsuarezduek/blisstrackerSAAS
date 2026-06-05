@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import { adminMemberOptions } from '../../utils/adminMembers'
+import { avatarUrl } from '../../utils/avatarUrl'
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
@@ -11,12 +12,6 @@ const PRIORITY = {
 }
 
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 }
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function avatarUrl(avatar) {
-  return avatar ? `/perfiles/${avatar}` : '/perfiles/2bee.png'
-}
 
 // ─── IssueCard ───────────────────────────────────────────────────────────────
 

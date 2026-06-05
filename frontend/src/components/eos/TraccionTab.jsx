@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 import { adminMemberOptions } from '../../utils/adminMembers'
+import { avatarUrl } from '../../utils/avatarUrl'
 import RichTextEditor from '../RichTextEditor'
 import DOMPurify from 'dompurify'
 import '../situation-editor.css'
@@ -105,10 +106,6 @@ function weekLabel(weekStr) {
   sunday.setUTCDate(monday.getUTCDate() + 6)
   const fmtD = (d) => `${d.getUTCDate()} ${MONTHS_SHORT[d.getUTCMonth()]}`
   return `Sem. ${week} · ${fmtD(monday)}–${fmtD(sunday)}`
-}
-
-function avatarUrl(avatar) {
-  return avatar ? `/perfiles/${avatar}` : '/perfiles/2bee.png'
 }
 
 // ─── RatingPicker ─────────────────────────────────────────────────────────────

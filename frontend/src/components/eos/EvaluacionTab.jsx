@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import { avatarUrl } from '../../utils/avatarUrl'
 
 // ─── Preguntas (espejo del backend) ──────────────────────────────────────────
 
@@ -74,10 +75,6 @@ function scoreBand(avg) {
   if (avg >= 3.0) return 'En camino'
   if (avg >= 2.0) return 'En desarrollo'
   return 'Débil'
-}
-
-function avatarUrl(avatar) {
-  return avatar ? `/perfiles/${avatar}` : '/perfiles/2bee.png'
 }
 
 // ─── ScoreRing SVG ────────────────────────────────────────────────────────────
