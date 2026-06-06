@@ -6,7 +6,8 @@ import { BRIEFS, briefByKey, briefProgress } from './briefCatalog'
 function BriefCard({ brief, answers, onOpen }) {
   const { answered, total } = briefProgress(brief, answers)
   const pct = total ? Math.round((answered / total) * 100) : 0
-  const status = answered === 0 ? 'empty' : answered === total ? 'done' : 'progress'
+  // Se da por "completo" con 80% o más de los campos respondidos.
+  const status = answered === 0 ? 'empty' : pct >= 80 ? 'done' : 'progress'
 
   const statusPill = {
     empty:    { cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400', label: 'Sin empezar' },

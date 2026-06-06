@@ -22,14 +22,12 @@ export const BRIEFS = [
           { k: 'slogan', q: 'Slogan o mensaje clave', short: true },
           { k: 'industria', q: 'Industria o sector', short: true },
           { k: 'antiguedad', q: 'Antigüedad de la empresa', short: true },
-          { k: 'canales', q: 'Sitio web y redes activas (Web, IG, FB, TikTok, LinkedIn, YouTube, WhatsApp)' },
         ],
       },
       {
         title: 'Qué hace la empresa',
         fields: [
           { k: 'actividad_principal', q: 'Servicio / actividad principal (lo que más venden o mejor hacen)' },
-          { k: 'servicios_secundarios', q: 'Otros productos o servicios secundarios' },
           { k: 'productos_estrella', q: '¿Cuáles son sus productos / servicios estrella?' },
         ],
       },
