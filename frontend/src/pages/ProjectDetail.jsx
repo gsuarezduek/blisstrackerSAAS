@@ -11,6 +11,7 @@ import AddTaskModal from '../components/AddTaskModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import ProjectSituation from '../components/ProjectSituation'
 import ProjectInfoTab from '../components/ProjectInfoTab'
+import ProjectBriefs from '../components/briefs/ProjectBriefs'
 import { useAuth } from '../context/AuthContext'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -360,9 +361,8 @@ export default function ProjectDetail() {
                 >
                   {data.project.situationEnabled !== false && <option value="situacion">Situación</option>}
                   {data.project.linksEnabled !== false && <option value="links">Links útiles</option>}
-                  <option value="personas">Equipo</option>
-                  {(data.project.services?.length > 0 || authUser?.isAdmin) && <option value="servicios">Servicios</option>}
                   <option value="info">Info</option>
+                  <option value="briefs">Briefs</option>
                   {marketingEnabled && <option value="marketing">Marketing ↗</option>}
                 </select>
                 {/* Desktop */}
@@ -384,24 +384,16 @@ export default function ProjectDetail() {
                     </button>
                   )}
                   <button
-                    onClick={() => setInfoTab('personas')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'personas' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                  >
-                    Equipo
-                  </button>
-                  {(data.project.services?.length > 0 || authUser?.isAdmin) && (
-                    <button
-                      onClick={() => setInfoTab('servicios')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'servicios' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                    >
-                      Servicios
-                    </button>
-                  )}
-                  <button
                     onClick={() => setInfoTab('info')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'info' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                   >
                     Info
+                  </button>
+                  <button
+                    onClick={() => setInfoTab('briefs')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'briefs' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                  >
+                    Briefs
                   </button>
                   {marketingEnabled && (
                     <button
@@ -509,110 +501,120 @@ export default function ProjectDetail() {
                 </div>
               )}
 
-              {/* Tab: Personas */}
-              {infoTab === 'personas' && (
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
-                      Equipo{(data.project.members?.length ?? 0) > 0 ? ` · ${data.project.members.length} persona${data.project.members.length !== 1 ? 's' : ''}` : ''}
-                    </p>
-                    {authUser?.isAdmin && (
-                      <button
-                        onClick={openTeamEdit}
-                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
-                      >
-                        ✏️ Editar equipo
-                      </button>
-                    )}
-                  </div>
-                  {(data.project.members?.length ?? 0) === 0 ? (
-                    <p className="text-sm text-gray-400 dark:text-gray-500">Sin personas en el equipo.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {data.project.members.map(pm => (
-                        <div key={pm.user.id} className="flex items-center gap-2 min-w-0">
-                          <Avatar user={pm.user} size="sm" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight truncate">{pm.user.name}</p>
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(pm.user.role)}`}>
-                              {labelFor(pm.user.role)}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Tab: Info — incluye Servicios, Equipo e Info del proyecto */}
+              {infoTab === 'info' && (
+                <div className="space-y-4">
 
-              {/* Tab: Servicios */}
-              {infoTab === 'servicios' && (data.project.services?.length > 0 || authUser?.isAdmin) && (
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Servicios</p>
-                    {authUser?.isAdmin && !editingServices && (
-                      <button
-                        onClick={openServicesEdit}
-                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
-                      >
-                        ✏️ Editar
-                      </button>
-                    )}
-                  </div>
-
-                  {editingServices && allServices ? (
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap gap-2">
-                        {allServices.filter(s => s.active).map(s => (
-                          <label key={s.id} className="flex items-center gap-1.5 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={servicesDraft.includes(s.id)}
-                              onChange={() => setServicesDraft(prev =>
-                                prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id]
-                              )}
-                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                            />
-                            <span className="text-sm text-gray-700 dark:text-gray-300">{s.name}</span>
-                          </label>
-                        ))}
-                        {allServices.filter(s => s.active).length === 0 && (
-                          <p className="text-sm text-gray-400 dark:text-gray-500">No hay servicios creados todavía.</p>
+                  {/* Servicios */}
+                  {(data.project.services?.length > 0 || authUser?.isAdmin) && (
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Servicios</p>
+                        {authUser?.isAdmin && !editingServices && (
+                          <button
+                            onClick={openServicesEdit}
+                            className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+                          >
+                            ✏️ Editar
+                          </button>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 pt-1">
-                        <button
-                          onClick={handleSaveServices}
-                          disabled={servicesSaving}
-                          className="text-sm px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
-                        >
-                          {servicesSaving ? 'Guardando...' : 'Guardar'}
-                        </button>
-                        <button
-                          onClick={() => setEditingServices(false)}
-                          className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
+
+                      {editingServices && allServices ? (
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap gap-2">
+                            {allServices.filter(s => s.active).map(s => (
+                              <label key={s.id} className="flex items-center gap-1.5 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={servicesDraft.includes(s.id)}
+                                  onChange={() => setServicesDraft(prev =>
+                                    prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id]
+                                  )}
+                                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                />
+                                <span className="text-sm text-gray-700 dark:text-gray-300">{s.name}</span>
+                              </label>
+                            ))}
+                            {allServices.filter(s => s.active).length === 0 && (
+                              <p className="text-sm text-gray-400 dark:text-gray-500">No hay servicios creados todavía.</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              onClick={handleSaveServices}
+                              disabled={servicesSaving}
+                              className="text-sm px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+                            >
+                              {servicesSaving ? 'Guardando...' : 'Guardar'}
+                            </button>
+                            <button
+                              onClick={() => setEditingServices(false)}
+                              className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (data.project.services?.length ?? 0) > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {data.project.services.map(ps => (
+                            <span key={ps.service.id} className="text-xs bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 border border-primary-100 dark:border-primary-800 rounded-full px-2.5 py-0.5 font-medium">
+                              {ps.service.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-400 dark:text-gray-500 italic">Sin servicios asignados todavía.</p>
+                      )}
                     </div>
-                  ) : (data.project.services?.length ?? 0) > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {data.project.services.map(ps => (
-                        <span key={ps.service.id} className="text-xs bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 border border-primary-100 dark:border-primary-800 rounded-full px-2.5 py-0.5 font-medium">
-                          {ps.service.name}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-400 dark:text-gray-500 italic">Sin servicios asignados todavía.</p>
                   )}
+
+                  {/* Equipo */}
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
+                        Equipo{(data.project.members?.length ?? 0) > 0 ? ` · ${data.project.members.length} persona${data.project.members.length !== 1 ? 's' : ''}` : ''}
+                      </p>
+                      {authUser?.isAdmin && (
+                        <button
+                          onClick={openTeamEdit}
+                          className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+                        >
+                          ✏️ Editar equipo
+                        </button>
+                      )}
+                    </div>
+                    {(data.project.members?.length ?? 0) === 0 ? (
+                      <p className="text-sm text-gray-400 dark:text-gray-500">Sin personas en el equipo.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {data.project.members.map(pm => (
+                          <div key={pm.user.id} className="flex items-center gap-2 min-w-0">
+                            <Avatar user={pm.user} size="sm" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight truncate">{pm.user.name}</p>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(pm.user.role)}`}>
+                                {labelFor(pm.user.role)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info del proyecto */}
+                  <ProjectInfoTab project={data.project} onSave={updated => setData(prev => ({ ...prev, project: { ...prev.project, ...updated } }))} />
                 </div>
               )}
 
-              {/* Tab: Info */}
-              {infoTab === 'info' && (
-                <ProjectInfoTab project={data.project} onSave={updated => setData(prev => ({ ...prev, project: { ...prev.project, ...updated } }))} />
+              {/* Tab: Briefs */}
+              {infoTab === 'briefs' && (
+                <ProjectBriefs
+                  projectId={data.project.id}
+                  canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
+                />
               )}
             </div>
 

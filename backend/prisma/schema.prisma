@@ -88,6 +88,7 @@ model Workspace {
   orgAssessmentRounds    OrgAssessmentRound[]
   orgAssessmentResponses OrgAssessmentResponse[]
   marketingObjectives    MarketingObjective[]
+  projectBriefs          ProjectBrief[]
 
   @@index([slug])
 }
@@ -299,6 +300,7 @@ model Project {
   adsSnapshots           AdsSnapshot[]
   competitors            CompetitorAccount[]
   marketingObjectives    MarketingObjective[]
+  briefs                 ProjectBrief[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -1208,6 +1210,30 @@ model MarketingObjective {
   trackedKeyword TrackedKeyword?    @relation(fields: [trackedKeywordId], references: [id], onDelete: SetNull)
   competitor     CompetitorAccount? @relation(fields: [competitorId], references: [id], onDelete: SetNull)
 
+  @@index([projectId])
+  @@index([workspaceId])
+}
+
+// ─── BRIEFS ───────────────────────────────────────────────────────────────────
+// Cuestionarios de relevamiento por proyecto. Se completan modularmente (no es
+// necesario completar todos ni todos los campos). Una fila por (proyecto, tipo).
+// `answers` es un JSON { fieldKey: valor }. Catálogo de tipos y campos en
+// backend/src/lib/briefCatalog.js (y espejo en frontend para el render).
+
+model ProjectBrief {
+  id          Int    @id @default(autoincrement())
+  projectId   Int
+  workspaceId Int
+  type        String // "marca" | "organico" | "meta_ads" | "web" | "seo_sem" | "crm"
+  answers     Json   @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, type])
   @@index([projectId])
   @@index([workspaceId])
 }

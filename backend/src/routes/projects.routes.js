@@ -1,5 +1,6 @@
 const router = require('express').Router()
 const c = require('../controllers/projects.controller')
+const briefs = require('../controllers/briefs.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
@@ -21,5 +22,7 @@ router.patch('/:id/star',                  c.toggleStar)
 router.put('/:id/links',                   c.saveLinks)
 router.patch('/:id/situation',             c.saveSituation)
 router.patch('/:id/info',                  c.saveInfo)
+router.get('/:id/briefs',                  briefs.listBriefs)
+router.put('/:id/briefs/:type',            briefs.saveBrief)
 
 module.exports = router
