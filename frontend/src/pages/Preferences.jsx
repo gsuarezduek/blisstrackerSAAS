@@ -456,6 +456,14 @@ export default function Preferences() {
 
                   <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
                     <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Briefs</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Muestra la sección de briefs (cuestionarios de relevamiento) en la vista de todos los proyectos.</p>
+                    </div>
+                    <Toggle on={globalSettings.briefsEnabled !== false} onToggle={() => handleGlobalSetting({ briefsEnabled: !globalSettings.briefsEnabled })} />
+                  </div>
+
+                  <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Horas por proyecto</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Permite cargar un presupuesto mensual de horas por proyecto y compara el tiempo trabajado contra ese presupuesto en el reporte por proyecto.</p>
                     </div>

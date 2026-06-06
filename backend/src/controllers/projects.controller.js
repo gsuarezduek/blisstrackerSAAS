@@ -246,7 +246,7 @@ async function projectTasks(req, res, next) {
       where: { id: projectId },
       select: {
         id: true, name: true, createdAt: true, situation: true,
-        timezone: true, linksEnabled: true, situationEnabled: true,
+        timezone: true, linksEnabled: true, situationEnabled: true, briefsEnabled: true,
         websiteUrl: true, connections: true,
         links:    { orderBy: { createdAt: 'asc' } },
         services: { include: { service: true }, orderBy: { service: { name: 'asc' } } },
@@ -378,7 +378,7 @@ async function getGlobalSettings(req, res, next) {
     const workspace = req.workspace
     const first = await prisma.project.findFirst({
       where: { workspaceId: workspace.id },
-      select: { linksEnabled: true, situationEnabled: true, hoursEnabled: true, emailFrom: true, aiWeeklyTokenLimit: true },
+      select: { linksEnabled: true, situationEnabled: true, hoursEnabled: true, briefsEnabled: true, emailFrom: true, aiWeeklyTokenLimit: true },
       orderBy: { id: 'asc' },
     })
     const effectiveEmailFrom = first?.emailFrom ?? process.env.EMAIL_FROM ?? null
@@ -387,6 +387,7 @@ async function getGlobalSettings(req, res, next) {
       linksEnabled: first?.linksEnabled ?? true,
       situationEnabled: first?.situationEnabled ?? true,
       hoursEnabled: first?.hoursEnabled ?? false,
+      briefsEnabled: first?.briefsEnabled ?? true,
       emailFrom: effectiveEmailFrom,
       aiWeeklyTokenLimit: first?.aiWeeklyTokenLimit ?? 500000,
     })
@@ -451,7 +452,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -463,6 +464,7 @@ async function saveGlobalSettings(req, res, next) {
     if (linksEnabled !== undefined)    projectData.linksEnabled    = Boolean(linksEnabled)
     if (situationEnabled !== undefined) projectData.situationEnabled = Boolean(situationEnabled)
     if (hoursEnabled !== undefined)    projectData.hoursEnabled    = Boolean(hoursEnabled)
+    if (briefsEnabled !== undefined)   projectData.briefsEnabled   = Boolean(briefsEnabled)
     if (aiWeeklyTokenLimit !== undefined) {
       const limit = Number(aiWeeklyTokenLimit)
       if (!Number.isInteger(limit) || limit < 0) {

@@ -362,7 +362,7 @@ export default function ProjectDetail() {
                   {data.project.situationEnabled !== false && <option value="situacion">Situación</option>}
                   {data.project.linksEnabled !== false && <option value="links">Links útiles</option>}
                   <option value="info">Info</option>
-                  <option value="briefs">Briefs</option>
+                  {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
                   {marketingEnabled && <option value="marketing">Marketing ↗</option>}
                 </select>
                 {/* Desktop */}
@@ -389,12 +389,14 @@ export default function ProjectDetail() {
                   >
                     Info
                   </button>
-                  <button
-                    onClick={() => setInfoTab('briefs')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'briefs' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                  >
-                    Briefs
-                  </button>
+                  {data.project.briefsEnabled !== false && (
+                    <button
+                      onClick={() => setInfoTab('briefs')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'briefs' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                    >
+                      Briefs
+                    </button>
+                  )}
                   {marketingEnabled && (
                     <button
                       onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)}
@@ -610,7 +612,7 @@ export default function ProjectDetail() {
               )}
 
               {/* Tab: Briefs */}
-              {infoTab === 'briefs' && (
+              {infoTab === 'briefs' && data.project.briefsEnabled !== false && (
                 <ProjectBriefs
                   projectId={data.project.id}
                   canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
