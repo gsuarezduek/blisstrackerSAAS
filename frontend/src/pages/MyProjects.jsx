@@ -276,7 +276,7 @@ export default function MyProjects() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mis Proyectos</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
@@ -412,7 +412,7 @@ export default function MyProjects() {
               </svg>
               Proyectos destacados
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {starredProjects.map(renderCard)}
             </div>
           </section>
@@ -423,7 +423,7 @@ export default function MyProjects() {
             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
               Mis proyectos
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {mineProjects.map(renderCard)}
             </div>
           </section>
@@ -434,7 +434,7 @@ export default function MyProjects() {
             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
               Otros proyectos del workspace
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {otherProjects.map(renderCard)}
             </div>
           </section>

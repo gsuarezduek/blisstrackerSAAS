@@ -211,7 +211,7 @@ export default function RealTime() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-8">
 
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
@@ -290,7 +290,7 @@ export default function RealTime() {
         {active.length > 0 && (
           <section className="mb-8">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Activos ahora</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {active.map(entry => (
                 <UserCard
                   key={entry.user.id}
@@ -308,7 +308,7 @@ export default function RealTime() {
         {finished.length > 0 && (
           <section className="mb-8">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">Finalizaron jornada</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {finished.map(entry => (
                 <UserCard
                   key={entry.user.id}
@@ -326,7 +326,7 @@ export default function RealTime() {
         {filteredNotStarted.length > 0 && (
           <section>
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">No iniciaron jornada</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredNotStarted.map(user => (
                 <button key={user.id} className="text-left" onClick={() => setSelectedUser(user)} title="Ver tareas de esta persona">
                   <div className="bg-white dark:bg-gray-800 rounded-2xl border-2 border-gray-100 dark:border-gray-700 opacity-50 p-5 flex items-center gap-3.5 hover:opacity-70 transition-opacity">

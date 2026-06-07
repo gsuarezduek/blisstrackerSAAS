@@ -358,7 +358,7 @@ export default function Dashboard() {
       <Navbar />
       <OnboardingTour />
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -548,7 +548,7 @@ export default function Dashboard() {
         {starred.length > 0 && (
           <section className="mb-6">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Destacadas: Foco del día</h2>
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
               {starred.map(t => (
                 <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} onOpenComments={setCommentTask} />
               ))}
@@ -560,7 +560,7 @@ export default function Dashboard() {
         {paused.length > 0 && (
           <section className="mb-6">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Pausadas</h2>
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
               {paused.map(t => (
                 <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} onOpenComments={setCommentTask} />
               ))}
@@ -574,7 +574,7 @@ export default function Dashboard() {
             <h2 className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
               <span>⚠</span> Bloqueadas
             </h2>
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
               {blocked.map(t => (
                 <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} onOpenComments={setCommentTask} />
               ))}
@@ -586,7 +586,7 @@ export default function Dashboard() {
         {pending.length > 0 && (
           <section className="mb-6">
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Pendientes</h2>
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
               {pending.map(t => (
                 <TaskCard key={t.id} task={t} onUpdate={handleUpdateTask} onDelete={handleDeleteTask} hasActiveTask={hasActiveTask} onMoveToBacklog={handleUpdateTask} onOpenComments={setCommentTask} />
               ))}
@@ -630,7 +630,7 @@ export default function Dashboard() {
             </button>
 
             {backlogOpen && (
-              <div className="space-y-2 mt-2">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 mt-2">
                 {allBacklog.map(t => (
                   <TaskCard
                     key={t.id}
