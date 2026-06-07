@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 const prisma = require('../lib/prisma')
 const stripe  = require('../lib/stripe')
-const { sendWelcomeEmail, sendInvitationEmail, sendWorkspaceDeletionWarning } = require('../services/email.service')
+const { sendWelcomeEmail, sendInvitationEmail, sendWorkspaceDeletionWarning, sendPlatformNotification, platformCard } = require('../services/email.service')
 const { syncSeatsToStripe } = require('./billing.controller')
 const { reconcileWorkspaceTier } = require('../services/billingTier.service')
 const { getSetting } = require('../lib/platformSettings')
@@ -538,6 +538,18 @@ async function createWorkspace(req, res, next) {
 
     sendWelcomeEmail(ownerEmail, ownerName, result.workspace.id).catch(err => console.error('[Workspace] Error enviando welcome email:', err.message))
 
+    // Aviso interno al equipo BlissTracker: nuevo workspace registrado.
+    sendPlatformNotification('newWorkspace', {
+      workspaceId: result.workspace.id,
+      subject: `🚀 Nuevo workspace: ${result.workspace.name}`,
+      bodyHtml: platformCard('🚀 Nuevo workspace registrado', [
+        ['Workspace', result.workspace.name],
+        ['Slug',      `${result.workspace.slug}.${process.env.APP_DOMAIN || 'blisstracker.app'}`],
+        ['Owner',     `${ownerName} (${ownerEmail})`],
+        ['Estado',    'Trial'],
+      ], '#16a34a'),
+    })
+
     // Crear Stripe Customer de forma asíncrona (no bloquea el registro si Stripe falla)
     if (stripe) {
       stripe.customers.create({
@@ -896,6 +908,18 @@ async function scheduleDeletion(req, res, next) {
       scheduledAt,
       workspace.id,
     ).catch(err => console.error('[sendWorkspaceDeletionWarning]', err.message))
+
+    // Aviso interno al equipo BlissTracker: posible churn / pérdida de datos.
+    sendPlatformNotification('deletionRequest', {
+      workspaceId: workspace.id,
+      subject: `⚠️ Solicitud de borrado: ${workspace.name}`,
+      bodyHtml: platformCard('⚠️ Solicitud de eliminación de workspace', [
+        ['Workspace',  workspace.name],
+        ['Slug',       `${workspace.slug}.${domain}`],
+        ['Solicitó',   requesterName],
+        ['Se elimina', new Date(scheduledAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })],
+      ], '#dc2626'),
+    })
 
     res.status(201).json(deletionReq)
   } catch (err) { next(err) }

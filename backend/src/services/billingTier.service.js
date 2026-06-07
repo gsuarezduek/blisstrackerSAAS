@@ -10,6 +10,7 @@
  */
 const prisma = require('../lib/prisma')
 const { getSetting } = require('../lib/platformSettings')
+const { sendPlatformNotification, platformCard } = require('./email.service')
 
 /**
  * Reconcilia el status de un workspace contra la regla de free tier.
@@ -28,7 +29,7 @@ const { getSetting } = require('../lib/platformSettings')
 async function reconcileWorkspaceTier(workspaceId) {
   const ws = await prisma.workspace.findUnique({
     where:  { id: workspaceId },
-    select: { id: true, status: true, trialEndsAt: true, billingExempt: true },
+    select: { id: true, name: true, status: true, trialEndsAt: true, billingExempt: true },
   })
   if (!ws || ws.billingExempt) return null
 
@@ -49,6 +50,19 @@ async function reconcileWorkspaceTier(workspaceId) {
   if (next !== ws.status) {
     await prisma.workspace.update({ where: { id: workspaceId }, data: { status: next } })
     console.log(`[BillingTier] Workspace ${workspaceId}: ${ws.status} → ${next} (${seats} usuario(s) activo(s), límite gratis ${limit})`)
+
+    // Aviso interno: trial vencido sin conversión que pasó a past_due.
+    if (ws.status === 'trialing' && next === 'past_due') {
+      sendPlatformNotification('trialExpired', {
+        workspaceId,
+        subject: `⏰ Trial vencido sin conversión: ${ws.name}`,
+        bodyHtml: platformCard('⏰ Trial vencido → past_due', [
+          ['Workspace',        ws.name],
+          ['Usuarios activos', String(seats)],
+          ['Límite gratis',    String(limit)],
+        ], '#d97706'),
+      })
+    }
   }
   return next
 }

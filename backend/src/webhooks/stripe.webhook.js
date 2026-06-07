@@ -1,6 +1,12 @@
 const prisma = require('../lib/prisma')
 const stripe  = require('../lib/stripe')
-const { sendPaymentSuccessEmail, sendPaymentFailedEmail } = require('../services/email.service')
+const { sendPaymentSuccessEmail, sendPaymentFailedEmail, sendPlatformNotification, platformCard } = require('../services/email.service')
+
+// Formatea un monto de Stripe (centavos) a string legible.
+function fmtAmount(cents, currency) {
+  if (cents == null) return null
+  return `${(cents / 100).toLocaleString('es-AR', { minimumFractionDigits: 2 })} ${(currency || 'usd').toUpperCase()}`
+}
 
 // Devuelve los emails de todos los owners y admins activos del workspace
 async function getAdminEmails(workspaceId) {
@@ -88,6 +94,18 @@ async function handleWebhook(req, res) {
           sendPaymentSuccessEmail(adminEmails, workspace?.name ?? '', seats, periodEnd, workspaceId)
             .catch(err => console.error('[Webhook] Error enviando email de pago:', err.message))
         }
+
+        // Aviso interno: activación de suscripción Pro.
+        sendPlatformNotification('paymentSuccess', {
+          workspaceId,
+          subject: `💰 Suscripción activada: ${workspace?.name ?? `#${workspaceId}`}`,
+          bodyHtml: platformCard('💰 Nueva suscripción Pro', [
+            ['Workspace',        workspace?.name ?? `#${workspaceId}`],
+            ['Seats',            String(seats)],
+            ['Próximo cobro',    periodEnd ? new Date(periodEnd).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
+            ['Evento',           'Activación (checkout)'],
+          ], '#16a34a'),
+        })
         break
       }
 
@@ -146,6 +164,17 @@ async function handleWebhook(req, res) {
           prisma.workspace.update({ where: { id: workspaceId }, data: { status: 'cancelled' } }),
           prisma.subscription.updateMany({ where: { workspaceId }, data: { status: 'cancelled' } }),
         ])
+
+        // Aviso interno: churn.
+        const cancelledWs = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } })
+        sendPlatformNotification('cancellation', {
+          workspaceId,
+          subject: `🚪 Suscripción cancelada: ${cancelledWs?.name ?? `#${workspaceId}`}`,
+          bodyHtml: platformCard('🚪 Cancelación de suscripción (churn)', [
+            ['Workspace', cancelledWs?.name ?? `#${workspaceId}`],
+            ['Seats',     String(sub.items.data[0]?.quantity ?? '—')],
+          ], '#dc2626'),
+        })
         break
       }
 
@@ -158,6 +187,21 @@ async function handleWebhook(req, res) {
         if (!workspaceId) break
 
         await prisma.workspace.update({ where: { id: workspaceId }, data: { status: 'active' } })
+
+        // Aviso interno solo en renovaciones (subscription_cycle); la primera
+        // factura (subscription_create) ya se avisó en checkout.session.completed.
+        if (invoice.billing_reason === 'subscription_cycle') {
+          const renewedWs = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } })
+          sendPlatformNotification('paymentSuccess', {
+            workspaceId,
+            subject: `💰 Renovación cobrada: ${renewedWs?.name ?? `#${workspaceId}`}`,
+            bodyHtml: platformCard('💰 Renovación de suscripción', [
+              ['Workspace', renewedWs?.name ?? `#${workspaceId}`],
+              ['Monto',     fmtAmount(invoice.amount_paid, invoice.currency)],
+              ['Evento',    'Renovación (ciclo)'],
+            ], '#16a34a'),
+          })
+        }
         break
       }
 
@@ -178,6 +222,17 @@ async function handleWebhook(req, res) {
           sendPaymentFailedEmail(adminEmails, workspace?.name ?? '', workspaceId)
             .catch(err => console.error('[Webhook] Error enviando email de fallo de pago:', err.message))
         }
+
+        // Aviso interno: morosidad / tarjeta rechazada.
+        sendPlatformNotification('paymentFailed', {
+          workspaceId,
+          subject: `❌ Pago fallido: ${workspace?.name ?? `#${workspaceId}`}`,
+          bodyHtml: platformCard('❌ Fallo de pago', [
+            ['Workspace', workspace?.name ?? `#${workspaceId}`],
+            ['Monto',     fmtAmount(invoice.amount_due, invoice.currency)],
+            ['Estado',    'past_due'],
+          ], '#dc2626'),
+        })
         break
       }
 

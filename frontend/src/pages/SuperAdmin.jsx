@@ -21,6 +21,7 @@ const EMAIL_TYPE_LABELS = {
   testSettings:    { label: 'Email de prueba',   color: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' },
   invitation:      { label: 'Invitación',        color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
   deletionWarning: { label: 'Aviso eliminación', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+  adminAlert:      { label: 'Aviso admin',       color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
 }
 
 function timeAgo(dateStr) {
@@ -1062,6 +1063,7 @@ function SectionUsers() {
 const SETTINGS_GROUP_LABELS = {
   commercial:  'Comercial',
   operational: 'Operativo',
+  platform:    'Notificaciones de plataforma',
 }
 
 const RETENTION_KEYS_FE = [
@@ -1151,6 +1153,18 @@ function SettingInput({ setting, draft, onChange }) {
 
   if (setting.type === 'pricingTiers') {
     return <PricingTiersEditor value={value} onChange={onChange} />
+  }
+  if (setting.type === 'boolean') {
+    return (
+      <button
+        type="button"
+        onClick={() => onChange(!value)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+        aria-pressed={!!value}
+      >
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${value ? 'translate-x-6' : 'translate-x-1'}`} />
+      </button>
+    )
   }
   if (setting.type === 'integer' || setting.type === 'float') {
     return (
@@ -1274,7 +1288,7 @@ function SectionSettings() {
     return <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center text-gray-400 text-sm">Cargando...</div>
   }
 
-  const groups = ['commercial', 'operational'].map(g => ({
+  const groups = ['commercial', 'operational', 'platform'].map(g => ({
     id:    g,
     label: SETTINGS_GROUP_LABELS[g],
     items: settings.filter(s => s.group === g),

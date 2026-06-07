@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { sendPlatformNotification, platformCard } = require('../services/email.service')
 
 async function create(req, res, next) {
   try {
@@ -16,8 +17,23 @@ async function create(req, res, next) {
         type,
         message: message.trim(),
       },
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, email: true } } },
     })
+
+    // Aviso interno al equipo BlissTracker (no-op si la casilla no está configurada).
+    const isBug = type === 'BUG'
+    const typeLabel = isBug ? '🐞 Reporte de error' : '💡 Sugerencia'
+    sendPlatformNotification('feedback', {
+      workspaceId: req.workspace?.id ?? null,
+      subject: `${typeLabel} de ${feedback.user.name} — ${req.workspace?.name ?? 'Sin workspace'}`,
+      bodyHtml: platformCard(typeLabel, [
+        ['Usuario',   `${feedback.user.name} (${feedback.user.email})`],
+        ['Workspace', req.workspace?.name ?? '—'],
+        ['Tipo',      isBug ? 'Bug' : 'Sugerencia'],
+        ['Mensaje',   feedback.message.replace(/\n/g, '<br>')],
+      ], isBug ? '#dc2626' : '#E67A1F'),
+    })
+
     res.status(201).json(feedback)
   } catch (err) { next(err) }
 }

@@ -1,5 +1,6 @@
 const { Resend } = require('resend')
 const prisma = require('../lib/prisma')
+const { getSetting } = require('../lib/platformSettings')
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -39,6 +40,18 @@ function emailShell(bodyHtml) {
 </html>`
 }
 
+/**
+ * Remitente global de la plataforma: setting `platformEmailFrom` (editable desde
+ * SuperAdmin → Configuración) con fallback a la env var EMAIL_FROM.
+ */
+async function getPlatformFrom() {
+  try {
+    const configured = await getSetting('platformEmailFrom')
+    if (configured && configured.trim()) return configured.trim()
+  } catch { /* ignore — caemos al env */ }
+  return process.env.EMAIL_FROM || 'BlissTracker <gaston@blissmkt.ar>'
+}
+
 async function getEmailFrom(workspaceId) {
   try {
     const query = workspaceId
@@ -48,10 +61,68 @@ async function getEmailFrom(workspaceId) {
       ...query,
       select: { emailFrom: true },
     })
-    return first?.emailFrom || process.env.EMAIL_FROM || 'BlissTracker <gaston@blissmkt.ar>'
-  } catch {
-    return process.env.EMAIL_FROM || 'BlissTracker <gaston@blissmkt.ar>'
+    if (first?.emailFrom) return first.emailFrom
+  } catch { /* ignore — caemos al remitente global */ }
+  return getPlatformFrom()
+}
+
+// Mapa evento → toggle de setting que lo habilita.
+const PLATFORM_EVENT_TOGGLE = {
+  feedback:        'notifyOnFeedback',
+  newWorkspace:    'notifyOnNewWorkspace',
+  paymentSuccess:  'notifyOnPaymentSuccess',
+  paymentFailed:   'notifyOnPaymentFailed',
+  cancellation:    'notifyOnCancellation',
+  deletionRequest: 'notifyOnDeletionRequest',
+  trialExpired:    'notifyOnTrialExpired',
+}
+
+/**
+ * Envía un aviso interno a la casilla de administración de la plataforma.
+ * No-op silencioso si `platformAdminEmail` está vacío o el toggle del evento
+ * está apagado. Nunca lanza — los hooks la llaman fire-and-forget.
+ *
+ * @param {string} event     clave de PLATFORM_EVENT_TOGGLE
+ * @param {object} opts      { subject, bodyHtml, workspaceId? }
+ */
+async function sendPlatformNotification(event, { subject, bodyHtml, workspaceId = null }) {
+  try {
+    const toggleKey = PLATFORM_EVENT_TOGGLE[event]
+    if (toggleKey) {
+      const enabled = await getSetting(toggleKey)
+      if (!enabled) return
+    }
+
+    const raw = (await getSetting('platformAdminEmail')) || ''
+    const to = raw.split(',').map(s => s.trim()).filter(Boolean)
+    if (!to.length) return // casilla no configurada → sistema apagado
+
+    const from = await getPlatformFrom()
+    const { error } = await resend.emails.send({ from, to, subject, html: emailShell(bodyHtml) })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: to.join(', '), subject, type: 'adminAlert', status: 'sent' })
+  } catch (err) {
+    console.error(`[PlatformNotification:${event}]`, err.message)
+    await logEmail({ workspaceId, to: 'admin', subject, type: 'adminAlert', status: 'failed', errorMsg: err.message })
   }
+}
+
+/**
+ * Tarjeta de detalle reutilizable para los avisos de plataforma.
+ * @param {string} title
+ * @param {Array<[string,string]>} rows  pares [etiqueta, valor]
+ * @param {string} accent  color del borde superior
+ */
+function platformCard(title, rows, accent = '#E67A1F') {
+  const cells = rows
+    .filter(([, v]) => v != null && v !== '')
+    .map(([k, v]) => `<tr><td style="padding:8px 0;color:#64748b;font-size:14px;width:140px;vertical-align:top;">${k}</td><td style="padding:8px 0;color:#1e293b;font-size:14px;font-weight:600;">${v}</td></tr>`)
+    .join('')
+  return `
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-top:3px solid ${accent};border-radius:12px;padding:24px 28px;margin-top:8px;">
+      <h2 style="color:#1e293b;margin:0 0 16px;font-size:18px;">${title}</h2>
+      <table style="width:100%;border-collapse:collapse;">${cells}</table>
+    </div>`
 }
 
 async function logEmail({ workspaceId, to, subject, type, status, errorMsg }) {
@@ -460,5 +531,7 @@ module.exports = {
   sendPaymentSuccessEmail,
   sendPaymentFailedEmail,
   sendMonthlyMarketingReport,
+  sendPlatformNotification,
+  platformCard,
   emailShell,
 }

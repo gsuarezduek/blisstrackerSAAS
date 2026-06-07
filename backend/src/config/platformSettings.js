@@ -176,6 +176,83 @@ const PLATFORM_SETTINGS = [
     label:   'Retención de logs de emails (días)',
     help:    'Después de cuántos días se borran los EmailLog. Afecta el panel SuperAdmin → Emails.',
   },
+
+  // ─── Notificaciones de plataforma ──────────────────────────────────────────
+  // Casilla interna del equipo BlissTracker que recibe avisos operativos
+  // (feedback, nuevos workspaces, pagos, churn). Si platformAdminEmail está
+  // vacío, NINGÚN aviso se envía (sistema apagado).
+  {
+    key:     'platformAdminEmail',
+    type:    'string',
+    default: '',
+    group:   'platform',
+    label:   'Casilla de administración (recibe avisos)',
+    help:    'Email del equipo BlissTracker que recibe los avisos internos de la plataforma (feedback, nuevos workspaces, pagos, cancelaciones). Vacío = no se envía ningún aviso. Para varias casillas, separá con coma.',
+  },
+  {
+    key:     'platformEmailFrom',
+    type:    'string',
+    default: '',
+    group:   'platform',
+    label:   'Remitente global de emails (From)',
+    help:    'Desde qué dirección salen todos los emails de la plataforma. Formato: "BlissTracker <noreply@blisstracker.app>". El dominio debe estar verificado en Resend. Vacío = usa la variable de entorno EMAIL_FROM. Un proyecto con emailFrom propio sigue teniendo prioridad para los emails de ese workspace.',
+  },
+  {
+    key:     'notifyOnFeedback',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: feedback (sugerencias / bugs)',
+    help:    'Enviar un aviso a la casilla de administración cada vez que un usuario de cualquier workspace envía una sugerencia o reporta un error.',
+  },
+  {
+    key:     'notifyOnNewWorkspace',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: nuevo workspace registrado',
+    help:    'Enviar un aviso cuando se registra un nuevo workspace (alta de cliente / inicio de trial).',
+  },
+  {
+    key:     'notifyOnPaymentSuccess',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: pago exitoso',
+    help:    'Enviar un aviso cuando un workspace activa o renueva su suscripción Pro (pago confirmado por Stripe).',
+  },
+  {
+    key:     'notifyOnPaymentFailed',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: pago fallido',
+    help:    'Enviar un aviso cuando Stripe no puede cobrar una suscripción (morosidad / tarjeta rechazada).',
+  },
+  {
+    key:     'notifyOnCancellation',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: cancelación de suscripción',
+    help:    'Enviar un aviso cuando un workspace cancela su plan Pro (churn).',
+  },
+  {
+    key:     'notifyOnDeletionRequest',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: solicitud de borrado de workspace',
+    help:    'Enviar un aviso cuando un owner programa la eliminación de su workspace (48h de gracia antes del borrado definitivo).',
+  },
+  {
+    key:     'notifyOnTrialExpired',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: trial vencido a past_due',
+    help:    'Enviar un aviso cuando un trial vence sin conversión y el workspace pasa a past_due (supera el límite de usuarios gratis).',
+  },
 ]
 
 const SETTINGS_BY_KEY = Object.fromEntries(PLATFORM_SETTINGS.map(s => [s.key, s]))
