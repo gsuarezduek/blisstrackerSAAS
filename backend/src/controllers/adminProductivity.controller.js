@@ -1,8 +1,7 @@
 const prisma    = require('../lib/prisma')
 const { generateMemoryForUser } = require('../services/insightMemory.service')
 const { getWorkspaceStats, getProjectStats } = require('../services/productivityStats.service')
-const { getNWeeksAgoMonday } = require('../lib/timeMetrics')
-const { todayString } = require('../utils/dates')
+const { getProductivityPeriod } = require('../lib/timeMetrics')
 
 // Umbrales para clasificar el estado de cada miembro (determinístico, sin IA)
 const DROP_TAREAS_PCT   = -0.25   // caída ≥25% en tareas completadas
@@ -24,17 +23,16 @@ function memberStatus(s) {
   return 'ok'
 }
 
-// Día anterior (YYYY-MM-DD) a una fecha ISO.
-function prevDay(iso) {
-  const d = new Date(iso + 'T12:00:00Z')
-  d.setUTCDate(d.getUTCDate() - 1)
-  return d.toISOString().slice(0, 10)
+// Modo de período: 'current' (mes en curso vs anterior, default) o 'closed' (mes anterior vs ante-anterior).
+function periodMode(req) {
+  return req.query.mode === 'closed' ? 'closed' : 'current'
 }
 
 async function listProductivity(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
+    const period = getProductivityPeriod(periodMode(req), tz)
 
     const [members, statsMap] = await Promise.all([
       prisma.workspaceMember.findMany({
@@ -54,7 +52,7 @@ async function listProductivity(req, res, next) {
         },
         orderBy: { user: { name: 'asc' } },
       }),
-      getWorkspaceStats(workspaceId, tz),
+      getWorkspaceStats(workspaceId, tz, period),
     ])
 
     const emptyStats = { current: { totalCompleted: 0, totalMinutes: 0, daysWorked: 0, tasaCompletado: 0 },
@@ -90,15 +88,6 @@ async function listProductivity(req, res, next) {
       }
     })
 
-    const curStart  = getNWeeksAgoMonday(4, tz)
-    const prevStart = getNWeeksAgoMonday(8, tz)
-    const period = {
-      curStart,
-      curEnd: todayString(tz),
-      prevStart,
-      prevEnd: prevDay(curStart),
-    }
-
     res.json({ members: result, period })
   } catch (err) { next(err) }
 }
@@ -107,7 +96,8 @@ async function listByProject(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
-    const projects = await getProjectStats(workspaceId, tz)
+    const period = getProductivityPeriod(periodMode(req), tz)
+    const projects = await getProjectStats(workspaceId, tz, period)
 
     // Resolver nombres de contribuyentes
     const userIds = new Set()
@@ -131,7 +121,7 @@ async function listByProject(req, res, next) {
         .sort((a, b) => b.hours - a.hours),
     }))
 
-    res.json(result)
+    res.json({ projects: result, period })
   } catch (err) { next(err) }
 }
 

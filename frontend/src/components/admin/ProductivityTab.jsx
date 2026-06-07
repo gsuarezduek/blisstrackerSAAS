@@ -3,6 +3,29 @@ import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import { avatarUrl } from '../../utils/avatarUrl'
 import ProductivityByProjectTab from './ProductivityByProjectTab'
+import ProductivityPeriodLabel from './ProductivityPeriodLabel'
+
+// Selector de modo de período (aplica a ambas vistas).
+function ModeToggle({ mode, onChange }) {
+  const opts = [['current', 'Mes en curso'], ['closed', 'Mes cerrado']]
+  return (
+    <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50 dark:bg-gray-800">
+      {opts.map(([key, label]) => (
+        <button
+          key={key}
+          onClick={() => onChange(key)}
+          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+            mode === key
+              ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -211,7 +234,7 @@ function sortValue(m, col) {
 // Dirección por defecto al activar una columna
 const DEFAULT_DIR = { name: 'asc', status: 'asc', completed: 'desc', hours: 'desc', tasa: 'desc', delta: 'desc' }
 
-function ByPersonView() {
+function ByPersonView({ mode }) {
   const [data, setData]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState(null)
@@ -225,13 +248,14 @@ function ByPersonView() {
   }
 
   const fetchData = useCallback(async () => {
+    setLoading(true)
     try {
-      const { data } = await api.get('/admin/productivity')
+      const { data } = await api.get('/admin/productivity', { params: { mode } })
       setData(data)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [mode])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -283,19 +307,10 @@ function ByPersonView() {
     )
   }
 
-  const fmtD  = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
-  const fmtDY = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
-  const p = data.period
-
   return (
     <div>
       {/* Período analizado */}
-      {p && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          Período: <strong className="text-gray-700 dark:text-gray-200">{fmtD(p.curStart)} – {fmtDY(p.curEnd)}</strong>
-          <span className="text-gray-400 dark:text-gray-500"> · comparado con {fmtD(p.prevStart)} – {fmtDY(p.prevEnd)}</span>
-        </p>
-      )}
+      <ProductivityPeriodLabel period={data.period} />
 
       {/* Tabla */}
       <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-x-auto">
@@ -339,7 +354,7 @@ function ByPersonView() {
         </table>
       </div>
       <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">
-        El promedio del equipo considera sólo a quienes tuvieron actividad. El análisis IA se actualiza cada sábado o al regenerarlo.
+        El Δ compara el ritmo por día logueado (tareas/día y horas/día) contra el período anterior, para neutralizar diferencias en la cantidad de días trabajados. El promedio del equipo considera sólo a quienes tuvieron actividad. El análisis IA se actualiza cada sábado o al regenerarlo.
       </p>
     </div>
   )
@@ -347,11 +362,15 @@ function ByPersonView() {
 
 export default function ProductivityTab() {
   const [tab, setTab] = useState('person')
+  const [mode, setMode] = useState('current')
 
   return (
     <div>
       <div className="mb-5">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Productividad del equipo</h2>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Productividad del equipo</h2>
+          <ModeToggle mode={mode} onChange={setMode} />
+        </div>
         <div className="flex gap-1 mt-3 border-b border-gray-200 dark:border-gray-700">
           {[['person', 'Por persona'], ['project', 'Por proyecto']].map(([key, label]) => (
             <button
@@ -369,7 +388,7 @@ export default function ProductivityTab() {
         </div>
       </div>
 
-      {tab === 'person' ? <ByPersonView /> : <ProductivityByProjectTab />}
+      {tab === 'person' ? <ByPersonView mode={mode} /> : <ProductivityByProjectTab mode={mode} />}
     </div>
   )
 }

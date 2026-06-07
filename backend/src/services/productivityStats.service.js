@@ -1,5 +1,8 @@
 // Capa de datos de productividad: calcula métricas determinísticas por miembro
-// comparando el período actual (últimas 4 semanas) contra el previo (semanas 5-8).
+// comparando un período actual contra el previo. El período lo define el caller
+// (mes en curso / mes cerrado en el admin; últimas 4 semanas por defecto para
+// la memoria de insights). Los Δ se calculan por día logueado para neutralizar
+// diferencias en la cantidad de días trabajados de cada período.
 // Sin IA. Lo consumen el controller de admin (live) y el servicio de memoria de insights.
 
 const prisma = require('../lib/prisma')
@@ -30,6 +33,9 @@ function summarize(workDays, completedTasks) {
     daysWorked,
     tasaCompletado: totalCreated > 0 ? totalCompleted / totalCreated : 0,
     tareasPorDia:   daysWorked > 0 ? Math.round(totalCompleted / daysWorked * 10) / 10 : 0,
+    // Ritmo por día logueado (sin redondear) — base de los Δ, neutraliza días no trabajados.
+    completedPerDay: daysWorked > 0 ? totalCompleted / daysWorked : 0,
+    minutesPerDay:   daysWorked > 0 ? totalMinutes   / daysWorked : 0,
   }
 }
 
@@ -88,8 +94,8 @@ function computeMemberStats({ workDays, completedTasks, stuckCount, curStart }) 
     previous,
     delta: {
       tasaCompletadoPts: Math.round((current.tasaCompletado - previous.tasaCompletado) * 100), // puntos %
-      horasPct:          pctChange(current.totalMinutes,   previous.totalMinutes),
-      tareasPct:         pctChange(current.totalCompleted, previous.totalCompleted),
+      horasPct:          pctChange(current.minutesPerDay,   previous.minutesPerDay),   // ritmo por día logueado
+      tareasPct:         pctChange(current.completedPerDay, previous.completedPerDay), // ritmo por día logueado
     },
     porProyecto,
     topProject,
@@ -100,21 +106,29 @@ function computeMemberStats({ workDays, completedTasks, stuckCount, curStart }) 
   }
 }
 
+// Período por defecto (memoria de insights): últimas 4 semanas vs las 4 previas.
+function weeksPeriod(tz) {
+  return {
+    curStart:  getNWeeksAgoMonday(4, tz),
+    prevStart: getNWeeksAgoMonday(8, tz),
+    curEnd:    todayString(tz),
+    prevEnd:   null,
+  }
+}
+
 // Trae las filas crudas (workDays + completed tasks) para un workspace en el rango
-// [prevStart, today], opcionalmente filtrado a un solo usuario. Devuelve también
-// el conteo de tareas atascadas por usuario.
-async function fetchRows(workspaceId, tz, userId = null) {
-  const offset    = tzOffsetStr(tz)
-  const today     = todayString(tz)
-  const curStart  = getNWeeksAgoMonday(4, tz)
-  const prevStart = getNWeeksAgoMonday(8, tz)
+// [prevStart, curEnd], opcionalmente filtrado a un solo usuario. El período lo define
+// el caller (default: weeksPeriod). Devuelve también el conteo de tareas atascadas.
+async function fetchRows(workspaceId, tz, { userId = null, period = null } = {}) {
+  const offset = tzOffsetStr(tz)
+  const { curStart, prevStart, curEnd } = period || weeksPeriod(tz)
   const stuckCutoff = new Date(daysAgo(STUCK_DAYS, tz) + 'T00:00:00' + offset)
 
   const userFilter = userId ? { userId } : {}
 
   const [workDays, completedTasks, stuckTasks] = await Promise.all([
     prisma.workDay.findMany({
-      where: { workspaceId, date: { gte: prevStart, lte: today }, ...userFilter },
+      where: { workspaceId, date: { gte: prevStart, lte: curEnd }, ...userFilter },
       select: {
         userId: true,
         date: true,
@@ -132,7 +146,7 @@ async function fetchRows(workspaceId, tz, userId = null) {
         status: 'COMPLETED',
         completedAt: {
           gte: new Date(prevStart + 'T00:00:00' + offset),
-          lte: new Date(today     + 'T23:59:59' + offset),
+          lte: new Date(curEnd    + 'T23:59:59' + offset),
         },
         workDay: { workspaceId },
         ...userFilter,
@@ -159,7 +173,7 @@ async function fetchRows(workspaceId, tz, userId = null) {
     }),
   ])
 
-  return { workDays, completedTasks, stuckTasks, curStart, prevStart, today }
+  return { workDays, completedTasks, stuckTasks, curStart, prevStart, curEnd }
 }
 
 function groupByUser(rows) {
@@ -181,8 +195,9 @@ function groupByUser(rows) {
 }
 
 // Stats de un solo miembro (usado por el servicio de memoria de insights).
+// Usa el período por defecto (últimas 4 semanas).
 async function getMemberStats(userId, workspaceId, tz) {
-  const rows = await fetchRows(workspaceId, tz, userId)
+  const rows = await fetchRows(workspaceId, tz, { userId })
   return computeMemberStats({
     workDays: rows.workDays,
     completedTasks: rows.completedTasks,
@@ -193,8 +208,8 @@ async function getMemberStats(userId, workspaceId, tz) {
 
 // Stats de todos los miembros de un workspace (usado por el controller, batched).
 // Devuelve Map<userId, stats>.
-async function getWorkspaceStats(workspaceId, tz) {
-  const rows = await fetchRows(workspaceId, tz)
+async function getWorkspaceStats(workspaceId, tz, period = null) {
+  const rows = await fetchRows(workspaceId, tz, { period })
   const { wdByUser, compByUser, stuckByUser } = groupByUser(rows)
   const userIds = new Set([...wdByUser.keys(), ...compByUser.keys(), ...stuckByUser.keys()])
   const result = new Map()
@@ -210,9 +225,19 @@ async function getWorkspaceStats(workspaceId, tz) {
 }
 
 // Agregado por proyecto a nivel equipo (período actual vs previo).
-async function getProjectStats(workspaceId, tz) {
-  const rows = await fetchRows(workspaceId, tz)
+async function getProjectStats(workspaceId, tz, period = null) {
+  const rows = await fetchRows(workspaceId, tz, { period })
   const { curStart } = rows
+
+  // Días logueados (con actividad) en cada período, para normalizar el Δ por día.
+  const curDaySet = new Set(), prevDaySet = new Set()
+  for (const wd of rows.workDays) {
+    if (wd.tasks.length === 0) continue
+    if (wd.date >= curStart) curDaySet.add(wd.date)
+    else                     prevDaySet.add(wd.date)
+  }
+  const nCurDays  = curDaySet.size
+  const nPrevDays = prevDaySet.size
 
   const byProject = {}
   function ensure(projectId, name) {
@@ -246,7 +271,11 @@ async function getProjectStats(workspaceId, tz) {
       completed: p.curCompleted,
       contributorCount: Object.keys(p.contributors).length,
       contributors: p.contributors, // { userId: minutes }
-      horasDeltaPct: pctChange(p.curMinutes, p.prevMinutes),
+      // Δ del ritmo por día logueado (minutos/día), neutraliza períodos con menos días.
+      horasDeltaPct: pctChange(
+        nCurDays  ? p.curMinutes  / nCurDays  : 0,
+        nPrevDays ? p.prevMinutes / nPrevDays : 0,
+      ),
     }))
     .filter(p => p.minutes > 0 || p.completed > 0)
     .sort((a, b) => b.minutes - a.minutes)

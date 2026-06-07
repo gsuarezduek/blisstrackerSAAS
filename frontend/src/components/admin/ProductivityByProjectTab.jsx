@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Fragment } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import { avatarUrl } from '../../utils/avatarUrl'
+import ProductivityPeriodLabel from './ProductivityPeriodLabel'
 
 const fmtHours = h => (h >= 1 ? `${h}h` : h > 0 ? `${Math.round(h * 60)}m` : '—')
 
@@ -17,27 +18,33 @@ function DeltaPct({ value }) {
   )
 }
 
-export default function ProductivityByProjectTab() {
+export default function ProductivityByProjectTab({ mode }) {
   const [projects, setProjects] = useState([])
+  const [period, setPeriod]     = useState(null)
   const [loading, setLoading]   = useState(true)
   const [expandedId, setExpandedId] = useState(null)
 
   const fetchData = useCallback(async () => {
+    setLoading(true)
     try {
-      const { data } = await api.get('/admin/productivity/by-project')
-      setProjects(data)
+      const { data } = await api.get('/admin/productivity/by-project', { params: { mode } })
+      setProjects(data.projects || [])
+      setPeriod(data.period || null)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [mode])
 
   useEffect(() => { fetchData() }, [fetchData])
 
   if (loading) return <LoadingSpinner className="py-16" />
   if (projects.length === 0) {
     return (
-      <div className="text-center py-16 text-gray-400 dark:text-gray-500">
-        <p className="text-sm">No hay tiempo registrado en proyectos en las últimas 4 semanas.</p>
+      <div>
+        <ProductivityPeriodLabel period={period} />
+        <div className="text-center py-16 text-gray-400 dark:text-gray-500">
+          <p className="text-sm">No hay tiempo registrado en proyectos en este período.</p>
+        </div>
       </div>
     )
   }
@@ -46,6 +53,7 @@ export default function ProductivityByProjectTab() {
 
   return (
     <div>
+      <ProductivityPeriodLabel period={period} />
       <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-x-auto">
         <table className="w-full min-w-[560px]">
           <thead>
@@ -107,7 +115,7 @@ export default function ProductivityByProjectTab() {
         </table>
       </div>
       <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">
-        Horas dedicadas por el equipo en las últimas 4 semanas. Δ compara contra las 4 semanas previas.
+        Horas dedicadas por el equipo en el período. El Δ compara el ritmo por día logueado contra el período anterior, para neutralizar diferencias en la cantidad de días trabajados.
       </p>
     </div>
   )
