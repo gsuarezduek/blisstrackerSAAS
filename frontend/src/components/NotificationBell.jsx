@@ -8,7 +8,6 @@ import { avatarUrl } from '../utils/avatarUrl'
 const MUTED_TYPES = ['COMPLETED']
 
 const FILTERS = [
-  { key: 'all',              label: 'Todas',  title: 'Todas',                    types: null },
   { key: 'TASK_MENTION',     label: '@',      title: 'Asignaciones y menciones', types: ['TASK_MENTION'] },
   { key: 'TASK_COMMENT',     label: '💬',     title: 'Comentarios',              types: ['TASK_COMMENT'] },
   { key: 'BLOCKED',          label: '🔒',     title: 'Bloqueos',                 types: ['BLOCKED'] },
@@ -28,26 +27,18 @@ function timeAgo(dateStr) {
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState([])
   const [open,          setOpen]          = useState(false)
-  const [activeFilter,  setActiveFilter]  = useState('all')
+  const [activeFilter,  setActiveFilter]  = useState(FILTERS[0].key)
   const containerRef = useRef(null)
 
   // El badge destacado ignora las completadas (no son prioritarias)
   const unreadCount = notifications.filter(n => !n.read && !MUTED_TYPES.includes(n.type)).length
-  // Para decidir si marcar todo como leído al abrir, sí contamos todo
-  const anyUnread = notifications.some(n => !n.read)
 
-  const filtered = useMemo(() => {
-    const f = FILTERS.find(f => f.key === activeFilter)
-    const list = !f?.types ? notifications : notifications.filter(n => f.types.includes(n.type))
-    // En la vista "Todas", las completadas van al final (el backend ya ordena
-    // por fecha desc; sort es estable, así que se preserva ese orden por grupo)
-    if (!f?.types) {
-      return [...list].sort(
-        (a, b) => (MUTED_TYPES.includes(a.type) ? 1 : 0) - (MUTED_TYPES.includes(b.type) ? 1 : 0)
-      )
-    }
-    return list
-  }, [notifications, activeFilter])
+  const activeFilterObj = FILTERS.find(f => f.key === activeFilter) ?? FILTERS[0]
+
+  const filtered = useMemo(
+    () => notifications.filter(n => activeFilterObj.types.includes(n.type)),
+    [notifications, activeFilterObj]
+  )
 
   const unreadByType = useMemo(() => {
     const counts = {}
@@ -85,15 +76,32 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  async function handleOpen() {
+  // Marca como leídas solo las notificaciones del tipo (filtro) indicado: así el indicador
+  // de cada icono refleja lo que todavía no viste, y se limpia recién cuando entrás a ese tipo.
+  const markTypeRead = useCallback(async (filterKey) => {
+    const f = FILTERS.find(f => f.key === filterKey)
+    if (!f) return
+    const hasUnread = notifications.some(n => !n.read && f.types.includes(n.type))
+    if (!hasUnread) return
+    setNotifications(prev => prev.map(n => f.types.includes(n.type) ? { ...n, read: true } : n))
+    try { await api.post('/notifications/read', { types: f.types }) } catch {}
+  }, [notifications])
+
+  function selectFilter(key) {
+    setActiveFilter(key)
+    markTypeRead(key)
+  }
+
+  function handleOpen() {
     const wasOpen = open
     setOpen(prev => !prev)
-    if (wasOpen) setActiveFilter('all')
-
-    // Mark all as read when opening
-    if (!wasOpen && anyUnread) {
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-      try { await api.post('/notifications/read-all') } catch {}
+    if (!wasOpen) {
+      // Al abrir, mostrar el primer tipo con no leídas (o el primero de la lista) y marcarlo visto
+      const firstUnread = FILTERS.find(f => f.types.some(t => !MUTED_TYPES.includes(t))
+        && notifications.some(n => !n.read && f.types.includes(n.type)))
+      const initial = firstUnread?.key ?? FILTERS[0].key
+      setActiveFilter(initial)
+      markTypeRead(initial)
     }
   }
 
@@ -121,34 +129,30 @@ export default function NotificationBell() {
       {open && (
         <div className="fixed inset-x-2 top-16 sm:absolute sm:inset-x-auto sm:right-0 sm:top-8 sm:w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
           <div className="px-4 pt-3 pb-2 border-b dark:border-gray-700">
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="font-semibold text-gray-900 dark:text-white text-sm">Notificaciones</span>
-              {notifications.length > 0 && (
-                <span className="text-xs text-gray-400 dark:text-gray-500">{notifications.length} recientes</span>
-              )}
+            <div className="flex items-baseline gap-1.5 mb-2.5 min-w-0">
+              <span className="font-semibold text-gray-900 dark:text-white text-sm flex-shrink-0">Notificaciones</span>
+              <span className="text-xs text-primary-600 dark:text-primary-400 font-medium truncate">· {activeFilterObj.title}</span>
             </div>
-            {/* Filter pills */}
-            <div className="flex gap-1 flex-wrap">
+            {/* Filter icons — solo iconos, con indicador de no leídas por tipo */}
+            <div className="flex gap-1.5">
               {FILTERS.map(f => {
                 const badge = unreadByType[f.key] ?? 0
                 const isActive = activeFilter === f.key
-                const showTitle = isActive && f.key !== 'all'
                 return (
                   <button
                     key={f.key}
-                    onClick={() => setActiveFilter(f.key)}
+                    onClick={() => selectFilter(f.key)}
                     title={f.title}
                     aria-label={f.title}
-                    className={`relative text-xs px-2.5 py-1 rounded-full font-medium transition-colors inline-flex items-center gap-1 ${
+                    className={`relative text-sm w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
                       isActive
-                        ? 'bg-primary-600 text-white'
+                        ? 'bg-primary-600 text-white ring-2 ring-primary-300 dark:ring-primary-700'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                   >
                     <span>{f.label}</span>
-                    {showTitle && <span>{f.title}</span>}
                     {badge > 0 && (
-                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none">
+                      <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
                         {badge > 9 ? '9+' : badge}
                       </span>
                     )}

@@ -163,7 +163,7 @@ Only one task can be `IN_PROGRESS` per user at a time (enforced via `assertNoAct
 
 **Task comments:** Any project member can comment on any task. `_count.comments` is always included in task responses. Notifications: `TASK_COMMENT` to owner + previous commenters; `TASK_MENTION` to `@mentioned` users (no duplicate with TASK_COMMENT).
 
-**Notifications:** `NotificationType` enum: `COMPLETED` / `BLOCKED` / `ADDED_TO_PROJECT` / `TASK_COMMENT` / `TASK_MENTION`. Bell panel has 6 filter pills. Each notification is a clickable link that auto-opens `TaskCommentsModal`.
+**Notifications:** `NotificationType` enum: `COMPLETED` / `BLOCKED` / `ADDED_TO_PROJECT` / `TASK_COMMENT` / `TASK_MENTION` (+ `VACATION_REQUEST` / `VACATION_REVIEWED`). Bell panel (`NotificationBell.jsx`) tiene 6 filtros **solo-icono** (sin "Todas"): el encabezado muestra "Notificaciones · {tipo activo}" y cada icono lleva un badge con la cantidad **sin leer de ese tipo**. Modelo de lectura **por tipo**: abrir el panel marca leído solo el tipo que se está viendo (no todo); cambiar de icono marca leído ese tipo. Así cada icono indica qué quedó sin ver. Backend: `POST /api/notifications/read` body `{ types: [...] }` (marca leídas por tipo) además de `/read-all`. Cada notificación es un link que abre `TaskCommentsModal`.
 
 **Project links:** Stored in `ProjectLink`. Any project member can add/delete. `PUT /api/projects/:id/links` replaces all links atomically.
 

@@ -1,5 +1,5 @@
 const router = require('express').Router()
-const { list, markAllRead } = require('../controllers/notifications.controller')
+const { list, markAllRead, markRead } = require('../controllers/notifications.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 
@@ -8,5 +8,6 @@ router.use(resolveWorkspace)
 
 router.get('/',          list)
 router.post('/read-all', markAllRead)
+router.post('/read',     markRead)
 
 module.exports = router
