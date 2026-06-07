@@ -47,6 +47,7 @@ model Workspace {
   insightMemories        UserInsightMemory[]
   notifications          Notification[]
   workDays               WorkDay[]
+  taskRecurrences        TaskRecurrence[]
   subscription           Subscription?
   loginEvents            UserLogin[]
   feedbacks              Feedback[]
@@ -167,6 +168,8 @@ model User {
   workDays                  WorkDay[]
   tasks                     Task[]
   tasksCreated              Task[]                     @relation("TaskCreatedBy")
+  taskRecurrences           TaskRecurrence[]           @relation("RecurrenceAssignee")
+  taskRecurrencesCreated    TaskRecurrence[]           @relation("RecurrenceCreatedBy")
   taskComments              TaskComment[]
   dailyInsights             DailyInsight[]
   insightMemories           UserInsightMemory[]
@@ -276,6 +279,7 @@ model Project {
   updatedAt          DateTime  @updatedAt
 
   tasks                  Task[]
+  taskRecurrences        TaskRecurrence[]
   services               ProjectService[]
   members                ProjectMember[]
   stars                  ProjectStar[]
@@ -413,6 +417,14 @@ model Task {
   starred            Int        @default(0)
   isBacklog          Boolean    @default(false)
   dismissedByCreator Boolean    @default(false)
+  // Tareas futuras/recurrentes: fecha de aparición "YYYY-MM-DD". null = tarea normal/ya activa.
+  // Mientras scheduledFor > hoy la tarea NO aparece en el foco/backlog; al llegar la fecha se
+  // engancha al workday del día y se setea scheduledFor = null (activación perezosa + cron).
+  scheduledFor       String?
+  // Instancia generada por una recurrencia (null = tarea suelta). SetNull conserva el historial
+  // completado si se borra la serie.
+  recurrenceId       Int?
+  recurrence         TaskRecurrence? @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
@@ -423,6 +435,38 @@ model Task {
   @@index([userId, status])
   @@index([projectId])
   @@index([workDayId])
+  @@index([userId, scheduledFor])
+  @@index([recurrenceId])
+}
+
+// Plantilla de tarea recurrente. Genera instancias Task (con scheduledFor + recurrenceId) que
+// se materializan de a una por adelantado (sin backfill de ocurrencias perdidas).
+model TaskRecurrence {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      Int // a quién se le asigna la tarea
+  user        User      @relation("RecurrenceAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  createdById Int? // quién la creó/delegó (null si es propia)
+  createdBy   User?     @relation("RecurrenceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  projectId   Int
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description String
+  frequency   String // daily | weekly | monthly | annual
+  weekdays    String  @default("[]") // JSON [0-6] (0=domingo) — solo weekly
+  dayOfMonth  Int? // 1-31 — monthly/annual (derivado de startDate)
+  month       Int? // 1-12 — annual (derivado de startDate)
+  startDate      String // "YYYY-MM-DD" — primera ocurrencia
+  endDate        String? // "YYYY-MM-DD" — null = nunca termina
+  lastSpawnedDate String? // "YYYY-MM-DD" — última ocurrencia materializada (para generar la próxima sin backfill)
+  active         Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tasks Task[]
+
+  @@index([workspaceId, active])
+  @@index([userId, active])
 }
 
 model TaskSession {

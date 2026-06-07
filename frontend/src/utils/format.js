@@ -6,15 +6,51 @@ export function fmtMins(mins) {
 
 const MAX_ACTIVE_MINS = 12 * 60  // cota de seguridad: 12h máximo para tareas en curso
 
-// Active minutes worked on a task, excluding paused time
-export function activeMinutes(task) {
+// Tiempo activo de una tarea en SEGUNDOS — fuente de verdad única para todas las vistas.
+// Suma los intervalos reales de trabajo registrados en TaskSession: las sesiones cerradas
+// aportan (endedAt - startedAt); la sesión abierta tickea hasta `now` solo si la tarea está
+// EN CURSO. Esto es inmune al drift de startedAt y a pausas/cron no registrados.
+// Si la tarea no trae `sessions` (datos legacy), cae al cálculo viejo por startedAt/pausedMinutes.
+export function activeSeconds(task, now = Date.now()) {
+  if (Array.isArray(task.sessions) && task.sessions.length > 0) {
+    let secs = 0
+    for (const s of task.sessions) {
+      const start = new Date(s.startedAt).getTime()
+      let end
+      if (s.endedAt) end = new Date(s.endedAt).getTime()
+      else if (task.status === 'IN_PROGRESS') end = now
+      else continue  // sesión abierta huérfana en tarea no activa: ignorar (evita runaway)
+      secs += Math.max(0, (end - start) / 1000)
+    }
+    return task.status === 'IN_PROGRESS' ? Math.min(secs, MAX_ACTIVE_MINS * 60) : secs
+  }
+  return legacyActiveSeconds(task, now)
+}
+
+// Cálculo legacy (tareas sin sesiones registradas): ahora − startedAt − pausedMinutes.
+function legacyActiveSeconds(task, now) {
   if (!task.startedAt) return 0
   const base = task.status === 'PAUSED' && task.pausedAt
-    ? new Date(task.pausedAt) - new Date(task.startedAt)
-    : Date.now()              - new Date(task.startedAt)
-  const result = Math.max(0, Math.round(base / 60000) - (task.pausedMinutes || 0))
-  // Si la tarea sigue EN CURSO y supera el máximo, es un zombie — cap para evitar valores absurdos
-  return task.status === 'IN_PROGRESS' ? Math.min(result, MAX_ACTIVE_MINS) : result
+    ? new Date(task.pausedAt).getTime() - new Date(task.startedAt).getTime()
+    : now                               - new Date(task.startedAt).getTime()
+  const secs = Math.max(0, base / 1000 - (task.pausedMinutes || 0) * 60)
+  return task.status === 'IN_PROGRESS' ? Math.min(secs, MAX_ACTIVE_MINS * 60) : secs
+}
+
+// Minutos activos de una tarea (excluye tiempo pausado). Derivado de activeSeconds.
+export function activeMinutes(task, now = Date.now()) {
+  return Math.round(activeSeconds(task, now) / 60)
+}
+
+// Formatea una duración en segundos como "Xh Ym" / "Xm Ys" / "Xs" (ticker en vivo).
+export function fmtDuration(secs) {
+  const total = Math.max(0, Math.floor(secs))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
 }
 
 // Minutos efectivos de una tarea completada (usa minutesOverride si fue editado manualmente)

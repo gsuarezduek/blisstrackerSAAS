@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { todayString } = require('../utils/dates')
 
 function weekMondayStr(tz) {
   const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : 'America/Argentina/Buenos_Aires'
@@ -261,13 +262,18 @@ async function projectTasks(req, res, next) {
     const monday = weekMondayStr(tz)
     const ACTIVE_LIMIT = 200
 
+    const today = todayString(tz)
+    // Excluir tareas futuras programadas (scheduledFor posterior a hoy)
+    const notFuture = { OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }] }
+
     const [activeTasks, completedThisWeek, activeCount] = await Promise.all([
       prisma.task.findMany({
-        where: { projectId, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] } },
+        where: { projectId, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] }, ...notFuture },
         include: {
           user:      { select: { id: true, name: true, avatar: true } },
           createdBy: { select: { id: true, name: true } },
           _count:    { select: { comments: true } },
+          sessions:  { select: { startedAt: true, endedAt: true } },
         },
         orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
         take: ACTIVE_LIMIT,
@@ -279,7 +285,7 @@ async function projectTasks(req, res, next) {
         take: 100,
       }),
       prisma.task.count({
-        where: { projectId, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] } },
+        where: { projectId, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] }, ...notFuture },
       }),
     ])
 
@@ -290,7 +296,8 @@ async function projectTasks(req, res, next) {
       byUser[uid].tasks.push({
         id: task.id, description: task.description, status: task.status,
         blockedReason: task.blockedReason, createdAt: task.createdAt, startedAt: task.startedAt,
-        projectId: task.projectId, _count: task._count,
+        pausedAt: task.pausedAt, pausedMinutes: task.pausedMinutes, sessions: task.sessions,
+        projectId: task.projectId, _count: task._count, recurrenceId: task.recurrenceId,
         createdBy: task.createdBy?.id !== task.user.id ? task.createdBy : null,
       })
     }

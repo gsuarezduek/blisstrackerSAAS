@@ -26,6 +26,8 @@ export default function Dashboard() {
   const [elapsed, setElapsed] = useState('')
 
   const [carryOver, setCarryOver] = useState([])
+  const [future, setFuture] = useState([])
+  const [futureOpen, setFutureOpen] = useState(false)
   const [delegated, setDelegated] = useState([])
   const [delegatedOpen, setDelegatedOpen] = useState(false)
   const [delegatedFilter, setDelegatedFilter] = useState('ALL')
@@ -59,9 +61,10 @@ export default function Dashboard() {
     setWorkdayError(null)
     try {
       const { data } = await api.get('/workdays/today')
-      const { carryOverTasks, ...wd } = data
+      const { carryOverTasks, futureTasks, ...wd } = data
       setWorkDay(wd)
       setCarryOver(carryOverTasks ?? [])
+      setFuture(futureTasks ?? [])
 
       const storedId = localStorage.getItem('autoPaused')
       if (storedId) {
@@ -144,7 +147,19 @@ export default function Dashboard() {
   }
 
   function handleAddTask(task) {
+    // Tarea programada a futuro: no va al foco de hoy, va a la sección "Futuras".
+    if (task.scheduledFor && workDay && task.scheduledFor > workDay.date) {
+      setFuture(prev => [...prev, task].sort((a, b) => (a.scheduledFor > b.scheduledFor ? 1 : -1)))
+      setFutureOpen(true)
+      return
+    }
     setWorkDay(prev => ({ ...prev, tasks: [...prev.tasks, task] }))
+  }
+
+  // Adelantar una tarea futura a hoy: sale de "Futuras" y entra al foco del día.
+  function handleBringToToday(updated) {
+    setFuture(prev => prev.filter(t => t.id !== updated.id))
+    setWorkDay(prev => ({ ...prev, tasks: [...prev.tasks, updated] }))
   }
 
   function handleUpdateTask(updated) {
@@ -164,9 +179,21 @@ export default function Dashboard() {
     }))
   }
 
-  function handleDeleteTask(id) {
+  function handleDeleteTask(id, recurrenceId) {
+    // Borrado de serie: quitar todas las instancias de esa recurrencia de todas las listas.
+    if (recurrenceId) {
+      const keep = t => t.recurrenceId !== recurrenceId
+      setCarryOver(prev => prev.filter(keep))
+      setFuture(prev => prev.filter(keep))
+      setWorkDay(prev => ({ ...prev, tasks: prev.tasks.filter(keep) }))
+      return
+    }
     if (carryOver.find(t => t.id === id)) {
       setCarryOver(prev => prev.filter(t => t.id !== id))
+      return
+    }
+    if (future.find(t => t.id === id)) {
+      setFuture(prev => prev.filter(t => t.id !== id))
       return
     }
     setWorkDay(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== id) }))
@@ -995,6 +1022,47 @@ export default function Dashboard() {
             </div>
           )}
         </section>
+
+        {/* 9. Futuras — tareas programadas para más adelante, collapsible */}
+        {future.length > 0 && (
+          <section className="mb-6">
+            <button
+              onClick={() => setFutureOpen(v => !v)}
+              className="w-full flex items-center justify-between py-2 group"
+            >
+              <div className="flex items-center gap-2">
+                <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Futuras</h2>
+                <span className="text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 rounded-full px-2 py-0.5 font-medium">
+                  {future.length}
+                </span>
+              </div>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${futureOpen ? 'rotate-180' : ''}`}
+              >
+                <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clipRule="evenodd" />
+              </svg>
+            </button>
+
+            {futureOpen && (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 mt-2">
+                {future.map(t => (
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    onUpdate={handleUpdateTask}
+                    onDelete={handleDeleteTask}
+                    future
+                    onBringToToday={handleBringToToday}
+                    onOpenComments={setCommentTask}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
       {showModal && <AddTaskModal onAdd={handleAddTask} onClose={() => setShowModal(false)} alertaGTD={insight?.alertaGTD ?? null} />}

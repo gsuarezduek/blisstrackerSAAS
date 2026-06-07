@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
+const { taskWorkedMinutes } = require('../lib/taskTime')
 
 async function snapshot(req, res, next) {
   try {
@@ -12,7 +13,9 @@ async function snapshot(req, res, next) {
       include: {
         user: { select: { id: true, name: true, avatar: true } },
         tasks: {
-          include: { project: true },
+          // Excluir tareas futuras programadas (scheduledFor posterior a hoy)
+          where: { OR: [{ scheduledFor: null }, { scheduledFor: { lte: date } }] },
+          include: { project: true, sessions: { select: { startedAt: true, endedAt: true } } },
           orderBy: { updatedAt: 'desc' },
         },
       },
@@ -36,8 +39,9 @@ async function snapshot(req, res, next) {
             userId: { in: userIds },
             status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
             workDay: { date: { lt: date }, workspaceId },
+            OR: [{ scheduledFor: null }, { scheduledFor: { lte: date } }],
           },
-          include: { project: true },
+          include: { project: true, sessions: { select: { startedAt: true, endedAt: true } } },
         }),
       ])
       for (const m of members) memberMap[m.userId] = m.teamRole
@@ -53,8 +57,8 @@ async function snapshot(req, res, next) {
       const inProgressTask = allTasks.find(t => t.status === 'IN_PROGRESS') ?? null
       const completedCount = wd.tasks.filter(t => t.status === 'COMPLETED').length
       const totalMins = wd.tasks
-        .filter(t => t.status === 'COMPLETED' && t.startedAt && t.completedAt)
-        .reduce((s, t) => s + Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000), 0)
+        .filter(t => t.status === 'COMPLETED')
+        .reduce((s, t) => s + taskWorkedMinutes(t), 0)
 
       return {
         user: { ...wd.user, role: memberMap[wd.userId] ?? '' },

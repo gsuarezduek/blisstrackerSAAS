@@ -4,7 +4,7 @@ import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import { fmtMins, activeMinutes, completedDuration, completedMinutes } from '../utils/format'
 
-export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, onAddToToday, onMoveToBacklog, onOpenComments }) {
+export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments }) {
   const [loading, setLoading] = useState(false)
   const [showBlockForm, setShowBlockForm] = useState(false)
   const [blockReason, setBlockReason] = useState('')
@@ -31,16 +31,31 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
     }
   }
 
-  async function handleDelete() {
+  async function handleDelete(scope) {
     setLoading(true)
     try {
-      await api.delete(`/tasks/${task.id}`)
-      onDelete(task.id)
+      await api.delete(`/tasks/${task.id}${scope === 'series' ? '?scope=series' : ''}`)
+      onDelete(task.id, scope === 'series' ? task.recurrenceId : null)
     } finally {
       setLoading(false)
       setShowDeleteConfirm(false)
     }
   }
+
+  async function handleBringToToday() {
+    setLoading(true)
+    try {
+      const { data } = await api.patch(`/tasks/${task.id}/bring-to-today`)
+      onBringToToday?.(data)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Fecha de aparición de una tarea futura, formateada "DD/MM"
+  const scheduledLabel = task.scheduledFor
+    ? task.scheduledFor.slice(8, 10) + '/' + task.scheduledFor.slice(5, 7)
+    : null
 
   async function handleStar() {
     setLoading(true)
@@ -131,6 +146,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
   const isBlocked = task.status === 'BLOCKED'
 
   const canMoveToBacklog = !backlog
+    && !future
     && onMoveToBacklog
     && ['PENDING', 'PAUSED', 'BLOCKED'].includes(task.status)
 
@@ -156,7 +172,9 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
       <div className="flex items-start gap-3">
         {/* Star (unified status + priority indicator) */}
         <div className="flex flex-col items-center flex-shrink-0 mt-0.5">
-          {task.status !== 'COMPLETED' ? (
+          {future ? (
+            <div className="w-4 h-4 flex items-center justify-center text-indigo-400" title="Tarea futura">📅</div>
+          ) : task.status !== 'COMPLETED' ? (
             <button
               onClick={handleStar}
               disabled={loading}
@@ -203,7 +221,12 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
           </p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <Link to={`/my-projects/${task.project.id}`} className="text-xs bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded px-2 py-0.5 hover:bg-primary-100 dark:hover:bg-primary-900/70 transition-colors">{task.project.name}</Link>
-            <span className={`text-xs rounded px-2 py-0.5 ${statusBadge[task.status]}`}>{statusLabel[task.status]}</span>
+            {future
+              ? <span className="text-xs rounded px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">📅 {scheduledLabel}</span>
+              : <span className={`text-xs rounded px-2 py-0.5 ${statusBadge[task.status]}`}>{statusLabel[task.status]}</span>}
+            {task.recurrenceId && (
+              <span title="Tarea recurrente" className="text-xs rounded px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">🔁</span>
+            )}
 
             {task.status === 'IN_PROGRESS' && task.startedAt && (
               <span className="text-xs text-blue-500">⏱ {fmtMins(activeMinutes(task))}</span>
@@ -273,10 +296,21 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
         </div>
 
         {/* Action column */}
-        <div className={`flex flex-col gap-1.5 flex-shrink-0 ${backlog ? 'w-28' : 'w-24'}`}>
+        <div className={`flex flex-col gap-1.5 flex-shrink-0 ${backlog || future ? 'w-28' : 'w-24'}`}>
+
+          {/* Future mode: single "Traer a hoy" action */}
+          {future && (
+            <button
+              onClick={handleBringToToday}
+              disabled={loading}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-40"
+            >
+              {loading ? '...' : 'Traer a hoy'}
+            </button>
+          )}
 
           {/* Backlog mode: single "Agregar a hoy" action */}
-          {backlog && (
+          {!future && backlog && (
             <button
               onClick={handleAddToToday}
               disabled={loading}
@@ -287,7 +321,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
           )}
 
           {/* Normal mode: state-based actions */}
-          {!backlog && task.status === 'PENDING' && (
+          {!backlog && !future && task.status === 'PENDING' && (
             <button
               onClick={() => call('start')}
               disabled={loading || !canStart}
@@ -409,26 +443,57 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
             <div className="flex flex-col gap-1">
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">Eliminar tarea</h3>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Eliminar tarea{task.recurrenceId ? ' recurrente' : ''}</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">"{task.description}"</p>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Esta acción no se puede deshacer.</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={loading}
-                className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={loading}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
-              >
-                {loading ? 'Eliminando...' : 'Eliminar'}
-              </button>
-            </div>
+            {task.recurrenceId ? (
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Es una tarea recurrente. ¿Qué querés eliminar?</p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => handleDelete('one')}
+                    disabled={loading}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                  >
+                    Solo esta
+                  </button>
+                  <button
+                    onClick={() => handleDelete('series')}
+                    disabled={loading}
+                    className="w-full border border-red-400 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                  >
+                    Esta y todas las siguientes
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={loading}
+                    className="w-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Esta acción no se puede deshacer.</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={loading}
+                    className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => handleDelete('one')}
+                    disabled={loading}
+                    className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                  >
+                    {loading ? 'Eliminando...' : 'Eliminar'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -1,11 +1,17 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
+const { materializeForUser } = require('../services/recurrence.service')
 
 const taskInclude = {
   project: true,
   createdBy: { select: { id: true, name: true } },
   _count: { select: { comments: true } },
+  sessions: { select: { startedAt: true, endedAt: true } },
 }
+
+// Predicado "tarea visible/activa": no programada a futuro. Las tareas con scheduledFor
+// posterior a hoy se ocultan del foco/backlog/carry-over hasta que llega su fecha.
+const liveWhere = (today) => ({ OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }] })
 
 async function getOrCreateToday(req, res, next) {
   try {
@@ -14,27 +20,16 @@ async function getOrCreateToday(req, res, next) {
     const tz = req.workspace.timezone
     const date = todayString(tz)
 
-    const taskQuery = { include: taskInclude, orderBy: { createdAt: 'desc' } }
-    const whereKey  = { userId_workspaceId_date: { userId, workspaceId, date } }
+    const whereKey = { userId_workspaceId_date: { userId, workspaceId, date } }
 
-    let workDay = await prisma.workDay.findUnique({
-      where: whereKey,
-      include: { tasks: taskQuery },
-    })
-
+    let workDay = await prisma.workDay.findUnique({ where: whereKey })
     if (!workDay) {
       try {
-        workDay = await prisma.workDay.create({
-          data: { userId, workspaceId, date },
-          include: { tasks: taskQuery },
-        })
+        workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
       } catch (createErr) {
         if (createErr.code === 'P2002') {
           // Condición de carrera: otro request creó el registro entre el findUnique y el create.
-          workDay = await prisma.workDay.findUnique({
-            where: whereKey,
-            include: { tasks: taskQuery },
-          })
+          workDay = await prisma.workDay.findUnique({ where: whereKey })
         } else {
           throw createErr
         }
@@ -45,22 +40,50 @@ async function getOrCreateToday(req, res, next) {
       workDay = await prisma.workDay.update({
         where: whereKey,
         data: { endedAt: null, startedAt: new Date() },
-        include: { tasks: taskQuery },
       })
     }
 
-    // Tareas de días anteriores aún activas en este workspace
+    // Materializar tareas futuras/recurrentes: activar las que ya vencieron (enganchándolas
+    // al workday de hoy) y generar la próxima ocurrencia de cada recurrencia. Aislado en su
+    // propio try: un error de recurrencia no debe romper el dashboard.
+    try {
+      await materializeForUser(prisma, { userId, workspaceId, todayWorkDayId: workDay.id, today: date })
+    } catch (matErr) {
+      console.error('[Recurrence] Error materializando tareas:', matErr.message)
+    }
+
+    // Tareas de hoy (excluye futuras programadas)
+    const tasks = await prisma.task.findMany({
+      where: { workDayId: workDay.id, ...liveWhere(date) },
+      include: taskInclude,
+      orderBy: { createdAt: 'desc' },
+    })
+
+    // Tareas de días anteriores aún activas en este workspace (excluye futuras)
     const carryOverTasks = await prisma.task.findMany({
       where: {
         userId,
         status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         workDay: { date: { lt: date }, workspaceId },
+        ...liveWhere(date),
       },
       include: taskInclude,
       orderBy: { createdAt: 'desc' },
     })
 
-    res.json({ ...workDay, carryOverTasks })
+    // Tareas futuras (programadas para más adelante) — sección "Futuras" del dashboard
+    const futureTasks = await prisma.task.findMany({
+      where: {
+        userId,
+        status: { not: 'COMPLETED' },
+        scheduledFor: { gt: date },
+        workDay: { workspaceId },
+      },
+      include: taskInclude,
+      orderBy: { scheduledFor: 'asc' },
+    })
+
+    res.json({ ...workDay, tasks, carryOverTasks, futureTasks })
   } catch (err) { next(err) }
 }
 

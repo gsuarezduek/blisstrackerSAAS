@@ -69,6 +69,7 @@ async function getUserTasks(req, res, next) {
     const taskInclude = {
       project: true,
       _count: { select: { comments: true } },
+      sessions: { select: { startedAt: true, endedAt: true } },
     }
 
     const [activeTasks, completedTasks] = await Promise.all([
@@ -77,6 +78,8 @@ async function getUserTasks(req, res, next) {
           userId,
           status: { not: 'COMPLETED' },
           workDay: { workspaceId },
+          // Excluir tareas futuras programadas
+          OR: [{ scheduledFor: null }, { scheduledFor: { lte: todayStr } }],
         },
         include: taskInclude,
         orderBy: { createdAt: 'desc' },

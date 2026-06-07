@@ -1,10 +1,14 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
+const {
+  buildRecurrenceParams, firstScheduledDate, spawnInstance,
+} = require('../services/recurrence.service')
 
 const taskInclude = {
   project: true,
   createdBy: { select: { id: true, name: true } },
   _count: { select: { comments: true } },
+  sessions: { select: { startedAt: true, endedAt: true } },
 }
 
 async function assertNoActiveTask(userId, currentWorkspaceId) {
@@ -50,6 +54,31 @@ async function create(req, res, next) {
     }
 
     const userId = targetUserId ? Number(targetUserId) : requesterId
+    const today = todayString(tz)
+
+    // ── Validación de opciones de tarea futura / recurrente ──────────────────
+    const isYMD = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+    const recurrence = req.body.recurrence || null
+    let scheduledFor = req.body.scheduledFor || null
+
+    if (scheduledFor && !isYMD(scheduledFor)) {
+      return res.status(400).json({ error: 'Fecha inválida (formato YYYY-MM-DD)' })
+    }
+    // Una fecha futura igual o anterior a hoy es una tarea normal.
+    if (scheduledFor && scheduledFor <= today) scheduledFor = null
+
+    if (recurrence) {
+      const FREQ = ['daily', 'weekly', 'monthly', 'annual']
+      if (!FREQ.includes(recurrence.frequency)) {
+        return res.status(400).json({ error: 'Tipo de recurrencia inválido' })
+      }
+      if (recurrence.endDate && !isYMD(recurrence.endDate)) {
+        return res.status(400).json({ error: 'Fecha de finalización inválida' })
+      }
+      if (recurrence.endDate && recurrence.endDate < today) {
+        return res.status(400).json({ error: 'La fecha de finalización no puede ser anterior a hoy' })
+      }
+    }
 
     if (userId !== requesterId) {
       // El equipo del proyecto (ProjectMember) es solo una etiqueta de "trabajan
@@ -64,12 +93,11 @@ async function create(req, res, next) {
       }
     }
 
-    const date = todayString(tz)
-    const wdKey = { userId_workspaceId_date: { userId, workspaceId, date } }
+    const wdKey = { userId_workspaceId_date: { userId, workspaceId, date: today } }
     let workDay = await prisma.workDay.findUnique({ where: wdKey })
     if (!workDay) {
       try {
-        workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
+        workDay = await prisma.workDay.create({ data: { userId, workspaceId, date: today } })
       } catch (createErr) {
         if (createErr.code === 'P2002') {
           workDay = await prisma.workDay.findUnique({ where: wdKey })
@@ -83,18 +111,55 @@ async function create(req, res, next) {
       return res.status(500).json({ error: 'No se pudo obtener la jornada laboral. Recargá la página.' })
     }
 
-    const task = await prisma.task.create({
-      data: {
-        description,
-        projectId: Number(projectId),
-        userId,
-        workDayId: workDay.id,
-        createdById: userId !== requesterId ? requesterId : null,
-      },
-      include: taskInclude,
-    })
+    let task
+    if (recurrence) {
+      // Tarea recurrente: crear la plantilla + materializar la primera ocurrencia.
+      const params = buildRecurrenceParams({
+        frequency: recurrence.frequency,
+        weekdays:  recurrence.weekdays,
+        startDate: today,
+      })
+      const rec = await prisma.taskRecurrence.create({
+        data: {
+          workspaceId,
+          userId,
+          createdById: userId !== requesterId ? requesterId : null,
+          projectId:   Number(projectId),
+          description,
+          frequency:   recurrence.frequency,
+          weekdays:    params.weekdays,
+          dayOfMonth:  params.dayOfMonth,
+          month:       params.month,
+          startDate:   today,
+          endDate:     recurrence.endDate || null,
+        },
+      })
+      const first = firstScheduledDate(rec)
+      if (!first) {
+        // La recurrencia no produce ninguna ocurrencia (ej. endDate antes del inicio).
+        await prisma.taskRecurrence.update({ where: { id: rec.id }, data: { active: false } })
+        return res.status(400).json({ error: 'La recurrencia no genera ninguna fecha válida' })
+      }
+      const created = await spawnInstance(prisma, rec, first, workDay.id)
+      task = await prisma.task.findUnique({ where: { id: created.id }, include: taskInclude })
+    } else {
+      // Tarea normal o futura (one-off).
+      task = await prisma.task.create({
+        data: {
+          description,
+          projectId: Number(projectId),
+          userId,
+          workDayId: workDay.id,
+          createdById: userId !== requesterId ? requesterId : null,
+          scheduledFor: scheduledFor || null,
+        },
+        include: taskInclude,
+      })
+    }
 
-    if (userId !== requesterId) {
+    // Notificar solo si la tarea ya está activa (no programada a futuro): si es futura,
+    // la notificación se vería antes de que la tarea exista para el destinatario.
+    if (userId !== requesterId && !task.scheduledFor) {
       const desc = description.length > 60 ? description.slice(0, 57) + '...' : description
       await prisma.notification.create({
         data: {
@@ -316,11 +381,22 @@ async function editTask(req, res, next) {
       return res.status(403).json({ error: 'No tenés permiso para editar esta tarea' })
     }
 
-    const updated = await prisma.task.update({
-      where: { id },
-      data: { description: description.trim() },
-      include: taskInclude,
-    })
+    const desc = description.trim()
+    // scope=series en una instancia recurrente: actualiza la plantilla + las instancias
+    // futuras no completadas (las completadas conservan su texto histórico).
+    if (req.query.scope === 'series' && task.recurrenceId) {
+      await prisma.$transaction([
+        prisma.taskRecurrence.update({ where: { id: task.recurrenceId }, data: { description: desc } }),
+        prisma.task.updateMany({
+          where: { recurrenceId: task.recurrenceId, status: { not: 'COMPLETED' } },
+          data:  { description: desc },
+        }),
+      ])
+    } else {
+      await prisma.task.update({ where: { id }, data: { description: desc } })
+    }
+
+    const updated = await prisma.task.findUnique({ where: { id }, include: taskInclude })
     res.json(updated)
   } catch (err) { next(err) }
 }
@@ -336,6 +412,25 @@ async function remove(req, res, next) {
     if (!isAdmin(req) && task.userId !== req.user.userId && task.createdById !== req.user.userId) {
       return res.status(403).json({ error: 'No tenés permiso para eliminar esta tarea' })
     }
+
+    // scope=series en una instancia recurrente: elimina toda la serie. Borra la plantilla
+    // (lo que pone recurrenceId=null en las instancias completadas, conservando el historial)
+    // y elimina explícitamente las instancias NO completadas (esta + las futuras pendientes).
+    if (req.query.scope === 'series' && task.recurrenceId) {
+      const recId = task.recurrenceId
+      const instances = await prisma.task.findMany({
+        where: { recurrenceId: recId, status: { not: 'COMPLETED' } },
+        select: { id: true },
+      })
+      const ids = instances.map(t => t.id)
+      await prisma.$transaction([
+        prisma.notification.deleteMany({ where: { taskId: { in: ids } } }),
+        prisma.task.deleteMany({ where: { id: { in: ids } } }),
+        prisma.taskRecurrence.delete({ where: { id: recId } }),
+      ])
+      return res.json({ ok: true, deletedSeries: true, deletedCount: ids.length })
+    }
+
     // Notification no tiene cascade sobre Task — borrarlas antes para evitar el FK constraint
     await prisma.$transaction([
       prisma.notification.deleteMany({ where: { taskId: id } }),
@@ -480,6 +575,44 @@ async function addToToday(req, res, next) {
   }
 }
 
+// Adelantar una tarea futura (scheduledFor en el futuro) a hoy: la engancha al workday de
+// hoy, limpia scheduledFor y la saca del backlog. Pasa a ser una tarea normal del día.
+async function bringToToday(req, res, next) {
+  try {
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const taskId = Number(req.params.id)
+
+    const task = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
+    if (!task.scheduledFor) return res.status(400).json({ error: 'La tarea no es futura.' })
+
+    const date = todayString(tz)
+    const wdKey = { userId_workspaceId_date: { userId, workspaceId, date } }
+    let workDay = await prisma.workDay.findUnique({ where: wdKey })
+    if (!workDay) {
+      try {
+        workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
+      } catch (createErr) {
+        if (createErr.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
+        else throw createErr
+      }
+    }
+    if (!workDay) return res.status(500).json({ error: 'No se pudo obtener la jornada laboral. Recargá la página.' })
+
+    const updated = await prisma.task.update({
+      where: { id: taskId },
+      data:  { scheduledFor: null, isBacklog: false, workDayId: workDay.id },
+      include: taskInclude,
+    })
+    res.json(updated)
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
+    next(err)
+  }
+}
+
 async function moveToBacklog(req, res, next) {
   try {
     const userId = req.user.userId
@@ -506,6 +639,7 @@ async function delegated(req, res, next) {
   try {
     const createdById = req.user.userId
     const workspaceId = req.workspace.id
+    const today = todayString(req.workspace.timezone)
 
     const weekAgo = new Date()
     weekAgo.setDate(weekAgo.getDate() - 7)
@@ -516,9 +650,13 @@ async function delegated(req, res, next) {
         userId: { not: createdById },
         dismissedByCreator: false,
         workDay: { workspaceId },
-        OR: [
-          { status: { not: 'COMPLETED' } },
-          { status: 'COMPLETED', completedAt: { gte: weekAgo } },
+        // Excluir tareas futuras (aún no materializadas para el destinatario)
+        AND: [
+          { OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }] },
+          { OR: [
+            { status: { not: 'COMPLETED' } },
+            { status: 'COMPLETED', completedAt: { gte: weekAgo } },
+          ] },
         ],
       },
       include: {
@@ -563,4 +701,4 @@ async function dismissDelegated(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, editTask, setDuration, starTask, addToToday, moveToBacklog, completedHistory, delegated, dismissDelegated, assertNoActiveTask }
+module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, editTask, setDuration, starTask, addToToday, bringToToday, moveToBacklog, completedHistory, delegated, dismissDelegated, assertNoActiveTask }

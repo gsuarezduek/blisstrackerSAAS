@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { fmtMins, activeMinutes, completedDuration } from '../../utils/format'
+import { fmtMins, activeMinutes, activeSeconds, fmtDuration, completedDuration } from '../../utils/format'
 
 // ── fmtMins ───────────────────────────────────────────────────────────────────
 
@@ -64,6 +64,49 @@ describe('activeMinutes', () => {
       pausedMinutes: 100, // más que el tiempo transcurrido
     }
     expect(activeMinutes(task)).toBeGreaterThanOrEqual(0)
+  })
+
+  // ── cálculo por sesiones (fuente de verdad) ─────────────────────────────────
+
+  it('cuando hay sessions las usa e ignora startedAt inflado/pausedMinutes', () => {
+    // startedAt de hace 24h (drift), pero las sesiones reales suman solo 30 min
+    const task = {
+      status: 'IN_PROGRESS',
+      startedAt: new Date('2024-01-14T10:00:00Z').toISOString(),
+      pausedMinutes: 0,
+      sessions: [
+        { startedAt: '2024-01-15T09:00:00Z', endedAt: '2024-01-15T09:20:00Z' }, // 20 min
+        { startedAt: '2024-01-15T09:50:00Z', endedAt: null },                   // sesión abierta: 10 min hasta now
+      ],
+    }
+    expect(activeMinutes(task)).toBe(30)
+  })
+
+  it('no cuenta la sesión abierta si la tarea no está IN_PROGRESS', () => {
+    const task = {
+      status: 'PAUSED',
+      sessions: [
+        { startedAt: '2024-01-15T09:00:00Z', endedAt: '2024-01-15T09:25:00Z' }, // 25 min
+        { startedAt: '2024-01-15T09:50:00Z', endedAt: null },                   // huérfana: ignorada
+      ],
+    }
+    expect(activeMinutes(task)).toBe(25)
+  })
+
+  it('topea tareas IN_PROGRESS con sesión abierta muy larga a 12h', () => {
+    const task = {
+      status: 'IN_PROGRESS',
+      sessions: [{ startedAt: '2024-01-14T00:00:00Z', endedAt: null }], // >24h abierta
+    }
+    expect(activeMinutes(task)).toBe(12 * 60)
+  })
+})
+
+describe('fmtDuration', () => {
+  it('formatea horas, minutos y segundos', () => {
+    expect(fmtDuration(45)).toBe('45s')
+    expect(fmtDuration(90)).toBe('1m 30s')
+    expect(fmtDuration(3700)).toBe('1h 1m')
   })
 })
 

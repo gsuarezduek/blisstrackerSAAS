@@ -7,7 +7,7 @@ import { avatarUrl } from '../utils/avatarUrl'
 import useRoles from '../hooks/useRoles'
 import UserTasksModal from '../components/UserTasksModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
-import { fmtMins } from '../utils/format'
+import { fmtMins, fmtDuration, activeSeconds } from '../utils/format'
 
 const ROLE_COLORS_LIST = [
   'bg-purple-100 text-purple-700',
@@ -36,17 +36,10 @@ function useNow() {
   return now
 }
 
-// pausedMinutes: minutos pausados acumulados a restar (solo para tareas, no para jornada)
-function elapsed(startedAt, now, pausedMinutes = 0) {
+// Tiempo transcurrido de la JORNADA (workDay) — no es una tarea, no tiene sesiones ni pausas.
+function elapsed(startedAt, now) {
   if (!startedAt) return null
-  const pausedSecs = (pausedMinutes || 0) * 60
-  const totalSecs  = Math.max(0, Math.floor((now - new Date(startedAt)) / 1000) - pausedSecs)
-  const h = Math.floor(totalSecs / 3600)
-  const m = Math.floor((totalSecs % 3600) / 60)
-  const s = totalSecs % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m ${s}s`
-  return `${s}s`
+  return fmtDuration((now - new Date(startedAt)) / 1000)
 }
 
 function Avatar({ user, size = 'w-10 h-10' }) {
@@ -97,7 +90,7 @@ function UserCard({ entry, now, onOpenUser, onOpenTask }) {
           {hasTask && (
             <div className="text-right">
               <p className="text-xs text-gray-400 dark:text-gray-500">En tarea hace</p>
-              <p className="text-sm font-bold text-primary-600 tabular-nums">{elapsed(currentTask.startedAt, now, currentTask.pausedMinutes)}</p>
+              <p className="text-sm font-bold text-primary-600 tabular-nums">{fmtDuration(activeSeconds(currentTask, now))}</p>
             </div>
           )}
         </div>

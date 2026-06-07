@@ -181,10 +181,20 @@ cron.schedule('0 0 * * *', async () => {
   console.log('[AutoPause] Pausando tareas en curso al cierre del día...')
   try {
     const prisma = require('./lib/prisma')
-    const { count } = await prisma.task.updateMany({
-      where: { status: 'IN_PROGRESS' },
-      data: { status: 'PAUSED', pausedAt: new Date() },
-    })
+    const now = new Date()
+    // Cerrar las sesiones abiertas además de pausar la tarea: si una sesión cruza la
+    // medianoche sin cerrarse, el tiempo activo (que se calcula sumando TaskSession) se
+    // infla con las horas no trabajadas. Solo las tareas IN_PROGRESS tienen sesión abierta.
+    const [{ count }] = await prisma.$transaction([
+      prisma.task.updateMany({
+        where: { status: 'IN_PROGRESS' },
+        data: { status: 'PAUSED', pausedAt: now },
+      }),
+      prisma.taskSession.updateMany({
+        where: { endedAt: null },
+        data: { endedAt: now },
+      }),
+    ])
     console.log(count > 0 ? `[AutoPause] ${count} tarea(s) pausada(s).` : '[AutoPause] Sin tareas activas.')
   } catch (err) {
     console.error('[AutoPause] Error al pausar tareas:', err.message)
