@@ -521,6 +521,10 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   const [nextStepsDraft,   setNextStepsDraft]   = useState('')
   const [savingNextSteps,  setSavingNextSteps]  = useState(false)
 
+  const [editingAlertas,   setEditingAlertas]   = useState(false)
+  const [alertasDraft,     setAlertasDraft]     = useState('')
+  const [savingAlertas,    setSavingAlertas]    = useState(false)
+
   // Contexto editorial por sección: 'rrss' | 'sitio' | 'seo' | null
   const [editingContext, setEditingContext] = useState(null)
   const [contextDraft,   setContextDraft]  = useState('')
@@ -584,6 +588,41 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       setEditingNextSteps(false)
     } finally {
       setSavingNextSteps(false)
+    }
+  }
+
+  async function handleDeleteNextSteps() {
+    if (!onSaveAnalysis) return
+    if (!window.confirm('¿Eliminar la sección "Próximos pasos"? No aparecerá en el informe del cliente.')) return
+    setSavingNextSteps(true)
+    try {
+      await onSaveAnalysis({ ...analysis, nextSteps: [] })
+      setEditingNextSteps(false)
+    } finally {
+      setSavingNextSteps(false)
+    }
+  }
+
+  async function handleSaveAlertas() {
+    if (!onSaveAnalysis) return
+    setSavingAlertas(true)
+    try {
+      await onSaveAnalysis({ ...analysis, alertas: alertasDraft })
+      setEditingAlertas(false)
+    } finally {
+      setSavingAlertas(false)
+    }
+  }
+
+  async function handleDeleteAlertas() {
+    if (!onSaveAnalysis) return
+    if (!window.confirm('¿Eliminar la sección "Oportunidades de mejora"? No aparecerá en el informe del cliente.')) return
+    setSavingAlertas(true)
+    try {
+      await onSaveAnalysis({ ...analysis, alertas: [] })
+      setEditingAlertas(false)
+    } finally {
+      setSavingAlertas(false)
     }
   }
 
@@ -913,17 +952,74 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                 </div>
               )}
 
-              {analysis?.alertas?.length > 0 && (
-                <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl space-y-1">
-                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Oportunidades de mejora</p>
-                  {analysis.alertas.map((a, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <span className="text-amber-500 mt-0.5 shrink-0">→</span>
-                      <span className="text-sm text-amber-800 dark:text-amber-300">{a}</span>
+              {(() => {
+                const al = analysis?.alertas
+                const hasAlertas = Array.isArray(al) ? al.length > 0 : !!al
+                if (!hasAlertas && !canEdit) return null
+
+                function openAlertasEditor() {
+                  let initial = ''
+                  if (Array.isArray(al) && al.length > 0) initial = '<ul>' + al.map(a => `<li>${a}</li>`).join('') + '</ul>'
+                  else if (typeof al === 'string') initial = al
+                  setAlertasDraft(initial)
+                  setEditingAlertas(true)
+                }
+
+                return (
+                  <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Oportunidades de mejora</p>
+                      {canEdit && !editingAlertas && (
+                        <div className="no-print flex items-center gap-2">
+                          <button onClick={openAlertasEditor} className="text-xs text-amber-700/80 dark:text-amber-400/80 hover:text-amber-800 dark:hover:text-amber-300 transition-colors">✏️ Editar</button>
+                          {hasAlertas && (
+                            <button onClick={handleDeleteAlertas} className="text-xs text-amber-700/80 dark:text-amber-400/80 hover:text-red-600 dark:hover:text-red-400 transition-colors">🗑 Eliminar</button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    {editingAlertas ? (
+                      <div className="space-y-3 no-print">
+                        <RichTextEditor
+                          defaultContent={alertasDraft}
+                          onChange={setAlertasDraft}
+                          minHeight={140}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setEditingAlertas(false)}
+                            className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={handleSaveAlertas}
+                            disabled={savingAlertas}
+                            className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                          >
+                            {savingAlertas ? 'Guardando…' : 'Guardar'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : Array.isArray(al) && al.length > 0 ? (
+                      al.map((a, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className="text-amber-500 mt-0.5 shrink-0">→</span>
+                          <span className="text-sm text-amber-800 dark:text-amber-300">{a}</span>
+                        </div>
+                      ))
+                    ) : typeof al === 'string' && al ? (
+                      <div
+                        className="situation-content text-sm text-amber-800 dark:text-amber-300"
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(al) }}
+                      />
+                    ) : (
+                      <span className="text-amber-700/60 dark:text-amber-300/60 italic text-sm">Sin oportunidades de mejora.</span>
+                    )}
+                  </div>
+                )
+              })()}
             </>
           )}
         </SectionCard>
@@ -1487,12 +1583,22 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             title="Próximos pasos"
             icon="🚀"
             action={canEdit && !editingNextSteps && (
-              <button
-                onClick={openNextStepsEditor}
-                className="no-print text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
-              >
-                ✏️ Editar
-              </button>
+              <div className="no-print flex items-center gap-2">
+                <button
+                  onClick={openNextStepsEditor}
+                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
+                >
+                  ✏️ Editar
+                </button>
+                {hasNextSteps && (
+                  <button
+                    onClick={handleDeleteNextSteps}
+                    className="text-xs text-gray-400 hover:text-red-600 dark:hover:text-red-400 flex items-center gap-1 transition-colors"
+                  >
+                    🗑 Eliminar
+                  </button>
+                )}
+              </div>
             )}
           >
             {editingNextSteps ? (
