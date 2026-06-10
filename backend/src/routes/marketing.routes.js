@@ -122,6 +122,7 @@ router.post('/projects/:id/reports/:month/banner', uploadBanner.single('image'),
 router.delete('/projects/:id/reports/:month/banner',                           monthlyReport.deleteReportBanner)
 
 // Objetivos de marketing (estructurados, persistentes por proyecto)
+router.get('/projects/:id/objectives/progress',   objectives.getObjectivesProgress)
 router.get('/projects/:id/objectives',            objectives.listObjectives)
 router.post('/projects/:id/objectives',           objectives.createObjective)
 router.patch('/projects/:id/objectives/:oid',     objectives.updateObjective)

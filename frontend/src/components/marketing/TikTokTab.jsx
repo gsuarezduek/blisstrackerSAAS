@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
+import ObjectiveProgressBars from './ObjectiveProgressBars'
+import CrossProjectRRSSPanel from './CrossProjectRRSSPanel'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -341,42 +343,21 @@ function CrossProjectTikTokPanel({ onSelectProject }) {
     </div>
   )
 
-  const maxFollowers = Math.max(...data.map(p => p.followersCount), 1)
-
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-        TikTok por proyecto ({data.length}) <span className="font-normal text-gray-400">· último snapshot disponible</span>
-      </h3>
-      <div className="space-y-3">
-        {data.map(p => (
-          <div key={p.projectId} className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <button
-                  onClick={() => onSelectProject?.(String(p.projectId))}
-                  className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
-                >
-                  {p.projectName}
-                </button>
-                <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-                  <span className="text-xs text-gray-400">{p.month}</span>
-                  <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtK(p.followersCount)}</span>
-                </div>
-              </div>
-              <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
-                <div className="h-1.5 rounded-full" style={{ width: `${Math.round((p.followersCount / maxFollowers) * 100)}%`, background: `linear-gradient(90deg, #000 0%, ${TEAL} 100%)` }} />
-              </div>
-              <div className="flex gap-3 mt-1 text-xs text-gray-400">
-                {p.avgViews != null && <span>👁 {fmtK(Math.round(p.avgViews))} vistas/video</span>}
-                {p.engagementRate != null && <span>{p.engagementRate.toFixed(2)}% eng.</span>}
-                {p.postsThisMonth != null && <span>{p.postsThisMonth} videos</span>}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    <CrossProjectRRSSPanel
+      data={data}
+      title="TikTok por proyecto"
+      gradient={`linear-gradient(90deg, #000 0%, ${TEAL} 100%)`}
+      onSelectProject={onSelectProject}
+      renderSecondary={p => (
+        <>
+          <span className="text-gray-400">{fmtK(p.followersCount)} seguidores</span>
+          {p.avgViews != null && <span className="text-gray-400">👁 {fmtK(Math.round(p.avgViews))} vistas/video</span>}
+          {p.engagementRate != null && <span className="text-gray-400">{p.engagementRate.toFixed(2)}% eng.</span>}
+          {p.postsThisMonth != null && <span className="text-gray-400">{p.postsThisMonth} videos</span>}
+        </>
+      )}
+    />
   )
 }
 
@@ -388,6 +369,7 @@ export default function TikTokTab({ projectId, onSelectProject }) {
   const [integration,     setIntegration]    = useState(null)
   const [metrics,         setMetrics]        = useState(null)
   const [snapshots,       setSnapshots]      = useState([])
+  const [objectives,      setObjectives]     = useState([])
   const [selectedMonth,   setSelectedMonth]  = useState(currentMonth)
   const [followerLogs,    setFollowerLogs]   = useState([])
   const [monthStartFollowers, setMonthStartFollowers] = useState(null)
@@ -412,14 +394,19 @@ export default function TikTokTab({ projectId, onSelectProject }) {
       const logParams = { to: today }
       if (from) logParams.from = from
 
-      const [metricsRes, snapshotsRes, logsRes] = await Promise.allSettled([
+      const [metricsRes, snapshotsRes, logsRes, objsRes] = await Promise.allSettled([
         api.get(`/marketing/projects/${projectId}/tiktok`),
         api.get(`/marketing/projects/${projectId}/tiktok/snapshots`),
         api.get(`/marketing/projects/${projectId}/tiktok/followers`, { params: logParams }),
+        api.get(`/marketing/projects/${projectId}/objectives/progress`),
       ])
 
       if (metricsRes.status   === 'fulfilled') setMetrics(metricsRes.value.data)
       if (snapshotsRes.status === 'fulfilled') setSnapshots(snapshotsRes.value.data.snapshots ?? [])
+      if (objsRes.status      === 'fulfilled') {
+        const all = objsRes.value.data.objectives ?? []
+        setObjectives(all.filter(o => ['seguidores', 'interaccion'].includes(o.metric) && o.detail?.platform === 'tiktok'))
+      }
       if (logsRes.status      === 'fulfilled') {
         const logs = logsRes.value.data.logs ?? []
         setFollowerLogs(logs)
@@ -533,6 +520,9 @@ export default function TikTokTab({ projectId, onSelectProject }) {
           />
         </div>
       )}
+
+      {/* Objetivos de TikTok del período (seguidores / interacción) con barra de progreso */}
+      <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de TikTok" />
 
       {isCurrentMonth && metrics?.topOfMonth && <TopOfMonth topOfMonth={metrics.topOfMonth} />}
 

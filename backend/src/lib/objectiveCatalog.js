@@ -8,6 +8,7 @@
 //   - direction   : "higher" (mayor es mejor) | "lower" (menor es mejor) | "info" (informativo)
 //   - aggregation : "flow" (acumula meses del período) | "stock" (último valor del período)
 //   - param       : param obligatorio extra ("trackedKeywordId" | "competitorId" | "platform" | null)
+//   - rrssPlatform: si acepta una red opcional (instagram | tiktok | linkedin); null = todas las redes
 
 const METRICS = {
   // WEB
@@ -17,8 +18,8 @@ const METRICS = {
   // SEO / GEO
   posicionamiento:{ category: 'seo',  label: 'Posicionamiento SEO',  unit: 'pos', direction: 'lower',  aggregation: 'stock', param: 'trackedKeywordId' },
   // RRSS
-  seguidores:     { category: 'rrss', label: 'Seguidores nuevos',    unit: '',    direction: 'higher', aggregation: 'flow',  param: null },
-  interaccion:    { category: 'rrss', label: 'Interacciones',        unit: '',    direction: 'higher', aggregation: 'flow',  param: null },
+  seguidores:     { category: 'rrss', label: 'Seguidores nuevos',    unit: '',    direction: 'higher', aggregation: 'flow',  param: null, rrssPlatform: true },
+  interaccion:    { category: 'rrss', label: 'Interacciones',        unit: '',    direction: 'higher', aggregation: 'flow',  param: null, rrssPlatform: true },
   competidores:   { category: 'rrss', label: 'Superar competidor',   unit: '',    direction: 'higher', aggregation: 'stock', param: 'competitorId' },
   // ANUNCIOS
   inversion:      { category: 'ads',  label: 'Monto a invertir',     unit: '$',   direction: 'info',   aggregation: 'flow',  param: 'platform' },
@@ -29,9 +30,10 @@ const METRICS = {
 const CATEGORIES = ['web', 'seo', 'rrss', 'ads']
 const PERIODICITIES = ['monthly', 'quarterly', 'annual']
 const AD_PLATFORMS = ['meta_ads', 'google_ads']
+const RRSS_PLATFORMS = ['instagram', 'tiktok', 'linkedin']
 
 function isValidMetric(metric)            { return Object.prototype.hasOwnProperty.call(METRICS, metric) }
 function metricDef(metric)                { return METRICS[metric] || null }
 function metricsForCategory(category)     { return Object.entries(METRICS).filter(([, d]) => d.category === category).map(([k]) => k) }
 
-module.exports = { METRICS, CATEGORIES, PERIODICITIES, AD_PLATFORMS, isValidMetric, metricDef, metricsForCategory }
+module.exports = { METRICS, CATEGORIES, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, isValidMetric, metricDef, metricsForCategory }

@@ -1,5 +1,7 @@
 const prisma = require('../lib/prisma')
-const { METRICS, CATEGORIES, PERIODICITIES, AD_PLATFORMS, metricDef } = require('../lib/objectiveCatalog')
+const { METRICS, CATEGORIES, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, metricDef } = require('../lib/objectiveCatalog')
+const { computeObjectives } = require('../services/marketingObjectives.service')
+const { todayString } = require('../utils/dates')
 
 async function assertProject(req) {
   const projectId = Number(req.params.id)
@@ -56,6 +58,11 @@ async function validatePayload(body, projectId, workspaceId) {
   // Params requeridos según métrica
   if (def.param === 'platform') {
     if (!AD_PLATFORMS.includes(body.platform)) return { error: 'Plataforma inválida (meta_ads | google_ads)' }
+    data.platform = body.platform
+  }
+  // RRSS: plataforma opcional (instagram | tiktok | linkedin). Vacío = todas las redes.
+  if (def.rrssPlatform && body.platform) {
+    if (!RRSS_PLATFORMS.includes(body.platform)) return { error: 'Red inválida (instagram | tiktok | linkedin)' }
     data.platform = body.platform
   }
   if (def.param === 'trackedKeywordId') {
@@ -130,6 +137,25 @@ async function updateObjective(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * GET /api/marketing/projects/:id/objectives/progress?month=YYYY-MM
+ * Progreso calculado de los objetivos del proyecto contra los datos reales.
+ * No persiste — recalcula en cada request. `month` por defecto = mes actual (ART).
+ */
+async function getObjectivesProgress(req, res, next) {
+  try {
+    const projectId = await assertProject(req)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || '')
+      ? req.query.month
+      : todayString().slice(0, 7)
+
+    const objectives = await computeObjectives({ projectId, workspaceId: req.workspace.id, dataMonth: month })
+    res.json({ month, objectives })
+  } catch (err) { next(err) }
+}
+
 /** DELETE /api/marketing/projects/:id/objectives/:oid */
 async function deleteObjective(req, res, next) {
   try {
@@ -145,4 +171,4 @@ async function deleteObjective(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listObjectives, createObjective, updateObjective, deleteObjective }
+module.exports = { listObjectives, createObjective, updateObjective, deleteObjective, getObjectivesProgress }

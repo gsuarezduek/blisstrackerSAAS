@@ -5,9 +5,50 @@
  */
 
 const prisma = require('../lib/prisma')
+const { computeObjectives } = require('../services/marketingObjectives.service')
+const { todayString } = require('../utils/dates')
 
 function safeParseArr(v) {
   try { return JSON.parse(v) } catch { return [] }
+}
+
+// Seguidores nuevos en lo que va del mes + fecha del último dato, por proyecto.
+// Usa los follower logs diarios cacheados (no re-scrapea).
+// followerLogModel: prisma.instagramFollowerLog | prisma.tikTokFollowerLog
+async function newFollowersByProject(followerLogModel, workspaceId, monthStart) {
+  const logs = await followerLogModel.findMany({
+    where:   { workspaceId, date: { gte: monthStart } },
+    orderBy: { date: 'asc' },
+    select:  { projectId: true, date: true, followersCount: true },
+  })
+  const byProj = new Map()
+  for (const l of logs) {
+    const e = byProj.get(l.projectId)
+    if (!e) byProj.set(l.projectId, { first: l.followersCount, last: l.followersCount, lastDate: l.date })
+    else    { e.last = l.followersCount; e.lastDate = l.date }   // logs asc → último sobrescribe
+  }
+  return byProj
+}
+
+// Progreso de los objetivos rrss (seguidores / interacción) de una red, por proyecto.
+// Solo computa los proyectos que tienen un objetivo de esa red (para no recalcular de más).
+async function rrssObjectivesByProject(workspaceId, network, month, projectIds) {
+  if (projectIds.length === 0) return new Map()
+  const objs = await prisma.marketingObjective.findMany({
+    where:  { workspaceId, platform: network, metric: { in: ['seguidores', 'interaccion'] }, projectId: { in: projectIds } },
+    select: { projectId: true },
+  })
+  const projWithObj = [...new Set(objs.map(o => o.projectId))]
+  const byProj = new Map()
+  await Promise.all(projWithObj.map(async (pid) => {
+    const results = await computeObjectives({ projectId: pid, workspaceId, dataMonth: month })
+    const pick = (metric) => {
+      const r = results.find(x => x.metric === metric && x.detail?.platform === network)
+      return r ? { target: r.target, actual: r.actual, pct: r.pct, periodLabel: r.periodLabel } : null
+    }
+    byProj.set(pid, { seguidores: pick('seguidores'), interaccion: pick('interaccion') })
+  }))
+  return byProj
 }
 
 /**
@@ -113,6 +154,9 @@ async function getInstagramSummary(req, res, next) {
   try {
     const workspaceId = req.workspace.id
 
+    const currentMonth = todayString().slice(0, 7)
+    const monthStart   = `${currentMonth}-01`
+
     const snapshots = await prisma.instagramSnapshot.findMany({
       where:   { workspaceId },
       orderBy: { month: 'desc' },
@@ -124,6 +168,10 @@ async function getInstagramSummary(req, res, next) {
     for (const s of snapshots) {
       if (seen.has(s.projectId)) continue
       seen.add(s.projectId)
+      // Interacciones del snapshot: (likes + comentarios) promedio × posts del mes.
+      const interactions = s.postsCount != null && (s.avgLikes != null || s.avgComments != null)
+        ? Math.round(((s.avgLikes ?? 0) + (s.avgComments ?? 0)) * s.postsCount)
+        : null
       result.push({
         projectId:      s.projectId,
         projectName:    s.project.name,
@@ -133,7 +181,23 @@ async function getInstagramSummary(req, res, next) {
         avgLikes:       s.avgLikes       ?? null,
         avgComments:    s.avgComments    ?? null,
         postsCount:     s.postsCount     ?? null,
+        interactions,
+        newFollowers:   null,
+        lastDataDate:   `${s.month}-01`,
+        objectives:     { seguidores: null, interaccion: null },
       })
+    }
+
+    const projectIds = result.map(r => r.projectId)
+    const [newFollowersMap, objMap] = await Promise.all([
+      newFollowersByProject(prisma.instagramFollowerLog, workspaceId, monthStart),
+      rrssObjectivesByProject(workspaceId, 'instagram', currentMonth, projectIds),
+    ])
+    for (const r of result) {
+      const nf = newFollowersMap.get(r.projectId)
+      if (nf) { r.newFollowers = nf.last - nf.first; r.lastDataDate = nf.lastDate }
+      const obj = objMap.get(r.projectId)
+      if (obj) r.objectives = obj
     }
 
     result.sort((a, b) => b.followersCount - a.followersCount)
@@ -151,6 +215,9 @@ async function getTikTokSummary(req, res, next) {
   try {
     const workspaceId = req.workspace.id
 
+    const currentMonth = todayString().slice(0, 7)
+    const monthStart   = `${currentMonth}-01`
+
     const snapshots = await prisma.tikTokSnapshot.findMany({
       where:   { workspaceId },
       orderBy: { month: 'desc' },
@@ -162,6 +229,10 @@ async function getTikTokSummary(req, res, next) {
     for (const s of snapshots) {
       if (seen.has(s.projectId)) continue
       seen.add(s.projectId)
+      // Interacciones del snapshot: (likes + comentarios + compartidos) promedio × videos del mes.
+      const interactions = s.postsThisMonth != null && (s.avgLikes != null || s.avgComments != null || s.avgShares != null)
+        ? Math.round(((s.avgLikes ?? 0) + (s.avgComments ?? 0) + (s.avgShares ?? 0)) * s.postsThisMonth)
+        : null
       result.push({
         projectId:      s.projectId,
         projectName:    s.project.name,
@@ -171,7 +242,23 @@ async function getTikTokSummary(req, res, next) {
         avgViews:       s.avgViews       ?? null,
         avgLikes:       s.avgLikes       ?? null,
         postsThisMonth: s.postsThisMonth ?? null,
+        interactions,
+        newFollowers:   null,
+        lastDataDate:   `${s.month}-01`,
+        objectives:     { seguidores: null, interaccion: null },
       })
+    }
+
+    const projectIds = result.map(r => r.projectId)
+    const [newFollowersMap, objMap] = await Promise.all([
+      newFollowersByProject(prisma.tikTokFollowerLog, workspaceId, monthStart),
+      rrssObjectivesByProject(workspaceId, 'tiktok', currentMonth, projectIds),
+    ])
+    for (const r of result) {
+      const nf = newFollowersMap.get(r.projectId)
+      if (nf) { r.newFollowers = nf.last - nf.first; r.lastDataDate = nf.lastDate }
+      const obj = objMap.get(r.projectId)
+      if (obj) r.objectives = obj
     }
 
     result.sort((a, b) => b.followersCount - a.followersCount)

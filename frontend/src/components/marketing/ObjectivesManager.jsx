@@ -1,13 +1,21 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import {
-  CATEGORIES, METRICS, PERIODICITIES, AD_PLATFORMS,
+  CATEGORIES, METRICS, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, PLATFORM_LABEL,
   metricsForCategory, fmtObjectiveValue, PERIODICITY_LABEL, CATEGORY_LABEL,
 } from './objectiveCatalog'
 
 const EMPTY_DRAFT = {
   category: '', metric: '', periodicity: 'monthly',
-  target: '', platform: 'meta_ads', trackedKeywordId: '', competitorId: '',
+  target: '', platform: '', trackedKeywordId: '', competitorId: '',
+}
+
+// Plataforma por defecto al elegir una métrica: ads requiere una; rrss arranca en "todas" ('').
+function defaultPlatformFor(metric, current) {
+  const def = METRICS[metric]
+  if (def?.param === 'platform') return AD_PLATFORMS.some(p => p.key === current) ? current : 'meta_ads'
+  if (def?.rrssPlatform)         return RRSS_PLATFORMS.some(p => p.key === current) ? current : ''
+  return current
 }
 
 // ─── Formulario de alta/edición ────────────────────────────────────────────────
@@ -42,6 +50,9 @@ function ObjectiveForm({ projectId, initial, keywords, competitors, onSaved, onC
     if (def.param === 'platform') {
       if (!draft.platform) { setError('Elegí la plataforma'); return }
       body.platform = draft.platform
+    }
+    if (def.rrssPlatform && draft.platform) {
+      body.platform = draft.platform   // vacío = todas las redes
     }
     if (def.param === 'trackedKeywordId') {
       if (!draft.trackedKeywordId) { setError('Elegí una keyword en seguimiento'); return }
@@ -88,7 +99,7 @@ function ObjectiveForm({ projectId, initial, keywords, competitors, onSaved, onC
       {draft.category && (
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Métrica</label>
-          <select value={draft.metric} onChange={e => set({ metric: e.target.value, trackedKeywordId: '', competitorId: '' })} className={inputCls}>
+          <select value={draft.metric} onChange={e => set({ metric: e.target.value, platform: defaultPlatformFor(e.target.value, draft.platform), trackedKeywordId: '', competitorId: '' })} className={inputCls}>
             <option value="">Elegir métrica…</option>
             {metricsForCategory(draft.category).map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
           </select>
@@ -106,13 +117,25 @@ function ObjectiveForm({ projectId, initial, keywords, competitors, onSaved, onC
         </div>
       )}
 
-      {/* Param: plataforma */}
+      {/* Param: plataforma (Ads) */}
       {metricDef?.param === 'platform' && (
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Plataforma</label>
           <select value={draft.platform} onChange={e => set({ platform: e.target.value })} className={inputCls}>
             {AD_PLATFORMS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
           </select>
+        </div>
+      )}
+
+      {/* Param: red (RRSS) — opcional, vacío = todas */}
+      {metricDef?.rrssPlatform && (
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Red social</label>
+          <select value={draft.platform} onChange={e => set({ platform: e.target.value })} className={inputCls}>
+            <option value="">Todas las redes (IG + TikTok + LinkedIn)</option>
+            {RRSS_PLATFORMS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
+          <p className="text-[11px] text-gray-400 mt-1">Elegí una red para un objetivo por plataforma (se ve en su pestaña de RRSS).</p>
         </div>
       )}
 
@@ -203,7 +226,7 @@ export default function ObjectivesManager({ projectId, onClose }) {
     setEditing({
       id: o.id, category: o.category, metric: o.metric, periodicity: o.periodicity,
       target: o.target != null ? String(o.target) : '',
-      platform: o.platform || 'meta_ads',
+      platform: o.platform || '',
       trackedKeywordId: o.trackedKeywordId != null ? String(o.trackedKeywordId) : '',
       competitorId: o.competitorId != null ? String(o.competitorId) : '',
     })
@@ -239,7 +262,7 @@ export default function ObjectivesManager({ projectId, onClose }) {
                       {METRICS[o.metric]?.label || o.metric}
                       {o.keyword && <span className="text-gray-400"> · {o.keyword}</span>}
                       {o.competitor && <span className="text-gray-400"> · {o.competitor}</span>}
-                      {o.platform && <span className="text-gray-400"> · {o.platform === 'meta_ads' ? 'Meta' : 'Google'}</span>}
+                      {o.platform && <span className="text-gray-400"> · {PLATFORM_LABEL[o.platform] || o.platform}</span>}
                     </p>
                     <p className="text-[11px] text-gray-400">
                       <span className="uppercase">{CATEGORY_LABEL[o.category]}</span> · {PERIODICITY_LABEL[o.periodicity]}

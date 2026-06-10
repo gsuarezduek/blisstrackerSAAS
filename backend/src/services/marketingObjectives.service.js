@@ -21,6 +21,15 @@ function statusFromPct(pct) {
 }
 
 const PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads' }
+const NETWORK_LABEL  = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn' }
+const RRSS_NETWORKS  = ['instagram', 'tiktok', 'linkedin']
+
+// Modelo de snapshot por red (para seguidores nuevos).
+function snapshotModel(network) {
+  if (network === 'instagram') return prisma.instagramSnapshot
+  if (network === 'tiktok')    return prisma.tikTokSnapshot
+  return prisma.linkedinSnapshot
+}
 
 // ─── Fuentes ───────────────────────────────────────────────────────────────────
 
@@ -145,29 +154,33 @@ async function computeOne(obj, ctx) {
     return finalize(base, def, actual, { keyword: obj.trackedKeyword?.query ?? null, month: r?.month ?? null })
   }
 
-  // ── RRSS: seguidores nuevos (flujo, suma de redes) ──
+  // ── RRSS: seguidores nuevos (flujo). Por red si hay platform, si no suma todas. ──
   if (obj.metric === 'seguidores') {
-    const nets = await Promise.all([
-      netNewFollowers(prisma.instagramSnapshot, projectId, workspaceId, months, 'instagram'),
-      netNewFollowers(prisma.tikTokSnapshot,    projectId, workspaceId, months, 'tiktok'),
-      netNewFollowers(prisma.linkedinSnapshot,  projectId, workspaceId, months, 'linkedin'),
-    ])
+    const networks = RRSS_NETWORKS.includes(obj.platform) ? [obj.platform] : RRSS_NETWORKS
+    const nets = await Promise.all(
+      networks.map(net => netNewFollowers(snapshotModel(net), projectId, workspaceId, months, net)),
+    )
     const withData = nets.filter(n => n.value != null)
     const actual = withData.length ? withData.reduce((s, n) => s + n.value, 0) : null
-    base.label = 'Seguidores nuevos (todas las redes)'
+    base.label = obj.platform
+      ? `Seguidores nuevos · ${NETWORK_LABEL[obj.platform]}`
+      : 'Seguidores nuevos (todas las redes)'
+    base.detail.platform = obj.platform || null
     return finalize(base, def, actual, { breakdown: nets })
   }
 
-  // ── RRSS: interacción (flujo, suma de redes) ──
+  // ── RRSS: interacción (flujo). Por red si hay platform, si no suma todas. ──
   if (obj.metric === 'interaccion') {
-    const nets = await Promise.all([
-      interactionsForNetwork('instagram', projectId, workspaceId, months),
-      interactionsForNetwork('tiktok',    projectId, workspaceId, months),
-      interactionsForNetwork('linkedin',  projectId, workspaceId, months),
-    ])
+    const networks = RRSS_NETWORKS.includes(obj.platform) ? [obj.platform] : RRSS_NETWORKS
+    const nets = await Promise.all(
+      networks.map(net => interactionsForNetwork(net, projectId, workspaceId, months)),
+    )
     const withData = nets.filter(n => n.value != null)
     const actual = withData.length ? withData.reduce((s, n) => s + n.value, 0) : null
-    base.label = 'Interacciones (todas las redes)'
+    base.label = obj.platform
+      ? `Interacciones · ${NETWORK_LABEL[obj.platform]}`
+      : 'Interacciones (todas las redes)'
+    base.detail.platform = obj.platform || null
     return finalize(base, def, actual, { breakdown: nets })
   }
 

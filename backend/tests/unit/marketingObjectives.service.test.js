@@ -92,6 +92,48 @@ it('seguidores nuevos suma el delta de todas las redes', async () => {
   expect(r.detail.breakdown).toHaveLength(3)
 })
 
+it('seguidores con platform=instagram solo cuenta esa red', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 51, projectId: 1, workspaceId: 1, category: 'rrss', metric: 'seguidores', periodicity: 'monthly', target: 100, platform: 'instagram' },
+  ])
+  // IG +50; TikTok tiene datos pero NO debe sumarse
+  prisma.instagramSnapshot.findMany.mockResolvedValue([{ month: '2026-04', followersCount: 1000 }, { month: '2026-05', followersCount: 1050 }])
+  prisma.tikTokSnapshot.findMany.mockResolvedValue([{ month: '2026-04', followersCount: 500 }, { month: '2026-05', followersCount: 530 }])
+  const [r] = await computeObjectives(CTX)
+  expect(r.actual).toBe(50)                 // solo Instagram
+  expect(r.pct).toBe(50)
+  expect(r.detail.platform).toBe('instagram')
+  expect(r.detail.breakdown).toHaveLength(1)
+  expect(r.label).toContain('Instagram')
+  // no debió consultar TikTok ni LinkedIn para esta métrica por red
+  expect(prisma.tikTokSnapshot.findMany).not.toHaveBeenCalled()
+  expect(prisma.linkedinSnapshot.findMany).not.toHaveBeenCalled()
+})
+
+it('interaccion con platform=tiktok solo cuenta TikTok', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 52, projectId: 1, workspaceId: 1, category: 'rrss', metric: 'interaccion', periodicity: 'monthly', target: 1000, platform: 'tiktok' },
+  ])
+  prisma.tikTokSnapshot.findMany.mockResolvedValue([{ month: '2026-05', avgLikes: 10, avgComments: 2, avgShares: 1, postsThisMonth: 20 }])
+  const [r] = await computeObjectives(CTX)
+  expect(r.actual).toBe(260)                // (10+2+1)*20
+  expect(r.detail.platform).toBe('tiktok')
+  expect(r.detail.breakdown).toHaveLength(1)
+  expect(r.label).toContain('TikTok')
+  expect(prisma.instagramSnapshot.findMany).not.toHaveBeenCalled()
+})
+
+it('seguidores sin platform (todas) mantiene detail.platform null', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 53, projectId: 1, workspaceId: 1, category: 'rrss', metric: 'seguidores', periodicity: 'monthly', target: 100, platform: null },
+  ])
+  prisma.instagramSnapshot.findMany.mockResolvedValue([{ month: '2026-04', followersCount: 1000 }, { month: '2026-05', followersCount: 1050 }])
+  const [r] = await computeObjectives(CTX)
+  expect(r.detail.platform).toBeNull()
+  expect(r.detail.breakdown).toHaveLength(3)
+  expect(r.label).toContain('todas las redes')
+})
+
 it('inversion en ads es informativo (status info + delta)', async () => {
   prisma.marketingObjective.findMany.mockResolvedValue([
     { id: 6, projectId: 1, workspaceId: 1, category: 'ads', metric: 'inversion', periodicity: 'monthly', target: 500, platform: 'meta_ads' },
