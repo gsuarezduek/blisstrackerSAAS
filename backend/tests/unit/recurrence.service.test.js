@@ -92,4 +92,14 @@ describe('buildRecurrenceParams', () => {
     expect(p.dayOfMonth).toBe(10)
     expect(p.month).toBe(3)
   })
+  it('monthly usa el dayOfMonth elegido por el usuario (no startDate)', () => {
+    const p = buildRecurrenceParams({ frequency: 'monthly', startDate: '2026-06-15', dayOfMonth: 28 })
+    expect(p.dayOfMonth).toBe(28)
+    expect(p.month).toBeNull()
+  })
+  it('annual usa el dayOfMonth y month elegidos por el usuario (no startDate)', () => {
+    const p = buildRecurrenceParams({ frequency: 'annual', startDate: '2026-06-15', dayOfMonth: 25, month: 12 })
+    expect(p.dayOfMonth).toBe(25)
+    expect(p.month).toBe(12)
+  })
 })

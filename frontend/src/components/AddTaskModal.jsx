@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
+const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
 function ProjectCombobox({ projects, value, onChange }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -111,6 +113,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
   const [taskMode, setTaskMode] = useState('normal') // 'normal' | 'recurring' | 'future'
   const [frequency, setFrequency] = useState('weekly') // daily | weekly | monthly | annual
   const [weekdays, setWeekdays] = useState([]) // 0=domingo … 6=sábado (solo weekly)
+  const [recurDate, setRecurDate] = useState(() => new Date().toLocaleDateString('en-CA')) // calendario: monthly usa el día, annual usa día+mes
   const [endMode, setEndMode] = useState('never') // never | custom
   const [endDate, setEndDate] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
@@ -163,6 +166,8 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
         body.recurrence = {
           frequency,
           ...(frequency === 'weekly' ? { weekdays } : {}),
+          ...(frequency === 'monthly' ? { dayOfMonth: Number(recurDate.slice(8, 10)) } : {}),
+          ...(frequency === 'annual' ? { dayOfMonth: Number(recurDate.slice(8, 10)), month: Number(recurDate.slice(5, 7)) } : {}),
           ...(endMode === 'custom' && endDate ? { endDate } : {}),
         }
       }
@@ -181,6 +186,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
     }
     if (taskMode === 'recurring') {
       if (frequency === 'weekly' && weekdays.length === 0) return 'Elegí al menos un día de la semana.'
+      if ((frequency === 'monthly' || frequency === 'annual') && !recurDate) return 'Elegí desde el calendario el día en que se repite.'
       if (endMode === 'custom' && !endDate) return 'Elegí la fecha de finalización o seleccioná "Nunca".'
       if (endMode === 'custom' && endDate && endDate < todayStr) return 'La fecha de finalización no puede ser anterior a hoy.'
     }
@@ -208,7 +214,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Nueva tarea</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -374,6 +380,28 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {(frequency === 'monthly' || frequency === 'annual') && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+                      {frequency === 'monthly' ? 'Día del mes en que aparece' : 'Fecha en que aparece'}
+                    </label>
+                    <input
+                      type="date"
+                      value={recurDate}
+                      onChange={e => setRecurDate(e.target.value)}
+                      className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    {recurDate && (
+                      <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                        {frequency === 'monthly'
+                          ? `Se repite el día ${Number(recurDate.slice(8, 10))} de cada mes.`
+                          : `Se repite cada año el ${Number(recurDate.slice(8, 10))} de ${MONTH_NAMES[Number(recurDate.slice(5, 7)) - 1]}.`}
+                        {frequency === 'monthly' && Number(recurDate.slice(8, 10)) > 28 && ' En meses más cortos se ajusta al último día.'}
+                      </p>
+                    )}
                   </div>
                 )}
 

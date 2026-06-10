@@ -78,6 +78,20 @@ async function create(req, res, next) {
       if (recurrence.endDate && recurrence.endDate < today) {
         return res.status(400).json({ error: 'La fecha de finalización no puede ser anterior a hoy' })
       }
+      // Día del mes elegido desde el calendario (monthly/annual)
+      if ((recurrence.frequency === 'monthly' || recurrence.frequency === 'annual') && recurrence.dayOfMonth != null) {
+        const dom = Number(recurrence.dayOfMonth)
+        if (!Number.isInteger(dom) || dom < 1 || dom > 31) {
+          return res.status(400).json({ error: 'Día del mes inválido (1-31)' })
+        }
+      }
+      // Mes elegido desde el calendario (annual)
+      if (recurrence.frequency === 'annual' && recurrence.month != null) {
+        const mo = Number(recurrence.month)
+        if (!Number.isInteger(mo) || mo < 1 || mo > 12) {
+          return res.status(400).json({ error: 'Mes inválido (1-12)' })
+        }
+      }
     }
 
     if (userId !== requesterId) {
@@ -115,9 +129,11 @@ async function create(req, res, next) {
     if (recurrence) {
       // Tarea recurrente: crear la plantilla + materializar la primera ocurrencia.
       const params = buildRecurrenceParams({
-        frequency: recurrence.frequency,
-        weekdays:  recurrence.weekdays,
-        startDate: today,
+        frequency:  recurrence.frequency,
+        weekdays:   recurrence.weekdays,
+        dayOfMonth: recurrence.dayOfMonth,
+        month:      recurrence.month,
+        startDate:  today,
       })
       const rec = await prisma.taskRecurrence.create({
         data: {

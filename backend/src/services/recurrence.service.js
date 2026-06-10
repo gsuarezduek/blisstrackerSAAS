@@ -99,7 +99,9 @@ function firstScheduledDate(rec) {
 }
 
 // Deriva los params (weekdays/dayOfMonth/month) a partir de la frecuencia + startDate + input.
-function buildRecurrenceParams({ frequency, weekdays, startDate }) {
+// monthly/annual: el día (y el mes en annual) los elige el usuario desde un calendario;
+// si no vienen, se derivan de startDate como fallback.
+function buildRecurrenceParams({ frequency, weekdays, startDate, dayOfMonth, month }) {
   const [y, m, d] = startDate.split('-').map(Number)
   if (frequency === 'weekly') {
     const days = Array.isArray(weekdays) ? weekdays.map(Number).filter(n => n >= 0 && n <= 6) : []
@@ -107,8 +109,9 @@ function buildRecurrenceParams({ frequency, weekdays, startDate }) {
     const final = days.length > 0 ? [...new Set(days)].sort((a, b) => a - b) : [weekdayOf(startDate)]
     return { weekdays: JSON.stringify(final), dayOfMonth: null, month: null }
   }
-  if (frequency === 'monthly') return { weekdays: '[]', dayOfMonth: d, month: null }
-  if (frequency === 'annual') return { weekdays: '[]', dayOfMonth: d, month: m }
+  const dom = Number(dayOfMonth) || d
+  if (frequency === 'monthly') return { weekdays: '[]', dayOfMonth: dom, month: null }
+  if (frequency === 'annual') return { weekdays: '[]', dayOfMonth: dom, month: Number(month) || m }
   return { weekdays: '[]', dayOfMonth: null, month: null } // daily
 }
 
