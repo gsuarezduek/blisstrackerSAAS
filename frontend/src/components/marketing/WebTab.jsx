@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
+import ObjectiveProgressBars from './ObjectiveProgressBars'
+import useObjectiveProgress from './useObjectiveProgress'
 
 function CreateTaskModal({ title, projectId, projectName, onClose }) {
   const { user } = useAuth()
@@ -830,6 +832,11 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
   const [reconnecting,  setReconnecting]  = useState(false)
   const [retryKey,      setRetryKey]      = useState(0)
 
+  const allObjectives = useObjectiveProgress(projectId)
+  const webObjectives = allObjectives.filter(o => subtab === 'performance'
+    ? o.metric === 'performance'
+    : (o.metric === 'visitas' || o.metric === 'leads'))
+
   // Snapshot del mes anterior (para deltas)
   const [prevSnap,     setPrevSnap]     = useState(null)
 
@@ -1305,6 +1312,9 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
             </div>
           </div>
 
+          {/* Objetivos del proyecto (visitas / leads) */}
+          <ObjectiveProgressBars objectives={webObjectives} title="🎯 Objetivos web" />
+
           {/* Análisis IA — primero para períodos mensuales */}
           {isMonthly && (
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-4">
@@ -1585,17 +1595,20 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
 
       {/* ── PageSpeed Insights — solo Performance ── */}
       {subtab === 'performance' && (
-        <PageSpeedSection
-          websiteUrl={websiteUrlForPS}
-          strategy={psStrategy}
-          onStrategyChange={s => setPsStrategy(s)}
-          result={psResult}
-          history={psHistory}
-          running={psRunning}
-          onRun={handleRunPageSpeed}
-          projectId={projectId}
-          projectName={selectedProject?.name ?? analytics?.projectName ?? ''}
-        />
+        <>
+          <ObjectiveProgressBars objectives={webObjectives} title="🎯 Objetivos de performance" />
+          <PageSpeedSection
+            websiteUrl={websiteUrlForPS}
+            strategy={psStrategy}
+            onStrategyChange={s => setPsStrategy(s)}
+            result={psResult}
+            history={psHistory}
+            running={psRunning}
+            onRun={handleRunPageSpeed}
+            projectId={projectId}
+            projectName={selectedProject?.name ?? analytics?.projectName ?? ''}
+          />
+        </>
       )}
 
       {/* Modal crear tarea desde recomendación IA */}

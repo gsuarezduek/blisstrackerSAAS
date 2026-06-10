@@ -275,6 +275,8 @@ model Project {
   websiteUrl         String?
   connections        String    @default("{}") // JSON: { instagram, facebook, ... }
   integrationDefaults String   @default("{}") // JSON: IDs recordados por tipo para reconexión, ej { google_ads: { customerId, propertyId, country }, google_analytics: { propertyId } }
+  domainRating       Float?    // Ahrefs Domain Rating (0-100), valor actual cacheado
+  domainRatingAt     DateTime? // última actualización del Domain Rating
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -1299,6 +1301,7 @@ model SearchConsoleSnapshot {
   countries   String @default("[]") // JSON: [{country, clicks, impressions}]
   topQueries  String @default("[]") // JSON: [{query, clicks, impressions, ctr, position}]
   topPages    String @default("[]") // JSON: [{page, clicks, impressions, ctr, position}]
+  domainRating Float? // Ahrefs Domain Rating (0-100) al momento del snapshot — histórico mensual
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

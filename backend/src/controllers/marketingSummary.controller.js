@@ -393,6 +393,36 @@ async function getReportsSummary(req, res, next) {
   }
 }
 
+/**
+ * GET /api/marketing/summary/seo
+ * Todos los sitios web del workspace (proyectos con websiteUrl) ordenados por
+ * Domain Rating de mayor a menor. Los que aún no tienen DR van al final.
+ */
+async function getSeoSummary(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+
+    const projects = await prisma.project.findMany({
+      where:  { workspaceId, active: true, websiteUrl: { not: null } },
+      select: { id: true, name: true, websiteUrl: true, domainRating: true, domainRatingAt: true },
+    })
+
+    const result = projects.map(p => ({
+      projectId:      p.id,
+      projectName:    p.name,
+      websiteUrl:     p.websiteUrl,
+      domainRating:   p.domainRating,
+      domainRatingAt: p.domainRatingAt,
+    }))
+
+    // DR desc; null al final
+    result.sort((a, b) => (b.domainRating ?? -1) - (a.domainRating ?? -1))
+    res.json(result)
+  } catch (err) {
+    next(err)
+  }
+}
+
 module.exports = {
   getAnalyticsSummary,
   getPerformanceSummary,
@@ -401,4 +431,5 @@ module.exports = {
   getLinkedinSummary,
   getAdsSummary,
   getReportsSummary,
+  getSeoSummary,
 }

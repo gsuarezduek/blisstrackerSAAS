@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
+import ObjectiveProgressBars from './ObjectiveProgressBars'
+import useObjectiveProgress from './useObjectiveProgress'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -368,6 +370,7 @@ function CrossProjectGoogleAdsPanel({ onSelectProject }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function GoogleAdsTab({ projectId, onSelectProject }) {
+  const objectives = useObjectiveProgress(projectId).filter(o => o.category === 'ads' && o.detail?.platform === 'google_ads')
   const [integration,        setIntegration]        = useState(null)
   const [initLoading,        setInitLoading]        = useState(true)
   const [data,               setData]               = useState(null)
@@ -649,6 +652,9 @@ export default function GoogleAdsTab({ projectId, onSelectProject }) {
           />
         </div>
       )}
+
+      {/* Objetivos de Google Ads del proyecto */}
+      <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Google Ads" />
 
       {/* Tabla de campañas */}
       {data && <CampaignsTable campaigns={data.campaigns} />}

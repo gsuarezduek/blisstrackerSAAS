@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import ObjectiveProgressBars from './ObjectiveProgressBars'
+import useObjectiveProgress from './useObjectiveProgress'
 
 function fmtNum(n) {
   if (n == null) return '—'
@@ -204,6 +206,7 @@ function CompetitorCard({ projectId, c, onChanged }) {
 }
 
 export default function CompetitorsTab({ projectId, onSelectProject }) {
+  const objectives = useObjectiveProgress(projectId).filter(o => o.metric === 'competidores')
   const [list,    setList]    = useState([])
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
@@ -274,6 +277,9 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
         </div>
         {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
       </div>
+
+      {/* Objetivos de competidores del proyecto */}
+      <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos vs competidores" />
 
       {/* Lista */}
       {loading ? (

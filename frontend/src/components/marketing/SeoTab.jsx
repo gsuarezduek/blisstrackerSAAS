@@ -30,6 +30,150 @@ function monthLabel(month) {
   return `${names[m - 1]} ${y}`
 }
 
+// ─── Domain Rating (Ahrefs) ───────────────────────────────────────────────────
+// Banda de color por valor: ≥60 fuerte, ≥30 medio, <30 débil
+function drBand(dr) {
+  if (dr == null)  return { text: 'text-gray-400',                    bg: 'bg-gray-300 dark:bg-gray-600',   label: 'Sin datos' }
+  if (dr >= 60)    return { text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500', label: 'Fuerte' }
+  if (dr >= 30)    return { text: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-400',   label: 'Medio'  }
+  return                  { text: 'text-red-600 dark:text-red-400',         bg: 'bg-red-500',     label: 'Débil'  }
+}
+
+function fmtDateShort(d) {
+  if (!d) return null
+  try { return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) }
+  catch { return null }
+}
+
+// Card de Domain Rating con botón de refresh (vista de proyecto)
+function DomainRatingCard({ projectId }) {
+  const [data,       setData]       = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error,      setError]      = useState(null)
+
+  useEffect(() => {
+    if (!projectId) return
+    const ctrl = new AbortController()
+    setLoading(true)
+    api.get(`/marketing/projects/${projectId}/domain-rating`, { signal: ctrl.signal })
+      .then(r => setData(r.data))
+      .catch(err => { if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return })
+      .finally(() => setLoading(false))
+    return () => ctrl.abort()
+  }, [projectId])
+
+  async function refresh() {
+    setRefreshing(true)
+    setError(null)
+    try {
+      const { data: r } = await api.post(`/marketing/projects/${projectId}/domain-rating/refresh`)
+      setData(d => ({ ...d, ...r }))
+    } catch (err) {
+      setError(err.response?.data?.error ?? 'No se pudo actualizar el Domain Rating.')
+    } finally { setRefreshing(false) }
+  }
+
+  if (loading) return null
+
+  const dr   = data?.domainRating
+  const band = drBand(dr)
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col">
+            <span className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Domain Rating</span>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-3xl font-bold ${band.text}`}>{dr != null ? Math.round(dr) : '—'}</span>
+              <span className="text-xs text-gray-400">/100 · {band.label}</span>
+            </div>
+          </div>
+          <div className="hidden sm:block w-32">
+            <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
+              <div className={`h-2 rounded-full ${band.bg}`} style={{ width: `${dr != null ? Math.min(dr, 100) : 0}%` }} />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">Fuerza del perfil de backlinks (Ahrefs)</p>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={refresh}
+            disabled={refreshing || !data?.hasUrl}
+            title={!data?.hasUrl ? 'El proyecto no tiene URL configurada' : ''}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {refreshing ? 'Actualizando…' : 'Actualizar DR'}
+          </button>
+          {data?.domainRatingAt && (
+            <span className="text-[10px] text-gray-400">Actualizado {fmtDateShort(data.domainRatingAt)}</span>
+          )}
+        </div>
+      </div>
+      {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+      {!data?.hasUrl && <p className="text-xs text-gray-400 mt-2">Agregá la URL del sitio en la tab Info del proyecto para medir el Domain Rating.</p>}
+    </div>
+  )
+}
+
+// Lista cross-proyecto: todos los sitios ordenados por Domain Rating (vista sin proyecto)
+function CrossProjectSeoPanel({ onSelectProject }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/marketing/summary/seo')
+      .then(r => setData(r.data))
+      .catch(() => setData([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+  )
+  if (!data?.length) return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
+      <div className="text-4xl mb-3">🔍</div>
+      <p className="text-sm text-gray-500 dark:text-gray-400">No hay sitios web cargados. Agregá la URL del sitio en la tab Info de un proyecto y seleccionalo para ver los datos de Search Console.</p>
+    </div>
+  )
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+        Sitios por Domain Rating ({data.length}) <span className="font-normal text-gray-400">· Ahrefs</span>
+      </h3>
+      <div className="space-y-3">
+        {data.map(p => {
+          const band = drBand(p.domainRating)
+          return (
+            <div key={p.projectId} className="flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <button
+                    onClick={() => onSelectProject?.(String(p.projectId))}
+                    className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                  >
+                    {p.projectName}
+                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <span className={`text-sm font-bold ${band.text}`}>{p.domainRating != null ? Math.round(p.domainRating) : '—'}</span>
+                    <span className="text-xs text-gray-400">/100</span>
+                  </div>
+                </div>
+                <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                  <div className={`h-1.5 rounded-full ${band.bg}`} style={{ width: `${p.domainRating != null ? Math.min(p.domainRating, 100) : 0}%` }} />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Barra de dispositivos ────────────────────────────────────────────────────
 // Acepta tanto el array de GSC live [ {device, clicks} ]
 // como el objeto de snapshot { DESKTOP:{clicks}, MOBILE:{clicks} }
@@ -373,7 +517,7 @@ function QueryRow({ row, comparison, startDate, endDate, projectId }) {
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function SeoTab({ projectId, projects }) {
+export default function SeoTab({ projectId, projects, onSelectProject }) {
   const projectName = projects?.find(p => p.id === projectId)?.name ?? ''
 
   // Modo: 'live' | 'YYYY-MM'
@@ -520,12 +664,7 @@ export default function SeoTab({ projectId, projects }) {
   const impactColor = { alto: 'text-red-500', medio: 'text-orange-500', bajo: 'text-blue-500' }
 
   if (!projectId) {
-    return (
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
-        <div className="text-4xl mb-3">🔍</div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Seleccioná un proyecto para ver los datos de Search Console</p>
-      </div>
-    )
+    return <CrossProjectSeoPanel onSelectProject={onSelectProject} />
   }
 
   const isLive = mode === 'live'
@@ -597,6 +736,9 @@ export default function SeoTab({ projectId, projects }) {
           </div>
         )}
       </div>
+
+      {/* ── Domain Rating (Ahrefs) — independiente de GSC ────────────────────── */}
+      <DomainRatingCard projectId={projectId} />
 
       {/* ── Error (modo live) ────────────────────────────────────────────────── */}
       {isLive && liveError && (

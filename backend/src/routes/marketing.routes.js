@@ -140,6 +140,10 @@ router.post('/projects/:id/seo/snapshots',        searchConsole.saveSeoSnapshot)
 router.get('/projects/:id/seo/ai-insights',       searchConsole.getSeoAiInsights)
 router.post('/projects/:id/seo/ai-insights',      searchConsole.createSeoAiInsights)
 
+// SEO — Domain Rating (Ahrefs, endpoint free sin API key)
+router.get('/projects/:id/domain-rating',          searchConsole.getDomainRating)
+router.post('/projects/:id/domain-rating/refresh', searchConsole.refreshDomainRating)
+
 // Keywords Tracking — rutas estáticas ANTES de las dinámicas /:kwId
 router.get('/projects/:id/keywords/suggest',              keywords.suggestKeywords)
 router.get('/projects/:id/keywords/heatmap',              keywords.getHeatmap)
@@ -165,5 +169,6 @@ router.get('/summary/tiktok',      summary.getTikTokSummary)
 router.get('/summary/linkedin',    summary.getLinkedinSummary)
 router.get('/summary/ads',         summary.getAdsSummary)
 router.get('/summary/reports',     summary.getReportsSummary)
+router.get('/summary/seo',         summary.getSeoSummary)
 
 module.exports = router

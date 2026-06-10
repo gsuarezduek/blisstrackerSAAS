@@ -58,6 +58,7 @@ const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapsh
 const { saveAllMonthlyTikTokSnapshots }    = require('./services/tiktokSnapshot.service')
 const { saveAllMonthlyLinkedinSnapshots }  = require('./services/linkedinSnapshot.service')
 const { saveAllSearchConsoleSnapshots }   = require('./services/searchConsoleSnapshot.service')
+const { refreshAllDomainRatings }         = require('./services/ahrefs.service')
 const { saveAllAdsSnapshots }             = require('./services/adsSnapshot.service')
 const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnapshot.service')
 
@@ -264,7 +265,11 @@ cron.schedule('30 2 1 * *', async () => {
   if (seoSnapshotRunning) { console.log('[SeoSnapshot] Ya en ejecución, se omite.'); return }
   seoSnapshotRunning = true
   console.log('[SeoSnapshot] Iniciando guardado mensual automático...')
-  try { await saveAllSearchConsoleSnapshots() }
+  try {
+    await saveAllSearchConsoleSnapshots()
+    // Refresca el Domain Rating cacheado de todos los proyectos con websiteUrl
+    await refreshAllDomainRatings()
+  }
   catch (err) { console.error('[SeoSnapshot] Error en cron mensual:', err.message) }
   finally { seoSnapshotRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })

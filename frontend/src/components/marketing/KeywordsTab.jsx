@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import ObjectiveProgressBars from './ObjectiveProgressBars'
+import useObjectiveProgress from './useObjectiveProgress'
 
 // ─── Países disponibles (ISO 3166-1 alpha-3 lowercase) ────────────────────────
 
@@ -1130,6 +1132,7 @@ function exportCsv(keywords) {
 }
 
 export default function KeywordsTab({ projectId, projects }) {
+  const objectives = useObjectiveProgress(projectId).filter(o => o.metric === 'posicionamiento')
   const [keywords,          setKeywords]          = useState([])
   const [loading,           setLoading]           = useState(false)
   const [error,             setError]             = useState('')
@@ -1308,6 +1311,13 @@ export default function KeywordsTab({ projectId, projects }) {
           </button>
         </div>
       </div>
+
+      {/* Objetivos de posicionamiento del proyecto */}
+      {objectives.length > 0 && (
+        <div className="mb-4">
+          <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de posicionamiento" />
+        </div>
+      )}
 
       {/* Aviso modo en vivo */}
       {liveMode && (

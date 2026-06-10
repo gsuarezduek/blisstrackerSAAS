@@ -1,6 +1,8 @@
 const prisma = require('../lib/prisma')
 const { METRICS, CATEGORIES, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, metricDef } = require('../lib/objectiveCatalog')
 const { computeObjectives } = require('../services/marketingObjectives.service')
+const { saveMonthSnapshot } = require('../services/analyticsSnapshot.service')
+const { saveMetaAdsSnapshot, saveGoogleAdsSnapshot } = require('../services/adsSnapshot.service')
 const { todayString } = require('../utils/dates')
 
 async function assertProject(req) {
@@ -147,11 +149,30 @@ async function getObjectivesProgress(req, res, next) {
     const projectId = await assertProject(req)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const month = /^\d{4}-\d{2}$/.test(req.query.month || '')
-      ? req.query.month
-      : todayString().slice(0, 7)
+    const workspaceId = req.workspace.id
+    const currentMonth = todayString().slice(0, 7)
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : currentMonth
 
-    const objectives = await computeObjectives({ projectId, workspaceId: req.workspace.id, dataMonth: month })
+    // El motor lee Web (AnalyticsSnapshot) y Ads (AdsSnapshot) por mes. A diferencia de
+    // IG/TikTok, esas fuentes NO se auto-snapshotean en cada visita, así que para el mes en
+    // curso el snapshot puede no existir. Refrescamos best-effort SOLO si hay un objetivo de
+    // esa categoría (cero llamadas externas si el proyecto no tiene objetivos web/ads).
+    if (month === currentMonth) {
+      const objs = await prisma.marketingObjective.findMany({
+        where:  { projectId, workspaceId },
+        select: { category: true, metric: true, platform: true },
+      })
+      const jobs = []
+      if (objs.some(o => o.category === 'web' && (o.metric === 'visitas' || o.metric === 'leads')))
+        jobs.push(saveMonthSnapshot(projectId, workspaceId, month).catch(() => null))
+      if (objs.some(o => o.category === 'ads' && o.platform === 'meta_ads'))
+        jobs.push(saveMetaAdsSnapshot(projectId, workspaceId, month).catch(() => null))
+      if (objs.some(o => o.category === 'ads' && o.platform === 'google_ads'))
+        jobs.push(saveGoogleAdsSnapshot(projectId, workspaceId, month).catch(() => null))
+      if (jobs.length) await Promise.all(jobs)
+    }
+
+    const objectives = await computeObjectives({ projectId, workspaceId, dataMonth: month })
     res.json({ month, objectives })
   } catch (err) { next(err) }
 }

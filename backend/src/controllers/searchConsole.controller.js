@@ -3,6 +3,7 @@ const { fetchSearchConsoleData, fetchQueryPages, querySearchConsole } = require(
 const { getValidAccessToken } = require('../services/tokenRefresh.service')
 const { normalizeSiteUrl } = require('../utils/seo')
 const { saveMonthSnapshot, generateSeoAiInsights } = require('../services/searchConsoleSnapshot.service')
+const { refreshProjectDomainRating } = require('../services/ahrefs.service')
 const { getSetting } = require('../lib/platformSettings')
 
 // Acepta 'YYYY-MM-DD' solamente (Search Console no acepta 'NdaysAgo')
@@ -185,6 +186,60 @@ function parseSnapshot(snap) {
   }
 }
 
+// ─── Domain Rating (Ahrefs) ───────────────────────────────────────────────────
+
+/**
+ * GET /api/marketing/projects/:id/domain-rating
+ * Devuelve el Domain Rating cacheado del proyecto (no consulta a Ahrefs).
+ */
+async function getDomainRating(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where:  { id: projectId, workspaceId },
+      select: { domainRating: true, domainRatingAt: true, websiteUrl: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    res.json({
+      domainRating:   project.domainRating,
+      domainRatingAt: project.domainRatingAt,
+      hasUrl:         !!project.websiteUrl,
+    })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/domain-rating/refresh
+ * Consulta Ahrefs (free endpoint) y actualiza el DR cacheado del proyecto.
+ */
+async function refreshDomainRating(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where:  { id: projectId, workspaceId },
+      select: { id: true, websiteUrl: true, domainRating: true, domainRatingAt: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!project.websiteUrl) {
+      return res.status(400).json({
+        error: 'El proyecto no tiene URL configurada. Agregala en la tab Info del proyecto.',
+        code:  'NO_SITE_URL',
+      })
+    }
+
+    const result = await refreshProjectDomainRating(project)
+    if (result.domainRatingAt == null && result.domainRating == null) {
+      return res.status(502).json({ error: 'No se pudo obtener el Domain Rating desde Ahrefs. Probá de nuevo en unos minutos.' })
+    }
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
 /**
  * GET /api/marketing/projects/:id/seo/snapshot/:month
  * Devuelve el snapshot guardado para un mes (YYYY-MM). 404 si no existe.
@@ -312,4 +367,5 @@ module.exports = {
   getSearchConsoleData, getQueryPages,
   getSeoSnapshot, saveSeoSnapshot,
   getSeoAiInsights, createSeoAiInsights,
+  getDomainRating, refreshDomainRating,
 }

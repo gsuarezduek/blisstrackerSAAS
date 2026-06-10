@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
+import ObjectiveProgressBars from './ObjectiveProgressBars'
+import useObjectiveProgress from './useObjectiveProgress'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -390,6 +392,7 @@ function CrossProjectMetaAdsPanel({ onSelectProject }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function MetaAdsTab({ projectId, onSelectProject }) {
+  const objectives = useObjectiveProgress(projectId).filter(o => o.category === 'ads' && o.detail?.platform === 'meta_ads')
   const [integration,    setIntegration]   = useState(null)
   const [data,           setData]          = useState(null)
   const [datePreset,     setDatePreset]    = useState('this_month')
@@ -599,6 +602,9 @@ export default function MetaAdsTab({ projectId, onSelectProject }) {
           />
         </div>
       )}
+
+      {/* Objetivos de Meta Ads del proyecto */}
+      <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Meta Ads" />
 
       {/* Tabla de campañas */}
       {data && <CampaignsTable campaigns={data.campaigns} />}

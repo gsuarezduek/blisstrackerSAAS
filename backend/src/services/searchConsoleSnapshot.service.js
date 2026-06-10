@@ -1,6 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk')
 const prisma    = require('../lib/prisma')
 const { fetchSearchConsoleData } = require('./googleSearchConsole.service')
+const { fetchDomainRating }      = require('./ahrefs.service')
 const { logTokens }              = require('../lib/logTokens')
 const { normalizeSiteUrl }       = require('../utils/seo')
 
@@ -53,6 +54,10 @@ async function saveMonthSnapshot(projectId, workspaceId, month) {
     devicesMap[d.device] = { clicks: d.clicks, impressions: d.impressions }
   }
 
+  // Domain Rating (Ahrefs) — histórico mensual. Aislado: si falla no rompe el snapshot.
+  let domainRating = null
+  try { domainRating = await fetchDomainRating(project?.websiteUrl) } catch {}
+
   const payload = {
     clicks:      data.overview.clicks,
     impressions: data.overview.impressions,
@@ -62,6 +67,7 @@ async function saveMonthSnapshot(projectId, workspaceId, month) {
     countries:   JSON.stringify(data.countries  ?? []),
     topQueries:  JSON.stringify(data.topQueries ?? []),
     topPages:    JSON.stringify(data.topPages   ?? []),
+    domainRating,
     updatedAt:   new Date(),
   }
 

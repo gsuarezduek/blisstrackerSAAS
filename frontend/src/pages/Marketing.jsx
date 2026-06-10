@@ -153,7 +153,7 @@ export default function Marketing() {
     if (activeSub?.soon)                               return <ComingSoon label={activeSub.label} />
 
     if (tab === 'geo-seo' && sub === 'geo')            return <GeoTab            projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
-    if (tab === 'geo-seo' && sub === 'seo')            return <SeoTab            projectId={projectId} projects={projects} />
+    if (tab === 'geo-seo' && sub === 'seo')            return <SeoTab            projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
     if (tab === 'geo-seo' && sub === 'keywords')       return <KeywordsTab       projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'canibalizacion') return <CanibalizacionTab projectId={projectId} />
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
