@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import DOMPurify from 'dompurify'
 import api from '../api/client'
 import RichTextEditor from './RichTextEditor'
@@ -10,6 +10,15 @@ export default function ProjectSituation({ encodedProjectId, initialContent }) {
   const [editing, setEditing] = useState(false)
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
+
+  // Al navegar entre proyectos React reutiliza la misma instancia del componente,
+  // por lo que el estado inicial no se vuelve a aplicar. Sincronizamos el contenido
+  // (y salimos de edición) cuando cambia el proyecto o su situación.
+  useEffect(() => {
+    setContent(initialContent || '')
+    setEditing(false)
+    setError('')
+  }, [encodedProjectId, initialContent])
 
   function handleEdit() {
     setDraft(content)
