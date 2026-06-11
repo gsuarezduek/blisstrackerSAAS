@@ -106,6 +106,10 @@ model WorkspaceMember {
   active       Boolean @default(true)
   vacationDays Int     @default(0)
 
+  // Horario laboral (para cálculo de tardanzas vs hora de login). Formato "HH:MM" en la timezone del workspace. null = sin horario configurado.
+  workStartTime String? // ej: "09:00"
+  workEndTime   String? // ej: "18:00"
+
   // Preferencias IA (por workspace)
   weeklyEmailEnabled   Boolean @default(true)
   dailyInsightEnabled  Boolean @default(true)

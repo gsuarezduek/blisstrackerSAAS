@@ -6,6 +6,7 @@
 
 const prisma = require('../lib/prisma')
 const { computeObjectives } = require('../services/marketingObjectives.service')
+const { saveMonthSnapshot } = require('../services/analyticsSnapshot.service')
 const { todayString } = require('../utils/dates')
 
 function safeParseArr(v) {
@@ -66,6 +67,18 @@ async function getAnalyticsSummary(req, res, next) {
       include: { project: { select: { id: true, name: true } } },
     })
 
+    // Estado de la integración GA4 por proyecto: 'active' | 'expired' | 'missing'.
+    // Permite pintar en rojo los proyectos cuya integración se desconectó (no refrescable).
+    const integrations = await prisma.projectIntegration.findMany({
+      where:  { workspaceId, type: 'google_analytics' },
+      select: { projectId: true, status: true, propertyId: true, project: { select: { id: true, name: true } } },
+    })
+    const integrationStatusOf = (projectId) => {
+      const ig = integrations.find(i => i.projectId === projectId)
+      if (!ig) return 'missing'
+      return (ig.status === 'active' && ig.propertyId) ? 'active' : 'expired'
+    }
+
     // Deduplicate: un registro por proyecto (el más reciente, que viene primero por orderBy)
     const seen = new Set()
     const result = []
@@ -73,21 +86,89 @@ async function getAnalyticsSummary(req, res, next) {
       if (seen.has(s.projectId)) continue
       seen.add(s.projectId)
       result.push({
-        projectId:   s.projectId,
-        projectName: s.project.name,
-        month:       s.month,
-        sessions:    s.sessions,
-        activeUsers: s.activeUsers,
-        newUsers:    s.newUsers,
-        pageviews:   s.pageviews,
-        bounceRate:  s.bounceRate,
-        avgDuration: s.avgDuration,
-        conversions: s.conversions,
+        projectId:         s.projectId,
+        projectName:       s.project.name,
+        month:             s.month,
+        updatedAt:         s.updatedAt,
+        sessions:          s.sessions,
+        activeUsers:       s.activeUsers,
+        newUsers:          s.newUsers,
+        pageviews:         s.pageviews,
+        bounceRate:        s.bounceRate,
+        avgDuration:       s.avgDuration,
+        conversions:       s.conversions,
+        hasData:           true,
+        integrationStatus: integrationStatusOf(s.projectId),
+      })
+    }
+
+    // Proyectos con GA4 configurado pero todavía sin ningún snapshot: aparecen sin datos
+    // (y en rojo si están desconectados) para que la alerta de "no refrescable" sea completa.
+    for (const ig of integrations) {
+      if (seen.has(ig.projectId)) continue
+      seen.add(ig.projectId)
+      result.push({
+        projectId:         ig.projectId,
+        projectName:       ig.project.name,
+        month:             null,
+        updatedAt:         null,
+        sessions:          0,
+        activeUsers:       0,
+        newUsers:          0,
+        pageviews:         0,
+        bounceRate:        0,
+        avgDuration:       0,
+        conversions:       0,
+        hasData:           false,
+        integrationStatus: integrationStatusOf(ig.projectId),
       })
     }
 
     result.sort((a, b) => b.sessions - a.sessions)
     res.json(result)
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * POST /api/marketing/summary/analytics/refresh
+ * Refresca el snapshot del mes en curso de todos los proyectos con GA4 activo.
+ * No consume tokens de IA (solo pega a la API de GA4). Secuencial para no saturar la cuota.
+ * Devuelve por proyecto: { projectId, projectName, status: 'ok'|'disconnected'|'error', error? }.
+ */
+async function refreshAnalyticsSummary(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const month = todayString(req.workspace.timezone).slice(0, 7) // "YYYY-MM" del mes en curso
+
+    const integrations = await prisma.projectIntegration.findMany({
+      where:  { workspaceId, type: 'google_analytics' },
+      select: { projectId: true, status: true, propertyId: true, project: { select: { name: true } } },
+    })
+
+    const results = []
+    for (const ig of integrations) {
+      const base = { projectId: ig.projectId, projectName: ig.project.name }
+      if (ig.status !== 'active' || !ig.propertyId) {
+        results.push({ ...base, status: 'disconnected' })
+        continue
+      }
+      try {
+        const snap = await saveMonthSnapshot(ig.projectId, workspaceId, month)
+        results.push({ ...base, status: snap ? 'ok' : 'disconnected' })
+      } catch (err) {
+        console.error(`[AnalyticsSummary] refresh proyecto ${ig.projectId}:`, err.message)
+        results.push({ ...base, status: 'error', error: err.message })
+      }
+    }
+
+    res.json({
+      month,
+      refreshed: results.filter(r => r.status === 'ok').length,
+      total:     results.length,
+      results,
+    })
   } catch (err) {
     next(err)
   }
@@ -425,6 +506,7 @@ async function getSeoSummary(req, res, next) {
 
 module.exports = {
   getAnalyticsSummary,
+  refreshAnalyticsSummary,
   getPerformanceSummary,
   getInstagramSummary,
   getTikTokSummary,

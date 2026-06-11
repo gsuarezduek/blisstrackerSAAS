@@ -163,6 +163,7 @@ router.get('/projects/:id/ads-snapshots',   adsSnapshot.listSnapshots)
 
 // Vistas cross-proyecto (sin proyecto seleccionado)
 router.get('/summary/analytics',   summary.getAnalyticsSummary)
+router.post('/summary/analytics/refresh', summary.refreshAnalyticsSummary)
 router.get('/summary/performance', summary.getPerformanceSummary)
 router.get('/summary/instagram',   summary.getInstagramSummary)
 router.get('/summary/tiktok',      summary.getTikTokSummary)

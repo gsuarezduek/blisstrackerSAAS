@@ -121,7 +121,7 @@ async function userSummary(req, res, next) {
       }),
       prisma.workspaceMember.findUnique({
         where: { workspaceId_userId: { workspaceId, userId } },
-        select: { active: true },
+        select: { active: true, workStartTime: true, workEndTime: true },
       }),
     ])
 
@@ -138,11 +138,36 @@ async function userSummary(req, res, next) {
       avgLoginTime = minsToTime(totalMins / firstLogins.length)
     }
 
+    // Puntualidad: compara el primer ingreso de cada día con el horario configurado.
+    let punctuality = null
+    const start = member?.workStartTime
+    if (start && firstLogins.length > 0) {
+      const [sh, sm] = start.split(':').map(Number)
+      const startMins = sh * 60 + sm
+      let lateDays = 0, totalLateMins = 0
+      for (const iso of firstLogins) {
+        const lateBy = loginMinsFromMidnight(iso, tz) - startMins
+        if (lateBy > 0) { lateDays++; totalLateMins += lateBy }
+      }
+      const daysCount = firstLogins.length
+      punctuality = {
+        expectedStart: start,
+        daysCount,
+        lateDays,
+        onTimeDays: daysCount - lateDays,
+        avgLateMins: lateDays > 0 ? Math.round(totalLateMins / lateDays) : 0,
+        punctualityPct: Math.round(((daysCount - lateDays) / daysCount) * 100),
+      }
+    }
+
     res.json({
       avgLoginTime,
       loginCount: logins.length,
       projects: memberships.map(m => m.project),
       active: member?.active ?? false,
+      workStartTime: member?.workStartTime ?? null,
+      workEndTime: member?.workEndTime ?? null,
+      punctuality,
     })
   } catch (err) { next(err) }
 }
@@ -178,8 +203,11 @@ async function dashboardStats(req, res, next) {
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
 
-    const [activeMembers, activeProjects, allLogins] = await Promise.all([
-      prisma.workspaceMember.count({ where: { workspaceId, active: true } }),
+    const [members, activeProjects, allLogins] = await Promise.all([
+      prisma.workspaceMember.findMany({
+        where: { workspaceId, active: true },
+        select: { userId: true, workStartTime: true },
+      }),
       prisma.project.count({ where: { workspaceId, active: true } }),
       prisma.userLogin.findMany({
         where: {
@@ -190,6 +218,16 @@ async function dashboardStats(req, res, next) {
         orderBy: { loginAt: 'asc' },
       }),
     ])
+
+    const activeMembers = members.length
+    // Mapa userId → minutos del horario de inicio configurado
+    const scheduleMap = {}
+    for (const m of members) {
+      if (m.workStartTime) {
+        const [h, mm] = m.workStartTime.split(':').map(Number)
+        scheduleMap[m.userId] = h * 60 + mm
+      }
+    }
 
     const byUserDay = {}
     for (const l of allLogins) {
@@ -202,11 +240,40 @@ async function dashboardStats(req, res, next) {
       ? minsToTime(firstLoginMins.reduce((a, b) => a + b, 0) / firstLoginMins.length)
       : null
 
+    // Puntualidad del equipo: sobre el primer ingreso de cada día de quienes tienen horario
+    let scheduledDays = 0, lateCount = 0
+    for (const [key, iso] of Object.entries(byUserDay)) {
+      const uid = Number(key.split('::')[0])
+      const startMins = scheduleMap[uid]
+      if (startMins == null) continue
+      scheduledDays++
+      if (loginMinsFromMidnight(iso, tz) - startMins > 0) lateCount++
+    }
+    const teamPunctualityPct = scheduledDays > 0
+      ? Math.round(((scheduledDays - lateCount) / scheduledDays) * 100)
+      : null
+
+    // Tardanzas de hoy: primer ingreso de hoy vs horario, por persona
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: tz })
+    const lateToday = []
+    for (const uid of Object.keys(scheduleMap)) {
+      const iso = byUserDay[`${uid}::${today}`]
+      if (!iso) continue
+      const lateBy = loginMinsFromMidnight(iso, tz) - scheduleMap[uid]
+      if (lateBy > 0) lateToday.push({ userId: Number(uid), lateBy })
+    }
+    lateToday.sort((a, b) => b.lateBy - a.lateBy)
+
     res.json({
       projectsPerPerson: activeMembers > 0
         ? Math.round((activeProjects / activeMembers) * 10) / 10
         : 0,
       avgFirstLoginTime,
+      teamPunctualityPct,
+      scheduledDays,
+      lateCount,
+      membersWithSchedule: Object.keys(scheduleMap).length,
+      lateToday,
     })
   } catch (err) { next(err) }
 }

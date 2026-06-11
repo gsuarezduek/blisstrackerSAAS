@@ -683,6 +683,13 @@ function fmtK(n) {
   return n.toLocaleString('es-AR')
 }
 
+function fmtSnapshotDate(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d)) return '—'
+  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+}
+
 function ScoreBar({ score }) {
   const color = score >= 90 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-400' : 'bg-red-500'
   return (
@@ -693,15 +700,33 @@ function ScoreBar({ score }) {
 }
 
 function CrossProjectAnalyticsPanel({ onSelectProject }) {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [data,       setData]       = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [flash,      setFlash]      = useState(null) // { ok, disconnected, error }
 
-  useEffect(() => {
+  const load = () =>
     api.get('/marketing/summary/analytics')
       .then(r => setData(r.data))
       .catch(() => setData([]))
-      .finally(() => setLoading(false))
-  }, [])
+
+  useEffect(() => { load().finally(() => setLoading(false)) }, [])
+
+  const refreshAll = async () => {
+    setRefreshing(true)
+    setFlash(null)
+    try {
+      const { data: res } = await api.post('/marketing/summary/analytics/refresh')
+      const disconnected = res.results.filter(r => r.status === 'disconnected').length
+      const error        = res.results.filter(r => r.status === 'error').length
+      setFlash({ ok: res.refreshed, disconnected, error })
+      await load()
+    } catch {
+      setFlash({ ok: 0, disconnected: 0, error: -1 }) // -1 = falló la request entera
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   if (loading) return (
     <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
@@ -717,11 +742,41 @@ function CrossProjectAnalyticsPanel({ onSelectProject }) {
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-        Tráfico web por proyecto ({data.length}) <span className="font-normal text-gray-400">· último snapshot disponible</span>
-      </h3>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          Tráfico web por proyecto ({data.length}) <span className="font-normal text-gray-400">· último snapshot disponible</span>
+        </h3>
+        <button
+          onClick={refreshAll}
+          disabled={refreshing}
+          className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+        >
+          {refreshing
+            ? <><span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Actualizando…</>
+            : <>🔄 Actualizar todo</>}
+        </button>
+      </div>
+
+      {flash && (
+        <div className={`mb-4 text-xs rounded-lg px-3 py-2 border ${
+          flash.error
+            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+            : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+        }`}>
+          {flash.error === -1
+            ? 'No se pudo ejecutar la actualización. Reintentá en unos segundos.'
+            : <>
+                {flash.ok} proyecto(s) actualizado(s).
+                {flash.disconnected > 0 && <span className="text-red-600 dark:text-red-400"> · {flash.disconnected} desconectado(s)</span>}
+                {flash.error > 0       && <span className="text-red-600 dark:text-red-400"> · {flash.error} con error</span>}
+              </>}
+        </div>
+      )}
+
       <div className="space-y-3">
-        {data.map(p => (
+        {data.map(p => {
+          const down = p.integrationStatus && p.integrationStatus !== 'active'
+          return (
           <div key={p.projectId} className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
@@ -732,21 +787,34 @@ function CrossProjectAnalyticsPanel({ onSelectProject }) {
                   {p.projectName}
                 </button>
                 <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-                  <span className="text-xs text-gray-400">{p.month}</span>
-                  <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtK(p.sessions)} sesiones</span>
+                  {down && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" title="La integración de Google Analytics se desconectó o venció. Reconectala desde el proyecto para poder actualizar.">
+                      ⚠ {p.integrationStatus === 'missing' ? 'Sin integración' : 'Desconectado'}
+                    </span>
+                  )}
+                  {!p.hasData
+                    ? <span className="text-xs text-gray-400">sin datos</span>
+                    : <span className="text-xs text-gray-400" title={p.updatedAt ? `Capturado el ${fmtSnapshotDate(p.updatedAt)}` : undefined}>
+                        {p.month}
+                        {p.updatedAt && <span className="text-gray-300 dark:text-gray-500"> · {fmtSnapshotDate(p.updatedAt)}</span>}
+                      </span>}
+                  <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{p.hasData ? `${fmtK(p.sessions)} sesiones` : '—'}</span>
                 </div>
               </div>
               <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
-                <div className="h-1.5 rounded-full bg-primary-500" style={{ width: `${Math.round((p.sessions / maxSessions) * 100)}%` }} />
+                <div className={`h-1.5 rounded-full ${down ? 'bg-red-400' : 'bg-primary-500'}`} style={{ width: `${Math.round((p.sessions / maxSessions) * 100)}%` }} />
               </div>
-              <div className="flex gap-3 mt-1 text-xs text-gray-400">
-                <span>{fmtK(p.activeUsers)} usuarios</span>
-                <span>{fmtK(p.pageviews)} vistas</span>
-                {p.conversions > 0 && <span>{fmtK(p.conversions)} conv.</span>}
-              </div>
+              {p.hasData && (
+                <div className="flex gap-3 mt-1 text-xs text-gray-400">
+                  <span>{fmtK(p.activeUsers)} usuarios</span>
+                  <span>{fmtK(p.pageviews)} vistas</span>
+                  {p.conversions > 0 && <span>{fmtK(p.conversions)} conv.</span>}
+                </div>
+              )}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

@@ -31,6 +31,8 @@ async function list(req, res, next) {
       isAdmin: m.role === 'admin' || m.role === 'owner',
       active: m.active,
       vacationDays: m.vacationDays,
+      workStartTime: m.workStartTime,
+      workEndTime: m.workEndTime,
       weeklyEmailEnabled: m.weeklyEmailEnabled,
       dailyInsightEnabled: m.dailyInsightEnabled,
       insightMemoryEnabled: m.insightMemoryEnabled,

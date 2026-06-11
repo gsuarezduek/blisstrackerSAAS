@@ -93,7 +93,12 @@ export default function TeamTab() {
 
   function startEdit(u) {
     setEditId(u.id)
-    setEditForm({ teamRole: u.role || '', memberRole: u.memberRole || 'member' })
+    setEditForm({
+      teamRole: u.role || '',
+      memberRole: u.memberRole || 'member',
+      workStartTime: u.workStartTime || '',
+      workEndTime: u.workEndTime || '',
+    })
     setEditError('')
   }
 
@@ -110,6 +115,8 @@ export default function TeamTab() {
       const { data } = await api.put(`/workspaces/current/members/${editId}`, {
         teamRole: editForm.teamRole,
         memberRole: editForm.memberRole,
+        workStartTime: editForm.workStartTime || null,
+        workEndTime: editForm.workEndTime || null,
       })
       setUsers(prev => prev.map(u => u.id === editId ? data : u))
       setEditId(null)
@@ -289,6 +296,11 @@ export default function TeamTab() {
                       {labelFor(u.role)}
                     </span>
                   )}
+                  {u.workStartTime && (
+                    <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                      🕒 {u.workStartTime}{u.workEndTime ? `–${u.workEndTime}` : ''}
+                    </span>
+                  )}
                   <button
                     onClick={() => isEditing ? cancelEdit() : startEdit(u)}
                     className="text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400"
@@ -316,6 +328,27 @@ export default function TeamTab() {
                         {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
                       </select>
                     </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Inicio de jornada</label>
+                      <input
+                        type="time"
+                        value={editForm.workStartTime}
+                        onChange={e => setEditForm(p => ({ ...p, workStartTime: e.target.value }))}
+                        className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Fin de jornada</label>
+                      <input
+                        type="time"
+                        value={editForm.workEndTime}
+                        onChange={e => setEditForm(p => ({ ...p, workEndTime: e.target.value }))}
+                        className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                    <p className="col-span-2 text-xs text-gray-400 dark:text-gray-500 -mt-1">
+                      Se usa para calcular tardanzas comparando con la hora de login. Dejalo vacío si la persona no tiene horario fijo.
+                    </p>
                     <div className="col-span-2">
                       <AdminToggle
                         value={editForm.memberRole}

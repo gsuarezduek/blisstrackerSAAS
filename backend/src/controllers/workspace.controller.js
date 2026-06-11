@@ -14,10 +14,24 @@ const MEMBER_SELECT = {
   teamRole: true,
   active: true,
   vacationDays: true,
+  workStartTime: true,
+  workEndTime: true,
   joinedAt: true,
   user: {
     select: { id: true, name: true, email: true, avatar: true },
   },
+}
+
+// Valida un horario "HH:MM" (24h). Acepta null/'' (sin horario). Devuelve el valor normalizado o lanza si es inválido.
+function normalizeTime(value) {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return null
+  if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    const err = new Error('Horario inválido (formato esperado HH:MM)')
+    err.status = 400
+    throw err
+  }
+  return value
 }
 
 /**
@@ -192,6 +206,8 @@ async function listMembers(req, res, next) {
       memberRole: m.role,
       active: m.active,
       vacationDays: m.vacationDays,
+      workStartTime: m.workStartTime,
+      workEndTime: m.workEndTime,
       joinedAt: m.joinedAt,
     }))
     res.json(result)
@@ -246,6 +262,8 @@ async function addMember(req, res, next) {
       memberRole: member.role,
       active: member.active,
       vacationDays: member.vacationDays,
+      workStartTime: member.workStartTime,
+      workEndTime: member.workEndTime,
     })
   } catch (err) {
     if (err.code === 'P2002') return res.status(409).json({ error: 'Email ya registrado' })
@@ -260,7 +278,7 @@ async function addMember(req, res, next) {
 async function updateMember(req, res, next) {
   try {
     const userId = Number(req.params.userId)
-    const { name, email, password, teamRole, memberRole } = req.body
+    const { name, email, password, teamRole, memberRole, workStartTime, workEndTime } = req.body
     const workspaceId = req.workspace.id
 
     const userUpdates = {}
@@ -274,6 +292,10 @@ async function updateMember(req, res, next) {
     const memberUpdates = {}
     if (teamRole !== undefined) memberUpdates.teamRole = teamRole
     if (memberRole !== undefined) memberUpdates.role = memberRole
+    const start = normalizeTime(workStartTime)
+    const end = normalizeTime(workEndTime)
+    if (start !== undefined) memberUpdates.workStartTime = start
+    if (end !== undefined) memberUpdates.workEndTime = end
 
     await prisma.$transaction(async (tx) => {
       if (Object.keys(userUpdates).length > 0) {
@@ -301,8 +323,11 @@ async function updateMember(req, res, next) {
       memberRole: member.role,
       active: member.active,
       vacationDays: member.vacationDays,
+      workStartTime: member.workStartTime,
+      workEndTime: member.workEndTime,
     })
   } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message })
     if (err.code === 'P2025') return res.status(404).json({ error: 'Usuario no encontrado' })
     next(err)
   }
