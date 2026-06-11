@@ -11,6 +11,7 @@ import BlissLogo from './BlissLogo'
 import AnnouncementBanner from './AnnouncementBanner'
 import TrialBanner from './TrialBanner'
 import TokenBudgetBanner from './TokenBudgetBanner'
+import NotesBoard from './NotesBoard'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 
@@ -469,6 +470,9 @@ export default function Navbar() {
           </div>
         )}
       </nav>
+
+      {/* Pizarra de notas — entre el nav y el contenido principal */}
+      {user && <NotesBoard />}
     </>
   )
 }

@@ -81,6 +81,13 @@ export default function Dashboard() {
 
   useEffect(() => { loadToday() }, [loadToday])
 
+  // Refrescar cuando se crea una tarea desde el atajo global (tecla N en otra página)
+  useEffect(() => {
+    function onTaskCreated() { loadToday() }
+    window.addEventListener('bliss:task-created', onTaskCreated)
+    return () => window.removeEventListener('bliss:task-created', onTaskCreated)
+  }, [loadToday])
+
   useEffect(() => {
     api.get('/tasks/delegated').then(r => setDelegated(r.data)).catch(() => {})
   }, [])
@@ -543,6 +550,7 @@ export default function Dashboard() {
           {!workDay?.endedAt && (
             <button
               onClick={() => setShowModal(true)}
+              title="Nueva tarea (tecla N)"
               className="flex-1 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl py-3 transition-colors"
             >
               + Agregar tarea

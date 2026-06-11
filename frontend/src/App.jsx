@@ -58,6 +58,7 @@ import EOS         from './pages/EOS'
 import OAuthResult  from './pages/OAuthResult'
 import LegalPage    from './pages/TermsPage'
 import ReportPublic from './pages/ReportPublic'
+import GlobalShortcuts from './components/GlobalShortcuts'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -125,6 +126,7 @@ export default function App() {
           <Route path="/admin/eos"          element={<AdminRoute><EOS         /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <GlobalShortcuts />
       </BrowserRouter>
     </AuthProvider>
     </WorkspaceProvider>

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Caveat:wght@500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,5 +7,36 @@
 @layer base {
   body {
     @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100;
+  }
+}
+
+@layer components {
+  /* ── Pizarra de notas (NotesBoard) ─────────────────────────────────── */
+  .chalk-font {
+    font-family: 'Patrick Hand', 'Caveat', 'Comic Sans MS', cursive;
+  }
+
+  /* Trazo de tiza: leve difuminado + textura granulada del polvo */
+  .chalk-text {
+    text-shadow: 0 0 1px currentColor, 0 0 2px rgba(125, 125, 125, 0.25);
+    letter-spacing: 0.3px;
+    line-height: 1.7;
+  }
+
+  /* Textura sutil de pizarra (granulado neutro que sirve sobre negro y blanco) */
+  .chalk-texture {
+    background-image:
+      radial-gradient(rgba(140, 140, 140, 0.06) 1px, transparent 1px),
+      radial-gradient(rgba(140, 140, 140, 0.05) 1px, transparent 1px);
+    background-size: 5px 5px, 8px 8px;
+    background-position: 0 0, 3px 4px;
+  }
+
+  /* Hover neutro que rinde sobre cualquier color de pizarra */
+  .chalk-hover:hover {
+    background-color: rgba(128, 128, 128, 0.16);
+  }
+  .chalk-divider {
+    border-color: rgba(128, 128, 128, 0.22);
   }
 }

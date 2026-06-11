@@ -74,32 +74,6 @@ function StatCard({ icon, label, value, sub }) {
   )
 }
 
-function StatCardSlider({ slides }) {
-  const [active, setActive] = useState(0)
-  const { icon, label, value, sub } = slides[active]
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4 relative">
-      <div className="absolute top-3 right-3 flex gap-1">
-        {slides.map((_, i) => (
-          <button key={i} onClick={() => setActive(i)}
-            className={`w-2 h-2 rounded-full transition-colors ${
-              i === active
-                ? 'bg-gray-400 dark:bg-gray-400'
-                : 'bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500'
-            }`}
-          />
-        ))}
-      </div>
-      <span className="text-2xl flex-shrink-0">{icon}</span>
-      <div className="min-w-0 pr-6">
-        <p className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{value}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
-        {sub && <p className="text-xs text-primary-600 dark:text-primary-400 mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  )
-}
-
 function MiniDashboard({ users, lastLoginsMap, dashStats }) {
   const { labelFor } = useRoles()
   const { workspace } = useWorkspace()
@@ -206,39 +180,42 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
   const lateToday = dashStats.lateToday ?? []
   const hasSchedules = (dashStats.membersWithSchedule ?? 0) > 0
 
-  // Slide de puntualidad del equipo (solo si hay horarios configurados)
-  const punctualitySlide = dashStats.teamPunctualityPct != null
+  // Tarjeta de puntualidad del equipo (solo si hay horarios configurados)
+  const punctualityCard = dashStats.teamPunctualityPct != null
     ? [{ icon: '⏰', label: 'Puntualidad del equipo', value: `${dashStats.teamPunctualityPct}%`,
          sub: `${dashStats.lateCount} tarde de ${dashStats.scheduledDays} llegadas` }]
     : []
 
-  // Slide de tardanzas de hoy (solo si hay horarios configurados)
-  const lateTodaySlide = hasSchedules
+  // Tarjeta de tardanzas de hoy (solo si hay horarios configurados)
+  const lateTodayCard = hasSchedules
     ? [{ icon: '⏰', label: 'Llegaron tarde hoy', value: lateToday.length,
          sub: lateToday.length === 0
            ? 'Nadie llegó tarde 🎉'
            : lateToday.slice(0, 3).map(x => `${(nameById[x.userId] ?? '—').split(' ')[0]} +${x.lateBy}m`).join(' · ') }]
     : []
 
+  // Todas las métricas numéricas, cada una en su propia tarjeta (sin slider)
+  const statCards = [
+    { icon: '👥', label: 'Personas activas',          value: activeUsers.length },
+    { icon: '📅', label: 'Antigüedad promedio',       value: avgTenureYears,              sub: 'del equipo activo' },
+    { icon: '📁', label: 'Proyectos por persona',     value: dashStats.projectsPerPerson, sub: 'proyectos activos ÷ equipo' },
+    { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—', sub: 'sobre últimos registros' },
+    ...punctualityCard,
+    { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${activeUsers.length}`,
+      sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${activeUsers.length - loggedInToday} aún no ingresaron` },
+    ...lateTodayCard,
+    incompleteCount > 0
+      ? { icon: '📋', label: 'Legajos incompletos', value: incompleteCount,    sub: 'Sin datos personales' }
+      : { icon: '✅', label: 'Legajos completos',   value: activeUsers.length, sub: 'Todos completos ✓' },
+  ]
+
   return (
     <div className="mb-6 space-y-3">
-      {/* Fila 1: stats numéricas */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard icon="👥" label="Personas activas"      value={activeUsers.length} />
-        <StatCardSlider slides={[
-          { icon: '📅', label: 'Antigüedad promedio',       value: avgTenureYears,                        sub: 'del equipo activo' },
-          { icon: '📁', label: 'Proyectos por persona',     value: dashStats.projectsPerPerson,           sub: 'proyectos activos ÷ equipo' },
-          { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—',           sub: 'sobre últimos registros' },
-          ...punctualitySlide,
-        ]} />
-        <StatCardSlider slides={[
-          {   icon: '🟢',  label: 'Iniciaron sesión hoy', value: `${loggedInToday} / ${activeUsers.length}`,
-              sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${activeUsers.length - loggedInToday} aún no ingresaron` },
-          ...lateTodaySlide,
-          incompleteCount > 0
-            ? { icon: '📋', label: 'Legajos incompletos', value: incompleteCount,  sub: 'Sin datos personales' }
-            : { icon: '✅', label: 'Legajos completos',   value: activeUsers.length, sub: 'Todos completos ✓' },
-        ]} />
+      {/* Fila 1: stats numéricas — cada métrica en su propia tarjeta */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {statCards.map((s, i) => (
+          <StatCard key={i} icon={s.icon} label={s.label} value={s.value} sub={s.sub} />
+        ))}
       </div>
 
       {/* Fila 2: cumpleaños + aniversarios */}
