@@ -269,29 +269,29 @@ function TopPostCard({ post, medal, label, highlight }) {
   )
 }
 
-function TopOfMonth({ topPosts, postsThisMonth }) {
+function TopOfMonth({ topPosts, postsThisMonth, label, isPast = false }) {
   const list = Array.isArray(topPosts) ? topPosts : []
 
-  const currentMonth = new Date().toLocaleString('es-AR', { month: 'long', timeZone: 'America/Argentina/Buenos_Aires' })
+  const heading = label || new Date().toLocaleString('es-AR', { month: 'long', timeZone: 'America/Argentina/Buenos_Aires' })
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-            🏆 Mejores publicaciones — {currentMonth}
+            🏆 Mejores publicaciones — {heading}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
             {postsThisMonth > 0
-              ? `${postsThisMonth} publicación${postsThisMonth !== 1 ? 'es' : ''} este mes · ranking por likes + comentarios`
-              : 'Sin publicaciones en lo que va del mes'}
+              ? `${postsThisMonth} publicación${postsThisMonth !== 1 ? 'es' : ''} ${isPast ? 'ese mes' : 'este mes'} · ranking por likes + comentarios`
+              : (isPast ? 'Sin publicaciones ese mes' : 'Sin publicaciones en lo que va del mes')}
           </p>
         </div>
       </div>
 
       {list.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">
-          Aún no hay publicaciones con datos de interacción este mes.
+          {isPast ? 'No hay publicaciones con datos de interacción de ese mes.' : 'Aún no hay publicaciones con datos de interacción este mes.'}
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -944,9 +944,17 @@ export default function InstagramTab({ projectId, onSelectProject }) {
       {/* Insights: breakdown por tipo + mejor horario — solo mes actual (datos en vivo) */}
       {isCurrentMonth && metrics && <ContentInsights byType={metrics.byType} bestHour={metrics.bestHour} />}
 
-      {/* TOP del mes — solo mes actual (datos en vivo) */}
+      {/* TOP del mes — mes actual: datos en vivo; meses anteriores: snapshot guardado */}
       {isCurrentMonth && metrics?.topPosts && (
         <TopOfMonth topPosts={metrics.topPosts} postsThisMonth={metrics.postsThisMonth} />
+      )}
+      {!isCurrentMonth && displayData?.topPosts?.length > 0 && (
+        <TopOfMonth
+          topPosts={displayData.topPosts}
+          postsThisMonth={displayData.postsThisMonth ?? displayData.postsCount}
+          label={monthLabel(selectedMonth)}
+          isPast
+        />
       )}
 
       {/* Evolución de seguidores */}

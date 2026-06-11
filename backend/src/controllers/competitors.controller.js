@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { scrapeInstagramProfile, parseInstagramUsername } = require('../services/socialScrape.service')
+const { cacheImagesInArray } = require('../services/socialImageCache.service')
 
 // Cooldown en memoria para el refresh manual (protege costo del proveedor de scraping).
 const REFRESH_COOLDOWN_MS = 30 * 60 * 1000
@@ -19,7 +20,9 @@ function todayStr() {
 async function persistCompetitorData(competitorId, workspaceId, metrics) {
   const month = currentMonthStr()
   const date  = todayStr()
-  const topPostsJson = JSON.stringify(metrics.topPosts ?? [])
+  // Cacheamos las imágenes de los top posts (las URLs del CDN de IG vencen).
+  const topPostsCached = await cacheImagesInArray(metrics.topPosts ?? [], 'imgSrc', workspaceId)
+  const topPostsJson = JSON.stringify(topPostsCached)
   await Promise.allSettled([
     prisma.competitorSnapshot.upsert({
       where:  { competitorId_month: { competitorId, month } },

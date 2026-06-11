@@ -171,11 +171,19 @@ async function getSnapshots(req, res, next) {
       select: {
         month: true, followersCount: true, mediaCount: true,
         avgLikes: true, avgComments: true, engagementRate: true,
-        postsCount: true, createdAt: true,
+        postsCount: true, topPosts: true, createdAt: true,
       },
     })
 
-    res.json({ snapshots })
+    // Parseamos topPosts (JSON) para que el front pueda mostrar el "Top del mes"
+    // también en meses anteriores.
+    const parsed = snapshots.map(s => {
+      let topPosts = []
+      try { topPosts = JSON.parse(s.topPosts || '[]') } catch { topPosts = [] }
+      return { ...s, topPosts }
+    })
+
+    res.json({ snapshots: parsed })
   } catch (err) { next(err) }
 }
 

@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { scrapeInstagramProfile } = require('./socialScrape.service')
+const { cacheImagesInArray }     = require('./socialImageCache.service')
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -37,7 +38,8 @@ async function saveAllMonthlyCompetitorSnapshots() {
   for (const c of competitors) {
     try {
       const metrics = await scrapeInstagramProfile(c.username, { targetMonth: month })
-      const topPostsJson = JSON.stringify(metrics.topPosts ?? [])
+      const topPostsCached = await cacheImagesInArray(metrics.topPosts ?? [], 'imgSrc', c.workspaceId)
+      const topPostsJson = JSON.stringify(topPostsCached)
       await Promise.allSettled([
         prisma.competitorSnapshot.upsert({
           where:  { competitorId_month: { competitorId: c.id, month } },

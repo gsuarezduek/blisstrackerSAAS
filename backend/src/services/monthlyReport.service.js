@@ -10,6 +10,7 @@ const { fetchTikTokMetrics }             = require('./tiktok.service')
 const { getValidLinkedinToken }          = require('./linkedinTokenRefresh.service')
 const { fetchLinkedinMetrics }           = require('./linkedin.service')
 const { computeObjectives }              = require('./marketingObjectives.service')
+const { cacheImagesInArray }             = require('./socialImageCache.service')
 const { monthBounds, prevMonthStr, prevMonthsArr } = require('../lib/monthUtils')
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -485,14 +486,16 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
           const token      = await getValidMetaToken(igIntegration)
           const useFbGraph = igIntegration.scopes?.startsWith('fb_graph')
           const live       = await fetchInstagramMetrics(igIntegration.propertyId, token, null, useFbGraph)
+          // Cacheamos las imágenes (las URLs del CDN vencen y el informe se persiste en dataCache).
+          const liveTopPosts = await cacheImagesInArray(live.topPosts ?? [], 'imgSrc', workspaceId)
           instagram = {
             followersCount:  live.followersCount,
             engagementRate:  live.engagementRate,
             avgLikes:        live.avgLikes,
             avgComments:     live.avgComments,
             postsCount:      live.postsThisMonth,
-            topPosts:        live.topPosts ?? [],
-            bestPost:        live.bestPost ?? null,
+            topPosts:        liveTopPosts,
+            bestPost:        liveTopPosts[0] ?? null,
             deltaFollowers:  null,
             deltaEngagement: null,
             _fallbackMonth:  'live',

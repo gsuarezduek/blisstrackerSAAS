@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const { getValidMetaToken }       = require('./metaTokenRefresh.service')
 const { fetchInstagramMetrics }   = require('./instagram.service')
 const { scrapeInstagramProfile }  = require('./socialScrape.service')
+const { cacheImagesInArray }      = require('./socialImageCache.service')
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -43,7 +44,9 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
     }
   }
 
-  const topPostsJson = JSON.stringify(metrics.topPosts ?? [])
+  // Cacheamos las imágenes de los top posts (las URLs del CDN de IG vencen).
+  const topPostsCached = await cacheImagesInArray(metrics.topPosts ?? [], 'imgSrc', workspaceId)
+  const topPostsJson   = JSON.stringify(topPostsCached)
 
   await prisma.instagramSnapshot.upsert({
     where: { projectId_month: { projectId, month } },

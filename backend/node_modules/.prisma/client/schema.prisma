@@ -74,6 +74,7 @@ model Workspace {
   seoAiInsights          SeoAiInsight[]
   cannibalReports        CannibalReport[]
   adsSnapshots           AdsSnapshot[]
+  socialImages           SocialImage[]
   eosData                EOSData?
   peopleAnalyzerRatings  PeopleAnalyzerRating[]
   eosStrikes             EOSStrike[]
@@ -994,6 +995,24 @@ model InstagramSnapshot {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, month])
+  @@index([workspaceId])
+}
+
+// ─── SOCIAL IMAGE (cache de imágenes de RRSS) ─────────────────────────────────
+// Las URLs de imágenes de los CDN de Instagram/Facebook/TikTok vienen firmadas y
+// vencen (horas/días). Para que los top posts de snapshots e informes no queden
+// con la imagen rota ("URL signature expired"), al capturar un snapshot
+// descargamos los bytes mientras la URL es válida y los servimos desde acá.
+model SocialImage {
+  id          String   @id @default(uuid())
+  workspaceId Int
+  sourceUrl   String   @db.Text // URL original del CDN (referencia/dedup)
+  imageData   Bytes
+  mimeType    String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   @@index([workspaceId])
 }
 

@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { getValidTikTokToken }  = require('./tiktokTokenRefresh.service')
 const { fetchTikTokMetrics }   = require('./tiktok.service')
+const { cacheImagesInArray }   = require('./socialImageCache.service')
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -35,7 +36,9 @@ async function saveTikTokSnapshot(projectId, workspaceId, month, preloaded = nul
     metrics     = await fetchTikTokMetrics(token, month)
   }
 
-  const topVideosJson = JSON.stringify(metrics.topVideos ?? [])
+  // Cacheamos las portadas de los top videos (las URLs del CDN de TikTok vencen).
+  const topVideosCached = await cacheImagesInArray(metrics.topVideos ?? [], 'coverUrl', workspaceId)
+  const topVideosJson   = JSON.stringify(topVideosCached)
 
   await prisma.tikTokSnapshot.upsert({
     where:  { projectId_month: { projectId, month } },
