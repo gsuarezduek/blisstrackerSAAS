@@ -5,13 +5,15 @@ import { isWorkspaceSubdomain } from '../utils/domain'
 import AddTaskModal from './AddTaskModal'
 
 // Catálogo de atajos — también alimenta el overlay de ayuda (tecla "?").
+// `chord: true` = teclas en secuencia (G luego D); por defecto se combinan (Ctrl/Cmd + B).
 const SHORTCUTS = [
-  { keys: ['N'],      desc: 'Nueva tarea (desde cualquier página)' },
-  { keys: ['G', 'D'], desc: 'Ir al Dashboard' },
-  { keys: ['G', 'P'], desc: 'Ir a Mis Proyectos' },
-  { keys: ['G', 'R'], desc: 'Ir a Tiempo real' },
-  { keys: ['?'],      desc: 'Mostrar / ocultar esta ayuda' },
-  { keys: ['Esc'],    desc: 'Cerrar la ventana actual' },
+  { keys: ['N'],             desc: 'Nueva tarea (desde cualquier página)' },
+  { keys: ['G', 'D'],        desc: 'Ir al Dashboard',     chord: true },
+  { keys: ['G', 'P'],        desc: 'Ir a Mis Proyectos',  chord: true },
+  { keys: ['G', 'R'],        desc: 'Ir a Tiempo real',    chord: true },
+  { keys: ['Ctrl/Cmd', 'B'], desc: 'Abrir / cerrar la pizarra de notas' },
+  { keys: ['?'],             desc: 'Mostrar / ocultar esta ayuda' },
+  { keys: ['Esc'],           desc: 'Cerrar la ventana actual' },
 ]
 
 // ¿El foco está en un campo editable? Entonces no disparamos atajos de una sola tecla.
@@ -132,7 +134,7 @@ export default function GlobalShortcuts() {
                   <span className="flex items-center gap-1 flex-shrink-0">
                     {s.keys.map((k, i) => (
                       <span key={k} className="flex items-center gap-1">
-                        {i > 0 && <span className="text-xs text-gray-400">luego</span>}
+                        {i > 0 && <span className="text-xs text-gray-400">{s.chord ? 'luego' : '+'}</span>}
                         <Kbd>{k}</Kbd>
                       </span>
                     ))}
