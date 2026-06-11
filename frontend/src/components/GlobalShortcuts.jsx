@@ -4,17 +4,41 @@ import { useAuth } from '../context/AuthContext'
 import { isWorkspaceSubdomain } from '../utils/domain'
 import AddTaskModal from './AddTaskModal'
 
-// Catálogo de atajos — también alimenta el overlay de ayuda (tecla "?").
-// `chord: true` = teclas en secuencia (G luego D); por defecto se combinan (Ctrl/Cmd + B).
-const SHORTCUTS = [
-  { keys: ['N'],             desc: 'Nueva tarea (desde cualquier página)' },
-  { keys: ['G', 'D'],        desc: 'Ir al Dashboard',     chord: true },
-  { keys: ['G', 'P'],        desc: 'Ir a Mis Proyectos',  chord: true },
-  { keys: ['G', 'R'],        desc: 'Ir a Tiempo real',    chord: true },
-  { keys: ['Ctrl/Cmd', 'B'], desc: 'Abrir / cerrar la pizarra de notas' },
-  { keys: ['?'],             desc: 'Mostrar / ocultar esta ayuda' },
-  { keys: ['Esc'],           desc: 'Cerrar la ventana actual' },
+// Catálogo de atajos — alimenta el overlay de ayuda (tecla "?").
+// `chord: true` = teclas en secuencia (G luego D); por defecto se combinan (Shift + C).
+const SHORTCUT_GROUPS = [
+  { title: 'Navegación', items: [
+    { keys: ['G', 'D'], chord: true, desc: 'Ir al Dashboard' },
+    { keys: ['G', 'P'], chord: true, desc: 'Ir a Mis Proyectos' },
+    { keys: ['G', 'A'], chord: true, desc: 'Ir a Actividad (tiempo real)' },
+    { keys: ['G', 'M'], chord: true, desc: 'Ir a Marketing' },
+    { keys: ['G', 'R'], chord: true, desc: 'Ir a Reportes' },
+  ]},
+  { title: 'Tareas', items: [
+    { keys: ['N'],            desc: 'Nueva tarea (desde cualquier página)' },
+    { keys: ['Shift', 'I'],   desc: 'Iniciar la primera tarea (si no hay ninguna en curso)' },
+    { keys: ['Shift', 'C'],   desc: 'Completar la tarea en curso' },
+    { keys: ['Shift', 'P'],   desc: 'Pausar la tarea en curso' },
+    { keys: ['Shift', 'B'],   desc: 'Bloquear la tarea en curso' },
+  ]},
+  { title: 'General', items: [
+    { keys: ['Ctrl/Cmd', 'B'], desc: 'Abrir / cerrar la pizarra de notas' },
+    { keys: ['?'],             desc: 'Mostrar / ocultar esta ayuda' },
+    { keys: ['Esc'],           desc: 'Cerrar la ventana actual' },
+  ]},
 ]
+
+// Destino de navegación para el acorde "G luego X". Reportes depende del rol.
+function navDest(key, isAdmin) {
+  switch (key) {
+    case 'd': return '/'
+    case 'p': return '/my-projects'
+    case 'a': return '/realtime'
+    case 'm': return '/marketing'
+    case 'r': return isAdmin ? '/reports' : '/my-reports'
+    default:  return null
+  }
+}
 
 // ¿El foco está en un campo editable? Entonces no disparamos atajos de una sola tecla.
 function isTypingTarget(el) {
@@ -66,15 +90,18 @@ export default function GlobalShortcuts() {
       // Ayuda con "?"
       if (key === '?') { e.preventDefault(); setHelpOpen(v => !v); clearG(); return }
 
+      // Las combinaciones con Shift (Shift+C/P/B/I, acciones de tarea) las maneja el Dashboard.
+      if (e.shiftKey) return
+
       // Si una de nuestras ventanas está abierta, no disparamos más atajos de tecla.
       if (taskOpen || helpOpen) return
 
       const lower = key.toLowerCase()
 
-      // Acorde de navegación: "g" y luego d/p/r
+      // Acorde de navegación: "g" y luego d/p/a/m/r
       if (gPending) {
-        const dest = { d: '/', h: '/', p: '/my-projects', r: '/realtime' }[lower]
         clearG()
+        const dest = navDest(lower, !!user?.isAdmin)
         if (dest) { e.preventDefault(); navigate(dest) }
         return
       }
@@ -90,7 +117,7 @@ export default function GlobalShortcuts() {
 
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey); clearG() }
-  }, [enabled, navigate, taskOpen, helpOpen])
+  }, [enabled, navigate, taskOpen, helpOpen, user])
 
   function handleAdd(task) {
     // Avisamos a la página activa (ej. Dashboard) para que refresque su lista.
@@ -127,21 +154,28 @@ export default function GlobalShortcuts() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <ul className="space-y-2.5">
-              {SHORTCUTS.map(s => (
-                <li key={s.desc} className="flex items-center justify-between gap-4">
-                  <span className="text-sm text-gray-600 dark:text-gray-300">{s.desc}</span>
-                  <span className="flex items-center gap-1 flex-shrink-0">
-                    {s.keys.map((k, i) => (
-                      <span key={k} className="flex items-center gap-1">
-                        {i > 0 && <span className="text-xs text-gray-400">{s.chord ? 'luego' : '+'}</span>}
-                        <Kbd>{k}</Kbd>
-                      </span>
+            <div className="space-y-4">
+              {SHORTCUT_GROUPS.map(group => (
+                <div key={group.title}>
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">{group.title}</p>
+                  <ul className="space-y-2.5">
+                    {group.items.map(s => (
+                      <li key={s.desc} className="flex items-center justify-between gap-4">
+                        <span className="text-sm text-gray-600 dark:text-gray-300">{s.desc}</span>
+                        <span className="flex items-center gap-1 flex-shrink-0">
+                          {s.keys.map((k, i) => (
+                            <span key={k} className="flex items-center gap-1">
+                              {i > 0 && <span className="text-xs text-gray-400">{s.chord ? 'luego' : '+'}</span>}
+                              <Kbd>{k}</Kbd>
+                            </span>
+                          ))}
+                        </span>
+                      </li>
                     ))}
-                  </span>
-                </li>
+                  </ul>
+                </div>
               ))}
-            </ul>
+            </div>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-4">
               Los atajos no se activan mientras escribís en un campo de texto.
             </p>

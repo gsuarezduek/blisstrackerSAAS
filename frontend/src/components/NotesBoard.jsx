@@ -8,10 +8,11 @@ import { useAuth } from '../context/AuthContext'
  * Se monta entre el Navbar y el contenido principal (ver Navbar.jsx).
  * - Tema claro  → pizarra negra, tiza clara.
  * - Tema oscuro → pizarra blanca, marcador oscuro.
- * Persiste contenido / estado abierto / altura / fuente / nº de columnas en
- * localStorage por usuario. Multicolor por selección vía execCommand('foreColor').
- * En desktop se puede dividir en 1, 2 o 3 columnas independientes (cada una con
- * su propio contenido). En mobile siempre es 1 columna a pantalla completa.
+ * Persiste contenido / estado abierto / altura / nº de columnas en localStorage
+ * por usuario. Formato (color, tipografía y tamaño) se aplica POR SELECCIÓN /
+ * texto que se escribe a continuación vía execCommand. En desktop se puede
+ * dividir en 1, 2 o 3 columnas independientes (cada una con su contenido).
+ * En mobile siempre es 1 columna a pantalla completa.
  */
 
 const COLORS = [
@@ -23,17 +24,25 @@ const COLORS = [
   { name: 'Naranja',  chalk: '#f4a85a', marker: '#e07b1a' },
 ]
 
+// Tipografías disponibles (se aplican a la selección / texto que se escribe)
 const FONTS = [
-  { id: 'kalam',   label: 'Kalam',        family: "'Kalam', cursive",              size: 1.0  },
-  { id: 'caveat',  label: 'Caveat',       family: "'Caveat', cursive",             size: 1.32 },
-  { id: 'gloria',  label: 'Gloria',       family: "'Gloria Hallelujah', cursive",  size: 0.9  },
-  { id: 'shadows', label: 'Shadows',      family: "'Shadows Into Light', cursive",  size: 1.14 },
-  { id: 'indie',   label: 'Indie Flower', family: "'Indie Flower', cursive",       size: 1.16 },
-  { id: 'patrick', label: 'Patrick Hand', family: "'Patrick Hand', cursive",       size: 1.05 },
+  { label: 'Kalam',        family: "'Kalam', cursive" },
+  { label: 'Caveat',       family: "'Caveat', cursive" },
+  { label: 'Gloria',       family: "'Gloria Hallelujah', cursive" },
+  { label: 'Shadows',      family: "'Shadows Into Light', cursive" },
+  { label: 'Indie Flower', family: "'Indie Flower', cursive" },
+  { label: 'Patrick Hand', family: "'Patrick Hand', cursive" },
 ]
-const DEFAULT_FONT = 'kalam'
+const DEFAULT_FAMILY = "'Kalam', cursive"
 
-const MAX_COLS = 3
+// Tamaños (valores 1-7 de execCommand('fontSize') → keywords CSS)
+const SIZES = [
+  { n: 3, label: 'Pequeño', cls: 'text-xs' },
+  { n: 4, label: 'Normal',  cls: 'text-sm' },
+  { n: 6, label: 'Título',  cls: 'text-lg' },
+  { n: 7, label: 'Grande',  cls: 'text-2xl' },
+]
+
 const DEFAULT_HEIGHT = () => Math.round(Math.min(window.innerHeight * 0.35, 460))
 const clampHeight = (h) => Math.max(180, Math.min(h, Math.round(window.innerHeight * 0.7)))
 
@@ -44,7 +53,6 @@ export default function NotesBoard() {
 
   const K_OPEN    = `bliss_notes_open_${uid}`
   const K_HEIGHT  = `bliss_notes_height_${uid}`
-  const K_FONT    = `bliss_notes_font_${uid}`
   const K_COLS    = `bliss_notes_cols_${uid}`
   const K_LEGACY  = `bliss_notes_html_${uid}`              // contenido de la v1 (1 sola columna)
   const keyFor    = (i) => `bliss_notes_html_${uid}_${i}`
@@ -54,22 +62,21 @@ export default function NotesBoard() {
     const stored = parseInt(localStorage.getItem(K_HEIGHT) || '', 10)
     return clampHeight(Number.isFinite(stored) ? stored : DEFAULT_HEIGHT())
   })
-  const [fontId, setFontId] = useState(() => localStorage.getItem(K_FONT) || DEFAULT_FONT)
-  const [cols, setCols]     = useState(() => {
+  const [cols, setCols] = useState(() => {
     const n = parseInt(localStorage.getItem(K_COLS) || '', 10)
     return [1, 2, 3].includes(n) ? n : 1
   })
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches)
-  const [status, setStatus]     = useState('idle')   // 'idle' | 'typing' | 'saved'
   const [confirmClear, setConfirmClear] = useState(false)
+  const [fontMenu, setFontMenu] = useState(false)
 
   const editorsRef  = useRef([])     // nodos contentEditable por columna
   const activeIdx   = useRef(0)      // última columna enfocada
+  const savedSel    = useRef(null)   // { idx, range } para no perder la selección al usar la toolbar
   const saveTimer   = useRef(null)
   const clearTimer  = useRef(null)
 
   const effectiveCols = isMobile ? 1 : cols
-  const font = FONTS.find((f) => f.id === fontId) || FONTS[0]
 
   // ── Colores resueltos según tema ──────────────────────────────────────
   const boardBg    = dark ? '#f7f7f2' : '#15171a'
@@ -81,10 +88,9 @@ export default function NotesBoard() {
   const [activeColor, setActiveColor] = useState(defaultInk)
   useEffect(() => { setActiveColor(defaultInk) }, [defaultInk])
 
-  // ── Persistencia de estado abierto / altura / fuente / columnas ──────
+  // ── Persistencia de estado abierto / altura / columnas ───────────────
   useEffect(() => { localStorage.setItem(K_OPEN, open ? '1' : '0') }, [open, K_OPEN])
   useEffect(() => { localStorage.setItem(K_HEIGHT, String(height)) }, [height, K_HEIGHT])
-  useEffect(() => { localStorage.setItem(K_FONT, fontId) }, [fontId, K_FONT])
   useEffect(() => { localStorage.setItem(K_COLS, String(cols)) }, [cols, K_COLS])
 
   // ── Breakpoint mobile ────────────────────────────────────────────────
@@ -103,11 +109,6 @@ export default function NotesBoard() {
     return ''
   }, [uid])
 
-  const saveFor = useCallback((i) => {
-    const el = editorsRef.current[i]
-    if (el) localStorage.setItem(keyFor(i), el.innerHTML)
-  }, [uid])
-
   const saveAll = useCallback(() => {
     editorsRef.current.forEach((el, i) => { if (el) localStorage.setItem(keyFor(i), el.innerHTML) })
   }, [uid])
@@ -121,33 +122,52 @@ export default function NotesBoard() {
     }
   }
 
-  // ── Autosave (debounce) ──────────────────────────────────────────────
+  // ── Autosave (debounce, silencioso) ──────────────────────────────────
   const scheduleSave = useCallback(() => {
-    setStatus('typing')
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => { saveAll(); setStatus('saved') }, 500)
+    saveTimer.current = setTimeout(saveAll, 500)
   }, [saveAll])
 
   useEffect(() => () => clearTimeout(saveTimer.current), [])
 
-  // ── Cambiar nº de columnas (guarda antes de desmontar) ───────────────
-  const changeCols = useCallback((n) => {
-    saveAll()
-    setCols(n)
-  }, [saveAll])
+  // ── Selección: guardar / restaurar (la toolbar no roba el cursor) ────
+  const saveSelection = useCallback(() => {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+    const idx = editorsRef.current.findIndex((el) => el && el.contains(range.commonAncestorContainer))
+    if (idx === -1) return
+    activeIdx.current = idx
+    savedSel.current = { idx, range: range.cloneRange() }
+  }, [])
 
-  // ── Aplicar color de tiza a la columna activa ────────────────────────
-  const applyColor = useCallback((hex) => {
-    const el = editorsRef.current[activeIdx.current] || editorsRef.current[0]
-    if (!el) return
+  const restoreSelection = useCallback(() => {
+    const saved = savedSel.current
+    const el = editorsRef.current[saved?.idx ?? activeIdx.current] || editorsRef.current[0]
+    if (!el) return null
     el.focus()
+    if (saved) {
+      const sel = window.getSelection()
+      sel.removeAllRanges()
+      sel.addRange(saved.range)
+    }
+    return el
+  }, [])
+
+  // ── Aplicar formato a la selección / texto siguiente ─────────────────
+  const applyFormat = useCallback((cmd, value) => {
+    if (!restoreSelection()) return
     try {
       document.execCommand('styleWithCSS', false, true)
-      document.execCommand('foreColor', false, hex)
+      document.execCommand(cmd, false, value)
     } catch { /* navegadores muy viejos */ }
-    setActiveColor(hex)
     scheduleSave()
-  }, [scheduleSave])
+    saveSelection()
+  }, [restoreSelection, saveSelection, scheduleSave])
+
+  const applyColor = useCallback((hex) => { applyFormat('foreColor', hex); setActiveColor(hex) }, [applyFormat])
+  const applyFont  = useCallback((family) => { applyFormat('fontName', family) }, [applyFormat])
+  const applySize  = useCallback((n) => { applyFormat('fontSize', String(n)) }, [applyFormat])
 
   // ── Limpiar la columna activa (doble confirmación) ───────────────────
   const clearBoard = useCallback(() => {
@@ -161,8 +181,10 @@ export default function NotesBoard() {
     const idx = editorsRef.current[activeIdx.current] ? activeIdx.current : 0
     const el = editorsRef.current[idx]
     if (el) { el.innerHTML = ''; localStorage.setItem(keyFor(idx), '') }
-    setStatus('saved')
   }, [confirmClear, uid])
+
+  // ── Cambiar nº de columnas (guarda antes de desmontar) ───────────────
+  const changeCols = useCallback((n) => { saveAll(); setCols(n) }, [saveAll])
 
   // ── Atajo de teclado Ctrl/Cmd + B + Escape (mobile) ──────────────────
   useEffect(() => {
@@ -171,7 +193,7 @@ export default function NotesBoard() {
         e.preventDefault()
         setOpen((o) => !o)
       }
-      if (e.key === 'Escape' && isMobile) setOpen(false)
+      if (e.key === 'Escape') { if (isMobile) setOpen(false); setFontMenu(false) }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -195,7 +217,7 @@ export default function NotesBoard() {
 
   if (!user) return null
 
-  const editorFontSize = `${1.18 * font.size}rem`
+  const noSteal = (e) => e.preventDefault()   // mantiene la selección del editor al clickear la toolbar
 
   // ── Contenido de la pizarra (toolbar + columnas) ─────────────────────
   const board = (
@@ -205,8 +227,6 @@ export default function NotesBoard() {
     >
       {/* Toolbar / bandeja de tizas */}
       <div className="flex items-center gap-2 px-3 sm:px-4 py-2 border-b chalk-divider flex-wrap">
-        <span className="chalk-font text-base sm:text-lg opacity-70 mr-1 select-none">Pizarra</span>
-
         {/* Tizas de colores */}
         <div className="flex items-center gap-1.5">
           {COLORS.map((c) => {
@@ -217,33 +237,67 @@ export default function NotesBoard() {
                 key={c.name}
                 type="button"
                 title={c.name}
-                onMouseDown={(e) => e.preventDefault()}   // no robar la selección del editor
+                onMouseDown={noSteal}
                 onClick={() => applyColor(hex)}
                 className={`w-5 h-5 rounded-full border border-black/20 transition-transform hover:scale-110 ${
                   active ? 'ring-2 ring-offset-1' : ''
                 }`}
-                style={{
-                  backgroundColor: hex,
-                  '--tw-ring-color': hex,
-                  '--tw-ring-offset-color': boardBg,
-                }}
+                style={{ backgroundColor: hex, '--tw-ring-color': hex, '--tw-ring-offset-color': boardBg }}
               />
             )
           })}
         </div>
 
-        {/* Selector de fuente */}
-        <select
-          value={fontId}
-          onChange={(e) => setFontId(e.target.value)}
-          title="Tipografía"
-          className="chalk-font text-sm bg-transparent border chalk-divider rounded px-1 py-0.5 outline-none cursor-pointer"
-          style={{ color: defaultInk }}
-        >
-          {FONTS.map((f) => (
-            <option key={f.id} value={f.id} style={{ color: '#000' }}>{f.label}</option>
+        {/* Tipografía (menú; se aplica a la selección) */}
+        <div className="relative">
+          <button
+            type="button"
+            onMouseDown={noSteal}
+            onClick={() => setFontMenu((o) => !o)}
+            title="Tipografía"
+            className="chalk-font text-base px-2 py-0.5 rounded border chalk-divider chalk-hover leading-none"
+          >
+            Aa ▾
+          </button>
+          {fontMenu && (
+            <>
+              <div className="fixed inset-0 z-10" onMouseDown={(e) => { e.preventDefault(); setFontMenu(false) }} />
+              <div
+                className="absolute left-0 mt-1 z-20 rounded border chalk-divider shadow-lg py-1 min-w-[140px]"
+                style={{ backgroundColor: boardBg, color: defaultInk }}
+              >
+                {FONTS.map((f) => (
+                  <button
+                    key={f.label}
+                    type="button"
+                    onMouseDown={noSteal}
+                    onClick={() => { applyFont(f.family); setFontMenu(false) }}
+                    className="block w-full text-left px-3 py-1 text-lg chalk-hover"
+                    style={{ fontFamily: f.family }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Tamaño (se aplica a la selección) */}
+        <div className="flex items-center gap-0.5 border chalk-divider rounded px-0.5" title="Tamaño de letra">
+          {SIZES.map((s) => (
+            <button
+              key={s.n}
+              type="button"
+              onMouseDown={noSteal}
+              onClick={() => applySize(s.n)}
+              title={s.label}
+              className={`chalk-font leading-none px-1.5 py-0.5 rounded chalk-hover ${s.cls}`}
+            >
+              A
+            </button>
           ))}
-        </select>
+        </div>
 
         {/* Selector de columnas (solo desktop) */}
         <div className="hidden md:flex items-center rounded border chalk-divider overflow-hidden" title="Columnas">
@@ -251,7 +305,7 @@ export default function NotesBoard() {
             <button
               key={n}
               type="button"
-              onMouseDown={(e) => e.preventDefault()}
+              onMouseDown={noSteal}
               onClick={() => changeCols(n)}
               className={`px-2 py-0.5 text-sm chalk-font transition-colors ${cols === n ? '' : 'opacity-50 chalk-hover'}`}
               style={cols === n ? { backgroundColor: 'rgba(128,128,128,.2)' } : undefined}
@@ -264,15 +318,10 @@ export default function NotesBoard() {
 
         <div className="flex-1" />
 
-        {/* Indicador de guardado */}
-        <span className="chalk-font text-sm opacity-60 select-none min-w-[68px] text-right">
-          {status === 'typing' ? 'Escribiendo…' : status === 'saved' ? 'Guardado ✓' : ''}
-        </span>
-
         {/* Limpiar columna activa */}
         <button
           type="button"
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={noSteal}
           onClick={clearBoard}
           title={effectiveCols > 1 ? 'Limpia la columna activa' : 'Limpia la pizarra'}
           className="chalk-font text-sm px-2 py-0.5 rounded border chalk-divider chalk-hover transition-colors"
@@ -306,10 +355,11 @@ export default function NotesBoard() {
               suppressContentEditableWarning
               onInput={scheduleSave}
               onFocus={() => { activeIdx.current = i }}
+              onKeyUp={saveSelection}
+              onMouseUp={saveSelection}
               spellCheck={false}
-              data-placeholder={effectiveCols > 1 ? `Columna ${i + 1}…` : 'Escribí acá tus notas, ideas o recordatorios…'}
               className="chalk-text flex-1 basis-0 min-w-0 overflow-y-auto px-4 sm:px-6 py-3 outline-none whitespace-pre-wrap"
-              style={{ caretColor: activeColor, fontFamily: font.family, fontSize: editorFontSize }}
+              style={{ caretColor: activeColor, fontFamily: DEFAULT_FAMILY, fontSize: '1.125rem' }}
             />
           </Fragment>
         ))}
@@ -330,15 +380,6 @@ export default function NotesBoard() {
 
   return (
     <>
-      {/* Estilo del placeholder cuando un editor está vacío */}
-      <style>{`
-        [contenteditable][data-placeholder]:empty::before {
-          content: attr(data-placeholder);
-          opacity: .45;
-          pointer-events: none;
-        }
-      `}</style>
-
       {/* ── Desktop: pizarra inline con slide por altura ── */}
       {!isMobile && (
         <div
