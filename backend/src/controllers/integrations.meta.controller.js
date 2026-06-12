@@ -5,6 +5,24 @@ const prisma           = require('../lib/prisma')
 const { encrypt }      = require('../lib/encryption')
 
 /**
+ * Trae TODAS las ad accounts accesibles por un token, siguiendo la paginación
+ * de Graph API. Sin esto, /me/adaccounts devuelve solo las primeras 25 y las
+ * cuentas que quedan en páginas siguientes nunca se listan.
+ */
+async function fetchAllAdAccounts(accessToken, fields = 'id,name,account_status,currency') {
+  const accounts = []
+  let url = 'https://graph.facebook.com/v21.0/me/adaccounts'
+  let params = { fields, access_token: accessToken, limit: 200 }
+  while (url) {
+    const { data } = await axios.get(url, params ? { params } : {})
+    accounts.push(...(data.data ?? []))
+    url = data.paging?.next || null   // el cursor `next` ya trae todos los query params en la URL
+    params = undefined
+  }
+  return accounts
+}
+
+/**
  * Instagram Business Login — flujo directo con instagram.com/oauth/authorize.
  * No requiere Facebook Pages ni Business Manager.
  * Scopes: instagram_business_basic, instagram_business_manage_insights
@@ -266,15 +284,8 @@ async function handleMetaAdsCallback(req, res, next) {
     const expiresIn = longRes.data.expires_in ?? 5183944
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
-    // 3. Obtener cuentas publicitarias del usuario
-    const accountsRes = await axios.get('https://graph.facebook.com/v21.0/me/adaccounts', {
-      params: {
-        fields:       'id,name,account_status',
-        access_token: longToken,
-      },
-    })
-
-    const accounts = accountsRes.data.data ?? []
+    // 3. Obtener cuentas publicitarias del usuario (todas las páginas)
+    const accounts = await fetchAllAdAccounts(longToken, 'id,name,account_status')
     // account_status 1 = ACTIVE
     const activeAccount = accounts.find(a => a.account_status === 1) ?? accounts[0]
 
@@ -563,22 +574,15 @@ async function connectMetaAdsToken(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    // 1. Obtener cuentas publicitarias del token
-    let accountsData
+    // 1. Obtener cuentas publicitarias del token (todas las páginas)
+    let allAccounts
     try {
-      const { data } = await axios.get('https://graph.facebook.com/v21.0/me/adaccounts', {
-        params: { fields: 'id,name,account_status,currency', access_token: accessToken },
-      })
-      accountsData = data.data ?? []
+      allAccounts = await fetchAllAdAccounts(accessToken)
     } catch (err) {
       const msg = err.response?.data?.error?.message || err.message
       console.error('[MetaAdsToken] Error al obtener cuentas:', msg)
       return res.status(400).json({ error: `Token inválido o sin permisos: ${msg}` })
     }
-
-    // account_status 1 = ACTIVE
-    const activeAccounts = accountsData.filter(a => a.account_status === 1)
-    const allAccounts    = activeAccounts.length > 0 ? activeAccounts : accountsData
 
     if (allAccounts.length === 0) {
       return res.status(400).json({
@@ -586,7 +590,8 @@ async function connectMetaAdsToken(req, res, next) {
       })
     }
 
-    // 2. Determinar qué cuenta usar
+    // 2. Determinar qué cuenta usar. No filtramos por account_status: una cuenta
+    // que el token puede leer es válida para conectar aunque no esté ACTIVE (1).
     let chosenAccount
     if (adAccountId) {
       chosenAccount = allAccounts.find(a => a.id === String(adAccountId))
@@ -594,10 +599,11 @@ async function connectMetaAdsToken(req, res, next) {
     } else if (allAccounts.length === 1) {
       chosenAccount = allAccounts[0]
     } else {
-      // Múltiples cuentas → devolver lista para el picker
-      return res.json({
-        accounts: allAccounts.map(a => ({ id: a.id, name: a.name, currency: a.currency ?? null })),
-      })
+      // Múltiples cuentas → devolver lista para el picker (con status, las activas primero)
+      const accounts = allAccounts
+        .map(a => ({ id: a.id, name: a.name, currency: a.currency ?? null, accountStatus: a.account_status ?? null }))
+        .sort((a, b) => (a.accountStatus === 1 ? 0 : 1) - (b.accountStatus === 1 ? 0 : 1))
+      return res.json({ accounts })
     }
 
     const finalAdAccountId = chosenAccount.id   // formato "act_XXXXXXXXX"

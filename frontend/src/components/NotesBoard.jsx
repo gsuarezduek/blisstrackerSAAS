@@ -67,14 +67,12 @@ export default function NotesBoard() {
     return [1, 2, 3].includes(n) ? n : 1
   })
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches)
-  const [confirmClear, setConfirmClear] = useState(false)
   const [fontMenu, setFontMenu] = useState(false)
 
   const editorsRef  = useRef([])     // nodos contentEditable por columna
   const activeIdx   = useRef(0)      // última columna enfocada
   const savedSel    = useRef(null)   // { idx, range } para no perder la selección al usar la toolbar
   const saveTimer   = useRef(null)
-  const clearTimer  = useRef(null)
 
   const effectiveCols = isMobile ? 1 : cols
 
@@ -168,20 +166,14 @@ export default function NotesBoard() {
   const applyColor = useCallback((hex) => { applyFormat('foreColor', hex); setActiveColor(hex) }, [applyFormat])
   const applyFont  = useCallback((family) => { applyFormat('fontName', family) }, [applyFormat])
   const applySize  = useCallback((n) => { applyFormat('fontSize', String(n)) }, [applyFormat])
+  const applyAlign = useCallback((cmd) => { applyFormat(cmd) }, [applyFormat])
 
-  // ── Limpiar la columna activa (doble confirmación) ───────────────────
-  const clearBoard = useCallback(() => {
-    if (!confirmClear) {
-      setConfirmClear(true)
-      clearTimeout(clearTimer.current)
-      clearTimer.current = setTimeout(() => setConfirmClear(false), 3000)
-      return
-    }
-    setConfirmClear(false)
+  // ── Limpiar la columna activa (directo, sin confirmación) ────────────
+  const doClear = useCallback(() => {
     const idx = editorsRef.current[activeIdx.current] ? activeIdx.current : 0
     const el = editorsRef.current[idx]
     if (el) { el.innerHTML = ''; localStorage.setItem(keyFor(idx), '') }
-  }, [confirmClear, uid])
+  }, [uid])
 
   // ── Cambiar nº de columnas (guarda antes de desmontar) ───────────────
   const changeCols = useCallback((n) => { saveAll(); setCols(n) }, [saveAll])
@@ -301,6 +293,28 @@ export default function NotesBoard() {
           ))}
         </div>
 
+        {/* Alineación del texto (se aplica a la selección) */}
+        <div className="flex items-center gap-0.5 border chalk-divider rounded px-0.5" title="Alineación">
+          {[
+            { cmd: 'justifyLeft',   label: 'Izquierda', d: 'M2 4h16v2H2zM2 8h10v2H2zM2 12h16v2H2zM2 16h10v2H2z' },
+            { cmd: 'justifyCenter', label: 'Centrar',   d: 'M2 4h16v2H2zM5 8h10v2H5zM2 12h16v2H2zM5 16h10v2H5z' },
+            { cmd: 'justifyRight',  label: 'Derecha',   d: 'M2 4h16v2H2zM8 8h10v2H8zM2 12h16v2H2zM8 16h10v2H8z' },
+          ].map((a) => (
+            <button
+              key={a.cmd}
+              type="button"
+              onMouseDown={noSteal}
+              onClick={() => applyAlign(a.cmd)}
+              title={a.label}
+              className="px-1.5 py-1 rounded chalk-hover leading-none"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <path d={a.d} />
+              </svg>
+            </button>
+          ))}
+        </div>
+
         {/* Selector de columnas (solo desktop) */}
         <div className="hidden md:flex items-center rounded border chalk-divider overflow-hidden" title="Columnas">
           {[1, 2, 3].map((n) => (
@@ -320,15 +334,15 @@ export default function NotesBoard() {
 
         <div className="flex-1" />
 
-        {/* Limpiar columna activa */}
+        {/* Limpiar columna activa (directo) */}
         <button
           type="button"
           onMouseDown={noSteal}
-          onClick={clearBoard}
+          onClick={doClear}
           title={effectiveCols > 1 ? 'Limpia la columna activa' : 'Limpia la pizarra'}
           className="chalk-font text-sm px-2 py-0.5 rounded border chalk-divider chalk-hover transition-colors"
         >
-          {confirmClear ? (effectiveCols > 1 ? '¿Borrar columna?' : '¿Borrar todo?') : 'Limpiar'}
+          Limpiar
         </button>
 
         {/* Cerrar (mobile) */}
