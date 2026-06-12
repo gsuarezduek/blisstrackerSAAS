@@ -116,6 +116,9 @@ model WorkspaceMember {
   insightMemoryEnabled Boolean @default(true)
   taskQualityEnabled   Boolean @default(true)
 
+  // Preferencias de UI (por workspace)
+  notesBoardEnabled    Boolean @default(true)  // mostrar/ocultar la pizarra de notas
+
   joinedAt DateTime @default(now())
 
   @@id([workspaceId, userId])

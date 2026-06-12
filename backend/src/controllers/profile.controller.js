@@ -19,7 +19,7 @@ const USER_SELECT = {
 }
 
 // Flags de preferencias que viven en WorkspaceMember
-const PREF_FLAGS = ['weeklyEmailEnabled', 'dailyInsightEnabled', 'insightMemoryEnabled', 'taskQualityEnabled']
+const PREF_FLAGS = ['weeklyEmailEnabled', 'dailyInsightEnabled', 'insightMemoryEnabled', 'taskQualityEnabled', 'notesBoardEnabled']
 
 // La validación de avatares se hace contra la DB (modelo Avatar) en updateAvatar.
 
@@ -43,6 +43,7 @@ async function getProfile(req, res, next) {
       dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
       insightMemoryEnabled: member?.insightMemoryEnabled ?? true,
       taskQualityEnabled: member?.taskQualityEnabled ?? true,
+      notesBoardEnabled: member?.notesBoardEnabled ?? true,
     })
   } catch (err) { next(err) }
 }
@@ -88,6 +89,7 @@ async function updateProfile(req, res, next) {
       dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
       insightMemoryEnabled: member?.insightMemoryEnabled ?? true,
       taskQualityEnabled: member?.taskQualityEnabled ?? true,
+      notesBoardEnabled: member?.notesBoardEnabled ?? true,
     })
   } catch (err) { next(err) }
 }
@@ -171,6 +173,7 @@ async function updatePreferences(req, res, next) {
       dailyInsightEnabled: member.dailyInsightEnabled,
       insightMemoryEnabled: member.insightMemoryEnabled,
       taskQualityEnabled: member.taskQualityEnabled,
+      notesBoardEnabled: member.notesBoardEnabled,
     })
   } catch (err) { next(err) }
 }

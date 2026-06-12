@@ -216,6 +216,8 @@ export default function NotesBoard() {
   }, [height])
 
   if (!user) return null
+  // Preferencia personal: ocultar la pizarra si está desactivada (default ON).
+  if (user.notesBoardEnabled === false) return null
 
   const noSteal = (e) => e.preventDefault()   // mantiene la selección del editor al clickear la toolbar
 
@@ -390,19 +392,22 @@ export default function NotesBoard() {
         </div>
       )}
 
-      {/* ── Flecha de apertura/cierre (siempre en el flujo) ── */}
-      <div className="flex justify-center bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      {/* ── Flecha de apertura/cierre: botón flotante sobre la línea divisoria,
+           pegado a la derecha (bajo el menú de perfil), sin ocupar una barra propia.
+           El contenedor tiene altura 0 → el botón "straddlea" el borde inferior de la
+           pizarra: línea nav/main cuando está cerrada, borde de la pizarra cuando está abierta. ── */}
+      <div className="relative h-0 z-20">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           title={open ? 'Cerrar pizarra (Ctrl/Cmd+B)' : 'Abrir pizarra (Ctrl/Cmd+B)'}
-          className="group -mb-px px-6 py-0.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+          className="absolute right-4 top-0 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 20 20"
             fill="currentColor"
-            className={`w-5 h-5 transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
+            className={`w-4 h-4 transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
           >
             <path
               fillRule="evenodd"

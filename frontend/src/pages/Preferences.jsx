@@ -10,8 +10,10 @@ export default function Preferences() {
   const [prefTab, setPrefTab] = useState('global')
   const [weeklyEmail,  setWeeklyEmail]  = useState(true)
   const [dailyInsight, setDailyInsight] = useState(true)
+  const [notesBoard,   setNotesBoard]   = useState(true)
   const [togglingW,    setTogglingW]    = useState(false)
   const [togglingD,    setTogglingD]    = useState(false)
+  const [togglingN,    setTogglingN]    = useState(false)
   const [sending,      setSending]      = useState(false)
   const [sendMsg,      setSendMsg]      = useState({ text: '', error: false })
   const [loaded,         setLoaded]         = useState(false)
@@ -59,6 +61,7 @@ export default function Preferences() {
     api.get('/profile').then(({ data }) => {
       setWeeklyEmail(data.weeklyEmailEnabled   ?? true)
       setDailyInsight(data.dailyInsightEnabled ?? true)
+      setNotesBoard(data.notesBoardEnabled     ?? true)
       setLoaded(true)
     })
   }, [])
@@ -172,6 +175,17 @@ export default function Preferences() {
       setWeeklyEmail(next)
     } catch (_) {}
     finally { setTogglingW(false) }
+  }
+
+  async function handleToggleNotesBoard() {
+    const next = !notesBoard
+    setTogglingN(true)
+    try {
+      await api.patch('/profile/preferences', { notesBoardEnabled: next })
+      setNotesBoard(next)
+      updateUser({ notesBoardEnabled: next })   // para que la pizarra aparezca/desaparezca al instante
+    } catch (_) {}
+    finally { setTogglingN(false) }
   }
 
   async function handleToggleInsight() {
@@ -723,6 +737,21 @@ export default function Preferences() {
                     {sendMsg.text}
                   </p>
                 )}
+              </div>
+            </div>
+
+            {/* Interfaz */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Interfaz</h2>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">Ajustes de la apariencia de la app.</p>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Pizarra de notas</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                    Muestra la pizarra desplegable entre la barra de navegación y el contenido, para anotar ideas y recordatorios rápidos. Si la desactivás, desaparece de toda la app (tus notas se conservan).
+                  </p>
+                </div>
+                <Toggle on={notesBoard} onToggle={handleToggleNotesBoard} disabled={togglingN} />
               </div>
             </div>
           </>

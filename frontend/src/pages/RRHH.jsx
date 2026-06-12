@@ -199,14 +199,14 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
     { icon: '👥', label: 'Personas activas',          value: activeUsers.length },
     { icon: '📅', label: 'Antigüedad promedio',       value: avgTenureYears,              sub: 'del equipo activo' },
     { icon: '📁', label: 'Proyectos por persona',     value: dashStats.projectsPerPerson, sub: 'proyectos activos ÷ equipo' },
-    { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—', sub: 'sobre últimos registros' },
-    ...punctualityCard,
-    { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${activeUsers.length}`,
-      sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${activeUsers.length - loggedInToday} aún no ingresaron` },
-    ...lateTodayCard,
     incompleteCount > 0
       ? { icon: '📋', label: 'Legajos incompletos', value: incompleteCount,    sub: 'Sin datos personales' }
       : { icon: '✅', label: 'Legajos completos',   value: activeUsers.length, sub: 'Todos completos ✓' },
+    { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${activeUsers.length}`,
+      sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${activeUsers.length - loggedInToday} aún no ingresaron` },
+    { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—', sub: 'sobre últimos registros' },
+    ...punctualityCard,
+    ...lateTodayCard,
   ]
 
   return (

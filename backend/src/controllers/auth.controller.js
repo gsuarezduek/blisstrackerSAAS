@@ -35,6 +35,7 @@ function formatUser(user, member) {
     isAdmin: member.role === 'admin' || member.role === 'owner',
     avatar: user.avatar,
     dailyInsightEnabled: member.dailyInsightEnabled,
+    notesBoardEnabled: member.notesBoardEnabled,
   }
 }
 
@@ -127,6 +128,7 @@ async function me(req, res, next) {
       role: member?.teamRole ?? '',
       isAdmin: user.isSuperAdmin || member?.role === 'admin' || member?.role === 'owner',
       dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
+      notesBoardEnabled: member?.notesBoardEnabled ?? true,
     })
   } catch (err) { next(err) }
 }

@@ -5,21 +5,21 @@ import { isWorkspaceSubdomain } from '../utils/domain'
 import AddTaskModal from './AddTaskModal'
 
 // Catálogo de atajos — alimenta el overlay de ayuda (tecla "?").
-// `chord: true` = teclas en secuencia (G luego D); por defecto se combinan (Shift + C).
+// Todas las teclas son combinaciones (Shift + X); por eso `chord` no se usa acá.
 const SHORTCUT_GROUPS = [
   { title: 'Navegación', items: [
-    { keys: ['G', 'D'], chord: true, desc: 'Ir al Dashboard' },
-    { keys: ['G', 'P'], chord: true, desc: 'Ir a Mis Proyectos' },
-    { keys: ['G', 'A'], chord: true, desc: 'Ir a Actividad (tiempo real)' },
-    { keys: ['G', 'M'], chord: true, desc: 'Ir a Marketing' },
-    { keys: ['G', 'R'], chord: true, desc: 'Ir a Reportes' },
+    { keys: ['Shift', 'D'], desc: 'Ir al Dashboard' },
+    { keys: ['Shift', 'Y'], desc: 'Ir a Mis Proyectos' },
+    { keys: ['Shift', 'A'], desc: 'Ir a Actividad (tiempo real)' },
+    { keys: ['Shift', 'M'], desc: 'Ir a Marketing' },
+    { keys: ['Shift', 'R'], desc: 'Ir a Reportes' },
   ]},
   { title: 'Tareas', items: [
-    { keys: ['N'],            desc: 'Nueva tarea (desde cualquier página)' },
-    { keys: ['Shift', 'I'],   desc: 'Iniciar la primera tarea (si no hay ninguna en curso)' },
-    { keys: ['Shift', 'C'],   desc: 'Completar la tarea en curso' },
-    { keys: ['Shift', 'P'],   desc: 'Pausar la tarea en curso' },
-    { keys: ['Shift', 'B'],   desc: 'Bloquear la tarea en curso' },
+    { keys: ['N'],          desc: 'Nueva tarea (desde cualquier página)' },
+    { keys: ['Shift', 'I'], desc: 'Iniciar la primera tarea (si no hay ninguna en curso)' },
+    { keys: ['Shift', 'C'], desc: 'Completar la tarea en curso' },
+    { keys: ['Shift', 'P'], desc: 'Pausar la tarea en curso' },
+    { keys: ['Shift', 'B'], desc: 'Bloquear la tarea en curso' },
   ]},
   { title: 'General', items: [
     { keys: ['Ctrl/Cmd', 'B'], desc: 'Abrir / cerrar la pizarra de notas' },
@@ -28,11 +28,12 @@ const SHORTCUT_GROUPS = [
   ]},
 ]
 
-// Destino de navegación para el acorde "G luego X". Reportes depende del rol.
+// Destino de navegación para "Shift + X". Reportes depende del rol.
+// Las teclas de tarea (C/P/B/I) no están acá: las maneja el Dashboard.
 function navDest(key, isAdmin) {
   switch (key) {
     case 'd': return '/'
-    case 'p': return '/my-projects'
+    case 'y': return '/my-projects'
     case 'a': return '/realtime'
     case 'm': return '/marketing'
     case 'r': return isAdmin ? '/reports' : '/my-reports'
@@ -68,10 +69,6 @@ export default function GlobalShortcuts() {
   useEffect(() => {
     if (!enabled) return
 
-    let gPending = false
-    let gTimer = null
-    const clearG = () => { gPending = false; if (gTimer) clearTimeout(gTimer) }
-
     function onKey(e) {
       // Escape cierra nuestras ventanas, incluso si el foco está dentro del modal.
       if (e.key === 'Escape') {
@@ -80,43 +77,31 @@ export default function GlobalShortcuts() {
         return
       }
 
-      // Dejamos las combinaciones con modificadores al navegador/SO.
+      // Dejamos Ctrl/Cmd/Alt al navegador/SO.
       if (e.ctrlKey || e.metaKey || e.altKey) return
       // No interferir mientras se escribe.
       if (isTypingTarget(e.target)) return
 
-      const key = e.key
+      // Ayuda con "?" (Shift + /)
+      if (e.key === '?') { e.preventDefault(); setHelpOpen(v => !v); return }
 
-      // Ayuda con "?"
-      if (key === '?') { e.preventDefault(); setHelpOpen(v => !v); clearG(); return }
+      const lower = e.key.toLowerCase()
 
-      // Las combinaciones con Shift (Shift+C/P/B/I, acciones de tarea) las maneja el Dashboard.
-      if (e.shiftKey) return
-
-      // Si una de nuestras ventanas está abierta, no disparamos más atajos de tecla.
-      if (taskOpen || helpOpen) return
-
-      const lower = key.toLowerCase()
-
-      // Acorde de navegación: "g" y luego d/p/a/m/r
-      if (gPending) {
-        clearG()
+      // Navegación con Shift + tecla. Las teclas de tarea (C/P/B/I) no están en el
+      // mapa de navegación, así que acá se ignoran y las maneja el Dashboard.
+      if (e.shiftKey) {
         const dest = navDest(lower, !!user?.isAdmin)
         if (dest) { e.preventDefault(); navigate(dest) }
         return
       }
-      if (lower === 'g') {
-        gPending = true
-        gTimer = setTimeout(() => { gPending = false }, 1200)
-        return
-      }
 
-      // Nueva tarea
+      // Atajos de una sola tecla (sin Shift).
+      if (taskOpen || helpOpen) return
       if (lower === 'n') { e.preventDefault(); setTaskOpen(true) }
     }
 
     window.addEventListener('keydown', onKey)
-    return () => { window.removeEventListener('keydown', onKey); clearG() }
+    return () => window.removeEventListener('keydown', onKey)
   }, [enabled, navigate, taskOpen, helpOpen, user])
 
   function handleAdd(task) {
