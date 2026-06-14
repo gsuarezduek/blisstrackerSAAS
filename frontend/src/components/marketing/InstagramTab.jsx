@@ -706,8 +706,7 @@ function ConnectPrompt({ projectId, onConnected }) {
           )}
         </div>
 
-        {/* Método 3 — Scraping (oculto temporalmente durante el App Review de Meta) */}
-        {false && (
+        {/* Método 3 — Scraping */}
         <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
           <button
             onClick={() => toggle('scrape')}
@@ -744,7 +743,6 @@ function ConnectPrompt({ projectId, onConnected }) {
             </div>
           )}
         </div>
-        )}
 
       </div>
     </div>

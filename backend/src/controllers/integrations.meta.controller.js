@@ -234,19 +234,31 @@ async function handleMetaAdsCallback(req, res, next) {
   const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
 
   if (oauthError) {
+    // Facebook devolvió un error en el redirect. Logueamos TODO el detalle para
+    // diagnóstico (visible en los logs de Railway).
+    console.error('[MetaAdsOAuth] Facebook devolvió un error en el callback:', JSON.stringify({
+      error:             oauthError,
+      error_reason:      req.query.error_reason,
+      error_description: req.query.error_description,
+      error_code:        req.query.error_code,
+    }, null, 2))
+    const detail = req.query.error_description || oauthError
     return res.redirect(
-      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(oauthError)}`
+      `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(detail)}`
     )
   }
 
   let statePayload
   try {
     statePayload = jwt.verify(state, process.env.JWT_SECRET)
-  } catch {
+  } catch (err) {
+    console.error('[MetaAdsOAuth] State inválido o expirado:', err.message, '· code presente:', !!code)
     return res.redirect(
       `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`
     )
   }
+
+  console.log(`[MetaAdsOAuth] Callback recibido OK · projectId=${statePayload?.projectId} · code presente: ${!!code}`)
 
   const { projectId, workspaceId, slug, userId } = statePayload
   const isLocalDev   = process.env.NODE_ENV !== 'production'
@@ -290,6 +302,7 @@ async function handleMetaAdsCallback(req, res, next) {
     const activeAccount = accounts.find(a => a.account_status === 1) ?? accounts[0]
 
     if (!activeAccount) {
+      console.error(`[MetaAdsOAuth] El token no devolvió ninguna ad account · ${accounts.length} cuentas recibidas`)
       return res.redirect(
         `${frontendBase}/oauth-result?error=${encodeURIComponent('No se encontró ninguna cuenta publicitaria de Meta')}`
       )
