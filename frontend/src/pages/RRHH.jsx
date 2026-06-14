@@ -1,10 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import LoadingSpinner from '../components/LoadingSpinner'
 import useRoles from '../hooks/useRoles'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import { computePeopleScore, peopleColumnKeys, scoreBand } from '../utils/peopleScore'
 
 const TZ = 'America/Argentina/Buenos_Aires'
 
@@ -74,7 +77,49 @@ function StatCard({ icon, label, value, sub }) {
   )
 }
 
-function MiniDashboard({ users, lastLoginsMap, dashStats }) {
+// Tarjeta de People Score (EOS) — salud del equipo según el Analizador de Personas.
+function PeopleScoreCard({ peopleScore }) {
+  const { score, rightPeople, total } = peopleScore
+  const band = scoreBand(score)
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          🧭 Salud del equipo
+        </p>
+        <Link to="/admin/eos?tab=personas"
+          className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline shrink-0">
+          Analizador de Personas →
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {/* People Score */}
+        <div>
+          <div className="flex items-baseline gap-2">
+            <span className={`text-3xl font-bold leading-none ${band.text}`}>{score != null ? `${score}%` : '—'}</span>
+            <span className={`text-xs font-medium ${band.text}`}>{band.label}</span>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">People Score</p>
+          <div className="mt-2 h-1.5 w-full rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${band.bar}`} style={{ width: `${score ?? 0}%` }} />
+          </div>
+        </div>
+        {/* Personas correctas */}
+        <div className="border-l border-gray-100 dark:border-gray-700 pl-4">
+          <span className="text-3xl font-bold leading-none text-gray-900 dark:text-white">
+            {rightPeople}<span className="text-xl text-gray-400 dark:text-gray-500">/{total}</span>
+          </span>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Personas correctas en el asiento</p>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 leading-snug">
+            Con <span className="font-medium text-green-600 dark:text-green-400">+</span> en todos sus valores y GWC
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
   const { labelFor } = useRoles()
   const { workspace } = useWorkspace()
   const today = todayBA()
@@ -217,6 +262,11 @@ function MiniDashboard({ users, lastLoginsMap, dashStats }) {
           <StatCard key={i} icon={s.icon} label={s.label} value={s.value} sub={s.sub} />
         ))}
       </div>
+
+      {/* People Score (EOS) — solo si EOS está habilitado y hay calificaciones */}
+      {peopleScore && peopleScore.score != null && (
+        <PeopleScoreCard peopleScore={peopleScore} />
+      )}
 
       {/* Fila 2: cumpleaños + aniversarios */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1150,6 +1200,8 @@ export default function RRHH() {
   const [users, setUsers]       = useState([])
   const [lastLoginsMap, setLastLoginsMap] = useState({})
   const [dashStats, setDashStats] = useState({ projectsPerPerson: 0 })
+  const [peopleScore, setPeopleScore] = useState(null)
+  const { enabled: eosEnabled } = useFeatureFlag('eos')
 
   useEffect(() => {
     api.get('/users').then(r => setUsers(r.data)).catch(() => {})
@@ -1165,6 +1217,18 @@ export default function RRHH() {
       .catch(() => {})
   }, [])
 
+  // People Score (EOS) — solo si el módulo está habilitado y hay valores definidos.
+  useEffect(() => {
+    if (!eosEnabled) { setPeopleScore(null); return }
+    api.get('/eos/personas')
+      .then(r => {
+        const { members, coreValues, ratingsMap } = r.data
+        if (!coreValues?.length) { setPeopleScore(null); return }
+        setPeopleScore(computePeopleScore(members, peopleColumnKeys(coreValues), ratingsMap))
+      })
+      .catch(() => {})
+  }, [eosEnabled])
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
@@ -1172,7 +1236,7 @@ export default function RRHH() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">RRHH</h1>
 
         {/* Mini dashboard — siempre visible */}
-        {users.length > 0 && <MiniDashboard users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} />}
+        {users.length > 0 && <MiniDashboard users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} peopleScore={peopleScore} />}
 
         {/* Tabs */}
         <div className="mb-4">

@@ -235,7 +235,11 @@ async function dashboardStats(req, res, next) {
       const key = `${l.userId}::${day}`
       if (!byUserDay[key]) byUserDay[key] = l.loginAt
     }
-    const firstLoginMins = Object.values(byUserDay).map(iso => loginMinsFromMidnight(iso, tz))
+    // Hora promedio de ingreso: solo personas con horario configurado (los freelancers
+    // o quienes trabajan en otra franja horaria no tienen horario → no se cuentan).
+    const firstLoginMins = Object.entries(byUserDay)
+      .filter(([key]) => scheduleMap[Number(key.split('::')[0])] != null)
+      .map(([, iso]) => loginMinsFromMidnight(iso, tz))
     const avgFirstLoginTime = firstLoginMins.length > 0
       ? minsToTime(firstLoginMins.reduce((a, b) => a + b, 0) / firstLoginMins.length)
       : null

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { computePeopleScore, scoreBand } from '../../utils/peopleScore'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UI primitivos compartidos
@@ -82,36 +83,6 @@ const GWC_COLUMNS = [
   { key: 'gwc_capacity', label: 'C',  title: '¿Tiene capacidad?' },
 ]
 
-const RATING_POINTS = { '+': 1, '+/-': 0.5, '-': 0 }
-
-// Calcula el People Score del equipo (promedio solo de celdas calificadas) y el
-// conteo de "personas correctas en el asiento correcto" (+ en todas sus columnas).
-function computePeopleScore(members, allColumns, ratingsMap) {
-  let sum = 0, rated = 0, rightPeople = 0
-  members.forEach(m => {
-    const r = ratingsMap[m.id] || {}
-    let allPlus = allColumns.length > 0
-    allColumns.forEach(col => {
-      const v = r[col.key]
-      if (v != null) { sum += RATING_POINTS[v]; rated++ }
-      if (v !== '+') allPlus = false
-    })
-    if (allPlus) rightPeople++
-  })
-  return {
-    score: rated > 0 ? Math.round((sum / rated) * 100) : null,
-    rightPeople,
-    total: members.length,
-  }
-}
-
-function scoreBand(score) {
-  if (score == null) return { label: 'Sin evaluar', text: 'text-gray-500 dark:text-gray-400', bar: 'bg-gray-300 dark:bg-gray-600', ring: 'border-gray-200 dark:border-gray-700' }
-  if (score >= 80)   return { label: 'Equipo saludable', text: 'text-green-600 dark:text-green-400', bar: 'bg-green-500', ring: 'border-green-200 dark:border-green-800' }
-  if (score >= 50)   return { label: 'Requiere atención', text: 'text-amber-600 dark:text-amber-400', bar: 'bg-amber-500', ring: 'border-amber-200 dark:border-amber-800' }
-  return { label: 'Crítico', text: 'text-red-600 dark:text-red-400', bar: 'bg-red-500', ring: 'border-red-200 dark:border-red-800' }
-}
-
 function PeopleScoreSummary({ score, rightPeople, total }) {
   const band = scoreBand(score)
   return (
@@ -175,7 +146,7 @@ function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
     return RATING_CYCLE[(idx + 1) % RATING_CYCLE.length]
   }
 
-  const { score, rightPeople, total } = computePeopleScore(members, allColumns, ratingsMap)
+  const { score, rightPeople, total } = computePeopleScore(members, allColumns.map(c => c.key), ratingsMap)
 
   return (
     <>
