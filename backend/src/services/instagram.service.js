@@ -46,7 +46,99 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
   const profile = profileRes.data
   const media   = mediaRes.data?.data ?? []
 
-  return computeInstagramMetrics(profile, media, targetMonth)
+  // Insights (requiere instagram_business_manage_insights). Best-effort: si falla
+  // —permiso no aprobado, cuenta chica, cambio de versión de API— las métricas
+  // básicas (likes/comments/engagement) se devuelven igual y los campos de
+  // alcance/guardados/compartidos quedan en null.
+  let insights = null
+  try {
+    insights = await fetchInstagramInsights(base, meId, accessToken, profile, media, targetMonth)
+  } catch (err) {
+    console.warn('[Instagram] Insights no disponibles:', err.response?.data?.error?.message || err.message)
+  }
+
+  return computeInstagramMetrics(profile, media, targetMonth, insights)
+}
+
+// ── Insights de Instagram ─────────────────────────────────────────────────────
+// Devuelve { accountReach, accountViews, mediaInsights } donde mediaInsights es
+// un Map(mediaId → { reach, saved, shares, views }). Solo trae insights de las
+// publicaciones del mes objetivo (acota el costo de llamadas por-media).
+
+function monthRangeEpoch(filterMonth) {
+  const [y, m] = filterMonth.split('-').map(Number)
+  const start = Math.floor(Date.UTC(y, m - 1, 1, 3, 0, 0) / 1000)            // 1° del mes 00:00 ART (UTC-3)
+  const artNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const isCurrent = `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}` === filterMonth
+  // Fin: ahora si es el mes en curso; si no, 1° del mes siguiente. La API limita el
+  // rango de reach a 30 días, así que para meses largos lo recortamos a 30.
+  const naturalEnd = isCurrent
+    ? Math.floor(Date.now() / 1000)
+    : Math.floor(Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1, 3, 0, 0) / 1000)
+  const cappedEnd = Math.min(naturalEnd, start + 30 * 24 * 60 * 60)
+  return { since: start, until: cappedEnd }
+}
+
+async function fetchInstagramInsights(base, meId, accessToken, profile, media, targetMonth) {
+  const artNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const filterMonth = targetMonth || `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}`
+
+  // Publicaciones del mes objetivo (mismo criterio que computeInstagramMetrics).
+  const monthPosts = media.filter(m => {
+    if (!m.timestamp) return false
+    const d = new Date(new Date(m.timestamp).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === filterMonth
+  })
+
+  // ── Insights a nivel cuenta (alcance + vistas del mes) ──
+  const { since, until } = monthRangeEpoch(filterMonth)
+  let accountReach = null
+  let accountViews = null
+  try {
+    const res = await axios.get(`${base}/${meId}/insights`, {
+      params: { metric: 'reach,views', metric_type: 'total_value', period: 'day', since, until, access_token: accessToken },
+    })
+    for (const row of res.data?.data ?? []) {
+      const total = row.total_value?.value ?? null
+      if (row.name === 'reach') accountReach = total
+      if (row.name === 'views') accountViews = total
+    }
+  } catch (err) {
+    // 'views' no existe en versiones viejas de la API → reintentamos solo reach.
+    try {
+      const res = await axios.get(`${base}/${meId}/insights`, {
+        params: { metric: 'reach', metric_type: 'total_value', period: 'day', since, until, access_token: accessToken },
+      })
+      accountReach = res.data?.data?.[0]?.total_value?.value ?? null
+    } catch { /* sin insights de cuenta */ }
+  }
+
+  // ── Insights por publicación (reach/saved/shares/views) ──
+  // Concurrencia acotada para no saturar la API.
+  const mediaInsights = new Map()
+  async function oneMedia(m) {
+    try {
+      const res = await axios.get(`${base}/${m.id}/insights`, {
+        params: { metric: 'reach,saved,shares,views', access_token: accessToken },
+      })
+      const vals = {}
+      for (const row of res.data?.data ?? []) {
+        vals[row.name] = row.values?.[0]?.value ?? row.total_value?.value ?? null
+      }
+      mediaInsights.set(m.id, {
+        reach:  vals.reach  ?? null,
+        saved:  vals.saved  ?? null,
+        shares: vals.shares ?? null,
+        views:  vals.views  ?? null,
+      })
+    } catch { /* este post no expone insights (p.ej. muy viejo) — se omite */ }
+  }
+  const CONCURRENCY = 5
+  for (let i = 0; i < monthPosts.length; i += CONCURRENCY) {
+    await Promise.all(monthPosts.slice(i, i + CONCURRENCY).map(oneMedia))
+  }
+
+  return { accountReach, accountViews, mediaInsights }
 }
 
 /**
@@ -56,9 +148,11 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
  * @param {Array}  media       — [{ id, like_count, comments_count, timestamp, media_type, media_url, thumbnail_url, permalink, caption }]
  * @param {string} targetMonth — 'YYYY-MM' opcional; si null usa el mes actual ART
  */
-function computeInstagramMetrics(profile, media = [], targetMonth = null) {
+function computeInstagramMetrics(profile, media = [], targetMonth = null, insights = null) {
   const followersCount = profile.followers_count ?? 0
   const mediaCount     = profile.media_count     ?? 0
+  const mediaInsights  = insights?.mediaInsights ?? null
+  const getInsight     = id => (mediaInsights ? mediaInsights.get(id) : null) || {}
 
   // ── Mes a filtrar (ART) ───────────────────────────────────────────────────
   // Si se pasa targetMonth ("YYYY-MM"), filtramos ese mes. Si no, usamos el mes actual.
@@ -107,10 +201,15 @@ function computeInstagramMetrics(profile, media = [], targetMonth = null) {
     .slice(0, 3)
 
   function toBestPost(m) {
+    const ins = getInsight(m.id)
     return {
       id:            m.id,
       likeCount:     m.like_count        ?? null,
       commentsCount: m.comments_count    ?? null,
+      reach:         ins.reach           ?? null,
+      saved:         ins.saved           ?? null,
+      shares:        ins.shares          ?? null,
+      views:         ins.views           ?? null,
       imgSrc:        m.thumbnail_url ?? m.media_url ?? null,
       permalink:     m.permalink         ?? null,
       mediaType:     m.media_type        ?? null,
@@ -121,6 +220,33 @@ function computeInstagramMetrics(profile, media = [], targetMonth = null) {
 
   const topPosts = topRanked.map(toBestPost)
   const bestPost = topPosts[0] ?? null
+
+  // ── Métricas de Insights del mes (alcance/guardados/compartidos) ──────────────
+  // Best-effort: null si no hubo insights (sin permiso, cuenta chica, scraping).
+  let reachThisMonth = null, viewsThisMonth = null
+  let totalSaved = null, totalShares = null, avgReach = null, bestByReach = null
+  if (mediaInsights) {
+    reachThisMonth = insights.accountReach ?? null
+    viewsThisMonth = insights.accountViews ?? null
+
+    const monthInsights = monthPosts.map(m => ({ m, ins: getInsight(m.id) }))
+    const savedVals  = monthInsights.map(x => x.ins.saved ).filter(v => v != null)
+    const sharesVals = monthInsights.map(x => x.ins.shares).filter(v => v != null)
+    const reachVals  = monthInsights.map(x => x.ins.reach ).filter(v => v != null)
+    totalSaved  = savedVals.length  ? savedVals.reduce((s, v) => s + v, 0)  : null
+    totalShares = sharesVals.length ? sharesVals.reduce((s, v) => s + v, 0) : null
+    avgReach    = reachVals.length  ? parseFloat((reachVals.reduce((s, v) => s + v, 0) / reachVals.length).toFixed(0)) : null
+
+    // Fallback de alcance del mes: si la cuenta no expuso el agregado, sumamos el de
+    // los posts (sobrecuenta levemente, pero es mejor que no mostrar nada).
+    if (reachThisMonth == null && reachVals.length) reachThisMonth = reachVals.reduce((s, v) => s + v, 0)
+
+    const withReach = monthPosts.filter(m => getInsight(m.id).reach != null)
+    if (withReach.length) {
+      const top = withReach.sort((a, b) => (getInsight(b.id).reach ?? 0) - (getInsight(a.id).reach ?? 0))[0]
+      bestByReach = toBestPost(top)
+    }
+  }
 
   // ── Breakdown por tipo de contenido (del mes) ─────────────────────────────
 
@@ -187,6 +313,13 @@ function computeInstagramMetrics(profile, media = [], targetMonth = null) {
     byType,
     bestHour,
     recentMedia,
+    // Insights (instagram_business_manage_insights) — null si no disponibles
+    reachThisMonth,
+    viewsThisMonth,
+    totalSaved,
+    totalShares,
+    avgReach,
+    bestByReach,
   }
 }
 

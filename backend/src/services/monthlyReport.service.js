@@ -210,11 +210,12 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.instagramSnapshot.findFirst({
       where:   { projectId, workspaceId, month: dataMonth },
       select:  { followersCount: true, engagementRate: true, avgLikes: true,
-                 avgComments: true, postsCount: true, mediaCount: true, topPosts: true },
+                 avgComments: true, postsCount: true, mediaCount: true, topPosts: true,
+                 reach: true, views: true, totalSaved: true, totalShares: true, avgReach: true },
     }),
     prisma.instagramSnapshot.findFirst({
       where:   { projectId, workspaceId, month: prev },
-      select:  { followersCount: true, engagementRate: true },
+      select:  { followersCount: true, engagementRate: true, reach: true },
     }),
 
     // TikTok snapshots
@@ -438,6 +439,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     catch { return [] }
   }
 
+  // Mejor publicación por alcance, derivada de los topPosts cacheados.
+  function bestPostByReach(topPosts) {
+    const withReach = topPosts.filter(p => p.reach != null)
+    if (!withReach.length) return null
+    return withReach.sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0))[0]
+  }
+
   let instagram = null
   if (instagramSnap) {
     const topPosts = parseIgTopPosts(instagramSnap.topPosts)
@@ -449,8 +457,15 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       postsCount:      instagramSnap.postsCount,
       topPosts,
       bestPost:        topPosts[0] ?? null,
+      reach:           instagramSnap.reach,
+      views:           instagramSnap.views,
+      totalSaved:      instagramSnap.totalSaved,
+      totalShares:     instagramSnap.totalShares,
+      avgReach:        instagramSnap.avgReach,
+      bestByReach:     bestPostByReach(topPosts),
       deltaFollowers:  instagramPrev ? pct(instagramSnap.followersCount, instagramPrev.followersCount) : null,
       deltaEngagement: instagramPrev ? pct(instagramSnap.engagementRate ?? 0, instagramPrev.engagementRate) : null,
+      deltaReach:      instagramPrev?.reach != null && instagramSnap.reach != null ? pct(instagramSnap.reach, instagramPrev.reach) : null,
     }
   } else {
     // Fallback 1: snapshot más reciente disponible (cualquier mes)
@@ -458,12 +473,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       where:   { projectId, workspaceId },
       orderBy: { month: 'desc' },
       select:  { followersCount: true, engagementRate: true, avgLikes: true,
-                 avgComments: true, postsCount: true, mediaCount: true, topPosts: true, month: true },
+                 avgComments: true, postsCount: true, mediaCount: true, topPosts: true, month: true,
+                 reach: true, views: true, totalSaved: true, totalShares: true, avgReach: true },
     })
     if (recentIg) {
       const prevIg = await prisma.instagramSnapshot.findFirst({
         where:  { projectId, workspaceId, month: prevMonthStr(recentIg.month) },
-        select: { followersCount: true, engagementRate: true },
+        select: { followersCount: true, engagementRate: true, reach: true },
       })
       const topPosts = parseIgTopPosts(recentIg.topPosts)
       instagram = {
@@ -474,8 +490,15 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         postsCount:      recentIg.postsCount,
         topPosts,
         bestPost:        topPosts[0] ?? null,
+        reach:           recentIg.reach,
+        views:           recentIg.views,
+        totalSaved:      recentIg.totalSaved,
+        totalShares:     recentIg.totalShares,
+        avgReach:        recentIg.avgReach,
+        bestByReach:     bestPostByReach(topPosts),
         deltaFollowers:  prevIg ? pct(recentIg.followersCount, prevIg.followersCount) : null,
         deltaEngagement: prevIg ? pct(recentIg.engagementRate ?? 0, prevIg.engagementRate) : null,
+        deltaReach:      prevIg?.reach != null && recentIg.reach != null ? pct(recentIg.reach, prevIg.reach) : null,
         _fallbackMonth:  recentIg.month,
       }
     } else {
@@ -496,8 +519,15 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
             postsCount:      live.postsThisMonth,
             topPosts:        liveTopPosts,
             bestPost:        liveTopPosts[0] ?? null,
+            reach:           live.reachThisMonth ?? null,
+            views:           live.viewsThisMonth ?? null,
+            totalSaved:      live.totalSaved     ?? null,
+            totalShares:     live.totalShares    ?? null,
+            avgReach:        live.avgReach        ?? null,
+            bestByReach:     bestPostByReach(liveTopPosts),
             deltaFollowers:  null,
             deltaEngagement: null,
+            deltaReach:      null,
             _fallbackMonth:  'live',
           }
         } catch (err) {

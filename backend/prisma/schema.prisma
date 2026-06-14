@@ -995,7 +995,12 @@ model InstagramSnapshot {
   avgComments    Float?
   engagementRate Float?
   postsCount     Int? // publicaciones nuevas en ese mes
-  topPosts       String   @default("[]") // JSON: [{ id, likeCount, commentsCount, imgSrc, permalink, mediaType, caption, timestamp }]
+  reach          Int? // alcance único de la cuenta en el mes (Insights)
+  views          Int? // vistas/impresiones de la cuenta en el mes (Insights)
+  totalSaved     Int? // guardados sumados de las publicaciones del mes (Insights)
+  totalShares    Int? // compartidos sumados de las publicaciones del mes (Insights)
+  avgReach       Float? // alcance promedio por publicación del mes (Insights)
+  topPosts       String   @default("[]") // JSON: [{ id, likeCount, commentsCount, reach, saved, shares, views, imgSrc, permalink, mediaType, caption, timestamp }]
   createdAt      DateTime @default(now())
 
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

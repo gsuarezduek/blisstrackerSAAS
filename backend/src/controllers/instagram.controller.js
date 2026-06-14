@@ -53,6 +53,13 @@ function snapshotToMetrics(snap, integration, lastScrapedAt = null) {
     byType:         [],
     bestHour:       null,
     recentMedia:    topPosts,
+    // Insights cacheados (null en scraping)
+    reachThisMonth: snap.reach       ?? null,
+    viewsThisMonth: snap.views       ?? null,
+    totalSaved:     snap.totalSaved  ?? null,
+    totalShares:    snap.totalShares ?? null,
+    avgReach:       snap.avgReach    ?? null,
+    bestByReach:    topPosts.filter(p => p.reach != null).sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0))[0] ?? null,
     scraped:        true,
     lastScrapedAt:  lastScrapedAt ?? snap.createdAt,
   }
@@ -172,6 +179,7 @@ async function getSnapshots(req, res, next) {
         month: true, followersCount: true, mediaCount: true,
         avgLikes: true, avgComments: true, engagementRate: true,
         postsCount: true, topPosts: true, createdAt: true,
+        reach: true, views: true, totalSaved: true, totalShares: true, avgReach: true,
       },
     })
 

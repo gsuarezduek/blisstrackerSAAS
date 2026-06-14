@@ -247,7 +247,7 @@ function KpiGrid({ items }) {
 }
 
 // Mejor publicación del mes (Instagram)
-function BestInstagramPost({ post }) {
+function BestInstagramPost({ post, label = 'Mejor publicación del mes', medal = '🏆' }) {
   if (!post) return null
   const score = (post.likeCount ?? 0) + (post.commentsCount ?? 0)
   const inner = (
@@ -258,17 +258,24 @@ function BestInstagramPost({ post }) {
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400" />
         )}
-        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
+        <div className="absolute top-1 left-1 text-base leading-none">{medal}</div>
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide">
-          Mejor publicación del mes
+          {label}
         </p>
         <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400 mt-1">
           {post.likeCount     != null && <span>❤️ {fmt(post.likeCount)}</span>}
           {post.commentsCount != null && <span>💬 {fmt(post.commentsCount)}</span>}
           {score > 0 && <span className="text-gray-400">· {fmt(score)} interacciones</span>}
         </div>
+        {(post.reach != null || post.saved != null || post.shares != null) && (
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+            {post.reach  != null && <span>📡 {fmt(post.reach)}</span>}
+            {post.saved  != null && <span>🔖 {fmt(post.saved)}</span>}
+            {post.shares != null && <span>↗️ {fmt(post.shares)}</span>}
+          </div>
+        )}
         {post.caption && (
           <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight mt-1">
             {post.caption}
@@ -1040,8 +1047,14 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                   { label: 'Engagement',  value: s.instagram.engagementRate != null ? `${s.instagram.engagementRate.toFixed(2)}%` : '—', delta: s.instagram.deltaEngagement },
                   { label: 'Avg. likes',  value: fmt(s.instagram.avgLikes, 0) },
                   { label: 'Posts / mes', value: fmt(s.instagram.postsCount) },
+                  ...(s.instagram.reach != null ? [{ label: 'Alcance', value: fmt(s.instagram.reach), delta: s.instagram.deltaReach }] : []),
+                  ...(s.instagram.totalSaved != null ? [{ label: 'Guardados', value: fmt(s.instagram.totalSaved) }] : []),
+                  ...(s.instagram.totalShares != null ? [{ label: 'Compartidos', value: fmt(s.instagram.totalShares) }] : []),
                 ]} />
                 {s.instagram.bestPost && <BestInstagramPost post={s.instagram.bestPost} />}
+                {s.instagram.bestByReach && s.instagram.bestByReach.id !== s.instagram.bestPost?.id && (
+                  <BestInstagramPost post={s.instagram.bestByReach} label="Mayor alcance del mes" medal="📡" />
+                )}
                 {s.instagram._fallbackMonth && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
                     {s.instagram._fallbackMonth === 'live'

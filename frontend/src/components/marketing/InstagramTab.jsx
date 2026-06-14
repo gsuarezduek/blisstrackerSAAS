@@ -259,6 +259,13 @@ function TopPostCard({ post, medal, label, highlight }) {
             </span>
           )}
         </div>
+        {(post.reach != null || post.saved != null || post.shares != null) && (
+          <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400">
+            {post.reach  != null && <span>📡 {fmtK(post.reach)}</span>}
+            {post.saved  != null && <span>🔖 {fmtK(post.saved)}</span>}
+            {post.shares != null && <span>↗️ {fmtK(post.shares)}</span>}
+          </div>
+        )}
         {post.caption && (
           <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight">
             {post.caption}
@@ -266,6 +273,33 @@ function TopPostCard({ post, medal, label, highlight }) {
         )}
       </div>
     </a>
+  )
+}
+
+// Publicación de mayor alcance del mes (requiere Insights).
+function ReachHighlight({ post }) {
+  if (!post || post.reach == null) return null
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800/50 rounded-xl p-5">
+      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">📡 Publicación de mayor alcance</p>
+      <a href={post.permalink ?? '#'} target="_blank" rel="noopener noreferrer" className="flex gap-4 group">
+        <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 shrink-0">
+          {post.imgSrc
+            ? <img src={post.imgSrc} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" loading="lazy" />
+            : <div className="w-full h-full bg-gradient-to-br from-purple-400 to-pink-400" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-bold text-purple-600 dark:text-purple-400 leading-tight">{fmtNum(post.reach)} <span className="text-sm font-medium text-gray-500 dark:text-gray-400">cuentas alcanzadas</span></p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-400 mt-1">
+            {post.likeCount != null && <span>❤️ {fmtK(post.likeCount)}</span>}
+            {post.commentsCount != null && <span>💬 {fmtK(post.commentsCount)}</span>}
+            {post.saved  != null && <span>🔖 {fmtK(post.saved)}</span>}
+            {post.shares != null && <span>↗️ {fmtK(post.shares)}</span>}
+          </div>
+          {post.caption && <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-1.5 leading-tight">{post.caption}</p>}
+        </div>
+      </a>
+    </div>
   )
 }
 
@@ -567,19 +601,22 @@ function ConnectPrompt({ projectId, onConnected }) {
 
       <div className="space-y-3">
 
-        {/* Método 1 — Conexión oficial (deshabilitada hasta aprobación de Meta) */}
-        <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden opacity-70">
+        {/* Método 1 — Conexión oficial (Instagram Business Login) */}
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
           <div className="w-full flex items-center gap-3 px-4 py-3">
             <span className="text-xl shrink-0">🔗</span>
             <div className="flex-1 min-w-0 text-left">
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Conexión oficial</p>
               <p className="text-xs text-gray-400 dark:text-gray-500">Instagram Business Login — directo, sin tokens</p>
             </div>
-            <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-1 rounded-full shrink-0">En revisión</span>
           </div>
           <div className="px-4 pb-3 -mt-1">
-            <button disabled className="w-full py-2 bg-gray-200 dark:bg-gray-700 text-gray-400 text-xs font-semibold rounded-lg cursor-not-allowed">
-              Disponible cuando Meta apruebe la app
+            <button
+              onClick={handleConnect}
+              disabled={loading || !projectId}
+              className="w-full py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+            >
+              {loading ? 'Conectando…' : 'Conectar con Instagram'}
             </button>
           </div>
         </div>
@@ -669,7 +706,8 @@ function ConnectPrompt({ projectId, onConnected }) {
           )}
         </div>
 
-        {/* Método 3 — Scraping */}
+        {/* Método 3 — Scraping (oculto temporalmente durante el App Review de Meta) */}
+        {false && (
         <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
           <button
             onClick={() => toggle('scrape')}
@@ -706,6 +744,7 @@ function ConnectPrompt({ projectId, onConnected }) {
             </div>
           )}
         </div>
+        )}
 
       </div>
     </div>
@@ -883,6 +922,20 @@ export default function InstagramTab({ projectId, onSelectProject }) {
     ? metrics
     : (snapshots.find(s => s.month === selectedMonth) ?? null)
 
+  // Insights (reach/saved/shares) — el mes actual usa nombres *ThisMonth (en vivo),
+  // los snapshots guardados usan las columnas reach/views. Normalizamos a un solo shape.
+  const reachVal   = displayData?.reachThisMonth ?? displayData?.reach ?? null
+  const viewsVal   = displayData?.viewsThisMonth ?? displayData?.views ?? null
+  const savedVal   = displayData?.totalSaved  ?? null
+  const sharesVal  = displayData?.totalShares ?? null
+  const avgReachVal = displayData?.avgReach   ?? null
+  const hasInsights = [reachVal, viewsVal, savedVal, sharesVal, avgReachVal].some(v => v != null)
+  // Publicación de mayor alcance: en vivo viene calculada; en snapshots se deriva de topPosts.
+  const bestByReach = displayData?.bestByReach
+    ?? (Array.isArray(displayData?.topPosts)
+      ? displayData.topPosts.filter(p => p.reach != null).sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0))[0] ?? null
+      : null)
+
   // Seguidores ganados en el mes actual: primer log del mes (fijado en la carga inicial) vs. valor actual
   const monthlyGain = (isCurrentMonth && displayData?.followersCount != null && monthStartFollowers != null)
     ? displayData.followersCount - monthStartFollowers
@@ -938,11 +991,46 @@ export default function InstagramTab({ projectId, onSelectProject }) {
         </div>
       )}
 
+      {/* KPIs de Insights (alcance/guardados/compartidos) — solo si la cuenta los expone */}
+      {hasInsights && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <KpiCard
+            icon="📡" label="Alcance del mes"
+            value={reachVal != null ? fmtNum(reachVal) : '—'}
+            valueClass="text-purple-600 dark:text-purple-400"
+            sub="cuentas alcanzadas"
+          />
+          <KpiCard
+            icon="👁️" label="Vistas"
+            value={viewsVal != null ? fmtNum(viewsVal) : '—'}
+            sub="impresiones del mes"
+          />
+          <KpiCard
+            icon="🔖" label="Guardados"
+            value={savedVal != null ? fmtNum(savedVal) : '—'}
+            sub="posts del mes"
+          />
+          <KpiCard
+            icon="↗️" label="Compartidos"
+            value={sharesVal != null ? fmtNum(sharesVal) : '—'}
+            sub="posts del mes"
+          />
+          <KpiCard
+            icon="📊" label="Alcance prom."
+            value={avgReachVal != null ? fmtNum(avgReachVal) : '—'}
+            sub="por publicación"
+          />
+        </div>
+      )}
+
       {/* Objetivos de Instagram del período (seguidores / interacción) con barra de progreso */}
       <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Instagram" />
 
       {/* Insights: breakdown por tipo + mejor horario — solo mes actual (datos en vivo) */}
       {isCurrentMonth && metrics && <ContentInsights byType={metrics.byType} bestHour={metrics.bestHour} />}
+
+      {/* Publicación de mayor alcance (requiere Insights) */}
+      <ReachHighlight post={bestByReach} />
 
       {/* TOP del mes — mes actual: datos en vivo; meses anteriores: snapshot guardado */}
       {isCurrentMonth && metrics?.topPosts && (
@@ -1035,6 +1123,20 @@ export default function InstagramTab({ projectId, onSelectProject }) {
           label="Engagement rate mensual (%)"
           color="#ec4899"
           formatY={v => `${v.toFixed(1)}%`}
+          chartHeight={160}
+          displayHeight={180}
+        />
+      )}
+
+      {/* Alcance histórico mensual — aparece cuando hay 2+ meses con Insights */}
+      {snapshots.filter(d => d.reach != null).length >= 2 && (
+        <LineChart
+          data={snapshots.filter(d => d.reach != null)}
+          valueAccessor={d => d.reach}
+          labelAccessor={d => d.month?.slice(5)}
+          label="Alcance mensual"
+          color="#a855f7"
+          formatY={v => fmtK(Math.round(v))}
           chartHeight={160}
           displayHeight={180}
         />

@@ -184,6 +184,18 @@ async function computeOne(obj, ctx) {
     return finalize(base, def, actual, { breakdown: nets })
   }
 
+  // ── RRSS: alcance (flujo, solo Instagram) ──
+  if (obj.metric === 'alcance') {
+    const rows = await prisma.instagramSnapshot.findMany({
+      where:  { projectId, workspaceId, month: { in: months } },
+      select: { month: true, reach: true },
+    })
+    const withData = rows.filter(r => r.reach != null)
+    const actual = withData.length ? withData.reduce((s, r) => s + r.reach, 0) : null
+    base.label = 'Alcance · Instagram'
+    return finalize(base, def, actual, { monthsWithData: withData.length, monthsExpected: months.length })
+  }
+
   // ── RRSS: competidores (head-to-head SIEMPRE visible) ──
   if (obj.metric === 'competidores') {
     if (!obj.competitorId) {
