@@ -2,6 +2,34 @@ function toDateStr(d) {
   return d.toLocaleDateString('en-CA') // YYYY-MM-DD using local timezone
 }
 
+const MONTHS_ES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
+
+// Genera las últimas `count` opciones de mes (más reciente primero)
+function getMonthOptions(count = 24) {
+  const now = new Date()
+  const opts = []
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const y = d.getFullYear()
+    const m = d.getMonth() // 0-11
+    opts.push({ value: `${y}-${String(m + 1).padStart(2, '0')}`, label: `${MONTHS_ES[m]} ${y}` })
+  }
+  return opts
+}
+
+// Rango de un mes completo (el mes en curso se corta en hoy)
+function monthRange(value) {
+  const [y, m] = value.split('-').map(Number) // m: 1-12
+  const first = new Date(y, m - 1, 1)
+  const last = new Date(y, m, 0)
+  const now = new Date()
+  const isCurrent = y === now.getFullYear() && m - 1 === now.getMonth()
+  return { from: toDateStr(first), to: isCurrent ? toDateStr(now) : toDateStr(last) }
+}
+
 function getPresets() {
   const now = new Date()
   const todayStr = toDateStr(now)
@@ -37,11 +65,25 @@ function getPresets() {
 export default function DateRangeFilter({ from, to, onFromChange, onToChange, onSearch, loading }) {
   const presets = getPresets()
   const activePreset = presets.find(p => p.from === from && p.to === to)?.label ?? null
+  const monthOptions = getMonthOptions()
+  // El mes está "seleccionado" si el rango actual coincide exactamente con un mes completo
+  const selectedMonth = monthOptions.find(o => {
+    const r = monthRange(o.value)
+    return r.from === from && r.to === to
+  })?.value ?? ''
 
   function applyPreset(preset) {
     onFromChange(preset.from)
     onToChange(preset.to)
     onSearch(preset.from, preset.to)
+  }
+
+  function applyMonth(value) {
+    if (!value) return
+    const r = monthRange(value)
+    onFromChange(r.from)
+    onToChange(r.to)
+    onSearch(r.from, r.to)
   }
 
   return (
@@ -63,8 +105,22 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, on
         ))}
       </div>
 
-      {/* Custom date inputs */}
+      {/* Custom date inputs + month selector */}
       <div className="flex gap-3 items-end flex-wrap">
+        <div>
+          <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Mes</label>
+          <select
+            value={selectedMonth}
+            onChange={e => applyMonth(e.target.value)}
+            className="mt-1 block border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="">Elegir mes…</option>
+            {monthOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="self-stretch flex items-center text-gray-300 dark:text-gray-600">|</div>
         <div>
           <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Desde</label>
           <input

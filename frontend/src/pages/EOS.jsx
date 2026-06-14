@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import api from '../api/client'
 import Navbar from '../components/Navbar'
 import VisionTab from '../components/eos/VisionTab'
 import PersonasTab from '../components/eos/PersonasTab'
@@ -63,7 +64,23 @@ export default function EOS() {
   const initialTab = VALID_TABS.has(searchParams.get('tab')) ? searchParams.get('tab') : 'vision'
   const [tab,     setTab]     = useState(initialTab)
   const [vtoMode, setVtoMode] = useState(false)
+  const [weeklyOpenCount, setWeeklyOpenCount] = useState(0)
   const current = TABS.find(t => t.id === tab)
+
+  // Cuenta de asuntos semanales abiertos (no parking lot) para el indicador del tab.
+  // AsuntosTab la mantiene en vivo vía onWeeklyOpenChange; este fetch sólo la
+  // precarga para que el puntito aparezca sin entrar a la pestaña.
+  useEffect(() => {
+    let cancelled = false
+    api.get('/eos/issues')
+      .then(({ data }) => {
+        if (cancelled) return
+        const count = (data.issues || []).filter(i => i.type === 'weekly' && i.status === 'open').length
+        setWeeklyOpenCount(count)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   function handleTabChange(id) {
     setTab(id)
@@ -99,7 +116,9 @@ export default function EOS() {
             onChange={e => handleTabChange(e.target.value)}
           >
             {TABS.map(t => (
-              <option key={t.id} value={t.id}>{t.label}</option>
+              <option key={t.id} value={t.id}>
+                {t.label}{t.id === 'asuntos' && weeklyOpenCount > 0 ? ` 🔴 (${weeklyOpenCount})` : ''}
+              </option>
             ))}
           </select>
 
@@ -109,13 +128,21 @@ export default function EOS() {
               <button
                 key={t.id}
                 onClick={() => handleTabChange(t.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   tab === t.id
                     ? 'bg-primary-600 text-white'
                     : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }`}
               >
                 {t.label}
+                {t.id === 'asuntos' && weeklyOpenCount > 0 && (
+                  <span
+                    title={`${weeklyOpenCount} asunto${weeklyOpenCount === 1 ? '' : 's'} semanal${weeklyOpenCount === 1 ? '' : 'es'} sin resolver`}
+                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none shadow ring-2 ring-white dark:ring-gray-800"
+                  >
+                    {weeklyOpenCount}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -126,7 +153,7 @@ export default function EOS() {
         {tab === 'personas'   && <PersonasTab />}
         {tab === 'datos'      && <DatosTab />}
         {tab === 'procesos'   && <ProcesosTab />}
-        {tab === 'asuntos'    && <AsuntosTab />}
+        {tab === 'asuntos'    && <AsuntosTab onWeeklyOpenChange={setWeeklyOpenCount} />}
         {tab === 'traccion'   && <TraccionTab />}
         {tab === 'evaluacion' && <EvaluacionTab />}
 

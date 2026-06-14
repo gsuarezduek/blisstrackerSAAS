@@ -279,7 +279,7 @@ function IssueColumn({ title, subtitle, type, issues, members, onAdd, onUpdate, 
 
 // ─── AsuntosTab ───────────────────────────────────────────────────────────────
 
-export default function AsuntosTab() {
+export default function AsuntosTab({ onWeeklyOpenChange }) {
   const [issues, setIssues]               = useState([])
   const [members, setMembers]             = useState([])
   const [loading, setLoading]             = useState(true)
@@ -290,6 +290,12 @@ export default function AsuntosTab() {
   useEffect(() => {
     load()
   }, [])
+
+  // Mantiene el indicador del tab "Asuntos" en vivo con los asuntos semanales abiertos.
+  useEffect(() => {
+    if (!onWeeklyOpenChange) return
+    onWeeklyOpenChange(issues.filter(i => i.type === 'weekly' && i.status === 'open').length)
+  }, [issues, onWeeklyOpenChange])
 
   async function load() {
     try {

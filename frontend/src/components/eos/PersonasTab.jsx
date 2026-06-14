@@ -82,6 +82,69 @@ const GWC_COLUMNS = [
   { key: 'gwc_capacity', label: 'C',  title: '¿Tiene capacidad?' },
 ]
 
+const RATING_POINTS = { '+': 1, '+/-': 0.5, '-': 0 }
+
+// Calcula el People Score del equipo (promedio solo de celdas calificadas) y el
+// conteo de "personas correctas en el asiento correcto" (+ en todas sus columnas).
+function computePeopleScore(members, allColumns, ratingsMap) {
+  let sum = 0, rated = 0, rightPeople = 0
+  members.forEach(m => {
+    const r = ratingsMap[m.id] || {}
+    let allPlus = allColumns.length > 0
+    allColumns.forEach(col => {
+      const v = r[col.key]
+      if (v != null) { sum += RATING_POINTS[v]; rated++ }
+      if (v !== '+') allPlus = false
+    })
+    if (allPlus) rightPeople++
+  })
+  return {
+    score: rated > 0 ? Math.round((sum / rated) * 100) : null,
+    rightPeople,
+    total: members.length,
+  }
+}
+
+function scoreBand(score) {
+  if (score == null) return { label: 'Sin evaluar', text: 'text-gray-500 dark:text-gray-400', bar: 'bg-gray-300 dark:bg-gray-600', ring: 'border-gray-200 dark:border-gray-700' }
+  if (score >= 80)   return { label: 'Equipo saludable', text: 'text-green-600 dark:text-green-400', bar: 'bg-green-500', ring: 'border-green-200 dark:border-green-800' }
+  if (score >= 50)   return { label: 'Requiere atención', text: 'text-amber-600 dark:text-amber-400', bar: 'bg-amber-500', ring: 'border-amber-200 dark:border-amber-800' }
+  return { label: 'Crítico', text: 'text-red-600 dark:text-red-400', bar: 'bg-red-500', ring: 'border-red-200 dark:border-red-800' }
+}
+
+function PeopleScoreSummary({ score, rightPeople, total }) {
+  const band = scoreBand(score)
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+      {/* People Score */}
+      <div className={`rounded-xl border p-4 ${band.ring}`}>
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">People Score del equipo</p>
+        <div className="flex items-baseline gap-2 mt-1">
+          <span className={`text-3xl font-bold ${band.text}`}>{score != null ? `${score}%` : '—'}</span>
+          <span className={`text-xs font-medium ${band.text}`}>{band.label}</span>
+        </div>
+        <div className="mt-2 h-1.5 w-full rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${band.bar}`} style={{ width: `${score ?? 0}%` }} />
+        </div>
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 leading-snug">
+          Promedio de las calificaciones: <span className="font-medium">+</span> = 100% · <span className="font-medium">+/−</span> = 50% · <span className="font-medium">−</span> = 0%
+        </p>
+      </div>
+
+      {/* Personas correctas */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Personas correctas en el asiento</p>
+        <div className="flex items-baseline gap-2 mt-1">
+          <span className="text-3xl font-bold text-gray-900 dark:text-white">{rightPeople}<span className="text-xl text-gray-400 dark:text-gray-500">/{total}</span></span>
+        </div>
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 leading-snug">
+          Con <span className="font-medium text-green-600 dark:text-green-400">+</span> en <strong>todos</strong> sus valores medulares y en G, W y C.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
   if (coreValues.length === 0) {
     return (
@@ -112,7 +175,11 @@ function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
     return RATING_CYCLE[(idx + 1) % RATING_CYCLE.length]
   }
 
+  const { score, rightPeople, total } = computePeopleScore(members, allColumns, ratingsMap)
+
   return (
+    <>
+    <PeopleScoreSummary score={score} rightPeople={rightPeople} total={total} />
     <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
         <thead>
@@ -178,6 +245,7 @@ function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
         </div>
       </div>
     </div>
+    </>
   )
 }
 

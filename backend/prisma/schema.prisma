@@ -45,6 +45,7 @@ model Workspace {
   aiTokenLogs            AiTokenLog[]
   dailyInsights          DailyInsight[]
   insightMemories        UserInsightMemory[]
+  notesBoardNotes        NotesBoardNote[]
   notifications          Notification[]
   workDays               WorkDay[]
   taskRecurrences        TaskRecurrence[]
@@ -181,6 +182,7 @@ model User {
   taskComments              TaskComment[]
   dailyInsights             DailyInsight[]
   insightMemories           UserInsightMemory[]
+  notesBoardNotes           NotesBoardNote[]
   feedbacks                 Feedback[]
   projects                  ProjectMember[]
   starredProjects           ProjectStar[]
@@ -559,6 +561,23 @@ model DailyInsight {
   updatedAt   DateTime  @updatedAt
 
   @@unique([userId, workspaceId, date])
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+// Pizarra de notas: una fila por columna (0-2) por usuario+workspace.
+// Sincroniza el contenido HTML de la pizarra entre dispositivos.
+model NotesBoardNote {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  columnIndex Int       // 0, 1, 2
+  content     String    @default("") @db.Text
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, workspaceId, columnIndex])
   @@index([userId])
   @@index([workspaceId])
 }
