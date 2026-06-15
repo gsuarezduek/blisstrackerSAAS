@@ -164,8 +164,8 @@ export default function Preferences() {
     setGlobalSettings(prev => ({ ...prev, ...patch }))
     try {
       await api.patch('/projects/settings', patch)
-      // El seguimiento de horarios vive en el workspace y lo leen otras vistas vía contexto.
-      if ('attendanceTrackingEnabled' in patch) refreshWorkspace()
+      // El seguimiento de horarios y la tolerancia viven en el workspace y los leen otras vistas vía contexto.
+      if ('attendanceTrackingEnabled' in patch || 'lateToleranceMins' in patch) refreshWorkspace()
     } catch (_) {
       api.get('/projects/settings').then(({ data }) => setGlobalSettings(data))
     }
@@ -488,13 +488,32 @@ export default function Preferences() {
                     <Toggle on={!!globalSettings.hoursEnabled} onToggle={() => handleGlobalSetting({ hoursEnabled: !globalSettings.hoursEnabled })} />
                   </div>
 
-                  <div className="flex items-start justify-between gap-4 py-4">
+                  <div className={`flex items-start justify-between gap-4 py-4 ${globalSettings.attendanceTrackingEnabled !== false ? 'border-b dark:border-gray-700' : ''}`}>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Seguimiento de horarios y puntualidad</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Mide llegadas, tardanzas y puntualidad del equipo en RRHH comparando el horario laboral de cada persona con su primer ingreso. Desactivalo si tu equipo no trabaja con horarios fijos (ej: full freelance o distintas franjas horarias): se ocultan las tarjetas de puntualidad.</p>
                     </div>
                     <Toggle on={globalSettings.attendanceTrackingEnabled !== false} onToggle={() => handleGlobalSetting({ attendanceTrackingEnabled: !(globalSettings.attendanceTrackingEnabled !== false) })} />
                   </div>
+
+                  {globalSettings.attendanceTrackingEnabled !== false && (
+                    <div className="flex items-start justify-between gap-4 py-4">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Tolerancia para tardanza</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Minutos de gracia después del horario de ingreso. Con 5, una llegada hasta 5 min tarde no cuenta como tardanza (9:05 con horario 9:00 está OK; 9:06 es tardanza). Aplica a las tardanzas por persona y del equipo.</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <input
+                          type="number" min="0" max="120"
+                          value={globalSettings.lateToleranceMins ?? 0}
+                          onChange={e => setGlobalSettings(p => ({ ...p, lateToleranceMins: e.target.value }))}
+                          onBlur={e => handleGlobalSetting({ lateToleranceMins: Math.max(0, Math.min(120, Number(e.target.value) || 0)) })}
+                          className="w-20 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-500 dark:text-gray-400">min</span>
+                      </div>
+                    </div>
+                  )}
 
                 </div>
               </div>

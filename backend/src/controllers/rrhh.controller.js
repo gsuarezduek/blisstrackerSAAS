@@ -138,22 +138,39 @@ async function userSummary(req, res, next) {
       avgLoginTime = minsToTime(totalMins / firstLogins.length)
     }
 
-    // Puntualidad: compara el primer ingreso de cada día con el horario configurado.
+    const attendanceTrackingEnabled = req.workspace.attendanceTrackingEnabled !== false
+    const tolerance = req.workspace.lateToleranceMins ?? 0  // minutos de gracia para tardanza
+    const start = member?.workStartTime
+    const startMins = (attendanceTrackingEnabled && start)
+      ? (() => { const [sh, sm] = start.split(':').map(Number); return sh * 60 + sm })()
+      : null
+
+    // Desglose día por día del PRIMER ingreso (más reciente primero).
+    // lateBy = minutos por encima del límite tolerado (workStartTime + tolerancia).
+    const loginDays = Object.entries(byDay)
+      .map(([date, iso]) => {
+        const mins = loginMinsFromMidnight(iso, tz)
+        return {
+          date,
+          time: minsToTime(mins),
+          lateBy: startMins != null ? Math.max(0, mins - startMins - tolerance) : null,
+        }
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+
+    // Puntualidad: compara el primer ingreso de cada día con el horario + tolerancia.
     // Solo si el seguimiento de horarios está habilitado para el workspace.
     let punctuality = null
-    const attendanceTrackingEnabled = req.workspace.attendanceTrackingEnabled !== false
-    const start = member?.workStartTime
-    if (attendanceTrackingEnabled && start && firstLogins.length > 0) {
-      const [sh, sm] = start.split(':').map(Number)
-      const startMins = sh * 60 + sm
+    if (startMins != null && firstLogins.length > 0) {
       let lateDays = 0, totalLateMins = 0
       for (const iso of firstLogins) {
-        const lateBy = loginMinsFromMidnight(iso, tz) - startMins
+        const lateBy = loginMinsFromMidnight(iso, tz) - startMins - tolerance
         if (lateBy > 0) { lateDays++; totalLateMins += lateBy }
       }
       const daysCount = firstLogins.length
       punctuality = {
         expectedStart: start,
+        toleranceMins: tolerance,
         daysCount,
         lateDays,
         onTimeDays: daysCount - lateDays,
@@ -165,12 +182,14 @@ async function userSummary(req, res, next) {
     res.json({
       avgLoginTime,
       loginCount: logins.length,
+      loginDays,
       projects: memberships.map(m => m.project),
       active: member?.active ?? false,
       workStartTime: member?.workStartTime ?? null,
       workEndTime: member?.workEndTime ?? null,
       punctuality,
       attendanceTrackingEnabled,
+      lateToleranceMins: tolerance,
     })
   } catch (err) { next(err) }
 }
@@ -206,6 +225,7 @@ async function dashboardStats(req, res, next) {
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
     const attendanceTrackingEnabled = req.workspace.attendanceTrackingEnabled !== false
+    const tolerance = req.workspace.lateToleranceMins ?? 0  // minutos de gracia para tardanza
 
     const [members, activeProjects, allLogins] = await Promise.all([
       prisma.workspaceMember.findMany({
@@ -258,7 +278,7 @@ async function dashboardStats(req, res, next) {
       const startMins = scheduleMap[uid]
       if (startMins == null) continue
       scheduledDays++
-      if (loginMinsFromMidnight(iso, tz) - startMins > 0) lateCount++
+      if (loginMinsFromMidnight(iso, tz) - startMins > tolerance) lateCount++
     }
     const teamPunctualityPct = scheduledDays > 0
       ? Math.round(((scheduledDays - lateCount) / scheduledDays) * 100)
@@ -270,7 +290,7 @@ async function dashboardStats(req, res, next) {
     for (const uid of Object.keys(scheduleMap)) {
       const iso = byUserDay[`${uid}::${today}`]
       if (!iso) continue
-      const lateBy = loginMinsFromMidnight(iso, tz) - scheduleMap[uid]
+      const lateBy = loginMinsFromMidnight(iso, tz) - scheduleMap[uid] - tolerance
       if (lateBy > 0) lateToday.push({ userId: Number(uid), lateBy })
     }
     lateToday.sort((a, b) => b.lateBy - a.lateBy)
@@ -286,6 +306,7 @@ async function dashboardStats(req, res, next) {
       membersWithSchedule: Object.keys(scheduleMap).length,
       lateToday,
       attendanceTrackingEnabled,
+      lateToleranceMins: tolerance,
     })
   } catch (err) { next(err) }
 }

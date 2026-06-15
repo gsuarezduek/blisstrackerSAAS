@@ -7,10 +7,11 @@ import useRoles from '../hooks/useRoles'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { renderMarkdown } from '../utils/processMarkdown'
 import { printProcess } from '../utils/printProcess'
+import WikiTab from '../components/docs/WikiTab'
 
 const BASE_TABS = [
   { id: 'filosofia', label: 'Filosofía' },
-  { id: 'manual',    label: 'Manual de Uso' },
+  { id: 'wiki',      label: 'Wiki' },
   { id: 'roles',     label: 'Roles' },
 ]
 
@@ -91,174 +92,6 @@ function FilosofiaTab() {
           No buscamos hacer más cosas.<br />Buscamos hacer mejor las cosas importantes.
         </p>
         <p className="text-primary-400 font-medium mt-3 text-sm">Y para eso, menos es más.</p>
-      </div>
-    </div>
-  )
-}
-
-// ── Manual de Uso ──────────────────────────────────────────────────────────
-
-function ManualTab() {
-  return (
-    <div className="max-w-2xl mx-auto space-y-6">
-
-      {/* Hero */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
-        <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">Manual de Uso</p>
-        <p className="text-xl font-bold text-gray-900 dark:text-white leading-snug">
-          Decidir qué hacer hoy.<br />Y hacerlo bien.
-        </p>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">BlissTracker no es para organizar tareas. Es para ejecutarlas con claridad y foco.</p>
-      </div>
-
-      {/* Reglas básicas */}
-      <DocCard title="Reglas básicas" icon="⚖️">
-        <div className="space-y-2">
-          {[
-            ['1', 'Todo está en BlissTracker', 'Nada queda en WhatsApp, cabeza o mails.'],
-            ['2', 'Cada tarea debe ser clara', 'Tiene que ser una acción concreta.'],
-            ['3', 'Solo 1 tarea en curso', 'No multitarea.'],
-            ['4', 'Máximo 3 tareas destacadas', 'Son tu foco real del día.'],
-            ['5', 'Si no es para hoy → Backlog', 'No sobrecargar el día.'],
-            ['6', 'Si no podés avanzar → BLOCKED', 'No simular progreso.'],
-          ].map(([num, rule, desc]) => (
-            <div key={rule} className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-700 last:border-0">
-              <span className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{num}</span>
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">{rule}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      {/* Cómo escribir una tarea */}
-      <DocCard title="Cómo escribir una tarea" icon="✍️">
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">Tiene que poder ejecutarse sin pensar.</p>
-        <div className="space-y-1.5">
-          {[
-            [false, 'Ver campaña'],
-            [false, 'Trabajar en web'],
-            [false, 'Revisar cliente'],
-          ].map(([, text]) => (
-            <div key={text} className="flex items-center gap-2.5 px-3 py-2 bg-red-50 dark:bg-red-900/10 rounded-xl">
-              <span className="text-red-400 text-sm flex-shrink-0">✗</span>
-              <span className="text-sm text-red-500 dark:text-red-400 line-through">{text}</span>
-            </div>
-          ))}
-          <div className="border-t border-gray-100 dark:border-gray-700 my-2" />
-          {[
-            'Ajustar presupuesto campaña Meta cliente X',
-            'Diseñar 3 placas para Instagram cliente Y',
-            'Enviar propuesta por mail a cliente Z',
-          ].map(text => (
-            <div key={text} className="flex items-center gap-2.5 px-3 py-2 bg-green-50 dark:bg-green-900/10 rounded-xl">
-              <span className="text-green-500 text-sm flex-shrink-0">✓</span>
-              <span className="text-sm text-green-800 dark:text-green-300 font-medium">{text}</span>
-            </div>
-          ))}
-        </div>
-      </DocCard>
-
-      {/* Cómo organizar tu día */}
-      <DocCard title="Cómo organizar tu día" icon="📅">
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Cada mañana:</p>
-        <div className="space-y-2">
-          {[
-            ['1', 'Revisar Dashboard', false],
-            ['2', 'Ver tareas pendientes', false],
-            ['3', 'Elegir 3 tareas clave (destacadas)', true],
-          ].map(([n, step, highlight]) => (
-            <div key={step} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl ${highlight ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-gray-50 dark:bg-gray-700/40'}`}>
-              <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 ${highlight ? 'bg-primary-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>{n}</span>
-              <p className={`text-sm ${highlight ? 'font-semibold text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300'}`}>{step}</p>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-primary-600 dark:text-primary-400 font-medium mt-3">Si no definís tu foco, el día se desordena solo.</p>
-      </DocCard>
-
-      {/* Estados */}
-      <DocCard title="Uso correcto de estados" icon="🧱">
-        <div className="space-y-2">
-          {[
-            ['PENDING',     'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',               'Pendiente',     'Todavía no empezaste'],
-            ['IN_PROGRESS', 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300','En progreso',   'Estás trabajando ahora mismo'],
-            ['PAUSED',      'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',               'Pausada',       'Pausa temporal — vas a retomarlo'],
-            ['BLOCKED',     'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',                'Bloqueada',     'No podés avanzar — registrá el motivo'],
-            ['COMPLETED',   'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',        'Completada',    'Terminado'],
-          ].map(([status, cls, label, desc]) => (
-            <div key={status} className="flex items-center gap-3 py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
-              <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg flex-shrink-0 w-28 text-center ${cls}`}>{label}</span>
-              <span className="text-sm text-gray-600 dark:text-gray-400">{desc}</span>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-3">No mentirse con los estados.</p>
-      </DocCard>
-
-      {/* Backlog */}
-      <DocCard title="Uso del backlog" icon="🧠">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-4">
-            <p className="text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wide mb-2">No es</p>
-            <ul className="space-y-1.5 text-sm text-red-600 dark:text-red-400">
-              <li className="flex items-start gap-1.5"><span>✗</span> Acumulación de tareas</li>
-              <li className="flex items-start gap-1.5"><span>✗</span> Cosas olvidadas</li>
-            </ul>
-          </div>
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-xl p-4">
-            <p className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wide mb-2">Sí es</p>
-            <ul className="space-y-1.5 text-sm text-green-700 dark:text-green-400">
-              <li className="flex items-start gap-1.5"><span>✓</span> Planificación futura</li>
-              <li className="flex items-start gap-1.5"><span>✓</span> Lo que no es prioridad hoy</li>
-            </ul>
-          </div>
-        </div>
-      </DocCard>
-
-      {/* Errores + IA en fila */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <DocCard title="Errores prohibidos" icon="🔥">
-          <ul className="space-y-2">
-            {[
-              'Tareas vagas ("ver", "chequear")',
-              'Más de 10 tareas en el día',
-              'Varias tareas en progreso',
-              'No usar backlog',
-              'No completar tareas',
-              'No bloquear cuando corresponde',
-            ].map(e => (
-              <li key={e} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                <span className="text-red-400 flex-shrink-0 mt-0.5">—</span>{e}
-              </li>
-            ))}
-          </ul>
-        </DocCard>
-
-        <DocCard title="Uso del insight IA" icon="🤖">
-          <ul className="space-y-2">
-            {[
-              'Leerlo todos los días',
-              'Aplicar al menos 1 sugerencia',
-              'Atender tareas mal definidas',
-              'Observar patrones repetidos',
-              'Detectar falta de foco',
-            ].map(e => (
-              <li key={e} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                <span className="text-primary-400 flex-shrink-0 mt-0.5">→</span>{e}
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-3">Ignorarlo = perder valor del sistema.</p>
-        </DocCard>
-      </div>
-
-      {/* Regla final */}
-      <div className="bg-gradient-to-br from-gray-900 to-gray-800 dark:from-gray-700 dark:to-gray-800 rounded-2xl p-6 text-center">
-        <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Regla final</p>
-        <p className="text-white font-bold text-lg">Si una tarea no está clara,<br />no se va a hacer.</p>
       </div>
     </div>
   )
@@ -661,35 +494,6 @@ function ProcesosTab({ processes, roles, expandedId, onExpand, onOpenRole }) {
   )
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function DocCard({ title, icon, children }) {
-  return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-lg">{icon}</span>
-        <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wide">{title}</h3>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-const PILL_COLORS = {
-  gray:   'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
-  blue:   'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400',
-  purple: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400',
-  orange: 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400',
-}
-
-function SectionPill({ color = 'gray', children }) {
-  return (
-    <span className={`inline-block text-xs font-semibold uppercase tracking-wide rounded-full px-2.5 py-0.5 ${PILL_COLORS[color]}`}>
-      {children}
-    </span>
-  )
-}
-
 // ── Página principal ───────────────────────────────────────────────────────
 
 export default function Docs() {
@@ -714,15 +518,21 @@ export default function Docs() {
       : BASE_TABS
   ), [processes.length])
 
-  const requestedTab = searchParams.get('tab')
+  // Back-compat: el viejo tab 'manual' ahora es el Wiki.
+  const requestedTab = searchParams.get('tab') === 'manual' ? 'wiki' : searchParams.get('tab')
   const tab = tabs.find(t => t.id === requestedTab) ? requestedTab : 'filosofia'
 
   const expandedProcessId = Number(searchParams.get('id')) || null
+  const wikiArticleId = searchParams.get('article') || null
 
   function setTab(id, extra) {
     const next = { tab: id }
     if (extra) Object.assign(next, extra)
     setSearchParams(next)
+  }
+
+  function openWikiArticle(articleId) {
+    setSearchParams({ tab: 'wiki', article: articleId })
   }
 
   function openProcess(id) {
@@ -743,7 +553,7 @@ export default function Docs() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className={`${tab === 'wiki' ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 py-8`}>
 
         {/* Header */}
         <div className="mb-6">
@@ -770,7 +580,7 @@ export default function Docs() {
 
         {/* Content */}
         {tab === 'filosofia' && <FilosofiaTab />}
-        {tab === 'manual'    && <ManualTab />}
+        {tab === 'wiki'      && <WikiTab articleId={wikiArticleId} onSelect={openWikiArticle} />}
         {tab === 'roles'     && (
           procesosLoaded
             ? <RolesTab processes={processes} onOpenProcess={openProcess} />

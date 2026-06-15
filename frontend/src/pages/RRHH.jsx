@@ -444,6 +444,7 @@ function dateShortcuts() {
 function TabIngresos({ users }) {
   const { workspace } = useWorkspace()
   const attendanceEnabled = workspace?.attendanceTrackingEnabled !== false
+  const tolerance = workspace?.lateToleranceMins ?? 0
   const [logins, setLogins]     = useState([])
   const [loading, setLoading]   = useState(false)
   const [from, setFrom]         = useState(todayStr)
@@ -518,7 +519,7 @@ function TabIngresos({ users }) {
       let lateDays = 0
       if (schedule) {
         for (const l of firstPerDay) {
-          if (minutesFromMidnight(l.loginAt) - schedule.mins > 0) lateDays++
+          if (minutesFromMidnight(l.loginAt) - schedule.mins > tolerance) lateDays++
         }
       }
       return {
@@ -528,7 +529,7 @@ function TabIngresos({ users }) {
     }).sort((a, b) =>
       sortOrder === 'asc' ? a.avgMins - b.avgMins : b.avgMins - a.avgMins
     )
-  }, [logins, sortOrder, startMinsMap])
+  }, [logins, sortOrder, startMinsMap, tolerance])
 
   return (
     <div>
@@ -657,7 +658,7 @@ function TabIngresos({ users }) {
                 const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: TZ })
                 // Tardanza solo para el primer ingreso del día (la "llegada")
                 const isFirst = firstIds.has(l.id)
-                const lateBy = schedule && isFirst ? minutesFromMidnight(l.loginAt) - schedule.mins : null
+                const lateBy = schedule && isFirst ? minutesFromMidnight(l.loginAt) - schedule.mins - tolerance : null
                 return (
                   <div key={l.id} className="flex items-center gap-3 px-4 py-2.5">
                     <p className="text-sm text-gray-600 dark:text-gray-300 flex-1 capitalize">{fmtDate(day)}</p>
@@ -833,10 +834,12 @@ function TabLegajos({ users, onVacationUpdate }) {
   const [summary, setSummary]       = useState(null)   // { avgLoginTime, loginCount, projects }
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [vacModalOpen, setVacModalOpen] = useState(false)
+  const [showLoginDays, setShowLoginDays] = useState(false)
 
   const selected = users.find(u => String(u.id) === selectedId) ?? null
 
   useEffect(() => {
+    setShowLoginDays(false)
     if (!selectedId) { setSummary(null); return }
     setSummaryLoading(true)
     api.get(`/admin/rrhh/user-summary/${selectedId}`)
@@ -888,40 +891,53 @@ function TabLegajos({ users, onVacationUpdate }) {
 
           {/* Datos de acceso y actividad */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Horario promedio de ingreso + puntualidad */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                🕐 Horario promedio de ingreso
-              </p>
-              {summaryLoading
-                ? <LoadingSpinner size="sm" className="mt-1" />
-                : summary?.avgLoginTime
-                  ? <>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{summary.avgLoginTime}</p>
-                      {summary.punctuality
-                        ? (() => {
-                            const p = summary.punctuality
-                            const late = p.avgLateMins > 0
-                            return (
-                              <>
-                                <p className={`text-xs font-medium mt-0.5 ${late ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                                  Esperado {p.expectedStart} · {late ? `+${p.avgLateMins} min promedio` : 'a horario'}
-                                </p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                                  {p.onTimeDays}/{p.daysCount} día{p.daysCount !== 1 ? 's' : ''} puntual ({p.punctualityPct}%)
-                                </p>
-                              </>
-                            )
-                          })()
-                        : <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                            sobre {summary.loginCount} ingreso{summary.loginCount !== 1 ? 's' : ''}
-                            {summary.attendanceTrackingEnabled !== false && !summary.workStartTime && ' · configurá el horario en Equipo para ver tardanzas'}
-                          </p>
-                      }
-                    </>
-                  : <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Sin registros</p>
-              }
-            </div>
+            {/* Horario promedio de ingreso + puntualidad — clickeable para ver el desglose por día */}
+            {(() => {
+              const hasDays = summary?.loginDays?.length > 0
+              return (
+                <div
+                  className={`bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 ${hasDays ? 'cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 transition-colors' : ''}`}
+                  onClick={hasDays ? () => setShowLoginDays(true) : undefined}
+                  role={hasDays ? 'button' : undefined}
+                  title={hasDays ? 'Ver desglose día por día' : undefined}
+                >
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                    🕐 Horario promedio de ingreso
+                  </p>
+                  {summaryLoading
+                    ? <LoadingSpinner size="sm" className="mt-1" />
+                    : summary?.avgLoginTime
+                      ? <>
+                          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{summary.avgLoginTime}</p>
+                          {summary.punctuality
+                            ? (() => {
+                                const p = summary.punctuality
+                                const late = p.avgLateMins > 0
+                                return (
+                                  <>
+                                    <p className={`text-xs font-medium mt-0.5 ${late ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                      Esperado {p.expectedStart}{p.toleranceMins > 0 ? ` (+${p.toleranceMins} min tol.)` : ''} · {late ? `+${p.avgLateMins} min promedio` : 'a horario'}
+                                    </p>
+                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                      {p.onTimeDays}/{p.daysCount} día{p.daysCount !== 1 ? 's' : ''} puntual ({p.punctualityPct}%)
+                                    </p>
+                                  </>
+                                )
+                              })()
+                            : <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                sobre {summary.loginCount} ingreso{summary.loginCount !== 1 ? 's' : ''}
+                                {summary.attendanceTrackingEnabled !== false && !summary.workStartTime && ' · configurá el horario en Equipo para ver tardanzas'}
+                              </p>
+                          }
+                          {hasDays && (
+                            <p className="text-xs text-primary-600 dark:text-primary-400 mt-1.5 font-medium">Ver desglose por día →</p>
+                          )}
+                        </>
+                      : <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Sin registros</p>
+                  }
+                </div>
+              )
+            })()}
 
             {/* Proyectos */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
@@ -989,6 +1005,59 @@ function TabLegajos({ users, onVacationUpdate }) {
           }}
         />
       )}
+
+      {showLoginDays && selected && summary?.loginDays?.length > 0 && (
+        <LoginDaysModal user={selected} summary={summary} onClose={() => setShowLoginDays(false)} />
+      )}
+    </div>
+  )
+}
+
+// Desglose día por día del primer ingreso de una persona (modal).
+function LoginDaysModal({ user, summary, onClose }) {
+  const days = summary.loginDays ?? []
+  const showLate = summary.attendanceTrackingEnabled !== false && !!summary.workStartTime
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md max-h-[80vh] flex flex-col shadow-xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-700">
+          <div>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">🕐 Primer ingreso por día</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {user.name} · promedio {summary.avgLoginTime}
+              {showLate && ` · horario ${summary.workStartTime}`}
+              {showLate && summary.lateToleranceMins > 0 && ` (+${summary.lateToleranceMins} min tol.)`}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-3">
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
+            {days.map(d => (
+              <div key={d.date} className="flex items-center justify-between py-2">
+                <span className="text-sm text-gray-700 dark:text-gray-300 capitalize">{fmtDate(d.date)}</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white tabular-nums">{d.time}</span>
+                  {showLate && d.lateBy != null && (
+                    d.lateBy > 0
+                      ? <span className="text-xs font-medium text-red-600 dark:text-red-400 tabular-nums">+{d.lateBy} min</span>
+                      : <span className="text-xs font-medium text-green-600 dark:text-green-400">a horario</span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">
+          {days.length} día{days.length !== 1 ? 's' : ''} con registro · se muestra solo el primer ingreso de cada día
+        </div>
+      </div>
     </div>
   )
 }

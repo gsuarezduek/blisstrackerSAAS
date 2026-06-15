@@ -396,6 +396,7 @@ async function getGlobalSettings(req, res, next) {
       hoursEnabled: first?.hoursEnabled ?? false,
       briefsEnabled: first?.briefsEnabled ?? true,
       attendanceTrackingEnabled: workspace.attendanceTrackingEnabled ?? true,
+      lateToleranceMins: workspace.lateToleranceMins ?? 0,
       emailFrom: effectiveEmailFrom,
       aiWeeklyTokenLimit: first?.aiWeeklyTokenLimit ?? 500000,
     })
@@ -460,7 +461,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, lateToleranceMins, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -470,6 +471,13 @@ async function saveGlobalSettings(req, res, next) {
       workspaceData.timezone = timezone
     }
     if (attendanceTrackingEnabled !== undefined) workspaceData.attendanceTrackingEnabled = Boolean(attendanceTrackingEnabled)
+    if (lateToleranceMins !== undefined) {
+      const t = Number(lateToleranceMins)
+      if (!Number.isInteger(t) || t < 0 || t > 120) {
+        return res.status(400).json({ error: 'La tolerancia debe ser un entero entre 0 y 120 minutos' })
+      }
+      workspaceData.lateToleranceMins = t
+    }
     if (linksEnabled !== undefined)    projectData.linksEnabled    = Boolean(linksEnabled)
     if (situationEnabled !== undefined) projectData.situationEnabled = Boolean(situationEnabled)
     if (hoursEnabled !== undefined)    projectData.hoursEnabled    = Boolean(hoursEnabled)
