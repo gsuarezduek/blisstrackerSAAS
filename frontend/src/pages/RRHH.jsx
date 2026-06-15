@@ -4,6 +4,9 @@ import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import LoadingSpinner from '../components/LoadingSpinner'
+import SetupHintCard from '../components/SetupHintCard'
+import useLegajoFields from '../hooks/useLegajoFields'
+import { fieldValue, displayValue, isLegajoComplete } from '../components/legajo/legajoUtils'
 import useRoles from '../hooks/useRoles'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -57,10 +60,6 @@ function relativeDay(days) {
   if (days === 1) return 'mañana'
   return `en ${days} días`
 }
-
-const PERSONAL_FIELDS = ['phone','birthday','address','dni','cuit','alias','bankName',
-  'maritalStatus','children','educationLevel','educationTitle',
-  'bloodType','medicalConditions','healthInsurance','emergencyContact']
 
 // ─── Mini Dashboard ───────────────────────────────────────────────────────────
 
@@ -122,6 +121,7 @@ function PeopleScoreCard({ peopleScore }) {
 function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
   const { labelFor } = useRoles()
   const { workspace } = useWorkspace()
+  const { fields: legajoFields, legajoEnabled } = useLegajoFields()
   const today = todayBA()
   const HORIZON = 30
 
@@ -139,10 +139,10 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
       : `${avg.toFixed(1)} años`
   }, [activeUsers])
 
-  // Legajos incompletos
-  const incompleteCount = activeUsers.filter(u =>
-    PERSONAL_FIELDS.every(f => u[f] === null || u[f] === undefined || u[f] === '')
-  ).length
+  // Legajos incompletos (según la config: faltan campos obligatorios, o ningún dato si no hay obligatorios)
+  const incompleteCount = legajoEnabled && legajoFields.length > 0
+    ? activeUsers.filter(u => !isLegajoComplete(u, legajoFields)).length
+    : 0
 
   // Distribución por roles
   const roleDistrib = useMemo(() => {
@@ -224,19 +224,35 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
   }, [activeUsers])
   const lateToday = dashStats.lateToday ?? []
   const hasSchedules = (dashStats.membersWithSchedule ?? 0) > 0
+  // Seguimiento de horarios/puntualidad (toggle global). Default ON salvo que el back diga false.
+  const attendanceEnabled = dashStats.attendanceTrackingEnabled !== false
 
-  // Tarjeta de puntualidad del equipo (solo si hay horarios configurados)
-  const punctualityCard = dashStats.teamPunctualityPct != null
-    ? [{ icon: '⏰', label: 'Puntualidad del equipo', value: `${dashStats.teamPunctualityPct}%`,
-         sub: `${dashStats.lateCount} tarde de ${dashStats.scheduledDays} llegadas` }]
+  // Bloque de asistencia (hora de ingreso / puntualidad / tardanzas). Tres estados:
+  //  · feature apagada → no se muestra nada
+  //  · encendida sin ningún horario cargado → placeholder educativo (se renderiza aparte)
+  //  · encendida con ≥1 horario → tarjetas con datos reales (sobre quienes tienen horario)
+  const showAttendanceHint = attendanceEnabled && !hasSchedules
+  const attendanceCards = attendanceEnabled && hasSchedules
+    ? [
+        { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—', sub: 'sobre quienes tienen horario' },
+        { icon: '⏰', label: 'Puntualidad del equipo',
+          value: dashStats.teamPunctualityPct != null ? `${dashStats.teamPunctualityPct}%` : '—',
+          sub: `${dashStats.lateCount} tarde de ${dashStats.scheduledDays} llegadas` },
+        { icon: '⏰', label: 'Llegaron tarde hoy', value: lateToday.length,
+          sub: lateToday.length === 0
+            ? 'Nadie llegó tarde 🎉'
+            : lateToday.slice(0, 3).map(x => `${(nameById[x.userId] ?? '—').split(' ')[0]} +${x.lateBy}m`).join(' · ') },
+      ]
     : []
 
-  // Tarjeta de tardanzas de hoy (solo si hay horarios configurados)
-  const lateTodayCard = hasSchedules
-    ? [{ icon: '⏰', label: 'Llegaron tarde hoy', value: lateToday.length,
-         sub: lateToday.length === 0
-           ? 'Nadie llegó tarde 🎉'
-           : lateToday.slice(0, 3).map(x => `${(nameById[x.userId] ?? '—').split(' ')[0]} +${x.lateBy}m`).join(' · ') }]
+  // Tarjeta de legajos. Tres estados:
+  //  · feature apagada → no se muestra nada
+  //  · encendida con incompletos → placeholder/hint (se renderiza aparte)
+  //  · encendida y todos completos → tarjeta verde
+  const legajoReady = legajoEnabled && legajoFields.length > 0
+  const showLegajoHint = legajoReady && incompleteCount > 0
+  const legajoCards = legajoReady && incompleteCount === 0
+    ? [{ icon: '✅', label: 'Legajos completos', value: activeUsers.length, sub: 'Todos completos ✓' }]
     : []
 
   // Todas las métricas numéricas, cada una en su propia tarjeta (sin slider)
@@ -244,14 +260,10 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
     { icon: '👥', label: 'Personas activas',          value: activeUsers.length },
     { icon: '📅', label: 'Antigüedad promedio',       value: avgTenureYears,              sub: 'del equipo activo' },
     { icon: '📁', label: 'Proyectos por persona',     value: dashStats.projectsPerPerson, sub: 'proyectos activos ÷ equipo' },
-    incompleteCount > 0
-      ? { icon: '📋', label: 'Legajos incompletos', value: incompleteCount,    sub: 'Sin datos personales' }
-      : { icon: '✅', label: 'Legajos completos',   value: activeUsers.length, sub: 'Todos completos ✓' },
+    ...legajoCards,
     { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${activeUsers.length}`,
       sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${activeUsers.length - loggedInToday} aún no ingresaron` },
-    { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—', sub: 'sobre últimos registros' },
-    ...punctualityCard,
-    ...lateTodayCard,
+    ...attendanceCards,
   ]
 
   return (
@@ -261,6 +273,24 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
         {statCards.map((s, i) => (
           <StatCard key={i} icon={s.icon} label={s.label} value={s.value} sub={s.sub} />
         ))}
+        {showAttendanceHint && (
+          <SetupHintCard
+            icon="⏰"
+            label="Puntualidad del equipo"
+            hint="Asigná horarios laborales a tu equipo para medir llegadas, tardanzas y puntualidad. Las personas sin horario (freelancers, otra franja horaria) no se cuentan."
+            to="/admin?tab=team"
+            ctaLabel="Configurar horarios →"
+          />
+        )}
+        {showLegajoHint && (
+          <SetupHintCard
+            icon="📋"
+            label="Legajos sin completar"
+            hint={`${incompleteCount} ${incompleteCount === 1 ? 'persona no completó' : 'personas no completaron'} su legajo. Pedíles que carguen sus datos desde Mi Perfil. Podés ajustar los campos y obligatorios en Administración → Legajo.`}
+            to="/admin?tab=legajo"
+            ctaLabel="Configurar legajo →"
+          />
+        )}
       </div>
 
       {/* People Score (EOS) — solo si EOS está habilitado y hay calificaciones */}
@@ -412,6 +442,8 @@ function dateShortcuts() {
 }
 
 function TabIngresos({ users }) {
+  const { workspace } = useWorkspace()
+  const attendanceEnabled = workspace?.attendanceTrackingEnabled !== false
   const [logins, setLogins]     = useState([])
   const [loading, setLoading]   = useState(false)
   const [from, setFrom]         = useState(todayStr)
@@ -450,9 +482,11 @@ function TabIngresos({ users }) {
     setExpanded(prev => ({ ...prev, [uid]: !prev[uid] }))
   }
 
-  // Mapa userId → minutos del horario de inicio configurado (null si no tiene)
+  // Mapa userId → minutos del horario de inicio configurado (null si no tiene).
+  // Vacío si el seguimiento de horarios está apagado → no se muestran tardanzas.
   const startMinsMap = useMemo(() => {
     const m = {}
+    if (!attendanceEnabled) return m
     for (const u of users) {
       if (u.workStartTime) {
         const [h, mm] = u.workStartTime.split(':').map(Number)
@@ -460,7 +494,7 @@ function TabIngresos({ users }) {
       }
     }
     return m
-  }, [users])
+  }, [users, attendanceEnabled])
 
   const byUser = useMemo(() => {
     const map = {}
@@ -653,15 +687,6 @@ function TabIngresos({ users }) {
 
 // ─── Tab Legajos ──────────────────────────────────────────────────────────────
 
-const CIVIL_LABELS = {
-  single: 'Soltero/a', married: 'Casado/a', divorced: 'Divorciado/a',
-  widowed: 'Viudo/a', partnership: 'Unión convivencial',
-}
-const EDU_LABELS = {
-  primary: 'Primario', secondary: 'Secundario', tertiary: 'Terciario',
-  university: 'Universitario', postgraduate: 'Posgrado',
-}
-
 function Field({ label, value }) {
   if (value === null || value === undefined || value === '') return null
   return (
@@ -803,6 +828,7 @@ function VacationEditModal({ user, onClose, onUpdated }) {
 
 function TabLegajos({ users, onVacationUpdate }) {
   const { labelFor } = useRoles()
+  const { fields: legajoFields } = useLegajoFields()
   const [selectedId, setSelectedId] = useState('')
   const [summary, setSummary]       = useState(null)   // { avgLoginTime, loginCount, projects }
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -819,13 +845,15 @@ function TabLegajos({ users, onVacationUpdate }) {
       .finally(() => setSummaryLoading(false))
   }, [selectedId])
 
-  function fmtBirthday(iso) {
-    if (!iso) return null
-    return new Date(iso.slice(0, 10) + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
-  }
-
-  const hasPersonalData = selected &&
-    PERSONAL_FIELDS.some(f => selected[f] !== null && selected[f] !== undefined && selected[f] !== '')
+  // Campos visibles del legajo con su valor mostrable para la persona seleccionada.
+  const legajoRows = selected
+    ? legajoFields
+        .filter(f => f.enabled !== false)
+        .sort((a, b) => a.order - b.order)
+        .map(f => ({ key: f.key, label: f.label, value: displayValue(f, fieldValue(selected, f)) }))
+        .filter(r => r.value !== null && r.value !== undefined && r.value !== '')
+    : []
+  const hasPersonalData = legajoRows.length > 0
 
   return (
     <div>
@@ -887,7 +915,7 @@ function TabLegajos({ users, onVacationUpdate }) {
                           })()
                         : <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                             sobre {summary.loginCount} ingreso{summary.loginCount !== 1 ? 's' : ''}
-                            {!summary.workStartTime && ' · configurá el horario en Equipo para ver tardanzas'}
+                            {summary.attendanceTrackingEnabled !== false && !summary.workStartTime && ' · configurá el horario en Equipo para ver tardanzas'}
                           </p>
                       }
                     </>
@@ -942,21 +970,9 @@ function TabLegajos({ users, onVacationUpdate }) {
             {!hasPersonalData
               ? <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8 pb-10">Esta persona aún no completó sus datos personales.</p>
               : <div className="px-6 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
-                  <Field label="Teléfono"               value={selected.phone} />
-                  <Field label="Dirección"              value={selected.address} />
-                  <Field label="Fecha de nacimiento"    value={fmtBirthday(selected.birthday)} />
-                  <Field label="DNI"                    value={selected.dni} />
-                  <Field label="CUIT"                   value={selected.cuit} />
-                  <Field label="Alias bancario"         value={selected.alias} />
-                  <Field label="Banco"                  value={selected.bankName} />
-                  <Field label="Estado civil"           value={CIVIL_LABELS[selected.maritalStatus] ?? selected.maritalStatus} />
-                  <Field label="Hijos"                  value={selected.children !== null && selected.children !== undefined ? String(selected.children) : null} />
-                  <Field label="Nivel educativo"        value={EDU_LABELS[selected.educationLevel] ?? selected.educationLevel} />
-                  <Field label="Título"                 value={selected.educationTitle} />
-                  <Field label="Grupo sanguíneo"        value={selected.bloodType} />
-                  <Field label="Obra social"            value={selected.healthInsurance} />
-                  <Field label="Condiciones médicas"    value={selected.medicalConditions} />
-                  <Field label="Contacto de emergencia" value={selected.emergencyContact} />
+                  {legajoRows.map(r => (
+                    <Field key={r.key} label={r.label} value={r.value} />
+                  ))}
                 </div>
             }
           </div>

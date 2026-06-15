@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import { useGoogleIntegration } from '../../hooks/useGoogleIntegration'
+import SetupHintCard from '../SetupHintCard'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtNum = n => (n ?? 0).toLocaleString('es-AR')
@@ -76,6 +77,17 @@ function DomainRatingCard({ projectId }) {
 
   if (loading) return null
 
+  // Sin URL configurada: no hay Domain Rating posible → invitación a completarla.
+  if (data && !data.hasUrl) return (
+    <SetupHintCard
+      icon="🌐"
+      label="Domain Rating no disponible"
+      hint="Agregá la URL del sitio para medir el Domain Rating (autoridad del dominio según Ahrefs)."
+      to={`/my-projects/${projectId}?infoTab=info`}
+      ctaLabel="Agregar URL en Info →"
+    />
+  )
+
   const dr   = data?.domainRating
   const band = drBand(dr)
 
@@ -112,7 +124,6 @@ function DomainRatingCard({ projectId }) {
         </div>
       </div>
       {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
-      {!data?.hasUrl && <p className="text-xs text-gray-400 mt-2">Agregá la URL del sitio en la tab Info del proyecto para medir el Domain Rating.</p>}
     </div>
   )
 }

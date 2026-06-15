@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
+import SetupHintCard from '../SetupHintCard'
 
 // ─── AI Traffic ───────────────────────────────────────────────────────────────
 
@@ -712,12 +713,15 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
   return (
     <div className="space-y-6">
 
-      {/* Selector de proyecto */}
+      {/* Sin URL configurada → invitación a completarla */}
       {noUrl && (
-        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl text-sm text-amber-700 dark:text-amber-400">
-          Este proyecto no tiene una URL configurada.
-          Podés agregarla desde <strong>Proyectos → Info</strong>.
-        </div>
+        <SetupHintCard
+          icon="🌐"
+          label="Este proyecto no tiene una URL configurada"
+          hint="Agregá la URL del sitio para correr la auditoría GEO y medir la visibilidad en buscadores con IA."
+          to={`/my-projects/${selectedProject.id}?infoTab=info`}
+          ctaLabel="Agregar URL en Info →"
+        />
       )}
 
       {/* Panel de auditoría */}

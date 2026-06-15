@@ -5,6 +5,7 @@ import ServicesTab from '../components/admin/ServicesTab'
 import RolesTab from '../components/admin/RolesTab'
 import RoleExpectationsTab from '../components/admin/RoleExpectationsTab'
 import EmpresaTab from '../components/admin/EmpresaTab'
+import LegajoTab from '../components/admin/LegajoTab'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'services',  label: '🛠 Servicios' },
   { id: 'roles',     label: '🏷 Roles' },
   { id: 'role-ai',   label: '🎯 Roles IA' },
+  { id: 'legajo',    label: '📋 Legajo' },
   { id: 'empresa',   label: '🏢 Empresa' },
 ]
 
@@ -66,6 +68,7 @@ export default function Admin() {
         {tab === 'services' && <ServicesTab />}
         {tab === 'roles' && <RolesTab />}
         {tab === 'role-ai' && <RoleExpectationsTab />}
+        {tab === 'legajo' && <LegajoTab />}
         {tab === 'empresa' && <EmpresaTab />}
       </main>
     </div>

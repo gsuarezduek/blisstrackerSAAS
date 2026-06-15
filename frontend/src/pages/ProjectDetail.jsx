@@ -78,7 +78,7 @@ export default function ProjectDetail() {
   const [linkForm, setLinkForm] = useState(null) // null = oculto, { label, url } = visible
   const [linkSaving, setLinkSaving] = useState(false)
   const [commentTask, setCommentTask] = useState(null)
-  const [infoTab, setInfoTab] = useState('situacion')
+  const [infoTab, setInfoTab] = useState(searchParams.get('infoTab') || 'situacion')
   const [teamTaskModal, setTeamTaskModal] = useState(false)
   const [teamTaskDesc, setTeamTaskDesc] = useState('')
   const [teamTaskSending, setTeamTaskSending] = useState(false)

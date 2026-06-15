@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs')
 const prisma = require('../lib/prisma')
+const { resolveLegajoFields, coerceCustomValue } = require('../lib/legajoCatalog')
 
 // Campos personales globales del User (no dependen del workspace)
 const PERSONAL_FIELDS = [
@@ -23,6 +24,21 @@ const PREF_FLAGS = ['weeklyEmailEnabled', 'dailyInsightEnabled', 'insightMemoryE
 
 // La validación de avatares se hace contra la DB (modelo Avatar) en updateAvatar.
 
+// Arma la respuesta de perfil (datos del User + preferencias y legajoData del WorkspaceMember).
+function buildProfileResponse(user, member) {
+  return {
+    ...user,
+    role: member?.teamRole ?? '',
+    isAdmin: member?.role === 'admin' || member?.role === 'owner',
+    weeklyEmailEnabled: member?.weeklyEmailEnabled ?? true,
+    dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
+    insightMemoryEnabled: member?.insightMemoryEnabled ?? true,
+    taskQualityEnabled: member?.taskQualityEnabled ?? true,
+    notesBoardEnabled: member?.notesBoardEnabled ?? true,
+    legajoData: member?.legajoData ?? {},
+  }
+}
+
 /**
  * GET /api/profile
  * Devuelve datos del User + preferencias del WorkspaceMember actual.
@@ -33,18 +49,7 @@ async function getProfile(req, res, next) {
       where: { id: req.user.userId },
       select: USER_SELECT,
     })
-    const member = req.workspaceMember
-
-    res.json({
-      ...user,
-      role: member?.teamRole ?? '',
-      isAdmin: member?.role === 'admin' || member?.role === 'owner',
-      weeklyEmailEnabled: member?.weeklyEmailEnabled ?? true,
-      dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
-      insightMemoryEnabled: member?.insightMemoryEnabled ?? true,
-      taskQualityEnabled: member?.taskQualityEnabled ?? true,
-      notesBoardEnabled: member?.notesBoardEnabled ?? true,
-    })
+    res.json(buildProfileResponse(user, req.workspaceMember))
   } catch (err) { next(err) }
 }
 
@@ -80,17 +85,27 @@ async function updateProfile(req, res, next) {
       data,
       select: USER_SELECT,
     })
-    const member = req.workspaceMember
-    res.json({
-      ...user,
-      role: member?.teamRole ?? '',
-      isAdmin: member?.role === 'admin' || member?.role === 'owner',
-      weeklyEmailEnabled: member?.weeklyEmailEnabled ?? true,
-      dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
-      insightMemoryEnabled: member?.insightMemoryEnabled ?? true,
-      taskQualityEnabled: member?.taskQualityEnabled ?? true,
-      notesBoardEnabled: member?.notesBoardEnabled ?? true,
-    })
+
+    let member = req.workspaceMember
+    // Campos custom del legajo → se guardan en WorkspaceMember.legajoData (workspace-scoped).
+    if (req.body.legajoData && typeof req.body.legajoData === 'object' && member) {
+      const fields = resolveLegajoFields(req.workspace.legajoFields)
+      const customByKey = Object.fromEntries(fields.filter(f => !f.builtin).map(f => [f.key, f]))
+      const next = { ...(member.legajoData || {}) }
+      for (const [key, raw] of Object.entries(req.body.legajoData)) {
+        const field = customByKey[key]
+        if (!field) continue // ignora claves desconocidas o builtins (esos van en columnas de User)
+        const val = coerceCustomValue(field, raw)
+        if (val === undefined) delete next[key]
+        else next[key] = val
+      }
+      member = await prisma.workspaceMember.update({
+        where: { workspaceId_userId: { workspaceId: req.workspace.id, userId: req.user.userId } },
+        data: { legajoData: next },
+      })
+    }
+
+    res.json(buildProfileResponse(user, member))
   } catch (err) { next(err) }
 }
 

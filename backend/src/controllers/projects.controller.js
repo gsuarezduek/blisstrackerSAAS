@@ -395,6 +395,7 @@ async function getGlobalSettings(req, res, next) {
       situationEnabled: first?.situationEnabled ?? true,
       hoursEnabled: first?.hoursEnabled ?? false,
       briefsEnabled: first?.briefsEnabled ?? true,
+      attendanceTrackingEnabled: workspace.attendanceTrackingEnabled ?? true,
       emailFrom: effectiveEmailFrom,
       aiWeeklyTokenLimit: first?.aiWeeklyTokenLimit ?? 500000,
     })
@@ -459,7 +460,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -468,6 +469,7 @@ async function saveGlobalSettings(req, res, next) {
       catch { return res.status(400).json({ error: 'Zona horaria inválida' }) }
       workspaceData.timezone = timezone
     }
+    if (attendanceTrackingEnabled !== undefined) workspaceData.attendanceTrackingEnabled = Boolean(attendanceTrackingEnabled)
     if (linksEnabled !== undefined)    projectData.linksEnabled    = Boolean(linksEnabled)
     if (situationEnabled !== undefined) projectData.situationEnabled = Boolean(situationEnabled)
     if (hoursEnabled !== undefined)    projectData.hoursEnabled    = Boolean(hoursEnabled)

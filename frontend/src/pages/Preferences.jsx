@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 export default function Preferences() {
   const { user, updateUser } = useAuth()
+  const { refreshWorkspace } = useWorkspace()
   const [prefTab, setPrefTab] = useState('global')
   const [weeklyEmail,  setWeeklyEmail]  = useState(true)
   const [dailyInsight, setDailyInsight] = useState(true)
@@ -162,6 +164,8 @@ export default function Preferences() {
     setGlobalSettings(prev => ({ ...prev, ...patch }))
     try {
       await api.patch('/projects/settings', patch)
+      // El seguimiento de horarios vive en el workspace y lo leen otras vistas vía contexto.
+      if ('attendanceTrackingEnabled' in patch) refreshWorkspace()
     } catch (_) {
       api.get('/projects/settings').then(({ data }) => setGlobalSettings(data))
     }
@@ -482,6 +486,14 @@ export default function Preferences() {
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Permite cargar un presupuesto mensual de horas por proyecto y compara el tiempo trabajado contra ese presupuesto en el reporte por proyecto.</p>
                     </div>
                     <Toggle on={!!globalSettings.hoursEnabled} onToggle={() => handleGlobalSetting({ hoursEnabled: !globalSettings.hoursEnabled })} />
+                  </div>
+
+                  <div className="flex items-start justify-between gap-4 py-4">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Seguimiento de horarios y puntualidad</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Mide llegadas, tardanzas y puntualidad del equipo en RRHH comparando el horario laboral de cada persona con su primer ingreso. Desactivalo si tu equipo no trabaja con horarios fijos (ej: full freelance o distintas franjas horarias): se ocultan las tarjetas de puntualidad.</p>
+                    </div>
+                    <Toggle on={globalSettings.attendanceTrackingEnabled !== false} onToggle={() => handleGlobalSetting({ attendanceTrackingEnabled: !(globalSettings.attendanceTrackingEnabled !== false) })} />
                   </div>
 
                 </div>

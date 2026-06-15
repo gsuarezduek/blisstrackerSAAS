@@ -635,7 +635,7 @@ async function getInfo(req, res, next) {
 
     const workspace = await prisma.workspace.findUnique({
       where: { slug },
-      select: { id: true, name: true, slug: true, status: true },
+      select: { id: true, name: true, slug: true, status: true, attendanceTrackingEnabled: true },
     })
     if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
 

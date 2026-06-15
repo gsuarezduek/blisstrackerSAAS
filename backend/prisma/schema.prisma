@@ -29,6 +29,9 @@ model Workspace {
   // Feature flags: keys que este workspace optó por desactivar (aunque estén habilitados globalmente o en su lista)
   disabledFeatureKeys String    @default("[]")
   monthlyTokenLimit   Int       @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
+  attendanceTrackingEnabled Boolean @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
+  legajoEnabled       Boolean   @default(true) // Muestra la tarjeta/hint de legajos en RRHH. OFF = no se nudge-ea completar el legajo
+  legajoFields        Json      @default("[]") // Config del formulario de legajo (campos default + custom). [] = usa el catálogo default
   billingExempt       Boolean   @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.
   demoSeeded          Boolean   @default(false) // True si tiene proyecto "Demo — Aprendé BlissTracker"
   // Identidad de marca
@@ -119,6 +122,10 @@ model WorkspaceMember {
 
   // Preferencias de UI (por workspace)
   notesBoardEnabled    Boolean @default(true)  // mostrar/ocultar la pizarra de notas
+
+  // Respuestas de los campos custom del legajo (los campos default viven en columnas de User).
+  // Workspace-scoped: { fieldKey: value }. Ver Workspace.legajoFields.
+  legajoData           Json    @default("{}")
 
   joinedAt DateTime @default(now())
 

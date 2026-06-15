@@ -139,9 +139,11 @@ async function userSummary(req, res, next) {
     }
 
     // Puntualidad: compara el primer ingreso de cada día con el horario configurado.
+    // Solo si el seguimiento de horarios está habilitado para el workspace.
     let punctuality = null
+    const attendanceTrackingEnabled = req.workspace.attendanceTrackingEnabled !== false
     const start = member?.workStartTime
-    if (start && firstLogins.length > 0) {
+    if (attendanceTrackingEnabled && start && firstLogins.length > 0) {
       const [sh, sm] = start.split(':').map(Number)
       const startMins = sh * 60 + sm
       let lateDays = 0, totalLateMins = 0
@@ -168,6 +170,7 @@ async function userSummary(req, res, next) {
       workStartTime: member?.workStartTime ?? null,
       workEndTime: member?.workEndTime ?? null,
       punctuality,
+      attendanceTrackingEnabled,
     })
   } catch (err) { next(err) }
 }
@@ -202,6 +205,7 @@ async function dashboardStats(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
+    const attendanceTrackingEnabled = req.workspace.attendanceTrackingEnabled !== false
 
     const [members, activeProjects, allLogins] = await Promise.all([
       prisma.workspaceMember.findMany({
@@ -220,12 +224,15 @@ async function dashboardStats(req, res, next) {
     ])
 
     const activeMembers = members.length
-    // Mapa userId → minutos del horario de inicio configurado
+    // Mapa userId → minutos del horario de inicio configurado.
+    // Si el seguimiento de horarios está apagado, queda vacío → no se calcula puntualidad/tardanzas.
     const scheduleMap = {}
-    for (const m of members) {
-      if (m.workStartTime) {
-        const [h, mm] = m.workStartTime.split(':').map(Number)
-        scheduleMap[m.userId] = h * 60 + mm
+    if (attendanceTrackingEnabled) {
+      for (const m of members) {
+        if (m.workStartTime) {
+          const [h, mm] = m.workStartTime.split(':').map(Number)
+          scheduleMap[m.userId] = h * 60 + mm
+        }
       }
     }
 
@@ -278,6 +285,7 @@ async function dashboardStats(req, res, next) {
       lateCount,
       membersWithSchedule: Object.keys(scheduleMap).length,
       lateToday,
+      attendanceTrackingEnabled,
     })
   } catch (err) { next(err) }
 }

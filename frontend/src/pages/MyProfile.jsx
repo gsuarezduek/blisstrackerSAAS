@@ -5,6 +5,8 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
+import useLegajoFields from '../hooks/useLegajoFields'
+import LegajoFormFields from '../components/legajo/LegajoFormFields'
 import { avatarUrl } from '../utils/avatarUrl'
 
 function Field({ label, children }) {
@@ -15,53 +17,6 @@ function Field({ label, children }) {
     </div>
   )
 }
-
-function Input({ value, onChange, type = 'text', placeholder }) {
-  return (
-    <input
-      type={type}
-      value={value ?? ''}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-    />
-  )
-}
-
-function Select({ value, onChange, options }) {
-  return (
-    <select
-      value={value ?? ''}
-      onChange={e => onChange(e.target.value)}
-      className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-    >
-      <option value="">— Sin especificar —</option>
-      {options.map(o => (
-        <option key={o.value} value={o.value}>{o.label}</option>
-      ))}
-    </select>
-  )
-}
-
-const MARITAL_OPTIONS = [
-  { value: 'soltero', label: 'Soltero/a' },
-  { value: 'casado', label: 'Casado/a' },
-  { value: 'divorciado', label: 'Divorciado/a' },
-  { value: 'viudo', label: 'Viudo/a' },
-  { value: 'union_convivencial', label: 'Unión convivencial' },
-]
-
-const EDUCATION_OPTIONS = [
-  { value: 'primario', label: 'Primario' },
-  { value: 'secundario', label: 'Secundario' },
-  { value: 'terciario', label: 'Terciario' },
-  { value: 'universitario', label: 'Universitario' },
-  { value: 'posgrado', label: 'Posgrado' },
-]
-
-const BLOOD_OPTIONS = [
-  'A+','A-','B+','B-','AB+','AB-','O+','O-'
-].map(v => ({ value: v, label: v }))
 
 const LEAVE_TYPES = [
   { value: 'vacaciones',  label: '🏖️ Vacaciones' },
@@ -195,8 +150,9 @@ export default function MyProfile() {
   const { user, updateUser } = useAuth()
   const { labelFor } = useRoles()
 
+  const { fields: legajoFields } = useLegajoFields()
   const [profile, setProfile] = useState(null)
-  const [form, setForm] = useState({})
+  const [values, setValues] = useState({})   // { [field.key]: value } — builtin + custom
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
 
@@ -235,28 +191,23 @@ export default function MyProfile() {
     api.get('/profile').then(({ data }) => {
       setProfile(data)
       setSelectedAvatar(data.avatar ?? '2bee.png')
-      setForm({
-        phone:            data.phone ?? '',
-        birthday:         data.birthday ? data.birthday.slice(0, 10) : '',
-        address:          data.address ?? '',
-        dni:              data.dni ?? '',
-        cuit:             data.cuit ?? '',
-        alias:            data.alias ?? '',
-        bankName:         data.bankName ?? '',
-        maritalStatus:    data.maritalStatus ?? '',
-        children:         data.children ?? '',
-        educationLevel:   data.educationLevel ?? '',
-        educationTitle:   data.educationTitle ?? '',
-        bloodType:        data.bloodType ?? '',
-        medicalConditions: data.medicalConditions ?? '',
-        healthInsurance:  data.healthInsurance ?? '',
-        emergencyContact: data.emergencyContact ?? '',
-      })
     })
   }, [])
 
-  function set(field) {
-    return val => setForm(prev => ({ ...prev, [field]: val }))
+  // Construye los valores del formulario desde el perfil + la config de campos.
+  // Builtin → columna de User; custom → profile.legajoData. Se recalcula al cargar/guardar.
+  useEffect(() => {
+    if (!profile || legajoFields.length === 0) return
+    const v = {}
+    for (const f of legajoFields) {
+      const raw = f.builtin ? profile[f.key] : profile.legajoData?.[f.key]
+      v[f.key] = f.type === 'date' && raw ? String(raw).slice(0, 10) : (raw ?? '')
+    }
+    setValues(v)
+  }, [profile, legajoFields])
+
+  function setValue(key, val) {
+    setValues(prev => ({ ...prev, [key]: val }))
   }
 
   function startEditName() {
@@ -295,7 +246,15 @@ export default function MyProfile() {
     setSaving(true)
     setSaveMsg('')
     try {
-      const { data } = await api.patch('/profile', form)
+      // Builtin → campos top-level (columnas de User); custom → legajoData.
+      const body = { legajoData: {} }
+      for (const f of legajoFields) {
+        if (f.enabled === false) continue
+        const val = values[f.key]
+        if (f.builtin) body[f.key] = val === '' ? null : val
+        else body.legajoData[f.key] = val
+      }
+      const { data } = await api.patch('/profile', body)
       setProfile(data)
       setSaveMsg('Datos guardados correctamente.')
       setTimeout(() => setSaveMsg(''), 3000)
@@ -607,93 +566,7 @@ export default function MyProfile() {
 
           <form onSubmit={handleSavePersonal} className="space-y-5">
 
-            {/* Contacto */}
-            <div>
-              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">Contacto</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Celular">
-                  <Input value={form.phone} onChange={set('phone')} placeholder="+54 9 11 1234-5678" />
-                </Field>
-                <Field label="Fecha de nacimiento">
-                  <Input type="date" value={form.birthday} onChange={set('birthday')} />
-                </Field>
-                <Field label="Dirección">
-                  <Input value={form.address} onChange={set('address')} placeholder="Av. Corrientes 1234, CABA" />
-                </Field>
-                <Field label="Contacto de emergencia">
-                  <Input value={form.emergencyContact} onChange={set('emergencyContact')} placeholder="Nombre — Teléfono" />
-                </Field>
-              </div>
-            </div>
-
-            {/* Identidad */}
-            <div>
-              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">Identidad y fiscal</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Field label="DNI">
-                  <Input value={form.dni} onChange={set('dni')} placeholder="12.345.678" />
-                </Field>
-                <Field label="CUIT">
-                  <Input value={form.cuit} onChange={set('cuit')} placeholder="20-12345678-9" />
-                </Field>
-                <Field label="Alias CBU">
-                  <Input value={form.alias} onChange={set('alias')} placeholder="nombre.alias.mp" />
-                </Field>
-                <Field label="Banco">
-                  <Input value={form.bankName} onChange={set('bankName')} placeholder="Ej: Santander, Galicia, Naranja X" />
-                </Field>
-              </div>
-            </div>
-
-            {/* Personal */}
-            <div>
-              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">Información personal</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Estado civil">
-                  <Select value={form.maritalStatus} onChange={set('maritalStatus')} options={MARITAL_OPTIONS} />
-                </Field>
-                <Field label="Hijos">
-                  <Input type="number" value={form.children} onChange={set('children')} placeholder="0" />
-                </Field>
-              </div>
-            </div>
-
-            {/* Educación */}
-            <div>
-              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">Educación</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Nivel de estudios">
-                  <Select value={form.educationLevel} onChange={set('educationLevel')} options={EDUCATION_OPTIONS} />
-                </Field>
-                <Field label="Título">
-                  <Input value={form.educationTitle} onChange={set('educationTitle')} placeholder="Lic. en Marketing..." />
-                </Field>
-              </div>
-            </div>
-
-            {/* Salud */}
-            <div>
-              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">Salud</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Grupo sanguíneo">
-                  <Select value={form.bloodType} onChange={set('bloodType')} options={BLOOD_OPTIONS} />
-                </Field>
-                <Field label="Obra social">
-                  <Input value={form.healthInsurance} onChange={set('healthInsurance')} placeholder="OSDE, Swiss Medical..." />
-                </Field>
-                <div className="sm:col-span-2">
-                  <Field label="Enfermedades, patologías o alergias">
-                    <textarea
-                      value={form.medicalConditions ?? ''}
-                      onChange={e => set('medicalConditions')(e.target.value)}
-                      placeholder="Ninguna / Describí si aplica..."
-                      rows={2}
-                      className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                    />
-                  </Field>
-                </div>
-              </div>
-            </div>
+            <LegajoFormFields fields={legajoFields} values={values} onChange={setValue} />
 
             {saveMsg && (
               <p className="text-sm bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg px-3 py-2">
