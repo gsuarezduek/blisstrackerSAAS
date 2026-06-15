@@ -253,6 +253,14 @@ const PLATFORM_SETTINGS = [
     label:   'Avisar: trial vencido a past_due',
     help:    'Enviar un aviso cuando un trial vence sin conversión y el workspace pasa a past_due (supera el límite de usuarios gratis).',
   },
+  {
+    key:     'notifyOnScrapeError',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: error de scraping de RRSS (Apify)',
+    help:    'Enviar un aviso cuando el scraping de redes sociales (Apify) falla — por ejemplo si la cuenta de Apify se queda sin crédito, el token es inválido o el proveedor responde con error. Limitado a un aviso cada 6 horas por tipo de error para no saturar la casilla durante el cron mensual.',
+  },
 ]
 
 const SETTINGS_BY_KEY = Object.fromEntries(PLATFORM_SETTINGS.map(s => [s.key, s]))

@@ -273,7 +273,7 @@ async function connectScrape(req, res, next) {
 
     let metrics
     try {
-      metrics = await scrapeInstagramProfile(username, { targetMonth: currentMonthStr() })
+      metrics = await scrapeInstagramProfile(username, { targetMonth: currentMonthStr(), workspaceId, context: 'Instagram — conexión por scraping' })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }
@@ -327,7 +327,7 @@ async function refreshScrape(req, res, next) {
 
     let metrics
     try {
-      metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: currentMonthStr() })
+      metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, context: 'Instagram — refresh manual' })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }

@@ -75,6 +75,7 @@ const PLATFORM_EVENT_TOGGLE = {
   cancellation:    'notifyOnCancellation',
   deletionRequest: 'notifyOnDeletionRequest',
   trialExpired:    'notifyOnTrialExpired',
+  scrapeError:     'notifyOnScrapeError',
 }
 
 /**

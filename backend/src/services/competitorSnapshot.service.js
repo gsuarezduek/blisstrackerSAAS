@@ -37,7 +37,7 @@ async function saveAllMonthlyCompetitorSnapshots() {
 
   for (const c of competitors) {
     try {
-      const metrics = await scrapeInstagramProfile(c.username, { targetMonth: month })
+      const metrics = await scrapeInstagramProfile(c.username, { targetMonth: month, workspaceId: c.workspaceId, context: 'Competidores — snapshot mensual' })
       const topPostsCached = await cacheImagesInArray(metrics.topPosts ?? [], 'imgSrc', c.workspaceId)
       const topPostsJson = JSON.stringify(topPostsCached)
       await Promise.allSettled([

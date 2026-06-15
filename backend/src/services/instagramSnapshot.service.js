@@ -36,7 +36,7 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
       throw new Error(`Proyecto ${projectId}: no tiene integración de Instagram activa`)
     }
     if (integration.scopes === 'scrape') {
-      metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: month })
+      metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: month, workspaceId, context: 'Instagram — snapshot mensual' })
     } else {
       const token      = await getValidMetaToken(integration)
       const useFbGraph = integration.scopes?.startsWith('fb_graph')

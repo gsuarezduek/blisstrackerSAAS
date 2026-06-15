@@ -1,5 +1,6 @@
 const axios = require('axios')
 const { computeInstagramMetrics } = require('./instagram.service')
+const { sendPlatformNotification, platformCard } = require('./email.service')
 
 /**
  * Motor de scraping de redes sociales — abstraído por proveedor.
@@ -37,6 +38,37 @@ function scrapeError(message, code, status = 400) {
   return err
 }
 
+// Aviso de error de scraping al equipo BlissTracker (casilla platformAdminEmail).
+// Throttle in-memory: a lo sumo un aviso por código cada 6h, para no saturar la
+// casilla cuando el cron mensual itera muchas cuentas con el mismo problema
+// (ej. la cuenta de Apify sin crédito falla en todas). Se resetea al reiniciar.
+const SCRAPE_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000
+const lastScrapeAlertAt = new Map() // code → timestamp ms
+
+function alertScrapeFailure({ code, detail, username, workspaceId = null, context = null }) {
+  const now  = Date.now()
+  const last = lastScrapeAlertAt.get(code) || 0
+  if (now - last < SCRAPE_ALERT_COOLDOWN_MS) return
+  lastScrapeAlertAt.set(code, now)
+
+  const subject = '⚠️ Error de scraping de RRSS (Apify) — BlissTracker'
+  const bodyHtml = `
+    <p style="color:#475569;margin:0 0 8px;">El scraping de redes sociales falló. Mientras no se resuelva, las métricas de Instagram y de competidores no se van a actualizar.</p>
+    ${platformCard('Detalle del error', [
+      ['Proveedor', 'Apify'],
+      ['Tipo', code],
+      ['Cuenta', username ? `@${username}` : '—'],
+      ['Contexto', context],
+      ['Mensaje', detail],
+    ], '#dc2626')}
+    <p style="color:#94a3b8;font-size:13px;margin:12px 0 0;">Revisá el saldo de la cuenta de Apify y el token <code>APIFY_API_TOKEN</code>. Para no saturar, este aviso se manda como máximo una vez cada 6 horas por tipo de error.</p>
+  `
+  // Fire-and-forget: sendPlatformNotification ya es no-op si la casilla está vacía
+  // o el toggle está apagado, y nunca lanza.
+  sendPlatformNotification('scrapeError', { subject, bodyHtml, workspaceId })
+    .catch(err => console.error('[Scrape] No se pudo enviar el aviso de error:', err.message))
+}
+
 /**
  * Extrae el username de Instagram de una URL o handle.
  * Acepta: "miusuario", "@miusuario", "https://instagram.com/miusuario/", etc.
@@ -58,11 +90,13 @@ function parseInstagramUsername(input) {
 /**
  * Corre el actor de Instagram en Apify (sincrónico) y devuelve el primer item.
  * @param {string} username
- * @param {number} postsLimit — cantidad de posts recientes a traer (cubre el mes completo)
+ * @param {object} opts — { postsLimit, workspaceId, context } (workspaceId/context solo enriquecen el aviso de error)
  */
-async function runApifyInstagram(username, postsLimit = DEFAULT_POSTS_LIMIT) {
+async function runApifyInstagram(username, opts = {}) {
+  const { postsLimit = DEFAULT_POSTS_LIMIT, workspaceId = null, context = null } = opts
   const token = process.env.APIFY_API_TOKEN
   if (!token) {
+    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username, workspaceId, context })
     throw scrapeError(
       'El scraping no está configurado en el servidor (falta APIFY_API_TOKEN).',
       'SCRAPE_NOT_CONFIGURED',
@@ -83,6 +117,7 @@ async function runApifyInstagram(username, postsLimit = DEFAULT_POSTS_LIMIT) {
     items = Array.isArray(data) ? data : []
   } catch (err) {
     const apifyMsg = err.response?.data?.error?.message || err.message
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username, workspaceId, context })
     throw scrapeError(`El proveedor de scraping falló: ${apifyMsg}`, 'SCRAPE_PROVIDER_ERROR', 502)
   }
 
@@ -140,14 +175,18 @@ function normalizeApifyProfile(item) {
  * Scrapea un perfil público de Instagram y devuelve métricas en el shape de
  * fetchInstagramMetrics, más { isPrivate, scraped: true }.
  * @param {string} usernameOrUrl
- * @param {object} opts — { postsLimit, targetMonth }
+ * @param {object} opts — { postsLimit, targetMonth, workspaceId, context }
  */
 async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
   const username = parseInstagramUsername(usernameOrUrl)
   if (!username) throw scrapeError('Usuario o URL de Instagram inválido.', 'INVALID_USERNAME', 400)
 
   const postsLimit = opts.postsLimit ?? DEFAULT_POSTS_LIMIT
-  const item = await runApifyInstagram(username, postsLimit)
+  const item = await runApifyInstagram(username, {
+    postsLimit,
+    workspaceId: opts.workspaceId ?? null,
+    context: opts.context ?? null,
+  })
   const { profile, media, isPrivate } = normalizeApifyProfile(item)
   const metrics = computeInstagramMetrics(profile, media, opts.targetMonth ?? null)
 

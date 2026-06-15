@@ -138,7 +138,7 @@ async function addCompetitor(req, res, next) {
 
     let metrics
     try {
-      metrics = await scrapeInstagramProfile(username, { targetMonth: currentMonthStr() })
+      metrics = await scrapeInstagramProfile(username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, context: 'Competidores — alta de cuenta' })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }
@@ -184,7 +184,7 @@ async function refreshCompetitor(req, res, next) {
 
     let metrics
     try {
-      metrics = await scrapeInstagramProfile(competitor.username, { targetMonth: currentMonthStr() })
+      metrics = await scrapeInstagramProfile(competitor.username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, context: 'Competidores — refresh manual' })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }
