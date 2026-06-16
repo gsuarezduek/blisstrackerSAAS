@@ -502,6 +502,14 @@ export default function Preferences() {
                     <Toggle on={!!globalSettings.hoursEnabled} onToggle={() => handleGlobalSetting({ hoursEnabled: !globalSettings.hoursEnabled })} />
                   </div>
 
+                  <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Aviso semanal de Productividad</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes a la mañana enviamos un mail a los administradores con las personas que necesitan atención (en baja, inactivas o con tareas atascadas). Solo se envía si hay alguien en alerta.</p>
+                    </div>
+                    <Toggle on={globalSettings.productivityDigestEnabled !== false} onToggle={() => handleGlobalSetting({ productivityDigestEnabled: !(globalSettings.productivityDigestEnabled !== false) })} />
+                  </div>
+
                   <div className={`flex items-start justify-between gap-4 py-4 ${globalSettings.attendanceTrackingEnabled !== false ? 'border-b dark:border-gray-700' : ''}`}>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Seguimiento de horarios y puntualidad</p>

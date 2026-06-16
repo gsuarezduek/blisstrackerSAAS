@@ -350,9 +350,9 @@ const DEFAULT_DIR = { name: 'asc', status: 'asc', completed: 'desc', hours: 'des
 function HelpPanel() {
   const [open, setOpen] = useState(false)
   const items = [
-    ['Hechas', 'Tareas completadas cuyo día cae en el período. Compará contra su propio ritmo y la mediana del equipo (▲/▼).'],
+    ['Hechas', 'Tareas completadas en el período, por fecha de completado (incluye las que se arrastraron de días previos). Compará contra su propio ritmo y la mediana del equipo (▲/▼).'],
     ['Horas', 'Tiempo activo de esas tareas (completado − iniciado − pausas, tope 8h por tarea, o el ajuste manual). No cuenta tiempo en tareas sin terminar.'],
-    ['Tasa', 'Completadas ÷ creadas en el período. Mide el ritmo de cierre. Preocupate si queda bajo (<50–60%) de forma sostenida.'],
+    ['Tasa', 'Completadas ÷ creadas en el período: ritmo de cierre vs creación. >100% = está bajando backlog; <100% sostenido = lo está acumulando.'],
     ['Δ tareas', 'Cambio del ritmo por día trabajado (tareas/día) vs el período anterior. Es por-día para no castigar tener menos días. Preocupate si cae ≥25%.'],
     ['Asistencia', 'Días hábiles trabajados / esperados (esperados = hábiles − licencias aprobadas). Separa "el mes está a medias" de "faltó". ⏰ = tardanzas (primer login vs su horario).'],
     ['Estado', 'Semáforo automático: inactivo (vino ≥3 días la última semana y no completó nada), ↓ baja (cae fuerte en tareas/horas/tasa), atascos (≥5 tareas frenadas >7d), ↑ alta (sube ≥30%), OK. Mirá primero a los rojos y ámbar.'],

@@ -1,27 +1,7 @@
 const prisma    = require('../lib/prisma')
 const { generateMemoryForUser } = require('../services/insightMemory.service')
-const { getWorkspaceStats, getProjectStats, getAttendanceStats, computeBenchmark } = require('../services/productivityStats.service')
+const { getWorkspaceStats, getProjectStats, getAttendanceStats, computeBenchmark, memberStatus } = require('../services/productivityStats.service')
 const { getProductivityPeriod, businessDaysBetween } = require('../lib/timeMetrics')
-
-// Umbrales para clasificar el estado de cada miembro (determinístico, sin IA)
-const DROP_TAREAS_PCT   = -0.25   // caída ≥25% en tareas completadas
-const DROP_HORAS_PCT    = -0.30   // caída ≥30% en horas
-const DROP_TASA_PTS     = -15     // caída ≥15 puntos en tasa de completado
-const RISE_PCT          = 0.30    // subida ≥30% en horas o tareas
-const STUCK_THRESHOLD   = 5       // ≥5 tareas atascadas
-
-function memberStatus(s) {
-  if (!s.hasData) return 'nodata'
-  if (s.recentInactive) return 'inactive'
-  const d = s.delta
-  if (d.tareasPct !== null && d.tareasPct <= DROP_TAREAS_PCT) return 'down'
-  if (d.horasPct  !== null && d.horasPct  <= DROP_HORAS_PCT)  return 'down'
-  if (d.tasaCompletadoPts <= DROP_TASA_PTS)                   return 'down'
-  if (s.stuckTasks >= STUCK_THRESHOLD)                        return 'stuck'
-  if (d.tareasPct !== null && d.tareasPct >= RISE_PCT)        return 'up'
-  if (d.horasPct  !== null && d.horasPct  >= RISE_PCT)        return 'up'
-  return 'ok'
-}
 
 // Modo de período: 'current' (mes en curso vs anterior, default) o 'closed' (mes anterior vs ante-anterior).
 function periodMode(req) {

@@ -30,6 +30,7 @@ model Workspace {
   disabledFeatureKeys String    @default("[]")
   monthlyTokenLimit   Int       @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
   attendanceTrackingEnabled Boolean @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
+  productivityDigestEnabled Boolean @default(true) // Aviso semanal por mail a admins/owners con las personas en alerta de Productividad
   lateToleranceMins   Int       @default(0) // Tolerancia (min) para tardanza: la llegada cuenta tarde solo si supera workStartTime + tolerancia
   lateNotifyEnabled   Boolean   @default(false) // Enviar email a quien acumula tardanzas en los últimos 30 días
   lateNotifyThreshold Int       @default(3) // Cantidad de tardanzas (1-10) en 30 días que dispara el email

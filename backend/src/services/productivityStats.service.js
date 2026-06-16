@@ -48,8 +48,8 @@ function computeMemberStats({ workDays, completedTasks, stuckCount, period }) {
   const inPrev = d => d >= prevStart && d <= prevEnd
   const curWorkDays  = workDays.filter(wd => inCur(wd.date))
   const prevWorkDays = workDays.filter(wd => inPrev(wd.date))
-  const curCompleted  = completedTasks.filter(t => inCur(t.workDay.date))
-  const prevCompleted = completedTasks.filter(t => inPrev(t.workDay.date))
+  const curCompleted  = completedTasks.filter(t => inCur(t.completedDate))
+  const prevCompleted = completedTasks.filter(t => inPrev(t.completedDate))
 
   const current  = summarize(curWorkDays,  curCompleted)
   const previous = summarize(prevWorkDays, prevCompleted)
@@ -80,7 +80,7 @@ function computeMemberStats({ workDays, completedTasks, stuckCount, period }) {
     if (wd.tasks.length > 0) weeks[idx].days.add(wd.date)
   }
   for (const t of curCompleted) {
-    const idx = Math.min(3, Math.max(0, Math.floor(dateDiffDays(curStart, t.workDay.date) / 7)))
+    const idx = Math.min(3, Math.max(0, Math.floor(dateDiffDays(curStart, t.completedDate) / 7)))
     weeks[idx].completed += 1
     weeks[idx].minutes   += taskMins(t)
   }
@@ -180,7 +180,16 @@ async function fetchRows(workspaceId, tz, { userId = null, period = null } = {})
     }),
   ])
 
-  return { workDays, completedTasks, stuckTasks, period: usePeriod, curStart, prevStart, curEnd }
+  // Atribuir cada tarea completada al día de COMPLETADO (no al de creación del workDay),
+  // así "Hechas" cuenta lo terminado en el período aunque se haya arrastrado de días previos.
+  const completedWithDate = completedTasks.map(t => ({
+    ...t,
+    completedDate: t.completedAt
+      ? new Date(t.completedAt).toLocaleDateString('en-CA', { timeZone: tz })
+      : t.workDay.date,
+  }))
+
+  return { workDays, completedTasks: completedWithDate, stuckTasks, period: usePeriod, curStart, prevStart, curEnd }
 }
 
 function groupByUser(rows) {
@@ -261,11 +270,11 @@ async function getProjectStats(workspaceId, tz, period = null) {
   for (const t of rows.completedTasks) {
     const p = ensure(t.projectId, t.project.name)
     const mins = taskMins(t)
-    if (inCur(t.workDay.date)) {
+    if (inCur(t.completedDate)) {
       p.curMinutes   += mins
       p.curCompleted += 1
       p.contributors[t.userId] = (p.contributors[t.userId] || 0) + mins
-    } else if (inPrev(t.workDay.date)) {
+    } else if (inPrev(t.completedDate)) {
       p.prevMinutes   += mins
       p.prevCompleted += 1
     }
@@ -397,6 +406,27 @@ async function getAttendanceStats(workspaceId, tz, period) {
   return result
 }
 
+// Umbrales para clasificar el estado de cada miembro (determinístico, sin IA).
+const DROP_TAREAS_PCT = -0.25   // caída ≥25% en tareas completadas (ritmo/día)
+const DROP_HORAS_PCT  = -0.30   // caída ≥30% en horas (ritmo/día)
+const DROP_TASA_PTS   = -15     // caída ≥15 puntos en tasa de completado
+const RISE_PCT        = 0.30    // subida ≥30% en horas o tareas
+const STUCK_THRESHOLD = 5       // ≥5 tareas atascadas
+
+// Estado del miembro: 'inactive' | 'down' | 'stuck' | 'up' | 'ok' | 'nodata'.
+function memberStatus(s) {
+  if (!s.hasData) return 'nodata'
+  if (s.recentInactive) return 'inactive'
+  const d = s.delta
+  if (d.tareasPct !== null && d.tareasPct <= DROP_TAREAS_PCT) return 'down'
+  if (d.horasPct  !== null && d.horasPct  <= DROP_HORAS_PCT)  return 'down'
+  if (d.tasaCompletadoPts <= DROP_TASA_PTS)                   return 'down'
+  if (s.stuckTasks >= STUCK_THRESHOLD)                        return 'stuck'
+  if (d.tareasPct !== null && d.tareasPct >= RISE_PCT)        return 'up'
+  if (d.horasPct  !== null && d.horasPct  >= RISE_PCT)        return 'up'
+  return 'ok'
+}
+
 function median(arr) {
   if (!arr.length) return 0
   const s = [...arr].sort((a, b) => a - b)
@@ -417,4 +447,4 @@ function computeBenchmark(statsMap) {
   }
 }
 
-module.exports = { getMemberStats, getWorkspaceStats, getProjectStats, getAttendanceStats, computeBenchmark, pctChange }
+module.exports = { getMemberStats, getWorkspaceStats, getProjectStats, getAttendanceStats, computeBenchmark, memberStatus, pctChange }

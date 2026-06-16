@@ -62,6 +62,7 @@ const { refreshAllDomainRatings }         = require('./services/ahrefs.service')
 const { saveAllAdsSnapshots }             = require('./services/adsSnapshot.service')
 const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnapshot.service')
 const { saveAllPreviousMonthSnapshots: saveAllPrevRrhhMetrics } = require('./services/rrhhMetricSnapshot.service')
+const { sendAllProductivityDigests } = require('./services/productivityDigest.service')
 
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
 let weeklyReportRunning         = false
@@ -80,6 +81,7 @@ let serpSnapshotRunning         = false
 let adsSnapshotRunning          = false
 let competitorSnapshotRunning   = false
 let rrhhMetricSnapRunning = false
+let productivityDigestRunning = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -323,6 +325,16 @@ cron.schedule('30 6 1 * *', async () => {
   try { await saveAllPrevRrhhMetrics() }
   catch (err) { console.error('[RrhhMetricSnapshot] Error en cron mensual:', err.message) }
   finally { rrhhMetricSnapRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: aviso semanal de Productividad a admins/owners — lunes 08:00 ART
+cron.schedule('0 8 * * 1', async () => {
+  if (productivityDigestRunning) { console.log('[ProductivityDigest] Ya en ejecución, se omite.'); return }
+  productivityDigestRunning = true
+  console.log('[ProductivityDigest] Iniciando aviso semanal...')
+  try { await sendAllProductivityDigests() }
+  catch (err) { console.error('[ProductivityDigest] Error en cron semanal:', err.message) }
+  finally { productivityDigestRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: eliminar workspaces vencidos — cada 15 minutos
