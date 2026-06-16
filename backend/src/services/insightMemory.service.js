@@ -5,7 +5,8 @@ const { parseAIJson } = require('../utils/parseAIJson')
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const AI_TIMEOUT_MS = 20000
 const { logTokens } = require('../lib/logTokens')
-const { getNWeeksAgoMonday, daysAgo, fmtMins } = require('../lib/timeMetrics')
+const { getNWeeksAgoMonday, daysAgo, fmtMins, businessDaysBetween } = require('../lib/timeMetrics')
+const { todayString } = require('../utils/dates')
 const { getMemberStats, getWorkspaceStats, computeBenchmark } = require('./productivityStats.service')
 
 const pct    = r => `${Math.round(r * 100)}%`
@@ -66,6 +67,20 @@ async function generateMemoryForUser(userId, workspace, opts = {}) {
       })
     : null
 
+  // Asistencia del período (para distinguir "menos días" por licencia/ausencia de bajo rendimiento)
+  const windowEnd = todayString(tz)
+  const windowBiz = businessDaysBetween(fourWeeksAgo, windowEnd)
+  const approvedLeaves = await prisma.vacationRequest.findMany({
+    where: { workspaceId, userId, status: 'approved', startDate: { lte: windowEnd }, endDate: { gte: fourWeeksAgo } },
+    select: { startDate: true, endDate: true, type: true },
+  })
+  let leaveDays = 0
+  for (const lv of approvedLeaves) {
+    const s = lv.startDate > fourWeeksAgo ? lv.startDate : fourWeeksAgo
+    const e = lv.endDate   < windowEnd    ? lv.endDate   : windowEnd
+    leaveDays += businessDaysBetween(s, e)
+  }
+
   // Receptividad al coaching (feedback de los últimos 30 días)
   const upvotes   = feedbackRecords.filter(f => f.feedback === 'up').length
   const downvotes = feedbackRecords.filter(f => f.feedback === 'down').length
@@ -89,7 +104,7 @@ async function generateMemoryForUser(userId, workspace, opts = {}) {
   ctx += `- Tareas completadas: ${c.totalCompleted} → ${p.totalCompleted} (${fmtPct(d.tareasPct)})\n`
   ctx += `- Tasa de completado: ${pct(c.tasaCompletado)} → ${pct(p.tasaCompletado)} (${signed(d.tasaCompletadoPts)} pts)\n`
   ctx += `- Horas trabajadas: ${(c.totalMinutes / 60).toFixed(1)}h → ${(p.totalMinutes / 60).toFixed(1)}h (${fmtPct(d.horasPct)})\n`
-  ctx += `- Días trabajados: ${c.daysWorked} → ${p.daysWorked}\n`
+  ctx += `- Días con actividad: ${c.daysWorked} de ${windowBiz} hábiles${leaveDays > 0 ? ` (${leaveDays} de licencia aprobada)` : ''} → ${p.daysWorked} en el período previo\n`
   if (stats.stuckTasks > 0) ctx += `- Tareas atascadas (>7 días sin moverse): ${stats.stuckTasks}\n`
 
   if (benchmark) {
@@ -124,6 +139,7 @@ Reglas estrictas:
 - Máximo 25 palabras por campo.
 - Español rioplatense, directo, sin adulación ni relleno ni obviedades.
 - No repitas la misma idea en dos campos.
+- Los conteos absolutos (tareas, horas, días) son de ventanas del mismo largo, pero NO interpretes "menos días con actividad" como bajo rendimiento por sí solo: puede ser licencia o ausencia. Si la licencia aprobada lo explica, no lo marques como riesgo. Para tendencia, priorizá métricas de ritmo (tareas/día, tasa) sobre conteos absolutos.
 - Preferí null antes que decir algo genérico. Un perfil con los tres campos en null es una respuesta válida y correcta para alguien estable y dentro del promedio.`,
     messages: [{ role: 'user', content: ctx }],
   }, { timeout: AI_TIMEOUT_MS })

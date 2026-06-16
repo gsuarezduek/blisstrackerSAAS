@@ -1,7 +1,7 @@
 const prisma    = require('../lib/prisma')
 const { generateMemoryForUser } = require('../services/insightMemory.service')
-const { getWorkspaceStats, getProjectStats } = require('../services/productivityStats.service')
-const { getProductivityPeriod } = require('../lib/timeMetrics')
+const { getWorkspaceStats, getProjectStats, getAttendanceStats, computeBenchmark } = require('../services/productivityStats.service')
+const { getProductivityPeriod, businessDaysBetween } = require('../lib/timeMetrics')
 
 // Umbrales para clasificar el estado de cada miembro (determinístico, sin IA)
 const DROP_TAREAS_PCT   = -0.25   // caída ≥25% en tareas completadas
@@ -34,7 +34,7 @@ async function listProductivity(req, res, next) {
     const tz = req.workspace.timezone
     const period = getProductivityPeriod(periodMode(req), tz)
 
-    const [members, statsMap] = await Promise.all([
+    const [members, statsMap, attendanceMap] = await Promise.all([
       prisma.workspaceMember.findMany({
         where: { workspaceId, active: true },
         include: {
@@ -53,7 +53,10 @@ async function listProductivity(req, res, next) {
         orderBy: { user: { name: 'asc' } },
       }),
       getWorkspaceStats(workspaceId, tz, period),
+      getAttendanceStats(workspaceId, tz, period),
     ])
+
+    const benchmark = computeBenchmark(statsMap)
 
     const emptyStats = { current: { totalCompleted: 0, totalMinutes: 0, daysWorked: 0, tasaCompletado: 0 },
       delta: { tareasPct: null, horasPct: null, tasaCompletadoPts: 0 },
@@ -62,6 +65,7 @@ async function listProductivity(req, res, next) {
     const result = members.map(m => {
       const u = m.user
       const s = statsMap.get(u.id) || emptyStats
+      const att = attendanceMap.get(u.id) || null
       const insight = u.insightMemories[0] || null
 
       return {
@@ -81,6 +85,7 @@ async function listProductivity(req, res, next) {
           weeklySeries: s.weeklySeries,
           stuckTasks: s.stuckTasks,
           hasData: s.hasData,
+          attendance: att,
         },
         insight: insight && (insight.tendencias || insight.fortalezas || insight.areasDeAtencion)
           ? { tendencias: insight.tendencias, fortalezas: insight.fortalezas, areasDeAtencion: insight.areasDeAtencion, updatedAt: insight.updatedAt }
@@ -88,7 +93,8 @@ async function listProductivity(req, res, next) {
       }
     })
 
-    res.json({ members: result, period })
+    const periodOut = { ...period, businessDays: businessDaysBetween(period.curStart, period.curEnd) }
+    res.json({ members: result, period: periodOut, benchmark })
   } catch (err) { next(err) }
 }
 
@@ -121,7 +127,8 @@ async function listByProject(req, res, next) {
         .sort((a, b) => b.hours - a.hours),
     }))
 
-    res.json({ projects: result, period })
+    const periodOut = { ...period, businessDays: businessDaysBetween(period.curStart, period.curEnd) }
+    res.json({ projects: result, period: periodOut })
   } catch (err) { next(err) }
 }
 

@@ -7,7 +7,9 @@ export default function ProductivityPeriodLabel({ period }) {
   return (
     <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
       Período: <strong className="text-gray-700 dark:text-gray-200">{fmtD(period.curStart)} – {fmtDY(period.curEnd)}</strong>
+      {period.businessDays != null && <span className="text-gray-400 dark:text-gray-500"> ({period.businessDays} días hábiles)</span>}
       <span className="text-gray-400 dark:text-gray-500"> · comparado con {fmtD(period.prevStart)} – {fmtDY(period.prevEnd)}</span>
+      {period.lengthMatched && <span className="text-gray-400 dark:text-gray-500"> (mismas fechas del mes anterior)</span>}
     </p>
   )
 }

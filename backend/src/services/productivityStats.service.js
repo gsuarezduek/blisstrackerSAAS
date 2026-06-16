@@ -7,7 +7,7 @@
 
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
-const { tzOffsetStr, getNWeeksAgoMonday, daysAgo, taskMins } = require('../lib/timeMetrics')
+const { tzOffsetStr, getNWeeksAgoMonday, daysAgo, taskMins, addDays, businessDaysBetween } = require('../lib/timeMetrics')
 
 const STUCK_DAYS = 7
 
@@ -40,11 +40,16 @@ function summarize(workDays, completedTasks) {
 }
 
 // Computa stats de un miembro a partir de filas ya traídas de la DB.
-function computeMemberStats({ workDays, completedTasks, stuckCount, curStart }) {
-  const curWorkDays  = workDays.filter(wd => wd.date >= curStart)
-  const prevWorkDays = workDays.filter(wd => wd.date <  curStart)
-  const curCompleted  = completedTasks.filter(t => t.workDay.date >= curStart)
-  const prevCompleted = completedTasks.filter(t => t.workDay.date <  curStart)
+// period = { curStart, curEnd, prevStart, prevEnd }: las dos ventanas se bucketean explícitamente
+// (con ventanas de igual largo puede haber un "hueco" entre prevEnd y curStart que se descarta).
+function computeMemberStats({ workDays, completedTasks, stuckCount, period }) {
+  const { curStart, curEnd, prevStart, prevEnd } = period
+  const inCur  = d => d >= curStart  && d <= curEnd
+  const inPrev = d => d >= prevStart && d <= prevEnd
+  const curWorkDays  = workDays.filter(wd => inCur(wd.date))
+  const prevWorkDays = workDays.filter(wd => inPrev(wd.date))
+  const curCompleted  = completedTasks.filter(t => inCur(t.workDay.date))
+  const prevCompleted = completedTasks.filter(t => inPrev(t.workDay.date))
 
   const current  = summarize(curWorkDays,  curCompleted)
   const previous = summarize(prevWorkDays, prevCompleted)
@@ -108,11 +113,12 @@ function computeMemberStats({ workDays, completedTasks, stuckCount, curStart }) 
 
 // Período por defecto (memoria de insights): últimas 4 semanas vs las 4 previas.
 function weeksPeriod(tz) {
+  const curStart = getNWeeksAgoMonday(4, tz)
   return {
-    curStart:  getNWeeksAgoMonday(4, tz),
+    curStart,
     prevStart: getNWeeksAgoMonday(8, tz),
     curEnd:    todayString(tz),
-    prevEnd:   null,
+    prevEnd:   addDays(curStart, -1), // ventana previa = [prevStart, día antes de curStart]
   }
 }
 
@@ -121,7 +127,8 @@ function weeksPeriod(tz) {
 // el caller (default: weeksPeriod). Devuelve también el conteo de tareas atascadas.
 async function fetchRows(workspaceId, tz, { userId = null, period = null } = {}) {
   const offset = tzOffsetStr(tz)
-  const { curStart, prevStart, curEnd } = period || weeksPeriod(tz)
+  const usePeriod = period || weeksPeriod(tz)
+  const { curStart, prevStart, curEnd } = usePeriod
   const stuckCutoff = new Date(daysAgo(STUCK_DAYS, tz) + 'T00:00:00' + offset)
 
   const userFilter = userId ? { userId } : {}
@@ -173,7 +180,7 @@ async function fetchRows(workspaceId, tz, { userId = null, period = null } = {})
     }),
   ])
 
-  return { workDays, completedTasks, stuckTasks, curStart, prevStart, curEnd }
+  return { workDays, completedTasks, stuckTasks, period: usePeriod, curStart, prevStart, curEnd }
 }
 
 function groupByUser(rows) {
@@ -202,7 +209,7 @@ async function getMemberStats(userId, workspaceId, tz) {
     workDays: rows.workDays,
     completedTasks: rows.completedTasks,
     stuckCount: rows.stuckTasks.length,
-    curStart: rows.curStart,
+    period: rows.period,
   })
 }
 
@@ -218,7 +225,7 @@ async function getWorkspaceStats(workspaceId, tz, period = null) {
       workDays: wdByUser.get(userId) || [],
       completedTasks: compByUser.get(userId) || [],
       stuckCount: stuckByUser.get(userId) || 0,
-      curStart: rows.curStart,
+      period: rows.period,
     }))
   }
   return result
@@ -227,14 +234,16 @@ async function getWorkspaceStats(workspaceId, tz, period = null) {
 // Agregado por proyecto a nivel equipo (período actual vs previo).
 async function getProjectStats(workspaceId, tz, period = null) {
   const rows = await fetchRows(workspaceId, tz, { period })
-  const { curStart } = rows
+  const { curStart, curEnd, prevStart, prevEnd } = rows.period
+  const inCur  = d => d >= curStart  && d <= curEnd
+  const inPrev = d => d >= prevStart && d <= prevEnd
 
   // Días logueados (con actividad) en cada período, para normalizar el Δ por día.
   const curDaySet = new Set(), prevDaySet = new Set()
   for (const wd of rows.workDays) {
     if (wd.tasks.length === 0) continue
-    if (wd.date >= curStart) curDaySet.add(wd.date)
-    else                     prevDaySet.add(wd.date)
+    if (inCur(wd.date))       curDaySet.add(wd.date)
+    else if (inPrev(wd.date)) prevDaySet.add(wd.date)
   }
   const nCurDays  = curDaySet.size
   const nPrevDays = prevDaySet.size
@@ -250,14 +259,13 @@ async function getProjectStats(workspaceId, tz, period = null) {
   }
 
   for (const t of rows.completedTasks) {
-    const isCurrent = t.workDay.date >= curStart
     const p = ensure(t.projectId, t.project.name)
     const mins = taskMins(t)
-    if (isCurrent) {
+    if (inCur(t.workDay.date)) {
       p.curMinutes   += mins
       p.curCompleted += 1
       p.contributors[t.userId] = (p.contributors[t.userId] || 0) + mins
-    } else {
+    } else if (inPrev(t.workDay.date)) {
       p.prevMinutes   += mins
       p.prevCompleted += 1
     }
@@ -281,6 +289,114 @@ async function getProjectStats(workspaceId, tz, period = null) {
     .sort((a, b) => b.minutes - a.minutes)
 }
 
+// Días hábiles (YYYY-MM-DD) entre dos fechas inclusive.
+function businessDayList(startStr, endStr) {
+  const out = []
+  if (!startStr || !endStr || startStr > endStr) return out
+  const end = new Date(endStr + 'T00:00:00Z')
+  for (let d = new Date(startStr + 'T00:00:00Z'); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const dow = d.getUTCDay()
+    if (dow !== 0 && dow !== 6) out.push(d.toISOString().slice(0, 10))
+  }
+  return out
+}
+
+function loginMinsFromMidnight(iso, tz) {
+  const d = new Date(iso)
+  const h = Number(d.toLocaleString('en-CA', { hour: 'numeric', hour12: false, timeZone: tz }))
+  const m = Number(d.toLocaleString('en-CA', { minute: 'numeric', timeZone: tz }))
+  return h * 60 + m
+}
+
+// Asistencia por miembro en el período actual: presencia (días hábiles trabajados),
+// licencias aprobadas, ausencias sin justificar y tardanzas. Todo en "espacio de días hábiles".
+// Separa "el período tiene menos días" de "la persona faltó". Devuelve Map<userId, {...}>.
+async function getAttendanceStats(workspaceId, tz, period) {
+  const { curStart, curEnd } = period
+  const offset = tzOffsetStr(tz)
+  const bizDays = businessDayList(curStart, curEnd)
+  const bizSet  = new Set(bizDays)
+  const businessDays = bizDays.length
+
+  const [ws, members, workDays, leaves, logins] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { attendanceTrackingEnabled: true, lateToleranceMins: true } }),
+    prisma.workspaceMember.findMany({ where: { workspaceId, active: true }, select: { userId: true, workStartTime: true } }),
+    prisma.workDay.findMany({ where: { workspaceId, date: { gte: curStart, lte: curEnd } }, select: { userId: true, date: true } }),
+    prisma.vacationRequest.findMany({
+      where: { workspaceId, status: 'approved', startDate: { lte: curEnd }, endDate: { gte: curStart } },
+      select: { userId: true, startDate: true, endDate: true },
+    }),
+    prisma.userLogin.findMany({
+      where: { workspaceId, loginAt: { gte: new Date(curStart + 'T00:00:00' + offset), lte: new Date(curEnd + 'T23:59:59' + offset) } },
+      select: { userId: true, loginAt: true },
+      orderBy: { loginAt: 'asc' },
+    }),
+  ])
+
+  const attendanceEnabled = ws?.attendanceTrackingEnabled !== false
+  const tolerance = ws?.lateToleranceMins ?? 0
+
+  const scheduleMap = {}
+  for (const m of members) {
+    if (attendanceEnabled && m.workStartTime) {
+      const [h, mm] = m.workStartTime.split(':').map(Number)
+      scheduleMap[m.userId] = h * 60 + mm
+    }
+  }
+
+  // Días hábiles presentes por usuario (intersección con días hábiles del período).
+  const presentByUser = new Map()
+  for (const wd of workDays) {
+    if (!bizSet.has(wd.date)) continue
+    if (!presentByUser.has(wd.userId)) presentByUser.set(wd.userId, new Set())
+    presentByUser.get(wd.userId).add(wd.date)
+  }
+
+  // Días hábiles de licencia aprobada por usuario (recortados al período).
+  const leaveByUser = new Map()
+  for (const lv of leaves) {
+    const start = lv.startDate > curStart ? lv.startDate : curStart
+    const end   = lv.endDate   < curEnd   ? lv.endDate   : curEnd
+    if (!leaveByUser.has(lv.userId)) leaveByUser.set(lv.userId, new Set())
+    const set = leaveByUser.get(lv.userId)
+    for (const d of businessDayList(start, end)) set.add(d)
+  }
+
+  // Tardanzas: primer login del día vs horario + tolerancia.
+  const firstLogin = new Map()
+  for (const l of logins) {
+    const date = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: tz })
+    if (date < curStart || date > curEnd) continue
+    const key = `${l.userId}::${date}`
+    if (!firstLogin.has(key)) firstLogin.set(key, loginMinsFromMidnight(l.loginAt, tz))
+  }
+  const lateByUser = new Map()
+  for (const [key, mins] of firstLogin) {
+    const uid = Number(key.split('::')[0])
+    if (scheduleMap[uid] == null) continue
+    if (mins - scheduleMap[uid] - tolerance > 0) lateByUser.set(uid, (lateByUser.get(uid) || 0) + 1)
+  }
+
+  const result = new Map()
+  for (const m of members) {
+    const uid = m.userId
+    const daysPresent  = presentByUser.get(uid)?.size || 0
+    const leaveDays    = leaveByUser.get(uid)?.size || 0
+    const expectedDays = Math.max(0, businessDays - leaveDays)
+    const hasSchedule  = scheduleMap[uid] != null
+    result.set(uid, {
+      businessDays,
+      daysPresent,
+      leaveDays,
+      expectedDays,
+      absentDays: Math.max(0, expectedDays - daysPresent),
+      lateDays:   hasSchedule ? (lateByUser.get(uid) || 0) : null,
+      hasSchedule,
+    })
+  }
+  return result
+}
+
 function median(arr) {
   if (!arr.length) return 0
   const s = [...arr].sort((a, b) => a - b)
@@ -295,9 +411,10 @@ function computeBenchmark(statsMap) {
   return {
     tasaCompletado: median(members.map(s => s.current.tasaCompletado)),
     tareasPorDia:   median(members.map(s => s.current.tareasPorDia)),
+    completed:      median(members.map(s => s.current.totalCompleted)),
     horas:          Math.round(median(members.map(s => s.current.totalMinutes)) / 60 * 10) / 10,
     teamSize:       members.length,
   }
 }
 
-module.exports = { getMemberStats, getWorkspaceStats, getProjectStats, computeBenchmark, pctChange }
+module.exports = { getMemberStats, getWorkspaceStats, getProjectStats, getAttendanceStats, computeBenchmark, pctChange }

@@ -64,20 +64,89 @@ function DeltaPct({ value }) {
   )
 }
 
-// Mini sparkline de 4 puntos (tasa de completado semanal)
-function Sparkline({ series }) {
-  const pts = (series || []).map(w => w.tasa ?? 0)
-  if (pts.length < 2) return null
-  const W = 80, H = 24, max = Math.max(...pts, 0.01)
-  const step = W / (pts.length - 1)
-  const coords = pts.map((v, i) => `${(i * step).toFixed(1)},${(H - (v / max) * H).toFixed(1)}`).join(' ')
-  const last = pts[pts.length - 1], prev = pts[pts.length - 2]
-  const color = last < prev ? '#ef4444' : last > prev ? '#22c55e' : '#9ca3af'
+// Indicador "vs equipo" (mediana). higherBetter define si estar arriba es bueno.
+function VsTeam({ value, median, higherBetter = true }) {
+  if (median === null || median === undefined) return null
+  const diff = value - median
+  const eps = Math.max(0.05, Math.abs(median) * 0.05) // ignora diferencias <5%
+  if (Math.abs(diff) <= eps) return <span className="text-[10px] text-gray-400 ml-1">≈</span>
+  const above = diff > 0
+  const good = higherBetter ? above : !above
   return (
-    <svg width={W} height={H} className="overflow-visible">
-      <polyline points={coords} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={(W).toFixed(1)} cy={(H - (last / max) * H).toFixed(1)} r="2.5" fill={color} />
-    </svg>
+    <span className={`text-[10px] ml-1 ${good ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+      {above ? '▲' : '▼'}
+    </span>
+  )
+}
+
+// Celda compacta de asistencia: presencia + badge de tardanzas.
+function AttendanceCell({ att }) {
+  if (!att || att.expectedDays === 0) return <span className="text-gray-300 dark:text-gray-600">—</span>
+  const { daysPresent, expectedDays, absentDays, lateDays } = att
+  const color = absentDays === 0
+    ? 'text-gray-700 dark:text-gray-300'
+    : absentDays <= 1 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`tabular-nums ${color}`} title={`${daysPresent} de ${expectedDays} días hábiles esperados`}>{daysPresent}/{expectedDays}</span>
+      {lateDays > 0 && (
+        <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" title="Tardanzas en el período">⏰{lateDays}</span>
+      )}
+    </span>
+  )
+}
+
+// Bloque detallado de asistencia (fila expandida).
+function AttendanceBlock({ att }) {
+  if (!att) return <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin datos de asistencia.</p>
+  const { businessDays, daysPresent, expectedDays, leaveDays, absentDays, lateDays, hasSchedule } = att
+  return (
+    <ul className="text-sm space-y-1 text-gray-700 dark:text-gray-300">
+      <li>
+        Presencia: <strong>{daysPresent}/{expectedDays}</strong> días hábiles
+        {absentDays > 0 && <span className="text-red-600 dark:text-red-400"> · {absentDays} sin actividad</span>}
+      </li>
+      {leaveDays > 0 && <li className="text-gray-500 dark:text-gray-400">🌴 {leaveDays} día{leaveDays !== 1 ? 's' : ''} de licencia aprobada</li>}
+      {hasSchedule
+        ? (lateDays > 0
+            ? <li className="text-amber-600 dark:text-amber-400">⏰ {lateDays} tardanza{lateDays !== 1 ? 's' : ''}</li>
+            : <li className="text-green-600 dark:text-green-400">⏰ Sin tardanzas</li>)
+        : <li className="text-xs text-gray-400 dark:text-gray-500">Sin horario configurado — no se miden tardanzas</li>}
+      <li className="text-xs text-gray-400 dark:text-gray-500">{businessDays} días hábiles en el período</li>
+    </ul>
+  )
+}
+
+// Barras de horas activas por semana (reemplaza el sparkline de tasa).
+function WeeklyHoursBars({ series, curStart }) {
+  const weeks = series || []
+  if (weeks.length < 2) return <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin datos suficientes.</p>
+  const hours = weeks.map(w => Math.round((w.minutes / 60) * 10) / 10)
+  const max = Math.max(...hours, 0.5)
+  const weekLabel = i => {
+    if (!curStart) return `S${i + 1}`
+    const d = new Date(curStart + 'T12:00:00'); d.setDate(d.getDate() + i * 7)
+    return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  }
+  return (
+    <div className="flex items-end gap-2">
+      {weeks.map((w, i) => {
+        const h = hours[i]
+        const isLast = i === weeks.length - 1
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+            <span className="text-[10px] text-gray-500 dark:text-gray-400 tabular-nums h-3">{h > 0 ? fmtHours(h) : ''}</span>
+            <div className="w-full h-12 bg-gray-100 dark:bg-gray-700 rounded flex items-end overflow-hidden">
+              <div
+                className={`w-full rounded ${isLast ? 'bg-primary-500' : 'bg-primary-300 dark:bg-primary-700'}`}
+                style={{ height: `${Math.max(3, (h / max) * 100)}%` }}
+              />
+            </div>
+            <span className="text-[9px] text-gray-400 dark:text-gray-500">{weekLabel(i)}</span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -104,7 +173,37 @@ function ProjectBars({ porProyecto }) {
   )
 }
 
-function PersonRow({ m, expanded, onToggle, onRefresh, refreshing }) {
+// Comparación con la mediana del equipo (fila expandida).
+function TeamCompare({ stats, benchmark }) {
+  if (!benchmark) return null
+  const rows = [
+    { label: 'Tareas hechas', val: stats.completed,                me: stats.completed, med: benchmark.completed, fmt: v => Math.round(v) },
+    { label: 'Horas',         val: stats.hours,                    me: stats.hours,     med: benchmark.horas,     fmt: v => fmtHours(Math.round(v * 10) / 10) },
+    { label: 'Tasa',          val: stats.tasaCompletado,           me: stats.tasaCompletado, med: benchmark.tasaCompletado, fmt: v => `${Math.round(v * 100)}%` },
+  ]
+  return (
+    <div className="space-y-1.5">
+      {rows.map(r => {
+        const max = Math.max(r.me, r.med, 0.0001)
+        return (
+          <div key={r.label} className="text-xs">
+            <div className="flex justify-between text-gray-500 dark:text-gray-400 mb-0.5">
+              <span>{r.label}</span>
+              <span><strong className="text-gray-700 dark:text-gray-200">{r.fmt(r.me)}</strong> <span className="text-gray-400">· equipo {r.fmt(r.med)}</span></span>
+            </div>
+            <div className="relative h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full">
+              <div className="absolute top-0 left-0 h-1.5 bg-primary-500 rounded-full" style={{ width: `${(r.me / max) * 100}%` }} />
+              {/* marca de la mediana del equipo */}
+              <div className="absolute top-[-2px] h-2.5 w-0.5 bg-gray-500 dark:bg-gray-300" style={{ left: `${(r.med / max) * 100}%` }} title="Mediana del equipo" />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function PersonRow({ m, benchmark, period, expanded, onToggle, onRefresh, refreshing }) {
   const st = STATUS[m.status] || STATUS.ok
   const s = m.stats
   return (
@@ -123,13 +222,17 @@ function PersonRow({ m, expanded, onToggle, onRefresh, refreshing }) {
             </div>
           </div>
         </td>
-        <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">{s.completed}</td>
-        <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">{fmtHours(s.hours)}</td>
-        <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">{s.hasData ? `${Math.round(s.tasaCompletado * 100)}%` : '—'}</td>
-        <td className="py-2.5 px-3 text-center text-sm font-medium tabular-nums"><DeltaPct value={s.delta?.tareasPct} /></td>
-        <td className="py-2.5 px-3 text-sm text-gray-600 dark:text-gray-400 hidden sm:table-cell">
-          {s.topProject ? <span className="truncate">{s.topProject.name} <span className="text-gray-400">· {s.topProject.pct}%</span></span> : '—'}
+        <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">
+          {s.completed}{s.hasData && <VsTeam value={s.completed} median={benchmark?.completed} />}
         </td>
+        <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">
+          {fmtHours(s.hours)}{s.hasData && <VsTeam value={s.hours} median={benchmark?.horas} />}
+        </td>
+        <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">
+          {s.hasData ? `${Math.round(s.tasaCompletado * 100)}%` : '—'}{s.hasData && <VsTeam value={s.tasaCompletado} median={benchmark?.tasaCompletado} />}
+        </td>
+        <td className="py-2.5 px-3 text-center text-sm font-medium tabular-nums"><DeltaPct value={s.delta?.tareasPct} /></td>
+        <td className="py-2.5 px-3 text-center text-sm hidden sm:table-cell"><AttendanceCell att={s.attendance} /></td>
         <td className="py-2.5 px-3 text-center">
           <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${st.cls}`}>{st.label}</span>
         </td>
@@ -138,29 +241,37 @@ function PersonRow({ m, expanded, onToggle, onRefresh, refreshing }) {
       {expanded && (
         <tr className="bg-gray-50 dark:bg-gray-800/60">
           <td colSpan={7} className="px-4 py-4">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {/* Tiempo por proyecto */}
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Tiempo por proyecto (4 sem)</p>
-                <ProjectBars porProyecto={s.porProyecto} />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* Col 1: Tiempo por proyecto + horas/semana */}
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Tiempo por proyecto</p>
+                  <ProjectBars porProyecto={s.porProyecto} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Horas por semana</p>
+                  <WeeklyHoursBars series={s.weeklySeries} curStart={period?.curStart} />
+                </div>
               </div>
 
-              {/* Evolución + IA */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">Tasa semanal</p>
-                    <Sparkline series={s.weeklySeries} />
-                  </div>
-                  {s.stuckTasks > 0 && (
-                    <div className="ml-auto text-right">
-                      <p className="text-lg font-bold text-amber-600 dark:text-amber-400 leading-none">{s.stuckTasks}</p>
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500">atascadas &gt;7d</p>
-                    </div>
-                  )}
+              {/* Col 2: Asistencia + comparación con el equipo */}
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Asistencia</p>
+                  <AttendanceBlock att={s.attendance} />
                 </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Comparación con el equipo</p>
+                  <TeamCompare stats={s} benchmark={benchmark} />
+                </div>
+                {s.stuckTasks > 0 && (
+                  <p className="text-xs"><span className="font-bold text-amber-600 dark:text-amber-400">{s.stuckTasks}</span> <span className="text-gray-500 dark:text-gray-400">tarea{s.stuckTasks !== 1 ? 's' : ''} atascada{s.stuckTasks !== 1 ? 's' : ''} &gt;7d</span></p>
+                )}
+              </div>
 
-                {/* Análisis IA — solo si hay contenido */}
+              {/* Col 3: Análisis IA */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">Análisis IA</p>
                 {m.insight ? (
                   <div className="space-y-2">
                     {m.insight.tendencias && (
@@ -226,13 +337,98 @@ function sortValue(m, col) {
     case 'hours':     return m.stats.hours
     case 'tasa':      return m.stats.hasData ? m.stats.tasaCompletado : -1
     case 'delta':     return m.stats.delta?.tareasPct ?? 0
+    case 'attendance':return m.stats.attendance ? -(m.stats.attendance.absentDays ?? 0) : -999
     case 'status':    return PRIORITY[m.status] ?? 3
     default:          return 0
   }
 }
 
 // Dirección por defecto al activar una columna
-const DEFAULT_DIR = { name: 'asc', status: 'asc', completed: 'desc', hours: 'desc', tasa: 'desc', delta: 'desc' }
+const DEFAULT_DIR = { name: 'asc', status: 'asc', completed: 'desc', hours: 'desc', tasa: 'desc', delta: 'desc', attendance: 'desc' }
+
+// Panel colapsable de ayuda: glosario de métricas + cuándo preocuparse.
+function HelpPanel() {
+  const [open, setOpen] = useState(false)
+  const items = [
+    ['Hechas', 'Tareas completadas cuyo día cae en el período. Compará contra su propio ritmo y la mediana del equipo (▲/▼).'],
+    ['Horas', 'Tiempo activo de esas tareas (completado − iniciado − pausas, tope 8h por tarea, o el ajuste manual). No cuenta tiempo en tareas sin terminar.'],
+    ['Tasa', 'Completadas ÷ creadas en el período. Mide el ritmo de cierre. Preocupate si queda bajo (<50–60%) de forma sostenida.'],
+    ['Δ tareas', 'Cambio del ritmo por día trabajado (tareas/día) vs el período anterior. Es por-día para no castigar tener menos días. Preocupate si cae ≥25%.'],
+    ['Asistencia', 'Días hábiles trabajados / esperados (esperados = hábiles − licencias aprobadas). Separa "el mes está a medias" de "faltó". ⏰ = tardanzas (primer login vs su horario).'],
+    ['Estado', 'Semáforo automático: inactivo (vino ≥3 días la última semana y no completó nada), ↓ baja (cae fuerte en tareas/horas/tasa), atascos (≥5 tareas frenadas >7d), ↑ alta (sube ≥30%), OK. Mirá primero a los rojos y ámbar.'],
+    ['vs equipo', 'El ▲/▼ y la barra comparan a la persona contra la mediana del equipo (no el promedio, para que un outlier no la distorsione).'],
+    ['Período', 'En "Mes en curso" se compara el mes a la fecha contra los mismos días del mes anterior, para que los números sean comparables. "Mes cerrado" usa el último mes completo.'],
+  ]
+  return (
+    <div className="mb-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+      >
+        <span>💡 ¿Cómo se lee esta sección?</span>
+        <span className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-1 border-t border-gray-100 dark:border-gray-700">
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 mt-3">
+            {items.map(([term, desc]) => (
+              <div key={term}>
+                <dt className="text-xs font-semibold text-gray-800 dark:text-gray-200">{term}</dt>
+                <dd className="text-xs text-gray-500 dark:text-gray-400 leading-snug">{desc}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Resumen ejecutivo: chips por estado, clickeables para filtrar.
+function SummaryBar({ members, filter, onFilter }) {
+  const counts = useMemo(() => {
+    const c = { inactive: 0, down: 0, stuck: 0, up: 0 }
+    for (const m of members) if (c[m.status] !== undefined) c[m.status]++
+    return c
+  }, [members])
+
+  const chips = [
+    { key: 'down',     label: 'En baja',   n: counts.down,     cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
+    { key: 'inactive', label: 'Inactivos', n: counts.inactive, cls: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' },
+    { key: 'stuck',    label: 'Con atascos', n: counts.stuck,  cls: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' },
+    { key: 'up',       label: 'En alza',   n: counts.up,       cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
+  ]
+  const needAttention = counts.down + counts.inactive + counts.stuck
+
+  return (
+    <div className="mb-4">
+      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+        {needAttention === 0
+          ? <>✅ Nadie necesita atención inmediata.</>
+          : <><strong className="text-gray-900 dark:text-white">{needAttention}</strong> {needAttention === 1 ? 'persona necesita' : 'personas necesitan'} atención.</>}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {chips.map(c => (
+          <button
+            key={c.key}
+            onClick={() => onFilter(filter === c.key ? null : c.key)}
+            disabled={c.n === 0}
+            className={`text-xs font-medium px-2.5 py-1 rounded-full transition-all disabled:opacity-40 disabled:cursor-default ${c.cls} ${
+              filter === c.key ? 'ring-2 ring-offset-1 ring-gray-400 dark:ring-offset-gray-900' : ''
+            }`}
+          >
+            {c.n} {c.label}
+          </button>
+        ))}
+        {filter && (
+          <button onClick={() => onFilter(null)} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2 py-1">
+            ✕ quitar filtro
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function ByPersonView({ mode }) {
   const [data, setData]   = useState(null)
@@ -241,6 +437,7 @@ function ByPersonView({ mode }) {
   const [refreshing, setRefreshing] = useState({})
   const [sortBy, setSortBy]   = useState('status')
   const [sortDir, setSortDir] = useState('asc')
+  const [filter, setFilter]   = useState(null)
 
   function handleSort(col) {
     if (col === sortBy) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
@@ -274,29 +471,17 @@ function ByPersonView({ mode }) {
     }
   }
 
+  const benchmark = data?.benchmark || null
+
   const sorted = useMemo(() => {
     if (!data) return []
-    const arr = [...data.members].sort((a, b) => {
+    const filtered = filter ? data.members.filter(m => m.status === filter) : data.members
+    return [...filtered].sort((a, b) => {
       const va = sortValue(a, sortBy), vb = sortValue(b, sortBy)
       const cmp = typeof va === 'string' ? va.localeCompare(vb, 'es') : va - vb
       return sortDir === 'asc' ? cmp : -cmp
     })
-    return arr
-  }, [data, sortBy, sortDir])
-
-  // Promedio del equipo (sólo miembros con actividad)
-  const avg = useMemo(() => {
-    if (!data) return null
-    const withData = data.members.filter(m => m.stats.hasData)
-    if (withData.length === 0) return null
-    const n = withData.length
-    return {
-      n,
-      completed: withData.reduce((s, m) => s + m.stats.completed, 0) / n,
-      hours:     withData.reduce((s, m) => s + m.stats.hours, 0) / n,
-      tasa:      withData.reduce((s, m) => s + m.stats.tasaCompletado, 0) / n,
-    }
-  }, [data])
+  }, [data, sortBy, sortDir, filter])
 
   if (loading) return <LoadingSpinner className="py-16" />
   if (!data || data.members.length === 0) {
@@ -309,21 +494,24 @@ function ByPersonView({ mode }) {
 
   return (
     <div>
+      <HelpPanel />
+      <SummaryBar members={data.members} filter={filter} onFilter={setFilter} />
+
       {/* Período analizado */}
       <ProductivityPeriodLabel period={data.period} />
 
       {/* Tabla */}
       <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-x-auto">
-        <table className="w-full min-w-[640px]">
+        <table className="w-full min-w-[680px]">
           <thead>
             <tr className="text-[11px] text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
-              <SortTh label="Persona"   col="name"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} align="left" />
-              <SortTh label="Hechas"    col="completed" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="Horas"     col="hours"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="Tasa"      col="tasa"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="Δ tareas"  col="delta"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <th className="py-2 px-3 text-left font-semibold uppercase tracking-wide hidden sm:table-cell">Top proyecto</th>
-              <SortTh label="Estado"    col="status"    sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Persona"     col="name"       sortBy={sortBy} sortDir={sortDir} onSort={handleSort} align="left" />
+              <SortTh label="Hechas"      col="completed"  sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Horas"       col="hours"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Tasa"        col="tasa"       sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Δ tareas"    col="delta"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Asistencia"  col="attendance" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="hidden sm:table-cell" />
+              <SortTh label="Estado"      col="status"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
             </tr>
           </thead>
           <tbody>
@@ -331,20 +519,25 @@ function ByPersonView({ mode }) {
               <PersonRow
                 key={m.id}
                 m={m}
+                benchmark={benchmark}
+                period={data.period}
                 expanded={expandedId === m.id}
                 onToggle={() => setExpandedId(expandedId === m.id ? null : m.id)}
                 onRefresh={handleRefresh}
                 refreshing={!!refreshing[m.id]}
               />
             ))}
+            {sorted.length === 0 && (
+              <tr><td colSpan={7} className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">Nadie en este filtro.</td></tr>
+            )}
           </tbody>
-          {avg && (
+          {benchmark && (
             <tfoot>
               <tr className="border-t-2 border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/60 font-medium">
-                <td className="py-2.5 px-3 text-xs text-gray-500 dark:text-gray-400">Promedio equipo ({avg.n})</td>
-                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{avg.completed.toFixed(1)}</td>
-                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{fmtHours(Math.round(avg.hours * 10) / 10)}</td>
-                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{Math.round(avg.tasa * 100)}%</td>
+                <td className="py-2.5 px-3 text-xs text-gray-500 dark:text-gray-400">Mediana equipo ({benchmark.teamSize})</td>
+                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{Math.round(benchmark.completed)}</td>
+                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{fmtHours(benchmark.horas)}</td>
+                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{Math.round(benchmark.tasaCompletado * 100)}%</td>
                 <td className="py-2.5 px-3 text-center text-gray-300 dark:text-gray-600">—</td>
                 <td className="py-2.5 px-3 hidden sm:table-cell" />
                 <td className="py-2.5 px-3" />
@@ -354,7 +547,7 @@ function ByPersonView({ mode }) {
         </table>
       </div>
       <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">
-        El Δ compara el ritmo por día logueado (tareas/día y horas/día) contra el período anterior, para neutralizar diferencias en la cantidad de días trabajados. El promedio del equipo considera sólo a quienes tuvieron actividad. El análisis IA se actualiza cada sábado o al regenerarlo.
+        El Δ compara el ritmo por día trabajado (tareas/día y horas/día) contra el período anterior, para neutralizar diferencias en la cantidad de días trabajados. La comparación con el equipo usa la mediana de quienes tuvieron actividad. El análisis IA se actualiza cada sábado o al regenerarlo.
       </p>
     </div>
   )
