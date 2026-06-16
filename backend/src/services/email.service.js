@@ -520,9 +520,47 @@ async function sendMonthlyMarketingReport(emails, projectName, month, html, work
   }
 }
 
+// Convierte texto plano (con saltos de línea) a HTML: párrafos por línea en blanco, <br> por salto simple.
+function textToHtmlParagraphs(text) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return String(text).trim().split(/\n{2,}/).map(block =>
+    `<p style="color:#475569;margin:0 0 16px;line-height:1.6;">${esc(block).replace(/\n/g, '<br>')}</p>`
+  ).join('')
+}
+
+/**
+ * Email de notificación de tardanza. `template` es el cuerpo editable por el admin
+ * (placeholders [Nombre] y [workspace]); acá se interpolan y se formatea a HTML.
+ */
+async function sendLateNotificationEmail(email, name, workspaceName, template, workspaceId) {
+  const from = await getEmailFrom(workspaceId)
+  const subject = `Sobre tu horario de ingreso en ${workspaceName}`
+  const body = String(template)
+    .replace(/\[Nombre\]/g, name || '')
+    .replace(/\[workspace\]/g, workspaceName || '')
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: email,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          ${textToHtmlParagraphs(body)}
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: email, subject, type: 'lateNotification', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: email, subject, type: 'lateNotification', status: 'failed', errorMsg: err.message })
+    throw err
+  }
+}
+
 module.exports = {
   sendPasswordReset,
   sendWelcomeEmail,
+  sendLateNotificationEmail,
   sendWeeklySummaryEmail,
   sendTestSettingsEmail,
   sendInvitationEmail,

@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const crypto = require('crypto')
 const { sendPasswordReset } = require('../services/email.service')
+const { triggerLateCheck } = require('../services/lateNotification.service')
 const { OAuth2Client } = require('google-auth-library')
 const prisma = require('../lib/prisma')
 
@@ -90,7 +91,9 @@ async function login(req, res, next) {
 
       prisma.userLogin.create({
         data: { userId: user.id, workspaceId: workspace.id, method: 'email' },
-      }).catch(err => console.error('[Login] Error al registrar userLogin (email):', err.message))
+      })
+        .then(() => triggerLateCheck(user.id, workspace.id))
+        .catch(err => console.error('[Login] Error al registrar userLogin (email):', err.message))
 
       return res.json({ token: signToken(user, member, workspace), user: formatUser(user, member) })
     }
@@ -238,7 +241,9 @@ async function googleLogin(req, res, next) {
 
       prisma.userLogin.create({
         data: { userId: user.id, workspaceId: workspace.id, method: 'google' },
-      }).catch(err => console.error('[Login] Error al registrar userLogin (google):', err.message))
+      })
+        .then(() => triggerLateCheck(user.id, workspace.id))
+        .catch(err => console.error('[Login] Error al registrar userLogin (google):', err.message))
 
       return res.json({ token: signToken(user, member, workspace), user: formatUser(user, member) })
     }
@@ -283,7 +288,9 @@ async function switchWorkspace(req, res, next) {
 
     prisma.userLogin.create({
       data: { userId: user.id, workspaceId: workspace.id, method: 'switch' },
-    }).catch(err => console.error('[Login] Error al registrar userLogin (switch):', err.message))
+    })
+      .then(() => triggerLateCheck(user.id, workspace.id))
+      .catch(err => console.error('[Login] Error al registrar userLogin (switch):', err.message))
 
     res.json({ token: signToken(user, member, workspace), slug: targetSlug })
   } catch (err) {
@@ -305,6 +312,7 @@ async function recordLogin(req, res, next) {
         method:      'token',
       },
     })
+    triggerLateCheck(req.user.userId, req.workspace.id)
     res.json({ ok: true })
   } catch (err) {
     next(err)

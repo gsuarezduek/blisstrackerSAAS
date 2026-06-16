@@ -453,6 +453,9 @@ function TabIngresos({ users }) {
   const [expanded, setExpanded] = useState({})   // { [userId]: true }
   const [activeShortcut, setActiveShortcut] = useState('Hoy')
   const [sortOrder, setSortOrder] = useState('asc')  // 'asc' | 'desc'
+  const [editingId, setEditingId] = useState(null)   // id del ingreso en edición
+  const [editTime, setEditTime]   = useState('')
+  const [busyId, setBusyId]       = useState(null)   // id del ingreso con acción en curso
 
   const shortcuts = useMemo(() => dateShortcuts(), [])
 
@@ -467,6 +470,33 @@ function TabIngresos({ users }) {
       const { data } = await api.get(`/admin/rrhh/logins?${params}`)
       setLogins(data)
     } finally { setLoading(false) }
+  }
+
+  function startEdit(l) {
+    setEditingId(l.id)
+    setEditTime(minsToTime(minutesFromMidnight(l.loginAt)))
+  }
+  function cancelEdit() { setEditingId(null); setEditTime('') }
+
+  async function saveEdit(l) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(editTime)) { alert('Hora inválida (HH:MM)'); return }
+    setBusyId(l.id)
+    try {
+      await api.patch(`/admin/rrhh/logins/${l.id}`, { time: editTime })
+      cancelEdit()
+      await fetchLogins()
+    } catch { alert('No se pudo actualizar el ingreso') }
+    finally { setBusyId(null) }
+  }
+
+  async function removeLogin(l) {
+    if (!window.confirm('¿Eliminar este ingreso? No se puede deshacer.')) return
+    setBusyId(l.id)
+    try {
+      await api.delete(`/admin/rrhh/logins/${l.id}`)
+      await fetchLogins()
+    } catch { alert('No se pudo eliminar el ingreso') }
+    finally { setBusyId(null) }
   }
 
   function applyShortcut(s) {
@@ -659,22 +689,49 @@ function TabIngresos({ users }) {
                 // Tardanza solo para el primer ingreso del día (la "llegada")
                 const isFirst = firstIds.has(l.id)
                 const lateBy = schedule && isFirst ? minutesFromMidnight(l.loginAt) - schedule.mins - tolerance : null
+                const isEditing = editingId === l.id
+                const isBusy = busyId === l.id
                 return (
                   <div key={l.id} className="flex items-center gap-3 px-4 py-2.5">
                     <p className="text-sm text-gray-600 dark:text-gray-300 flex-1 capitalize">{fmtDate(day)}</p>
-                    {lateBy !== null && (
+                    {!isEditing && lateBy !== null && (
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
                         lateBy > 0
                           ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
                           : 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400'
                       }`}>{lateBy > 0 ? `+${lateBy} min` : 'a horario'}</span>
                     )}
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex-shrink-0">{fmtTime(l.loginAt)}</p>
-                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
-                      l.method === 'google'
-                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                    }`}>{l.method === 'google' ? 'Google' : 'Email'}</span>
+                    {isEditing ? (
+                      <>
+                        <input
+                          type="time"
+                          value={editTime}
+                          onChange={e => setEditTime(e.target.value)}
+                          className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 flex-shrink-0"
+                        />
+                        <button onClick={() => saveEdit(l)} disabled={isBusy}
+                          className="text-xs px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium flex-shrink-0 disabled:opacity-50">
+                          Guardar
+                        </button>
+                        <button onClick={cancelEdit} disabled={isBusy}
+                          className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex-shrink-0">
+                          Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex-shrink-0">{fmtTime(l.loginAt)}</p>
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
+                          l.method === 'google'
+                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                        }`}>{l.method === 'google' ? 'Google' : 'Email'}</span>
+                        <button onClick={() => startEdit(l)} disabled={isBusy} title="Editar hora"
+                          className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 flex-shrink-0 disabled:opacity-50">✏️</button>
+                        <button onClick={() => removeLogin(l)} disabled={isBusy} title="Eliminar ingreso"
+                          className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 flex-shrink-0 disabled:opacity-50">🗑️</button>
+                      </>
+                    )}
                   </div>
                 )
               })}
@@ -829,6 +886,7 @@ function VacationEditModal({ user, onClose, onUpdated }) {
 
 function TabLegajos({ users, onVacationUpdate }) {
   const { labelFor } = useRoles()
+  const { workspace } = useWorkspace()
   const { fields: legajoFields } = useLegajoFields()
   const [selectedId, setSelectedId] = useState('')
   const [summary, setSummary]       = useState(null)   // { avgLoginTime, loginCount, projects }
@@ -847,6 +905,14 @@ function TabLegajos({ users, onVacationUpdate }) {
       .catch(() => setSummary(null))
       .finally(() => setSummaryLoading(false))
   }, [selectedId])
+
+  // Recarga el resumen sin tocar el estado de carga (para refrescar tras editar/eliminar un ingreso).
+  function reloadSummary() {
+    if (!selectedId) return Promise.resolve()
+    return api.get(`/admin/rrhh/user-summary/${selectedId}`)
+      .then(r => setSummary(r.data))
+      .catch(() => {})
+  }
 
   // Campos visibles del legajo con su valor mostrable para la persona seleccionada.
   const legajoRows = selected
@@ -885,6 +951,11 @@ function TabLegajos({ users, onVacationUpdate }) {
             <div>
               <p className="text-lg font-bold text-gray-900 dark:text-white">{selected.name}</p>
               <p className="text-sm text-gray-500 dark:text-gray-400">{labelFor(selected.role)}</p>
+              {selected.workspaceJoinedAt && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  📅 En {workspace?.name ?? 'el equipo'} desde el {new Date(selected.workspaceJoinedAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ })}
+                </p>
+              )}
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{selected.email}</p>
             </div>
           </div>
@@ -1007,16 +1078,44 @@ function TabLegajos({ users, onVacationUpdate }) {
       )}
 
       {showLoginDays && selected && summary?.loginDays?.length > 0 && (
-        <LoginDaysModal user={selected} summary={summary} onClose={() => setShowLoginDays(false)} />
+        <LoginDaysModal user={selected} summary={summary} onChanged={reloadSummary} onClose={() => setShowLoginDays(false)} />
       )}
     </div>
   )
 }
 
 // Desglose día por día del primer ingreso de una persona (modal).
-function LoginDaysModal({ user, summary, onClose }) {
+// Permite editar la hora o eliminar el ingreso que distorsiona el promedio.
+function LoginDaysModal({ user, summary, onChanged, onClose }) {
   const days = summary.loginDays ?? []
   const showLate = summary.attendanceTrackingEnabled !== false && !!summary.workStartTime
+  const [editingId, setEditingId] = useState(null)
+  const [editTime, setEditTime]   = useState('')
+  const [busyId, setBusyId]       = useState(null)
+
+  function startEdit(d) { setEditingId(d.id); setEditTime(d.time) }
+  function cancelEdit()  { setEditingId(null); setEditTime('') }
+
+  async function saveEdit(d) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(editTime)) { alert('Hora inválida (HH:MM)'); return }
+    setBusyId(d.id)
+    try {
+      await api.patch(`/admin/rrhh/logins/${d.id}`, { time: editTime })
+      cancelEdit()
+      await onChanged?.()
+    } catch { alert('No se pudo actualizar el ingreso') }
+    finally { setBusyId(null) }
+  }
+
+  async function removeLogin(d) {
+    if (!window.confirm(`¿Eliminar el ingreso del ${fmtDate(d.date)}? No se puede deshacer.`)) return
+    setBusyId(d.id)
+    try {
+      await api.delete(`/admin/rrhh/logins/${d.id}`)
+      await onChanged?.()
+    } catch { alert('No se pudo eliminar el ingreso') }
+    finally { setBusyId(null) }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -1038,19 +1137,42 @@ function LoginDaysModal({ user, summary, onClose }) {
 
         <div className="overflow-y-auto px-5 py-3">
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
-            {days.map(d => (
-              <div key={d.date} className="flex items-center justify-between py-2">
-                <span className="text-sm text-gray-700 dark:text-gray-300 capitalize">{fmtDate(d.date)}</span>
-                <span className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white tabular-nums">{d.time}</span>
-                  {showLate && d.lateBy != null && (
-                    d.lateBy > 0
-                      ? <span className="text-xs font-medium text-red-600 dark:text-red-400 tabular-nums">+{d.lateBy} min</span>
-                      : <span className="text-xs font-medium text-green-600 dark:text-green-400">a horario</span>
+            {days.map(d => {
+              const isEditing = editingId === d.id
+              const isBusy = busyId === d.id
+              return (
+                <div key={d.date} className="flex items-center justify-between gap-2 py-2">
+                  <span className="text-sm text-gray-700 dark:text-gray-300 capitalize flex-1 min-w-0 truncate">{fmtDate(d.date)}</span>
+                  {isEditing ? (
+                    <span className="flex items-center gap-1.5 flex-shrink-0">
+                      <input
+                        type="time"
+                        value={editTime}
+                        onChange={e => setEditTime(e.target.value)}
+                        className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 w-28"
+                      />
+                      <button onClick={() => saveEdit(d)} disabled={isBusy}
+                        className="text-xs px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium disabled:opacity-50">Guardar</button>
+                      <button onClick={cancelEdit} disabled={isBusy}
+                        className="text-xs px-1.5 py-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">×</button>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white tabular-nums">{d.time}</span>
+                      {showLate && d.lateBy != null && (
+                        d.lateBy > 0
+                          ? <span className="text-xs font-medium text-red-600 dark:text-red-400 tabular-nums">+{d.lateBy} min</span>
+                          : <span className="text-xs font-medium text-green-600 dark:text-green-400">a horario</span>
+                      )}
+                      <button onClick={() => startEdit(d)} disabled={isBusy} title="Editar hora"
+                        className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-50">✏️</button>
+                      <button onClick={() => removeLogin(d)} disabled={isBusy} title="Eliminar ingreso"
+                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50">🗑️</button>
+                    </span>
                   )}
-                </span>
-              </div>
-            ))}
+                </div>
+              )
+            })}
           </div>
         </div>
 

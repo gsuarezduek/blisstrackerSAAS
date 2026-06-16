@@ -28,6 +28,7 @@ async function list(req, res, next) {
     const result = members.map(m => ({
       ...m.user,
       role: m.teamRole,
+      workspaceJoinedAt: m.createdAt,
       isAdmin: m.role === 'admin' || m.role === 'owner',
       active: m.active,
       vacationDays: m.vacationDays,

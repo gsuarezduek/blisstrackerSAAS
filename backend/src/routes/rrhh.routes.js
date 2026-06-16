@@ -1,5 +1,5 @@
 const router = require('express').Router()
-const { loginHistory, lastLogins, userSummary, updateVacationDays, dashboardStats } = require('../controllers/rrhh.controller')
+const { loginHistory, lastLogins, userSummary, updateVacationDays, dashboardStats, updateLogin, deleteLogin } = require('../controllers/rrhh.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
@@ -12,5 +12,7 @@ router.get('/logins',              loginHistory)
 router.get('/last-logins',         lastLogins)
 router.get('/user-summary/:id',    userSummary)
 router.patch('/vacation-days/:id', updateVacationDays)
+router.patch('/logins/:loginId',   updateLogin)
+router.delete('/logins/:loginId',  deleteLogin)
 
 module.exports = router

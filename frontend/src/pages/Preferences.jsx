@@ -497,22 +497,65 @@ export default function Preferences() {
                   </div>
 
                   {globalSettings.attendanceTrackingEnabled !== false && (
-                    <div className="flex items-start justify-between gap-4 py-4">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Tolerancia para tardanza</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Minutos de gracia después del horario de ingreso. Con 5, una llegada hasta 5 min tarde no cuenta como tardanza (9:05 con horario 9:00 está OK; 9:06 es tardanza). Aplica a las tardanzas por persona y del equipo.</p>
+                    <>
+                      <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700 pl-4 border-l-2 border-l-gray-100 dark:border-l-gray-700">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Tolerancia para tardanza</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Minutos de gracia después del horario de ingreso. Con 5, una llegada hasta 5 min tarde no cuenta como tardanza (9:05 con horario 9:00 está OK; 9:06 es tardanza). Aplica a las tardanzas por persona y del equipo.</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <input
+                            type="number" min="0" max="120"
+                            value={globalSettings.lateToleranceMins ?? 0}
+                            onChange={e => setGlobalSettings(p => ({ ...p, lateToleranceMins: e.target.value }))}
+                            onBlur={e => handleGlobalSetting({ lateToleranceMins: Math.max(0, Math.min(120, Number(e.target.value) || 0)) })}
+                            className="w-20 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-gray-500 dark:text-gray-400">min</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <input
-                          type="number" min="0" max="120"
-                          value={globalSettings.lateToleranceMins ?? 0}
-                          onChange={e => setGlobalSettings(p => ({ ...p, lateToleranceMins: e.target.value }))}
-                          onBlur={e => handleGlobalSetting({ lateToleranceMins: Math.max(0, Math.min(120, Number(e.target.value) || 0)) })}
-                          className="w-20 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                        <span className="text-sm text-gray-500 dark:text-gray-400">min</span>
+
+                      <div className="flex items-start justify-between gap-4 py-4 pl-4 border-l-2 border-l-gray-100 dark:border-l-gray-700">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Notificación por email</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Envía un email a quien acumula tardanzas en los últimos 30 días, invitando a regularizar el horario.</p>
+                        </div>
+                        <Toggle on={!!globalSettings.lateNotifyEnabled} onToggle={() => handleGlobalSetting({ lateNotifyEnabled: !globalSettings.lateNotifyEnabled })} />
                       </div>
-                    </div>
+
+                      {globalSettings.lateNotifyEnabled && (
+                        <div className="pl-4 border-l-2 border-l-gray-100 dark:border-l-gray-700 pb-4 space-y-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Enviar después de</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cantidad de tardanzas (en 30 días) que dispara el email. Con 1, se envía la primera vez que llega tarde; con 3, después de la tercera. Se envía una sola vez cada 30 días por persona.</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <input
+                                type="number" min="1" max="10"
+                                value={globalSettings.lateNotifyThreshold ?? 3}
+                                onChange={e => setGlobalSettings(p => ({ ...p, lateNotifyThreshold: e.target.value }))}
+                                onBlur={e => handleGlobalSetting({ lateNotifyThreshold: Math.max(1, Math.min(10, Number(e.target.value) || 1)) })}
+                                className="w-20 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              />
+                              <span className="text-sm text-gray-500 dark:text-gray-400">tardanzas</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Texto del email</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Podés usar <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">[Nombre]</code> y <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">[workspace]</code>; se reemplazan automáticamente al enviar.</p>
+                            <textarea
+                              rows={12}
+                              value={globalSettings.lateNotifyTemplate ?? ''}
+                              onChange={e => setGlobalSettings(p => ({ ...p, lateNotifyTemplate: e.target.value }))}
+                              onBlur={e => handleGlobalSetting({ lateNotifyTemplate: e.target.value })}
+                              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y leading-relaxed"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
 
                 </div>

@@ -112,7 +112,7 @@ async function userSummary(req, res, next) {
     const [logins, memberships, member] = await Promise.all([
       prisma.userLogin.findMany({
         where: { userId, workspaceId },
-        select: { loginAt: true },
+        select: { id: true, loginAt: true },
         orderBy: { loginAt: 'asc' },
       }),
       prisma.projectMember.findMany({
@@ -128,9 +128,9 @@ async function userSummary(req, res, next) {
     const byDay = {}
     for (const l of logins) {
       const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: tz })
-      if (!byDay[day]) byDay[day] = l.loginAt
+      if (!byDay[day]) byDay[day] = l   // primer ingreso del día (orden asc)
     }
-    const firstLogins = Object.values(byDay)
+    const firstLogins = Object.values(byDay).map(l => l.loginAt)
 
     let avgLoginTime = null
     if (firstLogins.length > 0) {
@@ -148,9 +148,10 @@ async function userSummary(req, res, next) {
     // Desglose día por día del PRIMER ingreso (más reciente primero).
     // lateBy = minutos por encima del límite tolerado (workStartTime + tolerancia).
     const loginDays = Object.entries(byDay)
-      .map(([date, iso]) => {
-        const mins = loginMinsFromMidnight(iso, tz)
+      .map(([date, l]) => {
+        const mins = loginMinsFromMidnight(l.loginAt, tz)
         return {
+          id: l.id,   // id del UserLogin del primer ingreso (para editar/eliminar)
           date,
           time: minsToTime(mins),
           lateBy: startMins != null ? Math.max(0, mins - startMins - tolerance) : null,
@@ -216,6 +217,45 @@ async function updateVacationDays(req, res, next) {
       select: { userId: true, vacationDays: true },
     })
     res.json({ id: updated.userId, vacationDays: updated.vacationDays })
+  } catch (err) { next(err) }
+}
+
+// PATCH /api/admin/rrhh/logins/:loginId
+// Edita la hora (y opcionalmente la fecha) de un ingreso registrado.
+// Útil para corregir un ingreso de la tarde (fin de semana/feriado) que distorsiona el promedio.
+async function updateLogin(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const loginId = Number(req.params.loginId)
+    const { time, date } = req.body || {}
+
+    const login = await prisma.userLogin.findFirst({ where: { id: loginId, workspaceId } })
+    if (!login) return res.status(404).json({ error: 'Ingreso no encontrado' })
+
+    const curDay  = new Date(login.loginAt).toLocaleDateString('en-CA', { timeZone: tz })
+    const curTime = minsToTime(loginMinsFromMidnight(login.loginAt, tz))
+
+    const newDay  = date || curDay
+    const newTime = time || curTime
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDay)) return res.status(400).json({ error: 'Fecha inválida' })
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(newTime)) return res.status(400).json({ error: 'Hora inválida (HH:MM)' })
+
+    const loginAt = new Date(`${newDay}T${newTime}:00${tzSuffix(tz)}`)
+    const updated = await prisma.userLogin.update({ where: { id: loginId }, data: { loginAt } })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
+// DELETE /api/admin/rrhh/logins/:loginId
+async function deleteLogin(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const loginId = Number(req.params.loginId)
+    const login = await prisma.userLogin.findFirst({ where: { id: loginId, workspaceId } })
+    if (!login) return res.status(404).json({ error: 'Ingreso no encontrado' })
+    await prisma.userLogin.delete({ where: { id: loginId } })
+    res.json({ ok: true })
   } catch (err) { next(err) }
 }
 
@@ -311,4 +351,4 @@ async function dashboardStats(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { loginHistory, lastLogins, userSummary, updateVacationDays, dashboardStats }
+module.exports = { loginHistory, lastLogins, userSummary, updateVacationDays, dashboardStats, updateLogin, deleteLogin }

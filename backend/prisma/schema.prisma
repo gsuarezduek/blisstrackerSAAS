@@ -31,6 +31,9 @@ model Workspace {
   monthlyTokenLimit   Int       @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
   attendanceTrackingEnabled Boolean @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
   lateToleranceMins   Int       @default(0) // Tolerancia (min) para tardanza: la llegada cuenta tarde solo si supera workStartTime + tolerancia
+  lateNotifyEnabled   Boolean   @default(false) // Enviar email a quien acumula tardanzas en los últimos 30 días
+  lateNotifyThreshold Int       @default(3) // Cantidad de tardanzas (1-10) en 30 días que dispara el email
+  lateNotifyTemplate  String?   // Cuerpo del email de tardanza (placeholders [Nombre] y [workspace]); null = texto por defecto
   legajoEnabled       Boolean   @default(true) // Muestra la tarjeta/hint de legajos en RRHH. OFF = no se nudge-ea completar el legajo
   legajoFields        Json      @default("[]") // Config del formulario de legajo (campos default + custom). [] = usa el catálogo default
   billingExempt       Boolean   @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.

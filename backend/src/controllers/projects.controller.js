@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
+const { DEFAULT_LATE_TEMPLATE } = require('../services/lateNotification.service')
 
 function weekMondayStr(tz) {
   const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : 'America/Argentina/Buenos_Aires'
@@ -397,6 +398,9 @@ async function getGlobalSettings(req, res, next) {
       briefsEnabled: first?.briefsEnabled ?? true,
       attendanceTrackingEnabled: workspace.attendanceTrackingEnabled ?? true,
       lateToleranceMins: workspace.lateToleranceMins ?? 0,
+      lateNotifyEnabled: workspace.lateNotifyEnabled ?? false,
+      lateNotifyThreshold: workspace.lateNotifyThreshold ?? 3,
+      lateNotifyTemplate: workspace.lateNotifyTemplate || DEFAULT_LATE_TEMPLATE,
       emailFrom: effectiveEmailFrom,
       aiWeeklyTokenLimit: first?.aiWeeklyTokenLimit ?? 500000,
     })
@@ -461,7 +465,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, lateToleranceMins, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -477,6 +481,24 @@ async function saveGlobalSettings(req, res, next) {
         return res.status(400).json({ error: 'La tolerancia debe ser un entero entre 0 y 120 minutos' })
       }
       workspaceData.lateToleranceMins = t
+    }
+    if (lateNotifyEnabled !== undefined) workspaceData.lateNotifyEnabled = Boolean(lateNotifyEnabled)
+    if (lateNotifyThreshold !== undefined) {
+      const n = Number(lateNotifyThreshold)
+      if (!Number.isInteger(n) || n < 1 || n > 10) {
+        return res.status(400).json({ error: 'El umbral de tardanzas debe ser un entero entre 1 y 10' })
+      }
+      workspaceData.lateNotifyThreshold = n
+    }
+    if (lateNotifyTemplate !== undefined) {
+      if (lateNotifyTemplate === null || lateNotifyTemplate === '' || lateNotifyTemplate === DEFAULT_LATE_TEMPLATE) {
+        workspaceData.lateNotifyTemplate = null  // vacío o igual al default → null (usa el default)
+      } else if (typeof lateNotifyTemplate === 'string') {
+        if (lateNotifyTemplate.length > 5000) {
+          return res.status(400).json({ error: 'El texto del email es demasiado largo (máx. 5000 caracteres)' })
+        }
+        workspaceData.lateNotifyTemplate = lateNotifyTemplate
+      }
     }
     if (linksEnabled !== undefined)    projectData.linksEnabled    = Boolean(linksEnabled)
     if (situationEnabled !== undefined) projectData.situationEnabled = Boolean(situationEnabled)
