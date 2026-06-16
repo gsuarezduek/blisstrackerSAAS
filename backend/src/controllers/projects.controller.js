@@ -555,6 +555,23 @@ async function sendTestEmail(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Envía el email de tardanza al usuario actual (vista previa). Usa el template del body
+// si viene (para previsualizar ediciones sin guardar), si no el guardado / default.
+async function testLateNotification(req, res, next) {
+  try {
+    const { sendLateNotificationEmail } = require('../services/email.service')
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { name: true, email: true },
+    })
+    const tpl = (typeof req.body.template === 'string' && req.body.template.trim())
+      ? req.body.template
+      : (req.workspace.lateNotifyTemplate || DEFAULT_LATE_TEMPLATE)
+    await sendLateNotificationEmail(user.email, user.name, req.workspace.name, tpl, req.workspace.id)
+    res.json({ ok: true, sentTo: user.email })
+  } catch (err) { next(err) }
+}
+
 async function saveSituation(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -615,4 +632,4 @@ async function saveInfo(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, sendTestEmail, getAiUsage, getMembers, toggleStar }
+module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, sendTestEmail, testLateNotification, getAiUsage, getMembers, toggleStar }

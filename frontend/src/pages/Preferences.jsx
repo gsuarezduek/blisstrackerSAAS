@@ -21,6 +21,7 @@ export default function Preferences() {
   const [loaded,         setLoaded]         = useState(false)
   const [globalSettings,      setGlobalSettings]      = useState(null)
   const [globalSettingsError, setGlobalSettingsError] = useState(false)
+  const [lateTest,            setLateTest]            = useState({ sending: false, msg: '', error: false })
   const [aiUsage,             setAiUsage]             = useState(null)
   const [aiUsageError,        setAiUsageError]        = useState(false)
   const [wsFeatures,          setWsFeatures]          = useState(null)
@@ -169,6 +170,19 @@ export default function Preferences() {
     } catch (_) {
       api.get('/projects/settings').then(({ data }) => setGlobalSettings(data))
     }
+  }
+
+  async function handleTestLateNotification() {
+    setLateTest({ sending: true, msg: '', error: false })
+    try {
+      // Guarda primero el texto actual y luego envía el preview con ese mismo template.
+      await api.patch('/projects/settings', { lateNotifyTemplate: globalSettings.lateNotifyTemplate })
+      const { data } = await api.post('/projects/settings/late-notification/test', { template: globalSettings.lateNotifyTemplate })
+      setLateTest({ sending: false, msg: `Enviado a ${data.sentTo}`, error: false })
+    } catch (err) {
+      setLateTest({ sending: false, msg: err.response?.data?.error || 'No se pudo enviar el email de prueba.', error: true })
+    }
+    setTimeout(() => setLateTest(s => ({ ...s, msg: '' })), 5000)
   }
 
   async function handleToggleWeekly() {
@@ -552,6 +566,22 @@ export default function Preferences() {
                               onBlur={e => handleGlobalSetting({ lateNotifyTemplate: e.target.value })}
                               className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y leading-relaxed"
                             />
+                            <div className="flex items-center gap-3 mt-2">
+                              <button
+                                type="button"
+                                onClick={handleTestLateNotification}
+                                disabled={lateTest.sending}
+                                className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 transition-colors"
+                              >
+                                {lateTest.sending ? 'Enviando…' : '✉️ Probar ahora'}
+                              </button>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">Te envía este email a tu casilla para ver cómo llega.</span>
+                            </div>
+                            {lateTest.msg && (
+                              <p className={`text-sm mt-1.5 ${lateTest.error ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                {lateTest.msg}
+                              </p>
+                            )}
                           </div>
                         </div>
                       )}

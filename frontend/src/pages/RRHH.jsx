@@ -63,13 +63,26 @@ function relativeDay(days) {
 
 // ─── Mini Dashboard ───────────────────────────────────────────────────────────
 
-function StatCard({ icon, label, value, sub }) {
+function StatCard({ icon, label, value, sub, onClick }) {
+  const clickable = typeof onClick === 'function'
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4">
+    <div
+      onClick={onClick}
+      className={`bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4 ${
+        clickable ? 'cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 transition-colors' : ''
+      }`}
+    >
       <span className="text-2xl flex-shrink-0">{icon}</span>
       <div className="min-w-0">
         <p className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{value}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
+          {label}
+          {clickable && (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-gray-300 dark:text-gray-600">
+              <path d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM9 9a1 1 0 0 0 0 2v3a1 1 0 0 0 1 1h1a1 1 0 1 0 0-2v-3a1 1 0 0 0-1-1H9Zm1-4a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" />
+            </svg>
+          )}
+        </p>
         {sub && <p className="text-xs text-primary-600 dark:text-primary-400 mt-0.5">{sub}</p>}
       </div>
     </div>
@@ -124,6 +137,7 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
   const { fields: legajoFields, legajoEnabled } = useLegajoFields()
   const today = todayBA()
   const HORIZON = 30
+  const [historyMetric, setHistoryMetric] = useState(null)   // null | 'projectsPerPerson' | 'tenure'
 
   const activeUsers = users.filter(u => u.active)
 
@@ -234,10 +248,10 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
   const showAttendanceHint = attendanceEnabled && !hasSchedules
   const attendanceCards = attendanceEnabled && hasSchedules
     ? [
-        { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—', sub: 'sobre quienes tienen horario' },
+        { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—', sub: 'sobre quienes tienen horario', onClick: () => setHistoryMetric('avgLoginTime') },
         { icon: '⏰', label: 'Puntualidad del equipo',
           value: dashStats.teamPunctualityPct != null ? `${dashStats.teamPunctualityPct}%` : '—',
-          sub: `${dashStats.lateCount} tarde de ${dashStats.scheduledDays} llegadas` },
+          sub: `${dashStats.lateCount} tarde de ${dashStats.scheduledDays} llegadas`, onClick: () => setHistoryMetric('punctuality') },
         { icon: '⏰', label: 'Llegaron tarde hoy', value: lateToday.length,
           sub: lateToday.length === 0
             ? 'Nadie llegó tarde 🎉'
@@ -257,9 +271,9 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
 
   // Todas las métricas numéricas, cada una en su propia tarjeta (sin slider)
   const statCards = [
-    { icon: '👥', label: 'Personas activas',          value: activeUsers.length },
-    { icon: '📅', label: 'Antigüedad promedio',       value: avgTenureYears,              sub: 'del equipo activo' },
-    { icon: '📁', label: 'Proyectos por persona',     value: dashStats.projectsPerPerson, sub: 'proyectos activos ÷ equipo' },
+    { icon: '👥', label: 'Personas activas',          value: activeUsers.length, onClick: () => setHistoryMetric('activeMembers') },
+    { icon: '📅', label: 'Antigüedad promedio',       value: avgTenureYears,              sub: 'del equipo activo', onClick: () => setHistoryMetric('tenure') },
+    { icon: '📁', label: 'Proyectos por persona',     value: dashStats.projectsPerPerson, sub: 'proyectos activos ÷ equipo', onClick: () => setHistoryMetric('projectsPerPerson') },
     ...legajoCards,
     { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${activeUsers.length}`,
       sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${activeUsers.length - loggedInToday} aún no ingresaron` },
@@ -271,7 +285,7 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
       {/* Fila 1: stats numéricas — cada métrica en su propia tarjeta */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {statCards.map((s, i) => (
-          <StatCard key={i} icon={s.icon} label={s.label} value={s.value} sub={s.sub} />
+          <StatCard key={i} icon={s.icon} label={s.label} value={s.value} sub={s.sub} onClick={s.onClick} />
         ))}
         {showAttendanceHint && (
           <SetupHintCard
@@ -411,6 +425,181 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
               </p>
             )}
           </div>
+        </div>
+      </div>
+
+      {historyMetric && (
+        <MetricHistoryModal
+          config={METRIC_HISTORY[historyMetric]}
+          current={{
+            activeMembers: activeUsers.length,
+            tenure: avgTenureYears,
+            projectsPerPerson: dashStats.projectsPerPerson,
+            avgLoginTime: globalAvgLoginTime,
+            punctuality: dashStats.teamPunctualityPct != null ? `${dashStats.teamPunctualityPct}%` : null,
+          }[historyMetric]}
+          onClose={() => setHistoryMetric(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// Config de cada métrica de RRHH con historial mensual (icono, título, formateo).
+//   fmt(value)          → texto de la columna de valor + se usa el value crudo para escalar la barra
+//   detailText(detail)  → texto auxiliar a la derecha (opcional)
+//   currentText(c)      → frase del estado vacío ("Este mes: …")
+const METRIC_HISTORY = {
+  activeMembers: {
+    metric: 'activeMembers',
+    icon: '👥',
+    title: 'Personas activas',
+    footer: 'Integrantes activos del workspace · se guarda una captura por mes',
+    fmt: v => `${v}`,
+    detailText: () => '',
+    currentText: c => (c != null ? `Este mes: ${c}.` : ''),
+  },
+  tenure: {
+    metric: 'tenure',
+    icon: '📅',
+    title: 'Antigüedad promedio',
+    footer: 'Antigüedad promedio del equipo activo · se guarda una captura por mes',
+    fmt: v => (v < 1 ? `${Math.round(v * 12)}m` : `${v.toFixed(1)}a`),
+    detailText: d => (d?.memberCount != null ? `${d.memberCount} pers.` : ''),
+    currentText: c => (c ? `Este mes: ${c}.` : ''),
+  },
+  projectsPerPerson: {
+    metric: 'projectsPerPerson',
+    icon: '📁',
+    title: 'Proyectos por persona',
+    footer: 'Proyectos activos ÷ equipo activo · se guarda una captura por mes',
+    fmt: v => `${v}`,
+    detailText: d => (d?.activeProjects != null ? `${d.activeProjects}p / ${d.activeMembers}` : ''),
+    currentText: c => (c != null ? `Este mes: ${c} proyectos/persona.` : ''),
+  },
+  avgLoginTime: {
+    metric: 'avgLoginTime',
+    icon: '🕐',
+    title: 'Horario promedio de ingreso',
+    footer: 'Promedio mensual del primer ingreso · solo quienes tienen horario',
+    barMode: 'range', // la hora del día se escala dentro del rango del período (más legible que desde 0)
+    fmt: v => minsToTime(v),
+    detailText: d => (d?.scheduledDays != null ? `${d.scheduledDays} días` : ''),
+    currentText: c => (c ? `Este mes: ${c}.` : ''),
+  },
+  punctuality: {
+    metric: 'punctuality',
+    icon: '⏰',
+    title: 'Puntualidad del equipo',
+    footer: '% de llegadas a horario · promedio mensual',
+    fmt: v => `${v}%`,
+    detailText: d => (d?.scheduledDays != null ? `${d.scheduledDays - d.lateCount}/${d.scheduledDays} a horario` : ''),
+    currentText: c => (c != null ? `Este mes: ${c}.` : ''),
+  },
+}
+
+// Modal genérico: evolución mensual de una métrica de RRHH.
+// Muestra hasta 12 meses; con datos de varios años aparece un selector de año.
+function MetricHistoryModal({ config, current, onClose }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [year, setYear]       = useState(null)   // null = últimos 12 meses
+
+  useEffect(() => {
+    setLoading(true)
+    const params = new URLSearchParams({ metric: config.metric })
+    if (year) params.set('year', year)
+    api.get(`/admin/rrhh/metric-history?${params}`)
+      .then(r => setData(r.data))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [year, config.metric])
+
+  const snapshots = data?.snapshots ?? []
+  const years     = data?.availableYears ?? []
+  const showYearSelector = years.length > 1
+  const withData  = snapshots.filter(s => s.value != null)
+  const hasAny    = withData.length > 0
+  const values    = withData.map(s => s.value)
+  const maxValue  = Math.max(...values, 0.0001)
+  const minValue  = Math.min(...values)
+
+  // Ancho de la barra. 'range' escala dentro del [min, max] del período (útil para horas del día,
+  // donde el 0 absoluto no aporta); por defecto escala desde 0.
+  function barWidth(v) {
+    if (config.barMode === 'range') {
+      if (maxValue === minValue) return 100
+      return Math.max(8, ((v - minValue) / (maxValue - minValue)) * 100)
+    }
+    return Math.max(4, (v / maxValue) * 100)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 w-full max-w-lg max-h-[85vh] flex flex-col shadow-xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-700">
+          <div>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">{config.icon} {config.title}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Evolución mensual · {year ? `año ${year}` : 'últimos 12 meses'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {showYearSelector && (
+              <select
+                value={year ?? ''}
+                onChange={e => setYear(e.target.value ? Number(e.target.value) : null)}
+                className="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Últimos 12 meses</option>
+                {years.slice().reverse().map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4">
+          {loading ? (
+            <LoadingSpinner className="py-10" />
+          ) : !hasAny ? (
+            <div className="text-center py-10 text-gray-400">
+              <p className="text-3xl mb-2">📭</p>
+              <p className="text-sm font-medium">Todavía no hay historial</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                Se guarda una captura por mes. {config.currentText(current)}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {snapshots.map(s => (
+                <div key={s.month} className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 dark:text-gray-400 w-24 flex-shrink-0 capitalize">{s.label}</span>
+                  <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2.5 min-w-0">
+                    {s.value != null && (
+                      <div
+                        className="bg-primary-500 h-2.5 rounded-full transition-all"
+                        style={{ width: `${barWidth(s.value)}%` }}
+                      />
+                    )}
+                  </div>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 tabular-nums w-12 text-right flex-shrink-0">
+                    {s.value != null ? config.fmt(s.value) : '—'}
+                  </span>
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500 w-16 text-right flex-shrink-0 hidden sm:block">
+                    {s.value != null ? config.detailText(s.detail) : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">
+          {config.footer}
         </div>
       </div>
     </div>

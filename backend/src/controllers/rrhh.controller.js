@@ -1,4 +1,6 @@
 const prisma = require('../lib/prisma')
+const { saveAllCurrentMonth, METRIC_KEYS } = require('../services/rrhhMetricSnapshot.service')
+const { monthLabel, prevMonthsArr } = require('../lib/monthUtils')
 
 function defaultDateRange(tz) {
   const to   = new Date().toLocaleDateString('en-CA', { timeZone: tz })
@@ -335,10 +337,19 @@ async function dashboardStats(req, res, next) {
     }
     lateToday.sort((a, b) => b.lateBy - a.lateBy)
 
+    const projectsPerPerson = activeMembers > 0
+      ? Math.round((activeProjects / activeMembers) * 10) / 10
+      : 0
+
+    // Snapshot perezoso del mes actual: cada visita a RRHH actualiza el punto del mes,
+    // así se construye el historial de métricas. Aislado para no romper el dashboard.
+    // Pasamos projectsPerPerson ya calculado; el resto (tenure) lo computa el servicio.
+    saveAllCurrentMonth(workspaceId, tz, {
+      projectsPerPerson: { value: projectsPerPerson, detail: { activeMembers, activeProjects } },
+    }).catch(err => console.error('[RrhhMetricSnapshot] upsert mes actual:', err.message))
+
     res.json({
-      projectsPerPerson: activeMembers > 0
-        ? Math.round((activeProjects / activeMembers) * 10) / 10
-        : 0,
+      projectsPerPerson,
       avgFirstLoginTime,
       teamPunctualityPct,
       scheduledDays,
@@ -351,4 +362,49 @@ async function dashboardStats(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { loginHistory, lastLogins, userSummary, updateVacationDays, dashboardStats, updateLogin, deleteLogin }
+// GET /api/admin/rrhh/metric-history?metric=projectsPerPerson|tenure&year=YYYY
+// Historial mensual de una métrica de RRHH. Sin year → últimos 12 meses.
+// Con year → los 12 meses de ese año calendario. Devuelve también los años con datos.
+async function metricHistory(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const metric = req.query.metric
+    if (!METRIC_KEYS.includes(metric)) {
+      return res.status(400).json({ error: 'metric inválido' })
+    }
+    const yearParam = req.query.year ? Number(req.query.year) : null
+
+    const all = await prisma.rrhhMetricSnapshot.findMany({
+      where: { workspaceId, metric },
+      select: { month: true, value: true, detail: true },
+      orderBy: { month: 'asc' },
+    })
+
+    const availableYears = [...new Set(all.map(s => Number(s.month.slice(0, 4))))].sort((a, b) => a - b)
+    const byMonth = Object.fromEntries(all.map(s => [s.month, s]))
+
+    // Lista de meses a mostrar (siempre 12, rellenando huecos con null para no romper el eje).
+    let months
+    if (yearParam) {
+      months = Array.from({ length: 12 }, (_, i) => `${yearParam}-${String(i + 1).padStart(2, '0')}`)
+    } else {
+      const curMonth = new Date().toLocaleDateString('en-CA', { timeZone: tz }).slice(0, 7)
+      months = prevMonthsArr(curMonth, 12)
+    }
+
+    const snapshots = months.map(m => {
+      const s = byMonth[m]
+      return {
+        month: m,
+        label: monthLabel(m),
+        value: s ? s.value : null,
+        detail: s ? s.detail : null,
+      }
+    })
+
+    res.json({ snapshots, availableYears })
+  } catch (err) { next(err) }
+}
+
+module.exports = { loginHistory, lastLogins, userSummary, updateVacationDays, dashboardStats, updateLogin, deleteLogin, metricHistory }

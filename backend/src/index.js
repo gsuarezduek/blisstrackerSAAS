@@ -61,6 +61,7 @@ const { saveAllSearchConsoleSnapshots }   = require('./services/searchConsoleSna
 const { refreshAllDomainRatings }         = require('./services/ahrefs.service')
 const { saveAllAdsSnapshots }             = require('./services/adsSnapshot.service')
 const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnapshot.service')
+const { saveAllPreviousMonthSnapshots: saveAllPrevRrhhMetrics } = require('./services/rrhhMetricSnapshot.service')
 
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
 let weeklyReportRunning         = false
@@ -78,6 +79,7 @@ let seoSnapshotRunning          = false
 let serpSnapshotRunning         = false
 let adsSnapshotRunning          = false
 let competitorSnapshotRunning   = false
+let rrhhMetricSnapRunning = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -311,6 +313,16 @@ cron.schedule('15 6 1 * *', async () => {
   try { await saveAllMonthlyCompetitorSnapshots() }
   catch (err) { console.error('[CompetitorSnapshot] Error en cron mensual:', err.message) }
   finally { competitorSnapshotRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: snapshot mensual de métricas de RRHH (proyectos/persona, antigüedad) — 1° de cada mes a las 06:30 ART
+cron.schedule('30 6 1 * *', async () => {
+  if (rrhhMetricSnapRunning) { console.log('[RrhhMetricSnapshot] Ya en ejecución, se omite.'); return }
+  rrhhMetricSnapRunning = true
+  console.log('[RrhhMetricSnapshot] Iniciando guardado mensual automático...')
+  try { await saveAllPrevRrhhMetrics() }
+  catch (err) { console.error('[RrhhMetricSnapshot] Error en cron mensual:', err.message) }
+  finally { rrhhMetricSnapRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: eliminar workspaces vencidos — cada 15 minutos
