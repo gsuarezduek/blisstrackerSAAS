@@ -90,8 +90,22 @@ async function listProductivity(req, res, next) {
       benchmark.utilizationMedian = utils.length ? median(utils) : null
     }
 
+    // Δ horas del equipo (encabezado de la sección): promedio simple de la utilización por persona,
+    // más los totales para el detalle y la variante ponderada (Σ registradas ÷ Σ disponibles).
+    const withUtil       = result.filter(r => r.stats.utilization != null)
+    const totalRegistered = withUtil.reduce((s, r) => s + (r.stats.attendance?.registeredHours || 0), 0)
+    const totalAvailable  = withUtil.reduce((s, r) => s + (r.stats.attendance?.availableHours  || 0), 0)
+    const teamHours = {
+      utilizationAvg:      withUtil.length ? withUtil.reduce((s, r) => s + r.stats.utilization, 0) / withUtil.length : null,
+      utilizationWeighted: totalAvailable > 0 ? totalRegistered / totalAvailable : null,
+      totalRegistered:     Math.round(totalRegistered * 10) / 10,
+      totalAvailable:      Math.round(totalAvailable  * 10) / 10,
+      nWithSchedule:       withUtil.length,
+      nTotal:              result.length,
+    }
+
     const periodOut = { ...period, businessDays: businessDaysBetween(period.curStart, period.curEnd) }
-    res.json({ members: result, period: periodOut, benchmark })
+    res.json({ members: result, period: periodOut, benchmark, teamHours })
   } catch (err) { next(err) }
 }
 

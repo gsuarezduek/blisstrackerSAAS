@@ -27,6 +27,31 @@ function ModeToggle({ mode, onChange }) {
   )
 }
 
+// Encabezado de la sección: Δ horas del equipo (promedio simple de la utilización por persona).
+function TeamHoursHeadline({ teamHours, loading }) {
+  if (loading && !teamHours) {
+    return <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Δ horas del equipo: <span className="animate-pulse">…</span></p>
+  }
+  const pct = teamHours && teamHours.utilizationWeighted != null ? Math.round(teamHours.utilizationWeighted * 100) : null
+  if (pct == null) {
+    return (
+      <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+        Δ horas del equipo: <span className="text-gray-400 dark:text-gray-500">— configurá horario (inicio y fin) por persona</span>
+      </p>
+    )
+  }
+  const cls = pct < 50 ? 'text-amber-600 dark:text-amber-400' : pct >= 100 ? 'text-green-600 dark:text-green-400' : 'text-primary-600 dark:text-primary-400'
+  return (
+    <div className="mt-1 flex items-baseline gap-2 flex-wrap">
+      <span className="text-sm text-gray-500 dark:text-gray-400">Δ horas del equipo</span>
+      <span className={`text-2xl font-bold tabular-nums leading-none ${cls}`}>{pct}%</span>
+      <span className="text-xs text-gray-400 dark:text-gray-500">
+        {fmtHours(teamHours.totalRegistered)} reg / {fmtHours(teamHours.totalAvailable)} disp · {teamHours.nWithSchedule} de {teamHours.nTotal} con horario
+      </span>
+    </div>
+  )
+}
+
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
   if (diff < 60)    return 'hace un momento'
@@ -466,9 +491,7 @@ function SummaryBar({ members, filter, onFilter }) {
   )
 }
 
-function ByPersonView({ mode }) {
-  const [data, setData]   = useState(null)
-  const [loading, setLoading] = useState(true)
+function ByPersonView({ data, loading, setData }) {
   const [expandedId, setExpandedId] = useState(null)
   const [refreshing, setRefreshing] = useState({})
   const [sortBy, setSortBy]   = useState('status')
@@ -479,18 +502,6 @@ function ByPersonView({ mode }) {
     if (col === sortBy) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
     else { setSortBy(col); setSortDir(DEFAULT_DIR[col] || 'desc') }
   }
-
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const { data } = await api.get('/admin/productivity', { params: { mode } })
-      setData(data)
-    } finally {
-      setLoading(false)
-    }
-  }, [mode])
-
-  useEffect(() => { fetchData() }, [fetchData])
 
   async function handleRefresh(userId) {
     setRefreshing(prev => ({ ...prev, [userId]: true }))
@@ -591,12 +602,31 @@ function ByPersonView({ mode }) {
 export default function ProductivityTab() {
   const [tab, setTab] = useState('person')
   const [mode, setMode] = useState('current')
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  // Fetch de la vista por persona a nivel sección: alimenta el encabezado "Δ horas del equipo"
+  // (visible en ambas sub-pestañas) y la tabla por persona, sin doble request.
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { data } = await api.get('/admin/productivity', { params: { mode } })
+      setData(data)
+    } finally {
+      setLoading(false)
+    }
+  }, [mode])
+
+  useEffect(() => { fetchData() }, [fetchData])
 
   return (
     <div>
       <div className="mb-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Productividad del equipo</h2>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Productividad del equipo</h2>
+            <TeamHoursHeadline teamHours={data?.teamHours} loading={loading} />
+          </div>
           <ModeToggle mode={mode} onChange={setMode} />
         </div>
         <div className="flex gap-1 mt-3 border-b border-gray-200 dark:border-gray-700">
@@ -616,7 +646,9 @@ export default function ProductivityTab() {
         </div>
       </div>
 
-      {tab === 'person' ? <ByPersonView mode={mode} /> : <ProductivityByProjectTab mode={mode} />}
+      {tab === 'person'
+        ? <ByPersonView data={data} loading={loading} setData={setData} />
+        : <ProductivityByProjectTab mode={mode} />}
     </div>
   )
 }
