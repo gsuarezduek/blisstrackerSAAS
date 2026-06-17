@@ -51,19 +51,6 @@ const STATUS = {
 
 const PRIORITY = { inactive: 0, down: 1, stuck: 2, ok: 3, up: 4, nodata: 5 }
 
-// Δ porcentual (tareas / horas)
-function DeltaPct({ value }) {
-  if (value === null || value === undefined) return <span className="text-gray-300 dark:text-gray-600">—</span>
-  const p = Math.round(value * 100)
-  if (p === 0) return <span className="text-gray-400">=</span>
-  const up = p > 0
-  return (
-    <span className={up ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-      {up ? '↑' : '↓'}{Math.abs(p)}%
-    </span>
-  )
-}
-
 // Celda "Δ horas" de la tabla: utilización (horas registradas ÷ disponibles) en %, con marca vs equipo.
 function UtilCell({ value, median }) {
   if (value === null || value === undefined) return <span className="text-gray-300 dark:text-gray-600">—</span>
@@ -246,7 +233,7 @@ function TeamCompare({ stats, benchmark }) {
   )
 }
 
-function PersonRow({ m, benchmark, period, expanded, onToggle, onRefresh, refreshing }) {
+function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing }) {
   const st = STATUS[m.status] || STATUS.ok
   const s = m.stats
   return (
@@ -569,7 +556,6 @@ function ByPersonView({ mode }) {
                 key={m.id}
                 m={m}
                 benchmark={benchmark}
-                period={data.period}
                 expanded={expandedId === m.id}
                 onToggle={() => setExpandedId(expandedId === m.id ? null : m.id)}
                 onRefresh={handleRefresh}
