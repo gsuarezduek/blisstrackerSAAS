@@ -329,7 +329,7 @@ async function getAttendanceStats(workspaceId, tz, period) {
 
   const [ws, members, workDays, leaves, logins] = await Promise.all([
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { attendanceTrackingEnabled: true, lateToleranceMins: true } }),
-    prisma.workspaceMember.findMany({ where: { workspaceId, active: true }, select: { userId: true, workStartTime: true } }),
+    prisma.workspaceMember.findMany({ where: { workspaceId, active: true }, select: { userId: true, workStartTime: true, workEndTime: true } }),
     prisma.workDay.findMany({ where: { workspaceId, date: { gte: curStart, lte: curEnd } }, select: { userId: true, date: true } }),
     prisma.vacationRequest.findMany({
       where: { workspaceId, status: 'approved', startDate: { lte: curEnd }, endDate: { gte: curStart } },
@@ -345,11 +345,18 @@ async function getAttendanceStats(workspaceId, tz, period) {
   const attendanceEnabled = ws?.attendanceTrackingEnabled !== false
   const tolerance = ws?.lateToleranceMins ?? 0
 
-  const scheduleMap = {}
+  const scheduleMap = {}  // userId -> minuto de inicio (para tardanzas)
+  const dayMinsMap  = {}  // userId -> minutos de jornada (workEnd - workStart), para horas disponibles
   for (const m of members) {
-    if (attendanceEnabled && m.workStartTime) {
+    if (!attendanceEnabled) continue
+    if (m.workStartTime) {
       const [h, mm] = m.workStartTime.split(':').map(Number)
       scheduleMap[m.userId] = h * 60 + mm
+      if (m.workEndTime) {
+        const [eh, em] = m.workEndTime.split(':').map(Number)
+        const mins = (eh * 60 + em) - (h * 60 + mm)
+        if (mins > 0) dayMinsMap[m.userId] = mins
+      }
     }
   }
 
@@ -393,6 +400,7 @@ async function getAttendanceStats(workspaceId, tz, period) {
     const leaveDays    = leaveByUser.get(uid)?.size || 0
     const expectedDays = Math.max(0, businessDays - leaveDays)
     const hasSchedule  = scheduleMap[uid] != null
+    const dayMins      = dayMinsMap[uid] ?? null
     result.set(uid, {
       businessDays,
       daysPresent,
@@ -401,9 +409,45 @@ async function getAttendanceStats(workspaceId, tz, period) {
       absentDays: Math.max(0, expectedDays - daysPresent),
       lateDays:   hasSchedule ? (lateByUser.get(uid) || 0) : null,
       hasSchedule,
+      // Horas disponibles del período = días esperados × jornada (workEnd - workStart). null = sin horario completo.
+      dailyHours:     dayMins != null ? Math.round(dayMins / 60 * 10) / 10 : null,
+      availableHours: dayMins != null ? Math.round(expectedDays * dayMins / 60 * 10) / 10 : null,
     })
   }
   return result
+}
+
+// Historial de horas activas (de tareas completadas) por semana ISO, últimas `weeks` semanas.
+// INDEPENDIENTE del período seleccionado — sirve como contexto de tendencia en la vista expandida.
+// Devuelve { history: Map<userId, [{weekStart, hours}]>, labels: [weekStart,...] }.
+async function getHoursHistory(workspaceId, tz, { weeks = 12 } = {}) {
+  const offset = tzOffsetStr(tz)
+  const today  = todayString(tz)
+  const startMonday = getNWeeksAgoMonday(weeks - 1, tz) // lunes de hace (weeks-1) semanas → cubre `weeks` semanas incl. la actual
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      status: 'COMPLETED',
+      completedAt: { gte: new Date(startMonday + 'T00:00:00' + offset), lte: new Date(today + 'T23:59:59' + offset) },
+      workDay: { workspaceId },
+    },
+    select: { userId: true, startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true },
+  })
+
+  const labels = Array.from({ length: weeks }, (_, i) => addDays(startMonday, i * 7))
+  const minsByUser = new Map()
+  for (const t of tasks) {
+    const date = new Date(t.completedAt).toLocaleDateString('en-CA', { timeZone: tz })
+    const idx  = Math.min(weeks - 1, Math.max(0, Math.floor(dateDiffDays(startMonday, date) / 7)))
+    if (!minsByUser.has(t.userId)) minsByUser.set(t.userId, new Array(weeks).fill(0))
+    minsByUser.get(t.userId)[idx] += taskMins(t)
+  }
+
+  const history = new Map()
+  for (const [uid, mins] of minsByUser) {
+    history.set(uid, mins.map((m, i) => ({ weekStart: labels[i], hours: Math.round(m / 60 * 10) / 10 })))
+  }
+  return { history, labels }
 }
 
 // Umbrales para clasificar el estado de cada miembro (determinístico, sin IA).
@@ -447,4 +491,4 @@ function computeBenchmark(statsMap) {
   }
 }
 
-module.exports = { getMemberStats, getWorkspaceStats, getProjectStats, getAttendanceStats, computeBenchmark, memberStatus, pctChange }
+module.exports = { getMemberStats, getWorkspaceStats, getProjectStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median, pctChange }

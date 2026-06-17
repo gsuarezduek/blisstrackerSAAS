@@ -114,7 +114,7 @@ export default function MyReports() {
                       >
                         <div className="flex items-start gap-2 flex-1 min-w-0">
                           <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                          <span className="text-gray-700 dark:text-gray-300 text-left">{linkify(task.description)}</span>
+                          <span className="text-gray-700 dark:text-gray-300 text-left whitespace-pre-wrap break-words">{linkify(task.description)}</span>
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
                           {task.isOverride && <span className="text-amber-500 text-xs">✎</span>}

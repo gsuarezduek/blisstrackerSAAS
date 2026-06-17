@@ -1,6 +1,7 @@
 const prisma    = require('../lib/prisma')
 const { generateMemoryForUser } = require('../services/insightMemory.service')
-const { getWorkspaceStats, getProjectStats, getAttendanceStats, computeBenchmark, memberStatus } = require('../services/productivityStats.service')
+const { getWorkspaceStats, getProjectStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median } = require('../services/productivityStats.service')
+const { sendTestDigest } = require('../services/productivityDigest.service')
 const { getProductivityPeriod, businessDaysBetween } = require('../lib/timeMetrics')
 
 // Modo de período: 'current' (mes en curso vs anterior, default) o 'closed' (mes anterior vs ante-anterior).
@@ -14,7 +15,7 @@ async function listProductivity(req, res, next) {
     const tz = req.workspace.timezone
     const period = getProductivityPeriod(periodMode(req), tz)
 
-    const [members, statsMap, attendanceMap] = await Promise.all([
+    const [members, statsMap, attendanceMap, hist] = await Promise.all([
       prisma.workspaceMember.findMany({
         where: { workspaceId, active: true },
         include: {
@@ -34,6 +35,7 @@ async function listProductivity(req, res, next) {
       }),
       getWorkspaceStats(workspaceId, tz, period),
       getAttendanceStats(workspaceId, tz, period),
+      getHoursHistory(workspaceId, tz, { weeks: 12 }),
     ])
 
     const benchmark = computeBenchmark(statsMap)
@@ -48,6 +50,13 @@ async function listProductivity(req, res, next) {
       const att = attendanceMap.get(u.id) || null
       const insight = u.insightMemories[0] || null
 
+      // Δ horas = horas registradas (tiempo activo de tareas completadas) ÷ horas disponibles.
+      const registeredHours = Math.round(s.current.totalMinutes / 60 * 10) / 10
+      const availableHours   = att?.availableHours ?? null
+      const utilization      = availableHours && availableHours > 0 ? registeredHours / availableHours : null
+      const attendanceOut    = att ? { ...att, registeredHours, availableHours, utilization } : null
+      const hoursHistory     = hist.history.get(u.id) || hist.labels.map(w => ({ weekStart: w, hours: 0 }))
+
       return {
         id: u.id,
         name: u.name,
@@ -56,7 +65,7 @@ async function listProductivity(req, res, next) {
         status: memberStatus(s),
         stats: {
           completed: s.current.totalCompleted,
-          hours: Math.round(s.current.totalMinutes / 60 * 10) / 10,
+          hours: registeredHours,
           tasaCompletado: s.current.tasaCompletado,
           daysWorked: s.current.daysWorked,
           delta: s.delta,
@@ -65,13 +74,21 @@ async function listProductivity(req, res, next) {
           weeklySeries: s.weeklySeries,
           stuckTasks: s.stuckTasks,
           hasData: s.hasData,
-          attendance: att,
+          attendance: attendanceOut,
+          utilization,
+          hoursHistory,
         },
         insight: insight && (insight.tendencias || insight.fortalezas || insight.areasDeAtencion)
           ? { tendencias: insight.tendencias, fortalezas: insight.fortalezas, areasDeAtencion: insight.areasDeAtencion, updatedAt: insight.updatedAt }
           : null,
       }
     })
+
+    // Mediana de utilización del equipo (para "Comparación con el equipo" → Δ horas).
+    if (benchmark) {
+      const utils = result.map(r => r.stats.utilization).filter(v => v != null)
+      benchmark.utilizationMedian = utils.length ? median(utils) : null
+    }
 
     const periodOut = { ...period, businessDays: businessDaysBetween(period.curStart, period.curEnd) }
     res.json({ members: result, period: periodOut, benchmark })
@@ -133,4 +150,14 @@ async function refreshProductivity(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listProductivity, listByProject, refreshProductivity }
+// POST /api/admin/productivity/digest/send-now — envía el aviso de prueba al admin que lo pide.
+async function sendDigestNow(req, res, next) {
+  try {
+    const email = req.user?.email
+    if (!email) return res.status(400).json({ error: 'No se encontró tu email' })
+    const result = await sendTestDigest(req.workspace, email)
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
+module.exports = { listProductivity, listByProject, refreshProductivity, sendDigestNow }

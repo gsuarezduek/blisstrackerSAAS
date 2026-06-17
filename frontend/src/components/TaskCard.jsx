@@ -215,7 +215,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
         <div className="flex-1 min-w-0">
           <p
             onClick={() => onOpenComments?.(task)}
-            className={`text-sm font-medium text-justify ${task.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'} ${onOpenComments ? 'cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors' : ''}`}
+            className={`text-sm font-medium text-justify whitespace-pre-wrap break-words ${task.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'} ${onOpenComments ? 'cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors' : ''}`}
           >
             {linkify(task.description)}
           </p>

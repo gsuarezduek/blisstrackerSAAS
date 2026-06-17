@@ -137,7 +137,8 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
   const { fields: legajoFields, legajoEnabled } = useLegajoFields()
   const today = todayBA()
   const HORIZON = 30
-  const [historyMetric, setHistoryMetric] = useState(null)   // null | 'projectsPerPerson' | 'tenure'
+  const [historyMetric, setHistoryMetric] = useState(null)   // null | 'projectsPerPerson' | 'tenure' | ...
+  const [listModal, setListModal] = useState(null)           // null | 'notLoggedIn' | 'lateToday' | 'teamHours'
 
   const activeUsers = users.filter(u => u.active)
 
@@ -223,12 +224,39 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
   const todayBA_str = todayStr()
   const maxRole = roleDistrib[0]?.[1] || 1
 
-  // Promedio global de horario de ingreso (calculado server-side con primer ingreso del día)
+  // Promedio global de horario de ingreso (calculado server-side con primer ingreso del día, mes en curso)
   const globalAvgLoginTime = dashStats.avgFirstLoginTime ?? null
-  const loggedInToday = activeUsers.filter(u => {
+  const userById = useMemo(() => {
+    const m = {}
+    for (const u of activeUsers) m[u.id] = u
+    return m
+  }, [activeUsers])
+  // Quiénes no iniciaron sesión hoy (para la tarjeta clickeable)
+  const notLoggedInToday = useMemo(() => activeUsers.filter(u => {
     const last = lastLoginsMap[u.id]
-    return last && new Date(last).toLocaleDateString('en-CA', { timeZone: TZ }) === todayBA_str
-  }).length
+    return !(last && new Date(last).toLocaleDateString('en-CA', { timeZone: TZ }) === todayBA_str)
+  }), [activeUsers, lastLoginsMap, todayBA_str])
+  const loggedInToday = activeUsers.length - notLoggedInToday.length
+
+  // Horas disponibles del equipo según horario cargado (workEndTime − workStartTime por persona)
+  const teamHours = useMemo(() => {
+    const parseHM = s => { const [h, mm] = String(s).split(':').map(Number); return h * 60 + mm }
+    const withSchedule = activeUsers
+      .filter(u => u.workStartTime && u.workEndTime)
+      .map(u => {
+        const mins = Math.max(0, parseHM(u.workEndTime) - parseHM(u.workStartTime))
+        return { ...u, dailyMins: mins, dailyHours: Math.round(mins / 60 * 10) / 10 }
+      })
+    const totalMins = withSchedule.reduce((s, u) => s + u.dailyMins, 0)
+    const without = activeUsers.filter(u => !(u.workStartTime && u.workEndTime))
+    return {
+      totalHours: Math.round(totalMins / 60 * 10) / 10,
+      withSchedule,
+      without,
+      count: withSchedule.length,
+      total: activeUsers.length,
+    }
+  }, [activeUsers])
 
   // Tardanzas (calculadas server-side en dashboard-stats)
   const nameById = useMemo(() => {
@@ -248,14 +276,17 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
   const showAttendanceHint = attendanceEnabled && !hasSchedules
   const attendanceCards = attendanceEnabled && hasSchedules
     ? [
-        { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—', sub: 'sobre quienes tienen horario', onClick: () => setHistoryMetric('avgLoginTime') },
+        { icon: '🕐', label: 'Horario promedio de ingreso', value: globalAvgLoginTime ?? '—', sub: 'este mes · sobre quienes tienen horario', onClick: () => setHistoryMetric('avgLoginTime') },
         { icon: '⏰', label: 'Puntualidad del equipo',
           value: dashStats.teamPunctualityPct != null ? `${dashStats.teamPunctualityPct}%` : '—',
-          sub: `${dashStats.lateCount} tarde de ${dashStats.scheduledDays} llegadas`, onClick: () => setHistoryMetric('punctuality') },
+          sub: `este mes · ${dashStats.lateCount} tarde de ${dashStats.scheduledDays} llegadas`, onClick: () => setHistoryMetric('punctuality') },
+        { icon: '🕗', label: 'Horas disponibles del equipo', value: `${teamHours.totalHours} h`,
+          sub: `${teamHours.count} de ${teamHours.total} con horario`, onClick: () => setListModal('teamHours') },
         { icon: '⏰', label: 'Llegaron tarde hoy', value: lateToday.length,
           sub: lateToday.length === 0
             ? 'Nadie llegó tarde 🎉'
-            : lateToday.slice(0, 3).map(x => `${(nameById[x.userId] ?? '—').split(' ')[0]} +${x.lateBy}m`).join(' · ') },
+            : lateToday.slice(0, 3).map(x => `${(nameById[x.userId] ?? '—').split(' ')[0]} +${x.lateBy}m`).join(' · '),
+          onClick: lateToday.length > 0 ? () => setListModal('lateToday') : undefined },
       ]
     : []
 
@@ -271,12 +302,12 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
 
   // Todas las métricas numéricas, cada una en su propia tarjeta (sin slider)
   const statCards = [
-    { icon: '👥', label: 'Personas activas',          value: activeUsers.length, onClick: () => setHistoryMetric('activeMembers') },
+    { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${activeUsers.length}`,
+      sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${notLoggedInToday.length} aún no ingresaron`,
+      onClick: notLoggedInToday.length > 0 ? () => setListModal('notLoggedIn') : undefined },
     { icon: '📅', label: 'Antigüedad promedio',       value: avgTenureYears,              sub: 'del equipo activo', onClick: () => setHistoryMetric('tenure') },
     { icon: '📁', label: 'Proyectos por persona',     value: dashStats.projectsPerPerson, sub: 'proyectos activos ÷ equipo', onClick: () => setHistoryMetric('projectsPerPerson') },
     ...legajoCards,
-    { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${activeUsers.length}`,
-      sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${activeUsers.length - loggedInToday} aún no ingresaron` },
     ...attendanceCards,
   ]
 
@@ -441,6 +472,104 @@ function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
           onClose={() => setHistoryMetric(null)}
         />
       )}
+
+      {listModal === 'notLoggedIn' && (
+        <PeopleListModal
+          title="🟢 Sin iniciar sesión hoy"
+          subtitle={`${notLoggedInToday.length} de ${activeUsers.length} todavía no ingresaron`}
+          people={notLoggedInToday.map(u => ({ id: u.id, name: u.name, avatar: u.avatar, right: lastLoginsMap[u.id] ? daysSince(lastLoginsMap[u.id]) : 'sin registros' }))}
+          onClose={() => setListModal(null)}
+        />
+      )}
+
+      {listModal === 'lateToday' && (
+        <PeopleListModal
+          title="⏰ Llegaron tarde hoy"
+          subtitle={`${lateToday.length} ${lateToday.length === 1 ? 'persona' : 'personas'}`}
+          people={lateToday.map(x => ({ id: x.userId, name: nameById[x.userId] ?? '—', avatar: userById[x.userId]?.avatar, right: `+${x.lateBy} min`, rightCls: 'text-red-600 dark:text-red-400 font-medium' }))}
+          onClose={() => setListModal(null)}
+        />
+      )}
+
+      {listModal === 'teamHours' && (
+        <TeamHoursModal teamHours={teamHours} onClose={() => setListModal(null)} />
+      )}
+    </div>
+  )
+}
+
+// Modal genérico de lista de personas (avatar + nombre + dato a la derecha).
+function PeopleListModal({ title, subtitle, people, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md max-h-[80vh] flex flex-col shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-700">
+          <div>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">{title}</p>
+            {subtitle && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
+        </div>
+        <div className="overflow-y-auto px-5 py-3">
+          {people.length === 0
+            ? <p className="text-sm text-gray-400 dark:text-gray-500 py-6 text-center">Nadie 🎉</p>
+            : <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                {people.map(p => (
+                  <div key={p.id} className="flex items-center gap-2.5 py-2">
+                    <img src={avatarUrl(p.avatar)} alt={p.name} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                    <span className="text-sm text-gray-800 dark:text-gray-200 flex-1 truncate">{p.name}</span>
+                    {p.right && <span className={`text-xs flex-shrink-0 ${p.rightCls || 'text-gray-400 dark:text-gray-500'}`}>{p.right}</span>}
+                  </div>
+                ))}
+              </div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Modal de horas disponibles del equipo: detalle por persona + quiénes no tienen horario.
+function TeamHoursModal({ teamHours, onClose }) {
+  const { withSchedule, without, totalHours, count, total } = teamHours
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 w-full max-w-md max-h-[80vh] flex flex-col shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-700">
+          <div>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">🕗 Horas disponibles del equipo</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{totalHours} h/día · {count} de {total} con horario</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
+        </div>
+        <div className="overflow-y-auto px-5 py-3">
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
+            {withSchedule.map(u => (
+              <div key={u.id} className="flex items-center gap-2.5 py-2">
+                <img src={avatarUrl(u.avatar)} alt={u.name} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                <span className="text-sm text-gray-800 dark:text-gray-200 flex-1 truncate">{u.name}</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">{u.workStartTime}–{u.workEndTime}</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-200 tabular-nums w-10 text-right">{u.dailyHours}h</span>
+              </div>
+            ))}
+          </div>
+          {without.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Sin horario cargado ({without.length})</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                {without.map(u => (
+                  <div key={u.id} className="flex items-center gap-1.5">
+                    <img src={avatarUrl(u.avatar)} alt={u.name} className="w-5 h-5 rounded-full object-cover" />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{u.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">
+          Suma de horas diarias (salida − entrada) de quienes tienen horario cargado.
+        </div>
+      </div>
     </div>
   )
 }
@@ -484,7 +613,7 @@ const METRIC_HISTORY = {
     footer: 'Promedio mensual del primer ingreso · solo quienes tienen horario',
     barMode: 'range', // la hora del día se escala dentro del rango del período (más legible que desde 0)
     fmt: v => minsToTime(v),
-    detailText: d => (d?.scheduledDays != null ? `${d.scheduledDays} días` : ''),
+    detailText: d => (d?.scheduledDays != null ? `${d.scheduledDays} ingresos` : ''),
     currentText: c => (c ? `Este mes: ${c}.` : ''),
   },
   punctuality: {

@@ -61,10 +61,19 @@ async function sendWorkspaceDigest(workspace) {
   return { sent: true, count: digest.flagged.length, recipients: emails.length }
 }
 
-// Cron: recorre los workspaces activos con el digest habilitado y envía donde haya alertas.
+// Envío de prueba bajo demanda: manda el digest al email indicado SIEMPRE (incluso sin alertas,
+// con la variante "todo en orden"), para que el admin pueda ver cómo queda el mail.
+async function sendTestDigest(workspace, email) {
+  const digest = await buildWorkspaceDigest(workspace)
+  const appUrl = `https://${workspace.slug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/admin/productivity`
+  await sendProductivityDigestEmail([email], workspace.name, digest, appUrl, workspace.id, { isTest: true })
+  return { sent: true, to: email, count: digest.flagged.length }
+}
+
+// Cron: recorre los workspaces activos con la sección + el digest habilitados y envía donde haya alertas.
 async function sendAllProductivityDigests() {
   const workspaces = await prisma.workspace.findMany({
-    where: { status: { in: ['active', 'trialing'] }, productivityDigestEnabled: true },
+    where: { status: { in: ['active', 'trialing'] }, productivityEnabled: true, productivityDigestEnabled: true },
     select: { id: true, name: true, slug: true, timezone: true },
   })
   let sent = 0
@@ -81,4 +90,4 @@ async function sendAllProductivityDigests() {
   return sent
 }
 
-module.exports = { buildWorkspaceDigest, sendWorkspaceDigest, sendAllProductivityDigests }
+module.exports = { buildWorkspaceDigest, sendWorkspaceDigest, sendTestDigest, sendAllProductivityDigests }

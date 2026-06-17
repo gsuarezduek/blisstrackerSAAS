@@ -78,7 +78,8 @@ function IcoPlus() {
 
 export default function Navbar() {
   const { user, logout, switchWorkspace } = useAuth()
-  const { slug: currentSlug } = useWorkspace()
+  const { slug: currentSlug, workspace } = useWorkspace()
+  const productivityEnabled = workspace?.productivityEnabled !== false
   const [otherWorkspaces, setOtherWorkspaces] = useState([])
   const [switchLoading, setSwitchLoading]     = useState(null)
   const navigate  = useNavigate()
@@ -142,7 +143,7 @@ export default function Navbar() {
   // ── Sublinks de Administración ────────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
   const adminSublinks = [
-    { to: '/admin/productivity', label: '📊 Productividad' },
+    ...(productivityEnabled ? [{ to: '/admin/productivity', label: '📊 Productividad' }] : []),
     { to: '/admin/rrhh',         label: '👥 RRHH' },
     ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
     { to: '/admin',              label: '⚙️ Panel' },

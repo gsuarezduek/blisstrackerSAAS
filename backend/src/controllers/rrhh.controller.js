@@ -269,7 +269,10 @@ async function dashboardStats(req, res, next) {
     const attendanceTrackingEnabled = req.workspace.attendanceTrackingEnabled !== false
     const tolerance = req.workspace.lateToleranceMins ?? 0  // minutos de gracia para tardanza
 
-    const [members, activeProjects, allLogins] = await Promise.all([
+    // Hora promedio y puntualidad se calculan sobre el MES EN CURSO (hay historial para otros meses).
+    const monthStart = new Date().toLocaleDateString('en-CA', { timeZone: tz }).slice(0, 7) + '-01'
+
+    const [members, activeProjects, monthLogins] = await Promise.all([
       prisma.workspaceMember.findMany({
         where: { workspaceId, active: true },
         select: { userId: true, workStartTime: true },
@@ -279,6 +282,7 @@ async function dashboardStats(req, res, next) {
         where: {
           workspaceId,
           user: { workspaceMembers: { some: { workspaceId, active: true } } },
+          loginAt: { gte: new Date(monthStart + 'T00:00:00' + tzSuffix(tz)) },
         },
         select: { userId: true, loginAt: true },
         orderBy: { loginAt: 'asc' },
@@ -299,7 +303,7 @@ async function dashboardStats(req, res, next) {
     }
 
     const byUserDay = {}
-    for (const l of allLogins) {
+    for (const l of monthLogins) {
       const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: tz })
       const key = `${l.userId}::${day}`
       if (!byUserDay[key]) byUserDay[key] = l.loginAt

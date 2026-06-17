@@ -106,7 +106,7 @@ function UserCard({ entry, now, onOpenUser, onOpenTask }) {
           <div className="flex items-start gap-2">
             <span className="text-primary-400 mt-0.5">▶</span>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-primary-900 dark:text-primary-300">{linkify(currentTask.description)}</p>
+              <p className="text-sm font-medium text-primary-900 dark:text-primary-300 whitespace-pre-wrap break-words">{linkify(currentTask.description)}</p>
               <span className="text-xs bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-700 rounded px-2 py-0.5 mt-1 inline-block">
                 {currentTask.project.name}
               </span>

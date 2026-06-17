@@ -64,6 +64,14 @@ function DeltaPct({ value }) {
   )
 }
 
+// Celda "Δ horas" de la tabla: utilización (horas registradas ÷ disponibles) en %, con marca vs equipo.
+function UtilCell({ value, median }) {
+  if (value === null || value === undefined) return <span className="text-gray-300 dark:text-gray-600">—</span>
+  const pct = Math.round(value * 100)
+  const cls = pct < 50 ? 'text-amber-600 dark:text-amber-400' : pct >= 100 ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'
+  return <span className={`tabular-nums font-medium ${cls}`}>{pct}%<VsTeam value={value} median={median} /></span>
+}
+
 // Indicador "vs equipo" (mediana). higherBetter define si estar arriba es bueno.
 function VsTeam({ value, median, higherBetter = true }) {
   if (median === null || median === undefined) return null
@@ -96,57 +104,88 @@ function AttendanceCell({ att }) {
   )
 }
 
-// Bloque detallado de asistencia (fila expandida).
-function AttendanceBlock({ att }) {
+// Bloque detallado "Horas y Asistencia" (fila expandida): Δ horas + disponibles/registradas + presencia + tardanzas.
+function HoursAttendanceBlock({ att }) {
   if (!att) return <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin datos de asistencia.</p>
-  const { businessDays, daysPresent, expectedDays, leaveDays, absentDays, lateDays, hasSchedule } = att
+  const { businessDays, daysPresent, expectedDays, leaveDays, absentDays, lateDays, hasSchedule, availableHours, registeredHours, utilization } = att
+  const utilPct = utilization != null ? Math.round(utilization * 100) : null
+  const utilCls = utilPct == null ? '' : utilPct < 50 ? 'text-amber-600 dark:text-amber-400' : utilPct >= 100 ? 'text-green-600 dark:text-green-400' : 'text-gray-800 dark:text-gray-100'
   return (
     <ul className="text-sm space-y-1 text-gray-700 dark:text-gray-300">
-      <li>
-        Presencia: <strong>{daysPresent}/{expectedDays}</strong> días hábiles
-        {absentDays > 0 && <span className="text-red-600 dark:text-red-400"> · {absentDays} sin actividad</span>}
+      <li className="flex justify-between gap-2">
+        <span className="text-gray-500 dark:text-gray-400">Δ horas</span>
+        {utilPct != null
+          ? <strong className={`tabular-nums ${utilCls}`}>{utilPct}% <span className="font-normal text-gray-400 dark:text-gray-500">· reg ÷ disp</span></strong>
+          : <span className="text-gray-400 dark:text-gray-500">— sin horario</span>}
       </li>
-      {leaveDays > 0 && <li className="text-gray-500 dark:text-gray-400">🌴 {leaveDays} día{leaveDays !== 1 ? 's' : ''} de licencia aprobada</li>}
-      {hasSchedule
-        ? (lateDays > 0
-            ? <li className="text-amber-600 dark:text-amber-400">⏰ {lateDays} tardanza{lateDays !== 1 ? 's' : ''}</li>
-            : <li className="text-green-600 dark:text-green-400">⏰ Sin tardanzas</li>)
-        : <li className="text-xs text-gray-400 dark:text-gray-500">Sin horario configurado — no se miden tardanzas</li>}
-      <li className="text-xs text-gray-400 dark:text-gray-500">{businessDays} días hábiles en el período</li>
+      <li className="flex justify-between gap-2">
+        <span className="text-gray-500 dark:text-gray-400">Horas disponibles</span>
+        <strong className="tabular-nums">{availableHours != null ? fmtHours(availableHours) : '—'}</strong>
+      </li>
+      <li className="flex justify-between gap-2">
+        <span className="text-gray-500 dark:text-gray-400">Horas registradas</span>
+        <strong className="tabular-nums">{fmtHours(registeredHours ?? 0)}</strong>
+      </li>
+      <li className="flex justify-between gap-2">
+        <span className="text-gray-500 dark:text-gray-400">Presencia</span>
+        <span className="tabular-nums">
+          <strong>{daysPresent}/{expectedDays}</strong> días háb.
+          {absentDays > 0 && <span className="text-red-600 dark:text-red-400"> · {absentDays} sin act.</span>}
+          {leaveDays > 0 && <span className="text-gray-400 dark:text-gray-500"> · 🌴{leaveDays}</span>}
+        </span>
+      </li>
+      <li className="flex justify-between gap-2">
+        <span className="text-gray-500 dark:text-gray-400">Tardanzas</span>
+        {hasSchedule
+          ? (lateDays > 0
+              ? <strong className="text-amber-600 dark:text-amber-400">⏰ {lateDays}</strong>
+              : <span className="text-green-600 dark:text-green-400">sin tardanzas</span>)
+          : <span className="text-gray-400 dark:text-gray-500">sin horario</span>}
+      </li>
+      <li className="text-[11px] text-gray-400 dark:text-gray-500 pt-0.5">{businessDays} días hábiles en el período</li>
     </ul>
   )
 }
 
-// Barras de horas activas por semana (reemplaza el sparkline de tasa).
-function WeeklyHoursBars({ series, curStart }) {
-  const weeks = series || []
-  if (weeks.length < 2) return <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin datos suficientes.</p>
-  const hours = weeks.map(w => Math.round((w.minutes / 60) * 10) / 10)
-  const max = Math.max(...hours, 0.5)
-  const weekLabel = i => {
-    if (!curStart) return `S${i + 1}`
-    const d = new Date(curStart + 'T12:00:00'); d.setDate(d.getDate() + i * 7)
-    return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
-  }
+// Gráfico de líneas de horas registradas por semana (últimas 12 semanas, contexto de tendencia).
+// history = [{ weekStart: 'YYYY-MM-DD', hours }]
+function HoursLineChart({ history }) {
+  const data = history || []
+  if (data.length < 2) return <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin datos suficientes.</p>
+  const hrs = data.map(d => d.hours)
+  const max = Math.max(...hrs, 0.5)
+  const n = data.length
+  const W = 760, H = 150, padL = 30, padR = 8, padT = 12, padB = 22
+  const innerW = W - padL - padR, innerH = H - padT - padB
+  const x = i => padL + (n === 1 ? innerW / 2 : (i * innerW) / (n - 1))
+  const y = v => padT + innerH - (v / max) * innerH
+  const points = data.map((d, i) => `${x(i).toFixed(1)},${y(d.hours).toFixed(1)}`).join(' ')
+  const step = Math.max(1, Math.ceil(n / 6))
+  const fmtWeek = w => new Date(w + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
   return (
-    <div className="flex items-end gap-2">
-      {weeks.map((w, i) => {
-        const h = hours[i]
-        const isLast = i === weeks.length - 1
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 190 }} preserveAspectRatio="xMidYMid meet">
+      {/* eje base + etiquetas Y */}
+      <g className="text-gray-300 dark:text-gray-600">
+        <line x1={padL} y1={y(0)} x2={W - padR} y2={y(0)} stroke="currentColor" strokeWidth="1" />
+        <line x1={padL} y1={y(max)} x2={W - padR} y2={y(max)} stroke="currentColor" strokeWidth="0.5" strokeDasharray="3 3" opacity="0.5" />
+      </g>
+      <g className="text-gray-400 dark:text-gray-500" fill="currentColor">
+        <text x={padL - 5} y={y(max) + 3} textAnchor="end" fontSize="9">{Math.round(max)}h</text>
+        <text x={padL - 5} y={y(0) + 3} textAnchor="end" fontSize="9">0</text>
+      </g>
+      <polyline points={points} fill="none" stroke="#F7931A" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {data.map((d, i) => {
+        const isLast = i === n - 1
         return (
-          <div key={i} className="flex-1 flex flex-col items-center gap-1">
-            <span className="text-[10px] text-gray-500 dark:text-gray-400 tabular-nums h-3">{h > 0 ? fmtHours(h) : ''}</span>
-            <div className="w-full h-12 bg-gray-100 dark:bg-gray-700 rounded flex items-end overflow-hidden">
-              <div
-                className={`w-full rounded ${isLast ? 'bg-primary-500' : 'bg-primary-300 dark:bg-primary-700'}`}
-                style={{ height: `${Math.max(3, (h / max) * 100)}%` }}
-              />
-            </div>
-            <span className="text-[9px] text-gray-400 dark:text-gray-500">{weekLabel(i)}</span>
-          </div>
+          <g key={i}>
+            <circle cx={x(i)} cy={y(d.hours)} r={isLast ? 3.5 : 2.5} fill="#F7931A" />
+            {(i % step === 0 || isLast) && (
+              <text x={x(i)} y={H - 7} textAnchor="middle" fontSize="9" fill="currentColor" className="text-gray-400 dark:text-gray-500">{fmtWeek(d.weekStart)}</text>
+            )}
+          </g>
         )
       })}
-    </div>
+    </svg>
   )
 }
 
@@ -176,11 +215,15 @@ function ProjectBars({ porProyecto }) {
 // Comparación con la mediana del equipo (fila expandida).
 function TeamCompare({ stats, benchmark }) {
   if (!benchmark) return null
-  const rows = [
-    { label: 'Tareas hechas', val: stats.completed,                me: stats.completed, med: benchmark.completed, fmt: v => Math.round(v) },
-    { label: 'Horas',         val: stats.hours,                    me: stats.hours,     med: benchmark.horas,     fmt: v => fmtHours(Math.round(v * 10) / 10) },
-    { label: 'Tasa',          val: stats.tasaCompletado,           me: stats.tasaCompletado, med: benchmark.tasaCompletado, fmt: v => `${Math.round(v * 100)}%` },
-  ]
+  const rows = []
+  if (stats.utilization != null && benchmark.utilizationMedian != null) {
+    rows.push({ label: 'Δ horas', me: stats.utilization, med: benchmark.utilizationMedian, fmt: v => `${Math.round(v * 100)}%` })
+  }
+  rows.push(
+    { label: 'Tareas', me: stats.completed,      med: benchmark.completed,      fmt: v => Math.round(v) },
+    { label: 'Horas',  me: stats.hours,          med: benchmark.horas,          fmt: v => fmtHours(Math.round(v * 10) / 10) },
+    { label: 'Tasa',   me: stats.tasaCompletado, med: benchmark.tasaCompletado, fmt: v => `${Math.round(v * 100)}%` },
+  )
   return (
     <div className="space-y-1.5">
       {rows.map(r => {
@@ -222,6 +265,7 @@ function PersonRow({ m, benchmark, period, expanded, onToggle, onRefresh, refres
             </div>
           </div>
         </td>
+        <td className="py-2.5 px-3 text-center text-sm tabular-nums"><UtilCell value={s.utilization} median={benchmark?.utilizationMedian} /></td>
         <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">
           {s.completed}{s.hasData && <VsTeam value={s.completed} median={benchmark?.completed} />}
         </td>
@@ -231,7 +275,6 @@ function PersonRow({ m, benchmark, period, expanded, onToggle, onRefresh, refres
         <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-300 tabular-nums">
           {s.hasData ? `${Math.round(s.tasaCompletado * 100)}%` : '—'}{s.hasData && <VsTeam value={s.tasaCompletado} median={benchmark?.tasaCompletado} />}
         </td>
-        <td className="py-2.5 px-3 text-center text-sm font-medium tabular-nums"><DeltaPct value={s.delta?.tareasPct} /></td>
         <td className="py-2.5 px-3 text-center text-sm hidden sm:table-cell"><AttendanceCell att={s.attendance} /></td>
         <td className="py-2.5 px-3 text-center">
           <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${st.cls}`}>{st.label}</span>
@@ -240,39 +283,43 @@ function PersonRow({ m, benchmark, period, expanded, onToggle, onRefresh, refres
 
       {expanded && (
         <tr className="bg-gray-50 dark:bg-gray-800/60">
-          <td colSpan={7} className="px-4 py-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-              {/* Col 1: Tiempo por proyecto + horas/semana */}
-              <div className="space-y-4">
+          <td colSpan={7} className="px-4 py-5">
+            <div className="space-y-6">
+              {/* Gráfico de horas — últimas 12 semanas (a todo el ancho, contexto de tendencia) */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">
+                  Horas registradas por semana <span className="normal-case font-normal text-gray-400 dark:text-gray-500">· últimas 12 semanas (contexto, no depende del período)</span>
+                </p>
+                <HoursLineChart history={s.hoursHistory} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Col 1: Tiempo por proyecto */}
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Tiempo por proyecto</p>
                   <ProjectBars porProyecto={s.porProyecto} />
                 </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Horas por semana</p>
-                  <WeeklyHoursBars series={s.weeklySeries} curStart={period?.curStart} />
-                </div>
-              </div>
 
-              {/* Col 2: Asistencia + comparación con el equipo */}
-              <div className="space-y-4">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Asistencia</p>
-                  <AttendanceBlock att={s.attendance} />
+                {/* Col 2: Horas y Asistencia */}
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Horas y Asistencia</p>
+                    <HoursAttendanceBlock att={s.attendance} />
+                  </div>
+                  {s.stuckTasks > 0 && (
+                    <p className="text-xs"><span className="font-bold text-amber-600 dark:text-amber-400">{s.stuckTasks}</span> <span className="text-gray-500 dark:text-gray-400">tarea{s.stuckTasks !== 1 ? 's' : ''} atascada{s.stuckTasks !== 1 ? 's' : ''} &gt;7d</span></p>
+                  )}
                 </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Comparación con el equipo</p>
-                  <TeamCompare stats={s} benchmark={benchmark} />
-                </div>
-                {s.stuckTasks > 0 && (
-                  <p className="text-xs"><span className="font-bold text-amber-600 dark:text-amber-400">{s.stuckTasks}</span> <span className="text-gray-500 dark:text-gray-400">tarea{s.stuckTasks !== 1 ? 's' : ''} atascada{s.stuckTasks !== 1 ? 's' : ''} &gt;7d</span></p>
-                )}
-              </div>
 
-              {/* Col 3: Análisis IA */}
-              <div className="space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">Análisis IA</p>
-                {m.insight ? (
+                {/* Col 3: Comparación con el equipo + Análisis IA */}
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Comparación con el equipo</p>
+                    <TeamCompare stats={s} benchmark={benchmark} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">Análisis IA</p>
+                    {m.insight ? (
                   <div className="space-y-2">
                     {m.insight.tendencias && (
                       <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug"><span className="text-gray-400 dark:text-gray-500">Cambio:</span> {m.insight.tendencias}</p>
@@ -300,6 +347,8 @@ function PersonRow({ m, benchmark, period, expanded, onToggle, onRefresh, refres
                   {m.insight?.updatedAt && (
                     <span className="text-[11px] text-gray-300 dark:text-gray-600">actualizado {timeAgo(m.insight.updatedAt)}</span>
                   )}
+                </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -336,7 +385,7 @@ function sortValue(m, col) {
     case 'completed': return m.stats.completed
     case 'hours':     return m.stats.hours
     case 'tasa':      return m.stats.hasData ? m.stats.tasaCompletado : -1
-    case 'delta':     return m.stats.delta?.tareasPct ?? 0
+    case 'dhoras':    return m.stats.utilization ?? -1
     case 'attendance':return m.stats.attendance ? -(m.stats.attendance.absentDays ?? 0) : -999
     case 'status':    return PRIORITY[m.status] ?? 3
     default:          return 0
@@ -344,17 +393,17 @@ function sortValue(m, col) {
 }
 
 // Dirección por defecto al activar una columna
-const DEFAULT_DIR = { name: 'asc', status: 'asc', completed: 'desc', hours: 'desc', tasa: 'desc', delta: 'desc', attendance: 'desc' }
+const DEFAULT_DIR = { name: 'asc', status: 'asc', completed: 'desc', hours: 'desc', tasa: 'desc', dhoras: 'desc', attendance: 'desc' }
 
 // Panel colapsable de ayuda: glosario de métricas + cuándo preocuparse.
 function HelpPanel() {
   const [open, setOpen] = useState(false)
   const items = [
-    ['Hechas', 'Tareas completadas en el período, por fecha de completado (incluye las que se arrastraron de días previos). Compará contra su propio ritmo y la mediana del equipo (▲/▼).'],
+    ['Δ horas', 'Horas registradas ÷ horas disponibles (días esperados × la jornada del horario configurado). Mide cuánto del tiempo disponible quedó registrado en tareas. Requiere horario (inicio y fin) cargado; si no, muestra "—".'],
+    ['Tareas', 'Tareas completadas en el período, por fecha de completado (incluye las que se arrastraron de días previos). Compará contra la mediana del equipo (▲/▼).'],
     ['Horas', 'Tiempo activo de esas tareas (completado − iniciado − pausas, tope 8h por tarea, o el ajuste manual). No cuenta tiempo en tareas sin terminar.'],
     ['Tasa', 'Completadas ÷ creadas en el período: ritmo de cierre vs creación. >100% = está bajando backlog; <100% sostenido = lo está acumulando.'],
-    ['Δ tareas', 'Cambio del ritmo por día trabajado (tareas/día) vs el período anterior. Es por-día para no castigar tener menos días. Preocupate si cae ≥25%.'],
-    ['Asistencia', 'Días hábiles trabajados / esperados (esperados = hábiles − licencias aprobadas). Separa "el mes está a medias" de "faltó". ⏰ = tardanzas (primer login vs su horario).'],
+    ['Horas y Asistencia', 'Al expandir la fila: Δ horas, horas disponibles vs registradas, presencia (días hábiles trabajados / esperados = hábiles − licencias) y tardanzas (primer login vs su horario). Separa "el mes está a medias" de "faltó".'],
     ['Estado', 'Semáforo automático: inactivo (vino ≥3 días la última semana y no completó nada), ↓ baja (cae fuerte en tareas/horas/tasa), atascos (≥5 tareas frenadas >7d), ↑ alta (sube ≥30%), OK. Mirá primero a los rojos y ámbar.'],
     ['vs equipo', 'El ▲/▼ y la barra comparan a la persona contra la mediana del equipo (no el promedio, para que un outlier no la distorsione).'],
     ['Período', 'En "Mes en curso" se compara el mes a la fecha contra los mismos días del mes anterior, para que los números sean comparables. "Mes cerrado" usa el último mes completo.'],
@@ -506,10 +555,10 @@ function ByPersonView({ mode }) {
           <thead>
             <tr className="text-[11px] text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
               <SortTh label="Persona"     col="name"       sortBy={sortBy} sortDir={sortDir} onSort={handleSort} align="left" />
-              <SortTh label="Hechas"      col="completed"  sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Δ horas"     col="dhoras"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Tareas"      col="completed"  sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
               <SortTh label="Horas"       col="hours"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
               <SortTh label="Tasa"        col="tasa"       sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
-              <SortTh label="Δ tareas"    col="delta"      sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
               <SortTh label="Asistencia"  col="attendance" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} className="hidden sm:table-cell" />
               <SortTh label="Estado"      col="status"     sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
             </tr>
@@ -535,10 +584,10 @@ function ByPersonView({ mode }) {
             <tfoot>
               <tr className="border-t-2 border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/60 font-medium">
                 <td className="py-2.5 px-3 text-xs text-gray-500 dark:text-gray-400">Mediana equipo ({benchmark.teamSize})</td>
+                <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{benchmark.utilizationMedian != null ? `${Math.round(benchmark.utilizationMedian * 100)}%` : '—'}</td>
                 <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{Math.round(benchmark.completed)}</td>
                 <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{fmtHours(benchmark.horas)}</td>
                 <td className="py-2.5 px-3 text-center text-sm text-gray-700 dark:text-gray-200 tabular-nums">{Math.round(benchmark.tasaCompletado * 100)}%</td>
-                <td className="py-2.5 px-3 text-center text-gray-300 dark:text-gray-600">—</td>
                 <td className="py-2.5 px-3 hidden sm:table-cell" />
                 <td className="py-2.5 px-3" />
               </tr>
@@ -547,7 +596,7 @@ function ByPersonView({ mode }) {
         </table>
       </div>
       <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">
-        El Δ compara el ritmo por día trabajado (tareas/día y horas/día) contra el período anterior, para neutralizar diferencias en la cantidad de días trabajados. La comparación con el equipo usa la mediana de quienes tuvieron actividad. El análisis IA se actualiza cada sábado o al regenerarlo.
+        Δ horas = horas registradas ÷ horas disponibles (requiere horario configurado por persona). La comparación con el equipo usa la mediana de quienes tuvieron actividad. El análisis IA se actualiza cada sábado o al regenerarlo.
       </p>
     </div>
   )

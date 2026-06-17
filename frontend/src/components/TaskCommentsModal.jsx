@@ -286,7 +286,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
             </div>
           ) : (
             <div className="group flex items-start gap-2">
-              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug flex-1">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug flex-1 whitespace-pre-wrap break-words">
                 {linkify(currentDesc)}
               </p>
               {canEdit && (
@@ -400,7 +400,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                   <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{c.user.name}</span>
                   <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(c.createdAt)}</span>
                 </div>
-                <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug mt-0.5">
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug mt-0.5 whitespace-pre-wrap break-words">
                   {renderWithMentions(c.content)}
                 </p>
               </div>

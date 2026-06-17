@@ -22,6 +22,7 @@ export default function Preferences() {
   const [globalSettings,      setGlobalSettings]      = useState(null)
   const [globalSettingsError, setGlobalSettingsError] = useState(false)
   const [lateTest,            setLateTest]            = useState({ sending: false, msg: '', error: false })
+  const [digestTest,          setDigestTest]          = useState({ sending: false, msg: '', error: false })
   const [aiUsage,             setAiUsage]             = useState(null)
   const [aiUsageError,        setAiUsageError]        = useState(false)
   const [wsFeatures,          setWsFeatures]          = useState(null)
@@ -165,8 +166,9 @@ export default function Preferences() {
     setGlobalSettings(prev => ({ ...prev, ...patch }))
     try {
       await api.patch('/projects/settings', patch)
-      // El seguimiento de horarios y la tolerancia viven en el workspace y los leen otras vistas vía contexto.
-      if ('attendanceTrackingEnabled' in patch || 'lateToleranceMins' in patch) refreshWorkspace()
+      // El seguimiento de horarios, la tolerancia y la sección de Productividad viven en el workspace
+      // y los leen otras vistas (RRHH, nav) vía contexto.
+      if ('attendanceTrackingEnabled' in patch || 'lateToleranceMins' in patch || 'productivityEnabled' in patch) refreshWorkspace()
     } catch (_) {
       api.get('/projects/settings').then(({ data }) => setGlobalSettings(data))
     }
@@ -183,6 +185,20 @@ export default function Preferences() {
       setLateTest({ sending: false, msg: err.response?.data?.error || 'No se pudo enviar el email de prueba.', error: true })
     }
     setTimeout(() => setLateTest(s => ({ ...s, msg: '' })), 5000)
+  }
+
+  async function handleSendDigestNow() {
+    setDigestTest({ sending: true, msg: '', error: false })
+    try {
+      const { data } = await api.post('/admin/productivity/digest/send-now')
+      const detail = data.count > 0
+        ? `${data.count} en alerta`
+        : 'todo en orden, nadie en alerta'
+      setDigestTest({ sending: false, msg: `Enviado a ${data.to} · ${detail}`, error: false })
+    } catch (err) {
+      setDigestTest({ sending: false, msg: err.response?.data?.error || 'No se pudo enviar el aviso de prueba.', error: true })
+    }
+    setTimeout(() => setDigestTest(s => ({ ...s, msg: '' })), 6000)
   }
 
   async function handleToggleWeekly() {
@@ -502,12 +518,38 @@ export default function Preferences() {
                     <Toggle on={!!globalSettings.hoursEnabled} onToggle={() => handleGlobalSetting({ hoursEnabled: !globalSettings.hoursEnabled })} />
                   </div>
 
-                  <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Aviso semanal de Productividad</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes a la mañana enviamos un mail a los administradores con las personas que necesitan atención (en baja, inactivas o con tareas atascadas). Solo se envía si hay alguien en alerta.</p>
+                  <div className="py-4 border-b dark:border-gray-700">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Sección de Productividad</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Muestra la sección Administración → Productividad: ritmo, horas, asistencia y estado de cada persona. Si la apagás, se oculta del menú.</p>
+                      </div>
+                      <Toggle on={globalSettings.productivityEnabled !== false} onToggle={() => handleGlobalSetting({ productivityEnabled: !(globalSettings.productivityEnabled !== false) })} />
                     </div>
-                    <Toggle on={globalSettings.productivityDigestEnabled !== false} onToggle={() => handleGlobalSetting({ productivityDigestEnabled: !(globalSettings.productivityDigestEnabled !== false) })} />
+
+                    {globalSettings.productivityEnabled !== false && (
+                      <div className="mt-4 ml-1 pl-4 border-l-2 border-gray-100 dark:border-gray-700 space-y-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Aviso semanal automático</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes a la mañana enviamos un mail a los administradores con las personas que necesitan atención (en baja, inactivas o con tareas atascadas). Solo se envía si hay alguien en alerta.</p>
+                          </div>
+                          <Toggle on={globalSettings.productivityDigestEnabled !== false} onToggle={() => handleGlobalSetting({ productivityDigestEnabled: !(globalSettings.productivityDigestEnabled !== false) })} />
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <button
+                            onClick={handleSendDigestNow}
+                            disabled={digestTest.sending}
+                            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                          >
+                            {digestTest.sending ? 'Enviando…' : '✉️ Enviar ahora a mi correo'}
+                          </button>
+                          {digestTest.msg && (
+                            <span className={`text-xs ${digestTest.error ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{digestTest.msg}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className={`flex items-start justify-between gap-4 py-4 ${globalSettings.attendanceTrackingEnabled !== false ? 'border-b dark:border-gray-700' : ''}`}>

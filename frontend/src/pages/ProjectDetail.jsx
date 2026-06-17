@@ -743,7 +743,7 @@ export default function ProjectDetail() {
                                 <div className="flex-1 min-w-0">
                                   <p
                                     onClick={() => setCommentTask(task)}
-                                    className="text-sm text-gray-700 dark:text-gray-300 leading-snug cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                                    className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
                                   >{linkify(task.description)}</p>
                                   {task.createdBy && (
                                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
@@ -810,7 +810,7 @@ export default function ProjectDetail() {
                         <div key={task.id} className="flex items-start gap-3 px-4 py-3">
                           <Avatar user={task.user} size="sm" />
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{linkify(task.description)}</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
                             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                               {task.user.name} · {fmtDate(task.completedAt, data?.project?.timezone)}
                             </p>
@@ -856,7 +856,7 @@ export default function ProjectDetail() {
                         <div key={task.id} className="flex items-start gap-3 px-4 py-3">
                           <Avatar user={task.user} size="sm" />
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">{linkify(task.description)}</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
                             <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                               {task.user.name} · {fmtDate(task.completedAt, data?.project?.timezone)}
                             </p>

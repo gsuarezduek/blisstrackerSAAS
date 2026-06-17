@@ -99,7 +99,7 @@ export default function UserTasksModal({ user, onClose }) {
                             {STATUS_LABEL[task.status]}
                           </span>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug text-left">
+                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug text-left whitespace-pre-wrap break-words">
                               {linkify(task.description)}
                             </p>
                             {(task._count?.comments ?? 0) > 0 && (
@@ -128,7 +128,7 @@ export default function UserTasksModal({ user, onClose }) {
                   >
                     <span className="text-green-500 flex-shrink-0 mt-0.5 text-sm">✓</span>
                     <div className="min-w-0">
-                      <p className="text-sm text-gray-500 dark:text-gray-400 leading-snug line-through">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 leading-snug line-through whitespace-pre-wrap break-words">
                         {linkify(task.description)}
                       </p>
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{task.project.name}</p>

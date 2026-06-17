@@ -559,10 +559,13 @@ async function sendLateNotificationEmail(email, name, workspaceName, template, w
 
 // Aviso semanal de Productividad a admins/owners: lista de personas en alerta.
 // digest = { flagged: [{ name, role, statusLabel, status, completed, hours, tareasPct, stuckTasks }], period }
-async function sendProductivityDigestEmail(emails, workspaceName, digest, appUrl, workspaceId) {
+async function sendProductivityDigestEmail(emails, workspaceName, digest, appUrl, workspaceId, { isTest = false } = {}) {
   const from = await getEmailFrom(workspaceId)
   const n = digest.flagged.length
-  const subject = `📊 Productividad: ${n} ${n === 1 ? 'persona necesita' : 'personas necesitan'} atención en ${workspaceName}`
+  const testTag = isTest ? '[prueba] ' : ''
+  const subject = n === 0
+    ? `${testTag}📊 Productividad: todo en orden en ${workspaceName}`
+    : `${testTag}📊 Productividad: ${n} ${n === 1 ? 'persona necesita' : 'personas necesitan'} atención en ${workspaceName}`
 
   const STATUS_COLOR = {
     inactive: '#dc2626', down: '#dc2626', stuck: '#d97706',
@@ -587,14 +590,24 @@ async function sendProductivityDigestEmail(emails, workspaceName, digest, appUrl
       </td>
     </tr>`).join('')
 
-  try {
-    const { error } = await resend.emails.send({
-      from,
-      to: emails,
-      subject,
-      html: emailShell(`
+  const testNote = isTest
+    ? `<p style="color:#94a3b8;font-size:12px;margin:0 0 16px;text-align:center;background:#f8fafc;border-radius:8px;padding:8px;">Este es un envío de prueba que pediste desde Preferencias. El aviso automático se manda los lunes y solo cuando hay alguien en alerta.</p>`
+    : ''
+
+  const inner = n === 0
+    ? `
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
           <h2 style="color:#1e293b;margin:0 0 6px;font-size:20px;">📊 Pulso del equipo</h2>
+          ${testNote}
+          <p style="color:#475569;margin:0 0 20px;font-size:14px;">✅ Esta semana <strong>nadie necesita atención</strong> en <strong>${workspaceName}</strong>. Todo el equipo dentro de lo esperado.</p>
+          <div style="text-align:center;margin-top:8px;">
+            <a href="${appUrl}" style="display:inline-block;background:#F7931A;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 22px;border-radius:8px;">Ver Productividad</a>
+          </div>
+        </div>`
+    : `
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 6px;font-size:20px;">📊 Pulso del equipo</h2>
+          ${testNote}
           <p style="color:#475569;margin:0 0 20px;font-size:14px;">
             <strong>${n}</strong> ${n === 1 ? 'persona necesita' : 'personas necesitan'} tu atención esta semana en <strong>${workspaceName}</strong>.
           </p>
@@ -603,8 +616,14 @@ async function sendProductivityDigestEmail(emails, workspaceName, digest, appUrl
             <a href="${appUrl}" style="display:inline-block;background:#F7931A;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 22px;border-radius:8px;">Ver Productividad</a>
           </div>
           <p style="color:#94a3b8;font-size:12px;margin:20px 0 0;text-align:center;">Solo te avisamos cuando hay algo para mirar. Podés desactivar este aviso en Preferencias → Globales.</p>
-        </div>
-      `),
+        </div>`
+
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: emails,
+      subject,
+      html: emailShell(inner),
     })
     if (error) throw new Error(error.message)
     await logEmail({ workspaceId, to: emails.join(','), subject, type: 'productivityDigest', status: 'sent' })
