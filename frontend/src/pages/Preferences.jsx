@@ -463,6 +463,27 @@ export default function Preferences() {
                 <p className="text-sm text-red-500 dark:text-red-400">No se pudieron cargar las preferencias globales.</p>
               </div>
             ) : globalSettings && (
+              <>
+              {/* Zona horaria */}
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-0.5">Zona horaria</h2>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Afecta cómo se muestran las fechas en la vista de cada proyecto.</p>
+                  </div>
+                  <select
+                    value={globalSettings.timezone || 'America/Argentina/Buenos_Aires'}
+                    onChange={e => handleGlobalSetting({ timezone: e.target.value })}
+                    className="text-xs border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-400 min-w-[190px]"
+                  >
+                    {TIMEZONES.map(tz => (
+                      <option key={tz.value} value={tz.value}>{tz.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Proyectos */}
               <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
                 <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Proyectos</h2>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
@@ -470,22 +491,6 @@ export default function Preferences() {
                 </p>
 
                 <div className="space-y-5">
-                  <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Zona horaria</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Afecta cómo se muestran las fechas en la vista de cada proyecto.</p>
-                    </div>
-                    <select
-                      value={globalSettings.timezone || 'America/Argentina/Buenos_Aires'}
-                      onChange={e => handleGlobalSetting({ timezone: e.target.value })}
-                      className="text-xs border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-400 min-w-[190px]"
-                    >
-                      {TIMEZONES.map(tz => (
-                        <option key={tz.value} value={tz.value}>{tz.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
                   <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Links útiles</p>
@@ -510,14 +515,24 @@ export default function Preferences() {
                     <Toggle on={globalSettings.briefsEnabled !== false} onToggle={() => handleGlobalSetting({ briefsEnabled: !globalSettings.briefsEnabled })} />
                   </div>
 
-                  <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
+                  <div className="flex items-start justify-between gap-4 py-4">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Horas por proyecto</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Permite cargar un presupuesto mensual de horas por proyecto y compara el tiempo trabajado contra ese presupuesto en el reporte por proyecto.</p>
                     </div>
                     <Toggle on={!!globalSettings.hoursEnabled} onToggle={() => handleGlobalSetting({ hoursEnabled: !globalSettings.hoursEnabled })} />
                   </div>
+                </div>
+              </div>
 
+              {/* Administración */}
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Administración</h2>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
+                  Visibilidad y seguimiento del equipo. Los cambios aplican a todo el workspace.
+                </p>
+
+                <div className="space-y-5">
                   <div className="py-4 border-b dark:border-gray-700">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
@@ -640,6 +655,7 @@ export default function Preferences() {
 
                 </div>
               </div>
+              </>
             )}
 
             {/* ── Módulos adicionales ── */}

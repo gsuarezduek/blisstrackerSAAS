@@ -41,15 +41,29 @@ function emailShell(bodyHtml) {
 }
 
 /**
+ * Normaliza un remitente para que siempre lleve nombre de display. Si el valor
+ * es un email "pelado" (sin el formato `Nombre <email>`), le antepone
+ * "BlissTracker" para que los clientes de correo no muestren el email como nombre.
+ */
+function normalizeFrom(value) {
+  const v = (value || '').trim()
+  if (!v) return v
+  // Ya trae nombre de display ("Nombre <email>") → respetar tal cual.
+  if (v.includes('<')) return v
+  // Email pelado → anteponer el nombre por defecto.
+  return `BlissTracker <${v}>`
+}
+
+/**
  * Remitente global de la plataforma: setting `platformEmailFrom` (editable desde
  * SuperAdmin → Configuración) con fallback a la env var EMAIL_FROM.
  */
 async function getPlatformFrom() {
   try {
     const configured = await getSetting('platformEmailFrom')
-    if (configured && configured.trim()) return configured.trim()
+    if (configured && configured.trim()) return normalizeFrom(configured)
   } catch { /* ignore — caemos al env */ }
-  return process.env.EMAIL_FROM || 'BlissTracker <gaston@blissmkt.ar>'
+  return normalizeFrom(process.env.EMAIL_FROM) || 'BlissTracker <gaston@blissmkt.ar>'
 }
 
 async function getEmailFrom(workspaceId) {
@@ -61,7 +75,7 @@ async function getEmailFrom(workspaceId) {
       ...query,
       select: { emailFrom: true },
     })
-    if (first?.emailFrom) return first.emailFrom
+    if (first?.emailFrom) return normalizeFrom(first.emailFrom)
   } catch { /* ignore — caemos al remitente global */ }
   return getPlatformFrom()
 }

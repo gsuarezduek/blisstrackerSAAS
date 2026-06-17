@@ -43,7 +43,8 @@ function minutesFromMidnight(iso) {
   return h * 60 + m
 }
 function minsToTime(mins) {
-  const h = Math.floor(mins / 60), m = Math.round(mins % 60)
+  const r = Math.round(mins)              // redondear el total primero evita "08:60" por minutos fraccionarios
+  const h = Math.floor(r / 60), m = r % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
