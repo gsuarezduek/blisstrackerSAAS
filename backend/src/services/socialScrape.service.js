@@ -357,9 +357,11 @@ async function runApifyLinkedin(identifier, opts = {}) {
   const input = {
     identifier:  [identifier],
     companyName: [identifier],
+    company:     identifier,
     companyUrl,
     companyUrls: [companyUrl],
     urls:        [companyUrl],
+    startUrls:   [{ url: companyUrl }],
     maxPosts:    postsLimit,
     limit:       postsLimit,
   }
@@ -374,10 +376,49 @@ async function runApifyLinkedin(identifier, opts = {}) {
     throw scrapeError(`El proveedor de scraping falló: ${apifyMsg}`, 'SCRAPE_PROVIDER_ERROR', 502)
   }
 
+  console.log(`[Scrape] LinkedIn ${identifier} · actor=${actorId} · items=${items.length}${items[0] && typeof items[0] === 'object' ? ` · keys[0]=${Object.keys(items[0]).slice(0, 20).join(',')}` : ''}`)
+
   if (items.length === 0) {
     throw scrapeError(`No se encontró la empresa "${identifier}" en LinkedIn (¿URL/nombre mal escrito o página inexistente?).`, 'PROFILE_NOT_FOUND', 404)
   }
   return items
+}
+
+/**
+ * Diagnóstico: corre el scrape de LinkedIn y devuelve el output CRUDO de Apify
+ * junto con lo normalizado/computado, para inspeccionar por qué un actor devuelve
+ * datos en 0 (input incorrecto vs. shape de campos distinto). Admin-only en el controller.
+ */
+async function debugScrapeLinkedin(urlOrSlug, opts = {}) {
+  const identifier = parseLinkedinCompany(urlOrSlug)
+  if (!identifier) throw scrapeError('URL o nombre de empresa de LinkedIn inválido.', 'INVALID_USERNAME', 400)
+
+  let cfgLimit = 0
+  try { cfgLimit = Number(await getSetting('apifyLinkedinPostsLimit')) || 0 } catch { /* DB no disponible */ }
+  const postsLimit = opts.postsLimit ?? (cfgLimit > 0 ? cfgLimit : DEFAULT_LINKEDIN_POSTS_LIMIT)
+
+  const items = await runApifyLinkedin(identifier, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'LinkedIn — diagnóstico' })
+  const { profile, posts } = normalizeApifyCompany(items, identifier)
+  const metrics = computeLinkedinScrapeMetrics(profile, posts, opts.targetMonth ?? null)
+
+  return {
+    identifier,
+    itemCount: items.length,
+    topLevelKeysFirstItem: items[0] && typeof items[0] === 'object' ? Object.keys(items[0]) : null,
+    rawSample: items.slice(0, 2),               // primeros 2 items crudos, completos (para ver todos los campos)
+    normalized: {
+      followers:     profile.followers_count,
+      name:          profile.name,
+      postsDetected: posts.length,
+      firstPosts:    posts.slice(0, 3),
+    },
+    metricsSummary: {
+      followersCount: metrics.followersCount,
+      postsThisMonth: metrics.postsThisMonth,
+      totalLikes:     metrics.totalLikes,
+      engagementRate: metrics.engagementRate,
+    },
+  }
 }
 
 /**
@@ -426,4 +467,5 @@ module.exports = {
   scrapeInstagramProfile,
   parseLinkedinCompany,
   scrapeLinkedinCompany,
+  debugScrapeLinkedin,
 }

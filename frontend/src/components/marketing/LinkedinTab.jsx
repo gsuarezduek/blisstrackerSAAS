@@ -540,6 +540,9 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
   const [disconnecting,       setDisconnecting]   = useState(false)
   const [showOrgPicker,       setShowOrgPicker]   = useState(false)
   const [refreshing,          setRefreshing]      = useState(false)
+  const [debugData,           setDebugData]       = useState(null)
+  const [debugLoading,        setDebugLoading]    = useState(false)
+  const [debugError,          setDebugError]      = useState(null)
 
   const fetchData = useCallback(async () => {
     if (!projectId) return
@@ -619,6 +622,16 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
     } finally { setRefreshing(false) }
   }
 
+  async function handleScrapeDebug() {
+    setDebugLoading(true); setDebugError(null); setDebugData(null)
+    try {
+      const { data } = await api.get(`/marketing/projects/${projectId}/linkedin/scrape-debug`)
+      setDebugData(data)
+    } catch (err) {
+      setDebugError(err.response?.data?.error || 'No se pudo correr el diagnóstico.')
+    } finally { setDebugLoading(false) }
+  }
+
   if (!projectId) return <CrossProjectLinkedinPanel onSelectProject={onSelectProject} />
 
   if (loading) return (
@@ -668,7 +681,32 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
 
       {scraped && (
         <div className="bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
-          📊 Datos públicos vía scraping: seguidores, posts y engagement. Impresiones, clicks y audiencia solo están disponibles con la conexión oficial.
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span>📊 Datos públicos vía scraping: seguidores, posts y engagement. Impresiones, clicks y audiencia solo están disponibles con la conexión oficial.</span>
+            <button onClick={handleScrapeDebug} disabled={debugLoading}
+              className="shrink-0 px-2.5 py-1 rounded-lg border border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 disabled:opacity-50 transition-colors font-medium">
+              {debugLoading ? 'Diagnosticando…' : '🔍 Diagnóstico'}
+            </button>
+          </div>
+
+          {debugError && <p className="mt-2 text-red-600 dark:text-red-400">{debugError}</p>}
+
+          {debugData && (
+            <div className="mt-3 space-y-2">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-blue-800 dark:text-blue-200 font-medium">
+                <span>items: {debugData.itemCount}</span>
+                <span>posts detectados: {debugData.normalized?.postsDetected}</span>
+                <span>seguidores: {debugData.normalized?.followers ?? '—'}</span>
+                <span>engagement: {debugData.metricsSummary?.engagementRate ?? '—'}</span>
+              </div>
+              <p className="text-[11px] text-blue-600/80 dark:text-blue-300/80">
+                Si "items" es 0 → el actor no recibió bien la entrada. Si hay items pero posts/seguidores en 0 → el actor usa otros nombres de campo. Copiá este JSON y pasámelo para ajustar el mapeo.
+              </p>
+              <pre className="max-h-80 overflow-auto bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-[11px] leading-relaxed text-gray-700 dark:text-gray-300 select-all whitespace-pre-wrap break-all">
+{JSON.stringify(debugData, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
       )}
 

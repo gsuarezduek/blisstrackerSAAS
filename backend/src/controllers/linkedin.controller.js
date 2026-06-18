@@ -2,7 +2,7 @@ const prisma = require('../lib/prisma')
 const { getValidLinkedinToken }     = require('../services/linkedinTokenRefresh.service')
 const { fetchLinkedinMetrics, listAdminOrganizations } = require('../services/linkedin.service')
 const { saveLinkedinSnapshot }      = require('../services/linkedinSnapshot.service')
-const { scrapeLinkedinCompany, parseLinkedinCompany } = require('../services/socialScrape.service')
+const { scrapeLinkedinCompany, parseLinkedinCompany, debugScrapeLinkedin } = require('../services/socialScrape.service')
 
 // Cooldown en memoria para el refresh manual de scraping (protege el costo del proveedor).
 const SCRAPE_REFRESH_COOLDOWN_MS = 30 * 60 * 1000
@@ -366,4 +366,38 @@ async function refreshScrape(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, getFollowerLog, listOrganizations, connectScrape, refreshScrape }
+/**
+ * GET /api/marketing/projects/:id/linkedin/scrape-debug?company=<url|slug>
+ * Diagnóstico del scraping: devuelve el output crudo de Apify + lo normalizado.
+ * Sin ?company= usa la empresa de la integración conectada.
+ */
+async function scrapeDebug(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    let company = req.query.company
+    if (!company) {
+      const integration = await prisma.projectIntegration.findUnique({
+        where: { projectId_type: { projectId, type: 'linkedin' } },
+      })
+      company = integration?.propertyId
+    }
+    if (!company) return res.status(400).json({ error: 'Indicá la empresa (?company=) o conectá LinkedIn por scraping primero.' })
+
+    let result
+    try {
+      result = await debugScrapeLinkedin(company, { workspaceId, targetMonth: currentMonthStr() })
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code })
+    }
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetrics, getSnapshots, saveSnapshot, getFollowerLog, listOrganizations, connectScrape, refreshScrape, scrapeDebug }

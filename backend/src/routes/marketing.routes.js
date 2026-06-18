@@ -101,6 +101,7 @@ router.get('/projects/:id/linkedin/snapshots',           linkedin.getSnapshots)
 router.post('/projects/:id/linkedin/snapshots',          linkedin.saveSnapshot)
 router.get('/projects/:id/linkedin/followers',           linkedin.getFollowerLog)
 router.post('/projects/:id/linkedin/scrape/refresh',     linkedin.refreshScrape)
+router.get('/projects/:id/linkedin/scrape-debug',        linkedin.scrapeDebug)
 router.get('/projects/:id/linkedin',                     linkedin.getMetrics)
 
 // Snapshots mensuales + Insights IA
