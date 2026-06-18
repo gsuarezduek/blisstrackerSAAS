@@ -335,8 +335,94 @@ async function fetchLinkedinMetrics(orgId, accessToken, targetMonth = null) {
   }
 }
 
+/**
+ * Mes calendario (ART) de un timestamp (ISO string o ms epoch). null si no parsea.
+ */
+function monthOfTimestamp(ts) {
+  if (ts == null) return null
+  const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  if (isNaN(d.getTime())) return null
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/**
+ * Calcula métricas mensuales de una Company Page de LinkedIn a partir de datos
+ * PÚBLICOS (scraping). Devuelve el MISMO shape que fetchLinkedinMetrics, dejando
+ * en null lo que el scraping no puede ver: impresiones, clicks, CTR, page views,
+ * visitantes únicos y demographics (eso solo lo da la API oficial al admin).
+ *
+ * @param {object} profile — { id, followers_count, name, vanityName, logo_url }
+ * @param {Array}  posts   — [{ id, urn, text, likes, comments, shares, timestamp, url, imgSrc }]
+ * @param {string|null} targetMonth — "YYYY-MM" para filtrar al mes; null = todos
+ */
+function computeLinkedinScrapeMetrics(profile, posts, targetMonth = null) {
+  const followersCount = profile?.followers_count ?? 0
+  const all = Array.isArray(posts) ? posts : []
+
+  const inMonth = targetMonth
+    ? all.filter(p => p.timestamp && monthOfTimestamp(p.timestamp) === targetMonth)
+    : all
+  const postsThisMonth = inMonth.length
+
+  const sum = (field) => inMonth.reduce((acc, p) => acc + (p[field] ?? 0), 0)
+  const totalLikes    = postsThisMonth ? sum('likes')    : null
+  const totalComments = postsThisMonth ? sum('comments') : null
+  const totalShares   = postsThisMonth ? sum('shares')   : null
+
+  // Engagement rate "por seguidores": engagement promedio por post / seguidores.
+  // El scraping no tiene impresiones, así que esta es la base estándar para orgánico.
+  const totalEngagement = (totalLikes ?? 0) + (totalComments ?? 0) + (totalShares ?? 0)
+  const engagementRate = followersCount && postsThisMonth
+    ? parseFloat(((totalEngagement / postsThisMonth) / followersCount * 100).toFixed(2))
+    : null
+
+  const topPosts = inMonth
+    .map(p => {
+      const engagement = (p.likes ?? 0) + (p.comments ?? 0) + (p.shares ?? 0)
+      return {
+        id:          p.id ?? p.url ?? null,
+        urn:         p.urn ?? null,
+        text:        (p.text ?? '').slice(0, 280),
+        likes:       p.likes ?? null,
+        comments:    p.comments ?? null,
+        shares:      p.shares ?? null,
+        impressions: null,
+        clicks:      null,
+        engagement,
+        publishedAt: p.timestamp ?? null,
+        url:         p.url ?? null,
+        imgSrc:      p.imgSrc ?? null,
+      }
+    })
+    .sort((a, b) => (b.engagement ?? 0) - (a.engagement ?? 0))
+    .slice(0, 5)
+
+  return {
+    org: {
+      id:         profile?.id ?? null,
+      name:       profile?.name ?? null,
+      vanityName: profile?.vanityName ?? null,
+      logoUrl:    profile?.logo_url ?? null,
+    },
+    followersCount,
+    pageViews:      null,
+    uniqueVisitors: null,
+    impressions:    null,
+    clicks:         null,
+    ctr:            null,
+    totalLikes,
+    totalComments,
+    totalShares,
+    engagementRate,
+    postsThisMonth,
+    topPosts,
+    demographics: { industry: [], seniority: [], function: [], region: [] },
+  }
+}
+
 module.exports = {
   fetchLinkedinMetrics,
   listAdminOrganizations,
   fetchOrgInfo,
+  computeLinkedinScrapeMetrics,
 }

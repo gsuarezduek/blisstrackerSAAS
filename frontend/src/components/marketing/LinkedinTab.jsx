@@ -124,7 +124,7 @@ function FollowersCard({ followersCount, monthlyGain }) {
 }
 
 // ── Header de cuenta ──────────────────────────────────────────────────────────
-function AccountHeader({ org, integration, onDisconnect, disconnecting, onChangeOrg }) {
+function AccountHeader({ org, integration, scraped, onDisconnect, disconnecting, onChangeOrg, onRefresh, refreshing }) {
   const [imgError, setImgError] = useState(false)
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
@@ -139,7 +139,10 @@ function AccountHeader({ org, integration, onDisconnect, disconnecting, onChange
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="font-semibold text-gray-900 dark:text-white">{org?.name ?? 'LinkedIn'}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-gray-900 dark:text-white">{org?.name ?? 'LinkedIn'}</p>
+                {scraped && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-medium">vía scraping</span>}
+              </div>
               {org?.vanityName && (
                 <a href={`https://www.linkedin.com/company/${org.vanityName}`} target="_blank" rel="noopener noreferrer"
                   className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
@@ -148,10 +151,16 @@ function AccountHeader({ org, integration, onDisconnect, disconnecting, onChange
               )}
             </div>
             <div className="flex gap-3 shrink-0">
-              <button onClick={onChangeOrg}
-                className="text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                Cambiar página
-              </button>
+              {scraped
+                ? <button onClick={onRefresh} disabled={refreshing}
+                    className="text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50">
+                    {refreshing ? 'Actualizando…' : '↻ Actualizar'}
+                  </button>
+                : <button onClick={onChangeOrg}
+                    className="text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                    Cambiar página
+                  </button>
+              }
               <button onClick={onDisconnect} disabled={disconnecting}
                 className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50">
                 {disconnecting ? 'Desconectando…' : 'Desconectar'}
@@ -331,6 +340,42 @@ const FOLLOWER_FILTERS = [
   { key: 'all',  label: 'Todo',    days: null },
 ]
 
+// Formulario de conexión por scraping (Apify) — sin permisos ni OAuth.
+function ScrapeConnectForm({ projectId, onConnected }) {
+  const [value,   setValue]   = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState(null)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!value.trim() || !projectId) return
+    setLoading(true); setError(null)
+    try {
+      await api.post(`/marketing/projects/${projectId}/integrations/linkedin/connect-scrape`, { url: value.trim() })
+      onConnected()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo conectar por scraping.')
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-3 space-y-2">
+      <input
+        value={value} onChange={e => setValue(e.target.value)}
+        placeholder="linkedin.com/company/tu-empresa"
+        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+      />
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+      <button type="submit" disabled={loading || !value.trim() || !projectId}
+        className="w-full px-4 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+        style={{ background: LI_BLUE }}>
+        {loading ? 'Conectando…' : 'Conectar por scraping'}
+      </button>
+      <p className="text-[11px] text-gray-400 dark:text-gray-500">Solo páginas públicas. Pegá la URL de la Company Page o su nombre.</p>
+    </form>
+  )
+}
+
 function ConnectPrompt({ projectId, onConnected, inline = false }) {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
@@ -378,17 +423,43 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
   )
 
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 text-white" style={{ background: LI_BLUE }}>💼</div>
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Conectá tu página de empresa</h3>
-      <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs mb-6">Necesitás ser administrador de la Company Page en LinkedIn.</p>
-      {error && <p className="text-sm text-red-600 dark:text-red-400 mb-4 max-w-sm">{error}</p>}
-      <button onClick={handleConnect} disabled={loading || !projectId}
-        className="px-5 py-2.5 text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-        style={{ background: LI_BLUE }}>
-        {loading ? 'Conectando…' : 'Conectar LinkedIn'}
-      </button>
-      {!projectId && <p className="text-xs text-gray-400 mt-2">Seleccioná un proyecto para continuar.</p>}
+    <div className="max-w-2xl mx-auto py-12">
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 text-white mx-auto" style={{ background: LI_BLUE }}>💼</div>
+        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Conectá tu página de empresa de LinkedIn</h3>
+        <p className="text-sm text-gray-400 dark:text-gray-500">Elegí cómo querés traer las métricas.</p>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        {/* Método scraping (recomendado mientras la API oficial está en aprobación) */}
+        <div className="border-2 border-blue-200 dark:border-blue-800 rounded-2xl p-5 bg-blue-50/40 dark:bg-blue-900/10">
+          <div className="flex items-center gap-2 mb-1">
+            <p className="font-semibold text-gray-900 dark:text-white text-sm">🔎 Scraping (público)</p>
+            <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-medium">Recomendado</span>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+            Seguidores, posts y engagement de datos públicos. No requiere permisos ni aprobación.
+            <span className="block mt-1 text-gray-400 dark:text-gray-500">No incluye impresiones, clicks ni audiencia.</span>
+          </p>
+          <ScrapeConnectForm projectId={projectId} onConnected={onConnected} />
+        </div>
+
+        {/* Método oficial (API) */}
+        <div className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
+          <p className="font-semibold text-gray-900 dark:text-white text-sm mb-1">🔗 Oficial (API)</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+            Métricas completas: impresiones, clicks, CTR y audiencia. Requiere ser administrador de la página y que la app esté aprobada por LinkedIn.
+          </p>
+          {error && <p className="text-xs text-red-600 dark:text-red-400 mt-3">{error}</p>}
+          <button onClick={handleConnect} disabled={loading || !projectId}
+            className="mt-3 w-full px-4 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+            style={{ background: LI_BLUE }}>
+            {loading ? 'Conectando…' : 'Conectar con LinkedIn'}
+          </button>
+        </div>
+      </div>
+
+      {!projectId && <p className="text-xs text-gray-400 mt-4 text-center">Seleccioná un proyecto para continuar.</p>}
     </div>
   )
 }
@@ -468,6 +539,7 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
   const [error,               setError]           = useState(null)
   const [disconnecting,       setDisconnecting]   = useState(false)
   const [showOrgPicker,       setShowOrgPicker]   = useState(false)
+  const [refreshing,          setRefreshing]      = useState(false)
 
   const fetchData = useCallback(async () => {
     if (!projectId) return
@@ -537,6 +609,16 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
     } finally { setDisconnecting(false) }
   }
 
+  async function handleRefreshScrape() {
+    setRefreshing(true); setError(null)
+    try {
+      await api.post(`/marketing/projects/${projectId}/linkedin/scrape/refresh`)
+      await fetchData()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo actualizar el scraping.')
+    } finally { setRefreshing(false) }
+  }
+
   if (!projectId) return <CrossProjectLinkedinPanel onSelectProject={onSelectProject} />
 
   if (loading) return (
@@ -563,6 +645,7 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
     <OrgPicker projectId={projectId} onSelected={() => { setShowOrgPicker(false); fetchData() }} onCancel={() => setShowOrgPicker(false)} />
   )
 
+  const scraped         = integration?.scopes === 'scrape'
   const availableMonths = [...new Set([currentMonth, ...snapshots.map(s => s.month)])].sort().reverse()
   const isCurrentMonth  = selectedMonth === currentMonth
   const displayData     = isCurrentMonth ? metrics : (snapshots.find(s => s.month === selectedMonth) ?? null)
@@ -574,12 +657,19 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
   return (
     <div className="space-y-4">
 
-      <AccountHeader org={metrics?.org} integration={integration}
+      <AccountHeader org={metrics?.org} integration={integration} scraped={scraped}
         onDisconnect={handleDisconnect} disconnecting={disconnecting}
-        onChangeOrg={() => setShowOrgPicker(true)} />
+        onChangeOrg={() => setShowOrgPicker(true)}
+        onRefresh={handleRefreshScrape} refreshing={refreshing} />
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">{error}</div>
+      )}
+
+      {scraped && (
+        <div className="bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
+          📊 Datos públicos vía scraping: seguidores, posts y engagement. Impresiones, clicks y audiencia solo están disponibles con la conexión oficial.
+        </div>
       )}
 
       {availableMonths.length > 0 && (
@@ -587,7 +677,7 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
       )}
 
       {displayData && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${scraped ? 'lg:grid-cols-3' : 'lg:grid-cols-5'}`}>
           <FollowersCard
             followersCount={displayData.followersCount}
             monthlyGain={monthlyGain}
@@ -597,14 +687,18 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
             valueClass={engColor(displayData.engagementRate)}
             sub={engLabel(displayData.engagementRate)}
           />
-          <KpiCard icon="👁" label="Impresiones"
-            value={displayData.impressions != null ? fmtK(displayData.impressions) : '—'}
-            sub={isCurrentMonth ? 'este mes' : 'ese mes'}
-          />
-          <KpiCard icon="🖱" label="Clicks"
-            value={displayData.clicks != null ? fmtK(displayData.clicks) : '—'}
-            sub={displayData.ctr != null ? `${displayData.ctr}% CTR` : null}
-          />
+          {!scraped && (
+            <KpiCard icon="👁" label="Impresiones"
+              value={displayData.impressions != null ? fmtK(displayData.impressions) : '—'}
+              sub={isCurrentMonth ? 'este mes' : 'ese mes'}
+            />
+          )}
+          {!scraped && (
+            <KpiCard icon="🖱" label="Clicks"
+              value={displayData.clicks != null ? fmtK(displayData.clicks) : '—'}
+              sub={displayData.ctr != null ? `${displayData.ctr}% CTR` : null}
+            />
+          )}
           <KpiCard icon="📅" label="Posts del mes"
             value={displayData.postsThisMonth != null ? fmtNum(displayData.postsThisMonth) : '—'}
             sub={isCurrentMonth ? 'posts este mes' : 'posts ese mes'}

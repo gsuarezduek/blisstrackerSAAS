@@ -1,17 +1,21 @@
 const axios = require('axios')
 const { computeInstagramMetrics } = require('./instagram.service')
+const { computeLinkedinScrapeMetrics } = require('./linkedin.service')
 const { sendPlatformNotification, platformCard } = require('./email.service')
 
 /**
  * Motor de scraping de redes sociales — abstraído por proveedor.
  *
  * Proveedor actual: Apify (https://apify.com). Requiere APIFY_API_TOKEN.
- * El actor de Instagram se puede sobreescribir con APIFY_INSTAGRAM_ACTOR
- * (default: apify~instagram-profile-scraper).
+ * - Instagram: actor configurable con APIFY_INSTAGRAM_ACTOR (default
+ *   apify~instagram-profile-scraper).
+ * - LinkedIn (Company Pages): actor configurable con APIFY_LINKEDIN_ACTOR
+ *   (sin default — debe setearse para habilitar el scraping de LinkedIn).
  *
- * Todas las funciones devuelven datos en el MISMO shape que
- * instagram.service.fetchInstagramMetrics para reutilizar vistas, snapshots
- * e informes existentes.
+ * Todas las funciones devuelven datos en el MISMO shape que el fetch oficial de
+ * cada red (fetchInstagramMetrics / fetchLinkedinMetrics) para reutilizar vistas,
+ * snapshots e informes existentes. Lo que el scraping no puede ver (insights
+ * privados) queda en null.
  */
 
 const APIFY_BASE = 'https://api.apify.com/v2'
@@ -209,7 +213,205 @@ async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
   return { ...metrics, isPrivate, scraped: true, monthCoverageComplete }
 }
 
+// ─── LinkedIn (Company Pages, scraping público) ────────────────────────────────
+// El scraping sólo accede a datos PÚBLICOS de la Company Page: seguidores, posts
+// recientes (texto, reacciones, comentarios, compartidos), nombre y logo. NO
+// expone impresiones, clicks, CTR, page views ni demographics (eso es solo API
+// oficial). computeLinkedinScrapeMetrics deja esos campos en null.
+
+const DEFAULT_LINKEDIN_POSTS_LIMIT = Number(process.env.APIFY_LINKEDIN_POSTS_LIMIT) || 30
+
+// Devuelve el primer valor no nulo/no vacío entre varios nombres de campo posibles
+// (los actores de LinkedIn de Apify no comparten un esquema único).
+function pick(obj, keys) {
+  if (!obj) return null
+  for (const k of keys) {
+    if (obj[k] != null && obj[k] !== '') return obj[k]
+  }
+  return null
+}
+
+// Convierte un conteo a número, tolerando strings como "1,234", "12K" o "1.2M".
+function toCount(v) {
+  if (v == null) return 0
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  const s = String(v).trim().replace(/,/g, '')
+  const m = s.match(/^([\d.]+)\s*([KkMm])?/)
+  if (!m) return 0
+  let n = parseFloat(m[1])
+  if (!Number.isFinite(n)) return 0
+  const suffix = m[2]?.toLowerCase()
+  if (suffix === 'k') n *= 1e3
+  if (suffix === 'm') n *= 1e6
+  return Math.round(n)
+}
+
+/**
+ * Extrae el identificador (slug) de una Company Page de LinkedIn de una URL o nombre.
+ * Acepta: "miempresa", "https://www.linkedin.com/company/miempresa/", "/company/miempresa/".
+ */
+function parseLinkedinCompany(input) {
+  if (!input) return null
+  let s = String(input).trim()
+  if (!s) return null
+  const urlMatch = s.match(/linkedin\.com\/(?:company|showcase|school)\/([^/?#]+)/i)
+  if (urlMatch) s = urlMatch[1]
+  s = s.replace(/^@/, '').replace(/[/?#].*$/, '').trim()
+  // Slug de company: letras, números, guiones, puntos (más permisivo que IG)
+  if (!/^[A-Za-z0-9\-._%]{1,120}$/.test(s)) return null
+  return s.toLowerCase()
+}
+
+function normalizeLinkedinPost(p) {
+  return {
+    id:        pick(p, ['urn', 'activityUrn', 'shareUrn', 'postUrn', 'id']) ?? pick(p, ['url', 'postUrl', 'link']),
+    urn:       pick(p, ['urn', 'activityUrn', 'shareUrn', 'postUrn']),
+    text:      pick(p, ['text', 'commentary', 'content', 'caption', 'postText', 'description']) ?? '',
+    likes:     toCount(pick(p, ['likes', 'numLikes', 'likesCount', 'reactionsCount', 'reactions', 'totalReactionCount', 'numReactions', 'likeCount'])),
+    comments:  toCount(pick(p, ['comments', 'numComments', 'commentsCount', 'commentCount'])),
+    shares:    toCount(pick(p, ['shares', 'numShares', 'sharesCount', 'reposts', 'repostsCount', 'shareCount'])),
+    timestamp: pick(p, ['timestamp', 'postedAtTimestamp', 'postedAt', 'publishedAt', 'date', 'postedAtISO', 'time', 'createdAt']),
+    url:       pick(p, ['url', 'postUrl', 'link', 'postLink']),
+    imgSrc:    pick(p, ['image', 'imageUrl', 'thumbnail', 'imgSrc', 'mediaUrl']),
+  }
+}
+
+function linkedinProfileFrom(o, identifier) {
+  return {
+    id:              pick(o, ['id', 'companyId', 'entityUrn']),
+    followers_count: toCount(pick(o, ['followerCount', 'followersCount', 'followers', 'numFollowers'])),
+    name:            pick(o, ['name', 'companyName', 'title', 'localizedName']) ?? identifier,
+    vanityName:      pick(o, ['universalName', 'vanityName', 'publicIdentifier']) ?? identifier,
+    logo_url:        pick(o, ['logoUrl', 'logo', 'profilePicture', 'logoResolutionResult', 'image']),
+  }
+}
+
+/**
+ * Normaliza la respuesta del actor de LinkedIn al shape { profile, posts }.
+ * Tolera dos formas comunes de actor:
+ *  (A) "detalle de empresa": 1 item con followers + array de posts anidado.
+ *  (B) "posts de empresa": N items, cada uno un post (con company anidada opcional).
+ */
+function normalizeApifyCompany(items, identifier) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { profile: linkedinProfileFrom({}, identifier), posts: [] }
+  }
+
+  // (A) item de empresa con posts anidados
+  const detail = items.find(i => i && (i.followerCount != null || i.followersCount != null || i.followers != null) &&
+    (Array.isArray(i.posts) || Array.isArray(i.updates) || Array.isArray(i.latestPosts) || Array.isArray(i.companyUpdates)))
+  if (detail) {
+    const postsArr = detail.posts ?? detail.updates ?? detail.latestPosts ?? detail.companyUpdates ?? []
+    return { profile: linkedinProfileFrom(detail, identifier), posts: postsArr.map(normalizeLinkedinPost) }
+  }
+
+  // (B) items que son posts
+  const looksLikePosts = items.every(i => i && (i.text != null || i.commentary != null ||
+    i.reactionsCount != null || i.numLikes != null || i.postUrl != null || i.activityUrn != null))
+  if (looksLikePosts) {
+    const first = items[0]
+    const company = first.company ?? first.author ?? first.companyDetails ?? first.actor ?? {}
+    return { profile: linkedinProfileFrom(company, identifier), posts: items.map(normalizeLinkedinPost) }
+  }
+
+  // (C) item de empresa sin posts (solo seguidores/nombre)
+  const company = items.find(i => i && (i.followerCount != null || i.followersCount != null || i.name != null || i.companyName != null))
+  if (company) {
+    const postsArr = company.posts ?? company.updates ?? company.latestPosts ?? []
+    return { profile: linkedinProfileFrom(company, identifier), posts: postsArr.map(normalizeLinkedinPost) }
+  }
+
+  return { profile: linkedinProfileFrom(items[0], identifier), posts: [] }
+}
+
+/**
+ * Corre el actor de LinkedIn en Apify (sincrónico) y devuelve el array de items
+ * crudos del dataset. Requiere APIFY_API_TOKEN y APIFY_LINKEDIN_ACTOR.
+ */
+async function runApifyLinkedin(identifier, opts = {}) {
+  const { postsLimit = DEFAULT_LINKEDIN_POSTS_LIMIT, workspaceId = null, context = null } = opts
+  const token = process.env.APIFY_API_TOKEN
+  if (!token) {
+    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username: identifier, workspaceId, context })
+    throw scrapeError('El scraping no está configurado en el servidor (falta APIFY_API_TOKEN).', 'SCRAPE_NOT_CONFIGURED', 503)
+  }
+  const actor = process.env.APIFY_LINKEDIN_ACTOR
+  if (!actor) {
+    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_LINKEDIN_ACTOR en el servidor.', username: identifier, workspaceId, context })
+    throw scrapeError('El scraping de LinkedIn no está configurado (falta APIFY_LINKEDIN_ACTOR).', 'SCRAPE_NOT_CONFIGURED', 503)
+  }
+
+  const url = `${APIFY_BASE}/acts/${actor}/run-sync-get-dataset-items`
+  const companyUrl = `https://www.linkedin.com/company/${identifier}/`
+  // Input tolerante: distintos actores aceptan distintas claves; la mayoría ignora
+  // las que no conoce. Si tu actor usa otra clave, ajustá acá (punto único).
+  const input = {
+    identifier:  [identifier],
+    companyName: [identifier],
+    companyUrl,
+    companyUrls: [companyUrl],
+    urls:        [companyUrl],
+    maxPosts:    postsLimit,
+    limit:       postsLimit,
+  }
+
+  let items
+  try {
+    const { data } = await axios.post(url, input, { params: { token }, timeout: 180000 })
+    items = Array.isArray(data) ? data : []
+  } catch (err) {
+    const apifyMsg = err.response?.data?.error?.message || err.message
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username: identifier, workspaceId, context })
+    throw scrapeError(`El proveedor de scraping falló: ${apifyMsg}`, 'SCRAPE_PROVIDER_ERROR', 502)
+  }
+
+  if (items.length === 0) {
+    throw scrapeError(`No se encontró la empresa "${identifier}" en LinkedIn (¿URL/nombre mal escrito o página inexistente?).`, 'PROFILE_NOT_FOUND', 404)
+  }
+  return items
+}
+
+/**
+ * Scrapea una Company Page pública de LinkedIn y devuelve métricas en el shape de
+ * fetchLinkedinMetrics, más { identifier, scraped: true, monthCoverageComplete }.
+ * @param {string} urlOrSlug
+ * @param {object} opts — { postsLimit, targetMonth, workspaceId, context }
+ */
+async function scrapeLinkedinCompany(urlOrSlug, opts = {}) {
+  const identifier = parseLinkedinCompany(urlOrSlug)
+  if (!identifier) throw scrapeError('URL o nombre de empresa de LinkedIn inválido.', 'INVALID_USERNAME', 400)
+
+  const postsLimit = opts.postsLimit ?? DEFAULT_LINKEDIN_POSTS_LIMIT
+  const items = await runApifyLinkedin(identifier, {
+    postsLimit,
+    workspaceId: opts.workspaceId ?? null,
+    context: opts.context ?? null,
+  })
+  const { profile, posts } = normalizeApifyCompany(items, identifier)
+  const metrics = computeLinkedinScrapeMetrics(profile, posts, opts.targetMonth ?? null)
+
+  // Cobertura del mes: si todos los posts traídos caen dentro del mes objetivo y se
+  // alcanzó el tope de scrape, puede haber más posts del mes sin contabilizar.
+  let monthCoverageComplete = true
+  if (opts.targetMonth && posts.length > 0) {
+    const monthOf = (ts) => {
+      const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+      return isNaN(d.getTime()) ? null : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    }
+    const reachedBeforeMonth = posts.some(p => p.timestamp && monthOf(p.timestamp) && monthOf(p.timestamp) < opts.targetMonth)
+    const hitCap = posts.length >= postsLimit
+    monthCoverageComplete = reachedBeforeMonth || !hitCap
+    if (!monthCoverageComplete) {
+      console.warn(`[Scrape] LinkedIn ${identifier}: posible mes incompleto (${posts.length} posts traídos, tope ${postsLimit}). Subí APIFY_LINKEDIN_POSTS_LIMIT si la página postea mucho.`)
+    }
+  }
+
+  return { ...metrics, identifier, scraped: true, monthCoverageComplete }
+}
+
 module.exports = {
   parseInstagramUsername,
   scrapeInstagramProfile,
+  parseLinkedinCompany,
+  scrapeLinkedinCompany,
 }

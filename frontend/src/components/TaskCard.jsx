@@ -148,7 +148,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
   const canMoveToBacklog = !backlog
     && !future
     && onMoveToBacklog
-    && ['PENDING', 'PAUSED', 'BLOCKED'].includes(task.status)
+    && task.status === 'PENDING'
 
   const borderClass = isBlocked
     ? 'border-red-300 dark:border-red-700'
@@ -387,7 +387,7 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
             </button>
           )}
 
-          {/* Move to backlog — secondary action for PENDING / PAUSED / BLOCKED today tasks */}
+          {/* Move to backlog — secondary action solo para tareas PENDING (no empezadas) de hoy */}
           {canMoveToBacklog && (
             <button
               onClick={handleMoveToBacklog}

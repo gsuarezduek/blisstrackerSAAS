@@ -2,6 +2,11 @@ const prisma = require('../lib/prisma')
 const { getValidLinkedinToken }     = require('../services/linkedinTokenRefresh.service')
 const { fetchLinkedinMetrics, listAdminOrganizations } = require('../services/linkedin.service')
 const { saveLinkedinSnapshot }      = require('../services/linkedinSnapshot.service')
+const { scrapeLinkedinCompany, parseLinkedinCompany } = require('../services/socialScrape.service')
+
+// Cooldown en memoria para el refresh manual de scraping (protege el costo del proveedor).
+const SCRAPE_REFRESH_COOLDOWN_MS = 30 * 60 * 1000
+const scrapeCooldownMap = new Map() // integrationId → timestamp del último scrape
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -29,6 +34,46 @@ async function getIntegrationForProject(projectId, workspaceId) {
   return { integration }
 }
 
+// Persiste snapshot mensual + log diario de seguidores a partir de métricas ya obtenidas.
+async function persistScrapeData(projectId, workspaceId, metrics) {
+  const month = currentMonthStr()
+  const date  = todayStr()
+  await Promise.allSettled([
+    saveLinkedinSnapshot(projectId, workspaceId, month, metrics),
+    prisma.linkedinFollowerLog.upsert({
+      where:  { projectId_date: { projectId, date } },
+      update: { followersCount: metrics.followersCount },
+      create: { projectId, workspaceId, date, followersCount: metrics.followersCount },
+    }),
+  ])
+}
+
+// Reconstruye el shape de métricas a partir de un snapshot guardado (modo scraping cacheado).
+function snapshotToMetrics(snap, integration, lastScrapedAt = null) {
+  let topPosts = []
+  let demographics = { industry: [], seniority: [], function: [], region: [] }
+  try { topPosts     = JSON.parse(snap.topPosts     || '[]') } catch { topPosts = [] }
+  try { demographics = JSON.parse(snap.demographics || '{}') } catch { /* keep default */ }
+  return {
+    org: { id: null, name: integration.propertyId ?? null, vanityName: integration.propertyId ?? null, logoUrl: null },
+    followersCount: snap.followersCount,
+    pageViews:      snap.pageViews      ?? null,
+    uniqueVisitors: snap.uniqueVisitors ?? null,
+    impressions:    snap.impressions    ?? null,
+    clicks:         snap.clicks         ?? null,
+    ctr:            snap.ctr            ?? null,
+    totalLikes:     snap.totalLikes     ?? null,
+    totalComments:  snap.totalComments  ?? null,
+    totalShares:    snap.totalShares    ?? null,
+    engagementRate: snap.engagementRate ?? null,
+    postsThisMonth: snap.postsThisMonth ?? 0,
+    topPosts,
+    demographics,
+    scraped:        true,
+    lastScrapedAt:  lastScrapedAt ?? snap.createdAt,
+  }
+}
+
 /**
  * GET /api/marketing/projects/:id/linkedin
  * Métricas en tiempo real + auto-snapshot.
@@ -40,6 +85,23 @@ async function getMetrics(req, res, next) {
 
     const { integration, error } = await getIntegrationForProject(projectId, workspaceId)
     if (error) return res.status(error.status).json(error.body)
+
+    // ── Modo scraping ─────────────────────────────────────────────────────────
+    // No le pega a Apify en cada visita (costo): devuelve el último snapshot
+    // cacheado. El refresh manual (POST .../scrape/refresh) trae datos frescos.
+    if (integration.scopes === 'scrape') {
+      const [snap, lastLog] = await Promise.all([
+        prisma.linkedinSnapshot.findFirst({ where: { projectId }, orderBy: { month: 'desc' } }),
+        prisma.linkedinFollowerLog.findFirst({ where: { projectId }, orderBy: { date: 'desc' } }),
+      ])
+      if (!snap) {
+        return res.json({
+          scraped: true, org: { name: integration.propertyId }, followersCount: 0,
+          needsRefresh: true,
+        })
+      }
+      return res.json(snapshotToMetrics(snap, integration, lastLog?.createdAt ?? null))
+    }
 
     if (!integration.propertyId) {
       return res.status(400).json({
@@ -219,4 +281,89 @@ async function listOrganizations(req, res, next) {
   }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, getFollowerLog, listOrganizations }
+/**
+ * POST /api/marketing/projects/:id/integrations/linkedin/connect-scrape
+ * Conecta una Company Page de LinkedIn por scraping (sin token). Body: { url | company }.
+ * Valida con un scrape inicial y guarda snapshot + log de seguidores.
+ */
+async function connectScrape(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const identifier  = parseLinkedinCompany(req.body.url || req.body.company || req.body.username)
+    if (!identifier) return res.status(400).json({ error: 'URL o nombre de empresa de LinkedIn inválido.' })
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    let metrics
+    try {
+      metrics = await scrapeLinkedinCompany(identifier, { targetMonth: currentMonthStr(), workspaceId, context: 'LinkedIn — conexión por scraping' })
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code })
+    }
+
+    await prisma.projectIntegration.upsert({
+      where:  { projectId_type: { projectId, type: 'linkedin' } },
+      update: {
+        workspaceId, status: 'active', scopes: 'scrape', propertyId: identifier,
+        accessToken: null, refreshToken: null, expiresAt: null,
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+      create: {
+        projectId, workspaceId, type: 'linkedin', status: 'active',
+        scopes: 'scrape', propertyId: identifier,
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+    })
+
+    await persistScrapeData(projectId, workspaceId, metrics)
+
+    res.json({ ok: true, identifier, followersCount: metrics.followersCount })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/linkedin/scrape/refresh
+ * Fuerza un scrape fresco (cooldown 30 min) y actualiza snapshot + log.
+ */
+async function refreshScrape(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const integration = await prisma.projectIntegration.findUnique({
+      where: { projectId_type: { projectId, type: 'linkedin' } },
+    })
+    if (!integration || integration.scopes !== 'scrape') {
+      return res.status(400).json({ error: 'Este proyecto no está conectado por scraping.', code: 'NOT_SCRAPE' })
+    }
+
+    const last = scrapeCooldownMap.get(integration.id)
+    if (last && Date.now() - last < SCRAPE_REFRESH_COOLDOWN_MS) {
+      const waitMins = Math.ceil((SCRAPE_REFRESH_COOLDOWN_MS - (Date.now() - last)) / 60000)
+      return res.status(429).json({ error: `Esperá ${waitMins} min para actualizar de nuevo.`, code: 'COOLDOWN', waitMins })
+    }
+
+    let metrics
+    try {
+      metrics = await scrapeLinkedinCompany(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, context: 'LinkedIn — refresh manual' })
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code })
+    }
+
+    scrapeCooldownMap.set(integration.id, Date.now())
+    await persistScrapeData(projectId, workspaceId, metrics)
+
+    res.json({ ...metrics, lastScrapedAt: new Date() })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetrics, getSnapshots, saveSnapshot, getFollowerLog, listOrganizations, connectScrape, refreshScrape }

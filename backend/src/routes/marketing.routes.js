@@ -95,10 +95,12 @@ router.get('/projects/:id/tiktok',                        tiktok.getMetrics)
 
 // LinkedIn
 router.get('/integrations/linkedin/auth-url',            linkedinIntegrations.getLinkedinAuthUrl)
+router.post('/projects/:id/integrations/linkedin/connect-scrape', linkedin.connectScrape)
 router.get('/projects/:id/linkedin/orgs',                linkedin.listOrganizations)
 router.get('/projects/:id/linkedin/snapshots',           linkedin.getSnapshots)
 router.post('/projects/:id/linkedin/snapshots',          linkedin.saveSnapshot)
 router.get('/projects/:id/linkedin/followers',           linkedin.getFollowerLog)
+router.post('/projects/:id/linkedin/scrape/refresh',     linkedin.refreshScrape)
 router.get('/projects/:id/linkedin',                     linkedin.getMetrics)
 
 // Snapshots mensuales + Insights IA

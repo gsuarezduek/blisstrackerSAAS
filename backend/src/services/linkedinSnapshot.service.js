@@ -1,6 +1,8 @@
 const prisma = require('../lib/prisma')
 const { getValidLinkedinToken } = require('./linkedinTokenRefresh.service')
 const { fetchLinkedinMetrics }  = require('./linkedin.service')
+const { scrapeLinkedinCompany } = require('./socialScrape.service')
+const { cacheImagesInArray }    = require('./socialImageCache.service')
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -46,13 +48,20 @@ async function saveLinkedinSnapshot(projectId, workspaceId, month, preloaded = n
       throw new Error(`Proyecto ${projectId}: no tiene integración de LinkedIn activa`)
     }
     if (!integration.propertyId) {
-      throw new Error(`Proyecto ${projectId}: integración LinkedIn sin organización seleccionada`)
+      throw new Error(`Proyecto ${projectId}: integración LinkedIn sin organización/empresa seleccionada`)
     }
-    const token = await getValidLinkedinToken(integration)
-    metrics     = await fetchLinkedinMetrics(integration.propertyId, token, month)
+    if (integration.scopes === 'scrape') {
+      metrics = await scrapeLinkedinCompany(integration.propertyId, { targetMonth: month, workspaceId, context: 'LinkedIn — snapshot mensual' })
+    } else {
+      const token = await getValidLinkedinToken(integration)
+      metrics     = await fetchLinkedinMetrics(integration.propertyId, token, month)
+    }
   }
 
-  const data = snapshotData(metrics)
+  // Cacheamos las imágenes de los top posts (las URLs del CDN vencen) — no-op si no
+  // hay imgSrc (los top posts de la API oficial no traen imagen).
+  const topPostsCached = await cacheImagesInArray(metrics.topPosts ?? [], 'imgSrc', workspaceId)
+  const data = snapshotData({ ...metrics, topPosts: topPostsCached })
 
   await prisma.linkedinSnapshot.upsert({
     where:  { projectId_month: { projectId, month } },

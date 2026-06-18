@@ -67,28 +67,28 @@ describe('PATCH /api/tasks/:id/move-to-backlog', () => {
     }))
   })
 
-  it('mueve una tarea PAUSED al backlog', async () => {
+  it('retorna 400 si la tarea está PAUSED (ya empezada)', async () => {
     prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'PAUSED' }))
-    prisma.task.update.mockResolvedValue(makeTask({ status: 'PAUSED', isBacklog: true }))
 
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
       .set('Authorization', authHeader())
       .set('X-Workspace', WORKSPACE_SLUG)
 
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(400)
+    expect(prisma.task.update).not.toHaveBeenCalled()
   })
 
-  it('mueve una tarea BLOCKED al backlog', async () => {
+  it('retorna 400 si la tarea está BLOCKED (ya empezada)', async () => {
     prisma.task.findUnique.mockResolvedValue(makeTask({ status: 'BLOCKED' }))
-    prisma.task.update.mockResolvedValue(makeTask({ status: 'BLOCKED', isBacklog: true }))
 
     const res = await request(app)
       .patch('/api/tasks/1/move-to-backlog')
       .set('Authorization', authHeader())
       .set('X-Workspace', WORKSPACE_SLUG)
 
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(400)
+    expect(prisma.task.update).not.toHaveBeenCalled()
   })
 
   it('retorna 400 si la tarea está IN_PROGRESS', async () => {

@@ -638,8 +638,7 @@ async function moveToBacklog(req, res, next) {
 
     const task = await prisma.task.findUnique({ where: { id: taskId } })
     if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
-    if (task.status === 'IN_PROGRESS') return res.status(400).json({ error: 'Pausá la tarea en curso antes de moverla al Backlog.' })
-    if (task.status === 'COMPLETED') return res.status(400).json({ error: 'No podés mover al Backlog una tarea completada.' })
+    if (task.status !== 'PENDING') return res.status(400).json({ error: 'Solo las tareas pendientes pueden ir al Backlog. Una tarea pausada o bloqueada ya está empezada.' })
 
     const updated = await prisma.task.update({
       where: { id: taskId },
