@@ -1,6 +1,6 @@
 const prisma = require('../lib/prisma')
-const path   = require('path')
 const fs     = require('fs')
+const { validateImageUpload } = require('../lib/imageType')
 
 // ─── Público / usuarios autenticados ─────────────────────────────────────────
 
@@ -34,6 +34,7 @@ async function serveImage(req, res, next) {
     if (!avatar) return res.status(404).json({ error: 'Imagen no encontrada' })
 
     res.set('Content-Type', avatar.mimeType)
+    res.set('X-Content-Type-Options', 'nosniff')
     res.set('Cache-Control', 'public, max-age=86400') // 24h cache
     res.send(Buffer.from(avatar.imageData))
   } catch (err) { next(err) }
@@ -78,14 +79,12 @@ async function upload(req, res, next) {
       if (!label?.trim()) return res.status(400).json({ error: 'El nombre es requerido' })
 
       const filename = req.file.originalname
-      const ext = path.extname(filename).toLowerCase()
-      const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.gif']
-      if (!allowed.includes(ext)) {
+      // Validar por contenido real (magic bytes), no por extensión ni Content-Type del cliente.
+      const check = validateImageUpload(req.file.buffer, ['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+      if (!check.ok) {
         return res.status(400).json({ error: 'Formato no soportado. Usar PNG, JPG, WEBP o GIF.' })
       }
-
-      const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
-      const mimeType = mimeMap[ext] ?? 'image/png'
+      const mimeType = check.mimeType
 
       // Nombre único si ya existe
       const existing = await prisma.avatar.findUnique({ where: { filename } })

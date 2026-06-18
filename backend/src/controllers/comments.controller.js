@@ -5,9 +5,10 @@ function isAdmin(req) {
   return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
 }
 
-async function getTaskWithAccess(taskId, userId, admin) {
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
+async function getTaskWithAccess(taskId, userId, admin, workspaceId) {
+  // Scopear por workspace: evita que un admin lea/comente tareas de otros workspaces vía ID.
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, workDay: { workspaceId } },
     include: { project: true },
   })
   if (!task) return null
@@ -24,7 +25,7 @@ async function listComments(req, res, next) {
   try {
     const taskId = Number(req.params.id)
     const userId = req.user.userId
-    const task = await getTaskWithAccess(taskId, userId, isAdmin(req))
+    const task = await getTaskWithAccess(taskId, userId, isAdmin(req), req.workspace.id)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const comments = await prisma.taskComment.findMany({
@@ -55,7 +56,7 @@ async function addComment(req, res, next) {
 
     if (!text?.trim()) return res.status(400).json({ error: 'El comentario no puede estar vacío' })
 
-    const task = await getTaskWithAccess(taskId, userId, isAdmin(req))
+    const task = await getTaskWithAccess(taskId, userId, isAdmin(req), workspaceId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const comment = await prisma.taskComment.create({

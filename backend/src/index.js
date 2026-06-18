@@ -53,7 +53,6 @@ const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service'
 const { saveAllKeywordRankings, saveCurrentMonthKeywordRankings } = require('./services/keywordTracking.service')
 const { captureAllSerpSnapshots } = require('./services/serpApi.service')
 const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.service')
-const { sendAllMonthlyMarketingReports }   = require('./services/monthlyMarketingReport.service')
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
 const { saveAllMonthlyTikTokSnapshots }    = require('./services/tiktokSnapshot.service')
 const { saveAllMonthlyLinkedinSnapshots }  = require('./services/linkedinSnapshot.service')
@@ -67,21 +66,10 @@ const { sendAllProductivityDigests } = require('./services/productivityDigest.se
 // In-memory locks — prevent overlapping runs if a job takes longer than its schedule
 let weeklyReportRunning         = false
 let insightMemoryRunning        = false
-let analyticsSnapshotRunning    = false
-let pageSpeedMonthlyRunning     = false
-let keywordRankingsRunning      = false
 let keywordWeeklyRunning        = false
-let geoMonthlyRunning           = false
-let marketingReportRunning      = false
-let instagramSnapshotRunning    = false
-let tiktokSnapshotRunning       = false
-let linkedinSnapshotRunning     = false
-let seoSnapshotRunning          = false
 let serpSnapshotRunning         = false
-let adsSnapshotRunning          = false
-let competitorSnapshotRunning   = false
-let rrhhMetricSnapRunning = false
-let productivityDigestRunning = false
+let monthlyChainRunning         = false  // cadena mensual de snapshots del día 1°
+let productivityDigestRunning   = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
 cron.schedule('1 0 * * 5', async () => {
@@ -101,32 +89,9 @@ cron.schedule('0 0 * * 6', async () => {
   finally { insightMemoryRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
-// Cron: PageSpeed mensual — 1° de cada mes a las 03:30 ART (después del snapshot de analytics)
-cron.schedule('30 3 1 * *', async () => {
-  if (pageSpeedMonthlyRunning) { console.log('[PageSpeed] Ya en ejecución, se omite.'); return }
-  pageSpeedMonthlyRunning = true
-  console.log('[PageSpeed] Iniciando análisis mensual automático...')
-  try { await runAllMonthlyPageSpeed() }
-  finally { pageSpeedMonthlyRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: guardar snapshot del mes anterior — 1° de cada mes a las 02:00 ART
-cron.schedule('0 2 1 * *', async () => {
-  if (analyticsSnapshotRunning) { console.log('[AnalyticsSnapshot] Ya en ejecución, se omite.'); return }
-  analyticsSnapshotRunning = true
-  console.log('[AnalyticsSnapshot] Iniciando guardado mensual automático...')
-  try { await saveAllPreviousMonthSnapshots() }
-  finally { analyticsSnapshotRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: guardar rankings de keywords del mes anterior — 1° de cada mes a las 04:00 ART (después de analytics y pagespeed)
-cron.schedule('0 4 1 * *', async () => {
-  if (keywordRankingsRunning) { console.log('[KeywordTracking] Ya en ejecución, se omite.'); return }
-  keywordRankingsRunning = true
-  console.log('[KeywordTracking] Iniciando guardado mensual de rankings...')
-  try { await saveAllKeywordRankings() }
-  finally { keywordRankingsRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+// (Los jobs mensuales del día 1° — GEO, GA4, GSC, PageSpeed, keywords, RRSS, Ads, competidores,
+// RRHH — corren en una única cadena secuencial `MONTHLY_CHAIN`, definida más abajo, en vez de
+// como crons sueltos a distintos horarios que podían solaparse entre sí.)
 
 // Cron: actualizar rankings del mes actual — lunes 06:00 ART (semanal, upsert)
 cron.schedule('0 6 * * 1', async () => {
@@ -236,95 +201,44 @@ cron.schedule('0 3 * * *', async () => {
   }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
-// Cron: GEO audit mensual — 1° del mes 01:00 ART
+// ── Cadena mensual de snapshots — 1° del mes 01:00 ART ─────────────────────────
+// Corre TODOS los jobs pesados del día 1° de forma SECUENCIAL (uno arranca al terminar el
+// anterior → no se solapan entre sí) y cada uno aislado en su try/catch (un fallo no corta
+// la cadena). Orden: web/SEO → RRSS/Ads/RRHH. Todos capturan datos del mes ya cerrado, así
+// quedan listos a la mañana del 1° (el informe on-demand `/report/:token` lee estos snapshots).
+// El informe mensual por email (legacy) fue deprecado.
+// A ~100 workspaces: migrar a worker process + cola (ver "Deuda técnica" en CLAUDE.md).
+const MONTHLY_CHAIN = [
+  ['GeoAudit',           runAllMonthlyGeoAudits],
+  ['AnalyticsSnapshot',  saveAllPreviousMonthSnapshots],
+  ['SeoSnapshot+DR',     async () => { await saveAllSearchConsoleSnapshots(); await refreshAllDomainRatings() }],
+  ['PageSpeed',          runAllMonthlyPageSpeed],
+  ['KeywordRankings',    saveAllKeywordRankings],
+  ['InstagramSnapshot',  saveAllMonthlyInstagramSnapshots],
+  ['TikTokSnapshot',     saveAllMonthlyTikTokSnapshots],
+  ['LinkedinSnapshot',   saveAllMonthlyLinkedinSnapshots],
+  ['AdsSnapshot',        saveAllAdsSnapshots],
+  ['CompetitorSnapshot', saveAllMonthlyCompetitorSnapshots],
+  ['RrhhMetricSnapshot', saveAllPrevRrhhMetrics],
+]
 cron.schedule('0 1 1 * *', async () => {
-  if (geoMonthlyRunning) { console.log('[GeoAudit] Ya en ejecución, se omite.'); return }
-  geoMonthlyRunning = true
-  try { await runAllMonthlyGeoAudits() }
-  catch (err) { console.error('[GeoAudit] Error en cron mensual:', err.message) }
-  finally { geoMonthlyRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: informe mensual de marketing — 1° del mes 05:00 ART
-cron.schedule('0 5 1 * *', async () => {
-  if (marketingReportRunning) { console.log('[MonthlyReport] Ya en ejecución, se omite.'); return }
-  marketingReportRunning = true
-  try { await sendAllMonthlyMarketingReports() }
-  catch (err) { console.error('[MonthlyReport] Error en cron mensual:', err.message) }
-  finally { marketingReportRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: snapshot mensual de Instagram — 1° del mes 04:30 ART
-cron.schedule('30 4 1 * *', async () => {
-  if (instagramSnapshotRunning) { console.log('[InstagramSnapshot] Ya en ejecución, se omite.'); return }
-  instagramSnapshotRunning = true
-  console.log('[InstagramSnapshot] Iniciando guardado mensual automático...')
-  try { await saveAllMonthlyInstagramSnapshots() }
-  catch (err) { console.error('[InstagramSnapshot] Error en cron mensual:', err.message) }
-  finally { instagramSnapshotRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: snapshot GSC mensual — 1° de cada mes a las 02:30 ART
-cron.schedule('30 2 1 * *', async () => {
-  if (seoSnapshotRunning) { console.log('[SeoSnapshot] Ya en ejecución, se omite.'); return }
-  seoSnapshotRunning = true
-  console.log('[SeoSnapshot] Iniciando guardado mensual automático...')
+  if (monthlyChainRunning) { console.log('[MonthlyChain] Ya en ejecución, se omite.'); return }
+  monthlyChainRunning = true
+  console.log('[MonthlyChain] Iniciando cadena mensual de snapshots (1° del mes)...')
   try {
-    await saveAllSearchConsoleSnapshots()
-    // Refresca el Domain Rating cacheado de todos los proyectos con websiteUrl
-    await refreshAllDomainRatings()
+    for (const [name, job] of MONTHLY_CHAIN) {
+      const t0 = Date.now()
+      try {
+        await job()
+        console.log(`[MonthlyChain] ✓ ${name} (${Math.round((Date.now() - t0) / 1000)}s)`)
+      } catch (err) {
+        console.error(`[MonthlyChain] ✗ ${name}: ${err.message}`)
+      }
+    }
+    console.log('[MonthlyChain] Cadena mensual completada.')
+  } finally {
+    monthlyChainRunning = false
   }
-  catch (err) { console.error('[SeoSnapshot] Error en cron mensual:', err.message) }
-  finally { seoSnapshotRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: snapshot TikTok mensual — 1° de cada mes a las 05:30 ART
-cron.schedule('30 5 1 * *', async () => {
-  if (tiktokSnapshotRunning) { console.log('[TikTokSnapshot] Ya en ejecución, se omite.'); return }
-  tiktokSnapshotRunning = true
-  try { await saveAllMonthlyTikTokSnapshots() }
-  catch (err) { console.error('[TikTokSnapshot] Error en cron mensual:', err.message) }
-  finally { tiktokSnapshotRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: snapshot LinkedIn mensual — 1° de cada mes a las 05:45 ART
-cron.schedule('45 5 1 * *', async () => {
-  if (linkedinSnapshotRunning) { console.log('[LinkedinSnapshot] Ya en ejecución, se omite.'); return }
-  linkedinSnapshotRunning = true
-  console.log('[LinkedinSnapshot] Iniciando guardado mensual automático...')
-  try { await saveAllMonthlyLinkedinSnapshots() }
-  catch (err) { console.error('[LinkedinSnapshot] Error en cron mensual:', err.message) }
-  finally { linkedinSnapshotRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: snapshot de Ads (Meta + Google) mensual — 1° de cada mes a las 06:00 ART
-cron.schedule('0 6 1 * *', async () => {
-  if (adsSnapshotRunning) { console.log('[AdsSnapshot] Ya en ejecución, se omite.'); return }
-  adsSnapshotRunning = true
-  console.log('[AdsSnapshot] Iniciando guardado mensual automático...')
-  try { await saveAllAdsSnapshots() }
-  catch (err) { console.error('[AdsSnapshot] Error en cron mensual:', err.message) }
-  finally { adsSnapshotRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: snapshot mensual de competidores (Instagram) — 1° de cada mes a las 06:15 ART
-cron.schedule('15 6 1 * *', async () => {
-  if (competitorSnapshotRunning) { console.log('[CompetitorSnapshot] Ya en ejecución, se omite.'); return }
-  competitorSnapshotRunning = true
-  console.log('[CompetitorSnapshot] Iniciando guardado mensual automático...')
-  try { await saveAllMonthlyCompetitorSnapshots() }
-  catch (err) { console.error('[CompetitorSnapshot] Error en cron mensual:', err.message) }
-  finally { competitorSnapshotRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
-
-// Cron: snapshot mensual de métricas de RRHH (proyectos/persona, antigüedad) — 1° de cada mes a las 06:30 ART
-cron.schedule('30 6 1 * *', async () => {
-  if (rrhhMetricSnapRunning) { console.log('[RrhhMetricSnapshot] Ya en ejecución, se omite.'); return }
-  rrhhMetricSnapRunning = true
-  console.log('[RrhhMetricSnapshot] Iniciando guardado mensual automático...')
-  try { await saveAllPrevRrhhMetrics() }
-  catch (err) { console.error('[RrhhMetricSnapshot] Error en cron mensual:', err.message) }
-  finally { rrhhMetricSnapRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: aviso semanal de Productividad a admins/owners — lunes 08:00 ART

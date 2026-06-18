@@ -645,6 +645,7 @@ model AiTokenLog {
 
   @@index([createdAt])
   @@index([workspaceId])
+  @@index([workspaceId, createdAt]) // agregación de presupuesto de tokens por workspace + mes (hot path)
 }
 
 // ─── ROLES IA ─────────────────────────────────────────────────────────────────

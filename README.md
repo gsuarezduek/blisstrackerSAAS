@@ -6,6 +6,8 @@ Task tracker multi-tenant para agencias. Cada cliente opera en su propio workspa
 - **GitHub:** https://github.com/gsuarezduek/blisstrackerSAAS
 - **Backend:** Railway · **Frontend:** Vercel Pro (wildcard `*.blisstracker.app`)
 
+_Última actualización de este README: 17 jun 2026. La referencia de arquitectura completa y siempre al día es [`CLAUDE.md`](CLAUDE.md)._
+
 ---
 
 ## Stack
@@ -501,6 +503,22 @@ Generada cada sábado 00:00 ART. Analiza las últimas 4 semanas: tendencias, for
 
 ### Resumen semanal por email
 Enviado cada viernes 14:00 ART. Incluye análisis de la semana, patrones, recomendaciones y tareas de rol omitidas. Puede dispararse manualmente desde Preferencias.
+
+---
+
+## Productividad, asistencia y RRHH
+
+**Productividad** (`/admin/productivity`, admin) — métricas determinísticas por persona y por proyecto, sin IA en el cálculo:
+- **Δ horas** (métrica principal): horas registradas ÷ horas disponibles (días hábiles esperados × jornada `workEndTime − workStartTime`). El encabezado de la sección muestra el **Δ horas del equipo** ponderado por horas.
+- **Tareas / Horas / Tasa / Estado** por persona, comparación contra la **mediana** del equipo (`▲/▼ vs equipo`), y en la fila expandida un gráfico de líneas de las **últimas 12 semanas** de horas registradas.
+- **Período**: "Mes en curso" (mes a la fecha vs los mismos días del mes anterior) o "Mes cerrado" (último mes completo vs el anterior).
+- **Aviso semanal por mail** a admins/owners (lunes 08:00 ART) sólo si hay personas en alerta. Toggles `productivityEnabled` / `productivityDigestEnabled`.
+
+**Asistencia y horarios** — `WorkspaceMember.workStartTime` / `workEndTime` por persona habilitan el cálculo de horas disponibles y de tardanzas (primer login vs horario + `lateToleranceMins`). El bloque de asistencia de RRHH se enciende/apaga con `Workspace.attendanceTrackingEnabled`. Email automático opcional por acumulación de tardanzas en 30 días (`lateNotify*`).
+
+**RRHH** (`/admin/rrhh`) — legajos con **formulario configurable** por workspace (`legajoFields` + campos custom), historial de logins (editable), vacaciones/licencias, snapshots mensuales de métricas (`RrhhMetricSnapshot`) y People Analyzer (score GWC del equipo).
+
+Ver [`CLAUDE.md`](CLAUDE.md) para el detalle completo de cálculos y modelos.
 
 ---
 

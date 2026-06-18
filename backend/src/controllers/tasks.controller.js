@@ -391,7 +391,8 @@ async function editTask(req, res, next) {
     const { description } = req.body
     if (!description?.trim()) return res.status(400).json({ error: 'La descripción es requerida' })
 
-    const task = await prisma.task.findUnique({ where: { id } })
+    // Scopear por workspace: evita que un admin/owner edite tareas de otros workspaces vía ID.
+    const task = await prisma.task.findFirst({ where: { id, workDay: { workspaceId: req.workspace.id } } })
     if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (!isAdmin(req) && task.userId !== req.user.userId) {
       return res.status(403).json({ error: 'No tenés permiso para editar esta tarea' })
@@ -466,7 +467,8 @@ async function setDuration(req, res, next) {
     if (!Number.isInteger(minutes) || minutes < 0) {
       return res.status(400).json({ error: 'minutes debe ser un entero mayor o igual a 0' })
     }
-    const task = await prisma.task.findUnique({ where: { id } })
+    // Scopear por workspace: evita editar la duración de tareas de otros workspaces vía ID.
+    const task = await prisma.task.findFirst({ where: { id, workDay: { workspaceId: req.workspace.id } } })
     if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (task.status !== 'COMPLETED') {
       return res.status(400).json({ error: 'Solo se puede editar la duración de tareas completadas' })

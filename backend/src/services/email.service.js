@@ -521,19 +521,6 @@ async function sendPaymentFailedEmail(emails, workspaceName, workspaceId) {
   }
 }
 
-async function sendMonthlyMarketingReport(emails, projectName, month, html, workspaceId) {
-  const from = await getEmailFrom(workspaceId)
-  const subject = `📊 Informe de Marketing — ${projectName} — ${month}`
-  try {
-    const { error } = await resend.emails.send({ from, to: emails, subject, html })
-    if (error) throw new Error(error.message)
-    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'monthlyMarketingReport', status: 'sent' })
-  } catch (err) {
-    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'monthlyMarketingReport', status: 'failed', errorMsg: err.message })
-    throw err
-  }
-}
-
 // Convierte texto plano (con saltos de línea) a HTML: párrafos por línea en blanco, <br> por salto simple.
 function textToHtmlParagraphs(text) {
   const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -660,7 +647,6 @@ module.exports = {
   sendVacationReviewEmail,
   sendPaymentSuccessEmail,
   sendPaymentFailedEmail,
-  sendMonthlyMarketingReport,
   sendPlatformNotification,
   platformCard,
   emailShell,

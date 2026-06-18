@@ -6,6 +6,7 @@ const { sendWelcomeEmail, sendInvitationEmail, sendWorkspaceDeletionWarning, sen
 const { syncSeatsToStripe } = require('./billing.controller')
 const { reconcileWorkspaceTier } = require('../services/billingTier.service')
 const { getSetting } = require('../lib/platformSettings')
+const { validateImageUpload } = require('../lib/imageType')
 const { seedWorkspace, removeDemoProject } = require('../services/workspaceSeed.service')
 
 const MEMBER_SELECT = {
@@ -111,20 +112,16 @@ async function uploadLogo(req, res, next) {
   try {
     if (!req.file) return res.status(400).json({ error: 'Archivo requerido' })
 
-    const ext = require('path').extname(req.file.originalname).toLowerCase()
-    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.svg']
-    if (!allowed.includes(ext)) {
-      return res.status(400).json({ error: 'Formato no soportado. Usar PNG, JPG, WEBP o SVG.' })
-    }
-
-    const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml' }
-    const mimeType = mimeMap[ext] ?? req.file.mimetype
+    // Validar por contenido real (magic bytes). No se permite SVG (riesgo de XSS al servirse
+    // same-origin) ni se confía en la extensión / Content-Type del cliente.
+    const check = validateImageUpload(req.file.buffer, ['image/png', 'image/jpeg', 'image/webp'])
+    if (!check.ok) return res.status(400).json({ error: 'Formato no soportado. Usar PNG, JPG o WEBP.' })
 
     await prisma.workspace.update({
       where: { id: req.workspace.id },
       data: {
         logoData:     req.file.buffer,
-        logoMimeType: mimeType,
+        logoMimeType: check.mimeType,
       },
     })
     res.json({ ok: true })
@@ -153,20 +150,14 @@ async function uploadBanner(req, res, next) {
   try {
     if (!req.file) return res.status(400).json({ error: 'Archivo requerido' })
 
-    const ext = require('path').extname(req.file.originalname).toLowerCase()
-    const allowed = ['.png', '.jpg', '.jpeg', '.webp']
-    if (!allowed.includes(ext)) {
-      return res.status(400).json({ error: 'Formato no soportado. Usar PNG, JPG o WEBP.' })
-    }
-
-    const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
-    const mimeType = mimeMap[ext] ?? req.file.mimetype
+    const check = validateImageUpload(req.file.buffer, ['image/png', 'image/jpeg', 'image/webp'])
+    if (!check.ok) return res.status(400).json({ error: 'Formato no soportado. Usar PNG, JPG o WEBP.' })
 
     await prisma.workspace.update({
       where: { id: req.workspace.id },
       data: {
         bannerData:     req.file.buffer,
-        bannerMimeType: mimeType,
+        bannerMimeType: check.mimeType,
       },
     })
     res.json({ ok: true })
@@ -280,6 +271,15 @@ async function updateMember(req, res, next) {
     const userId = Number(req.params.userId)
     const { name, email, password, teamRole, memberRole, workStartTime, workEndTime } = req.body
     const workspaceId = req.workspace.id
+
+    // Seguridad: el usuario objetivo DEBE ser miembro de este workspace. Sin esta verificación,
+    // un admin podría editar nombre/email/contraseña de cualquier usuario global (otros tenants,
+    // superadmins) enviando solo `password` — `userUpdates` se aplicaría sin pasar por el scope
+    // de `workspaceMember` (que solo corre si hay `memberUpdates`).
+    const target = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+    })
+    if (!target) return res.status(404).json({ error: 'Miembro no encontrado' })
 
     const userUpdates = {}
     if (name) userUpdates.name = name

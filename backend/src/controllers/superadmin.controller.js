@@ -226,13 +226,17 @@ async function impersonate(req, res, next) {
 
     if (!ownerMember) return res.status(404).json({ error: 'No hay miembros activos en este workspace' })
 
+    // Seguridad: el token impersonado NO lleva isSuperAdmin — la sesión actúa con el rol real
+    // del miembro (owner/admin/member) en ESE workspace, sin acceso a rutas /superadmin ni a los
+    // bypass globales. `impersonatedBy` deja traza de quién impersonó (auditoría).
     const token = jwt.sign(
       {
         userId:      ownerMember.user.id,
         workspaceId: workspace.id,
         role:        ownerMember.role,
         teamRole:    ownerMember.teamRole,
-        isSuperAdmin: true, // mantener privilegio al impersonar
+        isSuperAdmin: false,
+        impersonatedBy: req.user.userId,
         name:        ownerMember.user.name,
         email:       ownerMember.user.email,
       },
@@ -240,6 +244,7 @@ async function impersonate(req, res, next) {
       { expiresIn: '2h' }
     )
 
+    console.log(`[impersonate] superadmin#${req.user.userId} → workspace#${workspace.id} (${workspace.slug}) como user#${ownerMember.user.id}`)
     res.json({ token, slug: workspace.slug, impersonating: ownerMember.user.name })
   } catch (err) { next(err) }
 }

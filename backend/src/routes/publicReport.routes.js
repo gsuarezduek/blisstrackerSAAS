@@ -20,7 +20,11 @@ router.get('/logo/:slug', async (req, res) => {
     if (!workspace?.logoData) return res.status(404).end()
 
     res.set('Content-Type', workspace.logoMimeType)
-    res.set('Cache-Control', 'public, max-age=3600')
+    res.set('X-Content-Type-Options', 'nosniff')
+    // Defensa contra logos SVG legacy (ya no se aceptan en la subida): forzar descarga
+    // para que el navegador no los renderice inline y ejecute scripts embebidos.
+    if (workspace.logoMimeType === 'image/svg+xml') res.set('Content-Disposition', 'attachment')
+    res.set('Cache-Control', 'public, max-age=86400') // 24h
     res.send(Buffer.from(workspace.logoData))
   } catch { res.status(500).end() }
 })
@@ -38,7 +42,8 @@ router.get('/report-banner/:token', async (req, res) => {
     if (!report?.bannerData) return res.status(404).end()
 
     res.set('Content-Type', report.bannerMimeType)
-    res.set('Cache-Control', 'public, max-age=3600')
+    res.set('X-Content-Type-Options', 'nosniff')
+    res.set('Cache-Control', 'public, max-age=86400') // 24h
     res.send(Buffer.from(report.bannerData))
   } catch { res.status(500).end() }
 })

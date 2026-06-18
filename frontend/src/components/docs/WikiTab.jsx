@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { WIKI_CATEGORIES, ALL_ARTICLES, findArticle } from '../../data/wikiContent'
+import { WIKI_CATEGORIES, ALL_ARTICLES, findArticle, WIKI_LAST_UPDATED } from '../../data/wikiContent'
 import { renderWikiMarkdown } from './wikiMarkdown'
 
 const MODULE_LABELS = { marketing: 'Módulo Marketing', eos: 'Módulo EOS' }
@@ -159,6 +159,14 @@ export default function WikiTab({ articleId, onSelect }) {
 
   return (
     <div>
+      {/* Última actualización del Wiki (referencia para el equipo) */}
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+        Última actualización del Wiki:{' '}
+        <span className="font-medium text-gray-500 dark:text-gray-400">
+          {new Date(WIKI_LAST_UPDATED + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
+        </span>
+      </p>
+
       {/* Buscador */}
       <div className="relative mb-5 max-w-xl">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"

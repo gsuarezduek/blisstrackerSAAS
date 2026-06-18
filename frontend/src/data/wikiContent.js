@@ -15,6 +15,10 @@
 //     related?,          // string[] de ids de otros artículos
 //   }
 
+// Fecha de última actualización del Wiki (YYYY-MM-DD). Actualizar al cambiar el contenido.
+// Se muestra al inicio del Wiki como referencia para el equipo.
+export const WIKI_LAST_UPDATED = '2026-06-17'
+
 export const WIKI_CATEGORIES = [
   // ── Primeros pasos ────────────────────────────────────────────────────────
   {
