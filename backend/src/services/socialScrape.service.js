@@ -2,6 +2,7 @@ const axios = require('axios')
 const { computeInstagramMetrics } = require('./instagram.service')
 const { computeLinkedinScrapeMetrics } = require('./linkedin.service')
 const { sendPlatformNotification, platformCard } = require('./email.service')
+const { getSetting } = require('../lib/platformSettings')
 
 /**
  * Motor de scraping de redes sociales — abstraído por proveedor.
@@ -9,8 +10,9 @@ const { sendPlatformNotification, platformCard } = require('./email.service')
  * Proveedor actual: Apify (https://apify.com). Requiere APIFY_API_TOKEN.
  * - Instagram: actor configurable con APIFY_INSTAGRAM_ACTOR (default
  *   apify~instagram-profile-scraper).
- * - LinkedIn (Company Pages): actor configurable con APIFY_LINKEDIN_ACTOR
- *   (sin default — debe setearse para habilitar el scraping de LinkedIn).
+ * - LinkedIn (Company Pages): actor configurable desde SuperAdmin → Configuración
+ *   (PlatformSetting apifyLinkedinActor) o, como fallback, la env APIFY_LINKEDIN_ACTOR.
+ *   Sin ninguno de los dos, el scraping de LinkedIn devuelve SCRAPE_NOT_CONFIGURED.
  *
  * Todas las funciones devuelven datos en el MISMO shape que el fetch oficial de
  * cada red (fetchInstagramMetrics / fetchLinkedinMetrics) para reutilizar vistas,
@@ -335,10 +337,14 @@ async function runApifyLinkedin(identifier, opts = {}) {
     alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username: identifier, workspaceId, context })
     throw scrapeError('El scraping no está configurado en el servidor (falta APIFY_API_TOKEN).', 'SCRAPE_NOT_CONFIGURED', 503)
   }
-  const actor = process.env.APIFY_LINKEDIN_ACTOR
+  // Actor: prioriza el PlatformSetting (editable desde SuperAdmin → Configuración,
+  // para probar/cambiar de actor sin redeploy); si está vacío, cae a la env var.
+  let actor = ''
+  try { actor = (await getSetting('apifyLinkedinActor')) || '' } catch { /* DB no disponible → env */ }
+  actor = actor.trim() || process.env.APIFY_LINKEDIN_ACTOR
   if (!actor) {
-    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_LINKEDIN_ACTOR en el servidor.', username: identifier, workspaceId, context })
-    throw scrapeError('El scraping de LinkedIn no está configurado (falta APIFY_LINKEDIN_ACTOR).', 'SCRAPE_NOT_CONFIGURED', 503)
+    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta configurar el actor de LinkedIn (setting apifyLinkedinActor o env APIFY_LINKEDIN_ACTOR).', username: identifier, workspaceId, context })
+    throw scrapeError('El scraping de LinkedIn no está configurado: falta elegir el actor de Apify (SuperAdmin → Configuración → "Actor de Apify para LinkedIn", o la variable de entorno APIFY_LINKEDIN_ACTOR).', 'SCRAPE_NOT_CONFIGURED', 503)
   }
 
   const url = `${APIFY_BASE}/acts/${actor}/run-sync-get-dataset-items`
@@ -381,7 +387,10 @@ async function scrapeLinkedinCompany(urlOrSlug, opts = {}) {
   const identifier = parseLinkedinCompany(urlOrSlug)
   if (!identifier) throw scrapeError('URL o nombre de empresa de LinkedIn inválido.', 'INVALID_USERNAME', 400)
 
-  const postsLimit = opts.postsLimit ?? DEFAULT_LINKEDIN_POSTS_LIMIT
+  // Límite de posts: PlatformSetting (>0) → env/default. Editable desde SuperAdmin.
+  let cfgLimit = 0
+  try { cfgLimit = Number(await getSetting('apifyLinkedinPostsLimit')) || 0 } catch { /* DB no disponible */ }
+  const postsLimit = opts.postsLimit ?? (cfgLimit > 0 ? cfgLimit : DEFAULT_LINKEDIN_POSTS_LIMIT)
   const items = await runApifyLinkedin(identifier, {
     postsLimit,
     workspaceId: opts.workspaceId ?? null,

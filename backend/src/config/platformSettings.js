@@ -176,6 +176,24 @@ const PLATFORM_SETTINGS = [
     label:   'Retención de logs de emails (días)',
     help:    'Después de cuántos días se borran los EmailLog. Afecta el panel SuperAdmin → Emails.',
   },
+  {
+    key:     'apifyLinkedinActor',
+    type:    'string',
+    default: '',
+    group:   'operational',
+    label:   'Actor de Apify para LinkedIn (scraping)',
+    help:    'ID del actor de Apify que scrapea Company Pages de LinkedIn (ej: "apimaestro~linkedin-company-posts"). Editable acá para probar e ir cambiando de actor sin redeploy. Vacío = usa la variable de entorno APIFY_LINKEDIN_ACTOR; si ambos están vacíos, el scraping de LinkedIn devuelve SCRAPE_NOT_CONFIGURED. Si el actor elegido usa otras claves de input/output, el mapeo se ajusta en runApifyLinkedin/normalizeApifyCompany (socialScrape.service.js).',
+  },
+  {
+    key:     'apifyLinkedinPostsLimit',
+    type:    'integer',
+    default: 0,
+    min:     0,
+    max:     200,
+    group:   'operational',
+    label:   'Posts a traer por scrape de LinkedIn',
+    help:    'Cantidad de posts recientes que trae cada scrape de LinkedIn (debe cubrir el mes completo). 0 = usa la variable de entorno APIFY_LINKEDIN_POSTS_LIMIT o el default (30). Subir si una página postea mucho y los meses quedan incompletos.',
+  },
 
   // ─── Notificaciones de plataforma ──────────────────────────────────────────
   // Casilla interna del equipo BlissTracker que recibe avisos operativos
