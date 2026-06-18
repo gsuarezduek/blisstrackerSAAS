@@ -1,8 +1,39 @@
 const prisma = require('../lib/prisma')
+const { addDays, getProductivityPeriod } = require('../lib/timeMetrics')
+const {
+  getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median,
+} = require('../services/productivityStats.service')
 
 function calcMins(t) {
   if (t.minutesOverride !== null && t.minutesOverride !== undefined) return t.minutesOverride
   return Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+}
+
+function dateDiffDays(a, b) {
+  return Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000)
+}
+
+// % de cambio entre dos valores. null = sin base de comparación (período previo en cero).
+function pctChange(cur, prev) {
+  if (!prev) return cur ? null : 0
+  return (cur - prev) / prev
+}
+
+// Suma de minutos activos por proyecto en un rango [from, to], usando completedAt.
+async function projectMinutesInRange(workspaceId, tz, from, to) {
+  const range = buildCompletedAtWhere(from, to, tz)
+  const tasks = await prisma.task.findMany({
+    where: {
+      status: 'COMPLETED',
+      startedAt: { not: null },
+      completedAt: { not: null, ...range },
+      workDay: { workspaceId },
+    },
+    select: { projectId: true, startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true },
+  })
+  const map = {}
+  for (const t of tasks) map[t.projectId] = (map[t.projectId] || 0) + calcMins(t)
+  return map
 }
 
 function defaultDateRange(tz = 'America/Argentina/Buenos_Aires') {
@@ -78,12 +109,20 @@ async function byProject(req, res, next) {
       })
     }
 
+    // Δ horas por proyecto: comparar minutos totales contra el rango inmediatamente
+    // anterior de igual duración (ventanas de igual largo → Δ crudo, sin normalizar por día).
+    const len     = dateDiffDays(from, to) + 1
+    const prevTo  = addDays(from, -1)
+    const prevFrom = addDays(from, -len)
+    const prevMins = await projectMinutesInRange(workspaceId, tz, prevFrom, prevTo)
+
     const result = Object.values(map).map(({ byUser, ...rest }) => ({
       ...rest,
       byUser: Object.values(byUser),
+      horasDeltaPct: pctChange(rest.totalMinutes, prevMins[rest.project.id] || 0),
     }))
 
-    res.json({ from, to, projects: result })
+    res.json({ from, to, prevFrom, prevTo, projects: result })
   } catch (err) { next(err) }
 }
 
@@ -116,50 +155,6 @@ async function byUser(req, res, next) {
       ...t,
       durationMinutes: Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000),
     })))
-  } catch (err) { next(err) }
-}
-
-async function byUserSummary(req, res, next) {
-  try {
-    const workspaceId = req.workspace.id
-    const tz = req.workspace.timezone
-    let { from, to } = req.query
-    if (!from && !to) ({ from, to } = defaultDateRange(tz))
-    const completedAtRange = buildCompletedAtWhere(from, to, tz)
-
-    const tasks = await prisma.task.findMany({
-      where: {
-        status: 'COMPLETED',
-        startedAt: { not: null },
-        completedAt: { not: null, ...completedAtRange },
-        workDay: { workspaceId },
-      },
-      select: taskSelect,
-      orderBy: { completedAt: 'desc' },
-    })
-
-    const map = {}
-    for (const t of tasks) {
-      const mins = calcMins(t)
-      const uid  = t.user.id
-      if (!map[uid]) map[uid] = { user: t.user, totalMinutes: 0, taskCount: 0, byProject: {} }
-      map[uid].totalMinutes += mins
-      map[uid].taskCount += 1
-      const pid = t.project.id
-      if (!map[uid].byProject[pid]) map[uid].byProject[pid] = { project: t.project, minutes: 0, taskList: [] }
-      map[uid].byProject[pid].minutes += mins
-      map[uid].byProject[pid].taskList.push({
-        id: t.id, description: t.description, minutes: mins,
-        completedAt: t.completedAt,
-        isOverride: t.minutesOverride !== null && t.minutesOverride !== undefined,
-      })
-    }
-
-    const result = Object.values(map)
-      .map(({ byProject, ...rest }) => ({ ...rest, byProject: Object.values(byProject) }))
-      .sort((a, b) => b.totalMinutes - a.totalMinutes)
-
-    res.json(result)
   } catch (err) { next(err) }
 }
 
@@ -211,4 +206,72 @@ async function mine(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { byProject, byUser, byUserSummary, mine }
+// Self-view de productividad para el usuario actual (NO admin): sus números de auto-mejora.
+// Filtrado: Δ horas propio, tendencia 12 semanas, tasa, tareas, insight IA + comparación
+// anónima contra la mediana del equipo. NO incluye asistencia/tardanzas ni el semáforo crudo.
+async function mineProductivity(req, res, next) {
+  try {
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const period = getProductivityPeriod('current', tz)
+
+    const [statsMap, attendanceMap, hist, insight] = await Promise.all([
+      getWorkspaceStats(workspaceId, tz, period),
+      getAttendanceStats(workspaceId, tz, period),
+      getHoursHistory(workspaceId, tz, { weeks: 12 }),
+      prisma.userInsightMemory.findFirst({
+        where: { userId, workspaceId },
+        orderBy: { weekStart: 'desc' },
+        select: { tendencias: true, fortalezas: true, areasDeAtencion: true, updatedAt: true },
+      }),
+    ])
+
+    const s = statsMap.get(userId) || null
+    const att = attendanceMap.get(userId) || null
+    const benchmark = computeBenchmark(statsMap)
+
+    const registeredHours = s ? Math.round(s.current.totalMinutes / 60 * 10) / 10 : 0
+    const availableHours   = att?.availableHours ?? null
+    const utilization      = availableHours && availableHours > 0 ? registeredHours / availableHours : null
+    const hoursHistory     = hist.history.get(userId) || hist.labels.map(w => ({ weekStart: w, hours: 0 }))
+
+    // Mediana de Δ horas del equipo (anónima).
+    let utilizationMedian = null
+    if (benchmark) {
+      const utils = []
+      for (const [uid, st] of statsMap) {
+        const a = attendanceMap.get(uid)
+        const avail = a?.availableHours ?? null
+        const reg = st.current.totalMinutes / 60
+        if (avail && avail > 0) utils.push(reg / avail)
+      }
+      utilizationMedian = utils.length ? median(utils) : null
+    }
+
+    res.json({
+      period: { ...period },
+      hasData: s?.hasData ?? false,
+      status: s ? memberStatus(s) : 'nodata',
+      stats: s ? {
+        completed: s.current.totalCompleted,
+        hours: registeredHours,
+        tasaCompletado: s.current.tasaCompletado,
+        utilization,
+        delta: s.delta,
+        stuckTasks: s.stuckTasks,
+        hoursHistory,
+      } : { completed: 0, hours: 0, tasaCompletado: 0, utilization: null, delta: { horasPct: null, tareasPct: null, tasaCompletadoPts: 0 }, stuckTasks: 0, hoursHistory },
+      benchmark: benchmark ? {
+        completed: benchmark.completed,
+        horas: benchmark.horas,
+        tasaCompletado: benchmark.tasaCompletado,
+        utilizationMedian,
+        teamSize: benchmark.teamSize,
+      } : null,
+      insight: insight && (insight.tendencias || insight.fortalezas || insight.areasDeAtencion) ? insight : null,
+    })
+  } catch (err) { next(err) }
+}
+
+module.exports = { byProject, byUser, mine, mineProductivity }

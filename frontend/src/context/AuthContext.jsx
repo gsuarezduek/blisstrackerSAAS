@@ -3,9 +3,14 @@ import api from '../api/client'
 
 const AuthContext = createContext(null)
 
+// Clave en localStorage del modo "ver como miembro" (por usuario)
+const viewAsMemberKey = userId => `viewAsMember_${userId}`
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Un admin puede previsualizar la app "como un miembro normal" sin perder su rol real.
+  const [viewAsMember, setViewAsMember] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -18,6 +23,15 @@ export function AuthProvider({ children }) {
       setLoading(false)
     }
   }, [])
+
+  // Recupera la preferencia de "ver como miembro" cuando se conoce el usuario.
+  useEffect(() => {
+    if (user?.id) {
+      setViewAsMember(localStorage.getItem(viewAsMemberKey(user.id)) === 'true')
+    } else {
+      setViewAsMember(false)
+    }
+  }, [user?.id])
 
   async function login(email, password) {
     const { data } = await api.post('/auth/login', { email, password })
@@ -62,8 +76,29 @@ export function AuthProvider({ children }) {
     setUser(prev => ({ ...prev, ...updates }))
   }
 
+  // Alterna entre la vista de admin y la vista "como miembro normal" (persistente).
+  function toggleViewAsMember() {
+    setViewAsMember(prev => {
+      const next = !prev
+      if (user?.id) localStorage.setItem(viewAsMemberKey(user.id), String(next))
+      return next
+    })
+  }
+
+  // Rol admin real (sin importar el modo de previsualización).
+  const realIsAdmin = user?.isAdmin === true
+  // Mientras un admin previsualiza como miembro, la app entera ve isAdmin=false:
+  // esto se propaga a las rutas admin, el Navbar y toda página que lea user.isAdmin.
+  const effectiveUser = user && realIsAdmin && viewAsMember
+    ? { ...user, isAdmin: false }
+    : user
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, loginWithToken, switchWorkspace, logout, updateUser }}>
+    <AuthContext.Provider value={{
+      user: effectiveUser, loading, login, loginWithGoogle, loginWithToken,
+      switchWorkspace, logout, updateUser,
+      realIsAdmin, viewAsMember, toggleViewAsMember,
+    }}>
       {children}
     </AuthContext.Provider>
   )

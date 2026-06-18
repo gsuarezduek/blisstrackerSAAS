@@ -4,6 +4,7 @@ import { linkify } from '../utils/linkify'
 import LoadingSpinner from '../components/LoadingSpinner'
 import DateRangeFilter from '../components/DateRangeFilter'
 import EditDurationModal from '../components/EditDurationModal'
+import MyProductivity from '../components/MyProductivity'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { fmtMins } from '../utils/format'
@@ -47,6 +48,10 @@ export default function MyReports() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mis Reportes</h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{user?.name}</p>
         </div>
+
+        <MyProductivity />
+
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3">Registro por proyecto</h2>
 
         <DateRangeFilter
           from={from} to={to}

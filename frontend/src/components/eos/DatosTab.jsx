@@ -143,6 +143,30 @@ function goalDisplay(metric) {
   return `${cmp} ${formatWithUnit(metric.goal, metric.unit)}`
 }
 
+/**
+ * Valor de una métrica en un período. Las automáticas (autoKey) lo leen de
+ * `autoData` (calculado por el backend); las manuales, de `entriesMap`.
+ */
+function metricValueAt(metric, period, entriesMap, autoData) {
+  if (metric.autoKey) return autoData?.[metric.autoKey]?.[period]?.value ?? null
+  return entriesMap[metric.id]?.[period] ?? null
+}
+
+/** Detalle (top 3) de una métrica automática en un período. */
+function metricDetailAt(metric, period, autoData) {
+  if (!metric.autoKey) return null
+  return autoData?.[metric.autoKey]?.[period] ?? null
+}
+
+// Badge "Automático" reutilizable.
+function AutoBadge({ className = '' }) {
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 ${className}`}>
+      ⚡ Auto
+    </span>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // YearNav — navegación de año con botón "Hoy"
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -267,11 +291,95 @@ function QuickEntryCard({ metric, owner, initialValue, onSave }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// AutoMetricCard — tarjeta de solo-lectura de una métrica automática (valor + top 3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Renderiza la línea de cada persona del top 3 según el tipo de dato automático. */
+function autoRankRow(autoKey, p, i) {
+  let detail = ''
+  if (autoKey === 'tardanzas') {
+    const d = `${p.lateDays} ${p.lateDays === 1 ? 'día' : 'días'}`
+    detail = `${d} · +${p.lateMins} min`
+  } else if (autoKey === 'ocupacion') {
+    detail = `${p.util}% · ${formatVal(p.registeredHours)}/${formatVal(p.availableHours)}h`
+  }
+  return (
+    <li key={p.userId} className="flex items-center gap-2 text-xs">
+      <span className="w-4 text-center text-[11px] font-bold text-gray-400 dark:text-gray-500 tabular-nums shrink-0">{i + 1}</span>
+      <img src={avatarUrl(p.avatar)} alt={p.name}
+        className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
+      <span className="font-medium text-gray-700 dark:text-gray-200 truncate min-w-0 flex-1">{p.name.split(' ')[0]}</span>
+      <span className="text-gray-500 dark:text-gray-400 tabular-nums whitespace-nowrap shrink-0">{detail}</span>
+    </li>
+  )
+}
+
+function AutoMetricCard({ metric, value, detail }) {
+  const hasGoal = metric.goal != null
+  const status  = goalStatus(value, metric.goal, metric.lowerIsBetter)
+  const onTrack = status === 'on'
+  const offTrack = status === 'off'
+  const top3 = detail?.top3 || []
+
+  const valColor = onTrack  ? 'text-green-700 dark:text-green-300'
+                 : offTrack ? 'text-red-600 dark:text-red-400'
+                 : 'text-gray-800 dark:text-gray-100'
+
+  const rankTitle = metric.autoKey === 'tardanzas'
+    ? 'Más tarde llegaron'
+    : metric.autoKey === 'ocupacion' ? 'Menos aprovecharon sus horas' : 'Top 3'
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3.5 shadow-sm">
+      <div className="flex items-start justify-between gap-2 mb-2 min-h-[36px]">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight truncate">{metric.name}</p>
+            <AutoBadge />
+          </div>
+        </div>
+        {hasGoal && (
+          <div className="text-right shrink-0">
+            <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-medium">Meta</div>
+            <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">{goalDisplay(metric)}</div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-baseline gap-1 mb-2">
+        {value != null ? (
+          <>
+            <span className={`text-2xl font-bold tabular-nums ${valColor}`}>{formatVal(value)}</span>
+            {metric.unit && <span className={`text-sm font-medium ${valColor}`}>{metric.unit}</span>}
+            {hasGoal && <span className="ml-1 text-base">{onTrack ? '✅' : '🔴'}</span>}
+          </>
+        ) : (
+          <span className="text-sm text-gray-400 dark:text-gray-500">Sin datos esta semana</span>
+        )}
+      </div>
+
+      {top3.length > 0 ? (
+        <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+          <p className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-medium mb-1.5">{rankTitle}</p>
+          <ul className="space-y-1.5">
+            {top3.map((p, i) => autoRankRow(metric.autoKey, p, i))}
+          </ul>
+        </div>
+      ) : value != null && (
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 pt-2 border-t border-gray-100 dark:border-gray-700">
+          {metric.autoKey === 'tardanzas' ? 'Nadie llegó tarde 🎉' : 'Sin personas con horario cargado'}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // CurrentPeriodPanel — panel destacado del período actual
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function CurrentPeriodPanel({
-  metrics, entriesMap, members, period, title, subtitle, onEntryChange,
+  metrics, entriesMap, autoData, members, period, title, subtitle, onEntryChange,
   isCurrent, canGoForward, onPrev, onNext, onToday,
 }) {
   if (metrics.length === 0 || !period) return null
@@ -314,6 +422,16 @@ function CurrentPeriodPanel({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {metrics.map(metric => {
+          if (metric.autoKey) {
+            return (
+              <AutoMetricCard
+                key={`${metric.id}-${period}`}
+                metric={metric}
+                value={metricValueAt(metric, period, entriesMap, autoData)}
+                detail={metricDetailAt(metric, period, autoData)}
+              />
+            )
+          }
           const owner = metric.ownerId ? members.find(m => m.id === metric.ownerId) : null
           const currentVal = entriesMap[metric.id]?.[period] ?? null
           return (
@@ -399,12 +517,40 @@ function ScoreCell({ metricId, period, initialValue, goal, lowerIsBetter, unit, 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// AutoScoreCell — celda de solo-lectura (métrica automática) en la tabla histórica
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function AutoScoreCell({ value, goal, lowerIsBetter, isCurrent, isWeekly }) {
+  const status   = goalStatus(value, goal, lowerIsBetter)
+  const onTrack  = status === 'on'
+  const offTrack = status === 'off'
+
+  const bg = onTrack  ? 'bg-green-50 dark:bg-green-900/25'
+           : offTrack ? 'bg-red-50 dark:bg-red-900/20'
+           : ''
+  const textColor = onTrack  ? 'text-green-800 dark:text-green-300'
+                  : offTrack ? 'text-red-700 dark:text-red-400'
+                  : 'text-gray-600 dark:text-gray-300'
+
+  return (
+    <td className={`p-0 ${isCurrent ? 'bg-primary-50/40 dark:bg-primary-900/15 border-x-2 border-primary-400 dark:border-primary-600' : ''}`}>
+      <div className={`text-right tabular-nums ${bg} ${textColor} ${
+        isWeekly ? 'text-xs py-2 px-1' : 'text-sm py-3 px-2'
+      }`} style={{ minWidth: isWeekly ? 34 : 88 }}>
+        {value != null ? formatVal(value) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+      </div>
+    </td>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Modal crear / editar métrica
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const UNITS = ['', '#', '$', '%', 'hs', 'días', 'km', 'kg', 'leads', 'clientes', 'ventas', 'tickets']
 
 function MetricModal({ metric, members, onSave, onClose, saving }) {
+  const isAuto = !!metric?.autoKey
   const [name,          setName]          = useState(metric?.name      ?? '')
   const [ownerId,       setOwnerId]       = useState(metric?.ownerId   != null ? String(metric.ownerId) : '')
   const [goal,          setGoal]          = useState(metric?.goal      != null ? String(metric.goal)    : '')
@@ -413,6 +559,10 @@ function MetricModal({ metric, members, onSave, onClose, saving }) {
   const [frequency,     setFrequency]     = useState(metric?.frequency ?? 'weekly')
 
   function handleSave() {
+    if (isAuto) {
+      onSave({ goal: goal !== '' ? Number(goal) : null })
+      return
+    }
     if (!name.trim()) return
     onSave({
       name:      name.trim(),
@@ -425,6 +575,43 @@ function MetricModal({ metric, members, onSave, onClose, saving }) {
   }
 
   const isNew = !metric?.id
+
+  // Edición de un dato automático: solo la meta es editable (el resto sale del catálogo).
+  if (isAuto) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+           onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              {metric.name} <AutoBadge />
+            </h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Dato calculado por el sistema. Definí su meta semanal ({metric.lowerIsBetter ? 'menor es mejor' : 'mayor es mejor'}):
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Meta {metric.unit ? `(${metric.unit})` : ''}
+            </label>
+            <input type="number" value={goal} onChange={e => setGoal(e.target.value)}
+              placeholder="Ej: 3"
+              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Dejala vacía para no marcar verde/rojo.</p>
+          </div>
+          <div className="flex gap-2 mt-5">
+            <button onClick={onClose} className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
+            <button onClick={handleSave} disabled={saving}
+              className="flex-1 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50">
+              {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -534,14 +721,14 @@ function MetricModal({ metric, members, onSave, onClose, saving }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function ScorecardTable({
-  metrics, entriesMap, members, periods, currentPeriod,
+  metrics, entriesMap, autoData, members, periods, currentPeriod,
   labelFn, tooltipFn,
   onEntryChange, onEdit, onDelete,
   containerRef, currentPeriodRef,
   isWeekly,
 }) {
-  function avg(metricId) {
-    const vals = periods.map(p => entriesMap[metricId]?.[p]).filter(v => v != null)
+  function avg(metric) {
+    const vals = periods.map(p => metricValueAt(metric, p, entriesMap, autoData)).filter(v => v != null)
     if (!vals.length) return null
     return vals.reduce((a, b) => a + b, 0) / vals.length
   }
@@ -602,7 +789,8 @@ function ScorecardTable({
         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
           {metrics.map(metric => {
             const owner    = metric.ownerId ? members.find(m => m.id === metric.ownerId) : null
-            const avgVal   = avg(metric.id)
+            const isAuto   = !!metric.autoKey
+            const avgVal   = avg(metric)
             const hasGoal  = metric.goal != null
             const avgStat  = goalStatus(avgVal, metric.goal, metric.lowerIsBetter)
             const avgOK    = avgStat === 'on'
@@ -613,7 +801,10 @@ function ScorecardTable({
                 {/* Métrica sticky — en mensual lleva nombre + meta + responsable apilados */}
                 <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20 px-4 py-2 transition-colors align-top">
                   {isWeekly ? (
-                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{metric.name}</span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{metric.name}</span>
+                      {isAuto && <AutoBadge />}
+                    </span>
                   ) : (
                     <div className="flex flex-col gap-1 py-1">
                       <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight">{metric.name}</span>
@@ -642,7 +833,9 @@ function ScorecardTable({
                 {isWeekly && (
                   <>
                     <td className="px-2 py-2 text-center">
-                      {owner ? (
+                      {isAuto ? (
+                        <span className="text-[10px] text-indigo-500 dark:text-indigo-300 font-medium">Sistema</span>
+                      ) : owner ? (
                         <div className="flex items-center justify-center gap-1">
                           <img src={avatarUrl(owner.avatar)} alt={owner.name}
                             className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
@@ -666,18 +859,29 @@ function ScorecardTable({
 
                 {/* Celdas de período */}
                 {periods.map(period => (
-                  <ScoreCell
-                    key={period}
-                    metricId={metric.id}
-                    period={period}
-                    initialValue={entriesMap[metric.id]?.[period] ?? null}
-                    goal={metric.goal}
-                    lowerIsBetter={metric.lowerIsBetter}
-                    unit={metric.unit}
-                    isCurrent={period === currentPeriod}
-                    isWeekly={isWeekly}
-                    onSave={onEntryChange}
-                  />
+                  isAuto ? (
+                    <AutoScoreCell
+                      key={period}
+                      value={metricValueAt(metric, period, entriesMap, autoData)}
+                      goal={metric.goal}
+                      lowerIsBetter={metric.lowerIsBetter}
+                      isCurrent={period === currentPeriod}
+                      isWeekly={isWeekly}
+                    />
+                  ) : (
+                    <ScoreCell
+                      key={period}
+                      metricId={metric.id}
+                      period={period}
+                      initialValue={entriesMap[metric.id]?.[period] ?? null}
+                      goal={metric.goal}
+                      lowerIsBetter={metric.lowerIsBetter}
+                      unit={metric.unit}
+                      isCurrent={period === currentPeriod}
+                      isWeekly={isWeekly}
+                      onSave={onEntryChange}
+                    />
+                  )
                 ))}
 
                 {/* Promedio */}
@@ -736,6 +940,74 @@ function ConfirmModal({ message, onConfirm, onCancel }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// AutoMetricPicker — agregar un dato automático desde el catálogo
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function AutoMetricPicker({ catalog, onAdd, onClose, saving }) {
+  const available = catalog.filter(c => !c.added)
+  const [goals, setGoals] = useState({})
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+         onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+            Datos automáticos <AutoBadge />
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Métricas semanales que el sistema calcula solo con datos que ya tiene. Se actualizan automáticamente.
+        </p>
+
+        {available.length === 0 ? (
+          <div className="text-center py-8 text-sm text-gray-500 dark:text-gray-400">
+            Ya agregaste todos los datos automáticos disponibles.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {available.map(c => (
+              <div key={c.key} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{c.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{c.description}</p>
+                  </div>
+                  <button
+                    onClick={() => onAdd(c.key, goals[c.key])}
+                    disabled={saving}
+                    className="shrink-0 px-3 py-1.5 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    Agregar
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-3">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">
+                    Meta semanal {c.unit ? `(${c.unit})` : ''} · {c.lowerIsBetter ? 'menor es mejor' : 'mayor es mejor'}
+                  </label>
+                  <input
+                    type="number"
+                    value={goals[c.key] ?? ''}
+                    onChange={e => setGoals(g => ({ ...g, [c.key]: e.target.value }))}
+                    placeholder="opcional"
+                    className="w-24 px-2 py-1 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-5">
+          <button onClick={onClose} className="w-full py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // DatosTab — componente principal
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -743,6 +1015,9 @@ export default function DatosTab() {
   const [members,     setMembers]     = useState([])
   const [metrics,     setMetrics]     = useState([])
   const [entriesMap,  setEntriesMap]  = useState({})
+  const [autoData,    setAutoData]    = useState({})   // { autoKey: { 'YYYY-Www': { value, top3 } } }
+  const [autoCatalog, setAutoCatalog] = useState([])
+  const [autoPicker,  setAutoPicker]  = useState(false)
   const [loading,     setLoading]     = useState(true)
   const [modalMetric, setModalMetric] = useState(null)
   const [saving,      setSaving]      = useState(false)
@@ -751,6 +1026,9 @@ export default function DatosTab() {
   const [monthYear,   setMonthYear]   = useState(TODAY_MONTH_YEAR)
   const [panelWeek,   setPanelWeek]   = useState(TODAY_WEEK)
   const [panelMonth,  setPanelMonth]  = useState(TODAY_MONTH)
+
+  // Años de los que ya cargamos los valores automáticos (para no re-pedir).
+  const loadedAutoYears = useRef(new Set())
 
   // Refs para auto-scroll de tablas
   const weekContainerRef  = useRef(null)
@@ -765,16 +1043,51 @@ export default function DatosTab() {
   const curWeek  = weekYear  === TODAY_WEEK_YEAR  ? TODAY_WEEK  : null
   const curMonth = monthYear === TODAY_MONTH_YEAR ? TODAY_MONTH : null
 
+  // Trae los valores automáticos de un año (una sola vez por año).
+  const fetchAutoYear = useCallback(async (year) => {
+    if (loadedAutoYears.current.has(year)) return
+    loadedAutoYears.current.add(year)
+    try {
+      const res = await api.get(`/eos/scorecard/auto?year=${year}`)
+      const data = res.data?.data || {}
+      setAutoData(prev => {
+        const next = { ...prev }
+        for (const k of Object.keys(data)) next[k] = { ...(next[k] || {}), ...data[k] }
+        return next
+      })
+    } catch {
+      loadedAutoYears.current.delete(year)
+    }
+  }, [])
+
+  // Reinicia y vuelve a traer los años visibles (tras agregar/quitar un dato automático).
+  const reloadAuto = useCallback(() => {
+    loadedAutoYears.current = new Set()
+    setAutoData({})
+    fetchAutoYear(weekYear)
+    const pYear = parseInt(panelWeek.split('-W')[0])
+    if (pYear !== weekYear) fetchAutoYear(pYear)
+  }, [fetchAutoYear, weekYear, panelWeek])
+
   useEffect(() => {
     api.get('/eos/scorecard')
       .then(res => {
         setMembers(res.data.members)
         setMetrics(res.data.metrics)
         setEntriesMap(res.data.entriesMap)
+        setAutoCatalog(res.data.autoCatalog || [])
+        if ((res.data.autoCatalog || []).some(c => c.added)) fetchAutoYear(TODAY_WEEK_YEAR)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [fetchAutoYear])
+
+  // Cargar valores automáticos del año de la tabla y del panel cuando cambian.
+  const hasAuto = metrics.some(m => m.autoKey)
+  useEffect(() => { if (hasAuto) fetchAutoYear(weekYear) }, [weekYear, hasAuto, fetchAutoYear])
+  useEffect(() => {
+    if (hasAuto) fetchAutoYear(parseInt(panelWeek.split('-W')[0]))
+  }, [panelWeek, hasAuto, fetchAutoYear])
 
   // Auto-scroll semanal: centra la semana actual al cargar o cambiar de año
   useEffect(() => {
@@ -843,11 +1156,30 @@ export default function DatosTab() {
     } finally { setSaving(false) }
   }
 
+  // ── Agregar un dato automático desde el catálogo
+  async function handleAddAuto(autoKey, goal) {
+    setSaving(true)
+    try {
+      const res = await api.post('/eos/scorecard', {
+        autoKey,
+        goal: goal !== '' && goal != null ? Number(goal) : null,
+      })
+      setMetrics(prev => [...prev, res.data])
+      setAutoCatalog(prev => prev.map(c => c.key === autoKey ? { ...c, added: true } : c))
+      reloadAuto()
+    } finally { setSaving(false) }
+  }
+
   // ── Eliminar métrica
   async function handleDeleteMetric(id) {
+    const removed = metrics.find(m => m.id === id)
     await api.delete(`/eos/scorecard/${id}`)
     setMetrics(prev => prev.filter(m => m.id !== id))
     setEntriesMap(prev => { const next = { ...prev }; delete next[id]; return next })
+    if (removed?.autoKey) {
+      setAutoCatalog(prev => prev.map(c => c.key === removed.autoKey ? { ...c, added: false } : c))
+      setAutoData(prev => { const next = { ...prev }; delete next[removed.autoKey]; return next })
+    }
     setConfirmDel(null)
   }
 
@@ -906,12 +1238,22 @@ export default function DatosTab() {
               Verde = cumplió la meta · Rojo = no la cumplió.
             </p>
           </div>
-          <button
-            onClick={() => setModalMetric({ mode: 'add' })}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-xl transition-colors shrink-0"
-          >
-            + Nueva métrica
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {autoCatalog.length > 0 && (
+              <button
+                onClick={() => setAutoPicker(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-colors"
+              >
+                ⚡ Dato automático
+              </button>
+            )}
+            <button
+              onClick={() => setModalMetric({ mode: 'add' })}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-xl transition-colors"
+            >
+              + Nueva métrica
+            </button>
+          </div>
         </div>
 
         {/* Leyenda */}
@@ -968,6 +1310,7 @@ export default function DatosTab() {
           <CurrentPeriodPanel
             metrics={weeklyMetrics}
             entriesMap={entriesMap}
+            autoData={autoData}
             members={members}
             period={panelWeek}
             title={weekPanelTitle}
@@ -988,6 +1331,7 @@ export default function DatosTab() {
             <ScorecardTable
               metrics={weeklyMetrics}
               entriesMap={entriesMap}
+              autoData={autoData}
               members={members}
               periods={weeklyPeriods}
               currentPeriod={curWeek}
@@ -1077,6 +1421,16 @@ export default function DatosTab() {
           message="¿Eliminás esta métrica? Se borrarán también todos sus datos históricos."
           onConfirm={() => handleDeleteMetric(confirmDel.id)}
           onCancel={() => setConfirmDel(null)}
+        />
+      )}
+
+      {/* Modal agregar dato automático */}
+      {autoPicker && (
+        <AutoMetricPicker
+          catalog={autoCatalog}
+          onAdd={async (key, goal) => { await handleAddAuto(key, goal) }}
+          onClose={() => setAutoPicker(false)}
+          saving={saving}
         />
       )}
 

@@ -1,8 +1,8 @@
 const prisma    = require('../lib/prisma')
 const { generateMemoryForUser } = require('../services/insightMemory.service')
-const { getWorkspaceStats, getProjectStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median } = require('../services/productivityStats.service')
+const { getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median } = require('../services/productivityStats.service')
 const { sendTestDigest } = require('../services/productivityDigest.service')
-const { getProductivityPeriod, businessDaysBetween } = require('../lib/timeMetrics')
+const { getProductivityPeriod, businessDaysBetween, tzOffsetStr, taskMins } = require('../lib/timeMetrics')
 
 // Modo de período: 'current' (mes en curso vs anterior, default) o 'closed' (mes anterior vs ante-anterior).
 function periodMode(req) {
@@ -109,37 +109,53 @@ async function listProductivity(req, res, next) {
   } catch (err) { next(err) }
 }
 
-async function listByProject(req, res, next) {
+// Drill-down persona→proyecto→tarea del período (lazy, al expandir un proyecto en el
+// detalle de una persona). Reemplaza al viejo tab "Por persona" de Reportes.
+// Usa taskMins (tope 8h) para ser consistente con las horas de la sección Productividad.
+async function userBreakdown(req, res, next) {
   try {
+    const userId = Number(req.params.userId)
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
     const period = getProductivityPeriod(periodMode(req), tz)
-    const projects = await getProjectStats(workspaceId, tz, period)
+    const offset = tzOffsetStr(tz)
 
-    // Resolver nombres de contribuyentes
-    const userIds = new Set()
-    projects.forEach(p => Object.keys(p.contributors).forEach(id => userIds.add(Number(id))))
-    const users = userIds.size > 0
-      ? await prisma.user.findMany({ where: { id: { in: [...userIds] } }, select: { id: true, name: true, avatar: true } })
-      : []
-    const userMap = new Map(users.map(u => [u.id, u]))
+    const tasks = await prisma.task.findMany({
+      where: {
+        userId,
+        status: 'COMPLETED',
+        completedAt: {
+          gte: new Date(period.curStart + 'T00:00:00' + offset),
+          lte: new Date(period.curEnd   + 'T23:59:59' + offset),
+        },
+        workDay: { workspaceId },
+      },
+      select: {
+        id: true, description: true, startedAt: true, completedAt: true,
+        pausedMinutes: true, minutesOverride: true,
+        project: { select: { id: true, name: true } },
+      },
+      orderBy: { completedAt: 'desc' },
+    })
 
-    const result = projects.map(p => ({
-      projectId: p.projectId,
-      name: p.name,
-      hours: Math.round(p.minutes / 60 * 10) / 10,
-      completed: p.completed,
-      horasDeltaPct: p.horasDeltaPct,
-      contributors: Object.entries(p.contributors)
-        .map(([uid, mins]) => {
-          const u = userMap.get(Number(uid))
-          return { id: Number(uid), name: u?.name || '—', avatar: u?.avatar, hours: Math.round(mins / 60 * 10) / 10 }
-        })
-        .sort((a, b) => b.hours - a.hours),
-    }))
+    const byProject = {}
+    for (const t of tasks) {
+      const mins = taskMins(t)
+      const pid = t.project.id
+      if (!byProject[pid]) byProject[pid] = { project: t.project, minutes: 0, taskList: [] }
+      byProject[pid].minutes += mins
+      byProject[pid].taskList.push({
+        id: t.id, description: t.description, minutes: mins,
+        completedAt: t.completedAt,
+        isOverride: t.minutesOverride !== null && t.minutesOverride !== undefined,
+      })
+    }
 
-    const periodOut = { ...period, businessDays: businessDaysBetween(period.curStart, period.curEnd) }
-    res.json({ projects: result, period: periodOut })
+    res.json({
+      byProject: Object.values(byProject)
+        .map(p => ({ ...p, taskList: p.taskList.sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt)) }))
+        .sort((a, b) => b.minutes - a.minutes),
+    })
   } catch (err) { next(err) }
 }
 
@@ -174,4 +190,4 @@ async function sendDigestNow(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listProductivity, listByProject, refreshProductivity, sendDigestNow }
+module.exports = { listProductivity, userBreakdown, refreshProductivity, sendDigestNow }

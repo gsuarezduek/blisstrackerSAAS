@@ -73,11 +73,19 @@ function IcoPlus() {
     </svg>
   )
 }
+function IcoEye() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
+      <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+      <path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" />
+    </svg>
+  )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Navbar() {
-  const { user, logout, switchWorkspace } = useAuth()
+  const { user, logout, switchWorkspace, realIsAdmin, viewAsMember, toggleViewAsMember } = useAuth()
   const { slug: currentSlug, workspace } = useWorkspace()
   const productivityEnabled = workspace?.productivityEnabled !== false
   const [otherWorkspaces, setOtherWorkspaces] = useState([])
@@ -163,6 +171,16 @@ export default function Navbar() {
         ...(isAdmin ? [{ key: 'billing', to: '/billing', label: 'Facturación', icon: <IcoCreditCard /> }] : []),
       ],
     },
+    ...(realIsAdmin ? [{
+      id: 'view-as',
+      items: [{
+        key:       'view-as-member',
+        label:     viewAsMember ? 'Volver a vista Admin' : 'Ver como miembro',
+        icon:      <IcoEye />,
+        onClick:   toggleViewAsMember,
+        highlight: true,
+      }],
+    }] : []),
     ...(user?.isSuperAdmin ? [{
       id: 'superadmin',
       items: [{
@@ -272,6 +290,19 @@ export default function Navbar() {
     )
   }
 
+  // Badge a la altura del perfil: ADMIN para admins, "Vista miembro" al previsualizar.
+  const roleBadge = realIsAdmin && (
+    viewAsMember ? (
+      <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 whitespace-nowrap">
+        Vista miembro
+      </span>
+    ) : (
+      <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 whitespace-nowrap">
+        Admin
+      </span>
+    )
+  )
+
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
@@ -357,6 +388,7 @@ export default function Navbar() {
                 onClick={() => setProfileOpen(o => !o)}
                 className="flex items-center gap-2.5 hover:opacity-80 transition-opacity rounded-lg px-2 py-1"
               >
+                {roleBadge}
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900 dark:text-white leading-tight">{user?.name}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{labelFor(user?.role)}</p>
@@ -414,6 +446,7 @@ export default function Navbar() {
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">{user?.name}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{labelFor(user?.role)}</p>
               </div>
+              {roleBadge && <div className="ml-auto">{roleBadge}</div>}
             </div>
 
             {/* Nav links — usa el mismo array `links` que desktop */}

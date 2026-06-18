@@ -6,7 +6,7 @@ const {
   createNode, updateNode, deleteNode,
 } = require('../controllers/eosPeople.controller')
 const {
-  getScorecard, createMetric, updateMetric, deleteMetric, upsertEntry,
+  getScorecard, getAutoScorecard, createMetric, updateMetric, deleteMetric, upsertEntry,
 } = require('../controllers/eosScorecard.controller')
 const {
   getProcesses, createProcess, updateProcess, deleteProcess,
@@ -49,6 +49,7 @@ router.delete('/accountability/:id',  deleteNode)
 
 // Datos — Scorecard
 router.get('/scorecard',                         getScorecard)
+router.get('/scorecard/auto',                    getAutoScorecard)
 router.post('/scorecard',                        createMetric)
 router.patch('/scorecard/:id',                   updateMetric)
 router.delete('/scorecard/:id',                  deleteMetric)

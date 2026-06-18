@@ -1,4 +1,6 @@
 const prisma = require('../lib/prisma')
+const { EOS_AUTO_METRICS, EOS_AUTO_KEYS, isAutoKey, autoCatalogList } = require('../lib/eosAutoMetricCatalog')
+const { computeAutoScorecardYear } = require('../services/eosAutoScorecard.service')
 
 // ─── Helpers de períodos ──────────────────────────────────────────────────────
 
@@ -75,18 +77,41 @@ async function getScorecard(req, res, next) {
         avatar: m.user.avatar,
         role:   m.role,
       })),
-      metrics: metrics.map(m => ({
-        id:            m.id,
-        name:          m.name,
-        ownerId:       m.ownerId,
-        goal:          m.goal,
-        lowerIsBetter: m.lowerIsBetter,
-        unit:          m.unit,
-        frequency:     m.frequency,
-        order:         m.order,
-      })),
+      metrics: metrics.map(formatMetric),
       entriesMap,
+      // Catálogo de datos automáticos + cuáles ya están agregados (para el menú "+ Dato automático").
+      autoCatalog: autoCatalogList().map(c => ({
+        ...c,
+        added: metrics.some(m => m.autoKey === c.key),
+      })),
     })
+  } catch (err) { next(err) }
+}
+
+// ─── GET /api/eos/scorecard/auto?year=YYYY ────────────────────────────────────
+// Valores calculados (no persistidos) de las métricas automáticas del workspace,
+// por semana ISO del año pedido. Devuelve { [autoKey]: { 'YYYY-Www': { value, top3 } } }.
+
+async function getAutoScorecard(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
+    const year = Number(req.query.year)
+    if (!Number.isInteger(year) || year < 2000 || year > 3000) {
+      return res.status(400).json({ error: 'year inválido' })
+    }
+
+    const autoMetrics = await prisma.scorecardMetric.findMany({
+      where: { workspaceId, autoKey: { not: null } },
+      select: { autoKey: true },
+    })
+    const autoKeys = autoMetrics.map(m => m.autoKey).filter(isAutoKey)
+
+    const data = autoKeys.length
+      ? await computeAutoScorecardYear(workspaceId, tz, year, autoKeys)
+      : {}
+
+    res.json({ year, data })
   } catch (err) { next(err) }
 }
 
@@ -96,14 +121,38 @@ async function getScorecard(req, res, next) {
 async function createMetric(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { name, ownerId, goal, lowerIsBetter, unit, frequency } = req.body
+    const { name, ownerId, goal, lowerIsBetter, unit, frequency, autoKey } = req.body
 
+    const count = await prisma.scorecardMetric.count({ where: { workspaceId } })
+
+    // ── Métrica automática: name/unit/lowerIsBetter/frequency salen del catálogo.
+    if (autoKey != null) {
+      if (!isAutoKey(autoKey)) return res.status(400).json({ error: 'Dato automático desconocido' })
+      const exists = await prisma.scorecardMetric.findFirst({ where: { workspaceId, autoKey } })
+      if (exists) return res.status(409).json({ error: 'Ese dato automático ya está agregado' })
+
+      const cat = EOS_AUTO_METRICS[autoKey]
+      const metric = await prisma.scorecardMetric.create({
+        data: {
+          workspaceId,
+          autoKey,
+          name:          cat.name,
+          ownerId:       null,
+          goal:          goal != null && goal !== '' ? Number(goal) : null,
+          lowerIsBetter: cat.lowerIsBetter,
+          unit:          cat.unit,
+          frequency:     'weekly',
+          order:         count,
+        },
+      })
+      return res.status(201).json(formatMetric(metric))
+    }
+
+    // ── Métrica manual.
     if (!name?.trim()) return res.status(400).json({ error: 'name es requerido' })
     if (!['weekly', 'monthly'].includes(frequency)) {
       return res.status(400).json({ error: 'frequency debe ser weekly o monthly' })
     }
-
-    const count = await prisma.scorecardMetric.count({ where: { workspaceId } })
 
     const metric = await prisma.scorecardMetric.create({
       data: {
@@ -138,13 +187,15 @@ async function updateMetric(req, res, next) {
       return res.status(400).json({ error: 'frequency debe ser weekly o monthly' })
     }
 
+    const isAuto = existing.autoKey != null
     const data = {}
-    if (name          !== undefined) data.name          = name.trim().slice(0, 200)
-    if (ownerId       !== undefined) data.ownerId       = ownerId ? Number(ownerId) : null
-    if (goal          !== undefined) data.goal          = goal != null ? Number(goal) : null
-    if (lowerIsBetter !== undefined) data.lowerIsBetter = Boolean(lowerIsBetter)
-    if (unit          !== undefined) data.unit          = unit?.trim().slice(0, 20) || null
-    if (frequency     !== undefined) data.frequency     = frequency
+    // En automáticas, name/unit/lowerIsBetter/frequency vienen fijos del catálogo: solo meta y orden.
+    if (!isAuto && name          !== undefined) data.name          = name.trim().slice(0, 200)
+    if (!isAuto && ownerId       !== undefined) data.ownerId       = ownerId ? Number(ownerId) : null
+    if (goal          !== undefined) data.goal          = goal != null && goal !== '' ? Number(goal) : null
+    if (!isAuto && lowerIsBetter !== undefined) data.lowerIsBetter = Boolean(lowerIsBetter)
+    if (!isAuto && unit          !== undefined) data.unit          = unit?.trim().slice(0, 20) || null
+    if (!isAuto && frequency     !== undefined) data.frequency     = frequency
     if (order         !== undefined) data.order         = Number(order)
 
     const metric = await prisma.scorecardMetric.update({ where: { id }, data })
@@ -182,6 +233,7 @@ async function upsertEntry(req, res, next) {
 
     const metric = await prisma.scorecardMetric.findFirst({ where: { id, workspaceId } })
     if (!metric) return res.status(404).json({ error: 'Métrica no encontrada' })
+    if (metric.autoKey) return res.status(400).json({ error: 'Esta métrica es automática: sus valores los calcula el sistema, no se cargan a mano' })
 
     const { value } = req.body
 
@@ -214,8 +266,9 @@ function formatMetric(m) {
     lowerIsBetter: m.lowerIsBetter,
     unit:          m.unit,
     frequency:     m.frequency,
+    autoKey:       m.autoKey ?? null,
     order:         m.order,
   }
 }
 
-module.exports = { getScorecard, createMetric, updateMetric, deleteMetric, upsertEntry }
+module.exports = { getScorecard, getAutoScorecard, createMetric, updateMetric, deleteMetric, upsertEntry }

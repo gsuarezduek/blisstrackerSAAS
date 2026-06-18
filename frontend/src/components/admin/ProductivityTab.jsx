@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import { avatarUrl } from '../../utils/avatarUrl'
-import ProductivityByProjectTab from './ProductivityByProjectTab'
+import { linkify } from '../../utils/linkify'
 import ProductivityPeriodLabel from './ProductivityPeriodLabel'
 
 // Selector de modo de período (aplica a ambas vistas).
@@ -201,25 +201,73 @@ function HoursLineChart({ history }) {
   )
 }
 
-// Barras horizontales de tiempo por proyecto
-function ProjectBars({ porProyecto }) {
+// Barras horizontales de tiempo por proyecto. Cada proyecto se expande para ver el
+// drill-down de tareas completadas (lazy: trae el breakdown del período al primer click).
+function ProjectBars({ porProyecto, userId, mode }) {
+  const [expandedPid, setExpandedPid] = useState(null)
+  const [breakdown, setBreakdown] = useState(null) // { [projectId]: taskList }
+  const [loading, setLoading] = useState(false)
+
+  async function toggle(pid) {
+    if (expandedPid === pid) { setExpandedPid(null); return }
+    setExpandedPid(pid)
+    if (!breakdown) {
+      setLoading(true)
+      try {
+        const { data } = await api.get(`/admin/productivity/users/${userId}/breakdown`, { params: { mode } })
+        const map = {}
+        for (const p of data.byProject || []) map[p.project.id] = p.taskList
+        setBreakdown(map)
+      } catch {
+        setBreakdown({})
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
   if (!porProyecto || porProyecto.length === 0) {
     return <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin tiempo registrado por proyecto.</p>
   }
   const max = Math.max(...porProyecto.map(p => p.minutes), 1)
   return (
     <div className="space-y-1.5">
-      {porProyecto.map(p => (
-        <div key={p.projectId} className="flex items-center gap-2">
-          <span className="text-xs text-gray-600 dark:text-gray-300 w-32 truncate shrink-0" title={p.name}>{p.name}</span>
-          <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
-            <div className="bg-primary-500 h-3 rounded-full" style={{ width: `${Math.round(p.minutes / max * 100)}%` }} />
+      {porProyecto.map(p => {
+        const open = expandedPid === p.projectId
+        const tasks = breakdown?.[p.projectId]
+        return (
+          <div key={p.projectId}>
+            <button onClick={() => toggle(p.projectId)} className="w-full flex items-center gap-2 group">
+              <span className={`text-gray-300 dark:text-gray-600 transition-transform text-xs shrink-0 ${open ? 'rotate-90' : ''}`}>›</span>
+              <span className="text-xs text-gray-600 dark:text-gray-300 w-28 truncate shrink-0 text-left group-hover:text-gray-900 dark:group-hover:text-white" title={p.name}>{p.name}</span>
+              <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                <div className="bg-primary-500 h-3 rounded-full" style={{ width: `${Math.round(p.minutes / max * 100)}%` }} />
+              </div>
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-20 text-right shrink-0">
+                {fmtHours(Math.round(p.minutes / 60 * 10) / 10)} · {p.completadas}t
+              </span>
+            </button>
+            {open && (
+              <div className="pl-5 pr-1 py-1.5 space-y-1">
+                {loading && !breakdown && <p className="text-xs text-gray-400 dark:text-gray-500 italic">Cargando tareas…</p>}
+                {tasks && tasks.length === 0 && <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin tareas completadas.</p>}
+                {tasks && tasks.map(task => (
+                  <div key={task.id} className="flex items-start justify-between text-xs gap-3">
+                    <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                      <span className="text-green-500 mt-0.5 shrink-0">✓</span>
+                      <span className="text-gray-600 dark:text-gray-300 truncate">{linkify(task.description)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {task.isOverride && <span className="text-amber-500">✎</span>}
+                      <span className="text-gray-400 dark:text-gray-500">{fmtHours(Math.round(task.minutes / 60 * 10) / 10)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-20 text-right shrink-0">
-            {fmtHours(Math.round(p.minutes / 60 * 10) / 10)} · {p.completadas}t
-          </span>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -258,7 +306,7 @@ function TeamCompare({ stats, benchmark }) {
   )
 }
 
-function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing }) {
+function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mode }) {
   const st = STATUS[m.status] || STATUS.ok
   const s = m.stats
   return (
@@ -306,10 +354,10 @@ function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing }) 
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Col 1: Tiempo por proyecto */}
+                {/* Col 1: Tiempo por proyecto (expandible a tareas) */}
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Tiempo por proyecto</p>
-                  <ProjectBars porProyecto={s.porProyecto} />
+                  <ProjectBars porProyecto={s.porProyecto} userId={m.id} mode={mode} />
                 </div>
 
                 {/* Col 2: Horas y Asistencia */}
@@ -323,16 +371,33 @@ function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing }) 
                   )}
                 </div>
 
-                {/* Col 3: Comparación con el equipo + Análisis IA */}
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Comparación con el equipo</p>
-                    <TeamCompare stats={s} benchmark={benchmark} />
+                {/* Col 3: Comparación con el equipo */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Comparación con el equipo</p>
+                  <TeamCompare stats={s} benchmark={benchmark} />
+                </div>
+              </div>
+
+              {/* Análisis IA — a todo el ancho, igual que el gráfico de horas */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Análisis IA</p>
+                  <div className="flex items-center gap-3">
+                    {m.insight?.updatedAt && (
+                      <span className="text-[11px] text-gray-300 dark:text-gray-600">actualizado {timeAgo(m.insight.updatedAt)}</span>
+                    )}
+                    <button
+                      onClick={e => { e.stopPropagation(); onRefresh(m.id) }}
+                      disabled={refreshing}
+                      className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-40 transition-colors flex items-center gap-1"
+                    >
+                      <span className={refreshing ? 'animate-spin inline-block' : ''}>↺</span>
+                      {refreshing ? 'Generando análisis...' : 'Regenerar análisis IA'}
+                    </button>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">Análisis IA</p>
-                    {m.insight ? (
-                  <div className="space-y-2">
+                </div>
+                {m.insight ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-2">
                     {m.insight.tendencias && (
                       <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug"><span className="text-gray-400 dark:text-gray-500">Cambio:</span> {m.insight.tendencias}</p>
                     )}
@@ -346,22 +411,6 @@ function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing }) 
                 ) : (
                   <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin señales destacables — dentro del promedio.</p>
                 )}
-
-                <div className="flex items-center gap-3 pt-1">
-                  <button
-                    onClick={e => { e.stopPropagation(); onRefresh(m.id) }}
-                    disabled={refreshing}
-                    className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-40 transition-colors flex items-center gap-1"
-                  >
-                    <span className={refreshing ? 'animate-spin inline-block' : ''}>↺</span>
-                    {refreshing ? 'Generando análisis...' : 'Regenerar análisis IA'}
-                  </button>
-                  {m.insight?.updatedAt && (
-                    <span className="text-[11px] text-gray-300 dark:text-gray-600">actualizado {timeAgo(m.insight.updatedAt)}</span>
-                  )}
-                </div>
-                  </div>
-                </div>
               </div>
             </div>
           </td>
@@ -491,7 +540,7 @@ function SummaryBar({ members, filter, onFilter }) {
   )
 }
 
-function ByPersonView({ data, loading, setData }) {
+function ByPersonView({ data, loading, setData, mode }) {
   const [expandedId, setExpandedId] = useState(null)
   const [refreshing, setRefreshing] = useState({})
   const [sortBy, setSortBy]   = useState('status')
@@ -571,6 +620,7 @@ function ByPersonView({ data, loading, setData }) {
                 onToggle={() => setExpandedId(expandedId === m.id ? null : m.id)}
                 onRefresh={handleRefresh}
                 refreshing={!!refreshing[m.id]}
+                mode={mode}
               />
             ))}
             {sorted.length === 0 && (
@@ -600,13 +650,10 @@ function ByPersonView({ data, loading, setData }) {
 }
 
 export default function ProductivityTab() {
-  const [tab, setTab] = useState('person')
   const [mode, setMode] = useState('current')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch de la vista por persona a nivel sección: alimenta el encabezado "Δ horas del equipo"
-  // (visible en ambas sub-pestañas) y la tabla por persona, sin doble request.
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
@@ -621,34 +668,15 @@ export default function ProductivityTab() {
 
   return (
     <div>
-      <div className="mb-5">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Productividad del equipo</h2>
-            <TeamHoursHeadline teamHours={data?.teamHours} loading={loading} />
-          </div>
-          <ModeToggle mode={mode} onChange={setMode} />
+      <div className="mb-5 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Productividad del equipo</h2>
+          <TeamHoursHeadline teamHours={data?.teamHours} loading={loading} />
         </div>
-        <div className="flex gap-1 mt-3 border-b border-gray-200 dark:border-gray-700">
-          {[['person', 'Por persona'], ['project', 'Por proyecto']].map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
-                tab === key
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <ModeToggle mode={mode} onChange={setMode} />
       </div>
 
-      {tab === 'person'
-        ? <ByPersonView data={data} loading={loading} setData={setData} />
-        : <ProductivityByProjectTab mode={mode} />}
+      <ByPersonView data={data} loading={loading} setData={setData} mode={mode} />
     </div>
   )
 }

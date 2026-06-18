@@ -240,64 +240,6 @@ async function getWorkspaceStats(workspaceId, tz, period = null) {
   return result
 }
 
-// Agregado por proyecto a nivel equipo (período actual vs previo).
-async function getProjectStats(workspaceId, tz, period = null) {
-  const rows = await fetchRows(workspaceId, tz, { period })
-  const { curStart, curEnd, prevStart, prevEnd } = rows.period
-  const inCur  = d => d >= curStart  && d <= curEnd
-  const inPrev = d => d >= prevStart && d <= prevEnd
-
-  // Días logueados (con actividad) en cada período, para normalizar el Δ por día.
-  const curDaySet = new Set(), prevDaySet = new Set()
-  for (const wd of rows.workDays) {
-    if (wd.tasks.length === 0) continue
-    if (inCur(wd.date))       curDaySet.add(wd.date)
-    else if (inPrev(wd.date)) prevDaySet.add(wd.date)
-  }
-  const nCurDays  = curDaySet.size
-  const nPrevDays = prevDaySet.size
-
-  const byProject = {}
-  function ensure(projectId, name) {
-    byProject[projectId] ??= {
-      projectId, name,
-      curMinutes: 0, curCompleted: 0, prevMinutes: 0, prevCompleted: 0,
-      contributors: {}, // userId -> minutes (período actual)
-    }
-    return byProject[projectId]
-  }
-
-  for (const t of rows.completedTasks) {
-    const p = ensure(t.projectId, t.project.name)
-    const mins = taskMins(t)
-    if (inCur(t.completedDate)) {
-      p.curMinutes   += mins
-      p.curCompleted += 1
-      p.contributors[t.userId] = (p.contributors[t.userId] || 0) + mins
-    } else if (inPrev(t.completedDate)) {
-      p.prevMinutes   += mins
-      p.prevCompleted += 1
-    }
-  }
-
-  return Object.values(byProject)
-    .map(p => ({
-      projectId: p.projectId,
-      name: p.name,
-      minutes: p.curMinutes,
-      completed: p.curCompleted,
-      contributorCount: Object.keys(p.contributors).length,
-      contributors: p.contributors, // { userId: minutes }
-      // Δ del ritmo por día logueado (minutos/día), neutraliza períodos con menos días.
-      horasDeltaPct: pctChange(
-        nCurDays  ? p.curMinutes  / nCurDays  : 0,
-        nPrevDays ? p.prevMinutes / nPrevDays : 0,
-      ),
-    }))
-    .filter(p => p.minutes > 0 || p.completed > 0)
-    .sort((a, b) => b.minutes - a.minutes)
-}
-
 // Días hábiles (YYYY-MM-DD) entre dos fechas inclusive.
 function businessDayList(startStr, endStr) {
   const out = []
@@ -491,4 +433,4 @@ function computeBenchmark(statsMap) {
   }
 }
 
-module.exports = { getMemberStats, getWorkspaceStats, getProjectStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median, pctChange }
+module.exports = { getMemberStats, getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median, pctChange }
