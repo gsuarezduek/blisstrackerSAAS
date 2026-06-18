@@ -182,7 +182,7 @@ const PLATFORM_SETTINGS = [
     default: '',
     group:   'operational',
     label:   'Actor de Apify para LinkedIn (scraping)',
-    help:    'ID del actor de Apify que scrapea Company Pages de LinkedIn (ej: "apimaestro~linkedin-company-posts"). Editable acá para probar e ir cambiando de actor sin redeploy. Vacío = usa la variable de entorno APIFY_LINKEDIN_ACTOR; si ambos están vacíos, el scraping de LinkedIn devuelve SCRAPE_NOT_CONFIGURED. Si el actor elegido usa otras claves de input/output, el mapeo se ajusta en runApifyLinkedin/normalizeApifyCompany (socialScrape.service.js).',
+    help:    'ID del actor de Apify que scrapea Company Pages de LinkedIn. Se acepta tanto "usuario/actor" (como lo muestra Apify) como "usuario~actor" — se normaliza solo. Importante: tiene que ser un actor que devuelva métricas de la página (seguidores y/o posts), no un utilitario (ej. un "id-to-slug finder" NO sirve). Editable acá para probar e ir cambiando de actor sin redeploy. Vacío = usa la env APIFY_LINKEDIN_ACTOR; si ambos están vacíos → SCRAPE_NOT_CONFIGURED. Si el actor usa otras claves de input/output, el mapeo se ajusta en runApifyLinkedin/normalizeApifyCompany (socialScrape.service.js).',
   },
   {
     key:     'apifyLinkedinPostsLimit',

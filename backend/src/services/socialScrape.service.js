@@ -346,8 +346,11 @@ async function runApifyLinkedin(identifier, opts = {}) {
     alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta configurar el actor de LinkedIn (setting apifyLinkedinActor o env APIFY_LINKEDIN_ACTOR).', username: identifier, workspaceId, context })
     throw scrapeError('El scraping de LinkedIn no está configurado: falta elegir el actor de Apify (SuperAdmin → Configuración → "Actor de Apify para LinkedIn", o la variable de entorno APIFY_LINKEDIN_ACTOR).', 'SCRAPE_NOT_CONFIGURED', 503)
   }
+  // En la API de Apify el ID del actor va con "~" (no "/"). Aceptamos la forma
+  // "usuario/actor" que muestra la UI de Apify y la normalizamos.
+  const actorId = actor.replace('/', '~')
 
-  const url = `${APIFY_BASE}/acts/${actor}/run-sync-get-dataset-items`
+  const url = `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`
   const companyUrl = `https://www.linkedin.com/company/${identifier}/`
   // Input tolerante: distintos actores aceptan distintas claves; la mayoría ignora
   // las que no conoce. Si tu actor usa otra clave, ajustá acá (punto único).
