@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Navbar from '../components/Navbar'
 import { linkify } from '../utils/linkify'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -9,10 +9,30 @@ import { fmtMins } from '../utils/format'
 
 // ── By Project View ────────────────────────────────────────────────────────────
 
-function ByProjectView({ data, loading, onEditTask }) {
+function ByProjectView({ data, sortBy, loading, onEditTask }) {
   const [expandedProject, setExpandedProject] = useState(null)
   const [expandedUser, setExpandedUser] = useState(null)
   const totalMins = data.reduce((s, d) => s + d.totalMinutes, 0)
+
+  // Horas contratadas del proyecto (null si no tiene presupuesto) y % usado.
+  const contractedOf = d => (d.project.hoursEnabled && d.project.monthlyHours != null ? d.project.monthlyHours : null)
+  const pctOf = d => {
+    const mh = contractedOf(d)
+    if (mh == null) return null
+    return mh > 0 ? d.totalMinutes / (mh * 60) : 0
+  }
+
+  const sorted = useMemo(() => {
+    const arr = [...data]
+    if (sortBy === 'contracted') {
+      arr.sort((a, b) => (contractedOf(b) ?? -1) - (contractedOf(a) ?? -1) || b.totalMinutes - a.totalMinutes)
+    } else if (sortBy === 'pct') {
+      arr.sort((a, b) => (pctOf(b) ?? -1) - (pctOf(a) ?? -1) || b.totalMinutes - a.totalMinutes)
+    } else {
+      arr.sort((a, b) => b.totalMinutes - a.totalMinutes)
+    }
+    return arr
+  }, [data, sortBy])
 
   function toggleProject(id) {
     setExpandedProject(expandedProject === id ? null : id)
@@ -35,7 +55,7 @@ function ByProjectView({ data, loading, onEditTask }) {
       )}
 
       <div className="space-y-3">
-        {data.map(d => {
+        {sorted.map(d => {
           const hoursEnabled = d.project.hoursEnabled
           const monthlyHours = d.project.monthlyHours
           const useBudget    = hoursEnabled && monthlyHours != null
@@ -152,6 +172,7 @@ function ByProjectView({ data, loading, onEditTask }) {
 
 export default function Reports() {
   const [projectData, setProjectData] = useState([])
+  const [sortBy, setSortBy] = useState('used')
   const [loading, setLoading] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
   const [from, setFrom] = useState(() => {
@@ -170,7 +191,7 @@ export default function Reports() {
     try {
       const { data } = await api.get(`/reports/by-project?${params}`)
       const projects = Array.isArray(data) ? data : data.projects
-      setProjectData(projects.sort((a, b) => b.totalMinutes - a.totalMinutes))
+      setProjectData(projects)
     } finally {
       setLoading(false)
     }
@@ -192,7 +213,20 @@ export default function Reports() {
           compact
         />
 
-        <ByProjectView data={projectData} loading={loading} onEditTask={setEditingTask} />
+        <div className="flex items-center justify-end gap-2 mb-3">
+          <span className="text-xs text-gray-500 dark:text-gray-400">Ordenar por</span>
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            className="text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="used">Más horas usadas</option>
+            <option value="contracted">Más horas contratadas</option>
+            <option value="pct">Mayor % usado</option>
+          </select>
+        </div>
+
+        <ByProjectView data={projectData} sortBy={sortBy} loading={loading} onEditTask={setEditingTask} />
       </main>
 
       {editingTask && (
