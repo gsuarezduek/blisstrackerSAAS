@@ -296,6 +296,10 @@ export default function MyProfile() {
     )
   }
 
+  const joinDate = new Date(profile.createdAt).toLocaleDateString('es-AR', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  })
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
@@ -345,7 +349,8 @@ export default function MyProfile() {
               )}
               {nameError && <p className="text-xs text-red-500 mb-1">{nameError}</p>}
               <p className="text-sm text-gray-500 dark:text-gray-400">{labelFor(profile.role)}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{profile.email}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">En Bliss desde el {joinDate}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{profile.email}</p>
             </div>
           </div>
 
