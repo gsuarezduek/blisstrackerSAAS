@@ -1,9 +1,11 @@
 jest.mock('../../src/lib/prisma', () => ({
-  workspace:        { findUnique: jest.fn() },
-  workspaceMember:  { findMany: jest.fn() },
-  userLogin:        { findMany: jest.fn() },
-  vacationRequest:  { findMany: jest.fn() },
-  task:             { findMany: jest.fn() },
+  workspace:          { findUnique: jest.fn() },
+  workspaceMember:    { findMany: jest.fn() },
+  userLogin:          { findMany: jest.fn() },
+  vacationRequest:    { findMany: jest.fn() },
+  task:               { findMany: jest.fn() },
+  project:            { findMany: jest.fn() },
+  rrhhMetricSnapshot: { findMany: jest.fn() },
 }))
 
 const prisma = require('../../src/lib/prisma')
@@ -12,17 +14,15 @@ const { computeAutoScorecardYear, isoWeekPeriodOf } = require('../../src/service
 const TZ = 'America/Argentina/Buenos_Aires' // UTC-3
 
 function resetAll() {
-  prisma.workspace.findUnique.mockReset()
-  prisma.workspaceMember.findMany.mockReset()
-  prisma.userLogin.findMany.mockReset()
-  prisma.vacationRequest.findMany.mockReset()
-  prisma.task.findMany.mockReset()
+  Object.values(prisma).forEach(model => Object.values(model).forEach(fn => fn.mockReset()))
   // defaults
   prisma.workspace.findUnique.mockResolvedValue({ attendanceTrackingEnabled: true, lateToleranceMins: 0 })
   prisma.workspaceMember.findMany.mockResolvedValue([])
   prisma.userLogin.findMany.mockResolvedValue([])
   prisma.vacationRequest.findMany.mockResolvedValue([])
   prisma.task.findMany.mockResolvedValue([])
+  prisma.project.findMany.mockResolvedValue([])
+  prisma.rrhhMetricSnapshot.findMany.mockResolvedValue([])
 }
 
 beforeEach(resetAll)
@@ -133,5 +133,70 @@ describe('computeAutoScorecardYear — ocupación', () => {
     ])
     const out = await computeAutoScorecardYear(1, TZ, 2026, ['ocupacion'])
     expect(Object.keys(out.ocupacion)).toHaveLength(0) // nadie con jornada completa
+  })
+})
+
+// Hoy (memoria) = 2026-06-18 → meses cerrados de 2026 = ene..may.
+describe('computeAutoScorecardYear — mensuales (a mes vencido)', () => {
+  it('delta_horas: ocupación ponderada del mes cerrado, por mes', async () => {
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 1, workStartTime: '09:00', workEndTime: '17:00', user: { name: 'Ana', avatar: 'a.png' } }, // 8h/día
+    ])
+    // Marzo 2026 tiene 22 días hábiles → disponible = 22×8 = 176h. Trabaja 88h → 50%.
+    prisma.task.findMany.mockResolvedValue([
+      { userId: 1, completedAt: '2026-03-10T12:00:00-03:00', startedAt: '2026-03-10T00:00:00-03:00', pausedMinutes: 0, minutesOverride: 5280 },
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['delta_horas'])
+    const m = out.delta_horas['2026-03']
+    expect(m.value).toBe(50)
+    expect(m.top3[0]).toMatchObject({ userId: 1, util: 50, registeredHours: 88, availableHours: 176 })
+  })
+
+  it('delta_horas: no incluye el mes en curso (junio)', async () => {
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 1, workStartTime: '09:00', workEndTime: '17:00', user: { name: 'Ana', avatar: 'a.png' } },
+    ])
+    prisma.task.findMany.mockResolvedValue([
+      { userId: 1, completedAt: '2026-06-10T12:00:00-03:00', startedAt: '2026-06-10T08:00:00-03:00', pausedMinutes: 0, minutesOverride: 240 },
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['delta_horas'])
+    expect(out.delta_horas['2026-06']).toBeUndefined()
+  })
+
+  it('proyectos_nuevos: cuenta altas por mes de creación y lista los nombres', async () => {
+    prisma.project.findMany.mockResolvedValue([
+      { id: 1, name: 'Cliente A', createdAt: '2026-03-05T10:00:00-03:00' },
+      { id: 2, name: 'Cliente B', createdAt: '2026-03-20T10:00:00-03:00' },
+      { id: 3, name: 'Cliente C (junio)', createdAt: '2026-06-02T10:00:00-03:00' }, // mes en curso → excluido
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['proyectos_nuevos'])
+    expect(out.proyectos_nuevos['2026-03']).toMatchObject({ value: 2 })
+    expect(out.proyectos_nuevos['2026-03'].top3.map(p => p.name)).toEqual(['Cliente A', 'Cliente B'])
+    expect(out.proyectos_nuevos['2026-06']).toBeUndefined()
+  })
+
+  it('proyectos_perdidos: cuenta bajas por mes de lostAt', async () => {
+    prisma.project.findMany.mockResolvedValue([
+      { id: 1, name: 'Perdido X', lostAt: '2026-04-10T10:00:00-03:00' },
+      { id: 2, name: 'Nunca perdido', lostAt: null },
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['proyectos_perdidos'])
+    expect(out.proyectos_perdidos['2026-04']).toMatchObject({ value: 1 })
+    expect(out.proyectos_perdidos['2026-04'].top3[0].name).toBe('Perdido X')
+  })
+
+  it('equipo: lee activeMembers del histórico de RRHH por mes', async () => {
+    prisma.rrhhMetricSnapshot.findMany.mockResolvedValue([
+      { month: '2026-04', value: 7 },
+      { month: '2026-05', value: 8 },
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['equipo'])
+    expect(out.equipo).toEqual({ '2026-04': { value: 7 }, '2026-05': { value: 8 } })
+  })
+
+  it('mensuales vacías para un año futuro (sin meses cerrados)', async () => {
+    const out = await computeAutoScorecardYear(1, TZ, 2027, ['equipo', 'proyectos_nuevos'])
+    expect(out.equipo).toEqual({})
+    expect(out.proyectos_nuevos).toEqual({})
   })
 })

@@ -294,13 +294,43 @@ function QuickEntryCard({ metric, owner, initialValue, onSave }) {
 // AutoMetricCard — tarjeta de solo-lectura de una métrica automática (valor + top 3)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Renderiza la línea de cada persona del top 3 según el tipo de dato automático. */
+// Títulos del bloque de detalle por tipo de dato automático.
+const AUTO_RANK_TITLE = {
+  tardanzas:          'Más tarde llegaron',
+  ocupacion:          'Menos aprovecharon sus horas',
+  delta_horas:        'Menos aprovecharon sus horas',
+  proyectos_nuevos:   'Cuáles',
+  proyectos_perdidos: 'Cuáles',
+}
+
+// Mensaje cuando no hay detalle (valor presente pero lista vacía). null = no mostrar nada.
+function autoEmptyHint(autoKey) {
+  switch (autoKey) {
+    case 'tardanzas':          return 'Nadie llegó tarde 🎉'
+    case 'ocupacion':
+    case 'delta_horas':        return 'Sin personas con horario cargado'
+    case 'proyectos_nuevos':   return 'Sin altas este mes'
+    case 'proyectos_perdidos': return 'Sin bajas 🎉'
+    default:                   return null
+  }
+}
+
+/** Renderiza la línea de cada item del top 3 según el tipo de dato automático. */
 function autoRankRow(autoKey, p, i) {
+  // Proyectos: filas de solo nombre (sin avatar ni métrica por persona).
+  if (autoKey === 'proyectos_nuevos' || autoKey === 'proyectos_perdidos') {
+    return (
+      <li key={`${p.name}-${i}`} className="flex items-center gap-2 text-xs">
+        <span className="w-4 text-center text-[11px] font-bold text-gray-400 dark:text-gray-500 tabular-nums shrink-0">{i + 1}</span>
+        <span className="font-medium text-gray-700 dark:text-gray-200 truncate min-w-0 flex-1">{p.name}</span>
+      </li>
+    )
+  }
+  // Personas: tardanzas / ocupación / Δ horas.
   let detail = ''
   if (autoKey === 'tardanzas') {
-    const d = `${p.lateDays} ${p.lateDays === 1 ? 'día' : 'días'}`
-    detail = `${d} · +${p.lateMins} min`
-  } else if (autoKey === 'ocupacion') {
+    detail = `${p.lateDays} ${p.lateDays === 1 ? 'día' : 'días'} · +${p.lateMins} min`
+  } else {
     detail = `${p.util}% · ${formatVal(p.registeredHours)}/${formatVal(p.availableHours)}h`
   }
   return (
@@ -325,9 +355,8 @@ function AutoMetricCard({ metric, value, detail }) {
                  : offTrack ? 'text-red-600 dark:text-red-400'
                  : 'text-gray-800 dark:text-gray-100'
 
-  const rankTitle = metric.autoKey === 'tardanzas'
-    ? 'Más tarde llegaron'
-    : metric.autoKey === 'ocupacion' ? 'Menos aprovecharon sus horas' : 'Top 3'
+  const rankTitle = AUTO_RANK_TITLE[metric.autoKey] || 'Detalle'
+  const emptyHint = autoEmptyHint(metric.autoKey)
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3.5 shadow-sm">
@@ -365,9 +394,9 @@ function AutoMetricCard({ metric, value, detail }) {
             {top3.map((p, i) => autoRankRow(metric.autoKey, p, i))}
           </ul>
         </div>
-      ) : value != null && (
+      ) : (value != null && emptyHint) && (
         <p className="text-[11px] text-gray-400 dark:text-gray-500 pt-2 border-t border-gray-100 dark:border-gray-700">
-          {metric.autoKey === 'tardanzas' ? 'Nadie llegó tarde 🎉' : 'Sin personas con horario cargado'}
+          {emptyHint}
         </p>
       )}
     </div>
@@ -589,7 +618,7 @@ function MetricModal({ metric, members, onSave, onClose, saving }) {
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            Dato calculado por el sistema. Definí su meta semanal ({metric.lowerIsBetter ? 'menor es mejor' : 'mayor es mejor'}):
+            Dato calculado por el sistema. Definí su meta {metric.frequency === 'monthly' ? 'mensual' : 'semanal'} ({metric.lowerIsBetter ? 'menor es mejor' : 'mayor es mejor'}):
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -807,7 +836,10 @@ function ScorecardTable({
                     </span>
                   ) : (
                     <div className="flex flex-col gap-1 py-1">
-                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight">{metric.name}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight">{metric.name}</span>
+                        {isAuto && <AutoBadge />}
+                      </span>
                       {hasGoal && (
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-medium">Meta</span>
@@ -816,7 +848,9 @@ function ScorecardTable({
                           </span>
                         </div>
                       )}
-                      {owner ? (
+                      {isAuto ? (
+                        <span className="text-[11px] text-indigo-500 dark:text-indigo-300 font-medium">Calculado por el sistema</span>
+                      ) : owner ? (
                         <div className="flex items-center gap-1.5">
                           <img src={avatarUrl(owner.avatar)} alt={owner.name}
                             className="w-4 h-4 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
@@ -958,7 +992,8 @@ function AutoMetricPicker({ catalog, onAdd, onClose, saving }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
         </div>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Métricas semanales que el sistema calcula solo con datos que ya tiene. Se actualizan automáticamente.
+          Métricas que el sistema calcula solo con datos que ya tiene. Se actualizan automáticamente.
+          Las mensuales se llenan a mes vencido.
         </p>
 
         {available.length === 0 ? (
@@ -971,7 +1006,12 @@ function AutoMetricPicker({ catalog, onAdd, onClose, saving }) {
               <div key={c.key} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{c.name}</p>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                      {c.name}
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                        {c.frequency === 'monthly' ? 'Mensual' : 'Semanal'}
+                      </span>
+                    </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{c.description}</p>
                   </div>
                   <button
@@ -984,7 +1024,7 @@ function AutoMetricPicker({ catalog, onAdd, onClose, saving }) {
                 </div>
                 <div className="flex items-center gap-2 mt-3">
                   <label className="text-xs text-gray-500 dark:text-gray-400">
-                    Meta semanal {c.unit ? `(${c.unit})` : ''} · {c.lowerIsBetter ? 'menor es mejor' : 'mayor es mejor'}
+                    Meta {c.frequency === 'monthly' ? 'mensual' : 'semanal'} {c.unit ? `(${c.unit})` : ''} · {c.lowerIsBetter ? 'menor es mejor' : 'mayor es mejor'}
                   </label>
                   <input
                     type="number"
@@ -1024,8 +1064,10 @@ export default function DatosTab() {
   const [confirmDel,  setConfirmDel]  = useState(null)
   const [weekYear,    setWeekYear]    = useState(TODAY_WEEK_YEAR)
   const [monthYear,   setMonthYear]   = useState(TODAY_MONTH_YEAR)
-  const [panelWeek,   setPanelWeek]   = useState(TODAY_WEEK)
-  const [panelMonth,  setPanelMonth]  = useState(TODAY_MONTH)
+  // Por defecto el panel muestra el período ANTERIOR (semana/mes pasados): son los últimos
+  // con datos completos, que normalmente se cargan a posteriori. "Hoy" vuelve al actual.
+  const [panelWeek,   setPanelWeek]   = useState(() => shiftWeekPeriod(TODAY_WEEK, -1))
+  const [panelMonth,  setPanelMonth]  = useState(() => shiftMonthPeriod(TODAY_MONTH, -1))
 
   // Años de los que ya cargamos los valores automáticos (para no re-pedir).
   const loadedAutoYears = useRef(new Set())
@@ -1064,10 +1106,9 @@ export default function DatosTab() {
   const reloadAuto = useCallback(() => {
     loadedAutoYears.current = new Set()
     setAutoData({})
-    fetchAutoYear(weekYear)
-    const pYear = parseInt(panelWeek.split('-W')[0])
-    if (pYear !== weekYear) fetchAutoYear(pYear)
-  }, [fetchAutoYear, weekYear, panelWeek])
+    const years = new Set([weekYear, monthYear, parseInt(panelWeek.split('-W')[0]), parseInt(panelMonth.split('-')[0])])
+    years.forEach(y => fetchAutoYear(y))
+  }, [fetchAutoYear, weekYear, monthYear, panelWeek, panelMonth])
 
   useEffect(() => {
     api.get('/eos/scorecard')
@@ -1082,12 +1123,16 @@ export default function DatosTab() {
       .finally(() => setLoading(false))
   }, [fetchAutoYear])
 
-  // Cargar valores automáticos del año de la tabla y del panel cuando cambian.
+  // Cargar valores automáticos del año de las tablas y los paneles cuando cambian.
   const hasAuto = metrics.some(m => m.autoKey)
   useEffect(() => { if (hasAuto) fetchAutoYear(weekYear) }, [weekYear, hasAuto, fetchAutoYear])
+  useEffect(() => { if (hasAuto) fetchAutoYear(monthYear) }, [monthYear, hasAuto, fetchAutoYear])
   useEffect(() => {
     if (hasAuto) fetchAutoYear(parseInt(panelWeek.split('-W')[0]))
   }, [panelWeek, hasAuto, fetchAutoYear])
+  useEffect(() => {
+    if (hasAuto) fetchAutoYear(parseInt(panelMonth.split('-')[0]))
+  }, [panelMonth, hasAuto, fetchAutoYear])
 
   // Auto-scroll semanal: centra la semana actual al cargar o cambiar de año
   useEffect(() => {
@@ -1368,6 +1413,7 @@ export default function DatosTab() {
           <CurrentPeriodPanel
             metrics={monthlyMetrics}
             entriesMap={entriesMap}
+            autoData={autoData}
             members={members}
             period={panelMonth}
             title={monthPanelTitle}
@@ -1388,6 +1434,7 @@ export default function DatosTab() {
             <ScorecardTable
               metrics={monthlyMetrics}
               entriesMap={entriesMap}
+              autoData={autoData}
               members={members}
               periods={monthlyPeriods}
               currentPeriod={curMonth}

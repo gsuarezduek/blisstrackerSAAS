@@ -141,7 +141,7 @@ async function createMetric(req, res, next) {
           goal:          goal != null && goal !== '' ? Number(goal) : null,
           lowerIsBetter: cat.lowerIsBetter,
           unit:          cat.unit,
-          frequency:     'weekly',
+          frequency:     cat.frequency,
           order:         count,
         },
       })

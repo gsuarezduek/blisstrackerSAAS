@@ -5,31 +5,14 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import DateRangeFilter from '../components/DateRangeFilter'
 import EditDurationModal from '../components/EditDurationModal'
 import api from '../api/client'
-import { fmtMins, monthsInRange } from '../utils/format'
-
-// Badge de Δ horas vs el período anterior de igual duración.
-function DeltaPct({ value }) {
-  if (value === null || value === undefined) return null
-  const p = Math.round(value * 100)
-  if (p === 0) return <span className="text-xs text-gray-400" title="Igual que el período anterior">=</span>
-  const up = p > 0
-  return (
-    <span
-      className={`text-xs font-medium ${up ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
-      title="Variación de horas vs el período anterior de igual duración"
-    >
-      {up ? '↑' : '↓'}{Math.abs(p)}%
-    </span>
-  )
-}
+import { fmtMins } from '../utils/format'
 
 // ── By Project View ────────────────────────────────────────────────────────────
 
-function ByProjectView({ data, from, to, loading, onEditTask }) {
+function ByProjectView({ data, loading, onEditTask }) {
   const [expandedProject, setExpandedProject] = useState(null)
   const [expandedUser, setExpandedUser] = useState(null)
   const totalMins = data.reduce((s, d) => s + d.totalMinutes, 0)
-  const months = monthsInRange(from, to)
 
   function toggleProject(id) {
     setExpandedProject(expandedProject === id ? null : id)
@@ -57,7 +40,8 @@ function ByProjectView({ data, from, to, loading, onEditTask }) {
           const monthlyHours = d.project.monthlyHours
           const useBudget    = hoursEnabled && monthlyHours != null
           const noBudget     = hoursEnabled && monthlyHours == null
-          const budgetMins   = useBudget ? monthlyHours * 60 * months : 0
+          // Presupuesto = 100% de las horas contratadas del mes (sin ponderar por días transcurridos)
+          const budgetMins   = useBudget ? monthlyHours * 60 : 0
           const pctRaw       = useBudget
             ? (budgetMins > 0 ? (d.totalMinutes / budgetMins) * 100 : 0)
             : (totalMins   > 0 ? (d.totalMinutes / totalMins)   * 100 : 0)
@@ -74,10 +58,9 @@ function ByProjectView({ data, from, to, loading, onEditTask }) {
                 <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded px-2 py-0.5 shrink-0">{d.taskCount} tareas</span>
               </div>
               <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                <DeltaPct value={d.horasDeltaPct} />
                 <span className="font-bold text-primary-600">{fmtMins(d.totalMinutes)}</span>
                 {useBudget && (
-                  <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">/ {monthlyHours}h{months >= 1.5 || months < 0.95 ? ` × ${months.toFixed(1)} mes` : '/mes'}</span>
+                  <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">/ {monthlyHours}h contratadas</span>
                 )}
                 <span className="text-gray-400 dark:text-gray-500 text-sm">{expandedProject === d.project.id ? '▲' : '▼'}</span>
               </div>
@@ -99,7 +82,7 @@ function ByProjectView({ data, from, to, loading, onEditTask }) {
                   </div>
                   {useBudget && (
                     <div className="text-xs text-right mt-1 text-gray-500 dark:text-gray-400">
-                      {Math.round(pctRaw)}% del presupuesto
+                      {Math.round(pctRaw)}% de las horas contratadas
                     </div>
                   )}
                 </>
@@ -169,7 +152,6 @@ function ByProjectView({ data, from, to, loading, onEditTask }) {
 
 export default function Reports() {
   const [projectData, setProjectData] = useState([])
-  const [projectRange, setProjectRange] = useState({ from: null, to: null })
   const [loading, setLoading] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
   const [from, setFrom] = useState(() => {
@@ -189,7 +171,6 @@ export default function Reports() {
       const { data } = await api.get(`/reports/by-project?${params}`)
       const projects = Array.isArray(data) ? data : data.projects
       setProjectData(projects.sort((a, b) => b.totalMinutes - a.totalMinutes))
-      setProjectRange({ from: data.from ?? f, to: data.to ?? t })
     } finally {
       setLoading(false)
     }
@@ -202,15 +183,16 @@ export default function Reports() {
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Reportes</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Tiempo registrado por proyecto. El Δ compara las horas contra el período anterior de igual duración.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Horas registradas por proyecto frente al 100% de las horas contratadas del mes.</p>
 
         <DateRangeFilter
           from={from} to={to}
           onFromChange={setFrom} onToChange={setTo}
           onSearch={loadReport} loading={loading}
+          compact
         />
 
-        <ByProjectView data={projectData} from={projectRange.from} to={projectRange.to} loading={loading} onEditTask={setEditingTask} />
+        <ByProjectView data={projectData} loading={loading} onEditTask={setEditingTask} />
       </main>
 
       {editingTask && (

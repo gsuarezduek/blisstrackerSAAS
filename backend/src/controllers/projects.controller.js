@@ -180,7 +180,15 @@ async function update(req, res, next) {
     const { name, active, serviceIds, memberIds, websiteUrl, connections, monthlyHours } = req.body
     const data = {}
     if (name        !== undefined) data.name       = name
-    if (active      !== undefined) data.active     = active
+    if (active      !== undefined) {
+      data.active = active
+      // Marca/limpia la fecha de baja solo en la transición (no pisa la original si se re-guarda inactivo).
+      const cur = await prisma.project.findFirst({ where: { id: Number(id), workspaceId }, select: { active: true } })
+      if (cur) {
+        if (cur.active && active === false)      data.lostAt = new Date()
+        else if (!cur.active && active === true) data.lostAt = null
+      }
+    }
     if (websiteUrl  !== undefined) data.websiteUrl = websiteUrl || null
     if (connections !== undefined) data.connections = typeof connections === 'string' ? connections : JSON.stringify(connections)
     if (monthlyHours !== undefined) {

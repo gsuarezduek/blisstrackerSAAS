@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma')
-const { addDays, getProductivityPeriod } = require('../lib/timeMetrics')
+const { getProductivityPeriod } = require('../lib/timeMetrics')
 const {
   getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median,
 } = require('../services/productivityStats.service')
@@ -7,33 +7,6 @@ const {
 function calcMins(t) {
   if (t.minutesOverride !== null && t.minutesOverride !== undefined) return t.minutesOverride
   return Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
-}
-
-function dateDiffDays(a, b) {
-  return Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000)
-}
-
-// % de cambio entre dos valores. null = sin base de comparación (período previo en cero).
-function pctChange(cur, prev) {
-  if (!prev) return cur ? null : 0
-  return (cur - prev) / prev
-}
-
-// Suma de minutos activos por proyecto en un rango [from, to], usando completedAt.
-async function projectMinutesInRange(workspaceId, tz, from, to) {
-  const range = buildCompletedAtWhere(from, to, tz)
-  const tasks = await prisma.task.findMany({
-    where: {
-      status: 'COMPLETED',
-      startedAt: { not: null },
-      completedAt: { not: null, ...range },
-      workDay: { workspaceId },
-    },
-    select: { projectId: true, startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true },
-  })
-  const map = {}
-  for (const t of tasks) map[t.projectId] = (map[t.projectId] || 0) + calcMins(t)
-  return map
 }
 
 function defaultDateRange(tz = 'America/Argentina/Buenos_Aires') {
@@ -109,20 +82,12 @@ async function byProject(req, res, next) {
       })
     }
 
-    // Δ horas por proyecto: comparar minutos totales contra el rango inmediatamente
-    // anterior de igual duración (ventanas de igual largo → Δ crudo, sin normalizar por día).
-    const len     = dateDiffDays(from, to) + 1
-    const prevTo  = addDays(from, -1)
-    const prevFrom = addDays(from, -len)
-    const prevMins = await projectMinutesInRange(workspaceId, tz, prevFrom, prevTo)
-
     const result = Object.values(map).map(({ byUser, ...rest }) => ({
       ...rest,
       byUser: Object.values(byUser),
-      horasDeltaPct: pctChange(rest.totalMinutes, prevMins[rest.project.id] || 0),
     }))
 
-    res.json({ from, to, prevFrom, prevTo, projects: result })
+    res.json({ from, to, projects: result })
   } catch (err) { next(err) }
 }
 

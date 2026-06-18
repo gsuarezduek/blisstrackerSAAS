@@ -62,8 +62,10 @@ function getPresets() {
   ]
 }
 
-export default function DateRangeFilter({ from, to, onFromChange, onToChange, onSearch, loading }) {
-  const presets = getPresets()
+export default function DateRangeFilter({ from, to, onFromChange, onToChange, onSearch, loading, compact = false }) {
+  const allPresets = getPresets()
+  // En modo compacto: solo Hoy / Esta semana / Este mes / Mes pasado (sin "Semana pasada")
+  const presets = compact ? allPresets.filter(p => p.label !== 'Semana pasada') : allPresets
   const activePreset = presets.find(p => p.from === from && p.to === to)?.label ?? null
   const monthOptions = getMonthOptions()
   // El mes está "seleccionado" si el rango actual coincide exactamente con un mes completo
@@ -84,6 +86,41 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, on
     onFromChange(r.from)
     onToChange(r.to)
     onSearch(r.from, r.to)
+  }
+
+  // Modo compacto: presets + selector de mes en una sola línea, sin calendarios.
+  if (compact) {
+    return (
+      <div className="mb-6 flex gap-2 flex-wrap items-center">
+        {presets.map(p => (
+          <button
+            key={p.label}
+            onClick={() => applyPreset(p)}
+            className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              activePreset === p.label
+                ? 'bg-primary-600 text-white'
+                : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 dark:hover:text-gray-200'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+        <select
+          value={selectedMonth}
+          onChange={e => applyMonth(e.target.value)}
+          className={`text-sm px-3 py-1.5 rounded-lg font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+            selectedMonth
+              ? 'bg-primary-600 text-white border-primary-600'
+              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-primary-400'
+          }`}
+        >
+          <option value="">Elegir mes…</option>
+          {monthOptions.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+    )
   }
 
   return (
