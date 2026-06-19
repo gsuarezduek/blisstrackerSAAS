@@ -63,6 +63,7 @@ TIKTOK_CLIENT_SECRET=...              # TikTok App Client Secret
 LINKEDIN_CLIENT_ID=...                # LinkedIn App Client ID (developer.linkedin.com)
 LINKEDIN_CLIENT_SECRET=...            # LinkedIn App Client Secret
 LINKEDIN_API_VERSION=...              # (opcional) versión de la API REST de LinkedIn (YYYYMM). Default 202601. LinkedIn soporta cada versión ~12 meses; actualizá si la API rechaza la versión
+LINKEDIN_SCOPES=...                   # (opcional) scopes OAuth separados por espacio. Default "r_organization_social r_organization_admin". Cambialo si la pestaña Auth de tu app lista otros nombres exactos (ej. rw_organization_admin)
 APIFY_API_TOKEN=apify_api_...         # Token de Apify (apify.com) para scraping de RRSS. Sin esto, el scraping devuelve SCRAPE_NOT_CONFIGURED
 APIFY_INSTAGRAM_ACTOR=...             # (opcional) actor de Apify para Instagram. Default: apify~instagram-profile-scraper
 APIFY_INSTAGRAM_POSTS_LIMIT=60        # (opcional) posts recientes a traer por scrape. Default 60 — debe cubrir el mes completo; subir para cuentas muy activas
@@ -868,7 +869,7 @@ Proyecto OAuth: el mismo que usa el login con Google (`GOOGLE_CLIENT_ID` / `GOOG
 - Access tokens duran 24h, refresh tokens duran 365 días. `tiktokTokenRefresh.service.js` renueva automáticamente.
 
 **Permisos requeridos en LinkedIn App (Marketing Developer Platform / Community Management API):**
-- Scopes: `r_organization_social` (leer posts y stats), `r_organization_admin` (listar páginas administradas). Sólo lectura — se requieren el producto **Community Management API** aprobado en la app.
+- Scopes: `r_organization_social` (leer posts y stats) + `rw_organization_admin` (listar páginas administradas + reporting data — es el único scope que LinkedIn ofrece para acceso a páginas; no hay un `r_organization_admin` de solo lectura, aunque acá solo leemos). Configurable por env `LINKEDIN_SCOPES`. Requiere el producto **Community Management API** aprobado en la app.
 - Access tokens duran 60 días (5184000 s); refresh tokens duran 365 días. `linkedinTokenRefresh.service.js` renueva silenciosamente con `expiresAt < now + 5min`. Si el refresh falla, la integración se marca como `status: 'expired'` y el frontend muestra prompt de reconexión (`code: TOKEN_EXPIRED`).
 - API REST versionada en `https://api.linkedin.com/rest/*` con header `LinkedIn-Version` (constante `LINKEDIN_API_VERSION` en `linkedin.service.js`, default `202601`, overridable por env `LINKEDIN_API_VERSION`; LinkedIn soporta cada versión ~12 meses, actualizar cuando la API la rechace) + `X-Restli-Protocol-Version: 2.0.0`.
 - Auto-detección de Company Page: tras OAuth, el callback llama a `/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR`. Si hay 1 sola org, se auto-asigna como `propertyId`; si hay >1, la integración se guarda sin `propertyId` y el frontend muestra un dropdown (`GET /projects/:id/linkedin/orgs`).

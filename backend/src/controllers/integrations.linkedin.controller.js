@@ -7,8 +7,11 @@ const { listAdminOrganizations } = require('../services/linkedin.service')
 const LINKEDIN_AUTH_URL  = 'https://www.linkedin.com/oauth/v2/authorization'
 const LINKEDIN_TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
 
-// Scopes mínimos de sólo lectura para Company Page (Community Management API)
-const LINKEDIN_SCOPES = 'r_organization_social r_organization_admin'
+// Scopes para Company Page (Community Management API). El acceso a páginas y
+// reporting data hoy solo lo da `rw_organization_admin` (no existe un `r_`
+// equivalente); aunque diga "manage", acá solo leemos. `r_organization_social`
+// cubre posts/engagement. Configurable por env por si cambian los nombres exactos.
+const LINKEDIN_SCOPES = process.env.LINKEDIN_SCOPES || 'r_organization_social rw_organization_admin'
 
 function buildLinkedinRedirectUri() {
   const base = process.env.BACKEND_URL || 'http://localhost:3001'
@@ -49,13 +52,18 @@ async function getLinkedinAuthUrl(req, res, next) {
       { expiresIn: '10m' },
     )
 
+    const redirectUri = buildLinkedinRedirectUri()
     const params = new URLSearchParams({
       response_type: 'code',
       client_id:     process.env.LINKEDIN_CLIENT_ID,
-      redirect_uri:  buildLinkedinRedirectUri(),
+      redirect_uri:  redirectUri,
       state,
       scope:         LINKEDIN_SCOPES,
     })
+
+    // Log de diagnóstico: deja ver qué config estamos mandando a LinkedIn sin
+    // exponer el client_id completo. Útil para detectar app/redirect/scope mal seteados.
+    console.log(`[LinkedinOAuth] auth-url generada · client_id=${(process.env.LINKEDIN_CLIENT_ID || '').slice(0, 8)}…(${(process.env.LINKEDIN_CLIENT_ID || '').length} chars) · redirect_uri=${redirectUri} · scope="${LINKEDIN_SCOPES}"`)
 
     res.json({ url: `${LINKEDIN_AUTH_URL}?${params.toString()}` })
   } catch (err) { next(err) }
@@ -70,6 +78,9 @@ async function handleLinkedinCallback(req, res, next) {
   const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
 
   if (oauthError) {
+    // LinkedIn rechazó la autorización (scope no autorizado, redirect URI no
+    // registrada, app sin el producto, etc.). Lo logueamos para diagnóstico.
+    console.error('[LinkedinOAuth] LinkedIn devolvió error en el callback:', JSON.stringify({ error: oauthError, error_description }, null, 2))
     const msg = error_description || oauthError
     return res.redirect(
       `${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(msg)}`
