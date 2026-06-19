@@ -135,7 +135,9 @@ async function getMetrics(req, res, next) {
         }).catch(err => console.error('[LinkedIn] Error al marcar integración expirada (API 401):', err.message))
         return res.status(400).json({ error: 'Token de LinkedIn inválido. Reconectá la cuenta.', code: 'TOKEN_EXPIRED' })
       }
-      return res.status(502).json({ error: 'Error al obtener datos de LinkedIn', code: 'API_ERROR' })
+      const liMsg = liErr?.message || liErr?.error_description || apiErr.message
+      const versionHint = /version/i.test(liMsg || '') ? ' · La versión de la API venció: actualizá LINKEDIN_API_VERSION a una vigente.' : ''
+      return res.status(502).json({ error: `LinkedIn devolvió un error${status ? ` (${status})` : ''}: ${liMsg}${versionHint}`, code: 'API_ERROR' })
     }
 
     res.json(metrics)
@@ -274,10 +276,18 @@ async function listOrganizations(req, res, next) {
     res.json({ orgs, selectedId: integration.propertyId ?? null })
   } catch (err) {
     console.error('[LinkedIn] listOrganizations error:', err.response?.data ?? err.message)
-    if (err.response?.status === 401) {
+    const status = err.response?.status
+    const liMsg  = err.response?.data?.message || err.response?.data?.error_description || err.message
+    if (status === 401) {
       return res.status(400).json({ error: 'Token de LinkedIn inválido. Reconectá la cuenta.', code: 'TOKEN_EXPIRED' })
     }
-    next(err)
+    if (status === 403) {
+      return res.status(400).json({
+        error: `LinkedIn rechazó el acceso (403): ${liMsg}. Verificá que el producto "Community Management API" esté aprobado en la app y que los scopes r_organization_admin / r_organization_social estén concedidos.`,
+        code:  'FORBIDDEN',
+      })
+    }
+    return res.status(502).json({ error: `Error de LinkedIn al listar tus páginas: ${liMsg}`, code: 'API_ERROR' })
   }
 }
 

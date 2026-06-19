@@ -23,6 +23,15 @@ async function getLinkedinAuthUrl(req, res, next) {
     const { projectId } = req.query
     if (!projectId) return res.status(400).json({ error: 'projectId requerido' })
 
+    // Pre-chequeo: sin credenciales el popup iría a LinkedIn y fallaría con un
+    // error genérico de ellos. Avisamos claro acá antes de abrir nada.
+    if (!process.env.LINKEDIN_CLIENT_ID || !process.env.LINKEDIN_CLIENT_SECRET) {
+      return res.status(503).json({
+        error: 'LinkedIn no está configurado en el servidor: faltan las variables LINKEDIN_CLIENT_ID y/o LINKEDIN_CLIENT_SECRET.',
+        code:  'NOT_CONFIGURED',
+      })
+    }
+
     const project = await prisma.project.findFirst({
       where:  { id: Number(projectId), workspaceId: req.workspace.id },
       select: { id: true },
@@ -136,7 +145,10 @@ async function handleLinkedinCallback(req, res, next) {
     res.redirect(`${frontendBase}/oauth-result?success=true&type=linkedin`)
   } catch (err) {
     console.error('[LinkedinOAuth] Error:', JSON.stringify(err.response?.data ?? err.message, null, 2))
-    const msg = err.response?.data?.error_description || err.response?.data?.message || err.message
+    let msg = err.response?.data?.error_description || err.response?.data?.message || err.message
+    // Pistas accionables para las fallas de configuración más comunes.
+    if (/redirect/i.test(msg)) msg += ` · Registrá esta redirect URI exacta en la app de LinkedIn: ${redirectUri}`
+    else if (/client|unauthorized|invalid_request/i.test(msg)) msg += ' · Revisá LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET en el servidor'
     res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(msg)}`)
   }
 }
