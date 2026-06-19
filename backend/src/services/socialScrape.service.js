@@ -378,6 +378,16 @@ async function runApifyLinkedin(identifier, opts = {}) {
 
   console.log(`[Scrape] LinkedIn ${identifier} · actor=${actorId} · items=${items.length}${items[0] && typeof items[0] === 'object' ? ` · keys[0]=${Object.keys(items[0]).slice(0, 20).join(',')}` : ''}`)
 
+  // Algunos actores no devuelven HTTP error: meten un item `{ error: "..." }` en
+  // el dataset (ej. "You have used up your credits"). Lo detectamos y lo
+  // surfaceamos como error real en vez de contarlo como 0 datos.
+  const errItem  = items.find(i => i && typeof i === 'object' && typeof i.error === 'string')
+  const hasUsable = items.some(i => i && typeof i === 'object' && !i.error)
+  if (errItem && !hasUsable) {
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: errItem.error, username: identifier, workspaceId, context })
+    throw scrapeError(`El proveedor de scraping devolvió un error: ${errItem.error}`, 'SCRAPE_PROVIDER_ERROR', 502)
+  }
+
   if (items.length === 0) {
     throw scrapeError(`No se encontró la empresa "${identifier}" en LinkedIn (¿URL/nombre mal escrito o página inexistente?).`, 'PROFILE_NOT_FOUND', 404)
   }

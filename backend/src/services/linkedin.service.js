@@ -13,7 +13,10 @@ const axios = require('axios')
  *   - /rest/posts → posts (incluye creado por owner=urn:li:organization:{id})
  */
 
-const LINKEDIN_API_VERSION = '202410' // YYYYMM — actualizar trimestralmente
+// YYYYMM — LinkedIn soporta cada versión ~12 meses. Configurable por env para
+// poder actualizarla sin tocar código si LinkedIn rechaza la versión.
+// Verificá la vigente en https://learn.microsoft.com/linkedin/marketing/versioning
+const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION || '202601'
 const REST_BASE = 'https://api.linkedin.com/rest'
 const V2_BASE   = 'https://api.linkedin.com/v2'
 
