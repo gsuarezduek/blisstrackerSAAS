@@ -35,6 +35,15 @@ function v2Headers(accessToken) {
   }
 }
 
+// Detalle completo de un error de la API de LinkedIn: status + cuerpo de la
+// respuesta (donde viene el motivo real del 400/4xx). Para diagnóstico en logs.
+function liErrDetail(err) {
+  const status = err.response?.status
+  const body   = err.response?.data
+  const bodyStr = body ? (typeof body === 'string' ? body : JSON.stringify(body)) : (err.message ?? '')
+  return `${status ?? '—'} · ${bodyStr}`
+}
+
 function monthBounds(month) {
   const [y, m] = month.split('-').map(Number)
   const startMs = Date.UTC(y, m - 1, 1, 0, 0, 0, 0)
@@ -83,7 +92,7 @@ async function fetchFollowersCount(orgId, accessToken) {
     })
     return res.data?.firstDegreeSize ?? null
   } catch (err) {
-    console.warn(`[Linkedin] fetchFollowersCount fallback v2:`, err.response?.status ?? err.message)
+    console.warn(`[Linkedin] fetchFollowersCount fallback v2:`, liErrDetail(err))
     // Fallback v2 (algunas apps están en API antigua)
     try {
       const urn = encodeURIComponent(`urn:li:organization:${orgId}`)
@@ -117,7 +126,7 @@ async function fetchPageStatistics(orgId, accessToken, startMs, endMs) {
       uniqueVisitors: totals.allPageViews?.uniquePageViews  ?? null,
     }
   } catch (err) {
-    console.warn(`[Linkedin] fetchPageStatistics:`, err.response?.status ?? err.message)
+    console.warn(`[Linkedin] fetchPageStatistics:`, liErrDetail(err))
     return { pageViews: null, uniqueVisitors: null }
   }
 }
@@ -149,7 +158,7 @@ async function fetchShareStatistics(orgId, accessToken, startMs, endMs) {
       : null
     return { impressions, clicks, ctr, totalLikes: likes, totalComments: comments, totalShares: shares, engagementRate }
   } catch (err) {
-    console.warn(`[Linkedin] fetchShareStatistics:`, err.response?.status ?? err.message)
+    console.warn(`[Linkedin] fetchShareStatistics:`, liErrDetail(err))
     return { impressions: null, clicks: null, ctr: null, totalLikes: null, totalComments: null, totalShares: null, engagementRate: null }
   }
 }
@@ -187,7 +196,7 @@ async function fetchFollowerDemographics(orgId, accessToken) {
       region:    summarize(el.followerCountsByGeoCountry,      'geo'),
     }
   } catch (err) {
-    console.warn(`[Linkedin] fetchFollowerDemographics:`, err.response?.status ?? err.message)
+    console.warn(`[Linkedin] fetchFollowerDemographics:`, liErrDetail(err))
     return { industry: [], seniority: [], function: [], region: [] }
   }
 }
@@ -246,7 +255,7 @@ async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
           }
         }
       } catch (err) {
-        console.warn(`[Linkedin] fetchTopPosts stats batch:`, err.response?.status ?? err.message)
+        console.warn(`[Linkedin] fetchTopPosts stats batch:`, liErrDetail(err))
       }
     }
 
@@ -272,7 +281,7 @@ async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
     enriched.sort((a, b) => (b.engagement ?? 0) - (a.engagement ?? 0))
     return { topPosts: enriched.slice(0, 5), postsThisMonth }
   } catch (err) {
-    console.warn(`[Linkedin] fetchTopPosts:`, err.response?.status ?? err.message)
+    console.warn(`[Linkedin] fetchTopPosts:`, liErrDetail(err))
     return { topPosts: [], postsThisMonth: 0 }
   }
 }
@@ -296,7 +305,7 @@ async function fetchOrgInfo(orgId, accessToken) {
       logoUrl,
     }
   } catch (err) {
-    console.warn(`[Linkedin] fetchOrgInfo:`, err.response?.status ?? err.message)
+    console.warn(`[Linkedin] fetchOrgInfo:`, liErrDetail(err))
     return { id: orgId, name: null, vanityName: null, logoUrl: null }
   }
 }
