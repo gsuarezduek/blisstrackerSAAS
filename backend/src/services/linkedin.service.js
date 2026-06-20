@@ -51,6 +51,25 @@ function monthBounds(month) {
   return { startMs, endMs }
 }
 
+// Encoda una URN de organización para usarla como valor de query param.
+function encUrn(orgId) { return encodeURIComponent(`urn:li:organization:${orgId}`) }
+
+// GET REST construyendo la query manualmente. La API versionada usa encoding
+// Rest.li 2.0: los paréntesis/comas/dos-puntos ESTRUCTURALES de los objetos NO se
+// percent-encodean (las URN como valor sí). axios.params encodearía todo y rompe
+// el formato → "ILLEGAL_ARGUMENT: Invalid query parameters". Por eso armamos la
+// query a mano.
+async function restGetRaw(path, queryString, accessToken) {
+  return axios.get(`${REST_BASE}/${path}?${queryString}`, { headers: restHeaders(accessToken) })
+}
+
+// Parámetro timeIntervals en sintaxis Rest.li 2.0. Clampa el fin a "ahora":
+// LinkedIn rechaza rangos que terminan en el futuro (p.ej. el mes en curso).
+function timeIntervalsParam(startMs, endMs, granularity = 'MONTH') {
+  const safeEnd = Math.min(endMs, Date.now())
+  return `timeIntervals=(timeRange:(start:${startMs},end:${safeEnd}),timeGranularityType:${granularity})`
+}
+
 /**
  * Lista organizaciones donde el usuario autenticado es ADMIN.
  * Devuelve [{ id, name, vanityName, logoUrl }]
@@ -67,12 +86,18 @@ async function listAdminOrganizations(accessToken) {
   })
 
   const elements = res.data?.elements ?? []
+  console.log(`[Linkedin] organizationalEntityAcls: ${elements.length} elemento(s) admin`)
   return elements.map(el => {
     const org = el['organizationalTarget~'] ?? {}
+    // Fallback robusto: si la decoración (organizationalTarget~) no resolvió, el id
+    // igual viene en la URN cruda organizationalTarget ("urn:li:organization:123").
+    const rawUrn    = typeof el.organizationalTarget === 'string' ? el.organizationalTarget : null
+    const idFromUrn = rawUrn ? rawUrn.split(':').pop() : null
+    const id        = org.id != null ? String(org.id) : idFromUrn
     const logoElems = org.logoV2?.original?.['~']?.elements ?? []
     const logoUrl   = logoElems[0]?.identifiers?.[0]?.identifier ?? null
     return {
-      id:         String(org.id),
+      id,
       name:       org.localizedName ?? null,
       vanityName: org.vanityName    ?? null,
       logoUrl,
@@ -110,21 +135,18 @@ async function fetchFollowersCount(orgId, accessToken) {
  */
 async function fetchPageStatistics(orgId, accessToken, startMs, endMs) {
   try {
-    const res = await axios.get(`${REST_BASE}/organizationPageStatistics`, {
-      params: {
-        q:                  'organization',
-        organization:       `urn:li:organization:${orgId}`,
-        'timeIntervals.timeGranularityType': 'MONTH',
-        'timeIntervals.timeRange.start':     startMs,
-        'timeIntervals.timeRange.end':       endMs,
-      },
-      headers: restHeaders(accessToken),
-    })
-    const totals = res.data?.elements?.[0]?.totalPageStatistics?.views ?? {}
-    return {
-      pageViews:      totals.allPageViews?.pageViews        ?? null,
-      uniqueVisitors: totals.allPageViews?.uniquePageViews  ?? null,
+    const query = `q=organization&organization=${encUrn(orgId)}&${timeIntervalsParam(startMs, endMs, 'MONTH')}`
+    const res = await restGetRaw('organizationPageStatistics', query, accessToken)
+    // Sumamos los buckets (1 si granularidad MONTH; N si LinkedIn devuelve por día).
+    const els = res.data?.elements ?? []
+    let pageViews = 0, uniqueVisitors = 0, any = false
+    for (const el of els) {
+      const v = el.totalPageStatistics?.views?.allPageViews ?? {}
+      if (v.pageViews != null || v.uniquePageViews != null) any = true
+      pageViews      += v.pageViews       ?? 0
+      uniqueVisitors += v.uniquePageViews ?? 0
     }
+    return { pageViews: any ? pageViews : null, uniqueVisitors: any ? uniqueVisitors : null }
   } catch (err) {
     console.warn(`[Linkedin] fetchPageStatistics:`, liErrDetail(err))
     return { pageViews: null, uniqueVisitors: null }
@@ -136,26 +158,22 @@ async function fetchPageStatistics(orgId, accessToken, startMs, endMs) {
  */
 async function fetchShareStatistics(orgId, accessToken, startMs, endMs) {
   try {
-    const res = await axios.get(`${REST_BASE}/organizationalEntityShareStatistics`, {
-      params: {
-        q:                                    'organizationalEntity',
-        organizationalEntity:                 `urn:li:organization:${orgId}`,
-        'timeIntervals.timeGranularityType':  'MONTH',
-        'timeIntervals.timeRange.start':      startMs,
-        'timeIntervals.timeRange.end':        endMs,
-      },
-      headers: restHeaders(accessToken),
-    })
-    const ts = res.data?.elements?.[0]?.totalShareStatistics ?? {}
-    const impressions = ts.impressionCount ?? null
-    const clicks      = ts.clickCount      ?? null
-    const likes       = ts.likeCount       ?? null
-    const comments    = ts.commentCount    ?? null
-    const shares      = ts.shareCount      ?? null
-    const ctr   = impressions && clicks != null    ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : null
-    const engagementRate = impressions && (likes != null || comments != null || shares != null)
-      ? parseFloat((((likes ?? 0) + (comments ?? 0) + (shares ?? 0)) / impressions * 100).toFixed(2))
-      : null
+    const query = `q=organizationalEntity&organizationalEntity=${encUrn(orgId)}&${timeIntervalsParam(startMs, endMs, 'MONTH')}`
+    const res = await restGetRaw('organizationalEntityShareStatistics', query, accessToken)
+    const els = res.data?.elements ?? []
+    let impressions = 0, clicks = 0, likes = 0, comments = 0, shares = 0, any = false
+    for (const el of els) {
+      const ts = el.totalShareStatistics ?? {}
+      if (Object.keys(ts).length) any = true
+      impressions += ts.impressionCount ?? 0
+      clicks      += ts.clickCount      ?? 0
+      likes       += ts.likeCount       ?? 0
+      comments    += ts.commentCount    ?? 0
+      shares      += ts.shareCount      ?? 0
+    }
+    if (!any) return { impressions: null, clicks: null, ctr: null, totalLikes: null, totalComments: null, totalShares: null, engagementRate: null }
+    const ctr            = impressions ? parseFloat(((clicks / impressions) * 100).toFixed(2)) : null
+    const engagementRate = impressions ? parseFloat(((likes + comments + shares) / impressions * 100).toFixed(2)) : null
     return { impressions, clicks, ctr, totalLikes: likes, totalComments: comments, totalShares: shares, engagementRate }
   } catch (err) {
     console.warn(`[Linkedin] fetchShareStatistics:`, liErrDetail(err))
@@ -168,13 +186,8 @@ async function fetchShareStatistics(orgId, accessToken, startMs, endMs) {
  */
 async function fetchFollowerDemographics(orgId, accessToken) {
   try {
-    const res = await axios.get(`${REST_BASE}/organizationalEntityFollowerStatistics`, {
-      params: {
-        q:                    'organizationalEntity',
-        organizationalEntity: `urn:li:organization:${orgId}`,
-      },
-      headers: restHeaders(accessToken),
-    })
+    const query = `q=organizationalEntity&organizationalEntity=${encUrn(orgId)}`
+    const res = await restGetRaw('organizationalEntityFollowerStatistics', query, accessToken)
     const el = res.data?.elements?.[0] ?? {}
 
     function summarize(arr, urnKey) {
@@ -207,11 +220,8 @@ async function fetchFollowerDemographics(orgId, accessToken) {
  */
 async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
   try {
-    const author = `urn:li:organization:${orgId}`
-    const postsRes = await axios.get(`${REST_BASE}/posts`, {
-      params: { q: 'author', author, count: 50, sortBy: 'LAST_MODIFIED' },
-      headers: restHeaders(accessToken),
-    })
+    const postsQuery = `q=author&author=${encUrn(orgId)}&count=20`
+    const postsRes = await restGetRaw('posts', postsQuery, accessToken)
 
     const posts = postsRes.data?.elements ?? []
     if (posts.length === 0) return { topPosts: [], postsThisMonth: 0 }
@@ -229,19 +239,15 @@ async function fetchTopPosts(orgId, accessToken, targetMonth = null) {
     const postsThisMonth = filtered.length
     if (filtered.length === 0) return { topPosts: [], postsThisMonth }
 
-    // Stats por share (batch — máximo 50 URNs)
-    const shareUrns = filtered.map(p => p.id).filter(Boolean).slice(0, 50)
+    // Stats por share (batch — máximo 20 URNs). `shares=List(urn1,urn2)` en
+    // sintaxis Rest.li 2.0: el List(...) va crudo, cada URN percent-encodeada.
+    const shareUrns = filtered.map(p => p.id).filter(Boolean).slice(0, 20)
     let statsByUrn = {}
     if (shareUrns.length > 0) {
       try {
-        const statsRes = await axios.get(`${REST_BASE}/organizationalEntityShareStatistics`, {
-          params: {
-            q:                                   'organizationalEntity',
-            organizationalEntity:                `urn:li:organization:${orgId}`,
-            shares:                              `List(${shareUrns.map(u => encodeURIComponent(u)).join(',')})`,
-          },
-          headers: restHeaders(accessToken),
-        })
+        const sharesParam = `List(${shareUrns.map(u => encodeURIComponent(u)).join(',')})`
+        const statsQuery = `q=organizationalEntity&organizationalEntity=${encUrn(orgId)}&shares=${sharesParam}`
+        const statsRes = await restGetRaw('organizationalEntityShareStatistics', statsQuery, accessToken)
         for (const el of (statsRes.data?.elements ?? [])) {
           if (el.share) {
             const ts = el.totalShareStatistics ?? {}
