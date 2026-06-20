@@ -160,7 +160,6 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     allKeywords,
     completedTasks,
     integrations,
-    cannibalSnap,
     seoSnap,
     seoPrev,
     competitorAccounts,
@@ -285,14 +284,6 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
                 accessToken: true, refreshToken: true, expiresAt: true, scopes: true },
     }),
 
-    // Canibalización — reporte completado más reciente
-    prisma.cannibalReport.findFirst({
-      where:   { projectId, workspaceId, status: 'completed' },
-      orderBy: { createdAt: 'desc' },
-      select:  { totalConflicts: true, criticalCount: true, warningCount: true,
-                 lowCount: true, trafficAtRisk: true, dateRange: true, createdAt: true },
-    }),
-
     // Search Console snapshot (SEO)
     prisma.searchConsoleSnapshot.findFirst({
       where:   { projectId, workspaceId, month: dataMonth },
@@ -360,17 +351,6 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     ctr:         metaAdsRaw.ctr,
     reach:       metaAdsRaw.reach,
     campaigns:   (metaAdsRaw.campaigns ?? []).slice(0, 5),
-  } : null
-
-  // ── Canibalización ───────────────────────────────────────────────────────────
-  const cannibalization = cannibalSnap ? {
-    totalConflicts: cannibalSnap.totalConflicts ?? 0,
-    criticalCount:  cannibalSnap.criticalCount  ?? 0,
-    warningCount:   cannibalSnap.warningCount   ?? 0,
-    lowCount:       cannibalSnap.lowCount       ?? 0,
-    trafficAtRisk:  cannibalSnap.trafficAtRisk  ?? 0,
-    dateRange:      cannibalSnap.dateRange,
-    date:           cannibalSnap.createdAt,
   } : null
 
   // ── GEO ──────────────────────────────────────────────────────────────────────
@@ -795,7 +775,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Secciones (filtradas según enabledSections) ───────────────────────────────
   // Si el informe define secciones habilitadas, las demás se excluyen por completo
   // (no se guardan en el caché ni viajan al link público del cliente).
-  const allSections = { geo, analytics, evolution, instagram, tiktok, linkedin, seo, keywords, googleAds, metaAds, cannibalization, performance, tasks, competitors }
+  const allSections = { geo, analytics, evolution, instagram, tiktok, linkedin, seo, keywords, googleAds, metaAds, performance, tasks, competitors }
   const sections = {}
   for (const [key, val] of Object.entries(allSections)) {
     sections[key] = wants(key) ? val : null
@@ -1039,7 +1019,7 @@ function emptyAnalysis(error) {
 async function getAvailableSections(projectId, workspaceId) {
   const [
     integrations, project, analyticsSnap, pageSpeed, geoAudit, seoSnap,
-    keyword, cannibal, igSnap, tkSnap, liSnap, metaAdsSnap, googleAdsSnap, competitor, objective,
+    keyword, igSnap, tkSnap, liSnap, metaAdsSnap, googleAdsSnap, competitor, objective,
   ] = await Promise.all([
     prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true, status: true } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true } }),
@@ -1048,7 +1028,6 @@ async function getAvailableSections(projectId, workspaceId) {
     prisma.geoAudit.findFirst({ where: { projectId, workspaceId, status: 'completed' }, select: { id: true } }),
     prisma.searchConsoleSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.trackedKeyword.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
-    prisma.cannibalReport.findFirst({ where: { projectId, workspaceId, status: 'completed' }, select: { id: true } }),
     prisma.instagramSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.tikTokSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.linkedinSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
@@ -1075,7 +1054,6 @@ async function getAvailableSections(projectId, workspaceId) {
     geo:             build(!!project?.websiteUrl        || !!geoAudit,      null),
     seo:             build(has('google_search_console') || !!seoSnap,       'google_search_console'),
     keywords:        build(has('google_search_console') || !!keyword,       'google_search_console'),
-    cannibalization: build(has('google_search_console') || !!cannibal,      'google_search_console'),
     instagram:       build(has('instagram')             || !!igSnap,        'instagram'),
     tiktok:          build(has('tiktok')                || !!tkSnap,        'tiktok'),
     linkedin:        build(has('linkedin')              || !!liSnap,        'linkedin'),

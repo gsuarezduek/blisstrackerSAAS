@@ -40,7 +40,6 @@ const SECTION_CATALOG = [
   { key: 'geo',             label: 'Presencia en IA (GEO)', icon: '🤖' },
   { key: 'seo',             label: 'SEO / Search Console',  icon: '🔍' },
   { key: 'keywords',        label: 'Keywords',              icon: '🔑' },
-  { key: 'cannibalization', label: 'Canibalización SEO',    icon: '⚔️' },
   { key: 'instagram',       label: 'Instagram',             icon: '📸' },
   { key: 'tiktok',          label: 'TikTok',                icon: '🎵' },
   { key: 'linkedin',        label: 'LinkedIn',              icon: '💼' },

@@ -354,7 +354,8 @@ function autoRankRow(autoKey, p, i) {
     detail = `${p.count} ${p.count === 1 ? 'tarea' : 'tareas'}`
   } else if (autoKey === 'todos_completados') {
     detail = `${p.done} to-do${p.done === 1 ? '' : 's'}`
-  } else {
+  } else if (p.util != null) {
+    // ocupación / Δ horas: solo si el dato trae `util` (evita "undefined%").
     detail = `${p.util}% · ${formatVal(p.registeredHours)}/${formatVal(p.availableHours)}h`
   }
   return (

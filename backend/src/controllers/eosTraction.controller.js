@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { todayString } = require('../utils/dates')
 
 const VALID_ROCK_STATUS = ['not_started', 'on_track', 'off_track', 'complete']
 const VALID_MEETING_TYPE = ['weekly', 'quarterly', 'annual']
@@ -40,6 +41,9 @@ function formatTodo(t) {
     completedAt: t.completedAt,
     order:       t.order,
     createdAt:   t.createdAt,
+    // Tarea del dashboard vinculada (null si no se envió).
+    taskId:      t.taskId ?? null,
+    task:        t.task ? { id: t.task.id, status: t.task.status, description: t.task.description } : null,
   }
 }
 
@@ -164,6 +168,7 @@ async function getWeek(req, res, next) {
       prisma.eOSTodo.findMany({
         where:   { workspaceId, week },
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+        include: { task: { select: { id: true, status: true, description: true } } },
       }),
       prisma.eOSMeeting.findFirst({ where: { workspaceId, week } }),
     ])
@@ -221,7 +226,11 @@ async function updateTodo(req, res, next) {
       data.completedAt = done ? new Date() : null
     }
 
-    const todo = await prisma.eOSTodo.update({ where: { id }, data })
+    const todo = await prisma.eOSTodo.update({
+      where:   { id },
+      data,
+      include: { task: { select: { id: true, status: true, description: true } } },
+    })
     res.json(formatTodo(todo))
   } catch (err) { next(err) }
 }
@@ -237,6 +246,84 @@ async function deleteTodo(req, res, next) {
 
     await prisma.eOSTodo.delete({ where: { id } })
     res.json({ deleted: true })
+  } catch (err) { next(err) }
+}
+
+// POST /api/eos/traction/todos/:id/send-to-dashboard
+// body: { projectId } — crea una tarea en el dashboard del responsable del To-Do
+// y la vincula (taskId). Al completar esa tarea, el To-Do se tilda solo.
+async function sendTodoToDashboard(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz          = req.workspace.timezone
+    const requesterId = req.user.userId
+    const id          = Number(req.params.id)
+    const projectId   = Number(req.body.projectId)
+
+    if (!projectId) return res.status(400).json({ error: 'projectId es requerido' })
+
+    const todo = await prisma.eOSTodo.findFirst({ where: { id, workspaceId } })
+    if (!todo)         return res.status(404).json({ error: 'To-Do no encontrado' })
+    if (!todo.ownerId) return res.status(400).json({ error: 'Asigná un responsable al To-Do primero' })
+    if (todo.taskId)   return res.status(409).json({ error: 'Este To-Do ya tiene una tarea vinculada' })
+
+    const [project, member] = await Promise.all([
+      prisma.project.findFirst({ where: { id: projectId, workspaceId, active: true }, select: { id: true } }),
+      prisma.workspaceMember.findUnique({
+        where:  { workspaceId_userId: { workspaceId, userId: todo.ownerId } },
+        select: { active: true },
+      }),
+    ])
+    if (!project)               return res.status(400).json({ error: 'Proyecto inválido' })
+    if (!member || !member.active) return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
+
+    // WorkDay de hoy del responsable (crear si falta — mismo patrón que tasks.create).
+    const today = todayString(tz)
+    const wdKey = { userId_workspaceId_date: { userId: todo.ownerId, workspaceId, date: today } }
+    let workDay = await prisma.workDay.findUnique({ where: wdKey })
+    if (!workDay) {
+      try {
+        workDay = await prisma.workDay.create({ data: { userId: todo.ownerId, workspaceId, date: today } })
+      } catch (e) {
+        if (e.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
+        else throw e
+      }
+    }
+    if (!workDay) return res.status(500).json({ error: 'No se pudo obtener la jornada del responsable' })
+
+    const task = await prisma.task.create({
+      data: {
+        description: todo.title,
+        projectId,
+        userId:      todo.ownerId,
+        workDayId:   workDay.id,
+        createdById: todo.ownerId !== requesterId ? requesterId : null,
+      },
+    })
+
+    const updated = await prisma.eOSTodo.update({
+      where:   { id },
+      data:    { taskId: task.id },
+      include: { task: { select: { id: true, status: true, description: true } } },
+    })
+
+    // Avisar al responsable (si no es quien lo envió).
+    if (todo.ownerId !== requesterId) {
+      const desc = todo.title.length > 60 ? todo.title.slice(0, 57) + '...' : todo.title
+      await prisma.notification.create({
+        data: {
+          userId:     todo.ownerId,
+          actorId:    requesterId,
+          taskId:     task.id,
+          projectId,
+          workspaceId,
+          type:       'TASK_MENTION',
+          message:    `te asignó un To-Do de L10: "${desc}"`,
+        },
+      })
+    }
+
+    res.status(201).json(formatTodo(updated))
   } catch (err) { next(err) }
 }
 
@@ -298,6 +385,6 @@ async function listSpecialMeetings(req, res, next) {
 
 module.exports = {
   getRocks, createRock, updateRock, deleteRock,
-  getWeek, createTodo, updateTodo, deleteTodo,
+  getWeek, createTodo, updateTodo, deleteTodo, sendTodoToDashboard,
   upsertMeeting, listSpecialMeetings,
 }

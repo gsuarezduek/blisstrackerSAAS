@@ -769,7 +769,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   // Flags de disponibilidad por grupo
   const hasRRSS   = !!(s.instagram || s.tiktok || s.linkedin)
   const hasAds    = !!(s.metaAds || s.googleAds)
-  const hasSeoGeo = !!(s.keywords || s.seo || s.geo || aiTrafficEntries || s.cannibalization)
+  const hasSeoGeo = !!(s.keywords || s.seo || s.geo || aiTrafficEntries)
   const hasSitio  = !!(s.analytics || evolutionPoints || s.performance)
 
   // ── Scorecard ejecutivo: métricas clave de todos los servicios ───────────────
@@ -1414,40 +1414,6 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
               <p className="text-xs text-gray-400 dark:text-gray-500 text-right mt-3">
                 Total: <strong className="text-gray-600 dark:text-gray-300">{fmt(aiTrafficEntries.reduce((acc, [, v]) => acc + v, 0))} sesiones</strong> desde IAs este mes
               </p>
-            </SectionCard>
-          )}
-
-          {/* Canibalización SEO */}
-          {s.cannibalization && (
-            <SectionCard title="Canibalización SEO" icon="⚠️">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                <div className="text-center bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">{s.cannibalization.totalConflicts}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Conflictos totales</p>
-                </div>
-                <div className="text-center bg-red-50 dark:bg-red-900/20 rounded-xl p-3">
-                  <p className="text-xl font-bold text-red-600 dark:text-red-400">{s.cannibalization.criticalCount}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Críticos</p>
-                </div>
-                <div className="text-center bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-3">
-                  <p className="text-xl font-bold text-yellow-600 dark:text-yellow-400">{s.cannibalization.warningCount}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Advertencias</p>
-                </div>
-                <div className="text-center bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">{s.cannibalization.trafficAtRisk > 0 ? fmt(s.cannibalization.trafficAtRisk) : '—'}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Tráfico en riesgo</p>
-                </div>
-              </div>
-              {s.cannibalization.criticalCount > 0 && (
-                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg px-3 py-2">
-                  Se detectaron <strong>{s.cannibalization.criticalCount}</strong> conflictos críticos de canibalización. Se recomienda revisar y consolidar las páginas afectadas.
-                </p>
-              )}
-              {s.cannibalization.date && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 text-right mt-2">
-                  Análisis del {new Date(s.cannibalization.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })} · Período: {s.cannibalization.dateRange}
-                </p>
-              )}
             </SectionCard>
           )}
 

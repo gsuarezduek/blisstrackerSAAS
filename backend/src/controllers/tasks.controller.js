@@ -213,6 +213,8 @@ async function startTask(req, res, next) {
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
     ])
+    // Reabrir una tarea vinculada destilda su To-Do de L10.
+    await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -263,6 +265,8 @@ async function resumeTask(req, res, next) {
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
     ])
+    // Reanudar una tarea vinculada destilda su To-Do de L10.
+    await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -303,6 +307,9 @@ async function completeTask(req, res, next) {
         })),
       })
     }
+
+    // Si la tarea está vinculada a un To-Do de L10, tildarlo (sync un sentido: tarea → To-Do).
+    await prisma.eOSTodo.updateMany({ where: { taskId: task.id }, data: { done: true, completedAt: now } })
 
     res.json(task)
   } catch (err) {

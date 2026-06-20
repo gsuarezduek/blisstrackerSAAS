@@ -476,6 +476,7 @@ model Task {
   notifications Notification[]
   comments      TaskComment[]
   sessions      TaskSession[]
+  eosTodo       EOSTodo? // To-Do de L10 vinculado (uno a uno); completar la tarea lo tilda
 
   @@index([userId, status])
   @@index([projectId])
@@ -1667,11 +1668,15 @@ model EOSTodo {
   done        Boolean   @default(false)
   completedAt DateTime?
   order       Int       @default(0)
+  // Tarea del dashboard vinculada (uno a uno). Al completar esa tarea se tilda el
+  // To-Do; al reabrirla se destilda. SetNull: si se borra la tarea, el To-Do queda.
+  taskId      Int?      @unique
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   owner     User?     @relation("TodoOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  task      Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, week])
 }

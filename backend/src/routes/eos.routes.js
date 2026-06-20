@@ -17,7 +17,7 @@ const {
 } = require('../controllers/eosIssues.controller')
 const {
   getRocks, createRock, updateRock, deleteRock,
-  getWeek, createTodo, updateTodo, deleteTodo,
+  getWeek, createTodo, updateTodo, deleteTodo, sendTodoToDashboard,
   upsertMeeting, listSpecialMeetings,
 } = require('../controllers/eosTraction.controller')
 const {
@@ -81,6 +81,7 @@ router.get('/traction/week',              getWeek)
 router.post('/traction/todos',            createTodo)
 router.patch('/traction/todos/:id',       updateTodo)
 router.delete('/traction/todos/:id',      deleteTodo)
+router.post('/traction/todos/:id/send-to-dashboard', sendTodoToDashboard)
 router.get('/traction/meetings/special',  listSpecialMeetings)
 router.put('/traction/meetings/:week',    upsertMeeting)
 
