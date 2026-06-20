@@ -41,8 +41,6 @@ export default function Dashboard() {
   const [completedLoading,  setCompletedLoading]  = useState(false)
   const [autoPausedTask, setAutoPausedTask] = useState(null)
   const [commentTask, setCommentTask] = useState(null)
-  const [editingTaskId,       setEditingTaskId]       = useState(null)
-  const [editingTaskDesc,     setEditingTaskDesc]     = useState('')
   const [editingDurationId,   setEditingDurationId]   = useState(null)
   const [durationEditInput,   setDurationEditInput]   = useState('')
   const cancelDurationEdit = useRef(false)
@@ -376,18 +374,6 @@ export default function Dashboard() {
     } catch (err) {
       if (err.response?.data?.error) alert(err.response.data.error)
     }
-  }
-
-  async function handleSaveTaskDesc(taskId) {
-    const desc = editingTaskDesc.trim()
-    setEditingTaskId(null)
-    if (!desc) return
-    // Optimistic update en ambas listas
-    setWorkDay(prev => prev ? ({ ...prev, tasks: prev.tasks.map(t => t.id === taskId ? { ...t, description: desc } : t) }) : prev)
-    setCompletedHistory(prev => prev.map(t => t.id === taskId ? { ...t, description: desc } : t))
-    try {
-      await api.patch(`/tasks/${taskId}`, { description: desc })
-    } catch { loadToday() }
   }
 
   async function loadCompletedHistory(skip = 0) {
@@ -903,33 +889,18 @@ export default function Dashboard() {
               )}
               {completed.map(t => {
                 const mins = completedMinutes(t)
-                const isEditing = editingTaskId === t.id
                 const isEditingDur = editingDurationId === t.id
                 return (
                   <div key={t.id} className="flex items-center gap-3 px-4 py-3 group">
                     <span className="text-green-500 flex-shrink-0 text-sm">✓</span>
                     <div className="flex-1 min-w-0">
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          value={editingTaskDesc}
-                          onChange={e => setEditingTaskDesc(e.target.value)}
-                          onBlur={() => handleSaveTaskDesc(t.id)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter')  e.currentTarget.blur()
-                            if (e.key === 'Escape') setEditingTaskId(null)
-                          }}
-                          className="w-full text-sm text-gray-700 dark:text-gray-200 bg-transparent border-b border-primary-400 focus:outline-none leading-snug"
-                        />
-                      ) : (
-                        <p
-                          onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(t.description) }}
-                          title="Clic para editar descripción"
-                          className="text-sm text-gray-600 dark:text-gray-300 leading-snug truncate cursor-text hover:text-gray-800 dark:hover:text-gray-100 transition-colors"
-                        >
-                          {t.description}
-                        </p>
-                      )}
+                      <p
+                        onClick={() => setCommentTask(t)}
+                        title="Abrir tarea"
+                        className="text-sm text-gray-600 dark:text-gray-300 leading-snug truncate cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                      >
+                        {t.description}
+                      </p>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
                         <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
@@ -995,33 +966,18 @@ export default function Dashboard() {
                 const dateStr = new Date(t.completedAt).toLocaleDateString('es-AR', {
                   weekday: 'short', day: 'numeric', month: 'short',
                 })
-                const isEditing = editingTaskId === t.id
                 const isEditingDur = editingDurationId === t.id
                 return (
                   <div key={t.id} className="flex items-center gap-3 px-4 py-3 group">
                     <span className="text-gray-300 dark:text-gray-600 flex-shrink-0 text-sm">✓</span>
                     <div className="flex-1 min-w-0">
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          value={editingTaskDesc}
-                          onChange={e => setEditingTaskDesc(e.target.value)}
-                          onBlur={() => handleSaveTaskDesc(t.id)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter')  e.currentTarget.blur()
-                            if (e.key === 'Escape') setEditingTaskId(null)
-                          }}
-                          className="w-full text-sm text-gray-600 dark:text-gray-300 bg-transparent border-b border-primary-400 focus:outline-none leading-snug"
-                        />
-                      ) : (
-                        <p
-                          onClick={() => { setEditingTaskId(t.id); setEditingTaskDesc(t.description) }}
-                          title="Clic para editar descripción"
-                          className="text-sm text-gray-500 dark:text-gray-400 leading-snug truncate cursor-text hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                        >
-                          {t.description}
-                        </p>
-                      )}
+                      <p
+                        onClick={() => setCommentTask(t)}
+                        title="Abrir tarea"
+                        className="text-sm text-gray-500 dark:text-gray-400 leading-snug truncate cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                      >
+                        {t.description}
+                      </p>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
                         <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
@@ -1146,8 +1102,12 @@ export default function Dashboard() {
           task={commentTask}
           onClose={() => setCommentTask(null)}
           onCommentAdded={count => handleCommentAdded(commentTask.id, count)}
-          onTaskEdited={updated => { handleUpdateTask(updated); setCommentTask(updated) }}
-          onTaskDeleted={id => { handleDeleteTask(id); setDelegated(prev => prev.filter(t => t.id !== id)) }}
+          onTaskEdited={updated => {
+            handleUpdateTask(updated)
+            setCompletedHistory(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t))
+            setCommentTask(updated)
+          }}
+          onTaskDeleted={id => { handleDeleteTask(id); setCompletedHistory(prev => prev.filter(t => t.id !== id)); setDelegated(prev => prev.filter(t => t.id !== id)) }}
         />
       )}
 

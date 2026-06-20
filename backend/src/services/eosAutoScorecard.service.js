@@ -13,8 +13,16 @@
 const prisma = require('../lib/prisma')
 const { tzOffsetStr, addDays, taskMins } = require('../lib/timeMetrics')
 const { todayString } = require('../utils/dates')
-const { monthBounds } = require('../lib/monthUtils')
+const { monthBounds, prevMonthStr } = require('../lib/monthUtils')
 const { EOS_AUTO_METRICS } = require('../lib/eosAutoMetricCatalog')
+const { computeObjectives } = require('./marketingObjectives.service')
+
+// Filtro de informes "generados" (no placeholders vacíos) — espejo de GENERATED_WHERE.
+const GENERATED_REPORT_OR = [
+  { enabledSections: { not: null } },
+  { dataCache:       { not: null } },
+  { analysis:        { not: null } },
+]
 
 // "YYYY-Www" (ISO 8601) de una fecha YYYY-MM-DD, interpretada como UTC.
 function isoWeekPeriodOf(dateStr) {
@@ -217,6 +225,74 @@ async function computeTardanzasWeekly(workspaceId, tz, offset, rangeStart, range
   return out
 }
 
+// Tareas completadas por semana (todas las del equipo, por fecha de completado).
+// La tarjeta rankea a quienes más completaron. No depende del horario; usa `info`
+// solo para nombres/avatares del top 3.
+async function computeTareasCompletadasWeekly(workspaceId, tz, offset, rangeStart, rangeEnd, info) {
+  const out = {}
+  const tasks = await prisma.task.findMany({
+    where: {
+      status: 'COMPLETED',
+      completedAt: { gte: new Date(rangeStart + 'T00:00:00' + offset), lte: new Date(rangeEnd + 'T23:59:59' + offset) },
+      workDay: { workspaceId },
+    },
+    select: { userId: true, completedAt: true },
+  })
+
+  const byWeek = new Map() // period -> Map<uid, count>
+  for (const t of tasks) {
+    const date = localDate(t.completedAt, tz)
+    if (date < rangeStart || date > rangeEnd) continue
+    const period = isoWeekPeriodOf(date)
+    if (!byWeek.has(period)) byWeek.set(period, new Map())
+    const wm = byWeek.get(period)
+    wm.set(t.userId, (wm.get(t.userId) || 0) + 1)
+  }
+
+  for (const [period, wm] of byWeek) {
+    let total = 0
+    const people = []
+    for (const [uid, count] of wm) {
+      total += count
+      const pInfo = info?.get(uid)
+      people.push({ userId: uid, name: pInfo?.name || '—', avatar: pInfo?.avatar || null, count })
+    }
+    people.sort((a, b) => b.count - a.count)
+    out[period] = { value: total, top3: people.slice(0, 3) }
+  }
+  return out
+}
+
+// To-Dos de L10 completados por semana ISO. Cada EOSTodo ya está asignado a su
+// semana (`week`, formato "YYYY-Www"); contamos los `done` de las semanas del año.
+async function computeTodosCompletadosWeekly(workspaceId, year, info) {
+  const out = {}
+  const todos = await prisma.eOSTodo.findMany({
+    where:  { workspaceId, done: true },
+    select: { week: true, ownerId: true },
+  })
+
+  const byWeek = new Map() // week -> { total, owners: Map<uid, count> }
+  for (const t of todos) {
+    if (!t.week || t.week.slice(0, 4) !== String(year)) continue
+    if (!byWeek.has(t.week)) byWeek.set(t.week, { total: 0, owners: new Map() })
+    const w = byWeek.get(t.week)
+    w.total += 1
+    if (t.ownerId != null) w.owners.set(t.ownerId, (w.owners.get(t.ownerId) || 0) + 1)
+  }
+
+  for (const [week, w] of byWeek) {
+    const people = []
+    for (const [uid, count] of w.owners) {
+      const pInfo = info?.get(uid)
+      people.push({ userId: uid, name: pInfo?.name || '—', avatar: pInfo?.avatar || null, done: count })
+    }
+    people.sort((a, b) => b.done - a.done)
+    out[week] = { value: w.total, top3: people.slice(0, 3) }
+  }
+  return out
+}
+
 // ── Mensuales ─────────────────────────────────────────────────────────────────
 
 async function computeProyectosNuevosMonthly(workspaceId, tz, offset, rangeStart, rangeEnd, closedMonths) {
@@ -256,14 +332,126 @@ async function computeProyectosPerdidosMonthly(workspaceId, tz, offset, rangeSta
   return out
 }
 
-async function computeEquipoMonthly(workspaceId, closedMonths) {
+// Lee una métrica del histórico de RRHH (RrhhMetricSnapshot) por mes cerrado.
+// `decimals` redondea el valor (0 = entero para `equipo`, 1 = un decimal para
+// antigüedad y proyectos/persona).
+async function computeRrhhSnapshotMonthly(workspaceId, closedMonths, metric, decimals = 0) {
   const out = {}
   if (!closedMonths.length) return out
   const snaps = await prisma.rrhhMetricSnapshot.findMany({
-    where: { workspaceId, metric: 'activeMembers', month: { in: closedMonths } },
+    where: { workspaceId, metric, month: { in: closedMonths } },
     select: { month: true, value: true },
   })
-  for (const s of snaps) out[s.month] = { value: Math.round(s.value) }
+  const factor = Math.pow(10, decimals)
+  for (const s of snaps) out[s.month] = { value: Math.round(s.value * factor) / factor }
+  return out
+}
+
+// Informes mensuales de marketing generados, por mes (del informe, no de creación).
+// La tarjeta lista los proyectos.
+async function computeInformesEntregadosMonthly(workspaceId, closedMonths) {
+  const out = {}
+  if (!closedMonths.length) return out
+  const reports = await prisma.monthlyReport.findMany({
+    where:  { workspaceId, month: { in: closedMonths }, OR: GENERATED_REPORT_OR },
+    select: { month: true, project: { select: { name: true } } },
+  })
+  const byMonth = new Map()
+  for (const r of reports) {
+    if (!byMonth.has(r.month)) byMonth.set(r.month, [])
+    byMonth.get(r.month).push({ name: r.project?.name || '—' })
+  }
+  for (const [m, items] of byMonth) out[m] = { value: items.length, top3: items.slice(0, 5) }
+  return out
+}
+
+// Seguidores netos ganados en el mes = followers(M) − followers(M−1), sumado sobre
+// todos los proyectos de cada red (IG + TikTok + LinkedIn). La tarjeta muestra el
+// desglose por red. Solo cuenta proyectos con snapshot en ambos meses.
+async function computeSeguidoresNuevosMonthly(workspaceId, closedMonths) {
+  const out = {}
+  if (!closedMonths.length) return out
+  const baseMonth = prevMonthStr(closedMonths[0])
+  const allMonths = [baseMonth, ...closedMonths]
+  const networks = [
+    { label: 'Instagram', model: prisma.instagramSnapshot },
+    { label: 'TikTok',    model: prisma.tikTokSnapshot },
+    { label: 'LinkedIn',  model: prisma.linkedinSnapshot },
+  ]
+
+  const perMonth = new Map() // month -> Map<netLabel, netSum>
+  for (const net of networks) {
+    const rows = await net.model.findMany({
+      where:  { workspaceId, month: { in: allMonths } },
+      select: { projectId: true, month: true, followersCount: true },
+    })
+    const byProject = new Map() // projectId -> Map<month, followers>
+    for (const r of rows) {
+      if (r.followersCount == null) continue
+      if (!byProject.has(r.projectId)) byProject.set(r.projectId, new Map())
+      byProject.get(r.projectId).set(r.month, r.followersCount)
+    }
+    for (const m of closedMonths) {
+      const prev = prevMonthStr(m)
+      let sum = 0, hasData = false
+      for (const months of byProject.values()) {
+        const cur = months.get(m), pv = months.get(prev)
+        if (cur != null && pv != null) { sum += (cur - pv); hasData = true }
+      }
+      if (!hasData) continue
+      if (!perMonth.has(m)) perMonth.set(m, new Map())
+      perMonth.get(m).set(net.label, (perMonth.get(m).get(net.label) || 0) + sum)
+    }
+  }
+
+  for (const [m, netMap] of perMonth) {
+    let total = 0
+    const breakdown = []
+    for (const [label, val] of netMap) { total += val; breakdown.push({ name: label, value: val }) }
+    breakdown.sort((a, b) => b.value - a.value)
+    out[m] = { value: total, top3: breakdown }
+  }
+  return out
+}
+
+// Porcentaje de objetivos de marketing cumplidos (status 'ok') sobre el total
+// evaluable (ok/partial/fail) en el mes, agregando todos los proyectos con objetivos.
+// La tarjeta lista los no cumplidos. Reutiliza el motor de objetivos de marketing.
+async function computeObjetivosCumplidosMonthly(workspaceId, closedMonths) {
+  const out = {}
+  if (!closedMonths.length) return out
+  const objs = await prisma.marketingObjective.findMany({
+    where:  { workspaceId },
+    select: { projectId: true },
+  })
+  const projectIds = [...new Set(objs.map(o => o.projectId))]
+  if (!projectIds.length) return out
+
+  const projects = await prisma.project.findMany({
+    where:  { id: { in: projectIds } },
+    select: { id: true, name: true },
+  })
+  const nameById = new Map(projects.map(p => [p.id, p.name]))
+
+  for (const month of closedMonths) {
+    let ok = 0, total = 0
+    const unmet = []
+    for (const pid of projectIds) {
+      let results = []
+      try {
+        results = await computeObjectives({ projectId: pid, workspaceId, dataMonth: month })
+      } catch (err) {
+        console.error(`[EOSAutoScorecard] objetivos pid=${pid} ${month}:`, err.message)
+      }
+      for (const r of results) {
+        if (r.status !== 'ok' && r.status !== 'partial' && r.status !== 'fail') continue
+        total += 1
+        if (r.status === 'ok') ok += 1
+        else unmet.push({ name: `${nameById.get(pid) || '—'} · ${r.label}` })
+      }
+    }
+    if (total > 0) out[month] = { value: Math.round(ok / total * 100), top3: unmet.slice(0, 5) }
+  }
   return out
 }
 
@@ -291,8 +479,10 @@ async function computeAutoScorecardYear(workspaceId, tz, year, autoKeys = []) {
     let wEnd   = addDays(`${year}-12-31`, 7)
     if (wStart <= todayStr) {
       if (wEnd > todayStr) wEnd = todayStr
-      if (weeklyKeys.includes('tardanzas')) out.tardanzas = await computeTardanzasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx)
-      if (weeklyKeys.includes('ocupacion'))  out.ocupacion  = await occupancyByBucket(workspaceId, tz, offset, wStart, wEnd, isoWeekPeriodOf, ctx.info)
+      if (weeklyKeys.includes('tardanzas'))         out.tardanzas         = await computeTardanzasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx)
+      if (weeklyKeys.includes('ocupacion'))         out.ocupacion         = await occupancyByBucket(workspaceId, tz, offset, wStart, wEnd, isoWeekPeriodOf, ctx.info)
+      if (weeklyKeys.includes('tareas_completadas')) out.tareas_completadas = await computeTareasCompletadasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx.info)
+      if (weeklyKeys.includes('todos_completados'))  out.todos_completados  = await computeTodosCompletadosWeekly(workspaceId, year, ctx.info)
     }
   }
 
@@ -304,10 +494,15 @@ async function computeAutoScorecardYear(workspaceId, tz, year, autoKeys = []) {
     if (closedMonths.length) {
       const mStart = `${closedMonths[0]}-01`
       const mEnd   = monthBounds(closedMonths[closedMonths.length - 1]).endDate
-      if (monthlyKeys.includes('delta_horas'))        out.delta_horas        = await occupancyByBucket(workspaceId, tz, offset, mStart, mEnd, monthOf, ctx.info)
-      if (monthlyKeys.includes('proyectos_nuevos'))   out.proyectos_nuevos   = await computeProyectosNuevosMonthly(workspaceId, tz, offset, mStart, mEnd, closedMonths)
-      if (monthlyKeys.includes('proyectos_perdidos')) out.proyectos_perdidos = await computeProyectosPerdidosMonthly(workspaceId, tz, offset, mStart, mEnd, closedMonths)
-      if (monthlyKeys.includes('equipo'))             out.equipo             = await computeEquipoMonthly(workspaceId, closedMonths)
+      if (monthlyKeys.includes('delta_horas'))           out.delta_horas           = await occupancyByBucket(workspaceId, tz, offset, mStart, mEnd, monthOf, ctx.info)
+      if (monthlyKeys.includes('proyectos_nuevos'))      out.proyectos_nuevos      = await computeProyectosNuevosMonthly(workspaceId, tz, offset, mStart, mEnd, closedMonths)
+      if (monthlyKeys.includes('proyectos_perdidos'))    out.proyectos_perdidos    = await computeProyectosPerdidosMonthly(workspaceId, tz, offset, mStart, mEnd, closedMonths)
+      if (monthlyKeys.includes('equipo'))                out.equipo                = await computeRrhhSnapshotMonthly(workspaceId, closedMonths, 'activeMembers', 0)
+      if (monthlyKeys.includes('antiguedad'))            out.antiguedad            = await computeRrhhSnapshotMonthly(workspaceId, closedMonths, 'tenure', 1)
+      if (monthlyKeys.includes('proyectos_por_persona')) out.proyectos_por_persona = await computeRrhhSnapshotMonthly(workspaceId, closedMonths, 'projectsPerPerson', 1)
+      if (monthlyKeys.includes('informes_entregados'))   out.informes_entregados   = await computeInformesEntregadosMonthly(workspaceId, closedMonths)
+      if (monthlyKeys.includes('seguidores_nuevos'))     out.seguidores_nuevos     = await computeSeguidoresNuevosMonthly(workspaceId, closedMonths)
+      if (monthlyKeys.includes('objetivos_cumplidos'))   out.objetivos_cumplidos   = await computeObjetivosCumplidosMonthly(workspaceId, closedMonths)
     }
   }
 

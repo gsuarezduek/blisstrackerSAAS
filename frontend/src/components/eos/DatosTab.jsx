@@ -296,40 +296,64 @@ function QuickEntryCard({ metric, owner, initialValue, onSave }) {
 
 // Títulos del bloque de detalle por tipo de dato automático.
 const AUTO_RANK_TITLE = {
-  tardanzas:          'Más tarde llegaron',
-  ocupacion:          'Menos aprovecharon sus horas',
-  delta_horas:        'Menos aprovecharon sus horas',
-  proyectos_nuevos:   'Cuáles',
-  proyectos_perdidos: 'Cuáles',
+  tardanzas:           'Más tarde llegaron',
+  ocupacion:           'Menos aprovecharon sus horas',
+  delta_horas:         'Menos aprovecharon sus horas',
+  proyectos_nuevos:    'Cuáles',
+  proyectos_perdidos:  'Cuáles',
+  tareas_completadas:  'Quién completó más',
+  todos_completados:   'Quién completó más',
+  informes_entregados: 'Proyectos',
+  seguidores_nuevos:   'Por red',
+  objetivos_cumplidos: 'No cumplidos',
 }
+
+// Datos automáticos cuyo top 3 son filas de solo nombre (con valor opcional al final).
+const NAME_ROW_KEYS = new Set([
+  'proyectos_nuevos', 'proyectos_perdidos', 'informes_entregados',
+  'seguidores_nuevos', 'objetivos_cumplidos',
+])
 
 // Mensaje cuando no hay detalle (valor presente pero lista vacía). null = no mostrar nada.
 function autoEmptyHint(autoKey) {
   switch (autoKey) {
-    case 'tardanzas':          return 'Nadie llegó tarde 🎉'
+    case 'tardanzas':           return 'Nadie llegó tarde 🎉'
     case 'ocupacion':
-    case 'delta_horas':        return 'Sin personas con horario cargado'
-    case 'proyectos_nuevos':   return 'Sin altas este mes'
-    case 'proyectos_perdidos': return 'Sin bajas 🎉'
-    default:                   return null
+    case 'delta_horas':         return 'Sin personas con horario cargado'
+    case 'proyectos_nuevos':    return 'Sin altas este mes'
+    case 'proyectos_perdidos':  return 'Sin bajas 🎉'
+    case 'tareas_completadas':  return 'Sin tareas completadas'
+    case 'todos_completados':   return 'Sin to-dos completados'
+    case 'informes_entregados': return 'Sin informes este mes'
+    case 'seguidores_nuevos':   return 'Sin datos de redes'
+    case 'objetivos_cumplidos': return '¡Todos cumplidos! 🎉'
+    default:                    return null
   }
 }
 
 /** Renderiza la línea de cada item del top 3 según el tipo de dato automático. */
 function autoRankRow(autoKey, p, i) {
-  // Proyectos: filas de solo nombre (sin avatar ni métrica por persona).
-  if (autoKey === 'proyectos_nuevos' || autoKey === 'proyectos_perdidos') {
+  // Filas de solo nombre (proyectos / informes / objetivos / redes), con valor opcional al final.
+  if (NAME_ROW_KEYS.has(autoKey)) {
+    const suffix = p.value != null
+      ? (p.value > 0 ? `+${formatVal(p.value)}` : formatVal(p.value))
+      : null
     return (
       <li key={`${p.name}-${i}`} className="flex items-center gap-2 text-xs">
         <span className="w-4 text-center text-[11px] font-bold text-gray-400 dark:text-gray-500 tabular-nums shrink-0">{i + 1}</span>
         <span className="font-medium text-gray-700 dark:text-gray-200 truncate min-w-0 flex-1">{p.name}</span>
+        {suffix && <span className="text-gray-500 dark:text-gray-400 tabular-nums whitespace-nowrap shrink-0">{suffix}</span>}
       </li>
     )
   }
-  // Personas: tardanzas / ocupación / Δ horas.
+  // Personas: tardanzas / ocupación / Δ horas / tareas / to-dos.
   let detail = ''
   if (autoKey === 'tardanzas') {
     detail = `${p.lateDays} ${p.lateDays === 1 ? 'día' : 'días'} · +${p.lateMins} min`
+  } else if (autoKey === 'tareas_completadas') {
+    detail = `${p.count} ${p.count === 1 ? 'tarea' : 'tareas'}`
+  } else if (autoKey === 'todos_completados') {
+    detail = `${p.done} to-do${p.done === 1 ? '' : 's'}`
   } else {
     detail = `${p.util}% · ${formatVal(p.registeredHours)}/${formatVal(p.availableHours)}h`
   }

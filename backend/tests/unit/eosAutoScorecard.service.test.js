@@ -6,6 +6,12 @@ jest.mock('../../src/lib/prisma', () => ({
   task:               { findMany: jest.fn() },
   project:            { findMany: jest.fn() },
   rrhhMetricSnapshot: { findMany: jest.fn() },
+  eOSTodo:            { findMany: jest.fn() },
+  monthlyReport:      { findMany: jest.fn() },
+  marketingObjective: { findMany: jest.fn() },
+  instagramSnapshot:  { findMany: jest.fn() },
+  tikTokSnapshot:     { findMany: jest.fn() },
+  linkedinSnapshot:   { findMany: jest.fn() },
 }))
 
 const prisma = require('../../src/lib/prisma')
@@ -23,6 +29,12 @@ function resetAll() {
   prisma.task.findMany.mockResolvedValue([])
   prisma.project.findMany.mockResolvedValue([])
   prisma.rrhhMetricSnapshot.findMany.mockResolvedValue([])
+  prisma.eOSTodo.findMany.mockResolvedValue([])
+  prisma.monthlyReport.findMany.mockResolvedValue([])
+  prisma.marketingObjective.findMany.mockResolvedValue([])
+  prisma.instagramSnapshot.findMany.mockResolvedValue([])
+  prisma.tikTokSnapshot.findMany.mockResolvedValue([])
+  prisma.linkedinSnapshot.findMany.mockResolvedValue([])
 }
 
 beforeEach(resetAll)
@@ -198,5 +210,89 @@ describe('computeAutoScorecardYear — mensuales (a mes vencido)', () => {
     const out = await computeAutoScorecardYear(1, TZ, 2027, ['equipo', 'proyectos_nuevos'])
     expect(out.equipo).toEqual({})
     expect(out.proyectos_nuevos).toEqual({})
+  })
+
+  it('antiguedad y proyectos_por_persona: leen RRHH con un decimal', async () => {
+    prisma.rrhhMetricSnapshot.findMany
+      .mockResolvedValueOnce([{ month: '2026-04', value: 2.345 }]) // antiguedad (tenure)
+      .mockResolvedValueOnce([{ month: '2026-04', value: 1.666 }]) // proyectos_por_persona
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['antiguedad', 'proyectos_por_persona'])
+    expect(out.antiguedad['2026-04'].value).toBe(2.3)
+    expect(out.proyectos_por_persona['2026-04'].value).toBe(1.7)
+  })
+
+  it('informes_entregados: cuenta informes generados por mes y lista proyectos', async () => {
+    prisma.monthlyReport.findMany.mockResolvedValue([
+      { month: '2026-04', project: { name: 'Cliente A' } },
+      { month: '2026-04', project: { name: 'Cliente B' } },
+      { month: '2026-05', project: { name: 'Cliente A' } },
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['informes_entregados'])
+    expect(out.informes_entregados['2026-04']).toMatchObject({ value: 2 })
+    expect(out.informes_entregados['2026-04'].top3.map(p => p.name)).toEqual(['Cliente A', 'Cliente B'])
+    expect(out.informes_entregados['2026-05'].value).toBe(1)
+  })
+
+  it('seguidores_nuevos: suma netos por red vs el mes anterior, desglose por red', async () => {
+    // closedMonths 2026 = ene..may. Solo abril tiene base (marzo) + valor.
+    prisma.instagramSnapshot.findMany.mockResolvedValue([
+      { projectId: 1, month: '2026-03', followersCount: 100 },
+      { projectId: 1, month: '2026-04', followersCount: 150 }, // +50
+    ])
+    prisma.linkedinSnapshot.findMany.mockResolvedValue([
+      { projectId: 1, month: '2026-03', followersCount: 10 },
+      { projectId: 1, month: '2026-04', followersCount: 30 },  // +20
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['seguidores_nuevos'])
+    expect(out.seguidores_nuevos['2026-04'].value).toBe(70)
+    const byName = Object.fromEntries(out.seguidores_nuevos['2026-04'].top3.map(b => [b.name, b.value]))
+    expect(byName).toEqual({ Instagram: 50, LinkedIn: 20 })
+    // marzo no tiene base (febrero) → sin dato
+    expect(out.seguidores_nuevos['2026-03']).toBeUndefined()
+  })
+
+  it('objetivos_cumplidos: vacío si el workspace no tiene objetivos', async () => {
+    prisma.marketingObjective.findMany.mockResolvedValue([])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['objetivos_cumplidos'])
+    expect(out.objetivos_cumplidos).toEqual({})
+  })
+})
+
+describe('computeAutoScorecardYear — semanales nuevas', () => {
+  it('tareas_completadas: cuenta completadas por semana y rankea por persona', async () => {
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 1, workStartTime: null, workEndTime: null, user: { name: 'Ana Lopez', avatar: 'a.png' } },
+      { userId: 2, workStartTime: null, workEndTime: null, user: { name: 'Beto Ruiz', avatar: 'b.png' } },
+    ])
+    prisma.task.findMany.mockResolvedValue([
+      { userId: 1, completedAt: '2026-03-02T12:00:00-03:00' },
+      { userId: 1, completedAt: '2026-03-03T12:00:00-03:00' },
+      { userId: 2, completedAt: '2026-03-04T12:00:00-03:00' },
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['tareas_completadas'])
+    const wk = out.tareas_completadas['2026-W10']
+    expect(wk.value).toBe(3)
+    expect(wk.top3[0]).toMatchObject({ userId: 1, count: 2 })
+    expect(wk.top3[1]).toMatchObject({ userId: 2, count: 1 })
+  })
+
+  it('todos_completados: cuenta to-dos done por semana y rankea por responsable', async () => {
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 1, workStartTime: null, workEndTime: null, user: { name: 'Ana', avatar: 'a.png' } },
+      { userId: 2, workStartTime: null, workEndTime: null, user: { name: 'Beto', avatar: 'b.png' } },
+    ])
+    prisma.eOSTodo.findMany.mockResolvedValue([
+      { week: '2026-W10', ownerId: 1 },
+      { week: '2026-W10', ownerId: 1 },
+      { week: '2026-W10', ownerId: 2 },
+      { week: '2026-W11', ownerId: null }, // sin responsable → cuenta pero no va al top 3
+      { week: '2025-W10', ownerId: 1 },    // otro año → excluido
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['todos_completados'])
+    expect(out.todos_completados['2026-W10'].value).toBe(3)
+    expect(out.todos_completados['2026-W10'].top3[0]).toMatchObject({ userId: 1, done: 2 })
+    expect(out.todos_completados['2026-W11'].value).toBe(1)
+    expect(out.todos_completados['2026-W11'].top3).toHaveLength(0)
+    expect(out.todos_completados['2025-W10']).toBeUndefined()
   })
 })

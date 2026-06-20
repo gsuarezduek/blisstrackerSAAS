@@ -26,6 +26,22 @@ const EOS_AUTO_METRICS = {
     frequency:     'weekly',
     description:   'Horas trabajadas del equipo sobre horas disponibles (según el horario cargado de cada uno). Solo cuenta a quienes tienen horario. La tarjeta muestra el top 3 que menos aprovecharon sus horas.',
   },
+  todos_completados: {
+    key:           'todos_completados',
+    name:          'To-Dos de L10 completados',
+    unit:          null,            // conteo
+    lowerIsBetter: false,           // más es mejor
+    frequency:     'weekly',
+    description:   'To-Dos de la reunión L10 marcados como completados, por semana. La tarjeta muestra el top 3 de quienes más completaron.',
+  },
+  tareas_completadas: {
+    key:           'tareas_completadas',
+    name:          'Tareas completadas',
+    unit:          null,            // conteo
+    lowerIsBetter: false,           // más es mejor
+    frequency:     'weekly',
+    description:   'Tareas que el equipo completó en la semana (por fecha de completado). La tarjeta muestra el top 3 de quienes más completaron.',
+  },
 
   // ── Mensuales (a mes vencido: solo se llenan los meses cerrados) ─────────────
   delta_horas: {
@@ -59,6 +75,46 @@ const EOS_AUTO_METRICS = {
     lowerIsBetter: false,
     frequency:     'monthly',
     description:   'Cantidad de integrantes activos al cierre del mes (del histórico de RRHH). Si un mes no tiene snapshot, queda vacío.',
+  },
+  antiguedad: {
+    key:           'antiguedad',
+    name:          'Antigüedad promedio',
+    unit:          'años',
+    lowerIsBetter: false,
+    frequency:     'monthly',
+    description:   'Antigüedad promedio del equipo al cierre del mes (del histórico de RRHH). Si un mes no tiene snapshot, queda vacío.',
+  },
+  proyectos_por_persona: {
+    key:           'proyectos_por_persona',
+    name:          'Proyectos por persona',
+    unit:          null,
+    lowerIsBetter: false,
+    frequency:     'monthly',
+    description:   'Proyectos activos ÷ integrantes activos al cierre del mes (del histórico de RRHH). Si un mes no tiene snapshot, queda vacío.',
+  },
+  informes_entregados: {
+    key:           'informes_entregados',
+    name:          'Informes entregados',
+    unit:          null,
+    lowerIsBetter: false,
+    frequency:     'monthly',
+    description:   'Informes mensuales de marketing generados para el mes. La tarjeta lista los proyectos. Requiere el módulo Marketing.',
+  },
+  seguidores_nuevos: {
+    key:           'seguidores_nuevos',
+    name:          'Seguidores nuevos',
+    unit:          null,
+    lowerIsBetter: false,
+    frequency:     'monthly',
+    description:   'Seguidores netos ganados en el mes sumando Instagram, TikTok y LinkedIn de todos los proyectos. La tarjeta muestra el desglose por red. Requiere el módulo Marketing.',
+  },
+  objetivos_cumplidos: {
+    key:           'objetivos_cumplidos',
+    name:          'Objetivos de marketing cumplidos',
+    unit:          '%',
+    lowerIsBetter: false,
+    frequency:     'monthly',
+    description:   'Porcentaje de objetivos de marketing alcanzados (en verde) en el mes, sobre el total evaluable. La tarjeta lista los no cumplidos. Requiere el módulo Marketing.',
   },
 }
 

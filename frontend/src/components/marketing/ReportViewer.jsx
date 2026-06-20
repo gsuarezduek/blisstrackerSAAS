@@ -339,6 +339,83 @@ function BestTikTokVideo({ video }) {
   )
 }
 
+// Mejor post del mes (LinkedIn)
+function BestLinkedinPost({ post }) {
+  if (!post) return null
+  const inner = (
+    <div className="flex items-stretch gap-3">
+      <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+        {post.imgSrc ? (
+          <img src={post.imgSrc} alt="" className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-blue-500 to-sky-400" />
+        )}
+        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">
+          Mejor post del mes
+        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400 mt-1">
+          {post.impressions != null && <span>👁 {fmt(post.impressions)}</span>}
+          {post.likes       != null && <span>❤️ {fmt(post.likes)}</span>}
+          {post.comments    != null && <span>💬 {fmt(post.comments)}</span>}
+          {post.shares      != null && <span>↗ {fmt(post.shares)}</span>}
+        </div>
+        {post.text && (
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight mt-1">
+            {post.text}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="mt-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 p-3">
+      {post.url ? (
+        <a href={post.url} target="_blank" rel="noopener noreferrer" className="block hover:opacity-90 transition-opacity">
+          {inner}
+        </a>
+      ) : inner}
+    </div>
+  )
+}
+
+// Audiencia de LinkedIn (demographics) — bloque compacto, solo si hay datos
+function LinkedinAudience({ demographics }) {
+  if (!demographics) return null
+  const cats = [
+    { key: 'region',    icon: '🌎', title: 'Región' },
+    { key: 'seniority', icon: '📊', title: 'Seniority' },
+    { key: 'industry',  icon: '🏢', title: 'Industria' },
+    { key: 'function',  icon: '💼', title: 'Función' },
+  ].filter(c => Array.isArray(demographics[c.key]) && demographics[c.key].length)
+  if (!cats.length) return null
+  const labelOf = (item) => item.label || (item.urn ? String(item.urn).split(':').pop().replace(/_/g, ' ') : '—')
+  return (
+    <div className="mt-4 grid grid-cols-2 gap-3">
+      {cats.map(c => {
+        const items = demographics[c.key]
+        const total = items.reduce((sm, x) => sm + (x.count ?? 0), 0) || 1
+        return (
+          <div key={c.key} className="rounded-lg bg-gray-50 dark:bg-gray-700/40 p-2.5">
+            <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">{c.icon} {c.title}</p>
+            <div className="space-y-1">
+              {items.slice(0, 3).map((item, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="truncate text-gray-700 dark:text-gray-300 capitalize">{labelOf(item)}</span>
+                  <span className="tabular-nums text-gray-400">{Math.round((item.count / total) * 100)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // Tabla de objetivos vs real
 // Formatea un valor de objetivo según la unidad
 function fmtObjVal(value, unit) {
@@ -690,7 +767,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   const contextSEO   = analysis?.contextSEO   || ''
 
   // Flags de disponibilidad por grupo
-  const hasRRSS   = !!(s.instagram || s.tiktok)
+  const hasRRSS   = !!(s.instagram || s.tiktok || s.linkedin)
   const hasAds    = !!(s.metaAds || s.googleAds)
   const hasSeoGeo = !!(s.keywords || s.seo || s.geo || aiTrafficEntries || s.cannibalization)
   const hasSitio  = !!(s.analytics || evolutionPoints || s.performance)
@@ -708,6 +785,8 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       items.push({ label: 'Seguidores IG', value: fmt(s.instagram.followersCount), delta: s.instagram.deltaFollowers })
     } else if (s.tiktok) {
       items.push({ label: 'Seguidores TK', value: fmt(s.tiktok.followersCount), delta: s.tiktok.deltaFollowers })
+    } else if (s.linkedin) {
+      items.push({ label: 'Seguidores LI', value: fmt(s.linkedin.followersCount), delta: s.linkedin.deltaFollowers })
     }
     if (s.seo?.avgPosition) {
       items.push({ label: 'Pos. media SEO', value: String(s.seo.avgPosition) })
@@ -1039,7 +1118,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       {hasRRSS && (
         <>
           <GroupHeader title="Redes Sociales" />
-          <div className={`grid gap-5 ${s.instagram && s.tiktok ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={`grid gap-5 ${[s.instagram, s.tiktok, s.linkedin].filter(Boolean).length >= 2 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
             {s.instagram && (
               <SectionCard title="Instagram" icon="📸">
                 <KpiGrid items={[
@@ -1080,6 +1159,29 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                     {s.tiktok._fallbackMonth === 'live'
                       ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
                       : `📅 Datos más recientes disponibles: ${monthLabel(s.tiktok._fallbackMonth)}`
+                    }
+                  </p>
+                )}
+              </SectionCard>
+            )}
+
+            {s.linkedin && (
+              <SectionCard title="LinkedIn" icon="💼">
+                <KpiGrid items={[
+                  { label: 'Seguidores',   value: fmt(s.linkedin.followersCount), delta: s.linkedin.deltaFollowers },
+                  { label: 'Engagement',  value: s.linkedin.engagementRate != null ? `${s.linkedin.engagementRate.toFixed(2)}%` : '—', delta: s.linkedin.deltaEngagement },
+                  { label: 'Posts / mes', value: fmt(s.linkedin.postsThisMonth) },
+                  ...(s.linkedin.impressions != null ? [{ label: 'Impresiones', value: fmt(s.linkedin.impressions), delta: s.linkedin.deltaImpressions }] : []),
+                  ...(s.linkedin.clicks      != null ? [{ label: 'Clics',       value: fmt(s.linkedin.clicks) }] : []),
+                  ...(s.linkedin.ctr         != null ? [{ label: 'CTR',         value: `${s.linkedin.ctr.toFixed(2)}%` }] : []),
+                ]} />
+                {s.linkedin.topPosts?.[0] && <BestLinkedinPost post={s.linkedin.topPosts[0]} />}
+                <LinkedinAudience demographics={s.linkedin.demographics} />
+                {s.linkedin._fallbackMonth && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
+                    {s.linkedin._fallbackMonth === 'live'
+                      ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                      : `📅 Datos más recientes disponibles: ${monthLabel(s.linkedin._fallbackMonth)}`
                     }
                   </p>
                 )}
