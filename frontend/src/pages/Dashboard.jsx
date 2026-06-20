@@ -222,6 +222,7 @@ export default function Dashboard() {
     )
     setWorkDay(prev => ({ ...prev, tasks: update(prev.tasks) }))
     setCarryOver(prev => update(prev))
+    setCompletedHistory(prev => update(prev))
   }
 
   // Derived state
@@ -931,6 +932,14 @@ export default function Dashboard() {
                       )}
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
+                        <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                        <button
+                          onClick={() => setCommentTask(t)}
+                          title="Ver comentarios"
+                          className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                        >
+                          💬{(t._count?.comments ?? 0) > 0 ? ` ${t._count.comments}` : ''}
+                        </button>
                         {isEditingDur ? (
                           <>
                             <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
@@ -1017,6 +1026,14 @@ export default function Dashboard() {
                         <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
                         <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
                         <span className="text-xs text-gray-400 dark:text-gray-500 capitalize">{dateStr}</span>
+                        <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                        <button
+                          onClick={() => setCommentTask(t)}
+                          title="Ver comentarios"
+                          className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                        >
+                          💬{(t._count?.comments ?? 0) > 0 ? ` ${t._count.comments}` : ''}
+                        </button>
                         {isEditingDur ? (
                           <>
                             <span className="text-xs text-gray-300 dark:text-gray-600">·</span>

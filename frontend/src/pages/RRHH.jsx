@@ -8,6 +8,7 @@ import SetupHintCard from '../components/SetupHintCard'
 import useLegajoFields from '../hooks/useLegajoFields'
 import { fieldValue, displayValue, isLegajoComplete } from '../components/legajo/legajoUtils'
 import useRoles from '../hooks/useRoles'
+import RoleBadge from '../components/RoleBadge'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { computePeopleScore, peopleColumnKeys, scoreBand } from '../utils/peopleScore'
@@ -979,7 +980,10 @@ function TabIngresos({ users }) {
             <img src={avatarUrl(user.avatar)} alt={user.name}
               className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0" />
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">{user.name}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{user.name}</p>
+                <RoleBadge role={user.role} userId={user.id} />
+              </div>
               <p className="text-xs text-gray-400 dark:text-gray-500">
                 {ul.length} ingreso{ul.length !== 1 ? 's' : ''} · promedio {avgTime}
                 {schedule && ` · horario ${schedule.label}`}
@@ -1269,7 +1273,7 @@ function TabLegajos({ users, onVacationUpdate }) {
               className="w-14 h-14 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 flex-shrink-0" />
             <div>
               <p className="text-lg font-bold text-gray-900 dark:text-white">{selected.name}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{labelFor(selected.role)}</p>
+              <RoleBadge role={selected.role} userId={selected.id} className="inline-block mt-1" />
               {selected.workspaceJoinedAt && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   📅 En {workspace?.name ?? 'el equipo'} desde el {new Date(selected.workspaceJoinedAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ })}
@@ -1677,6 +1681,7 @@ function TabVacaciones() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-0.5">
                           <p className="font-semibold text-sm text-gray-900 dark:text-white">{req.user.name}</p>
+                          <RoleBadge userId={req.user.id} />
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
                           <span className="text-xs text-gray-500 dark:text-gray-400">{typeLabel}</span>
                         </div>

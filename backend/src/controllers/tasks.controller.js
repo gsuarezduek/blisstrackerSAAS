@@ -526,7 +526,11 @@ async function completedHistory(req, res, next) {
 
     const tasks = await prisma.task.findMany({
       where,
-      include: { project: { select: { id: true, name: true } }, workDay: { select: { date: true } } },
+      include: {
+        project: { select: { id: true, name: true } },
+        workDay: { select: { date: true } },
+        _count: { select: { comments: true } },
+      },
       orderBy: { completedAt: 'desc' },
       skip,
       take: take + 1,

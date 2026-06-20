@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { computePeopleScore, scoreBand } from '../../utils/peopleScore'
+import RoleBadge from '../RoleBadge'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UI primitivos compartidos
@@ -176,7 +177,10 @@ function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
                 <td className="py-2 pr-4">
                   <div className="flex items-center gap-2">
                     <Avatar src={member.avatar} name={member.name} />
-                    <span className="text-sm text-gray-800 dark:text-gray-200 truncate max-w-[100px]">{member.name}</span>
+                    <div className="min-w-0">
+                      <span className="block text-sm text-gray-800 dark:text-gray-200 truncate max-w-[120px]">{member.name}</span>
+                      <RoleBadge role={member.teamRole} userId={member.id} className="inline-block mt-0.5" />
+                    </div>
                   </div>
                 </td>
                 {allColumns.map((col, i) => {
@@ -413,7 +417,9 @@ function ThreeStrikes({ members, strikesMap, onAddStrike, onRemoveStrike }) {
             <button onClick={() => setExpanded(expanded === m.id ? null : m.id)}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left">
               <Avatar src={m.avatar} name={m.name} />
-              <span className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-200">{m.name}</span>
+              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{m.name}</span>
+              <RoleBadge role={m.teamRole} userId={m.id} />
+              <span className="flex-1" />
               <StrikesDots count={m.strikes.length} />
               <span className="text-gray-400 text-xs ml-2">{expanded === m.id ? '▲' : '▼'}</span>
             </button>

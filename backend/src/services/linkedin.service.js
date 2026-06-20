@@ -63,11 +63,27 @@ async function restGetRaw(path, queryString, accessToken) {
   return axios.get(`${REST_BASE}/${path}?${queryString}`, { headers: restHeaders(accessToken) })
 }
 
-// Parámetro timeIntervals en sintaxis Rest.li 2.0. Clampa el fin a "ahora":
-// LinkedIn rechaza rangos que terminan en el futuro (p.ej. el mes en curso).
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// Parámetro timeIntervals en sintaxis Rest.li 2.0.
+// LinkedIn rechaza rangos que terminan en el futuro y, con granularidad MONTH,
+// exige que el rango cubra al menos un mes COMPLETO. El mes en curso no cumple
+// ninguna de las dos (su fin natural es futuro) → 400 "End time must be greater
+// than start time by at least one multiple of the granularity type [MONTH]".
+// Solución: si el rango termina en el futuro (= mes en curso, incompleto) caemos
+// a granularidad DAY (admite rangos parciales) hasta el último día cerrado
+// (00:00 UTC). El llamador suma los buckets, así que el total month-to-date es
+// el mismo. Para meses pasados (fin <= ahora) se mantiene MONTH (un solo bucket).
 function timeIntervalsParam(startMs, endMs, granularity = 'MONTH') {
-  const safeEnd = Math.min(endMs, Date.now())
-  return `timeIntervals=(timeRange:(start:${startMs},end:${safeEnd}),timeGranularityType:${granularity})`
+  const now = Date.now()
+  let g = granularity
+  let safeEnd = endMs
+  if (endMs > now) {
+    if (g === 'MONTH') g = 'DAY'
+    safeEnd = Math.floor(now / DAY_MS) * DAY_MS       // último día completo, alineado a 00:00 UTC
+    if (safeEnd <= startMs) safeEnd = startMs + DAY_MS // al menos 1 día (los primeros del mes casi no traen datos)
+  }
+  return `timeIntervals=(timeRange:(start:${startMs},end:${safeEnd}),timeGranularityType:${g})`
 }
 
 /**
@@ -77,32 +93,29 @@ function timeIntervalsParam(startMs, endMs, granularity = 'MONTH') {
 async function listAdminOrganizations(accessToken) {
   const res = await axios.get(`${V2_BASE}/organizationalEntityAcls`, {
     params: {
-      q:          'roleAssignee',
-      role:       'ADMINISTRATOR',
-      state:      'APPROVED',
-      projection: '(elements*(organizationalTarget~(id,localizedName,vanityName,logoV2(original~:playableStreams))))',
+      q:     'roleAssignee',
+      role:  'ADMINISTRATOR',
+      state: 'APPROVED',
     },
     headers: v2Headers(accessToken),
   })
 
   const elements = res.data?.elements ?? []
   console.log(`[Linkedin] organizationalEntityAcls: ${elements.length} elemento(s) admin`)
-  return elements.map(el => {
-    const org = el['organizationalTarget~'] ?? {}
-    // Fallback robusto: si la decoración (organizationalTarget~) no resolvió, el id
-    // igual viene en la URN cruda organizationalTarget ("urn:li:organization:123").
-    const rawUrn    = typeof el.organizationalTarget === 'string' ? el.organizationalTarget : null
-    const idFromUrn = rawUrn ? rawUrn.split(':').pop() : null
-    const id        = org.id != null ? String(org.id) : idFromUrn
-    const logoElems = org.logoV2?.original?.['~']?.elements ?? []
-    const logoUrl   = logoElems[0]?.identifiers?.[0]?.identifier ?? null
-    return {
-      id,
-      name:       org.localizedName ?? null,
-      vanityName: org.vanityName    ?? null,
-      logoUrl,
-    }
-  }).filter(o => o.id && o.id !== 'undefined')
+
+  // El ACL solo trae la URN de la org de forma confiable; la decoración con
+  // nombre/logo (organizationalTarget~) suele venir vacía. Resolvemos cada org
+  // con fetchOrgInfo (el mismo endpoint /v2/organizations/{id} que SÍ devuelve el
+  // nombre cuando se selecciona la página), en paralelo.
+  const ids = elements
+    .map(el => {
+      const rawUrn = typeof el.organizationalTarget === 'string' ? el.organizationalTarget : null
+      return rawUrn ? rawUrn.split(':').pop() : null
+    })
+    .filter(id => id && id !== 'undefined')
+
+  const orgs = await Promise.all(ids.map(id => fetchOrgInfo(id, accessToken)))
+  return orgs.filter(o => o.id)
 }
 
 /**
@@ -181,8 +194,96 @@ async function fetchShareStatistics(orgId, accessToken, startMs, endMs) {
   }
 }
 
+// ── Traducción de URNs de demographics a nombres legibles ────────────────────
+// seniority y function son listas estándar de LinkedIn (chicas y estables) → mapa
+// estático. industry y geo son catálogos enormes → se resuelven vía API (cacheado).
+
+const SENIORITY_LABELS = {
+  1: 'Sin remunerar', 2: 'Pasantía / Trainee', 3: 'Junior', 4: 'Senior',
+  5: 'Manager', 6: 'Director', 7: 'VP', 8: 'CXO', 9: 'Socio/a', 10: 'Dueño/a',
+}
+
+const FUNCTION_LABELS = {
+  1: 'Contabilidad', 2: 'Administración', 3: 'Arte y Diseño', 4: 'Desarrollo de Negocio',
+  5: 'Servicios Sociales', 6: 'Consultoría', 7: 'Educación', 8: 'Ingeniería',
+  9: 'Emprendimiento', 10: 'Finanzas', 11: 'Salud', 12: 'Recursos Humanos',
+  13: 'IT', 14: 'Legal', 15: 'Marketing', 16: 'Medios y Comunicación',
+  17: 'Servicios de Protección', 18: 'Operaciones', 19: 'Gestión de Producto',
+  20: 'Gestión de Proyectos', 21: 'Compras', 22: 'Calidad (QA)', 23: 'Bienes Raíces',
+  24: 'Investigación', 25: 'Ventas', 26: 'Soporte',
+}
+
+// Cache de etiquetas resueltas por API (id → nombre|null). null = "ya intentado,
+// sin resultado" (no reintentar). El flag *ApiOk se baja si la API falla una vez,
+// para no spamear con llamados que no andan en esta app.
+const _labelCache = { industry: new Map(), geo: new Map() }
+let _industryApiOk = true
+let _geoApiOk = true
+
+function urnId(urn) {
+  const n = Number(String(urn ?? '').split(':').pop())
+  return Number.isFinite(n) ? n : null
+}
+
+function summarizeDemo(arr, urnKey) {
+  if (!Array.isArray(arr)) return []
+  return arr
+    .map(x => ({
+      urn:   x[urnKey],
+      count: x.followerCounts?.organicFollowerCount ?? x.followerCounts?.paidFollowerCount ?? 0,
+    }))
+    .filter(x => x.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8)
+}
+
+// Resuelve nombres de industrias por batch (/v2/industries). Query manual por el
+// encoding Rest.li del locale/ids (axios.params lo rompería).
+async function loadIndustries(ids, accessToken, cache) {
+  const q   = `ids=List(${ids.join(',')})&locale=(language:en,country:US)`
+  const res = await axios.get(`${V2_BASE}/industries?${q}`, { headers: v2Headers(accessToken) })
+  const results = res.data?.results ?? res.data?.elements ?? {}
+  for (const [id, obj] of Object.entries(results)) {
+    const loc  = obj?.name?.localized ?? obj?.name
+    const name = (loc && typeof loc === 'object') ? Object.values(loc)[0] : (typeof loc === 'string' ? loc : null)
+    cache.set(Number(id), name ?? null)
+  }
+  ids.forEach(id => { if (!cache.has(id)) cache.set(id, null) })
+}
+
+// Resuelve nombres de países/regiones por batch (/rest/geo).
+async function loadGeos(ids, accessToken, cache) {
+  const res = await restGetRaw('geo', `ids=List(${ids.join(',')})`, accessToken)
+  const results = res.data?.results ?? {}
+  for (const [id, obj] of Object.entries(results)) {
+    const loc  = obj?.defaultLocalizedName?.value ?? obj?.name?.localized
+    const name = typeof loc === 'string' ? loc : (loc && typeof loc === 'object' ? Object.values(loc)[0] : null)
+    cache.set(Number(id), name ?? null)
+  }
+  ids.forEach(id => { if (!cache.has(id)) cache.set(id, null) })
+}
+
+// Adjunta x.label a cada item de un demographic resuelto por API (industry|geo).
+async function attachApiLabels(items, kind, accessToken) {
+  if (!items.length) return
+  const cache   = _labelCache[kind]
+  const missing = [...new Set(items.map(x => urnId(x.urn)).filter(id => id != null && !cache.has(id)))]
+  if (missing.length && ((kind === 'industry' && _industryApiOk) || (kind === 'geo' && _geoApiOk))) {
+    try {
+      if (kind === 'industry') await loadIndustries(missing, accessToken, cache)
+      else                     await loadGeos(missing, accessToken, cache)
+    } catch (err) {
+      console.warn(`[Linkedin] resolución de etiquetas ${kind} falló (se muestran los códigos):`, liErrDetail(err))
+      if (kind === 'industry') _industryApiOk = false
+      else                     _geoApiOk = false
+    }
+  }
+  items.forEach(x => { x.label = cache.get(urnId(x.urn)) ?? null })
+}
+
 /**
- * Demographics agregados de followers (industry, seniority, function, region).
+ * Demographics agregados de followers (industry, seniority, function, region),
+ * con etiquetas legibles (x.label) además de la URN cruda (x.urn).
  */
 async function fetchFollowerDemographics(orgId, accessToken) {
   try {
@@ -190,24 +291,20 @@ async function fetchFollowerDemographics(orgId, accessToken) {
     const res = await restGetRaw('organizationalEntityFollowerStatistics', query, accessToken)
     const el = res.data?.elements?.[0] ?? {}
 
-    function summarize(arr, urnKey) {
-      if (!Array.isArray(arr)) return []
-      return arr
-        .map(x => ({
-          urn:    x[urnKey],
-          count:  x.followerCounts?.organicFollowerCount ?? x.followerCounts?.paidFollowerCount ?? 0,
-        }))
-        .filter(x => x.count > 0)
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 8)
-    }
+    const industry  = summarizeDemo(el.followerCountsByIndustry,   'industry')
+    const seniority = summarizeDemo(el.followerCountsBySeniority,  'seniority')
+    const func      = summarizeDemo(el.followerCountsByFunction,   'function')
+    const region    = summarizeDemo(el.followerCountsByGeoCountry, 'geo')
 
-    return {
-      industry:  summarize(el.followerCountsByIndustry,        'industry'),
-      seniority: summarize(el.followerCountsBySeniority,       'seniority'),
-      function:  summarize(el.followerCountsByFunction,        'function'),
-      region:    summarize(el.followerCountsByGeoCountry,      'geo'),
-    }
+    // Etiquetas: seniority/function por mapa estático; industry/region vía API.
+    seniority.forEach(x => { x.label = SENIORITY_LABELS[urnId(x.urn)] ?? null })
+    func.forEach(x      => { x.label = FUNCTION_LABELS[urnId(x.urn)]  ?? null })
+    await Promise.all([
+      attachApiLabels(industry, 'industry', accessToken),
+      attachApiLabels(region,   'geo',      accessToken),
+    ])
+
+    return { industry, seniority, function: func, region }
   } catch (err) {
     console.warn(`[Linkedin] fetchFollowerDemographics:`, liErrDetail(err))
     return { industry: [], seniority: [], function: [], region: [] }

@@ -289,7 +289,10 @@ async function projectTasks(req, res, next) {
       }),
       prisma.task.findMany({
         where: { projectId, status: 'COMPLETED', workDay: { date: { gte: monday } } },
-        include: { user: { select: { id: true, name: true, avatar: true } } },
+        include: {
+          user: { select: { id: true, name: true, avatar: true } },
+          _count: { select: { comments: true } },
+        },
         orderBy: { completedAt: 'desc' },
         take: 100,
       }),
@@ -335,7 +338,10 @@ async function projectCompletedHistory(req, res, next) {
     // Lectura abierta a cualquier integrante del workspace (proyecto scopeado por workspaceId).
     const tasks = await prisma.task.findMany({
       where: { projectId, status: 'COMPLETED' },
-      include: { user: { select: { id: true, name: true, avatar: true } } },
+      include: {
+        user: { select: { id: true, name: true, avatar: true } },
+        _count: { select: { comments: true } },
+      },
       orderBy: { completedAt: 'desc' },
       skip,
       take: TAKE + 1,

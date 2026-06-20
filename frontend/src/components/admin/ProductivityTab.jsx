@@ -4,6 +4,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { linkify } from '../../utils/linkify'
 import ProductivityPeriodLabel from './ProductivityPeriodLabel'
+import RoleBadge from '../RoleBadge'
 
 // Selector de modo de período (aplica a ambas vistas).
 function ModeToggle({ mode, onChange }) {
@@ -321,7 +322,7 @@ function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mo
             <img src={avatarUrl(m.avatar)} alt={m.name} className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600" />
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-900 dark:text-white truncate leading-tight">{m.name}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{m.role || '—'}</p>
+              <RoleBadge role={m.role} userId={m.id} className="inline-block mt-0.5" />
             </div>
           </div>
         </td>

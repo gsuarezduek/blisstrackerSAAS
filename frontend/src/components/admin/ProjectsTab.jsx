@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
-import useRoles from '../../hooks/useRoles'
+import RoleBadge from '../RoleBadge'
 
 // ── Team Modal ─────────────────────────────────────────────────────────────────
 
 function TeamModal({ project, allUsers, onClose, onUpdate }) {
-  const { labelFor } = useRoles()
   const [members, setMembers]   = useState(project.members.map(pm => pm.user))
   const [query,   setQuery]     = useState('')
   const [saving,  setSaving]    = useState(false)
@@ -95,7 +94,7 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
                     <div key={u.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 border-b dark:border-gray-600 last:border-b-0 transition-colors">
                       <div>
                         <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{u.name}</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500">{labelFor(u.role)}</p>
+                        <RoleBadge role={u.role} userId={u.id} className="inline-block mt-0.5" />
                       </div>
                       <button
                         onClick={() => addUser(u)}
@@ -126,7 +125,7 @@ function TeamModal({ project, allUsers, onClose, onUpdate }) {
                   <div key={u.id} className="flex items-center justify-between px-4 py-2.5 border-b dark:border-gray-600 last:border-b-0">
                     <div>
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{u.name}</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">{labelFor(u.role)}</p>
+                      <RoleBadge role={u.role} userId={u.id} className="inline-block mt-0.5" />
                     </div>
                     <button
                       onClick={() => removeUser(u.id)}

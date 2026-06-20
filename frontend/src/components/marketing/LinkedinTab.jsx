@@ -301,7 +301,7 @@ function DemographicsCard({ title, items, icon }) {
           const pct = Math.round((item.count / total) * 100)
           return (
             <div key={i} className="flex items-center gap-2 text-xs">
-              <span className="flex-1 truncate text-gray-700 dark:text-gray-300 capitalize">{urnLabel(item.urn)}</span>
+              <span className="flex-1 truncate text-gray-700 dark:text-gray-300 capitalize">{item.label || urnLabel(item.urn)}</span>
               <div className="w-20 bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
                 <div className="h-1.5" style={{ width: `${pct}%`, background: LI_BLUE }} />
               </div>

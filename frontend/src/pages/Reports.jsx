@@ -4,6 +4,7 @@ import { linkify } from '../utils/linkify'
 import LoadingSpinner from '../components/LoadingSpinner'
 import DateRangeFilter from '../components/DateRangeFilter'
 import EditDurationModal from '../components/EditDurationModal'
+import RoleBadge from '../components/RoleBadge'
 import api from '../api/client'
 import { fmtMins } from '../utils/format'
 
@@ -121,6 +122,7 @@ function ByProjectView({ data, sortBy, loading, onEditTask }) {
                       >
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-gray-700 dark:text-gray-300">{u.user.name}</span>
+                          <RoleBadge userId={u.user.id} />
                           <span className="text-xs text-gray-400 dark:text-gray-500">{u.tasks} tarea{u.tasks !== 1 ? 's' : ''}</span>
                         </div>
                         <div className="flex items-center gap-2">

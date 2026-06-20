@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import RoleBadge from '../RoleBadge'
 import { fmtMins, monthsInRange } from '../../utils/format'
 
 function thisWeekRange() {
@@ -132,9 +133,10 @@ export default function ReportsTab() {
               <div className="border-t px-4 py-3 space-y-2 bg-gray-50">
                 {d.byUser.sort((a, b) => b.minutes - a.minutes).map(u => (
                   <div key={u.user.id} className="flex items-center justify-between text-sm">
-                    <div>
+                    <div className="flex items-center gap-2">
                       <span className="font-medium text-gray-700">{u.user.name}</span>
-                      <span className="text-xs text-gray-400 ml-2">{u.tasks} tarea{u.tasks !== 1 ? 's' : ''}</span>
+                      <RoleBadge userId={u.user.id} />
+                      <span className="text-xs text-gray-400">{u.tasks} tarea{u.tasks !== 1 ? 's' : ''}</span>
                     </div>
                     <span className="text-gray-600">{fmtMins(u.minutes)}</span>
                   </div>

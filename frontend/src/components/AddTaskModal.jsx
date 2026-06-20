@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import useRoles from '../hooks/useRoles'
 
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
@@ -101,6 +102,7 @@ function getGtdWarning(desc) {
 
 export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD }) {
   const { user } = useAuth()
+  const { labelFor } = useRoles()
   const [description, setDescription] = useState('')
   const [projectId, setProjectId] = useState(lockedProject ? String(lockedProject.id) : '')
   const [projects, setProjects] = useState([])
@@ -274,7 +276,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
                   <optgroup label="Equipo del proyecto">
                     {teamOptions.map(u => (
                       <option key={u.id} value={String(u.id)}>
-                        {u.name}{String(u.id) === String(user?.id) ? ' (yo)' : ''}
+                        {u.name}{String(u.id) === String(user?.id) ? ' (yo)' : ''}{u.role ? ` — ${labelFor(u.role)}` : ''}
                       </option>
                     ))}
                   </optgroup>
@@ -283,7 +285,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
                   <optgroup label="Otros del workspace">
                     {otherOptions.map(u => (
                       <option key={u.id} value={String(u.id)}>
-                        {u.name}{String(u.id) === String(user?.id) ? ' (yo)' : ''}
+                        {u.name}{String(u.id) === String(user?.id) ? ' (yo)' : ''}{u.role ? ` — ${labelFor(u.role)}` : ''}
                       </option>
                     ))}
                   </optgroup>

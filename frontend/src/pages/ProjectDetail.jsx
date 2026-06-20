@@ -5,7 +5,6 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { linkify } from '../utils/linkify'
 import { fmtMins, completedDuration } from '../utils/format'
 import api from '../api/client'
-import useRoles from '../hooks/useRoles'
 import UserTasksModal from '../components/UserTasksModal'
 import AddTaskModal from '../components/AddTaskModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
@@ -15,6 +14,7 @@ import ProjectBriefs from '../components/briefs/ProjectBriefs'
 import { useAuth } from '../context/AuthContext'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import RoleBadge from '../components/RoleBadge'
 
 const STATUS_LABEL = {
   BLOCKED:     'Bloqueada',
@@ -31,21 +31,6 @@ const STATUS_CLASS = {
 }
 
 const STATUS_ORDER = { BLOCKED: 0, IN_PROGRESS: 1, PAUSED: 2, PENDING: 3 }
-
-const ROLE_COLORS = [
-  'bg-purple-100 text-purple-700',
-  'bg-pink-100 text-pink-700',
-  'bg-yellow-100 text-yellow-700',
-  'bg-blue-100 text-blue-700',
-  'bg-cyan-100 text-cyan-700',
-  'bg-green-100 text-green-700',
-  'bg-orange-100 text-orange-700',
-]
-function roleColor(name) {
-  let hash = 0
-  for (const c of (name || '')) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff
-  return ROLE_COLORS[hash % ROLE_COLORS.length]
-}
 
 function Avatar({ user, size = 'md' }) {
   const cls = size === 'sm' ? 'w-7 h-7' : 'w-9 h-9'
@@ -68,7 +53,6 @@ export default function ProjectDetail() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user: authUser } = useAuth()
-  const { labelFor } = useRoles()
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -185,15 +169,13 @@ export default function ProjectDetail() {
   }
 
   function handleCommentAdded(taskId, newCount) {
+    const bump = t => t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t
     setData(prev => ({
       ...prev,
-      byUser: prev.byUser.map(u => ({
-        ...u,
-        tasks: u.tasks.map(t =>
-          t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t
-        ),
-      })),
+      byUser: prev.byUser.map(u => ({ ...u, tasks: u.tasks.map(bump) })),
+      completedThisWeek: prev.completedThisWeek?.map(bump),
     }))
+    setArchive(prev => prev.map(bump))
   }
 
   async function handleAddLink() {
@@ -596,9 +578,7 @@ export default function ProjectDetail() {
                             <Avatar user={pm.user} size="sm" />
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight truncate">{pm.user.name}</p>
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(pm.user.role)}`}>
-                                {labelFor(pm.user.role)}
-                              </span>
+                              <RoleBadge role={pm.user.role} userId={pm.user.id} className="inline-block mt-0.5" />
                             </div>
                           </div>
                         ))}
@@ -724,7 +704,7 @@ export default function ProjectDetail() {
                         <Avatar user={user} />
                         <div className="min-w-0">
                           <p className="font-semibold text-gray-900 dark:text-white text-sm leading-tight">{user.name}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{labelFor(user.role)}</p>
+                          <RoleBadge role={user.role} userId={user.id} className="inline-block mt-0.5" />
                         </div>
                         <span className="ml-auto text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">
                           {tasks.length} tarea{tasks.length !== 1 ? 's' : ''}
@@ -811,11 +791,20 @@ export default function ProjectDetail() {
                           <Avatar user={task.user} size="sm" />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                              {task.user.name} · {fmtDate(task.completedAt, data?.project?.timezone)}
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              <span>{task.user.name}</span>
+                              <RoleBadge userId={task.user.id} />
+                              <span>· {fmtDate(task.completedAt, data?.project?.timezone)}</span>
                             </p>
                           </div>
                           <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                            <button
+                              onClick={() => setCommentTask(task)}
+                              title="Ver comentarios"
+                              className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                            >
+                              💬{(task._count?.comments ?? 0) > 0 ? ` ${task._count.comments}` : ''}
+                            </button>
                             {dur && (
                               <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{dur}</span>
                             )}
@@ -857,10 +846,19 @@ export default function ProjectDetail() {
                           <Avatar user={task.user} size="sm" />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                              {task.user.name} · {fmtDate(task.completedAt, data?.project?.timezone)}
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              <span>{task.user.name}</span>
+                              <RoleBadge userId={task.user.id} />
+                              <span>· {fmtDate(task.completedAt, data?.project?.timezone)}</span>
                             </p>
                           </div>
+                          <button
+                            onClick={() => setCommentTask(task)}
+                            title="Ver comentarios"
+                            className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex-shrink-0 mt-0.5"
+                          >
+                            💬{(task._count?.comments ?? 0) > 0 ? ` ${task._count.comments}` : ''}
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -948,7 +946,7 @@ export default function ProjectDetail() {
                         <div key={u.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 border-b dark:border-gray-600 last:border-b-0 transition-colors">
                           <div>
                             <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{u.name}</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500">{labelFor(u.teamRole || u.role)}</p>
+                            <RoleBadge role={u.teamRole || u.role} userId={u.id} className="inline-block mt-0.5" />
                           </div>
                           <button
                             onClick={() => {
@@ -982,7 +980,7 @@ export default function ProjectDetail() {
                       <div key={pm.user.id} className="flex items-center justify-between px-4 py-2.5 border-b dark:border-gray-600 last:border-b-0">
                         <div>
                           <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{pm.user.name}</p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500">{labelFor(pm.user.teamRole || pm.user.role)}</p>
+                          <RoleBadge role={pm.user.teamRole || pm.user.role} userId={pm.user.id} className="inline-block mt-0.5" />
                         </div>
                         <button
                           onClick={() => syncTeam(data.project.members.filter(m => m.user.id !== pm.user.id).map(m => m.user))}

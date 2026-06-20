@@ -8,22 +8,7 @@ import useRoles from '../hooks/useRoles'
 import UserTasksModal from '../components/UserTasksModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import { fmtMins, fmtDuration, activeSeconds } from '../utils/format'
-
-const ROLE_COLORS_LIST = [
-  'bg-purple-100 text-purple-700',
-  'bg-pink-100 text-pink-700',
-  'bg-yellow-100 text-yellow-700',
-  'bg-blue-100 text-blue-700',
-  'bg-cyan-100 text-cyan-700',
-  'bg-green-100 text-green-700',
-  'bg-orange-100 text-orange-700',
-]
-
-function roleColor(name) {
-  let hash = 0
-  for (const c of (name || '')) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff
-  return ROLE_COLORS_LIST[hash % ROLE_COLORS_LIST.length]
-}
+import { roleColor } from '../utils/roleColor'
 
 const REFRESH_INTERVAL = 30 // seconds
 

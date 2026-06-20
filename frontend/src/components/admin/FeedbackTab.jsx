@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
-import useRoles from '../../hooks/useRoles'
+import RoleBadge from '../RoleBadge'
 import LoadingSpinner from '../LoadingSpinner'
 
 function timeAgo(dateStr) {
@@ -13,7 +13,6 @@ function timeAgo(dateStr) {
 }
 
 export default function FeedbackTab() {
-  const { labelFor } = useRoles()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all') // 'all' | 'SUGGESTION' | 'BUG' | 'unread'
@@ -125,8 +124,7 @@ export default function FeedbackTab() {
                 </span>
               </div>
               <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{f.user.name}</span>
-              <span className="text-xs text-gray-400 dark:text-gray-500">·</span>
-              <span className="text-xs text-gray-400 dark:text-gray-500">{labelFor(f.user.role)}</span>
+              <RoleBadge role={f.user.role} userId={f.user.id} />
               <span className="text-xs text-gray-400 dark:text-gray-500">·</span>
               <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(f.createdAt)}</span>
               {f.read && <span className="ml-auto text-xs text-gray-300 dark:text-gray-600">Leído ✓</span>}
