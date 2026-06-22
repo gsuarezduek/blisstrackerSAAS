@@ -54,6 +54,7 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
 
   const query = `
     SELECT
+      customer.descriptive_name,
       campaign.id,
       campaign.name,
       campaign.status,
@@ -89,6 +90,9 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
   )
 
   const rows = data.results ?? []
+
+  // El nombre descriptivo de la cuenta viene en cada fila (recurso customer implícito).
+  const customerName = rows.find(r => r.customer?.descriptiveName)?.customer?.descriptiveName ?? null
 
   const campaigns = rows
     .map(row => ({
@@ -128,6 +132,7 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
     ctr:         avgCtr,
     avgCpc:      parseFloat(avgCpc.toFixed(2)),
     campaigns,
+    customerName,
     datePreset,
   }
 }

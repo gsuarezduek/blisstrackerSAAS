@@ -382,6 +382,48 @@ function BestLinkedinPost({ post }) {
   )
 }
 
+function BestFacebookPost({ post }) {
+  if (!post) return null
+  const inner = (
+    <div className="flex items-stretch gap-3">
+      <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+        {post.imgSrc ? (
+          <img src={post.imgSrc} alt="" className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-blue-600 to-sky-500" />
+        )}
+        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">
+          Mejor post del mes
+        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400 mt-1">
+          {post.reach    != null && <span>👁 {fmt(post.reach)}</span>}
+          {post.likes    != null && <span>👍 {fmt(post.likes)}</span>}
+          {post.comments != null && <span>💬 {fmt(post.comments)}</span>}
+          {post.shares   != null && <span>↗ {fmt(post.shares)}</span>}
+        </div>
+        {post.text && (
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight mt-1">
+            {post.text}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="mt-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 p-3">
+      {post.permalink ? (
+        <a href={post.permalink} target="_blank" rel="noopener noreferrer" className="block hover:opacity-90 transition-opacity">
+          {inner}
+        </a>
+      ) : inner}
+    </div>
+  )
+}
+
 // Audiencia de LinkedIn (demographics) — bloque compacto, solo si hay datos
 function LinkedinAudience({ demographics }) {
   if (!demographics) return null
@@ -767,7 +809,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   const contextSEO   = analysis?.contextSEO   || ''
 
   // Flags de disponibilidad por grupo
-  const hasRRSS   = !!(s.instagram || s.tiktok || s.linkedin)
+  const hasRRSS   = !!(s.instagram || s.tiktok || s.linkedin || s.facebook)
   const hasAds    = !!(s.metaAds || s.googleAds)
   const hasSeoGeo = !!(s.keywords || s.seo || s.geo || aiTrafficEntries)
   const hasSitio  = !!(s.analytics || evolutionPoints || s.performance)
@@ -787,6 +829,8 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       items.push({ label: 'Seguidores TK', value: fmt(s.tiktok.followersCount), delta: s.tiktok.deltaFollowers })
     } else if (s.linkedin) {
       items.push({ label: 'Seguidores LI', value: fmt(s.linkedin.followersCount), delta: s.linkedin.deltaFollowers })
+    } else if (s.facebook) {
+      items.push({ label: 'Seguidores FB', value: fmt(s.facebook.followersCount), delta: s.facebook.deltaFollowers })
     }
     if (s.seo?.avgPosition) {
       items.push({ label: 'Pos. media SEO', value: String(s.seo.avgPosition) })
@@ -1118,7 +1162,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       {hasRRSS && (
         <>
           <GroupHeader title="Redes Sociales" />
-          <div className={`grid gap-5 ${[s.instagram, s.tiktok, s.linkedin].filter(Boolean).length >= 2 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={`grid gap-5 ${[s.instagram, s.tiktok, s.linkedin, s.facebook].filter(Boolean).length >= 2 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
             {s.instagram && (
               <SectionCard title="Instagram" icon="📸">
                 <KpiGrid items={[
@@ -1182,6 +1226,27 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                     {s.linkedin._fallbackMonth === 'live'
                       ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
                       : `📅 Datos más recientes disponibles: ${monthLabel(s.linkedin._fallbackMonth)}`
+                    }
+                  </p>
+                )}
+              </SectionCard>
+            )}
+
+            {s.facebook && (
+              <SectionCard title="Facebook" icon="👍">
+                <KpiGrid items={[
+                  { label: 'Seguidores',   value: fmt(s.facebook.followersCount), delta: s.facebook.deltaFollowers },
+                  { label: 'Engagement',  value: s.facebook.engagementRate != null ? `${s.facebook.engagementRate.toFixed(2)}%` : '—', delta: s.facebook.deltaEngagement },
+                  { label: 'Posts / mes', value: fmt(s.facebook.postsThisMonth) },
+                  ...(s.facebook.reach       != null ? [{ label: 'Alcance',     value: fmt(s.facebook.reach), delta: s.facebook.deltaReach }] : []),
+                  ...(s.facebook.impressions != null ? [{ label: 'Impresiones', value: fmt(s.facebook.impressions) }] : []),
+                ]} />
+                {s.facebook.topPosts?.[0] && <BestFacebookPost post={s.facebook.topPosts[0]} />}
+                {s.facebook._fallbackMonth && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
+                    {s.facebook._fallbackMonth === 'live'
+                      ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                      : `📅 Datos más recientes disponibles: ${monthLabel(s.facebook._fallbackMonth)}`
                     }
                   </p>
                 )}

@@ -194,6 +194,24 @@ const PLATFORM_SETTINGS = [
     label:   'Posts a traer por scrape de LinkedIn',
     help:    'Cantidad de posts recientes que trae cada scrape de LinkedIn (debe cubrir el mes completo). 0 = usa la variable de entorno APIFY_LINKEDIN_POSTS_LIMIT o el default (30). Subir si una página postea mucho y los meses quedan incompletos.',
   },
+  {
+    key:     'apifyFacebookActor',
+    type:    'string',
+    default: '',
+    group:   'operational',
+    label:   'Actor de Apify para Facebook (scraping)',
+    help:    'ID del actor de Apify que scrapea Páginas de Facebook. Se acepta "usuario/actor" o "usuario~actor" — se normaliza solo. Tiene que devolver métricas de la página (seguidores y/o posts). Editable acá para probar e ir cambiando de actor sin redeploy. Vacío = usa la env APIFY_FACEBOOK_ACTOR; si ambos están vacíos → SCRAPE_NOT_CONFIGURED. Si el actor usa otras claves de input/output, el mapeo se ajusta en runApifyFacebook/normalizeApifyFacebook (socialScrape.service.js).',
+  },
+  {
+    key:     'apifyFacebookPostsLimit',
+    type:    'integer',
+    default: 0,
+    min:     0,
+    max:     200,
+    group:   'operational',
+    label:   'Posts a traer por scrape de Facebook',
+    help:    'Cantidad de posts recientes que trae cada scrape de Facebook (debe cubrir el mes completo). 0 = usa la variable de entorno APIFY_FACEBOOK_POSTS_LIMIT o el default (30). Subir si una página postea mucho y los meses quedan incompletos.',
+  },
 
   // ─── Notificaciones de plataforma ──────────────────────────────────────────
   // Casilla interna del equipo BlissTracker que recibe avisos operativos

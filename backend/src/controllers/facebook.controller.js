@@ -1,0 +1,349 @@
+const prisma = require('../lib/prisma')
+const { getValidFacebookToken }  = require('../services/metaTokenRefresh.service')
+const { fetchFacebookMetrics }   = require('../services/facebook.service')
+const { saveFacebookSnapshot }   = require('../services/facebookSnapshot.service')
+const { scrapeFacebookPage, parseFacebookPage, debugScrapeFacebook } = require('../services/socialScrape.service')
+
+// Cooldown en memoria para el refresh manual de scraping (protege el costo del proveedor).
+const SCRAPE_REFRESH_COOLDOWN_MS = 30 * 60 * 1000
+const scrapeCooldownMap = new Map() // integrationId → timestamp del último scrape
+
+function currentMonthStr() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function todayStr() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+async function getIntegrationForProject(projectId, workspaceId) {
+  const project = await prisma.project.findFirst({
+    where:  { id: projectId, workspaceId },
+    select: { id: true },
+  })
+  if (!project) return { error: { status: 404, body: { error: 'Proyecto no encontrado' } } }
+
+  const integration = await prisma.projectIntegration.findUnique({
+    where: { projectId_type: { projectId, type: 'facebook' } },
+  })
+  if (!integration) {
+    return { error: { status: 404, body: { error: 'Sin integración de Facebook', code: 'NOT_CONNECTED' } } }
+  }
+  return { integration }
+}
+
+// Persiste snapshot mensual + log diario de seguidores a partir de métricas ya obtenidas.
+async function persistScrapeData(projectId, workspaceId, metrics) {
+  const month = currentMonthStr()
+  const date  = todayStr()
+  await Promise.allSettled([
+    saveFacebookSnapshot(projectId, workspaceId, month, metrics),
+    prisma.facebookFollowerLog.upsert({
+      where:  { projectId_date: { projectId, date } },
+      update: { followersCount: metrics.followersCount },
+      create: { projectId, workspaceId, date, followersCount: metrics.followersCount },
+    }),
+  ])
+}
+
+// Reconstruye el shape de métricas a partir de un snapshot guardado (modo scraping cacheado).
+function snapshotToMetrics(snap, integration, lastScrapedAt = null) {
+  let topPosts = []
+  try { topPosts = JSON.parse(snap.topPosts || '[]') } catch { topPosts = [] }
+  return {
+    page: { id: null, name: integration.propertyId ?? null },
+    followersCount: snap.followersCount,
+    fanCount:       snap.fanCount       ?? null,
+    reach:          snap.reach          ?? null,
+    impressions:    snap.impressions    ?? null,
+    pageViews:      snap.pageViews      ?? null,
+    engagementRate: snap.engagementRate ?? null,
+    totalLikes:     snap.totalLikes     ?? null,
+    totalComments:  snap.totalComments  ?? null,
+    totalShares:    snap.totalShares    ?? null,
+    postsThisMonth: snap.postsThisMonth ?? 0,
+    topPosts,
+    scraped:        true,
+    lastScrapedAt:  lastScrapedAt ?? snap.createdAt,
+  }
+}
+
+/**
+ * GET /api/marketing/projects/:id/facebook
+ * Métricas en tiempo real + auto-snapshot. Modo scrape: snapshot cacheado.
+ */
+async function getMetrics(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const { integration, error } = await getIntegrationForProject(projectId, workspaceId)
+    if (error) return res.status(error.status).json(error.body)
+
+    // ── Modo scraping — devuelve el último snapshot cacheado (no pega a Apify) ──
+    if (integration.scopes === 'scrape') {
+      const [snap, lastLog] = await Promise.all([
+        prisma.facebookSnapshot.findFirst({ where: { projectId }, orderBy: { month: 'desc' } }),
+        prisma.facebookFollowerLog.findFirst({ where: { projectId }, orderBy: { date: 'desc' } }),
+      ])
+      if (!snap) {
+        return res.json({ scraped: true, page: { name: integration.propertyId }, followersCount: 0, needsRefresh: true })
+      }
+      return res.json(snapshotToMetrics(snap, integration, lastLog?.createdAt ?? null))
+    }
+
+    if (!integration.propertyId) {
+      return res.status(400).json({ error: 'Seleccioná la página de Facebook para empezar a ver métricas.', code: 'NO_PAGE' })
+    }
+
+    let token
+    try {
+      token = getValidFacebookToken(integration)
+    } catch (tokenErr) {
+      await prisma.projectIntegration.update({
+        where: { id: integration.id }, data: { status: 'expired' },
+      }).catch(err => console.error('[Facebook] Error al marcar integración expirada (token):', err.message))
+      return res.status(400).json({ error: tokenErr.message, code: 'TOKEN_EXPIRED' })
+    }
+
+    let metrics
+    try {
+      metrics = await fetchFacebookMetrics(integration.propertyId, token)
+    } catch (apiErr) {
+      const status = apiErr.response?.status
+      const fbErr  = apiErr.response?.data?.error
+      console.error(`[Facebook] API error ${status}:`, JSON.stringify(fbErr ?? apiErr.message, null, 2))
+      if (fbErr?.code === 190 || status === 401) {
+        await prisma.projectIntegration.update({
+          where: { id: integration.id }, data: { status: 'expired' },
+        }).catch(err => console.error('[Facebook] Error al marcar integración expirada (API):', err.message))
+        return res.status(400).json({ error: 'Token de Facebook inválido. Reconectá la página.', code: 'TOKEN_EXPIRED' })
+      }
+      const fbMsg = fbErr?.message || apiErr.message
+      return res.status(502).json({ error: `Facebook devolvió un error${status ? ` (${status})` : ''}: ${fbMsg}`, code: 'API_ERROR' })
+    }
+
+    res.json(metrics)
+
+    setImmediate(async () => {
+      const month = currentMonthStr()
+      const date  = todayStr()
+      if (metrics.followersCount != null) {
+        await Promise.allSettled([
+          saveFacebookSnapshot(projectId, workspaceId, month, metrics)
+            .catch(err => console.warn('[Facebook] Auto-snapshot failed:', err.message)),
+          prisma.facebookFollowerLog.upsert({
+            where:  { projectId_date: { projectId, date } },
+            update: { followersCount: metrics.followersCount },
+            create: { projectId, workspaceId, date, followersCount: metrics.followersCount },
+          }).catch(err => console.warn('[Facebook] Follower log failed:', err.message)),
+        ])
+      }
+    })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/marketing/projects/:id/facebook/snapshots?months=12
+ */
+async function getSnapshots(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const take        = Math.min(Number(req.query.months) || 12, 24)
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const snapshots = await prisma.facebookSnapshot.findMany({
+      where:   { projectId, workspaceId },
+      orderBy: { month: 'asc' },
+      take,
+      select: {
+        month: true, followersCount: true, fanCount: true, reach: true, impressions: true,
+        pageViews: true, engagementRate: true, totalLikes: true, totalComments: true,
+        totalShares: true, postsThisMonth: true, topPosts: true, createdAt: true,
+      },
+    })
+
+    const parsed = snapshots.map(s => ({
+      ...s,
+      topPosts: (() => { try { return JSON.parse(s.topPosts ?? '[]') } catch { return [] } })(),
+    }))
+
+    res.json({ snapshots: parsed })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/facebook/snapshots
+ * Body: { month?: "YYYY-MM" }
+ */
+async function saveSnapshot(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const month       = req.body.month || currentMonthStr()
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    await saveFacebookSnapshot(projectId, workspaceId, month)
+    res.json({ ok: true, month })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/marketing/projects/:id/facebook/followers?from=YYYY-MM-DD&to=YYYY-MM-DD
+ */
+async function getFollowerLog(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const to   = req.query.to   || todayStr()
+    const from = req.query.from || (() => {
+      const d = new Date(to)
+      d.setDate(d.getDate() - 89)
+      return d.toISOString().slice(0, 10)
+    })()
+
+    const logs = await prisma.facebookFollowerLog.findMany({
+      where:   { projectId, workspaceId, date: { gte: from, lte: to } },
+      orderBy: { date: 'asc' },
+      select:  { date: true, followersCount: true },
+    })
+
+    res.json({ logs, from, to })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/integrations/facebook/connect-scrape
+ * Conecta una Página de Facebook por scraping (sin token). Body: { url | page }.
+ */
+async function connectScrape(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const identifier  = parseFacebookPage(req.body.url || req.body.page || req.body.username)
+    if (!identifier) return res.status(400).json({ error: 'URL o nombre de página de Facebook inválido.' })
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    let metrics
+    try {
+      metrics = await scrapeFacebookPage(identifier, { targetMonth: currentMonthStr(), workspaceId, context: 'Facebook — conexión por scraping' })
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code })
+    }
+
+    await prisma.projectIntegration.upsert({
+      where:  { projectId_type: { projectId, type: 'facebook' } },
+      update: {
+        workspaceId, status: 'active', scopes: 'scrape', propertyId: identifier,
+        accessToken: null, refreshToken: null, expiresAt: null,
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+      create: {
+        projectId, workspaceId, type: 'facebook', status: 'active',
+        scopes: 'scrape', propertyId: identifier,
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+    })
+
+    await persistScrapeData(projectId, workspaceId, metrics)
+
+    res.json({ ok: true, identifier, followersCount: metrics.followersCount })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/facebook/scrape/refresh
+ * Fuerza un scrape fresco (cooldown 30 min) y actualiza snapshot + log.
+ */
+async function refreshScrape(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const integration = await prisma.projectIntegration.findUnique({
+      where: { projectId_type: { projectId, type: 'facebook' } },
+    })
+    if (!integration || integration.scopes !== 'scrape') {
+      return res.status(400).json({ error: 'Este proyecto no está conectado por scraping.', code: 'NOT_SCRAPE' })
+    }
+
+    const last = scrapeCooldownMap.get(integration.id)
+    if (last && Date.now() - last < SCRAPE_REFRESH_COOLDOWN_MS) {
+      const waitMins = Math.ceil((SCRAPE_REFRESH_COOLDOWN_MS - (Date.now() - last)) / 60000)
+      return res.status(429).json({ error: `Esperá ${waitMins} min para actualizar de nuevo.`, code: 'COOLDOWN', waitMins })
+    }
+
+    let metrics
+    try {
+      metrics = await scrapeFacebookPage(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, context: 'Facebook — refresh manual' })
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code })
+    }
+
+    scrapeCooldownMap.set(integration.id, Date.now())
+    await persistScrapeData(projectId, workspaceId, metrics)
+
+    res.json({ ...metrics, lastScrapedAt: new Date() })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/marketing/projects/:id/facebook/scrape-debug?page=<url|slug>
+ * Diagnóstico del scraping: output crudo de Apify + lo normalizado.
+ */
+async function scrapeDebug(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    let page = req.query.page || req.query.company
+    if (!page) {
+      const integration = await prisma.projectIntegration.findUnique({
+        where: { projectId_type: { projectId, type: 'facebook' } },
+      })
+      page = integration?.propertyId
+    }
+    if (!page) return res.status(400).json({ error: 'Indicá la página (?page=) o conectá Facebook por scraping primero.' })
+
+    let result
+    try {
+      result = await debugScrapeFacebook(page, { workspaceId, targetMonth: currentMonthStr() })
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code })
+    }
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetrics, getSnapshots, saveSnapshot, getFollowerLog, connectScrape, refreshScrape, scrapeDebug }

@@ -234,13 +234,17 @@ async function handleCallback(req, res, next) {
       })
     }
 
-    // Propagar el nuevo refresh_token a todos los proyectos del workspace con los mismos tipos.
-    // Esto evita que otros proyectos sigan teniendo tokens viejos después de que uno reconectó.
-    if (encRefreshToken && GOOGLE_LINKED_TYPES.includes(type)) {
+    // Propagar el nuevo refresh_token a todos los proyectos del workspace que comparten ESTE token.
+    // Evita que otros proyectos queden con un refresh token viejo (→ invalid_grant) tras reconectar uno.
+    // `typesToSave` es exactamente el grupo que comparte el mismo token/scope:
+    //   - GA4/GSC comparten una sola auth (GOOGLE_LINKED_TYPES).
+    //   - google_ads usa el scope `adwords` por separado, pero entre proyectos con google_ads
+    //     comparten el refresh token del mismo usuario de Google → se propaga solo a otros google_ads.
+    if (encRefreshToken) {
       await prisma.projectIntegration.updateMany({
         where: {
           workspaceId,
-          type:        { in: GOOGLE_LINKED_TYPES },
+          type:        { in: typesToSave },
           NOT:         { projectId },          // no pisar el que acabamos de guardar
           refreshToken: { not: null },
         },
@@ -325,6 +329,20 @@ async function updateIntegration(req, res, next) {
     if (propertyId !== undefined) updateData.propertyId = propertyId || null
     if (customerId !== undefined) updateData.customerId = customerId || null
     if (country    !== undefined) updateData.country    = country    || 'arg'
+
+    // Cambiar de cuenta/manager no es un problema de token: si la integración quedó
+    // marcada `expired` por una falla previa, reactivarla para que la próxima llamada
+    // revalide con el token actual. Si el token estuviera realmente muerto, el flujo de
+    // datos la volverá a marcar `expired`. Solo aplica si hay refresh token para reintentar.
+    if (Object.keys(updateData).length > 0) {
+      const current = await prisma.projectIntegration.findUnique({
+        where:  { projectId_type: { projectId, type } },
+        select: { status: true, refreshToken: true },
+      })
+      if (current?.status === 'expired' && current.refreshToken) {
+        updateData.status = 'active'
+      }
+    }
 
     const updated = await prisma.projectIntegration.update({
       where: { projectId_type: { projectId, type } },

@@ -73,4 +73,23 @@ async function getValidMetaToken(integration) {
   }
 }
 
-module.exports = { getValidMetaToken }
+/**
+ * Devuelve un Page Access Token válido para una integración de tipo 'facebook'.
+ * Los page tokens NO se renuevan vía refresh como los de Instagram:
+ *  - `expiresAt = null` → token permanente (System User Token de Business Manager).
+ *  - `expiresAt` en el futuro → válido, se usa tal cual (page token derivado de un
+ *    user token long-lived dura ~60d).
+ *  - `expiresAt` vencido → hay que reconectar (lanza error → el caller responde TOKEN_EXPIRED).
+ *
+ * @param {object} integration — registro de ProjectIntegration de Prisma
+ * @returns {string} access token desencriptado
+ */
+function getValidFacebookToken(integration) {
+  const expiresAt = integration.expiresAt?.getTime() ?? null
+  if (expiresAt != null && expiresAt < Date.now()) {
+    throw new Error('El token de Facebook expiró. Reconectá la página desde la configuración del proyecto.')
+  }
+  return decrypt(integration.accessToken)
+}
+
+module.exports = { getValidMetaToken, getValidFacebookToken }

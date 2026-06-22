@@ -9,6 +9,8 @@ const { getValidTikTokToken }            = require('./tiktokTokenRefresh.service
 const { fetchTikTokMetrics }             = require('./tiktok.service')
 const { getValidLinkedinToken }          = require('./linkedinTokenRefresh.service')
 const { fetchLinkedinMetrics }           = require('./linkedin.service')
+const { getValidFacebookToken }          = require('./metaTokenRefresh.service')
+const { fetchFacebookMetrics }           = require('./facebook.service')
 const { computeObjectives }              = require('./marketingObjectives.service')
 const { cacheImagesInArray }             = require('./socialImageCache.service')
 const { monthBounds, prevMonthStr, prevMonthsArr } = require('../lib/monthUtils')
@@ -155,6 +157,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     tiktokPrev,
     linkedinSnap,
     linkedinPrev,
+    facebookSnap,
+    facebookPrev,
     pageSpeedMobile,
     pageSpeedDesktop,
     allKeywords,
@@ -238,6 +242,18 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.linkedinSnapshot.findFirst({
       where:   { projectId, workspaceId, month: prev },
       select:  { followersCount: true, engagementRate: true, impressions: true },
+    }),
+
+    // Facebook snapshots
+    prisma.facebookSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: dataMonth },
+      select:  { followersCount: true, fanCount: true, engagementRate: true, reach: true,
+                 impressions: true, totalLikes: true, totalComments: true,
+                 totalShares: true, postsThisMonth: true, topPosts: true },
+    }),
+    prisma.facebookSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: prev },
+      select:  { followersCount: true, engagementRate: true, reach: true },
     }),
 
     // PageSpeed
@@ -699,6 +715,94 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     }
   }
 
+  // ── Facebook (con fallback a snapshot más reciente o datos en vivo) ──────────
+  function parseFb(snap) {
+    if (!snap) return null
+    return {
+      ...snap,
+      topPosts: (() => { try { return JSON.parse(snap.topPosts ?? '[]') } catch { return [] } })(),
+    }
+  }
+
+  let facebook = null
+  if (facebookSnap) {
+    const s = parseFb(facebookSnap)
+    facebook = {
+      followersCount:  s.followersCount,
+      fanCount:        s.fanCount,
+      engagementRate:  s.engagementRate,
+      reach:           s.reach,
+      impressions:     s.impressions,
+      totalLikes:      s.totalLikes,
+      totalComments:   s.totalComments,
+      totalShares:     s.totalShares,
+      postsThisMonth:  s.postsThisMonth,
+      topPosts:        s.topPosts,
+      deltaFollowers:  facebookPrev ? pct(s.followersCount, facebookPrev.followersCount) : null,
+      deltaEngagement: facebookPrev ? pct(s.engagementRate ?? 0, facebookPrev.engagementRate) : null,
+      deltaReach:      facebookPrev ? pct(s.reach ?? 0, facebookPrev.reach) : null,
+    }
+  } else {
+    // Fallback 1: snapshot más reciente disponible
+    const recentFb = await prisma.facebookSnapshot.findFirst({
+      where:   { projectId, workspaceId },
+      orderBy: { month: 'desc' },
+      select:  { followersCount: true, fanCount: true, engagementRate: true, reach: true,
+                 impressions: true, totalLikes: true, totalComments: true,
+                 totalShares: true, postsThisMonth: true, topPosts: true, month: true },
+    })
+    if (recentFb) {
+      const prevFb = await prisma.facebookSnapshot.findFirst({
+        where:  { projectId, workspaceId, month: prevMonthStr(recentFb.month) },
+        select: { followersCount: true, engagementRate: true, reach: true },
+      })
+      const s = parseFb(recentFb)
+      facebook = {
+        followersCount:  s.followersCount,
+        fanCount:        s.fanCount,
+        engagementRate:  s.engagementRate,
+        reach:           s.reach,
+        impressions:     s.impressions,
+        totalLikes:      s.totalLikes,
+        totalComments:   s.totalComments,
+        totalShares:     s.totalShares,
+        postsThisMonth:  s.postsThisMonth,
+        topPosts:        s.topPosts,
+        deltaFollowers:  prevFb ? pct(s.followersCount, prevFb.followersCount) : null,
+        deltaEngagement: prevFb ? pct(s.engagementRate ?? 0, prevFb.engagementRate) : null,
+        deltaReach:      prevFb ? pct(s.reach ?? 0, prevFb.reach) : null,
+        _fallbackMonth:  s.month,
+      }
+    } else {
+      // Fallback 2: datos en vivo (solo integración oficial/token, no scrape)
+      const fbIntegration = integrations.find(i => i.type === 'facebook' && i.propertyId && i.scopes !== 'scrape')
+      if (fbIntegration && wants('facebook')) {
+        try {
+          const token = getValidFacebookToken(fbIntegration)
+          const live  = await fetchFacebookMetrics(fbIntegration.propertyId, token, null)
+          facebook = {
+            followersCount:  live.followersCount,
+            fanCount:        live.fanCount,
+            engagementRate:  live.engagementRate,
+            reach:           live.reach,
+            impressions:     live.impressions,
+            totalLikes:      live.totalLikes,
+            totalComments:   live.totalComments,
+            totalShares:     live.totalShares,
+            postsThisMonth:  live.postsThisMonth,
+            topPosts:        live.topPosts,
+            deltaFollowers:  null,
+            deltaEngagement: null,
+            deltaReach:      null,
+            _fallbackMonth:  'live',
+          }
+        } catch (err) {
+          console.warn('[MonthlyReport] Facebook live fallback fallido:', err.message)
+        }
+      }
+    }
+  }
+
   // ── PageSpeed ─────────────────────────────────────────────────────────────────
   const performance = (pageSpeedMobile || pageSpeedDesktop) ? {
     mobile:  pageSpeedMobile  ? {
@@ -778,7 +882,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Secciones (filtradas según enabledSections) ───────────────────────────────
   // Si el informe define secciones habilitadas, las demás se excluyen por completo
   // (no se guardan en el caché ni viajan al link público del cliente).
-  const allSections = { geo, analytics, evolution, instagram, tiktok, linkedin, seo, keywords, googleAds, metaAds, performance, tasks, competitors }
+  const allSections = { geo, analytics, evolution, instagram, tiktok, linkedin, facebook, seo, keywords, googleAds, metaAds, performance, tasks, competitors }
   const sections = {}
   for (const [key, val] of Object.entries(allSections)) {
     sections[key] = wants(key) ? val : null
@@ -799,7 +903,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     ? validCachedAnalysis
     : await generateAnalysis({ project, month: dataMonth,
         geo: sections.geo, analytics: sections.analytics, instagram: sections.instagram,
-        tiktok: sections.tiktok, linkedin: sections.linkedin, keywords: sections.keywords,
+        tiktok: sections.tiktok, linkedin: sections.linkedin, facebook: sections.facebook, keywords: sections.keywords,
         seo: sections.seo, performance: sections.performance, googleAds: sections.googleAds,
         metaAds: sections.metaAds, competitors: sections.competitors,
         workspaceId, objectives: objectivesResults, services })
@@ -820,13 +924,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     analysisError:  analysis?._error ?? null,
     _analysisIsNew:  !validCachedAnalysis && !!analysis?.resumen,
     // No cachear si estamos usando datos en vivo (cambian a diario)
-    _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live' && linkedin?._fallbackMonth !== 'live',
+    _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live' && linkedin?._fallbackMonth !== 'live' && facebook?._fallbackMonth !== 'live',
   }
 }
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, linkedin, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = [], services = [] }) {
+async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, linkedin, facebook, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = [], services = [] }) {
   // Cumplimiento de objetivos (array calculado por computeObjectives)
   const fmtVal = (v, unit) => v == null ? '—' : (unit === '$' ? `$${v}` : unit === '%' ? `${v}%` : unit === 'pos' ? `#${v}` : `${v}`)
   const objCtx = (Array.isArray(objectives) ? objectives : [])
@@ -877,6 +981,13 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
       clicks:           linkedin.clicks,
       engagement:       linkedin.engagementRate != null ? `${linkedin.engagementRate.toFixed(2)}%` : null,
       posts:            linkedin.postsThisMonth,
+    } : null,
+    facebook: facebook ? {
+      seguidores:      facebook.followersCount,
+      deltaSeguidores: facebook.deltaFollowers,
+      alcance:         facebook.reach,
+      engagement:      facebook.engagementRate != null ? `${facebook.engagementRate.toFixed(2)}%` : null,
+      posts:           facebook.postsThisMonth,
     } : null,
     posicionamiento: keywords ? {
       posPromedio:   keywords.avgPosition,
@@ -1022,7 +1133,7 @@ function emptyAnalysis(error) {
 async function getAvailableSections(projectId, workspaceId) {
   const [
     integrations, project, analyticsSnap, pageSpeed, geoAudit, seoSnap,
-    keyword, igSnap, tkSnap, liSnap, metaAdsSnap, googleAdsSnap, competitor, objective,
+    keyword, igSnap, tkSnap, liSnap, fbSnap, metaAdsSnap, googleAdsSnap, competitor, objective,
   ] = await Promise.all([
     prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true, status: true } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true } }),
@@ -1034,6 +1145,7 @@ async function getAvailableSections(projectId, workspaceId) {
     prisma.instagramSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.tikTokSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.linkedinSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.facebookSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'meta_ads' }, select: { id: true } }),
     prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'google_ads' }, select: { id: true } }),
     prisma.competitorAccount.findFirst({ where: { projectId, platform: 'instagram' }, select: { id: true } }),
@@ -1060,6 +1172,7 @@ async function getAvailableSections(projectId, workspaceId) {
     instagram:       build(has('instagram')             || !!igSnap,        'instagram'),
     tiktok:          build(has('tiktok')                || !!tkSnap,        'tiktok'),
     linkedin:        build(has('linkedin')              || !!liSnap,        'linkedin'),
+    facebook:        build(has('facebook')              || !!fbSnap,        'facebook'),
     metaAds:         build(has('meta_ads')              || !!metaAdsSnap,   'meta_ads'),
     googleAds:       build(has('google_ads')            || !!googleAdsSnap, 'google_ads'),
     competitors:     build(!!competitor, null),

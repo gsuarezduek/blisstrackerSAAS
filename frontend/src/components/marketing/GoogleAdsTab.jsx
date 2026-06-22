@@ -543,7 +543,7 @@ export default function GoogleAdsTab({ projectId, onSelectProject }) {
             <div>
               <p className="font-semibold text-gray-900 dark:text-white">Google Ads</p>
               <p className="text-xs text-gray-400 dark:text-gray-500">
-                Cliente: {String(integration.customerId).replace(/(\d{3})(\d{3})(\d+)/, '$1-$2-$3')}
+                Cliente: {data?.customerName ? `${data.customerName} · ` : ''}{String(integration.customerId).replace(/(\d{3})(\d{3})(\d+)/, '$1-$2-$3')}
               </p>
               {integration.propertyId && (
                 <p className="text-xs text-gray-400 dark:text-gray-500">

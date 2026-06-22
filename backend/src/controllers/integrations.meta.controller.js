@@ -644,4 +644,265 @@ async function connectMetaAdsToken(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback, connectInstagramToken, connectMetaAdsToken }
+// ── Facebook Pages (Facebook Login + páginas) ─────────────────────────────────
+
+function buildFacebookRedirectUri() {
+  const base = process.env.BACKEND_URL || 'http://localhost:3001'
+  return `${base}/api/marketing/integrations/facebook/callback`
+}
+
+const FB_PAGE_SCOPES = 'pages_show_list,pages_read_engagement,read_insights'
+
+/**
+ * Recoge todas las Páginas de Facebook accesibles para un token.
+ * Combina tres fuentes (deduplicadas por id) siguiendo la paginación:
+ *   a) me/accounts                         — páginas administradas por el usuario/system user (traen access_token de página)
+ *   b) {business}/owned_pages              — páginas propias de cada Business Manager
+ *   c) {business}/client_pages             — páginas de clientes de cada Business Manager
+ * Devuelve array deduplicado de { id, name, accessToken }.
+ */
+async function fetchFbPages(accessToken) {
+  const pages = new Map()
+  let authError = null
+  const add = (p) => {
+    const id = p?.id ? String(p.id) : null
+    if (id && !pages.has(id)) pages.set(id, { id, name: p.name ?? null, accessToken: p.access_token ?? null })
+  }
+  const onError = (label, e) => {
+    const err = e.response?.data?.error
+    if (err?.code === 190) authError = authError || e
+    console.warn(`[FacebookToken] ${label} falló:`, err ?? e.message)
+  }
+
+  try {
+    const direct = await fetchAllGraphPages(`${GRAPH_BASE}/me/accounts`, {
+      fields: 'id,name,access_token', access_token: accessToken, limit: 100,
+    })
+    console.log(`[FacebookToken] /me/accounts → ${direct.length} página(s)`)
+    direct.forEach(add)
+  } catch (e) { onError('/me/accounts', e) }
+
+  try {
+    const businesses = await fetchAllGraphPages(`${GRAPH_BASE}/me/businesses`, {
+      fields: 'id,name', access_token: accessToken, limit: 100,
+    })
+    for (const biz of businesses) {
+      for (const edge of ['owned_pages', 'client_pages']) {
+        try {
+          const ps = await fetchAllGraphPages(`${GRAPH_BASE}/${biz.id}/${edge}`, {
+            fields: 'id,name,access_token', access_token: accessToken, limit: 100,
+          })
+          console.log(`[FacebookToken] ${biz.id}/${edge} ("${biz.name}") → ${ps.length} página(s)`)
+          ps.forEach(add)
+        } catch (e) { onError(`${biz.id}/${edge}`, e) }
+      }
+    }
+  } catch (e) { onError('/me/businesses', e) }
+
+  const result = [...pages.values()]
+  console.log(`[FacebookToken] Total páginas encontradas: ${result.length}`, result.map(p => `${p.id} ${p.name}`))
+  if (result.length === 0 && authError) throw authError
+  return result
+}
+
+// Deriva el Page Access Token de una página dado un user/system token (cuando la
+// fuente no lo trajo embebido — owned_pages/client_pages a veces no lo incluyen).
+async function derivePageToken(pageId, userToken) {
+  try {
+    const { data } = await axios.get(`${GRAPH_BASE}/${pageId}`, {
+      params: { fields: 'access_token', access_token: userToken },
+    })
+    return data?.access_token ?? null
+  } catch (err) {
+    console.warn('[FacebookToken] No se pudo derivar page token:', err.response?.data?.error?.message || err.message)
+    return null
+  }
+}
+
+/**
+ * GET /api/marketing/integrations/facebook/auth-url?projectId=X
+ */
+async function getFacebookAuthUrl(req, res, next) {
+  try {
+    const { projectId } = req.query
+    if (!projectId) return res.status(400).json({ error: 'projectId requerido' })
+
+    const project = await prisma.project.findFirst({
+      where: { id: Number(projectId), workspaceId: req.workspace.id },
+      select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const state = jwt.sign(
+      { projectId: Number(projectId), workspaceId: req.workspace.id, slug: req.workspace.slug, userId: req.user.userId },
+      process.env.JWT_SECRET,
+      { expiresIn: '10m' },
+    )
+
+    const params = new URLSearchParams({
+      client_id:     process.env.META_APP_ID,
+      redirect_uri:  buildFacebookRedirectUri(),
+      scope:         FB_PAGE_SCOPES,
+      state,
+      response_type: 'code',
+    })
+
+    const url = `https://www.facebook.com/dialog/oauth?${params.toString()}`
+    res.json({ url })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/marketing/integrations/facebook/callback?code=...&state=...
+ * Sin auth middleware.
+ */
+async function handleFacebookCallback(req, res, next) {
+  const { code, state, error: oauthError } = req.query
+  const appDomain = process.env.APP_DOMAIN || 'blisstracker.app'
+
+  if (oauthError) {
+    const detail = req.query.error_description || oauthError
+    return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=${encodeURIComponent(detail)}`)
+  }
+
+  let statePayload
+  try { statePayload = jwt.verify(state, process.env.JWT_SECRET) }
+  catch { return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/oauth-result?error=invalid_state`) }
+
+  const { projectId, workspaceId, slug, userId } = statePayload
+  const isLocalDev   = process.env.NODE_ENV !== 'production'
+  const frontendBase = isLocalDev ? (process.env.FRONTEND_URL || 'http://localhost:5173') : `https://${slug}.${appDomain}`
+  const redirectUri  = buildFacebookRedirectUri()
+
+  try {
+    // 1. code → short-lived token
+    const tokenRes = await axios.post(
+      'https://graph.facebook.com/v21.0/oauth/access_token',
+      new URLSearchParams({
+        client_id:     process.env.META_APP_ID,
+        client_secret: process.env.META_APP_SECRET,
+        grant_type:    'authorization_code',
+        redirect_uri:  redirectUri,
+        code,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+    )
+    const shortToken = tokenRes.data.access_token
+
+    // 2. short-lived → long-lived (60 días)
+    const longRes = await axios.get('https://graph.facebook.com/v21.0/oauth/access_token', {
+      params: {
+        grant_type:        'fb_exchange_token',
+        client_id:         process.env.META_APP_ID,
+        client_secret:     process.env.META_APP_SECRET,
+        fb_exchange_token: shortToken,
+      },
+    })
+    const longToken = longRes.data.access_token
+    const expiresIn = longRes.data.expires_in ?? 5183944
+    const expiresAt = new Date(Date.now() + expiresIn * 1000)
+
+    // 3. Páginas accesibles
+    const fbPages = await fetchFbPages(longToken)
+    if (fbPages.length === 0) {
+      return res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent('No se encontró ninguna Página de Facebook administrada con esta cuenta.')}`)
+    }
+
+    // 4. Página a conectar: la primera con token (auto-selección v1). El page token
+    // derivado de un user token long-lived dura ~60 días.
+    const page      = fbPages[0]
+    const pageToken = page.accessToken || await derivePageToken(page.id, longToken) || longToken
+
+    await prisma.projectIntegration.upsert({
+      where:  { projectId_type: { projectId, type: 'facebook' } },
+      update: {
+        workspaceId, status: 'active', propertyId: page.id,
+        accessToken: encrypt(pageToken), refreshToken: null,
+        expiresAt, scopes: FB_PAGE_SCOPES,
+        connectedById: userId, connectedAt: new Date(),
+      },
+      create: {
+        projectId, workspaceId, type: 'facebook', status: 'active',
+        propertyId: page.id, accessToken: encrypt(pageToken), refreshToken: null,
+        expiresAt, scopes: FB_PAGE_SCOPES,
+        connectedById: userId, connectedAt: new Date(),
+      },
+    })
+
+    console.log(`[FacebookOAuth] Facebook conectado: proyecto ${projectId}, página ${page.id} (${page.name})`)
+    res.redirect(`${frontendBase}/oauth-result?success=true&type=facebook`)
+  } catch (err) {
+    const msg = err.response?.data?.error?.message || err.message
+    console.error('[FacebookOAuth] Error:', err.response?.status, msg)
+    res.redirect(`${frontendBase}/oauth-result?error=${encodeURIComponent(msg)}`)
+  }
+}
+
+/**
+ * POST /api/marketing/projects/:id/integrations/facebook/connect-token
+ * Conecta una Página mediante un System User Token de Business Manager.
+ *
+ * Flujo de 2 pasos (igual a Instagram/Meta Ads):
+ *   Paso 1 — Body: { accessToken }       → 1 página: conecta; varias: { accounts: [{id, name}] }
+ *   Paso 2 — Body: { accessToken, pageId } → conecta la página elegida
+ */
+async function connectFacebookToken(req, res, next) {
+  try {
+    const projectId            = Number(req.params.id)
+    const { accessToken, pageId } = req.body
+    if (!accessToken) return res.status(400).json({ error: 'accessToken requerido' })
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId: req.workspace.id }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    let fbPages
+    try {
+      fbPages = await fetchFbPages(accessToken)
+    } catch (err) {
+      const msg = err.response?.data?.error?.message || err.message
+      return res.status(400).json({ error: `Token inválido o sin permisos: ${msg}` })
+    }
+
+    if (fbPages.length === 0) {
+      return res.status(400).json({
+        error: 'No se encontró ninguna Página de Facebook accesible con este token. Verificá que el System User tenga páginas asignadas en Business Manager.',
+      })
+    }
+
+    let chosen
+    if (pageId) {
+      chosen = fbPages.find(p => p.id === String(pageId))
+      if (!chosen) return res.status(400).json({ error: 'La página seleccionada no está disponible para este token.' })
+    } else if (fbPages.length === 1) {
+      chosen = fbPages[0]
+    } else {
+      return res.json({ accounts: fbPages.map(p => ({ id: p.id, name: p.name })) })
+    }
+
+    const pageToken = chosen.accessToken || await derivePageToken(chosen.id, accessToken) || accessToken
+
+    // System User Token → page token permanente (expiresAt: null)
+    await prisma.projectIntegration.upsert({
+      where:  { projectId_type: { projectId, type: 'facebook' } },
+      update: {
+        workspaceId: req.workspace.id, status: 'active', propertyId: chosen.id,
+        accessToken: encrypt(pageToken), refreshToken: null,
+        expiresAt: null, scopes: 'fb_graph,' + FB_PAGE_SCOPES,
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+      create: {
+        projectId, workspaceId: req.workspace.id, type: 'facebook', status: 'active',
+        propertyId: chosen.id, accessToken: encrypt(pageToken), refreshToken: null,
+        expiresAt: null, scopes: 'fb_graph,' + FB_PAGE_SCOPES,
+        connectedById: req.user.userId, connectedAt: new Date(),
+      },
+    })
+
+    console.log(`[FacebookToken] Facebook conectado via token: proyecto ${projectId}, página ${chosen.id} (${chosen.name})`)
+    res.json({ ok: true, pageId: chosen.id, pageName: chosen.name })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetaAuthUrl, handleMetaCallback, getMetaAdsAuthUrl, handleMetaAdsCallback, connectInstagramToken, connectMetaAdsToken, getFacebookAuthUrl, handleFacebookCallback, connectFacebookToken }

@@ -504,6 +504,44 @@ async function getSeoSummary(req, res, next) {
   }
 }
 
+/**
+ * GET /api/marketing/summary/facebook
+ * Snapshot de Facebook más reciente por proyecto, ordenado por followersCount desc.
+ */
+async function getFacebookSummary(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+
+    const snapshots = await prisma.facebookSnapshot.findMany({
+      where:   { workspaceId },
+      orderBy: { month: 'desc' },
+      include: { project: { select: { id: true, name: true } } },
+    })
+
+    const seen = new Set()
+    const result = []
+    for (const s of snapshots) {
+      if (seen.has(s.projectId)) continue
+      seen.add(s.projectId)
+      result.push({
+        projectId:      s.projectId,
+        projectName:    s.project.name,
+        month:          s.month,
+        followersCount: s.followersCount,
+        engagementRate: s.engagementRate ?? null,
+        reach:          s.reach          ?? null,
+        impressions:    s.impressions    ?? null,
+        postsThisMonth: s.postsThisMonth ?? null,
+      })
+    }
+
+    result.sort((a, b) => b.followersCount - a.followersCount)
+    res.json(result)
+  } catch (err) {
+    next(err)
+  }
+}
+
 module.exports = {
   getAnalyticsSummary,
   refreshAnalyticsSummary,
@@ -511,6 +549,7 @@ module.exports = {
   getInstagramSummary,
   getTikTokSummary,
   getLinkedinSummary,
+  getFacebookSummary,
   getAdsSummary,
   getReportsSummary,
   getSeoSummary,

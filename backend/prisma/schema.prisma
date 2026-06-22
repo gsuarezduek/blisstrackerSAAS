@@ -79,6 +79,8 @@ model Workspace {
   tiktokFollowerLogs     TikTokFollowerLog[]
   linkedinSnapshots      LinkedinSnapshot[]
   linkedinFollowerLogs   LinkedinFollowerLog[]
+  facebookSnapshots      FacebookSnapshot[]
+  facebookFollowerLogs   FacebookFollowerLog[]
   monthlyReports         MonthlyReport[]
   searchConsoleSnapshots SearchConsoleSnapshot[]
   seoAiInsights          SeoAiInsight[]
@@ -343,6 +345,8 @@ model Project {
   tiktokFollowerLogs     TikTokFollowerLog[]
   linkedinSnapshots      LinkedinSnapshot[]
   linkedinFollowerLogs   LinkedinFollowerLog[]
+  facebookSnapshots      FacebookSnapshot[]
+  facebookFollowerLogs   FacebookFollowerLog[]
   monthlyReports         MonthlyReport[]
   searchConsoleSnapshots SearchConsoleSnapshot[]
   seoAiInsights          SeoAiInsight[]
@@ -1233,6 +1237,50 @@ model LinkedinSnapshot {
 // ─── LINKEDIN FOLLOWER LOG ────────────────────────────────────────────────────
 
 model LinkedinFollowerLog {
+  id             Int      @id @default(autoincrement())
+  projectId      Int
+  workspaceId    Int
+  date           String // "YYYY-MM-DD" en horario ART
+  followersCount Int
+  createdAt      DateTime @default(now())
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, date])
+  @@index([workspaceId])
+}
+
+// ─── FACEBOOK (PÁGINAS) ───────────────────────────────────────────────────────
+
+model FacebookSnapshot {
+  id             Int      @id @default(autoincrement())
+  projectId      Int
+  workspaceId    Int
+  month          String // "YYYY-MM"
+  followersCount Int      @default(0)
+  fanCount       Int? // "me gusta" de la página (distinto de followers en FB)
+  reach          Int?
+  impressions    Int?
+  pageViews      Int?
+  engagementRate Float?
+  totalLikes     Int?
+  totalComments  Int?
+  totalShares    Int?
+  postsThisMonth Int?
+  topPosts       String   @default("[]") // JSON: [{ id, text, likes, comments, shares, reach, imgSrc, permalink, publishedAt, engagement }]
+  createdAt      DateTime @default(now())
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, month])
+  @@index([workspaceId])
+}
+
+// ─── FACEBOOK FOLLOWER LOG ────────────────────────────────────────────────────
+
+model FacebookFollowerLog {
   id             Int      @id @default(autoincrement())
   projectId      Int
   workspaceId    Int

@@ -22,7 +22,6 @@ function BriefCard({ brief, answers, onOpen }) {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500">Brief {brief.n}</p>
           <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">{brief.title}</h3>
         </div>
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${statusPill.cls}`}>
@@ -106,7 +105,7 @@ function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSave
             Todos los briefs
           </button>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-            Brief {brief.n} — {brief.title}
+            {brief.title}
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{brief.intro}</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
@@ -174,8 +173,12 @@ function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSave
 
 export default function ProjectBriefs({ projectId, canEdit }) {
   const [answersByType, setAnswersByType] = useState({}) // { type: { fieldKey: value } }
+  const [activeKeys, setActiveKeys]   = useState([])     // briefs con fila en DB
   const [loading, setLoading] = useState(true)
   const [openKey, setOpenKey] = useState(null)
+  const [adding, setAdding]   = useState(false)          // menú "Agregar brief" abierto
+  const [addingKey, setAddingKey] = useState(null)       // alta en curso
+  const [addError, setAddError]   = useState('')
 
   useEffect(() => {
     let alive = true
@@ -184,8 +187,10 @@ export default function ProjectBriefs({ projectId, canEdit }) {
       .then(r => {
         if (!alive) return
         const map = {}
-        for (const b of r.data.briefs || []) map[b.type] = b.answers || {}
+        const keys = []
+        for (const b of r.data.briefs || []) { map[b.type] = b.answers || {}; keys.push(b.type) }
         setAnswersByType(map)
+        setActiveKeys(keys)
       })
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false) })
@@ -194,6 +199,27 @@ export default function ProjectBriefs({ projectId, canEdit }) {
 
   function handleSaved(type, answers) {
     setAnswersByType(prev => ({ ...prev, [type]: answers }))
+    setActiveKeys(prev => (prev.includes(type) ? prev : [...prev, type]))
+  }
+
+  // Marca siempre visible (documento madre, primero); el resto solo si fue agregado.
+  const activeBriefs   = BRIEFS.filter(b => b.key === 'marca' || activeKeys.includes(b.key))
+  const availableToAdd = BRIEFS.filter(b => b.key !== 'marca' && !activeKeys.includes(b.key))
+
+  async function handleAdd(key) {
+    setAddingKey(key)
+    setAddError('')
+    try {
+      // Crea la fila vacía para que el brief quede agregado y persista; luego lo abre.
+      const { data } = await api.put(`/projects/${projectId}/briefs/${key}`, { answers: {} })
+      handleSaved(key, data.brief.answers || {})
+      setAdding(false)
+      setOpenKey(key)
+    } catch (e) {
+      setAddError(e.response?.data?.error || 'No se pudo agregar el brief')
+    } finally {
+      setAddingKey(null)
+    }
   }
 
   if (loading) {
@@ -217,12 +243,45 @@ export default function ProjectBriefs({ projectId, canEdit }) {
 
   return (
     <div>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Cuestionarios de relevamiento del cliente. Empezá por el <span className="font-medium text-gray-700 dark:text-gray-300">Brief de Marca</span> (documento madre);
-        los demás son por servicio y se completan modularmente — no hace falta llenarlos todos.
-      </p>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Cuestionarios de relevamiento del cliente. Empezá por el <span className="font-medium text-gray-700 dark:text-gray-300">Brief de Marca</span> (documento madre);
+          sumá los demás <span className="font-medium text-gray-700 dark:text-gray-300">a medida que los necesites</span> — no hace falta tenerlos todos.
+        </p>
+
+        {canEdit && availableToAdd.length > 0 && (
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => setAdding(o => !o)}
+              className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors whitespace-nowrap"
+            >
+              + Agregar brief
+            </button>
+            {adding && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setAdding(false)} />
+                <div className="absolute right-0 mt-2 w-64 z-20 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg py-1">
+                  {availableToAdd.map(b => (
+                    <button
+                      key={b.key}
+                      onClick={() => handleAdd(b.key)}
+                      disabled={addingKey === b.key}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 disabled:opacity-60 transition-colors"
+                    >
+                      {addingKey === b.key ? 'Agregando…' : b.title}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {addError && <p className="text-sm text-red-500 mb-3">{addError}</p>}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {BRIEFS.map(brief => (
+        {activeBriefs.map(brief => (
           <BriefCard
             key={brief.key}
             brief={brief}

@@ -56,6 +56,7 @@ const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.servic
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
 const { saveAllMonthlyTikTokSnapshots }    = require('./services/tiktokSnapshot.service')
 const { saveAllMonthlyLinkedinSnapshots }  = require('./services/linkedinSnapshot.service')
+const { saveAllMonthlyFacebookSnapshots }  = require('./services/facebookSnapshot.service')
 const { saveAllSearchConsoleSnapshots }   = require('./services/searchConsoleSnapshot.service')
 const { refreshAllDomainRatings }         = require('./services/ahrefs.service')
 const { saveAllAdsSnapshots }             = require('./services/adsSnapshot.service')
@@ -217,6 +218,7 @@ const MONTHLY_CHAIN = [
   ['InstagramSnapshot',  saveAllMonthlyInstagramSnapshots],
   ['TikTokSnapshot',     saveAllMonthlyTikTokSnapshots],
   ['LinkedinSnapshot',   saveAllMonthlyLinkedinSnapshots],
+  ['FacebookSnapshot',   saveAllMonthlyFacebookSnapshots],
   ['AdsSnapshot',        saveAllAdsSnapshots],
   ['CompetitorSnapshot', saveAllMonthlyCompetitorSnapshots],
   ['RrhhMetricSnapshot', saveAllPrevRrhhMetrics],

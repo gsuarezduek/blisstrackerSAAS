@@ -43,6 +43,7 @@ const SECTION_CATALOG = [
   { key: 'instagram',       label: 'Instagram',             icon: '📸' },
   { key: 'tiktok',          label: 'TikTok',                icon: '🎵' },
   { key: 'linkedin',        label: 'LinkedIn',              icon: '💼' },
+  { key: 'facebook',        label: 'Facebook',              icon: '👍' },
   { key: 'metaAds',         label: 'Meta Ads',              icon: '📣' },
   { key: 'googleAds',       label: 'Google Ads',            icon: '🔎' },
   { key: 'competitors',     label: 'Competidores',          icon: '🏁' },

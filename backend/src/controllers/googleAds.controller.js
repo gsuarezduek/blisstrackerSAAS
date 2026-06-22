@@ -33,26 +33,21 @@ async function getGoogleAdsData(req, res, next) {
     const data = await fetchGoogleAdsData(integration, datePreset)
     res.json(data)
   } catch (err) {
-    // Token de Google expirado — marcar integración y devolver 400 con código reconocible
-    if (err.code === 'TOKEN_EXPIRED' || err.message?.includes('invalid_grant')) {
-      await prisma.projectIntegration.update({
-        where: { projectId_type: { projectId: Number(req.params.id), type: 'google_ads' } },
-        data:  { status: 'expired' },
-      }).catch(err => console.error('[GoogleAds] Error al marcar integración como expirada:', err.message))
-      return res.status(400).json({
-        error: 'El token de Google Ads expiró. Desconectá y volvé a conectar la integración.',
-        code:  'TOKEN_EXPIRED',
-      })
-    }
+    // Helper local: marcar la integración como expirada (token muerto).
+    const markExpired = () => prisma.projectIntegration.update({
+      where: { projectId_type: { projectId: Number(req.params.id), type: 'google_ads' } },
+      data:  { status: 'expired' },
+    }).catch(e => console.error('[GoogleAds] Error al marcar integración como expirada:', e.message))
 
-    // Error específico de Google Ads API — puede venir como objeto o como array
+    // 1) Error de la Google Ads API (tiene response.data): clasificar SIEMPRE por su propio
+    //    status — un problema de cuenta/manager NUNCA se reporta como "token expirado".
     const body = err.response?.data
     if (body) {
       console.error('[GoogleAds] API error:', JSON.stringify(body))
-      // Formato objeto: { error: { message, code, status } }
-      const gadsErr = body.error
+      const status  = err.response.status
+      // Formato objeto: { error: { message, code, status } } | array (algunas versiones)
+      const gadsErr = body.error || (Array.isArray(body) ? body[0]?.error : null)
       if (gadsErr) {
-        const status = err.response.status
         if (status === 404) {
           return res.status(400).json({
             error: `Cuenta de Google Ads no encontrada (ID: ${req.query?.customerId ?? '?'}). Verificá que el Customer ID sea correcto y que tu cuenta de Google tenga acceso directo a esa cuenta.`,
@@ -65,13 +60,29 @@ async function getGoogleAdsData(req, res, next) {
             code: 'PERMISSION_DENIED',
           })
         }
+        // 401 UNAUTHENTICATED: el access token no sirve (revocado / scope insuficiente) →
+        // sí es un problema de token: marcar expirado y pedir reconexión.
+        if (status === 401) {
+          await markExpired()
+          return res.status(400).json({
+            error: 'El token de Google Ads ya no es válido. Desconectá y volvé a conectar la integración.',
+            code:  'TOKEN_EXPIRED',
+          })
+        }
         return res.status(400).json({ error: gadsErr.message || 'Error en Google Ads API' })
       }
-      // Formato array (algunas versiones de la API)
-      if (Array.isArray(body) && body[0]?.error) {
-        return res.status(400).json({ error: body[0].error.message || 'Error en Google Ads API' })
-      }
     }
+
+    // 2) Falla genuina al refrescar el token OAuth (sin response.data): el refresh dio
+    //    invalid_grant. No es un problema de la cuenta — es el refresh token del usuario.
+    if (err.code === 'TOKEN_EXPIRED' || err.message?.includes('invalid_grant')) {
+      await markExpired()
+      return res.status(400).json({
+        error: 'El token de Google Ads expiró. Desconectá y volvé a conectar la integración.',
+        code:  'TOKEN_EXPIRED',
+      })
+    }
+
     next(err)
   }
 }
