@@ -81,6 +81,33 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   const [currentDesc, setCurrentDesc] = useState(task.description)
   const editRef                       = useRef(null)
 
+  // Edición de proyecto / responsable / fecha futura
+  const [projects, setProjects]       = useState([])
+  const [wsMembers, setWsMembers]     = useState([])
+  const [editProjectId, setEditProjectId]   = useState(String(task.project?.id ?? task.projectId ?? ''))
+  const [editAssignee, setEditAssignee]     = useState(String(task.userId ?? ''))
+  const [editSchedule, setEditSchedule]     = useState(task.scheduledFor || '')
+  const [currentProject, setCurrentProject] = useState(task.project?.name || '')
+  const todayStr = new Date().toLocaleDateString('en-CA')
+  // Solo las tareas futuras one-off (no recurrentes) permiten editar la fecha
+  const isFutureTask = !!task.scheduledFor && !task.recurrenceId
+
+  // Cargar proyectos + miembros del workspace solo cuando se entra en modo edición
+  useEffect(() => {
+    if (!editing || projects.length) return
+    api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
+    api.get('/workspaces/current/members')
+      .then(r => setWsMembers(r.data.filter(m => m.active)))
+      .catch(() => {})
+  }, [editing, projects.length])
+
+  // Equipo del proyecto seleccionado vs resto del workspace (etiqueta, no barrera)
+  const projectMemberIds = new Set(
+    (projects.find(p => String(p.id) === editProjectId)?.members ?? []).map(pm => pm.user.id)
+  )
+  const teamOptions  = wsMembers.filter(m => projectMemberIds.has(m.id))
+  const otherOptions = wsMembers.filter(m => !projectMemberIds.has(m.id))
+
   // Delete state
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting]           = useState(false)
@@ -147,12 +174,20 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
 
   async function handleSaveEdit() {
     if (!editDesc.trim() || editSaving) return
-    if (editDesc.trim() === currentDesc) { setEditing(false); return }
+    if (isFutureTask && editSchedule && editSchedule <= todayStr) {
+      setEditError('La fecha debe ser posterior a hoy.')
+      return
+    }
     setEditSaving(true)
     setEditError('')
     try {
-      const { data } = await api.patch(`/tasks/${task.id}`, { description: editDesc.trim() })
+      const body = { description: editDesc.trim() }
+      if (editProjectId) body.projectId = editProjectId
+      if (editAssignee) body.targetUserId = editAssignee
+      if (isFutureTask && editSchedule) body.scheduledFor = editSchedule
+      const { data } = await api.patch(`/tasks/${task.id}`, body)
       setCurrentDesc(data.description)
+      setCurrentProject(data.project?.name || '')
       setEditing(false)
       onTaskEdited?.(data)
     } catch (err) {
@@ -246,7 +281,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-start justify-between gap-3 mb-3">
-            <p className="text-xs text-gray-400 dark:text-gray-500">{task.project?.name}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">{currentProject}</p>
             <button
               onClick={onClose}
               className="text-2xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 leading-none flex-shrink-0 -mt-1"
@@ -266,6 +301,60 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                 onKeyDown={handleEditKeyDown}
                 className="w-full text-sm px-3 py-2 rounded-xl border border-primary-300 dark:border-primary-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
               />
+
+              {/* Proyecto */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Proyecto</label>
+                <select
+                  value={editProjectId}
+                  onChange={e => setEditProjectId(e.target.value)}
+                  className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                >
+                  {projects.map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+                </select>
+              </div>
+
+              {/* Responsable */}
+              {wsMembers.length > 1 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Responsable</label>
+                  <select
+                    value={editAssignee}
+                    onChange={e => setEditAssignee(e.target.value)}
+                    className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  >
+                    {teamOptions.length > 0 && (
+                      <optgroup label="Equipo del proyecto">
+                        {teamOptions.map(u => (
+                          <option key={u.id} value={String(u.id)}>{u.name}{String(u.id) === String(user?.id) ? ' (yo)' : ''}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherOptions.length > 0 && (
+                      <optgroup label="Otros del workspace">
+                        {otherOptions.map(u => (
+                          <option key={u.id} value={String(u.id)}>{u.name}{String(u.id) === String(user?.id) ? ' (yo)' : ''}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+              )}
+
+              {/* Fecha programada (solo tareas futuras one-off) */}
+              {isFutureTask && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Aparece el día</label>
+                  <input
+                    type="date"
+                    min={todayStr}
+                    value={editSchedule}
+                    onChange={e => setEditSchedule(e.target.value)}
+                    className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                  />
+                </div>
+              )}
+
               {editError && <p className="text-xs text-red-500">{editError}</p>}
               <div className="flex items-center gap-2">
                 <button
@@ -276,7 +365,12 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                   {editSaving ? 'Guardando...' : 'Guardar'}
                 </button>
                 <button
-                  onClick={() => { setEditing(false); setEditDesc(currentDesc); setEditError('') }}
+                  onClick={() => {
+                    setEditing(false); setEditDesc(currentDesc); setEditError('')
+                    setEditProjectId(String(task.project?.id ?? task.projectId ?? ''))
+                    setEditAssignee(String(task.userId ?? ''))
+                    setEditSchedule(task.scheduledFor || '')
+                  }}
                   className="text-xs px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                 >
                   Cancelar
@@ -292,8 +386,13 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
               {canEdit && (
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button
-                    onClick={() => { setEditDesc(currentDesc); setEditing(true) }}
-                    title="Editar descripción"
+                    onClick={() => {
+                      setEditDesc(currentDesc); setEditing(true)
+                      setEditProjectId(String(task.project?.id ?? task.projectId ?? ''))
+                      setEditAssignee(String(task.userId ?? ''))
+                      setEditSchedule(task.scheduledFor || '')
+                    }}
+                    title="Editar tarea"
                     className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-all rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">

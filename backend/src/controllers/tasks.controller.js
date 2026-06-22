@@ -395,29 +395,80 @@ async function unblockTask(req, res, next) {
 async function editTask(req, res, next) {
   try {
     const id = Number(req.params.id)
-    const { description } = req.body
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const requesterId = req.user.userId
+    const { description, projectId, targetUserId, scheduledFor } = req.body
     if (!description?.trim()) return res.status(400).json({ error: 'La descripción es requerida' })
 
     // Scopear por workspace: evita que un admin/owner edite tareas de otros workspaces vía ID.
-    const task = await prisma.task.findFirst({ where: { id, workDay: { workspaceId: req.workspace.id } } })
+    const task = await prisma.task.findFirst({ where: { id, workDay: { workspaceId } } })
     if (!task) return res.status(404).json({ error: 'Tarea no encontrada' })
-    if (!isAdmin(req) && task.userId !== req.user.userId) {
+    if (!isAdmin(req) && task.userId !== requesterId) {
       return res.status(403).json({ error: 'No tenés permiso para editar esta tarea' })
     }
 
     const desc = description.trim()
+    const data = { description: desc }
+
+    // ── Proyecto ── (debe existir y pertenecer al workspace)
+    if (projectId != null && Number(projectId) !== task.projectId) {
+      const project = await prisma.project.findFirst({ where: { id: Number(projectId), workspaceId } })
+      if (!project) return res.status(400).json({ error: 'Proyecto inválido' })
+      data.projectId = Number(projectId)
+    }
+
+    // ── Responsable ── (debe ser miembro activo del workspace; se re-engancha al
+    // workday de hoy del nuevo responsable, como en la creación, para que la tarea
+    // aparezca en su dashboard — las consultas de "hoy" filtran por workDayId).
+    if (targetUserId != null && Number(targetUserId) !== task.userId) {
+      const newUserId = Number(targetUserId)
+      const targetMember = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: newUserId } },
+      })
+      if (!targetMember || !targetMember.active) {
+        return res.status(400).json({ error: 'El usuario no pertenece a este workspace' })
+      }
+      data.userId = newUserId
+      const today = todayString(tz)
+      const wdKey = { userId_workspaceId_date: { userId: newUserId, workspaceId, date: today } }
+      let workDay = await prisma.workDay.findUnique({ where: wdKey })
+      if (!workDay) {
+        try {
+          workDay = await prisma.workDay.create({ data: { userId: newUserId, workspaceId, date: today } })
+        } catch (createErr) {
+          if (createErr.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
+          else throw createErr
+        }
+      }
+      if (workDay) data.workDayId = workDay.id
+    }
+
+    // ── Fecha programada ── (solo para tareas futuras one-off; las recurrentes
+    // controlan sus fechas vía la plantilla, no se editan acá).
+    if (scheduledFor !== undefined && task.scheduledFor && !task.recurrenceId) {
+      const isYMD = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+      const today = todayString(tz)
+      if (!isYMD(scheduledFor)) return res.status(400).json({ error: 'Fecha inválida (formato YYYY-MM-DD)' })
+      if (scheduledFor <= today) return res.status(400).json({ error: 'La fecha debe ser posterior a hoy.' })
+      data.scheduledFor = scheduledFor
+    }
+
     // scope=series en una instancia recurrente: actualiza la plantilla + las instancias
-    // futuras no completadas (las completadas conservan su texto histórico).
+    // futuras no completadas (las completadas conservan su texto histórico). Se propagan
+    // descripción y proyecto; responsable/fecha quedan por instancia.
     if (req.query.scope === 'series' && task.recurrenceId) {
+      const seriesData = { description: desc, ...(data.projectId != null ? { projectId: data.projectId } : {}) }
       await prisma.$transaction([
-        prisma.taskRecurrence.update({ where: { id: task.recurrenceId }, data: { description: desc } }),
+        prisma.taskRecurrence.update({ where: { id: task.recurrenceId }, data: seriesData }),
         prisma.task.updateMany({
           where: { recurrenceId: task.recurrenceId, status: { not: 'COMPLETED' } },
-          data:  { description: desc },
+          data:  seriesData,
         }),
+        prisma.task.update({ where: { id }, data }),
       ])
     } else {
-      await prisma.task.update({ where: { id }, data: { description: desc } })
+      await prisma.task.update({ where: { id }, data })
     }
 
     const updated = await prisma.task.findUnique({ where: { id }, include: taskInclude })
