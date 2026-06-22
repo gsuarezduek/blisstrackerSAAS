@@ -1,7 +1,9 @@
 const axios                  = require('axios')
 const { getValidAccessToken } = require('./tokenRefresh.service')
 
-const GADS_BASE = 'https://googleads.googleapis.com/v20'
+// Google Ads API pasó a releases mensuales en 2026; cada versión mayor se sunsetea
+// a los ~meses. Si la API responde UNSUPPORTED_VERSION, subir esta versión (ver release notes).
+const GADS_BASE = 'https://googleads.googleapis.com/v23'
 
 const GAQL_DATE_CLAUSE = {
   today:      'TODAY',

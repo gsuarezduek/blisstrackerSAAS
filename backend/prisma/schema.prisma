@@ -836,7 +836,7 @@ model ProjectIntegration {
   workspaceId Int
   projectId   Int
   type        String // "google_analytics" | "google_ads" | "instagram" | "tiktok" | "meta_ads" | "linkedin"
-  status      String @default("active") // "active" | "error" | "revoked"
+  status      String @default("active") // "active" | "expired" (se marca al detectar invalid_grant / token vencido)
 
   propertyId String? // GA4: "properties/123456789"
   customerId String? // Google Ads: "123-456-7890"

@@ -20,7 +20,8 @@ const METRICS = {
   // RRSS
   seguidores:     { category: 'rrss', label: 'Seguidores nuevos',    unit: '',    direction: 'higher', aggregation: 'flow',  param: null, rrssPlatform: true },
   interaccion:    { category: 'rrss', label: 'Interacciones',        unit: '',    direction: 'higher', aggregation: 'flow',  param: null, rrssPlatform: true },
-  alcance:        { category: 'rrss', label: 'Alcance (Instagram)',  unit: '',    direction: 'higher', aggregation: 'flow',  param: null },
+  alcance:        { category: 'rrss', label: 'Alcance (Instagram)',  unit: '',    direction: 'higher', aggregation: 'flow',  param: null, igInsightsOnly: true },
+  visualizaciones:{ category: 'rrss', label: 'Visualizaciones (Instagram)', unit: '', direction: 'higher', aggregation: 'flow', param: null, igInsightsOnly: true },
   competidores:   { category: 'rrss', label: 'Superar competidor',   unit: '',    direction: 'higher', aggregation: 'stock', param: 'competitorId' },
   // ANUNCIOS
   inversion:      { category: 'ads',  label: 'Monto a invertir',     unit: '$',   direction: 'info',   aggregation: 'flow',  param: 'platform' },

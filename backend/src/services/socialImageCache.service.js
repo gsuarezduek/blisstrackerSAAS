@@ -7,10 +7,22 @@ const prisma = require('../lib/prisma')
 // mientras la URL todavía es válida y los servimos desde nuestro backend.
 
 const MAX_BYTES = 8 * 1024 * 1024 // 8 MB — imágenes de social, generosamente acotado
+const RETRIES   = 3               // los CDN de IG/FB devuelven 403/timeout esporádicos
+const RETRY_MS  = [600, 1800]     // backoff entre intentos
+
+// Los CDN de Instagram/Facebook a veces rechazan UAs "de bot" con 403. Un UA de
+// navegador real + Referer de instagram.com maximiza la tasa de descarga.
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  'Referer': 'https://www.instagram.com/',
+}
 
 function publicBase() {
   return (process.env.BACKEND_URL || 'http://localhost:3001').replace(/\/$/, '')
 }
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
 /** True si la URL ya apunta a nuestro propio cache (idempotencia). */
 function isCachedUrl(url) {
@@ -30,31 +42,39 @@ async function cacheSocialImage(url, workspaceId) {
   if (!url || typeof url !== 'string') return url ?? null
   if (isCachedUrl(url)) return url // ya cacheada
 
-  try {
-    const resp = await axios.get(url, {
-      responseType: 'arraybuffer',
-      timeout: 15000,
-      maxContentLength: MAX_BYTES,
-      // Algunos CDN devuelven 403 sin un UA "de navegador"
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BlissTracker/1.0)' },
-    })
+  let lastErr
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    try {
+      const resp = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 20000,
+        maxContentLength: MAX_BYTES,
+        headers: BROWSER_HEADERS,
+      })
 
-    const mimeType = String(resp.headers['content-type'] || '').split(';')[0].trim()
-    if (!mimeType.startsWith('image/')) return url // no es imagen → no cachear
+      const mimeType = String(resp.headers['content-type'] || '').split(';')[0].trim()
+      if (!mimeType.startsWith('image/')) return url // no es imagen → no cachear
 
-    const buffer = Buffer.from(resp.data)
-    if (buffer.length === 0 || buffer.length > MAX_BYTES) return url
+      const buffer = Buffer.from(resp.data)
+      if (buffer.length === 0 || buffer.length > MAX_BYTES) return url
 
-    const row = await prisma.socialImage.create({
-      data: { workspaceId, sourceUrl: url, imageData: buffer, mimeType },
-      select: { id: true },
-    })
+      const row = await prisma.socialImage.create({
+        data: { workspaceId, sourceUrl: url, imageData: buffer, mimeType },
+        select: { id: true },
+      })
 
-    return `${publicBase()}/api/social-image/${row.id}`
-  } catch (err) {
-    console.warn(`[SocialImageCache] No se pudo cachear imagen (${err.message}); se mantiene URL original`)
-    return url
+      return `${publicBase()}/api/social-image/${row.id}`
+    } catch (err) {
+      lastErr = err
+      // 404/403 firmados no se recuperan reintentando; sí los 5xx/timeout/red.
+      const status = err.response?.status
+      const retriable = !status || status >= 500 || err.code === 'ECONNABORTED' || err.code === 'ECONNRESET'
+      if (retriable && attempt < RETRIES - 1) { await sleep(RETRY_MS[attempt]); continue }
+      break
+    }
   }
+  console.warn(`[SocialImageCache] FALLO cacheo tras ${RETRIES} intentos (${lastErr?.response?.status || lastErr?.code || lastErr?.message}); se mantiene URL original que VENCERÁ: ${url.slice(0, 80)}`)
+  return url
 }
 
 /**

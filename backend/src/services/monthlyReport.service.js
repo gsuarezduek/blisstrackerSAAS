@@ -428,7 +428,10 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
   let instagram = null
   if (instagramSnap) {
-    const topPosts = parseIgTopPosts(instagramSnap.topPosts)
+    // Idempotente: si el snapshot ya tiene URLs cacheadas (/api/social-image) es no-op;
+    // si quedaron URLs de CDN (snapshot tomado antes del cacheo, aún frescas) las cachea
+    // ahora, antes de congelarlas en el dataCache del informe.
+    const topPosts = await cacheImagesInArray(parseIgTopPosts(instagramSnap.topPosts), 'imgSrc', workspaceId)
     instagram = {
       followersCount:  instagramSnap.followersCount,
       engagementRate:  instagramSnap.engagementRate,
@@ -461,7 +464,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         where:  { projectId, workspaceId, month: prevMonthStr(recentIg.month) },
         select: { followersCount: true, engagementRate: true, reach: true },
       })
-      const topPosts = parseIgTopPosts(recentIg.topPosts)
+      const topPosts = await cacheImagesInArray(parseIgTopPosts(recentIg.topPosts), 'imgSrc', workspaceId)
       instagram = {
         followersCount:  recentIg.followersCount,
         engagementRate:  recentIg.engagementRate,

@@ -20,13 +20,16 @@ function defaultPlatformFor(metric, current) {
 
 // ─── Formulario de alta/edición ────────────────────────────────────────────────
 
-function ObjectiveForm({ projectId, initial, keywords, competitors, onSaved, onCancel }) {
+function ObjectiveForm({ projectId, initial, keywords, competitors, igConnection, onSaved, onCancel }) {
   const [draft, setDraft]   = useState(initial || EMPTY_DRAFT)
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState(null)
 
   const metricDef = draft.metric ? METRICS[draft.metric] : null
   const isEdit = !!initial?.id
+
+  // Alcance y visualizaciones solo existen vía insights oficiales (API/token), no por scraping.
+  const igInsightsUnavailable = metricDef?.igInsightsOnly && igConnection !== 'official'
 
   function set(patch) { setDraft(d => ({ ...d, ...patch })) }
 
@@ -104,6 +107,13 @@ function ObjectiveForm({ projectId, initial, keywords, competitors, onSaved, onC
             {metricsForCategory(draft.category).map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
           </select>
           {metricDef && <p className="text-[11px] text-gray-400 mt-1">{metricDef.help}</p>}
+          {igInsightsUnavailable && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded-lg px-2.5 py-1.5 mt-1.5">
+              ⚠️ {igConnection === 'scrape'
+                ? 'La cuenta de Instagram está conectada por scraping. El alcance y las visualizaciones no están disponibles por este método: solo se obtienen con la conexión oficial (API o token). Este objetivo no tendrá datos.'
+                : 'No hay una cuenta de Instagram conectada por API o token. El alcance y las visualizaciones solo se obtienen con la conexión oficial (la conexión por scraping no los ve), así que este objetivo no tendrá datos.'}
+            </p>
+          )}
         </div>
       )}
 
@@ -194,6 +204,7 @@ export default function ObjectivesManager({ projectId, onClose }) {
   const [objectives, setObjectives] = useState([])
   const [keywords, setKeywords]     = useState([])
   const [competitors, setCompetitors] = useState([])
+  const [igConnection, setIgConnection] = useState(null)  // 'official' | 'scrape' | null (sin conectar)
   const [loading, setLoading]       = useState(true)
   const [showForm, setShowForm]     = useState(false)
   const [editing, setEditing]       = useState(null)
@@ -201,14 +212,17 @@ export default function ObjectivesManager({ projectId, onClose }) {
   async function loadAll() {
     setLoading(true)
     try {
-      const [objs, kws, comps] = await Promise.all([
+      const [objs, kws, comps, integs] = await Promise.all([
         api.get(`/marketing/projects/${projectId}/objectives`),
         api.get(`/marketing/projects/${projectId}/keywords`).catch(() => ({ data: { keywords: [] } })),
         api.get(`/marketing/projects/${projectId}/competitors?platform=instagram`).catch(() => ({ data: [] })),
+        api.get(`/marketing/projects/${projectId}/integrations`).catch(() => ({ data: [] })),
       ])
       setObjectives(objs.data.objectives || [])
       setKeywords(kws.data.keywords || [])
       setCompetitors(Array.isArray(comps.data) ? comps.data : (comps.data.competitors || []))
+      const ig = (Array.isArray(integs.data) ? integs.data : []).find(i => i.type === 'instagram')
+      setIgConnection(ig ? (ig.scopes === 'scrape' ? 'scrape' : 'official') : null)
     } catch { /* noop */ }
     finally { setLoading(false) }
   }
@@ -280,6 +294,7 @@ export default function ObjectivesManager({ projectId, onClose }) {
                   initial={editing}
                   keywords={keywords}
                   competitors={competitors}
+                  igConnection={igConnection}
                   onSaved={onSaved}
                   onCancel={() => { setShowForm(false); setEditing(null) }}
                 />
