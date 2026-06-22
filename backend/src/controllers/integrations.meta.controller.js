@@ -883,6 +883,26 @@ async function connectFacebookToken(req, res, next) {
 
     const pageToken = chosen.accessToken || await derivePageToken(chosen.id, accessToken) || accessToken
 
+    // Validación: probamos una lectura real de métricas ANTES de guardar, para no
+    // dejar una integración rota. Listar páginas usa pages_show_list (que casi
+    // siempre está); leer followers/fan_count exige pages_read_engagement. Si el
+    // token no lo tiene, Graph devuelve #100 (missing permission) → mensaje claro.
+    try {
+      await axios.get(`${GRAPH_BASE}/${chosen.id}`, {
+        params: { fields: 'name,followers_count,fan_count', access_token: pageToken },
+      })
+    } catch (err) {
+      const fbErr = err.response?.data?.error
+      console.error('[FacebookToken] Validación de lectura falló:', JSON.stringify(fbErr ?? err.message))
+      if (fbErr?.code === 100 || fbErr?.code === 200 || fbErr?.code === 10) {
+        return res.status(400).json({
+          error: 'El token no puede leer las métricas de la página. Regenerá el System User Token en Business Manager incluyendo los permisos pages_read_engagement (seguidores, posts, engagement) y read_insights (alcance, impresiones), y verificá que el System User tenga la página asignada con acceso a métricas.',
+          code:  'MISSING_PERMISSION',
+        })
+      }
+      return res.status(400).json({ error: `No se pudieron leer las métricas de la página: ${fbErr?.message || err.message}` })
+    }
+
     // System User Token → page token permanente (expiresAt: null)
     await prisma.projectIntegration.upsert({
       where:  { projectId_type: { projectId, type: 'facebook' } },

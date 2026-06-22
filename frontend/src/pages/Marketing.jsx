@@ -17,6 +17,7 @@ import CompetitorsTab from '../components/marketing/CompetitorsTab'
 import MetaAdsTab    from '../components/marketing/MetaAdsTab'
 import GoogleAdsTab  from '../components/marketing/GoogleAdsTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
+import SocialIcon from '../components/marketing/SocialIcon'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import api from '../api/client'
 
@@ -43,10 +44,10 @@ const NAV = [
     id: 'rrss',
     label: '📱 RRSS',
     subs: [
-      { id: 'instagram',    label: '📸 Instagram' },
-      { id: 'tiktok',       label: '🎵 TikTok' },
-      { id: 'linkedin',     label: '💼 LinkedIn' },
-      { id: 'facebook',     label: '👍 Facebook' },
+      { id: 'instagram',    label: 'Instagram', network: 'instagram' },
+      { id: 'tiktok',       label: 'TikTok',    network: 'tiktok' },
+      { id: 'linkedin',     label: 'LinkedIn',  network: 'linkedin' },
+      { id: 'facebook',     label: 'Facebook',  network: 'facebook' },
       { id: 'competidores', label: '🏁 Competidores' },
       { id: 'youtube',      label: '▶️ YouTube',  soon: true },
     ],
@@ -251,7 +252,9 @@ export default function Marketing() {
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
                   >
-                    {s.label}
+                    {s.network
+                      ? <span className="inline-flex items-center gap-1.5"><SocialIcon network={s.network} className="w-4 h-4" />{s.label}</span>
+                      : s.label}
                     {s.soon && sub !== s.id && (
                       <span className="ml-1.5 text-[9px] bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 rounded-full px-1 leading-4">
                         soon

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
+import SocialIcon from './SocialIcon'
 
 const FB_BLUE = '#1877F2'
 
@@ -130,7 +131,7 @@ function AccountHeader({ page, integration, scraped, onDisconnect, disconnecting
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
       <div className="flex items-start gap-4">
         <div className="shrink-0">
-          <div className="w-14 h-14 rounded-lg flex items-center justify-center text-white text-2xl" style={{ background: FB_BLUE }}>👍</div>
+          <div className="w-14 h-14 rounded-lg flex items-center justify-center text-white" style={{ background: FB_BLUE }}><SocialIcon network="facebook" className="w-7 h-7" /></div>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
@@ -343,7 +344,7 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
   return (
     <div className="max-w-3xl mx-auto py-12">
       <div className="text-center mb-8">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 text-white mx-auto" style={{ background: FB_BLUE }}>👍</div>
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 text-white mx-auto" style={{ background: FB_BLUE }}><SocialIcon network="facebook" className="w-8 h-8" /></div>
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Conectá tu página de Facebook</h3>
         <p className="text-sm text-gray-400 dark:text-gray-500">Elegí cómo querés traer las métricas.</p>
       </div>
@@ -411,7 +412,7 @@ function CrossProjectFacebookPanel({ onSelectProject }) {
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-      <div className="text-4xl mb-3">👍</div>
+      <div className="flex justify-center mb-3"><SocialIcon network="facebook" className="w-10 h-10 text-gray-300 dark:text-gray-600" /></div>
       <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay snapshots de Facebook. Seleccioná un proyecto para empezar.</p>
     </div>
   )

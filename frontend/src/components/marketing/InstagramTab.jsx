@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
+import SocialIcon from './SocialIcon'
 import CrossProjectRRSSPanel from './CrossProjectRRSSPanel'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -422,8 +423,8 @@ function AccountHeader({ metrics, integration, onDisconnect, disconnecting, onRe
               className="w-14 h-14 rounded-full object-cover border-2 border-purple-200 dark:border-purple-800"
             />
           ) : (
-            <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-2xl">
-              📸
+            <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white">
+              <SocialIcon network="instagram" className="w-7 h-7" />
             </div>
           )}
         </div>
@@ -591,7 +592,7 @@ function ConnectPrompt({ projectId, onConnected }) {
   return (
     <div className="max-w-lg mx-auto py-10">
       <div className="text-center mb-6">
-        <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-3xl mb-4 mx-auto">📸</div>
+        <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-white mb-4 mx-auto"><SocialIcon network="instagram" className="w-8 h-8" /></div>
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Conectá Instagram</h3>
         <p className="text-sm text-gray-400 dark:text-gray-500">Elegí cómo querés traer los datos de la cuenta.</p>
       </div>
@@ -767,7 +768,7 @@ function CrossProjectInstagramPanel({ onSelectProject }) {
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-      <div className="text-4xl mb-3">📸</div>
+      <div className="flex justify-center mb-3"><SocialIcon network="instagram" className="w-10 h-10 text-gray-300 dark:text-gray-600" /></div>
       <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay snapshots de Instagram. Seleccioná un proyecto para empezar.</p>
     </div>
   )

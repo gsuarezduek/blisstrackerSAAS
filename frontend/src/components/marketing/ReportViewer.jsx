@@ -12,6 +12,7 @@
 import { useState, useRef } from 'react'
 import DOMPurify from 'dompurify'
 import RichTextEditor from '../RichTextEditor'
+import SocialIcon from './SocialIcon'
 import api from '../../api/client'
 import '../situation-editor.css'
 
@@ -1164,7 +1165,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
           <GroupHeader title="Redes Sociales" />
           <div className={`grid gap-5 ${[s.instagram, s.tiktok, s.linkedin, s.facebook].filter(Boolean).length >= 2 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
             {s.instagram && (
-              <SectionCard title="Instagram" icon="📸">
+              <SectionCard title="Instagram" icon={<SocialIcon network="instagram" className="w-5 h-5" />}>
                 <KpiGrid items={[
                   { label: 'Seguidores',   value: fmt(s.instagram.followersCount), delta: s.instagram.deltaFollowers },
                   { label: 'Engagement',  value: s.instagram.engagementRate != null ? `${s.instagram.engagementRate.toFixed(2)}%` : '—', delta: s.instagram.deltaEngagement },
@@ -1190,7 +1191,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             )}
 
             {s.tiktok && (
-              <SectionCard title="TikTok" icon="🎵">
+              <SectionCard title="TikTok" icon={<SocialIcon network="tiktok" className="w-5 h-5" />}>
                 <KpiGrid items={[
                   { label: 'Seguidores',   value: fmt(s.tiktok.followersCount), delta: s.tiktok.deltaFollowers },
                   { label: 'Engagement',  value: s.tiktok.engagementRate != null ? `${s.tiktok.engagementRate.toFixed(2)}%` : '—', delta: s.tiktok.deltaEngagement },
@@ -1210,7 +1211,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             )}
 
             {s.linkedin && (
-              <SectionCard title="LinkedIn" icon="💼">
+              <SectionCard title="LinkedIn" icon={<SocialIcon network="linkedin" className="w-5 h-5" />}>
                 <KpiGrid items={[
                   { label: 'Seguidores',   value: fmt(s.linkedin.followersCount), delta: s.linkedin.deltaFollowers },
                   { label: 'Engagement',  value: s.linkedin.engagementRate != null ? `${s.linkedin.engagementRate.toFixed(2)}%` : '—', delta: s.linkedin.deltaEngagement },
@@ -1233,7 +1234,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             )}
 
             {s.facebook && (
-              <SectionCard title="Facebook" icon="👍">
+              <SectionCard title="Facebook" icon={<SocialIcon network="facebook" className="w-5 h-5" />}>
                 <KpiGrid items={[
                   { label: 'Seguidores',   value: fmt(s.facebook.followersCount), delta: s.facebook.deltaFollowers },
                   { label: 'Engagement',  value: s.facebook.engagementRate != null ? `${s.facebook.engagementRate.toFixed(2)}%` : '—', delta: s.facebook.deltaEngagement },

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import CrossProjectRRSSPanel from './CrossProjectRRSSPanel'
+import SocialIcon from './SocialIcon'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -219,7 +220,7 @@ function AccountHeader({ metrics, integration, onDisconnect, disconnecting }) {
           {metrics?.avatarUrl && !imgError
             ? <img src={metrics.avatarUrl} alt={metrics.displayName ?? 'TikTok'} onError={() => setImgError(true)}
                 className="w-14 h-14 rounded-full object-cover border-2 border-teal-200 dark:border-teal-800" />
-            : <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-2xl" style={{ background: 'linear-gradient(135deg, #000 50%, #69C9D0 100%)' }}>🎵</div>
+            : <div className="w-14 h-14 rounded-full flex items-center justify-center text-white" style={{ background: 'linear-gradient(135deg, #000 50%, #69C9D0 100%)' }}><SocialIcon network="tiktok" className="w-7 h-7" /></div>
           }
         </div>
         <div className="flex-1 min-w-0">
@@ -306,7 +307,7 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
 
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 text-white" style={{ background: 'linear-gradient(135deg, #000 50%, #69C9D0 100%)' }}>🎵</div>
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 text-white" style={{ background: 'linear-gradient(135deg, #000 50%, #69C9D0 100%)' }}><SocialIcon network="tiktok" className="w-8 h-8" /></div>
       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Conectá tu cuenta de TikTok</h3>
       <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs mb-6">Necesitás una cuenta de TikTok Business o Creator.</p>
       {error && <p className="text-sm text-red-600 dark:text-red-400 mb-4 max-w-sm">{error}</p>}
@@ -338,7 +339,7 @@ function CrossProjectTikTokPanel({ onSelectProject }) {
   )
   if (!data?.length) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-      <div className="text-4xl mb-3">🎵</div>
+      <div className="flex justify-center mb-3"><SocialIcon network="tiktok" className="w-10 h-10 text-gray-300 dark:text-gray-600" /></div>
       <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay snapshots de TikTok. Seleccioná un proyecto para empezar.</p>
     </div>
   )
