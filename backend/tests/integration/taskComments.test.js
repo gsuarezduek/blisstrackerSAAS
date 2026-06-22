@@ -2,7 +2,7 @@ jest.mock('../../src/lib/prisma', () => ({
   workspace:       { findUnique: jest.fn() },
   workspaceMember: { findUnique: jest.fn() },
   task:            { findUnique: jest.fn(), findFirst: jest.fn() },
-  projectMember:   { findUnique: jest.fn() },
+  projectMember:   { findUnique: jest.fn(), findMany: jest.fn() },
   taskComment:     { create: jest.fn(), findMany: jest.fn() },
   notification:    { createMany: jest.fn() },
 }))
@@ -173,6 +173,49 @@ describe('POST /api/tasks/:id/comments', () => {
     expect(notifiedIds).toContain(2) // dueño
     expect(notifiedIds).toContain(3) // comentador previo
     expect(notifiedIds).toHaveLength(2) // sin duplicados
+  })
+
+  it('notifica con TASK_MENTION a un nombre completo de 3 palabras (autocompletado)', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1 }))
+    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
+    prisma.projectMember.findMany.mockResolvedValue([
+      { user: { id: 7, name: 'María José García' } },
+    ])
+    prisma.taskComment.create.mockResolvedValue(makeComment())
+    prisma.taskComment.findMany.mockResolvedValue([])
+    prisma.notification.createMany.mockResolvedValue({ count: 1 })
+
+    await request(app)
+      .post('/api/tasks/10/comments')
+      .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ text: 'dale una mano @María José García por favor' })
+
+    expect(prisma.notification.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ userId: 7, type: 'TASK_MENTION' }),
+        ]),
+      })
+    )
+  })
+
+  it('no confunde un prefijo: "@Ana" no menciona a "Analía"', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1 }))
+    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
+    prisma.projectMember.findMany.mockResolvedValue([
+      { user: { id: 8, name: 'Analía Suárez' } },
+    ])
+    prisma.taskComment.create.mockResolvedValue(makeComment())
+    prisma.taskComment.findMany.mockResolvedValue([])
+
+    await request(app)
+      .post('/api/tasks/10/comments')
+      .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ text: 'gracias @Ana' })
+
+    expect(prisma.notification.createMany).not.toHaveBeenCalled()
   })
 
   it('devuelve 400 si el texto está vacío', async () => {
