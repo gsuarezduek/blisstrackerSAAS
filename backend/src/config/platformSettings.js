@@ -10,7 +10,7 @@
  *   type     — 'integer' | 'float' | 'boolean' | 'string' | 'pricingTiers'
  *   default  — valor inicial (al crear el row por primera vez)
  *   min/max  — bounds opcionales (defensa en profundidad)
- *   group    — 'commercial' | 'operational' (para agrupar la UI)
+ *   group    — 'commercial' | 'operational' | 'scraping' | 'platform' (agrupa la UI)
  *   label    — nombre legible
  *   help     — descripción larga para el panel
  */
@@ -176,11 +176,15 @@ const PLATFORM_SETTINGS = [
     label:   'Retención de logs de emails (días)',
     help:    'Después de cuántos días se borran los EmailLog. Afecta el panel SuperAdmin → Emails.',
   },
+
+  // ─── Scraping (Apify) ──────────────────────────────────────────────────────
+  // Actores y topes de posts por red. El token de Apify (APIFY_API_TOKEN) sigue
+  // siendo una env — es la credencial real y no se edita desde el panel.
   {
     key:     'apifyInstagramActor',
     type:    'string',
     default: '',
-    group:   'operational',
+    group:   'scraping',
     label:   'Actor de Apify para Instagram (scraping)',
     help:    'ID del actor de Apify que scrapea perfiles de Instagram. Se acepta "usuario/actor" o "usuario~actor" — se normaliza solo. Vacío = usa la env APIFY_INSTAGRAM_ACTOR; si ambos están vacíos cae al default oficial `apify~instagram-profile-scraper`. Editable acá para probar/cambiar de actor sin redeploy. Si el actor usa otras claves de input/output, el mapeo se ajusta en runApifyInstagram/normalizeApifyProfile (socialScrape.service.js).',
   },
@@ -190,7 +194,7 @@ const PLATFORM_SETTINGS = [
     default: 0,
     min:     0,
     max:     200,
-    group:   'operational',
+    group:   'scraping',
     label:   'Posts a traer por scrape de Instagram',
     help:    'Cantidad de publicaciones recientes que trae cada scrape de Instagram (debe cubrir el mes completo). 0 = usa la variable de entorno APIFY_INSTAGRAM_POSTS_LIMIT o el default (60). Subir si una cuenta postea mucho y los meses quedan incompletos.',
   },
@@ -198,7 +202,7 @@ const PLATFORM_SETTINGS = [
     key:     'apifyLinkedinActor',
     type:    'string',
     default: '',
-    group:   'operational',
+    group:   'scraping',
     label:   'Actor de Apify para LinkedIn (scraping)',
     help:    'ID del actor de Apify que scrapea Company Pages de LinkedIn. Se acepta tanto "usuario/actor" (como lo muestra Apify) como "usuario~actor" — se normaliza solo. Importante: tiene que ser un actor que devuelva métricas de la página (seguidores y/o posts), no un utilitario (ej. un "id-to-slug finder" NO sirve). Editable acá para probar e ir cambiando de actor sin redeploy. Vacío = usa la env APIFY_LINKEDIN_ACTOR; si ambos están vacíos → SCRAPE_NOT_CONFIGURED. Si el actor usa otras claves de input/output, el mapeo se ajusta en runApifyLinkedin/normalizeApifyCompany (socialScrape.service.js).',
   },
@@ -208,7 +212,7 @@ const PLATFORM_SETTINGS = [
     default: 0,
     min:     0,
     max:     200,
-    group:   'operational',
+    group:   'scraping',
     label:   'Posts a traer por scrape de LinkedIn',
     help:    'Cantidad de posts recientes que trae cada scrape de LinkedIn (debe cubrir el mes completo). 0 = usa la variable de entorno APIFY_LINKEDIN_POSTS_LIMIT o el default (30). Subir si una página postea mucho y los meses quedan incompletos.',
   },
@@ -216,7 +220,7 @@ const PLATFORM_SETTINGS = [
     key:     'apifyFacebookActor',
     type:    'string',
     default: '',
-    group:   'operational',
+    group:   'scraping',
     label:   'Actor de Apify para Facebook (scraping)',
     help:    'ID del actor de Apify que scrapea Páginas de Facebook. Se acepta "usuario/actor" o "usuario~actor" — se normaliza solo. Tiene que devolver métricas de la página (seguidores y/o posts). Editable acá para probar e ir cambiando de actor sin redeploy. Vacío = usa la env APIFY_FACEBOOK_ACTOR; si ambos están vacíos → SCRAPE_NOT_CONFIGURED. Si el actor usa otras claves de input/output, el mapeo se ajusta en runApifyFacebook/normalizeApifyFacebook (socialScrape.service.js).',
   },
@@ -226,7 +230,7 @@ const PLATFORM_SETTINGS = [
     default: 0,
     min:     0,
     max:     200,
-    group:   'operational',
+    group:   'scraping',
     label:   'Posts a traer por scrape de Facebook',
     help:    'Cantidad de posts recientes que trae cada scrape de Facebook (debe cubrir el mes completo). 0 = usa la variable de entorno APIFY_FACEBOOK_POSTS_LIMIT o el default (30). Subir si una página postea mucho y los meses quedan incompletos.',
   },

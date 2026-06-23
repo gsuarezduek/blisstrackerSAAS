@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const {
   scrapeInstagramProfile, parseInstagramUsername,
   scrapeLinkedinCompany,  parseLinkedinCompany,
+  scrapeFacebookPage,     parseFacebookPage,
 } = require('../services/socialScrape.service')
 const { cacheImagesInArray } = require('../services/socialImageCache.service')
 
@@ -27,6 +28,20 @@ const PLATFORM_SCRAPERS = {
       }
     },
     invalidMsg: 'URL o nombre de Company Page de LinkedIn inválido.',
+  },
+  facebook: {
+    parseId: parseFacebookPage,
+    // El actor de Páginas trae seguidores (no posts) → engagement/avgLikes quedan
+    // en null. scrapeFacebookPage devuelve el nombre en page.name; mapeamos al shape común.
+    scrape:  async (slug, opts) => {
+      const m = await scrapeFacebookPage(slug, opts)
+      return {
+        ...m,
+        name:          m.name ?? m.page?.name ?? slug,
+        profilePicUrl: m.profilePicUrl ?? m.page?.profilePicUrl ?? null,
+      }
+    },
+    invalidMsg: 'URL o nombre de página de Facebook inválido.',
   },
 }
 

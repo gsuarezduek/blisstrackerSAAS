@@ -31,6 +31,19 @@ const PLATFORMS = {
     avatarBg:     'from-blue-600 to-sky-500',
     sparkColor:   '#0A66C2',
   },
+  facebook: {
+    label:        'Facebook',
+    icon:         '👍',
+    placeholder:  'tu-pagina o https://facebook.com/tu-pagina',
+    profileUrl:   (u) => `https://www.facebook.com/${u}/`,
+    handle:       (u) => u,
+    accentClass:  'from-blue-700 to-blue-500',
+    accentBorder: 'border-blue-200 dark:border-blue-800',
+    accentText:   'text-blue-600 hover:text-blue-700 dark:text-blue-400',
+    accentRing:   'focus:ring-blue-500',
+    avatarBg:     'from-blue-700 to-blue-500',
+    sparkColor:   '#1877F2',
+  },
 }
 const PLATFORM_KEYS = Object.keys(PLATFORMS)
 

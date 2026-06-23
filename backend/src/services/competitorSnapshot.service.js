@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const {
   scrapeInstagramProfile,
   scrapeLinkedinCompany,
+  scrapeFacebookPage,
 } = require('./socialScrape.service')
 const { cacheImagesInArray }     = require('./socialImageCache.service')
 
@@ -9,6 +10,7 @@ const { cacheImagesInArray }     = require('./socialImageCache.service')
 const PLATFORM_SCRAPERS = {
   instagram: scrapeInstagramProfile,
   linkedin:  scrapeLinkedinCompany,
+  facebook:  scrapeFacebookPage,
 }
 
 function currentMonthStr() {

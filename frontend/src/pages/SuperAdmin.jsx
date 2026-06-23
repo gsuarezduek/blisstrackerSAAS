@@ -1063,8 +1063,11 @@ function SectionUsers() {
 const SETTINGS_GROUP_LABELS = {
   commercial:  'Comercial',
   operational: 'Operativo',
-  platform:    'Notificaciones de plataforma',
+  scraping:    'Scraping',
+  platform:    'Notificaciones',
 }
+
+const SETTINGS_GROUP_ORDER = ['commercial', 'operational', 'scraping', 'platform']
 
 const RETENTION_KEYS_FE = [
   'notificationReadRetentionDays',
@@ -1200,6 +1203,7 @@ function SectionSettings() {
   const [logsOpen, setLogsOpen] = useState(false)
   const [cleanupPreview, setCleanupPreview] = useState(null)
   const [cleanupRunning, setCleanupRunning] = useState(false)
+  const [activeGroup, setActiveGroup] = useState('commercial')
 
   async function load() {
     setLoading(true)
@@ -1288,11 +1292,18 @@ function SectionSettings() {
     return <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center text-gray-400 text-sm">Cargando...</div>
   }
 
-  const groups = ['commercial', 'operational', 'platform'].map(g => ({
-    id:    g,
-    label: SETTINGS_GROUP_LABELS[g],
-    items: settings.filter(s => s.group === g),
-  }))
+  const groups = SETTINGS_GROUP_ORDER
+    .map(g => ({
+      id:    g,
+      label: SETTINGS_GROUP_LABELS[g],
+      items: settings.filter(s => s.group === g),
+    }))
+    .filter(g => g.items.length > 0)
+
+  // Si el grupo activo quedó vacío (datos viejos), cae al primero disponible.
+  const visibleGroups = groups.some(g => g.id === activeGroup)
+    ? groups.filter(g => g.id === activeGroup)
+    : groups.slice(0, 1)
 
   return (
     <div className="space-y-4">
@@ -1303,7 +1314,35 @@ function SectionSettings() {
         </p>
       </div>
 
-      {groups.map(group => (
+      {/* Navegación por subsecciones */}
+      <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-gray-50/90 dark:bg-gray-900/90 backdrop-blur-sm">
+        <div className="flex flex-wrap gap-2">
+          {groups.map(group => {
+            const groupDirty = dirty.filter(s => group.items.some(i => i.key === s.key)).length
+            const isActive = group.id === activeGroup
+            return (
+              <button
+                key={group.id}
+                onClick={() => setActiveGroup(group.id)}
+                className={`text-sm px-3 py-1.5 rounded-full font-medium transition-colors flex items-center gap-1.5 ${
+                  isActive
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-primary-300 dark:hover:border-primary-700'
+                }`}
+              >
+                {group.label}
+                {groupDirty > 0 && (
+                  <span className={`text-xs px-1.5 rounded-full ${isActive ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+                    {groupDirty}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {visibleGroups.map(group => (
         <div key={group.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700">
           <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
             <h3 className="font-semibold text-gray-900 dark:text-white">{group.label}</h3>
