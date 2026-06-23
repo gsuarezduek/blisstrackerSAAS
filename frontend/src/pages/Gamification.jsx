@@ -1,0 +1,503 @@
+import { useState, useEffect, useCallback } from 'react'
+import api from '../api/client'
+import Navbar from '../components/Navbar'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
+
+const WEEKDAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+
+const STATUS_PILL = {
+  draft:    { label: 'Borrador',  cls: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
+  active:   { label: 'Activo',    cls: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
+  finished: { label: 'Finalizado', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
+  archived: { label: 'Archivado', cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
+}
+
+const SUBJECT_LABEL = { project: 'Proyectos', person: 'Personas', team: 'Equipos' }
+
+function visibilitySummary(rule = {}) {
+  const mode = rule.mode || 'always'
+  if (mode === 'always') return 'Siempre visible'
+  if (mode === 'date_range') return 'Entre fechas'
+  if (mode === 'recurring') {
+    if (rule.kind === 'last_n_days_of_month') return `Últimos ${rule.n || 7} días del mes`
+    if (rule.kind === 'first_n_days_of_month') return `Primeros ${rule.n || 7} días del mes`
+    if (rule.kind === 'day_range_of_month') return `Días ${rule.fromDay}–${rule.toDay} del mes`
+    if (rule.kind === 'weekdays') return `${(rule.weekdays || []).map((d) => WEEKDAYS[d]).join(', ') || '—'}`
+  }
+  return mode
+}
+
+export default function Gamification() {
+  const { enabled, loading: flagLoading } = useFeatureFlag('gamification')
+  const [games, setGames] = useState([])
+  const [catalog, setCatalog] = useState([])
+  const [members, setMembers] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(null)   // game o {} para nuevo
+  const [scoresFor, setScoresFor] = useState(null) // game manual para cargar puntos
+
+  const load = useCallback(() => {
+    setLoading(true)
+    Promise.all([
+      api.get('/gamification/games'),
+      api.get('/gamification/catalog'),
+      api.get('/workspaces/current/members'),
+      api.get('/projects'),
+    ]).then(([g, c, m, p]) => {
+      setGames(g.data.games || [])
+      setCatalog(c.data.types || [])
+      setMembers((m.data || []).filter((u) => u.active))
+      setProjects((p.data || []).filter((pr) => pr.active !== false))
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { if (enabled) load() }, [enabled, load])
+
+  async function setStatus(game, status) {
+    await api.patch(`/gamification/games/${game.id}`, { status })
+    load()
+  }
+  async function finish(game) {
+    if (!window.confirm('¿Finalizar el juego y proclamar al ganador según el ranking actual?')) return
+    const { data } = await api.post(`/gamification/games/${game.id}/finish`)
+    load()
+    if (data.winner) window.alert(`🏆 Ganador: ${data.winner.label} (${data.winner.score} pts)`)
+    else window.alert('El juego se finalizó, pero todavía nadie tiene puntaje.')
+  }
+  async function remove(game) {
+    if (!window.confirm(`¿Eliminar el juego "${game.title}"? Esta acción no se puede deshacer.`)) return
+    await api.delete(`/gamification/games/${game.id}`)
+    load()
+  }
+
+  if (flagLoading) return null
+  if (!enabled) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navbar />
+        <main className="max-w-3xl mx-auto px-4 py-16 text-center">
+          <p className="text-5xl mb-4">🏆</p>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Gamification no está habilitado</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Pedile al equipo de BlissTracker que active el módulo, o revisá Preferencias → Módulos adicionales.</p>
+        </main>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Navbar />
+      <main className="max-w-5xl mx-auto px-4 py-8">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🏆 Gamification</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Creá juegos y desafíos para el equipo. Cuando un juego está <strong>activo</strong> y dentro de su ventana, aparece para todos con el botón flotante 🏆.
+            </p>
+          </div>
+          <button
+            onClick={() => setEditing({})}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl transition-colors shadow-sm"
+          >
+            + Nuevo juego
+          </button>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-gray-400">Cargando…</p>
+        ) : games.length === 0 ? (
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-10 text-center">
+            <p className="text-4xl mb-3">🎯</p>
+            <p className="text-gray-700 dark:text-gray-200 font-medium mb-1">Todavía no hay juegos</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Creá tu primer desafío: una competencia, una votación o un puntaje manual.</p>
+            <button onClick={() => setEditing({})} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl">+ Nuevo juego</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {games.map((g) => (
+              <GameCard
+                key={g.id}
+                game={g}
+                onEdit={() => setEditing(g)}
+                onScores={() => setScoresFor(g)}
+                onActivate={() => setStatus(g, 'active')}
+                onPause={() => setStatus(g, 'draft')}
+                onFinish={() => finish(g)}
+                onRemove={() => remove(g)}
+              />
+            ))}
+          </div>
+        )}
+      </main>
+
+      {editing !== null && (
+        <GameEditor
+          game={editing.id ? editing : null}
+          catalog={catalog}
+          members={members}
+          projects={projects}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load() }}
+        />
+      )}
+
+      {scoresFor && (
+        <ManualScores
+          game={scoresFor}
+          members={members}
+          projects={projects}
+          onClose={() => setScoresFor(null)}
+          onSaved={() => { setScoresFor(null); load() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Card de un juego ─────────────────────────────────────────────────────────
+
+function GameCard({ game, onEdit, onScores, onActivate, onPause, onFinish, onRemove }) {
+  const pill = STATUS_PILL[game.status] || STATUS_PILL.draft
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${pill.cls}`}>{pill.label}</span>
+            {game.status === 'active' && (
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${game.visibleNow ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
+                {game.visibleNow ? 'Visible ahora' : 'Fuera de ventana'}
+              </span>
+            )}
+            <span className="text-[11px] text-gray-400">{game.typeName}</span>
+          </div>
+          <h3 className="font-semibold text-gray-900 dark:text-white truncate">{game.title}</h3>
+          {game.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{game.description}</p>}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <span>👥 {SUBJECT_LABEL[game.subjectType]}</span>
+            <span>👁 {visibilitySummary(game.visibilityRule)}</span>
+            {game.prize && <span>🎁 {game.prize}</span>}
+            {game.winnerSubject && <span className="text-blue-600 dark:text-blue-300">🏆 {game.winnerSubject.label} ({game.winnerSubject.score})</span>}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+        {game.status === 'draft' && <Btn onClick={onActivate} kind="primary">▶ Activar</Btn>}
+        {game.status === 'active' && <Btn onClick={onPause}>⏸ Pausar</Btn>}
+        {game.scoring === 'manual' && game.status !== 'finished' && <Btn onClick={onScores}>🔢 Cargar puntos</Btn>}
+        <Btn onClick={onEdit}>✏️ Editar</Btn>
+        {game.status !== 'finished' && <Btn onClick={onFinish}>🏁 Finalizar</Btn>}
+        <Btn onClick={onRemove} kind="danger">🗑 Eliminar</Btn>
+      </div>
+    </div>
+  )
+}
+
+function Btn({ children, onClick, kind }) {
+  const cls = kind === 'primary'
+    ? 'text-white bg-primary-600 hover:bg-primary-700'
+    : kind === 'danger'
+      ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-900/40'
+      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600'
+  return <button onClick={onClick} className={`text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${cls}`}>{children}</button>
+}
+
+// ─── Editor de juego (crear/editar) ───────────────────────────────────────────
+
+function GameEditor({ game, catalog, members, projects, onClose, onSaved }) {
+  const isNew = !game
+  const [type, setType] = useState(game?.type || '')
+  const def = catalog.find((c) => c.key === type) || null
+
+  const [title, setTitle] = useState(game?.title || '')
+  const [description, setDescription] = useState(game?.description || '')
+  const [prize, setPrize] = useState(game?.prize || '')
+  const [subjectType, setSubjectType] = useState(game?.subjectType || 'team')
+  const [projectIds, setProjectIds] = useState(game?.config?.projectIds || [])
+  const [candidateIds, setCandidateIds] = useState(game?.config?.candidateIds || [])
+  const [startDate, setStartDate] = useState(game?.startDate ? game.startDate.slice(0, 10) : '')
+  const [endDate, setEndDate] = useState(game?.endDate ? game.endDate.slice(0, 10) : '')
+  const [vis, setVis] = useState(game?.visibilityRule || { mode: 'always' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  // Al elegir un tipo nuevo, precargar defaults del catálogo.
+  function chooseType(key) {
+    setType(key)
+    const d = catalog.find((c) => c.key === key)
+    if (d) {
+      setSubjectType(d.subjectType)
+      setVis(d.defaultVisibility || { mode: 'always' })
+    }
+  }
+
+  const scoring = def?.scoring || game?.scoring
+  const effSubjectType = def?.subjectConfigurable ? subjectType : (def?.subjectType || game?.subjectType)
+
+  async function save(activate) {
+    setError('')
+    if (!type) return setError('Elegí un tipo de juego')
+    if (!title.trim()) return setError('El enunciado es obligatorio')
+    if (def?.requiresPeriod && (!startDate || !endDate)) return setError('Este juego necesita fecha de inicio y fin')
+
+    const config = {}
+    if (scoring === 'auto_metric') config.projectIds = projectIds
+    if (scoring === 'vote') config.candidateIds = candidateIds
+
+    const payload = {
+      title: title.trim(),
+      description: description.trim() || null,
+      prize: prize.trim() || null,
+      config,
+      visibilityRule: vis,
+      startDate: startDate || null,
+      endDate: endDate || null,
+    }
+    if (def?.subjectConfigurable) payload.subjectType = subjectType
+
+    setSaving(true)
+    try {
+      if (isNew) {
+        payload.type = type
+        if (activate) payload.status = 'active'
+        await api.post('/gamification/games', payload)
+      } else {
+        if (activate) payload.status = 'active'
+        await api.patch(`/gamification/games/${game.id}`, payload)
+      }
+      onSaved()
+    } catch (e) {
+      setError(e.response?.data?.error || 'No se pudo guardar')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} title={isNew ? 'Nuevo juego' : 'Editar juego'}>
+      {/* Tipo */}
+      {isNew ? (
+        <Field label="Tipo de juego">
+          <div className="space-y-2">
+            {catalog.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => chooseType(c.key)}
+                className={`w-full text-left p-3 rounded-xl border transition-colors ${type === c.key ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+              >
+                <p className="text-sm font-medium text-gray-900 dark:text-white">{c.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{c.description}</p>
+              </button>
+            ))}
+          </div>
+        </Field>
+      ) : (
+        <p className="text-xs text-gray-400 mb-3">{def?.name || game.typeName}</p>
+      )}
+
+      {type && (
+        <>
+          <Field label="Enunciado del desafío">
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: ¿Qué proyecto suma más seguidores en junio?" className={inputCls} />
+          </Field>
+          <Field label="Descripción (opcional)">
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={inputCls} />
+          </Field>
+          <Field label="Premio (opcional)">
+            <input value={prize} onChange={(e) => setPrize(e.target.value)} placeholder="Ej: Día libre / Almuerzo del equipo" className={inputCls} />
+          </Field>
+
+          {/* Sujeto configurable (solo custom) */}
+          {def?.subjectConfigurable && (
+            <Field label="¿Quiénes compiten?">
+              <select value={subjectType} onChange={(e) => setSubjectType(e.target.value)} className={inputCls}>
+                <option value="person">Personas</option>
+                <option value="project">Proyectos</option>
+                <option value="team">Equipos custom</option>
+              </select>
+            </Field>
+          )}
+
+          {/* Config por scoring */}
+          {scoring === 'auto_metric' && (
+            <Field label="Proyectos que participan (vacío = todos)">
+              <CheckList items={projects.map((p) => ({ id: p.id, label: p.name }))} selected={projectIds} onChange={setProjectIds} />
+            </Field>
+          )}
+          {scoring === 'vote' && (
+            <Field label="Candidatos (vacío = todo el equipo)">
+              <CheckList items={members.map((m) => ({ id: m.id, label: m.name }))} selected={candidateIds} onChange={setCandidateIds} />
+            </Field>
+          )}
+          {scoring === 'manual' && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1 mb-3">
+              Después de crear el juego vas a poder cargar los puntos con el botón <strong>🔢 Cargar puntos</strong>.
+              {effSubjectType === 'team' && ' Cada fila representa un equipo.'}
+            </p>
+          )}
+
+          {/* Período (date_range / auto_metric) */}
+          {(def?.requiresPeriod || vis.mode === 'date_range') && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Inicio"><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} /></Field>
+              <Field label="Fin"><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} /></Field>
+            </div>
+          )}
+
+          {/* Visibilidad */}
+          <VisibilityEditor vis={vis} setVis={setVis} />
+
+          {error && <p className="text-sm text-red-600 dark:text-red-400 mt-2">{error}</p>}
+
+          <div className="flex justify-end gap-2 mt-5">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl">Cancelar</button>
+            <button disabled={saving} onClick={() => save(false)} className="px-4 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-xl disabled:opacity-50">Guardar borrador</button>
+            <button disabled={saving} onClick={() => save(true)} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar y activar'}</button>
+          </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
+function VisibilityEditor({ vis, setVis }) {
+  const mode = vis.mode || 'always'
+  function set(patch) { setVis({ ...vis, ...patch }) }
+  return (
+    <Field label="¿Cuándo se muestra a los usuarios?">
+      <select value={mode} onChange={(e) => set({ mode: e.target.value })} className={inputCls}>
+        <option value="always">Siempre (mientras esté activo)</option>
+        <option value="date_range">Entre fechas (usa Inicio/Fin de arriba)</option>
+        <option value="recurring">Ventana recurrente del mes/semana</option>
+      </select>
+      {mode === 'recurring' && (
+        <div className="mt-2 space-y-2">
+          <select value={vis.kind || 'last_n_days_of_month'} onChange={(e) => set({ kind: e.target.value })} className={inputCls}>
+            <option value="last_n_days_of_month">Últimos N días del mes</option>
+            <option value="first_n_days_of_month">Primeros N días del mes</option>
+            <option value="day_range_of_month">Rango de días del mes</option>
+            <option value="weekdays">Días de la semana</option>
+          </select>
+          {(vis.kind === 'last_n_days_of_month' || vis.kind === 'first_n_days_of_month' || !vis.kind) && (
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+              N días: <input type="number" min={1} max={28} value={vis.n ?? 7} onChange={(e) => set({ n: Number(e.target.value) })} className="w-20 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" />
+            </label>
+          )}
+          {vis.kind === 'day_range_of_month' && (
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+              Del día <input type="number" min={1} max={31} value={vis.fromDay ?? 1} onChange={(e) => set({ fromDay: Number(e.target.value) })} className="w-16 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" />
+              al <input type="number" min={1} max={31} value={vis.toDay ?? 31} onChange={(e) => set({ toDay: Number(e.target.value) })} className="w-16 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" />
+            </div>
+          )}
+          {vis.kind === 'weekdays' && (
+            <div className="flex flex-wrap gap-1">
+              {WEEKDAYS.map((w, i) => {
+                const on = (vis.weekdays || []).includes(i)
+                return (
+                  <button key={i} onClick={() => set({ weekdays: on ? (vis.weekdays || []).filter((d) => d !== i) : [...(vis.weekdays || []), i] })}
+                    className={`px-2 py-1 rounded-lg text-xs font-medium ${on ? 'bg-primary-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>{w}</button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </Field>
+  )
+}
+
+// ─── Carga manual de puntos ───────────────────────────────────────────────────
+
+function ManualScores({ game, members, projects, onClose, onSaved }) {
+  const [rows, setRows] = useState([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api.get(`/gamification/games/${game.id}`).then(({ data }) => {
+      const existing = data.leaderboard?.subjects || []
+      if (existing.length) setRows(existing.map((s) => ({ subjectId: s.subjectId, label: s.label, points: s.score })))
+      else setRows([{ subjectId: `s${Date.now()}`, label: '', points: 0 }])
+    }).catch(() => setRows([{ subjectId: `s${Date.now()}`, label: '', points: 0 }]))
+  }, [game.id])
+
+  function update(i, patch) { setRows((r) => r.map((row, idx) => idx === i ? { ...row, ...patch } : row)) }
+  function add() { setRows((r) => [...r, { subjectId: `s${Date.now()}${r.length}`, label: '', points: 0 }]) }
+  function removeRow(i) { setRows((r) => r.filter((_, idx) => idx !== i)) }
+
+  async function save() {
+    setSaving(true)
+    try {
+      const scores = rows.filter((r) => r.label.trim()).map((r) => ({ subjectId: r.subjectId, label: r.label.trim(), points: Number(r.points) || 0 }))
+      await api.put(`/gamification/games/${game.id}/scores`, { scores })
+      onSaved()
+    } catch { setSaving(false) }
+  }
+
+  // Sugerencias rápidas de etiqueta según el sujeto del juego
+  const suggestions = game.subjectType === 'person' ? members.map((m) => m.name) : game.subjectType === 'project' ? projects.map((p) => p.name) : []
+
+  return (
+    <Modal onClose={onClose} title={`Puntos · ${game.title}`}>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Cargá el puntaje de cada participante. El de mayor puntaje gana.</p>
+      <div className="space-y-2">
+        {rows.map((row, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input list={suggestions.length ? 'ms-sug' : undefined} value={row.label} onChange={(e) => update(i, { label: e.target.value })} placeholder="Nombre / equipo" className={`${inputCls} flex-1`} />
+            <input type="number" value={row.points} onChange={(e) => update(i, { points: e.target.value })} className="w-24 px-2 py-2 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm" />
+            <button onClick={() => removeRow(i)} className="text-gray-400 hover:text-red-500 px-1">✕</button>
+          </div>
+        ))}
+        {suggestions.length > 0 && <datalist id="ms-sug">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>}
+      </div>
+      <button onClick={add} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-medium">+ Agregar fila</button>
+      <div className="flex justify-end gap-2 mt-5">
+        <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl">Cancelar</button>
+        <button disabled={saving} onClick={save} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar puntos'}</button>
+      </div>
+    </Modal>
+  )
+}
+
+// ─── UI helpers ───────────────────────────────────────────────────────────────
+
+const inputCls = 'w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
+
+function Field({ label, children }) {
+  return (
+    <div className="mb-3">
+      <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function CheckList({ items, selected, onChange }) {
+  function toggle(id) { onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]) }
+  return (
+    <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-xl p-2 space-y-1">
+      {items.length === 0 && <p className="text-xs text-gray-400 px-1">Sin opciones</p>}
+      {items.map((it) => (
+        <label key={it.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 px-1 py-0.5 cursor-pointer">
+          <input type="checkbox" checked={selected.includes(it.id)} onChange={() => toggle(it.id)} className="rounded" />
+          {it.label}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+function Modal({ title, children, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg my-8 p-5 z-10">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}

@@ -105,6 +105,7 @@ model Workspace {
   projectBriefs          ProjectBrief[]
   rrhhMetricSnapshots    RrhhMetricSnapshot[]
   projectAccesses        ProjectAccess[]
+  games                  Game[]
 
   @@index([slug])
 }
@@ -1837,4 +1838,84 @@ model ConversionEvent {
 
   @@index([name, createdAt])
   @@index([workspaceId])
+}
+
+// ─── GAMIFICATION (juegos/desafíos del workspace) ────────────────────────────
+// Módulo gateado por el feature flag `gamification`. El catálogo de TIPOS de
+// juego vive en código (backend/src/lib/gameCatalog.js, espejo en el frontend);
+// el admin crea INSTANCIAS (Game) eligiendo un tipo y configurándolo.
+// Cada juego es autónomo: su propio ranking, ganador y premio (sin temporada
+// acumulada). Sujetos posibles: proyectos, personas o equipos custom.
+
+model Game {
+  id             Int       @id @default(autoincrement())
+  workspaceId    Int
+  type           String // key del catálogo (gameCatalog.js)
+  title          String // enunciado del desafío
+  description    String?   @db.Text
+  prize          String? // premio (texto libre)
+  subjectType    String // "project" | "person" | "team"
+  scoring        String // "auto_metric" | "vote" | "manual"
+  config         Json      @default("{}") // params del tipo (métrica, candidateIds, projectIds, etc.)
+  visibilityRule Json      @default("{}") // { mode: "always" | "date_range" | "recurring", ... }
+  startDate      DateTime?
+  endDate        DateTime?
+  status         String    @default("draft") // "draft" | "active" | "finished" | "archived"
+  winnerSubject  Json? // ganador resuelto al finalizar: { subjectId, label, score }
+  createdById    Int
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  teams     GameTeam[]
+  votes     GameVote[]
+  scores    GameScore[]
+
+  @@index([workspaceId, status])
+}
+
+// Equipos custom definidos por el admin POR juego (cuando subjectType = "team").
+model GameTeam {
+  id         String   @id @default(uuid())
+  gameId     Int
+  name       String
+  memberIds  Json     @default("[]") // [userId, ...]
+  projectIds Json     @default("[]") // [projectId, ...]
+  createdAt  DateTime @default(now())
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([gameId])
+}
+
+// Votos (scoring = "vote"). Un voto por persona por juego; sin auto-voto (validado en el controller).
+model GameVote {
+  id           Int      @id @default(autoincrement())
+  gameId       Int
+  voterId      Int // quién vota
+  targetUserId Int // a quién vota
+  createdAt    DateTime @default(now())
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, voterId])
+  @@index([gameId])
+}
+
+// Puntajes manuales (scoring = "manual"). El admin carga puntos por sujeto.
+model GameScore {
+  id          Int      @id @default(autoincrement())
+  gameId      Int
+  subjectType String // "project" | "person" | "team"
+  subjectId   String // id del sujeto (projectId/userId/teamId como string)
+  label       String? // etiqueta editable (ej. nombre de un sujeto manual)
+  points      Float    @default(0)
+  detail      Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, subjectId])
+  @@index([gameId])
 }

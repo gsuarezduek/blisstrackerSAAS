@@ -21,6 +21,11 @@ const FEATURE_FLAGS = [
     name: 'Sección EOS',
     description: 'Sistema Entrepreneurial Operating System basado en el libro Traction de Gino Wickman. Incluye Visión, Personas, Datos, Asuntos, Procesos y Tracción.',
   },
+  {
+    key: 'gamification',
+    name: 'Gamification',
+    description: 'Juegos y desafíos para el equipo: competencias entre proyectos, personas o equipos, votaciones (ej. compañero del mes) y rankings por premios. Configurable desde Administración → Gamification.',
+  },
 ]
 
 module.exports = { FEATURE_FLAGS }

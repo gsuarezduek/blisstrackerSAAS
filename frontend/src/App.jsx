@@ -55,6 +55,7 @@ import JoinWorkspace from './pages/JoinWorkspace'
 import Marketing   from './pages/Marketing'
 import Billing     from './pages/Billing'
 import EOS         from './pages/EOS'
+import Gamification from './pages/Gamification'
 import OAuthResult  from './pages/OAuthResult'
 import LegalPage    from './pages/TermsPage'
 import ReportPublic from './pages/ReportPublic'
@@ -124,6 +125,7 @@ export default function App() {
           <Route path="/admin/productivity" element={<AdminRoute><Productivity /></AdminRoute>} />
           <Route path="/admin/rrhh"         element={<AdminRoute><RRHH        /></AdminRoute>} />
           <Route path="/admin/eos"          element={<AdminRoute><EOS         /></AdminRoute>} />
+          <Route path="/admin/gamification" element={<AdminRoute><Gamification /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <GlobalShortcuts />

@@ -50,6 +50,7 @@ const legalRoutes             = require('./routes/legal.routes')
 const publicReportRoutes      = require('./routes/publicReport.routes')
 const eosRoutes               = require('./routes/eos.routes')
 const processesRoutes         = require('./routes/processes.routes')
+const gamificationRoutes      = require('./routes/gamification.routes')
 const { handleWebhook }       = require('./webhooks/stripe.webhook')
 
 const app = express()
@@ -170,6 +171,7 @@ app.use('/api/superadmin',        superadminRoutes)
 app.use('/api/legal',             legalRoutes)
 app.use('/api/eos',              eosRoutes)
 app.use('/api/processes',        processesRoutes)
+app.use('/api/gamification',     gamificationRoutes)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 

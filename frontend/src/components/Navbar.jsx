@@ -5,6 +5,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import useRoles from '../hooks/useRoles'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import FeedbackButton from './FeedbackButton'
+import GamificationFab from './GamificationFab'
 import NotificationBell from './NotificationBell'
 import { useTheme } from '../context/ThemeContext'
 import BlissLogo from './BlissLogo'
@@ -101,7 +102,7 @@ export default function Navbar() {
   const profileRef = useRef(null)
   const adminRef   = useRef(null)
 
-  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos')
+  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification')
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -136,6 +137,7 @@ export default function Navbar() {
   const avatarSrc = avatarUrl(user?.avatar)
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
   const { enabled: eosEnabled }       = useFeatureFlag('eos')
+  const { enabled: gamificationEnabled } = useFeatureFlag('gamification')
 
   // ── Links de navegación principal ────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
@@ -154,6 +156,7 @@ export default function Navbar() {
     ...(productivityEnabled ? [{ to: '/admin/productivity', label: '📊 Productividad' }] : []),
     { to: '/admin/rrhh',         label: '👥 RRHH' },
     ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
+    ...(gamificationEnabled ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
     { to: '/admin',              label: '⚙️ Panel' },
   ]
 
@@ -308,6 +311,7 @@ export default function Navbar() {
   return (
     <>
       <FeedbackButton />
+      <GamificationFab />
       <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         {user && <AnnouncementBanner />}
         {user && <TrialBanner />}
