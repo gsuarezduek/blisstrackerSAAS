@@ -1,0 +1,21 @@
+{
+  "name": "linkedin-company-scraper",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Scraper de Apify para Company Pages públicas de LinkedIn. Devuelve followers, metadata y posts recientes con engagement, sin necesidad de login.",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "dev": "apify run -p"
+  },
+  "dependencies": {
+    "apify": "^3.2.0",
+    "crawlee": "^3.11.0",
+    "playwright": "*"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

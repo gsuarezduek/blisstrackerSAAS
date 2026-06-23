@@ -11,6 +11,7 @@ import TaskCommentsModal from '../components/TaskCommentsModal'
 import ProjectSituation from '../components/ProjectSituation'
 import ProjectInfoTab from '../components/ProjectInfoTab'
 import ProjectBriefs from '../components/briefs/ProjectBriefs'
+import ProjectAccesos from '../components/ProjectAccesos'
 import { useAuth } from '../context/AuthContext'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -342,7 +343,7 @@ export default function ProjectDetail() {
                   }}
                 >
                   {data.project.situationEnabled !== false && <option value="situacion">Situación</option>}
-                  {data.project.linksEnabled !== false && <option value="links">Links útiles</option>}
+                  {data.project.linksEnabled !== false && <option value="links">Links/Accesos</option>}
                   <option value="info">Info</option>
                   {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
                   {marketingEnabled && <option value="marketing">Marketing ↗</option>}
@@ -362,7 +363,7 @@ export default function ProjectDetail() {
                       onClick={() => setInfoTab('links')}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'links' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                     >
-                      Links útiles
+                      Links/Accesos
                     </button>
                   )}
                   <button
@@ -403,9 +404,10 @@ export default function ProjectDetail() {
 
               {/* Tab: Links útiles */}
               {infoTab === 'links' && data.project.linksEnabled !== false && (
+               <div className="space-y-4">
                 <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Links útiles</p>
+                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Links</p>
                     {!linkForm && (
                       <button
                         onClick={() => setLinkForm({ label: '', url: '' })}
@@ -483,6 +485,9 @@ export default function ProjectDetail() {
                     </div>
                   )}
                 </div>
+
+                <ProjectAccesos projectId={encodedId} />
+               </div>
               )}
 
               {/* Tab: Info — incluye Servicios, Equipo e Info del proyecto */}

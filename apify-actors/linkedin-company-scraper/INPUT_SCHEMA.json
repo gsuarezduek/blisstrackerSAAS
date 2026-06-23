@@ -1,0 +1,52 @@
+{
+  "title": "LinkedIn Company Page Scraper",
+  "description": "Scrapea Company Pages públicas de LinkedIn. Pasá una o más empresas (slug, URL o handle) y opcionalmente el límite de posts por empresa.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "identifier": {
+      "title": "Empresas (slugs)",
+      "type": "array",
+      "description": "Lista de slugs de LinkedIn Company Pages (el segmento que va después de /company/). Ejemplo: ['bliss-marketing', 'microsoft'].",
+      "editor": "stringList",
+      "prefill": ["microsoft"]
+    },
+    "companyUrls": {
+      "title": "Empresas (URLs)",
+      "type": "array",
+      "description": "Alternativa: lista de URLs completas a Company Pages (https://www.linkedin.com/company/...). El actor también acepta `identifier`, `companyName`, `company`, `companyUrl`, `urls`, `startUrls` para máxima compatibilidad con clientes existentes.",
+      "editor": "stringList",
+      "default": []
+    },
+    "maxPosts": {
+      "title": "Máximo de posts por empresa",
+      "type": "integer",
+      "description": "Cantidad máxima de posts recientes a scrapear por cada empresa.",
+      "default": 30,
+      "minimum": 0,
+      "maximum": 200
+    },
+    "proxy": {
+      "title": "Proxy",
+      "type": "object",
+      "description": "Configuración de proxy. Por defecto usa Apify Proxy con grupo RESIDENTIAL (recomendado para LinkedIn — los datacenter están bloqueados).",
+      "editor": "proxy",
+      "prefill": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": ["RESIDENTIAL"]
+      },
+      "default": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": ["RESIDENTIAL"]
+      }
+    },
+    "minRequestDelayMs": {
+      "title": "Delay mínimo entre requests (ms)",
+      "type": "integer",
+      "description": "Espera aleatoria entre 1x y 2x este valor antes de cada request. Subilo si LinkedIn empieza a bloquear; bajalo si todo va bien y querés más velocidad.",
+      "default": 2000,
+      "minimum": 0,
+      "maximum": 30000
+    }
+  }
+}

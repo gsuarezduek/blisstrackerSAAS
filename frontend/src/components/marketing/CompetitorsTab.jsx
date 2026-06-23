@@ -3,6 +3,37 @@ import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 
+// Configuración por plataforma — UI label + URL externa + accent color + handle prefix
+const PLATFORMS = {
+  instagram: {
+    label:        'Instagram',
+    icon:         '📸',
+    placeholder:  '@competidor o https://instagram.com/competidor',
+    profileUrl:   (u) => `https://www.instagram.com/${u}/`,
+    handle:       (u) => `@${u}`,
+    accentClass:  'from-purple-600 to-pink-600',
+    accentBorder: 'border-purple-200 dark:border-purple-800',
+    accentText:   'text-purple-500 hover:text-purple-600 dark:text-purple-400',
+    accentRing:   'focus:ring-purple-500',
+    avatarBg:     'from-purple-500 to-pink-500',
+    sparkColor:   '#a855f7',
+  },
+  linkedin: {
+    label:        'LinkedIn',
+    icon:         '💼',
+    placeholder:  'bliss-marketing o https://www.linkedin.com/company/bliss-marketing/',
+    profileUrl:   (u) => `https://www.linkedin.com/company/${u}/`,
+    handle:       (u) => u,
+    accentClass:  'from-blue-600 to-sky-500',
+    accentBorder: 'border-blue-200 dark:border-blue-800',
+    accentText:   'text-blue-500 hover:text-blue-600 dark:text-blue-400',
+    accentRing:   'focus:ring-blue-500',
+    avatarBg:     'from-blue-600 to-sky-500',
+    sparkColor:   '#0A66C2',
+  },
+}
+const PLATFORM_KEYS = Object.keys(PLATFORMS)
+
 function fmtNum(n) {
   if (n == null) return '—'
   return n.toLocaleString('es-AR')
@@ -28,7 +59,7 @@ function engColor(rate) {
 }
 
 // Sparkline simple de seguidores
-function FollowerSparkline({ logs }) {
+function FollowerSparkline({ logs, color = '#a855f7' }) {
   if (!logs || logs.length < 2) {
     return <p className="text-xs text-gray-400">Todavía no hay suficiente historial para graficar.</p>
   }
@@ -44,18 +75,18 @@ function FollowerSparkline({ logs }) {
   }).join(' ')
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-16" preserveAspectRatio="none">
-      <path d={pts} fill="none" stroke="#a855f7" strokeWidth="2" />
+      <path d={pts} fill="none" stroke={color} strokeWidth="2" />
     </svg>
   )
 }
 
-function Avatar({ url, fallback }) {
+function Avatar({ url, fallback, cfg }) {
   const [err, setErr] = useState(false)
   if (url && !err) {
-    return <img src={url} alt="" onError={() => setErr(true)} referrerPolicy="no-referrer" className="w-11 h-11 rounded-full object-cover border border-purple-200 dark:border-purple-800" />
+    return <img src={url} alt="" onError={() => setErr(true)} referrerPolicy="no-referrer" className={`w-11 h-11 rounded-full object-cover border ${cfg.accentBorder}`} />
   }
   return (
-    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold">
+    <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${cfg.avatarBg} flex items-center justify-center text-white text-sm font-bold`}>
       {(fallback || '?')[0].toUpperCase()}
     </div>
   )
@@ -71,6 +102,7 @@ function Metric({ label, value, valueClass = '' }) {
 }
 
 function CompetitorCard({ projectId, c, onChanged }) {
+  const cfg = PLATFORMS[c.platform] ?? PLATFORMS.instagram
   const [refreshing, setRefreshing] = useState(false)
   const [deleting,   setDeleting]   = useState(false)
   const [expanded,   setExpanded]   = useState(false)
@@ -90,7 +122,7 @@ function CompetitorCard({ projectId, c, onChanged }) {
   }
 
   async function handleDelete() {
-    if (!window.confirm(`¿Quitar a @${c.username} de competidores?`)) return
+    if (!window.confirm(`¿Quitar a ${cfg.handle(c.username)} de competidores?`)) return
     setDeleting(true)
     try {
       await api.delete(`/marketing/projects/${projectId}/competitors/${c.id}`)
@@ -120,21 +152,22 @@ function CompetitorCard({ projectId, c, onChanged }) {
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
       <div className="flex items-start gap-3">
-        <Avatar url={c.profilePicUrl} fallback={c.username} />
+        <Avatar url={c.profilePicUrl} fallback={c.username} cfg={cfg} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <a
-                href={`https://www.instagram.com/${c.username}/`}
+                href={cfg.profileUrl(c.username)}
                 target="_blank" rel="noopener noreferrer"
-                className="font-semibold text-gray-900 dark:text-white hover:text-purple-600 dark:hover:text-purple-400 truncate block"
+                className={`font-semibold text-gray-900 dark:text-white truncate block ${cfg.accentText}`}
               >
-                @{c.username}
+                <span className="mr-1 text-xs">{cfg.icon}</span>
+                {cfg.handle(c.username)}
               </a>
               {c.displayName && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.displayName}</p>}
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <button onClick={handleRefresh} disabled={refreshing} className="text-xs text-purple-500 hover:text-purple-600 dark:text-purple-400 disabled:opacity-50 transition-colors">
+              <button onClick={handleRefresh} disabled={refreshing} className={`text-xs ${cfg.accentText} disabled:opacity-50 transition-colors`}>
                 {refreshing ? 'Actualizando…' : '↻'}
               </button>
               <button onClick={handleDelete} disabled={deleting} className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors">
@@ -177,7 +210,7 @@ function CompetitorCard({ projectId, c, onChanged }) {
               ) : (
                 <>
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Seguidores (últimos registros)</p>
-                  <FollowerSparkline logs={history?.followerLogs} />
+                  <FollowerSparkline logs={history?.followerLogs} color={cfg.sparkColor} />
                   {history?.snapshots?.length > 0 && (
                     <div className="mt-3 space-y-1">
                       {history.snapshots.slice().reverse().map(s => (
@@ -207,17 +240,22 @@ function CompetitorCard({ projectId, c, onChanged }) {
 
 export default function CompetitorsTab({ projectId, onSelectProject }) {
   const objectives = useObjectiveProgress(projectId).filter(o => o.metric === 'competidores')
-  const [list,    setList]    = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
-  const [input,   setInput]   = useState('')
-  const [adding,  setAdding]  = useState(false)
+  const [list,     setList]     = useState([])
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState(null)
+  const [input,    setInput]    = useState('')
+  const [adding,   setAdding]   = useState(false)
+  const [platform, setPlatform] = useState('instagram')   // plataforma del NUEVO competidor
+  const [filter,   setFilter]   = useState('all')         // filtro de la lista: 'all' | 'instagram' | 'linkedin'
+
+  const cfg = PLATFORMS[platform]
 
   const load = useCallback(async () => {
     if (!projectId) return
     setLoading(true); setError(null)
     try {
-      const { data } = await api.get(`/marketing/projects/${projectId}/competitors`, { params: { platform: 'instagram' } })
+      // Sin filtro `platform` → backend devuelve todas las plataformas
+      const { data } = await api.get(`/marketing/projects/${projectId}/competitors`)
       setList(data)
     } catch (e) {
       setError(e.response?.data?.error || 'Error al cargar competidores.')
@@ -227,16 +265,20 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
   useEffect(() => { load() }, [load])
 
   async function handleAdd() {
-    if (!input.trim()) { setError('Pegá el usuario o la URL del perfil.'); return }
+    if (!input.trim()) { setError('Pegá la URL o el identificador.'); return }
     setAdding(true); setError(null)
     try {
-      await api.post(`/marketing/projects/${projectId}/competitors`, { url: input.trim(), platform: 'instagram' })
+      await api.post(`/marketing/projects/${projectId}/competitors`, { url: input.trim(), platform })
       setInput('')
       load()
     } catch (e) {
       setError(e.response?.data?.error || 'No se pudo agregar el competidor.')
     } finally { setAdding(false) }
   }
+
+  // Conteo por plataforma para el filtro
+  const counts = list.reduce((acc, c) => { acc[c.platform] = (acc[c.platform] ?? 0) + 1; return acc }, {})
+  const visible = filter === 'all' ? list : list.filter(c => c.platform === filter)
 
   if (!projectId) {
     return (
@@ -254,23 +296,32 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
         <div className="flex items-center gap-2 mb-2">
           <span className="text-xl">🏁</span>
           <div>
-            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Competidores de Instagram</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">Seguí cuentas públicas de la competencia por scraping.</p>
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Competidores</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Seguí cuentas/páginas públicas de la competencia por scraping.</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+          <select
+            value={platform}
+            onChange={e => setPlatform(e.target.value)}
+            className={`text-sm bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-2 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 ${cfg.accentRing}`}
+          >
+            {PLATFORM_KEYS.map(k => (
+              <option key={k} value={k}>{PLATFORMS[k].icon} {PLATFORMS[k].label}</option>
+            ))}
+          </select>
           <input
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
-            placeholder="@competidor o https://instagram.com/competidor"
-            className="flex-1 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-purple-500"
+            placeholder={cfg.placeholder}
+            className={`flex-1 min-w-0 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 ${cfg.accentRing}`}
           />
           <button
             onClick={handleAdd}
             disabled={adding || !input.trim()}
-            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity whitespace-nowrap"
+            className={`px-4 py-2 bg-gradient-to-r ${cfg.accentClass} text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity whitespace-nowrap`}
           >
             {adding ? 'Agregando…' : 'Agregar'}
           </button>
@@ -281,16 +332,41 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
       {/* Objetivos de competidores del proyecto */}
       <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos vs competidores" />
 
+      {/* Filtro por plataforma — sólo si hay más de una plataforma cargada */}
+      {Object.keys(counts).length > 1 && (
+        <div className="flex gap-1 flex-wrap">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-3 py-1 text-xs rounded-lg transition-colors ${filter === 'all' ? 'bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+          >
+            Todos ({list.length})
+          </button>
+          {PLATFORM_KEYS.filter(k => counts[k]).map(k => (
+            <button
+              key={k}
+              onClick={() => setFilter(k)}
+              className={`px-3 py-1 text-xs rounded-lg transition-colors ${filter === k ? 'bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+            >
+              {PLATFORMS[k].icon} {PLATFORMS[k].label} ({counts[k]})
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Lista */}
       {loading ? (
-        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" /></div>
-      ) : list.length === 0 ? (
+        <div className="flex justify-center py-12"><div className={`w-6 h-6 border-2 border-t-transparent rounded-full animate-spin`} style={{ borderColor: `${cfg.sparkColor} transparent ${cfg.sparkColor} ${cfg.sparkColor}` }} /></div>
+      ) : visible.length === 0 ? (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no agregaste competidores. Pegá un usuario o URL arriba para empezar.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {list.length === 0
+              ? 'Todavía no agregaste competidores. Elegí plataforma y pegá un usuario o URL arriba para empezar.'
+              : `Sin competidores de ${PLATFORMS[filter]?.label ?? filter}.`}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {list.map(c => (
+          {visible.map(c => (
             <CompetitorCard key={c.id} projectId={projectId} c={c} onChanged={load} />
           ))}
         </div>

@@ -1,6 +1,34 @@
 const prisma = require('../lib/prisma')
-const { scrapeInstagramProfile, parseInstagramUsername } = require('../services/socialScrape.service')
+const {
+  scrapeInstagramProfile, parseInstagramUsername,
+  scrapeLinkedinCompany,  parseLinkedinCompany,
+} = require('../services/socialScrape.service')
 const { cacheImagesInArray } = require('../services/socialImageCache.service')
+
+// Adaptadores por plataforma — todos retornan métricas con shape común
+// (followersCount, name, profilePicUrl, postsThisMonth, avgLikes, avgComments,
+// engagementRate, topPosts, mediaCount?, isPrivate?). El normalizador de cada
+// scraper ya se encarga de devolver ese shape.
+const PLATFORM_SCRAPERS = {
+  instagram: {
+    parseId: parseInstagramUsername,
+    scrape:  scrapeInstagramProfile,
+    invalidMsg: 'Usuario o URL de Instagram inválido.',
+  },
+  linkedin: {
+    parseId: parseLinkedinCompany,
+    // scrapeLinkedinCompany no expone profilePicUrl — lo mapeamos desde logoUrl si está
+    scrape:  async (slug, opts) => {
+      const m = await scrapeLinkedinCompany(slug, opts)
+      return {
+        ...m,
+        profilePicUrl: m.profilePicUrl ?? m.org?.logoUrl ?? m.logoUrl ?? null,
+        name:          m.name ?? m.org?.name ?? slug,
+      }
+    },
+    invalidMsg: 'URL o nombre de Company Page de LinkedIn inválido.',
+  },
+}
 
 // Cooldown en memoria para el refresh manual (protege costo del proveedor de scraping).
 const REFRESH_COOLDOWN_MS = 30 * 60 * 1000
@@ -124,21 +152,25 @@ async function addCompetitor(req, res, next) {
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
     const platform = req.body.platform || 'instagram'
-    if (platform !== 'instagram') {
-      return res.status(400).json({ error: 'Por ahora solo se soporta Instagram.' })
+    const driver = PLATFORM_SCRAPERS[platform]
+    if (!driver) {
+      return res.status(400).json({ error: `Plataforma "${platform}" no soportada. Disponibles: ${Object.keys(PLATFORM_SCRAPERS).join(', ')}.` })
     }
 
-    const username = parseInstagramUsername(req.body.url || req.body.username)
-    if (!username) return res.status(400).json({ error: 'Usuario o URL de Instagram inválido.' })
+    const username = driver.parseId(req.body.url || req.body.username)
+    if (!username) return res.status(400).json({ error: driver.invalidMsg })
 
     const existing = await prisma.competitorAccount.findUnique({
       where: { projectId_platform_username: { projectId, platform, username } },
     })
-    if (existing) return res.status(409).json({ error: `@${username} ya está en la lista.` })
+    if (existing) {
+      const handle = platform === 'instagram' ? `@${username}` : username
+      return res.status(409).json({ error: `${handle} ya está en la lista.` })
+    }
 
     let metrics
     try {
-      metrics = await scrapeInstagramProfile(username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, context: 'Competidores — alta de cuenta' })
+      metrics = await driver.scrape(username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, context: `Competidores — alta de cuenta (${platform})` })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }
@@ -182,9 +214,14 @@ async function refreshCompetitor(req, res, next) {
       return res.status(429).json({ error: `Esperá ${waitMins} min para actualizar de nuevo.`, code: 'COOLDOWN', waitMins })
     }
 
+    const driver = PLATFORM_SCRAPERS[competitor.platform]
+    if (!driver) {
+      return res.status(400).json({ error: `Plataforma "${competitor.platform}" no soportada para refresh.` })
+    }
+
     let metrics
     try {
-      metrics = await scrapeInstagramProfile(competitor.username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, context: 'Competidores — refresh manual' })
+      metrics = await driver.scrape(competitor.username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, context: `Competidores — refresh manual (${competitor.platform})` })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }

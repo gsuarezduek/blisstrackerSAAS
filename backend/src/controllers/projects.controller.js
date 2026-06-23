@@ -650,4 +650,101 @@ async function saveInfo(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, sendTestEmail, testLateNotification, getAiUsage, getMembers, toggleStar }
+// ─── ACCESOS / CREDENCIALES ─────────────────────────────────────────────────
+// Son credenciales sensibles: solo el equipo del proyecto (ProjectMember) y los
+// admins/owners pueden verlas/gestionarlas, aunque el proyecto en sí sea visible
+// para todo el workspace. La contraseña se cifra con AES-256-GCM y solo se
+// descifra en el endpoint reveal, bajo demanda.
+const { encrypt, decrypt } = require('../lib/encryption')
+
+// Resuelve el proyecto y verifica permiso de acceso a credenciales.
+// Devuelve { projectId } si OK, o { error, status } si no.
+async function resolveAccessGuard(req) {
+  const workspaceId = req.workspace.id
+  const projectId = await resolveProjectId(req.params.id, workspaceId)
+  if (!projectId) return { error: 'Proyecto no encontrado', status: 404 }
+  if (!isAdmin(req)) {
+    const member = await prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId: req.user.userId } },
+    })
+    if (!member) return { error: 'No tenés acceso a las credenciales de este proyecto', status: 403 }
+  }
+  return { projectId }
+}
+
+// Forma pública de un acceso: nunca expone la contraseña, solo si tiene una.
+const publicAccess = (a) => ({
+  id: a.id,
+  account: a.account,
+  username: a.username,
+  extra: a.extra,
+  hasPassword: !!a.password,
+  createdAt: a.createdAt,
+})
+
+async function listAccesses(req, res, next) {
+  try {
+    const guard = await resolveAccessGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const accesses = await prisma.projectAccess.findMany({
+      where: { projectId: guard.projectId },
+      orderBy: { createdAt: 'asc' },
+    })
+    res.json(accesses.map(publicAccess))
+  } catch (err) { next(err) }
+}
+
+async function addAccess(req, res, next) {
+  try {
+    const guard = await resolveAccessGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+
+    const clean = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+    const account  = clean(req.body.account)
+    const username = clean(req.body.username)
+    const password = clean(req.body.password)
+    const extra    = clean(req.body.extra)
+
+    if (!account && !username && !password && !extra) {
+      return res.status(400).json({ error: 'Completá al menos un campo del acceso' })
+    }
+
+    const created = await prisma.projectAccess.create({
+      data: {
+        projectId:   guard.projectId,
+        workspaceId: req.workspace.id,
+        account,
+        username,
+        password: password ? encrypt(password) : null,
+        extra,
+      },
+    })
+    res.status(201).json(publicAccess(created))
+  } catch (err) { next(err) }
+}
+
+async function revealAccess(req, res, next) {
+  try {
+    const guard = await resolveAccessGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const access = await prisma.projectAccess.findFirst({
+      where: { id: Number(req.params.accessId), projectId: guard.projectId },
+    })
+    if (!access) return res.status(404).json({ error: 'Acceso no encontrado' })
+    res.json({ password: access.password ? decrypt(access.password) : null })
+  } catch (err) { next(err) }
+}
+
+async function deleteAccess(req, res, next) {
+  try {
+    const guard = await resolveAccessGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const result = await prisma.projectAccess.deleteMany({
+      where: { id: Number(req.params.accessId), projectId: guard.projectId },
+    })
+    if (result.count === 0) return res.status(404).json({ error: 'Acceso no encontrado' })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, sendTestEmail, testLateNotification, getAiUsage, getMembers, toggleStar, listAccesses, addAccess, revealAccess, deleteAccess }

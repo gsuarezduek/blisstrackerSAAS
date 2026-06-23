@@ -1,6 +1,15 @@
 const prisma = require('../lib/prisma')
-const { scrapeInstagramProfile } = require('./socialScrape.service')
+const {
+  scrapeInstagramProfile,
+  scrapeLinkedinCompany,
+} = require('./socialScrape.service')
 const { cacheImagesInArray }     = require('./socialImageCache.service')
+
+// Scraper por plataforma — keep en sync con PLATFORM_SCRAPERS de competitors.controller.js
+const PLATFORM_SCRAPERS = {
+  instagram: scrapeInstagramProfile,
+  linkedin:  scrapeLinkedinCompany,
+}
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -28,16 +37,22 @@ async function saveAllMonthlyCompetitorSnapshots() {
   const month = prevMonthStr(currentMonthStr())
   const date  = todayStr()
 
+  // Procesamos todas las plataformas soportadas (Instagram + LinkedIn)
   const competitors = await prisma.competitorAccount.findMany({
-    where:  { platform: 'instagram' },
-    select: { id: true, username: true, workspaceId: true },
+    where:  { platform: { in: Object.keys(PLATFORM_SCRAPERS) } },
+    select: { id: true, username: true, workspaceId: true, platform: true },
   })
 
   console.log(`[CompetitorSnapshot] Procesando ${competitors.length} competidores (mes: ${month})`)
 
   for (const c of competitors) {
     try {
-      const metrics = await scrapeInstagramProfile(c.username, { targetMonth: month, workspaceId: c.workspaceId, context: 'Competidores — snapshot mensual' })
+      const scrape = PLATFORM_SCRAPERS[c.platform]
+      if (!scrape) {
+        console.warn(`[CompetitorSnapshot] Plataforma "${c.platform}" sin scraper, omito competidor ${c.id}`)
+        continue
+      }
+      const metrics = await scrape(c.username, { targetMonth: month, workspaceId: c.workspaceId, context: `Competidores — snapshot mensual (${c.platform})` })
       const topPostsCached = await cacheImagesInArray(metrics.topPosts ?? [], 'imgSrc', c.workspaceId)
       const topPostsJson = JSON.stringify(topPostsCached)
       await Promise.allSettled([

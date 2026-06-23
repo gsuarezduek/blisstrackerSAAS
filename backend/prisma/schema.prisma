@@ -104,6 +104,7 @@ model Workspace {
   marketingObjectives    MarketingObjective[]
   projectBriefs          ProjectBrief[]
   rrhhMetricSnapshots    RrhhMetricSnapshot[]
+  projectAccesses        ProjectAccess[]
 
   @@index([slug])
 }
@@ -355,6 +356,7 @@ model Project {
   competitors            CompetitorAccount[]
   marketingObjectives    MarketingObjective[]
   briefs                 ProjectBrief[]
+  accesses               ProjectAccess[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -414,6 +416,26 @@ model ProjectLink {
   createdAt DateTime @default(now())
 
   @@index([projectId])
+}
+
+// Accesos / credenciales por proyecto (Cuenta, Usuario, Contraseña, Extra).
+// La contraseña se guarda cifrada con AES-256-GCM (lib/encryption.js) y solo se
+// descifra bajo demanda en el endpoint reveal. Todos los campos son opcionales.
+model ProjectAccess {
+  id          Int      @id @default(autoincrement())
+  projectId   Int
+  workspaceId Int
+  account     String?  // Cuenta (ej. "Instagram")
+  username    String?  // Usuario
+  password    String?  // Contraseña cifrada ("iv:tag:ciphertext")
+  extra       String?  // Notas / dato extra
+  createdAt   DateTime @default(now())
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([workspaceId])
 }
 
 // ─── WORKDAY & TASKS ─────────────────────────────────────────────────────────
