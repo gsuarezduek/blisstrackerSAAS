@@ -341,42 +341,6 @@ const FOLLOWER_FILTERS = [
   { key: 'all',  label: 'Todo',    days: null },
 ]
 
-// Formulario de conexión por scraping (Apify) — sin permisos ni OAuth.
-function ScrapeConnectForm({ projectId, onConnected }) {
-  const [value,   setValue]   = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!value.trim() || !projectId) return
-    setLoading(true); setError(null)
-    try {
-      await api.post(`/marketing/projects/${projectId}/integrations/linkedin/connect-scrape`, { url: value.trim() })
-      onConnected()
-    } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo conectar por scraping.')
-    } finally { setLoading(false) }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="mt-3 space-y-2">
-      <input
-        value={value} onChange={e => setValue(e.target.value)}
-        placeholder="linkedin.com/company/tu-empresa"
-        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-      />
-      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
-      <button type="submit" disabled={loading || !value.trim() || !projectId}
-        className="w-full px-4 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-        style={{ background: LI_BLUE }}>
-        {loading ? 'Conectando…' : 'Conectar por scraping'}
-      </button>
-      <p className="text-[11px] text-gray-400 dark:text-gray-500">Solo páginas públicas. Pegá la URL de la Company Page o su nombre.</p>
-    </form>
-  )
-}
-
 function ConnectPrompt({ projectId, onConnected, inline = false }) {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
@@ -424,40 +388,23 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
   )
 
   return (
-    <div className="max-w-2xl mx-auto py-12">
+    <div className="max-w-md mx-auto py-12">
       <div className="text-center mb-8">
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 text-white mx-auto" style={{ background: LI_BLUE }}><SocialIcon network="linkedin" className="w-8 h-8" /></div>
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Conectá tu página de empresa de LinkedIn</h3>
-        <p className="text-sm text-gray-400 dark:text-gray-500">Elegí cómo querés traer las métricas.</p>
+        <p className="text-sm text-gray-400 dark:text-gray-500">Métricas completas vía la API oficial de LinkedIn.</p>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        {/* Método scraping (recomendado mientras la API oficial está en aprobación) */}
-        <div className="border-2 border-blue-200 dark:border-blue-800 rounded-2xl p-5 bg-blue-50/40 dark:bg-blue-900/10">
-          <div className="flex items-center gap-2 mb-1">
-            <p className="font-semibold text-gray-900 dark:text-white text-sm">🔎 Scraping (público)</p>
-            <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-medium">Recomendado</span>
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-            Seguidores, posts y engagement de datos públicos. No requiere permisos ni aprobación.
-            <span className="block mt-1 text-gray-400 dark:text-gray-500">No incluye impresiones, clicks ni audiencia.</span>
-          </p>
-          <ScrapeConnectForm projectId={projectId} onConnected={onConnected} />
-        </div>
-
-        {/* Método oficial (API) */}
-        <div className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
-          <p className="font-semibold text-gray-900 dark:text-white text-sm mb-1">🔗 Oficial (API)</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-            Métricas completas: impresiones, clicks, CTR y audiencia. Requiere ser administrador de la página y que la app esté aprobada por LinkedIn.
-          </p>
-          {error && <p className="text-xs text-red-600 dark:text-red-400 mt-3">{error}</p>}
-          <button onClick={handleConnect} disabled={loading || !projectId}
-            className="mt-3 w-full px-4 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-            style={{ background: LI_BLUE }}>
-            {loading ? 'Conectando…' : 'Conectar con LinkedIn'}
-          </button>
-        </div>
+      <div className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5 bg-white dark:bg-gray-800">
+        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-3">
+          Seguidores, impresiones, clicks, CTR, engagement de posts y demographics de la audiencia. Requiere ser administrador de la Company Page.
+        </p>
+        {error && <p className="text-xs text-red-600 dark:text-red-400 mb-3">{error}</p>}
+        <button onClick={handleConnect} disabled={loading || !projectId}
+          className="w-full px-4 py-2.5 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+          style={{ background: LI_BLUE }}>
+          {loading ? 'Conectando…' : 'Conectar con LinkedIn'}
+        </button>
       </div>
 
       {!projectId && <p className="text-xs text-gray-400 mt-4 text-center">Seleccioná un proyecto para continuar.</p>}
