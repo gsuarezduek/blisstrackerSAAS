@@ -1,10 +1,12 @@
-// Extracción de datos de Company Pages de LinkedIn.
-// Estrategia: privilegiar campos estables (meta tags, JSON-LD) sobre selectors
-// de DOM (que LinkedIn cambia cada 3-6 meses). El DOM sólo se usa para datos
-// que no están en metadata (followers, posts).
+// Extracción de datos de Company Pages de LinkedIn (sin login).
+//
+// Estrategia: privilegiar campos estables (meta tags, JSON-LD, label-value pairs
+// con selectores quirúrgicos) sobre selectors amplios. LinkedIn cambia el HTML
+// cada 3-6 meses pero los <dt>/<dd> del bloque About y los meta tags son
+// relativamente estables.
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers
+// Helpers numéricos / temporales
 // ─────────────────────────────────────────────────────────────────────────────
 
 function toCount(v) {
@@ -22,15 +24,14 @@ function toCount(v) {
 }
 
 // Saca un timestamp ISO desde un string "2h", "3d", "1mo", "1w", "1yr" relativo a now.
-// LinkedIn muestra esos formatos en posts sin login. Devuelve null si no parsea.
 function relativeToIso(rel, now = Date.now()) {
     if (!rel) return null
     const s = String(rel).trim().toLowerCase()
     const m = s.match(/^(\d+)\s*(s|sec|min|m|h|hr|hour|d|day|w|wk|week|mo|mon|month|y|yr|year)s?\b/)
     if (!m) return null
-    const n   = parseInt(m[1], 10)
-    const u   = m[2]
-    const ms  = {
+    const n = parseInt(m[1], 10)
+    const u = m[2]
+    const ms = {
         s: 1e3, sec: 1e3,
         min: 60e3, m: 60e3,
         h: 3600e3, hr: 3600e3, hour: 3600e3,
@@ -43,10 +44,7 @@ function relativeToIso(rel, now = Date.now()) {
     return new Date(now - n * ms).toISOString()
 }
 
-// Convierte el ID de un activity URN ("7012345678") a un timestamp ISO aproximado.
-// Los activity URNs de LinkedIn embeden un timestamp en los primeros 41 bits
-// (epoch en ms). Es el dato más preciso que tenemos para fechas de posts.
-// Ver: https://www.linkedin.com/help/linkedin/answer/a522537
+// Activity URN → ISO timestamp aproximado (los primeros 41 bits del ID son ms epoch).
 function urnToTimestamp(urn) {
     if (!urn) return null
     const m = String(urn).match(/(\d{19,})$/)
@@ -61,12 +59,24 @@ function urnToTimestamp(urn) {
     }
 }
 
+// Normaliza whitespace y limpia un texto: "Industry\n      Beverages" → "Beverages"
+// Útil cuando el label viene pegado al valor en el mismo nodo (sin <dd> hijo).
+function cleanText(s, stripLabel = null) {
+    if (!s) return null
+    let t = String(s).replace(/\s+/g, ' ').trim()
+    if (stripLabel) {
+        const re = new RegExp(`^\\s*${stripLabel}\\s*[:\\-]?\\s*`, 'i')
+        t = t.replace(re, '').trim()
+    }
+    return t || null
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Página de overview de la empresa — extrae profile completo
+// Página de overview: extrae profile + posts visibles (sin visitar /posts/).
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function extractCompanyProfile(page, slug) {
-    // 1. Meta tags estables (siempre disponibles, hasta detrás del modal de login)
+    // 1. Meta tags (siempre disponibles, hasta detrás del modal de login)
     const meta = await page.evaluate(() => {
         const get = (sel) => document.querySelector(sel)?.getAttribute('content') ?? null
         return {
@@ -78,20 +88,17 @@ async function extractCompanyProfile(page, slug) {
         }
     })
 
-    // 2. JSON-LD si está presente (LinkedIn lo embebe en algunas vistas)
+    // 2. JSON-LD (LinkedIn lo embebe en algunas vistas)
     const jsonLd = await page.evaluate(() => {
         const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
         const items = []
         for (const s of scripts) {
-            try {
-                const obj = JSON.parse(s.textContent || '{}')
-                items.push(obj)
-            } catch { /* ignorar */ }
+            try { items.push(JSON.parse(s.textContent || '{}')) }
+            catch { /* ignorar */ }
         }
         return items
     })
 
-    // Buscar un nodo @type=Organization en el JSON-LD
     let org = null
     for (const item of jsonLd) {
         const arr = Array.isArray(item) ? item : (item['@graph'] ? item['@graph'] : [item])
@@ -103,154 +110,164 @@ async function extractCompanyProfile(page, slug) {
         if (org) break
     }
 
-    // 3. DOM scraping para campos que sólo están en HTML
+    // 3. DOM scraping — extractor robusto de label/value pairs
     const dom = await page.evaluate(() => {
-        const get = (sel) => document.querySelector(sel)?.textContent?.trim() ?? null
+        // ── 3a. Label-value pairs del bloque "About"/"Overview" ────────────
+        //
+        // LinkedIn estructura los detalles con varios patrones según el render:
+        //   (i)  <dt>Industry</dt><dd>Beverages</dd>
+        //   (ii) <h3>Industry</h3><p>Beverages</p>  (envuelto en <div>)
+        //   (iii) <div class="...">Industry</div><div class="...">Beverages</div>
+        //
+        // Bug que tuvimos en v1: usar selector amplio `dt, h3, h4, div, p, span`
+        // matcheaba elementos PADRE cuyo textContent incluía el label, y devolvía
+        // el siguiente PADRE (siguiente sección entera) en vez del valor. Fix:
+        // (a) sólo dt/h3/h4 (no div/span), (b) restringir a textContent corto
+        // (label puro, no padre concatenado), (c) match EXACTO contra el label.
+        const fields = {}
+        const candidates = Array.from(document.querySelectorAll('dt, h3, h4'))
+        for (const el of candidates) {
+            const rawLabel = (el.textContent || '').replace(/\s+/g, ' ').trim()
+            if (!rawLabel || rawLabel.length > 30) continue   // Demasiado largo = es un padre
+            const label = rawLabel.toLowerCase()
+            // El value es el siguiente sibling (dt→dd típicamente, o h3→p/div)
+            const next = el.nextElementSibling
+            if (!next) continue
+            // Skip si el sibling también es un header (no es un valor)
+            if (/^(h[1-6]|dt)$/i.test(next.tagName)) continue
+            const value = (next.textContent || '').replace(/\s+/g, ' ').trim()
+            // Filtrar valores ruidosos: vacíos, sólo whitespace, demasiado largos (probablemente texto irrelevante)
+            if (!value || value.length > 300) continue
+            // Si ya tenemos un value para este label (otro candidato), nos quedamos con el más corto (suele ser el valor real, no un padre con extra)
+            if (!fields[label] || value.length < fields[label].length) fields[label] = value
+        }
 
-        // Followers: el header muestra "1,234 followers" o "1,234 seguidores"
-        // Buscamos cualquier elemento cuyo texto matchee número + followers/seguidores.
+        const findVal = (keys) => {
+            for (const k of keys) {
+                if (fields[k]) return fields[k]
+            }
+            return null
+        }
+
+        // Soportar labels en español, inglés y francés
+        const industry     = findVal(['industry', 'industria', 'industrie', 'sector'])
+        const companySize  = findVal(['company size', 'tamaño de la empresa', 'tamano de la empresa', "taille de l'entreprise", 'size'])
+        const headquarters = findVal(['headquarters', 'sede', 'siège', 'sede principal'])
+        const founded      = findVal(['founded', 'fundada', 'fondée', 'fundación', 'year founded'])
+        const type         = findVal(['type', 'tipo'])
+        const specialties  = findVal(['specialties', 'especialidades', 'spécialités'])
+
+        // Website: link saliente con tracking de "website"
+        const websiteLink  = document.querySelector('a[data-tracking-control-name*="website" i], a.org-about-us-company-module__website, dd a[href*="redir/redirect"]')
+        const websiteUrl   = websiteLink?.getAttribute('href') ?? null
+
+        // ── 3b. Followers ───────────────────────────────────────────────────
+        // Aparece en el header como "1.234 followers" / "1,234 seguidores".
+        // Buscamos el primer nodo "small" que matchee, no nodos padre concatenados.
         let followersText = null
-        const followerNode = Array.from(document.querySelectorAll('h3, p, div, span, a'))
-            .find(el => {
-                const t = (el.textContent || '').trim()
-                return /^[\d.,]+\s*(followers?|seguidores?|abonn[ée]s?|follower)$/i.test(t)
+        const followerCandidates = Array.from(document.querySelectorAll('h3, p, span, a, div, dd'))
+            .filter(el => {
+                const t = (el.textContent || '').replace(/\s+/g, ' ').trim()
+                return t.length < 80 && /^[\d.,KkMm]+\s*(followers?|seguidores?|abonn[ée]s?)\b/i.test(t)
             })
-        if (followerNode) followersText = followerNode.textContent.trim()
-
-        // Fallback: buscar "X followers" en todo el texto visible del header
-        if (!followersText) {
-            const header = document.querySelector('section, header, main') || document.body
-            const m = (header.textContent || '').match(/([\d.,]+)\s*(followers?|seguidores?|abonn[ée]s?)/i)
+        if (followerCandidates.length > 0) {
+            // El primero suele ser el del header (más cerca del top)
+            followersText = followerCandidates[0].textContent.replace(/\s+/g, ' ').trim()
+        } else {
+            // Fallback: buscar en todo el header con regex acotado a inicio de número
+            const header = document.querySelector('section.top-card-layout, section[class*="top-card"], main') || document.body
+            const m = (header.textContent || '').match(/([\d.,]+[KkMm]?)\s*(followers?|seguidores?|abonn[ée]s?)/i)
             if (m) followersText = m[0]
         }
 
-        // Industria, tamaño, HQ: viven en una "definition list" del about preview
-        // Las claves vienen en distintos idiomas; matcheamos por keyword.
-        const lines = Array.from(document.querySelectorAll('dt, h3, h4, div, p, span'))
-            .map(el => ({ key: (el.textContent || '').trim().toLowerCase(), next: el.nextElementSibling?.textContent?.trim() ?? null }))
-            .filter(x => x.next)
+        // ── 3c. About / descripción ─────────────────────────────────────────
+        const aboutEl = document.querySelector(
+            'section.about-us p, ' +
+            'section[data-test-id="about-us"] p, ' +
+            'div[data-test-id="about-us__description"], ' +
+            'p[data-test-id="about-us__description"], ' +
+            'section.org-about-module p'
+        )
+        const aboutText = aboutEl ? (aboutEl.textContent || '').replace(/\s+/g, ' ').trim() : null
 
-        const findVal = (keywords) => {
-            const hit = lines.find(l => keywords.some(k => l.key === k || l.key.startsWith(k)))
-            return hit?.next ?? null
-        }
-
-        const industry     = findVal(['industry', 'industria', 'industrie', 'sector'])
-        const companySize  = findVal(['company size', 'tamaño de la empresa', 'tamano de la empresa', 'taille de l\'entreprise'])
-        const headquarters = findVal(['headquarters', 'sede', 'siège', 'sede principal'])
-        const founded      = findVal(['founded', 'fundada', 'fondée', 'fundación'])
-        const websiteUrl   = document.querySelector('a[data-tracking-control-name="public_jobs_topcard-website"], a[data-tracking-control-name*="website"]')?.getAttribute('href') ?? null
-
-        const aboutText = get('section.about-us p, section[data-test-id="about-us"] p, div[data-test-id="about-us__description"]')
-
-        // Logo: og:image normalmente, pero también lo intenta capturar del DOM
-        const logoImg = document.querySelector('img.org-top-card-primary-content__logo, img[data-delayed-url*="company-logo"], section img[alt*="logo" i]')
+        // ── 3d. Logo ─────────────────────────────────────────────────────────
+        const logoImg = document.querySelector(
+            'img.org-top-card-primary-content__logo, ' +
+            'img[data-delayed-url*="company-logo"], ' +
+            'section img[alt*="logo" i], ' +
+            'img.top-card-layout__icon'
+        )
         const logoSrc = logoImg?.getAttribute('src') || logoImg?.getAttribute('data-delayed-url') || null
 
-        return { followersText, industry, companySize, headquarters, founded, websiteUrl, aboutText, logoSrc }
-    })
-
-    const followerCount = toCount((dom.followersText || '').match(/[\d.,KkMm]+/)?.[0])
-
-    return {
-        slug,
-        name:           org?.name        ?? meta.ogTitle?.replace(/\s*\|\s*LinkedIn\s*$/i, '') ?? slug,
-        vanityName:     slug,
-        url:            org?.url         ?? meta.ogUrl ?? `https://www.linkedin.com/company/${slug}/`,
-        description:    dom.aboutText    ?? meta.ogDescription ?? meta.description ?? org?.description ?? null,
-        industry:       dom.industry     ?? null,
-        companySize:    dom.companySize  ?? null,
-        headquarters:   dom.headquarters ?? null,
-        founded:        dom.founded      ?? null,
-        websiteUrl:     dom.websiteUrl   ?? org?.sameAs?.[0] ?? null,
-        logoUrl:        meta.ogImage     ?? dom.logoSrc ?? org?.logo ?? null,
-        followerCount,
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Página de posts — extrae los N más recientes con engagement
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function extractCompanyPosts(page, slug, maxPosts) {
-    // Sin login, LinkedIn muestra los primeros ~5-10 posts. Hacemos un poco de
-    // scroll para gatillar lazy-load (si está habilitado para visitantes anónimos).
-    try {
-        for (let i = 0; i < Math.min(6, Math.ceil(maxPosts / 5)); i++) {
-            await page.evaluate(() => window.scrollBy(0, window.innerHeight * 1.5))
-            await page.waitForTimeout(800 + Math.random() * 400)
-        }
-    } catch { /* ignorar — algunos browsers throw si la página se cerró */ }
-
-    const raw = await page.evaluate(() => {
-        // Los posts de empresa en /posts/ son <li> o <article> con data-urn.
-        // Probamos varios selectors porque LinkedIn los cambia.
-        const cards = Array.from(document.querySelectorAll(
-            'li[data-urn^="urn:li:activity:"],' +
-            'article[data-urn^="urn:li:activity:"],' +
-            'div[data-urn^="urn:li:activity:"],' +
-            'div.feed-shared-update-v2[data-urn],' +
-            'div.update-components-actor__container'
+        // ── 3e. Posts visibles en el overview ───────────────────────────────
+        // Sin login, LinkedIn muestra 2-3 posts "destacados" en el overview.
+        // Capturamos lo que esté visible — el actor configura postsLimit pero
+        // sin login no podemos pasar de los que LinkedIn renderiza por default.
+        const postCards = Array.from(document.querySelectorAll(
+            'li[data-urn^="urn:li:activity:"], ' +
+            'article[data-urn^="urn:li:activity:"], ' +
+            'div[data-urn^="urn:li:activity:"], ' +
+            'div.feed-shared-update-v2[data-urn], ' +
+            'li.profile-creator-shared-feed-update__container, ' +
+            'article.main-feed-card'
         ))
 
-        const seen = new Set()
-        const out = []
-        for (const card of cards) {
+        const seenUrns = new Set()
+        const posts = []
+        for (const card of postCards) {
             const urn = card.getAttribute('data-urn')
-                    || card.closest('[data-urn]')?.getAttribute('data-urn')
-                    || null
-            if (urn && seen.has(urn)) continue
-            if (urn) seen.add(urn)
+                || card.closest('[data-urn]')?.getAttribute('data-urn')
+                || card.querySelector('[data-urn]')?.getAttribute('data-urn')
+                || null
+            if (urn && seenUrns.has(urn)) continue
+            if (urn) seenUrns.add(urn)
 
-            // Texto del post
             const textEl = card.querySelector(
                 '.feed-shared-update-v2__description, ' +
                 '.update-components-text, ' +
                 '.attributed-text-segment-list__content, ' +
-                '[data-test-id="main-feed-activity-card__commentary"]'
+                'p.attributed-text-segment-list__content, ' +
+                '[data-test-id="main-feed-activity-card__commentary"], ' +
+                '.entity-result__primary-subtitle'
             )
             const text = textEl?.textContent?.trim() ?? ''
 
-            // Reacciones — el botón muestra "N likes" / "N reacciones" / "N reactions"
-            const reactionsEl = card.querySelector(
+            // Reacciones / likes
+            const reactEl = card.querySelector(
                 '[data-test-id*="reactions"], ' +
                 'button[aria-label*="reaction" i], ' +
                 'button[data-tracking-control-name*="reactions"], ' +
                 '.social-details-social-counts__reactions-count, ' +
-                'span.v-align-middle.social-details-social-counts__reactions-count'
+                'span[data-test-id="social-actions__reaction-count"]'
             )
-            const reactionsText = reactionsEl?.textContent?.trim() ?? reactionsEl?.getAttribute('aria-label') ?? ''
+            const reactText = reactEl?.textContent?.trim() ?? reactEl?.getAttribute('aria-label') ?? ''
 
-            // Comentarios
-            const commentsEl = card.querySelector(
+            // Comments
+            const commEl = card.querySelector(
                 '[data-test-id*="comments"], ' +
                 'button[aria-label*="comment" i], ' +
                 '.social-details-social-counts__comments, ' +
-                'li.social-details-social-counts__comments'
+                'span[data-test-id="social-actions__comments-count"], ' +
+                'a[data-test-id*="comments"]'
             )
-            const commentsText = commentsEl?.textContent?.trim() ?? commentsEl?.getAttribute('aria-label') ?? ''
+            const commText = commEl?.textContent?.trim() ?? commEl?.getAttribute('aria-label') ?? ''
 
-            // Reposts / shares
-            const sharesEl = card.querySelector(
+            // Shares / reposts
+            const shareEl = card.querySelector(
                 '[data-test-id*="reposts"], ' +
                 '[data-test-id*="shares"], ' +
                 'button[aria-label*="repost" i], ' +
                 'button[aria-label*="share" i], ' +
-                '.social-details-social-counts__item--with-social-proof'
+                'span[data-test-id="social-actions__shares-count"]'
             )
-            const sharesText = sharesEl?.textContent?.trim() ?? sharesEl?.getAttribute('aria-label') ?? ''
+            const shareText = shareEl?.textContent?.trim() ?? shareEl?.getAttribute('aria-label') ?? ''
 
-            // Fecha relativa visible (ej. "2d", "3h", "1mo")
-            const timeEl = card.querySelector(
-                'time, ' +
-                'span.update-components-actor__sub-description, ' +
-                'a[data-test-id="main-feed-activity-card__entity-lockup"] time, ' +
-                'span[data-test-id*="time"]'
-            )
+            // Fecha (relativa o datetime)
+            const timeEl = card.querySelector('time, span.update-components-actor__sub-description, [data-test-id*="time"]')
             const timeText = timeEl?.textContent?.trim() ?? null
             const datetime = timeEl?.getAttribute('datetime') ?? null
 
-            // Imagen principal del post
+            // Imagen
             const imgEl = card.querySelector(
                 'img.feed-shared-image__image, ' +
                 'img.update-components-image__image, ' +
@@ -260,25 +277,49 @@ async function extractCompanyPosts(page, slug, maxPosts) {
             const imgSrc = imgEl?.getAttribute('src') ?? imgEl?.getAttribute('data-delayed-url') ?? null
 
             // URL al post
-            const linkEl = card.querySelector('a[href*="/feed/update/"], a[href*="/posts/"]')
+            const linkEl = card.querySelector('a[href*="/feed/update/"], a[href*="/posts/"], a[data-tracking-control-name*="public_post_feed"]')
             const url    = linkEl?.getAttribute('href') ?? (urn ? `https://www.linkedin.com/feed/update/${urn}/` : null)
 
-            out.push({ urn, text, reactionsText, commentsText, sharesText, timeText, datetime, imgSrc, url })
+            posts.push({ urn, text, reactText, commText, shareText, timeText, datetime, imgSrc, url })
         }
-        return out
+
+        return {
+            fields, industry, companySize, headquarters, founded, type, specialties,
+            websiteUrl, followersText, aboutText, logoSrc, posts,
+        }
     })
 
-    return raw.slice(0, maxPosts).map(p => ({
+    const followerCount = toCount((dom.followersText || '').match(/[\d.,KkMm]+/)?.[0])
+
+    const profile = {
+        slug,
+        name:           org?.name        ?? meta.ogTitle?.replace(/\s*\|\s*LinkedIn\s*$/i, '') ?? slug,
+        vanityName:     slug,
+        url:            org?.url         ?? meta.ogUrl ?? `https://www.linkedin.com/company/${slug}/`,
+        description:    dom.aboutText    ?? meta.ogDescription ?? meta.description ?? org?.description ?? null,
+        industry:       cleanText(dom.industry,     'industry|industria|industrie|sector') ?? null,
+        companySize:    cleanText(dom.companySize,  'company size|tamaño de la empresa|size') ?? null,
+        headquarters:   cleanText(dom.headquarters, 'headquarters|sede|siège') ?? null,
+        founded:        cleanText(dom.founded,      'founded|fundada|year founded') ?? null,
+        companyType:    cleanText(dom.type,         'type|tipo') ?? null,
+        specialties:    cleanText(dom.specialties,  'specialties|especialidades') ?? null,
+        websiteUrl:     dom.websiteUrl   ?? org?.sameAs?.[0] ?? null,
+        logoUrl:        meta.ogImage     ?? dom.logoSrc ?? org?.logo ?? null,
+        followerCount,
+    }
+
+    const posts = (dom.posts || []).map(p => ({
         urn:       p.urn,
         text:      (p.text || '').replace(/\s+/g, ' ').trim().slice(0, 1000),
-        likes:     toCount((p.reactionsText.match(/[\d.,KkMm]+/) || [])[0]),
-        comments:  toCount((p.commentsText.match(/[\d.,KkMm]+/)  || [])[0]),
-        shares:    toCount((p.sharesText.match(/[\d.,KkMm]+/)    || [])[0]),
-        // Prioridad de fecha: datetime exacto del DOM > timestamp embebido en el URN > parseo del label relativo
+        likes:     toCount((p.reactText.match(/[\d.,KkMm]+/) || [])[0]),
+        comments:  toCount((p.commText.match(/[\d.,KkMm]+/)  || [])[0]),
+        shares:    toCount((p.shareText.match(/[\d.,KkMm]+/) || [])[0]),
         timestamp: p.datetime ?? urnToTimestamp(p.urn) ?? relativeToIso(p.timeText),
         url:       p.url ? (p.url.startsWith('http') ? p.url : `https://www.linkedin.com${p.url}`) : null,
         imgSrc:    p.imgSrc,
     }))
+
+    return { profile, posts }
 }
 
-export { extractCompanyProfile, extractCompanyPosts, toCount, urnToTimestamp, relativeToIso }
+export { extractCompanyProfile, toCount, urnToTimestamp, relativeToIso, cleanText }
