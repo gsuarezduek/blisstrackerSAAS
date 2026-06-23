@@ -167,6 +167,10 @@ try {
         }
 
         await Actor.pushData({
+            // Canary para detectar si el código nuevo está corriendo en el actor.
+            // Si en el diagnóstico del backend el rawSample NO trae esta key, el
+            // deploy no surtió efecto y hay que rehacer `apify push`.
+            extractorVersion: '1.2-canary',
             // Campos canónicos esperados por normalizeApifyCompany (shape A)
             name:            profile.name,
             companyName:     profile.name,

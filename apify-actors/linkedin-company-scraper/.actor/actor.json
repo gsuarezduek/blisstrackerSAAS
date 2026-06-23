@@ -3,7 +3,7 @@
   "name": "linkedin-company-scraper",
   "title": "LinkedIn Company Page Scraper",
   "description": "Scrapea Company Pages públicas de LinkedIn (sin login). Devuelve followers, metadata y posts recientes con likes/comments/reposts.",
-  "version": "1.0",
+  "version": "1.2",
   "buildTag": "latest",
   "dockerfile": "../Dockerfile",
   "input": "../INPUT_SCHEMA.json",
