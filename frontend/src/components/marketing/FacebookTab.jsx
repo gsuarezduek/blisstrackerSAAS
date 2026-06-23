@@ -350,12 +350,21 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
       </div>
 
       <div className="grid sm:grid-cols-3 gap-4">
-        {/* Scraping — recomendado mientras la API oficial está en aprobación */}
+        {/* Token de Business Manager — recomendado */}
         <div className="border-2 border-blue-200 dark:border-blue-800 rounded-2xl p-5 bg-blue-50/40 dark:bg-blue-900/10">
           <div className="flex items-center gap-2 mb-1">
-            <p className="font-semibold text-gray-900 dark:text-white text-sm">🔎 Scraping</p>
+            <p className="font-semibold text-gray-900 dark:text-white text-sm">🔑 Token (Business Manager)</p>
             <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-medium">Recomendado</span>
           </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+            Métricas completas (alcance, impresiones) con un System User Token. No espera aprobación de Meta.
+          </p>
+          <TokenConnectForm projectId={projectId} onConnected={onConnected} />
+        </div>
+
+        {/* Scraping */}
+        <div className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
+          <p className="font-semibold text-gray-900 dark:text-white text-sm mb-1">🔎 Scraping</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
             Seguidores, posts y engagement de datos públicos. No requiere permisos ni aprobación.
             <span className="block mt-1 text-gray-400 dark:text-gray-500">No incluye alcance ni impresiones.</span>
@@ -363,29 +372,18 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
           <ScrapeConnectForm projectId={projectId} onConnected={onConnected} />
         </div>
 
-        {/* Token de Business Manager */}
-        <div className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
-          <p className="font-semibold text-gray-900 dark:text-white text-sm mb-1">🔑 Token (Business Manager)</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-            Métricas completas (alcance, impresiones) con un System User Token. No espera aprobación de Meta.
-          </p>
-          <TokenConnectForm projectId={projectId} onConnected={onConnected} />
-        </div>
-
-        {/* Oficial (Facebook Login) */}
-        <div className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
+        {/* Oficial (Facebook Login) — próximamente */}
+        <div className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5 opacity-75">
           <div className="flex items-center gap-2 mb-1">
             <p className="font-semibold text-gray-900 dark:text-white text-sm">🔗 Oficial (API)</p>
-            <span className="text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium">En revisión</span>
+            <span className="text-[10px] bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full font-medium">Próximamente</span>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-            Login con Facebook. Métricas completas; requiere los permisos de páginas aprobados por Meta.
+            Login con Facebook. Métricas completas; requiere los permisos de páginas aprobados por Meta (en revisión).
           </p>
-          {error && <p className="text-xs text-red-600 dark:text-red-400 mt-3">{error}</p>}
-          <button onClick={handleConnect} disabled={loading || !projectId}
-            className="mt-3 w-full px-4 py-2 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-            style={{ background: FB_BLUE }}>
-            {loading ? 'Conectando…' : 'Conectar con Facebook'}
+          <button disabled
+            className="mt-3 w-full px-4 py-2 text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 text-sm font-semibold rounded-lg cursor-not-allowed">
+            Próximamente
           </button>
         </div>
       </div>

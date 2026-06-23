@@ -111,8 +111,14 @@ async function runApifyInstagram(username, opts = {}) {
     )
   }
 
-  const actor = process.env.APIFY_INSTAGRAM_ACTOR || 'apify~instagram-profile-scraper'
-  const url   = `${APIFY_BASE}/acts/${actor}/run-sync-get-dataset-items`
+  // Actor: PlatformSetting (editable desde SuperAdmin → Configuración) → env →
+  // default. El default oficial cubre el caso estándar sin configurar nada.
+  let actor = ''
+  try { actor = (await getSetting('apifyInstagramActor')) || '' } catch { /* DB no disponible → env */ }
+  actor = actor.trim() || process.env.APIFY_INSTAGRAM_ACTOR || 'apify~instagram-profile-scraper'
+  // En la API de Apify el ID del actor va con "~" (no "/"). Aceptamos "usuario/actor".
+  const actorId = actor.replace('/', '~')
+  const url     = `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`
 
   let items
   try {
@@ -188,7 +194,10 @@ async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
   const username = parseInstagramUsername(usernameOrUrl)
   if (!username) throw scrapeError('Usuario o URL de Instagram inválido.', 'INVALID_USERNAME', 400)
 
-  const postsLimit = opts.postsLimit ?? DEFAULT_POSTS_LIMIT
+  // Tope de posts: PlatformSetting (>0) → env/default. Editable desde SuperAdmin.
+  let cfgLimit = 0
+  try { cfgLimit = Number(await getSetting('apifyInstagramPostsLimit')) || 0 } catch { /* DB no disponible */ }
+  const postsLimit = opts.postsLimit ?? (cfgLimit > 0 ? cfgLimit : DEFAULT_POSTS_LIMIT)
   const item = await runApifyInstagram(username, {
     postsLimit,
     workspaceId: opts.workspaceId ?? null,
