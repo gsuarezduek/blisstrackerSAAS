@@ -4,14 +4,19 @@ Actor de Apify que scrapea **Company Pages públicas de LinkedIn sin login**. Co
 
 ## Para qué sirve
 
-- Datos públicos de Company Pages: nombre, descripción, industria, tamaño, headquarters, logo, **followers**.
-- Posts recientes (~5 a 10 sin login, hasta `maxPosts`) con texto, **likes / reactions, comments, shares, fecha y URL**.
+- Datos públicos de Company Pages: nombre, descripción, **industria**, **tamaño**, **headquarters**, tipo de empresa, especialidades, logo, website, **followers**.
 - Sin login → cero gestión de cuentas baneables.
 - Diseñado para encajar como driver del scraping de Company Pages propias y de **competidores** en BlissTracker.
 
-## Lo que NO da
+## Límite estructural de LinkedIn sin login
 
-Sin login no es posible obtener: impresiones, clicks, CTR, page views únicos, demographics de followers (industria/seniority/función/región), histórico granular. Para esos datos hace falta la API oficial de LinkedIn (`Marketing Developer Platform`).
+**LinkedIn deliberadamente NO renderiza posts a visitantes anónimos.** Cuando alguien sin sesión carga `https://www.linkedin.com/company/{slug}/`, LinkedIn muestra el overview (followers, descripción, metadata) pero **oculta el feed de posts** detrás de un banner "Sign in to view more". La URL `/company/{slug}/posts/` redirige a login en ~90% de los casos.
+
+Esto NO es un bug del actor — es comportamiento intencional de LinkedIn. El actor intenta extraer los posts visibles del DOM como best-effort, pero en la mayoría de las empresas vas a recibir `posts: []`.
+
+**Consecuencia para BlissTracker:** con el actor sin login obtenés `followersCount`, `mediaCount` y datos de perfil; los campos derivados de posts (`postsThisMonth`, `totalLikes`, `engagementRate`, `topPosts`) vienen en `null`. Para competidores eso es suficiente para trackear crecimiento de seguidores mes a mes.
+
+Tampoco es posible obtener (sin login): impresiones, clicks, CTR, page views únicos, demographics de followers. Para esos datos hace falta la API oficial de LinkedIn (`Marketing Developer Platform`).
 
 ## Input
 
