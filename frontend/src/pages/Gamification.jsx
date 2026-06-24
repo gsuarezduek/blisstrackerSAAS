@@ -248,6 +248,10 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
   const [candidateIds, setCandidateIds] = useState(game?.config?.candidateIds || [])
   const [metric, setMetric] = useState(game?.config?.metric || '')
   const [adsPlatform, setAdsPlatform] = useState(game?.config?.adsPlatform || '')
+  const [imageFile, setImageFile] = useState(null)
+  const [removeImg, setRemoveImg] = useState(false)
+  const apiUrl = import.meta.env.VITE_API_URL || ''
+  const showExistingImg = game?.hasImage && !removeImg && !imageFile
   const [startDate, setStartDate] = useState(game?.startDate ? game.startDate.slice(0, 10) : '')
   const [endDate, setEndDate] = useState(game?.endDate ? game.endDate.slice(0, 10) : '')
   const [vis, setVis] = useState(game?.visibilityRule || { mode: 'always' })
@@ -297,13 +301,25 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
 
     setSaving(true)
     try {
+      let gameId = game?.id
       if (isNew) {
         payload.type = type
         if (activate) payload.status = 'active'
-        await api.post('/gamification/games', payload)
+        const { data } = await api.post('/gamification/games', payload)
+        gameId = data.game.id
       } else {
         if (activate) payload.status = 'active'
         await api.patch(`/gamification/games/${game.id}`, payload)
+      }
+      // Imagen: subir la nueva, o quitar la existente.
+      if (gameId) {
+        if (imageFile) {
+          const fd = new FormData()
+          fd.append('image', imageFile)
+          await api.post(`/gamification/games/${gameId}/image`, fd)
+        } else if (removeImg && game?.hasImage) {
+          await api.delete(`/gamification/games/${gameId}/image`)
+        }
       }
       onSaved()
     } catch (e) {
@@ -341,6 +357,25 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
           </Field>
           <Field label="Descripción (opcional)">
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={inputCls} />
+          </Field>
+          <Field label="Imagen (opcional)">
+            <p className="text-xs text-gray-400 mb-1.5">Recomendado: <strong>1200 × 400 px</strong> (relación 3:1, apaisada). PNG, JPG o WebP, hasta 5 MB.</p>
+            {(imageFile || showExistingImg) && (
+              <div className="relative mb-2">
+                <img
+                  src={imageFile ? URL.createObjectURL(imageFile) : `${apiUrl}/api/gamification/games/${game.id}/image?v=${encodeURIComponent(game.updatedAt)}`}
+                  alt=""
+                  className="w-full aspect-[3/1] object-cover rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700"
+                />
+                <button type="button" onClick={() => { setImageFile(null); setRemoveImg(true) }} className="absolute top-1.5 right-1.5 bg-black/55 hover:bg-black/70 text-white text-xs font-medium px-2 py-1 rounded-lg">Quitar</button>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => { setImageFile(e.target.files?.[0] || null); setRemoveImg(false) }}
+              className="block w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 dark:file:bg-primary-900/30 dark:file:text-primary-300"
+            />
           </Field>
           <Field label="Premio (opcional)">
             <input value={prize} onChange={(e) => setPrize(e.target.value)} placeholder="Ej: Día libre / Almuerzo del equipo" className={inputCls} />

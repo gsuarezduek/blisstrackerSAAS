@@ -6,6 +6,7 @@ const {
 } = require('../lib/gameCatalog')
 const { isGameVisible, computeLeaderboard, resolveWinner } = require('../services/gamification.service')
 const { sendGameFinishedEmail } = require('../services/email.service')
+const { validateImageUpload } = require('../lib/imageType')
 
 const ADS_PLATFORMS = ['meta_ads', 'google_ads']
 
@@ -13,10 +14,13 @@ const ADS_PLATFORMS = ['meta_ads', 'google_ads']
 
 function tzOf(req) { return req.workspace.timezone || 'America/Argentina/Buenos_Aires' }
 
+// Nunca cargamos los bytes de la imagen en las consultas que vuelven al cliente.
+const OMIT_IMAGE = { imageData: true }
+
 async function findGame(req) {
   const id = Number(req.params.id)
   if (!Number.isInteger(id)) return null
-  return prisma.game.findFirst({ where: { id, workspaceId: req.workspace.id } })
+  return prisma.game.findFirst({ where: { id, workspaceId: req.workspace.id }, omit: OMIT_IMAGE })
 }
 
 // Da forma a un juego para la respuesta (sin leaderboard).
@@ -36,6 +40,7 @@ function shapeGame(g, { teams } = {}) {
     endDate: g.endDate,
     status: g.status,
     winnerSubject: g.winnerSubject || null,
+    hasImage: !!g.imageMimeType,
     createdAt: g.createdAt,
     updatedAt: g.updatedAt,
     ...(teams ? { teams: teams.map(shapeTeam) } : {}),
@@ -92,7 +97,7 @@ async function listGames(req, res, next) {
   try {
     const games = await prisma.game.findMany({
       where: { workspaceId: req.workspace.id },
-      include: { teams: true },
+      omit: OMIT_IMAGE, include: { teams: true },
       orderBy: { createdAt: 'desc' },
     })
     const now = new Date(), tz = tzOf(req)
@@ -138,7 +143,7 @@ async function createGame(req, res, next) {
         status: req.body.status === 'active' ? 'active' : 'draft',
         createdById: req.user.userId,
       },
-      include: { teams: true },
+      omit: OMIT_IMAGE, include: { teams: true },
     })
     res.status(201).json({ game: shapeGame(game, { teams: game.teams }) })
   } catch (err) { next(err) }
@@ -189,7 +194,7 @@ function maskLeaderboard(game, leaderboard) {
 /** GET /api/gamification/games/:id (admin) — incluye leaderboard */
 async function getGame(req, res, next) {
   try {
-    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, include: { teams: true } })
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE, include: { teams: true } })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     const leaderboard = await computeLeaderboard(game)
     res.json({ game: shapeGame(game, { teams: game.teams }), leaderboard })
@@ -256,7 +261,7 @@ async function finishGame(req, res, next) {
     const updated = await prisma.game.update({
       where: { id: game.id },
       data: { status: 'finished', winnerSubject: winner },
-      include: { teams: true },
+      omit: OMIT_IMAGE, include: { teams: true },
     })
     // Notificar al equipo por email (fire-and-forget: nunca bloquea ni rompe el finish).
     notifyGameFinished(req.workspace, updated, winner).catch((e) => console.error('[Gamification] email ganador:', e.message))
@@ -364,7 +369,7 @@ async function getActive(req, res, next) {
     const RECENT_MS = 7 * 24 * 60 * 60 * 1000 // los finalizados se muestran 7 días
     const games = await prisma.game.findMany({
       where: { workspaceId: req.workspace.id, status: { in: ['active', 'finished'] } },
-      include: { teams: true },
+      omit: OMIT_IMAGE, include: { teams: true },
       orderBy: { createdAt: 'desc' },
     })
     const shown = games.filter((g) => {
@@ -398,7 +403,7 @@ async function getActive(req, res, next) {
 /** GET /api/gamification/games/:id/leaderboard (cualquier miembro) */
 async function getLeaderboard(req, res, next) {
   try {
-    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, include: { teams: true } })
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE, include: { teams: true } })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     const leaderboard = maskLeaderboard(game, await computeLeaderboard(game))
     res.json({ game: shapeGame(game, { teams: game.teams }), leaderboard })
@@ -408,7 +413,7 @@ async function getLeaderboard(req, res, next) {
 /** POST /api/gamification/games/:id/vote (cualquier miembro) — body { targetUserId } */
 async function castVote(req, res, next) {
   try {
-    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id } })
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     if (game.scoring !== 'vote') return res.status(400).json({ error: 'Este juego no es de votación' })
     if (!isGameVisible(game, new Date(), tzOf(req))) return res.status(400).json({ error: 'La votación no está abierta en este momento' })
@@ -439,10 +444,56 @@ async function castVote(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── Imagen del juego ─────────────────────────────────────────────────────────
+
+/** POST /api/gamification/games/:id/image (admin) — multipart, campo "image" */
+async function uploadImage(req, res, next) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No se recibió ninguna imagen' })
+    // Validar por contenido real (magic bytes), no por extensión ni Content-Type del cliente.
+    const check = validateImageUpload(req.file.buffer, ['image/png', 'image/jpeg', 'image/webp'])
+    if (!check.ok) return res.status(400).json({ error: 'Formato no soportado. Usá PNG, JPG o WebP.' })
+
+    const r = await prisma.game.updateMany({
+      where: { id: Number(req.params.id), workspaceId: req.workspace.id },
+      data:  { imageData: req.file.buffer, imageMimeType: check.mimeType },
+    })
+    if (r.count === 0) return res.status(404).json({ error: 'Juego no encontrado' })
+    res.json({ ok: true, hasImage: true })
+  } catch (err) { next(err) }
+}
+
+/** DELETE /api/gamification/games/:id/image (admin) */
+async function deleteImage(req, res, next) {
+  try {
+    const r = await prisma.game.updateMany({
+      where: { id: Number(req.params.id), workspaceId: req.workspace.id },
+      data:  { imageData: null, imageMimeType: null },
+    })
+    if (r.count === 0) return res.status(404).json({ error: 'Juego no encontrado' })
+    res.json({ ok: true, hasImage: false })
+  } catch (err) { next(err) }
+}
+
+/** GET /api/gamification/games/:id/image — sirve la imagen (público, sin auth, igual que avatares/logo) */
+async function serveImage(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id)) return res.status(404).end()
+    const game = await prisma.game.findUnique({ where: { id }, select: { imageData: true, imageMimeType: true } })
+    if (!game?.imageData || !game.imageMimeType) return res.status(404).json({ error: 'Imagen no encontrada' })
+    res.set('Content-Type', game.imageMimeType)
+    res.set('X-Content-Type-Options', 'nosniff')
+    res.set('Cache-Control', 'public, max-age=86400')
+    res.send(Buffer.from(game.imageData))
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   getCatalog,
   listGames, createGame, getGame, updateGame, deleteGame, finishGame,
   createTeam, updateTeam, deleteTeam,
   setScores,
   getActive, getLeaderboard, castVote,
+  uploadImage, deleteImage, serveImage,
 }

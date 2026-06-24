@@ -1,7 +1,13 @@
 const router = require('express').Router()
+const multer = require('multer')
 const ctrl = require('../controllers/gamification.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
+
+const uploadImage = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
+
+// ─── Pública (sin auth) — sirve la imagen del juego, igual que avatares/logo ──
+router.get('/games/:id/image', ctrl.serveImage)
 
 router.use(auth)
 router.use(resolveWorkspace)
@@ -23,5 +29,7 @@ router.post('/games/:id/teams', workspaceAdminOnly, ctrl.createTeam)
 router.patch('/games/:id/teams/:teamId', workspaceAdminOnly, ctrl.updateTeam)
 router.delete('/games/:id/teams/:teamId', workspaceAdminOnly, ctrl.deleteTeam)
 router.put('/games/:id/scores', workspaceAdminOnly, ctrl.setScores)
+router.post('/games/:id/image', workspaceAdminOnly, uploadImage.single('image'), ctrl.uploadImage)
+router.delete('/games/:id/image', workspaceAdminOnly, ctrl.deleteImage)
 
 module.exports = router

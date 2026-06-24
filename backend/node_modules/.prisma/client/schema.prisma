@@ -1862,6 +1862,8 @@ model Game {
   endDate        DateTime?
   status         String    @default("draft") // "draft" | "active" | "finished" | "archived"
   winnerSubject  Json? // ganador resuelto al finalizar: { subjectId, label, score }
+  imageData      Bytes? // imagen/banner opcional del juego (se omite en los listados)
+  imageMimeType  String?
   createdById    Int
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

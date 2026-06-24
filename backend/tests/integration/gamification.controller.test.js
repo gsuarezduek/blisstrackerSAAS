@@ -1,7 +1,7 @@
 jest.mock('../../src/lib/prisma', () => ({
   workspace:            { findUnique: jest.fn() },
   workspaceMember:      { findUnique: jest.fn(), findMany: jest.fn() },
-  game:                 { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
+  game:                 { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
   gameVote:             { findMany: jest.fn(), upsert: jest.fn() },
   gameScore:            { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
   gameTeam:             { findMany: jest.fn() },
@@ -184,5 +184,44 @@ describe('PUT /api/gamification/games/:id/scores', () => {
     expect(res.status).toBe(200)
     expect(prisma.$transaction).toHaveBeenCalled()
     expect(res.body.leaderboard.subjects.map((s) => s.label)).toEqual(['Equipo B', 'Equipo A'])
+  })
+})
+
+// ─── Imagen del juego ─────────────────────────────────────────────────────────
+
+describe('imagen del juego', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+
+  it('rechaza un archivo que no es imagen (400)', async () => {
+    mockWorkspace('admin')
+    const res = await request(app)
+      .post('/api/gamification/games/5/image')
+      .set('Authorization', authHeader(1, 'admin')).set('X-Workspace', SLUG)
+      .attach('image', Buffer.from('esto no es una imagen'), 'x.png')
+    expect(res.status).toBe(400)
+  })
+
+  it('sube una imagen PNG válida', async () => {
+    mockWorkspace('admin')
+    prisma.game.updateMany.mockResolvedValue({ count: 1 })
+    const res = await request(app)
+      .post('/api/gamification/games/5/image')
+      .set('Authorization', authHeader(1, 'admin')).set('X-Workspace', SLUG)
+      .attach('image', PNG, 'x.png')
+    expect(res.status).toBe(200)
+    expect(prisma.game.updateMany).toHaveBeenCalled()
+  })
+
+  it('serve devuelve 404 sin imagen (ruta pública, sin auth)', async () => {
+    prisma.game.findUnique.mockResolvedValue(null)
+    const res = await request(app).get('/api/gamification/games/5/image')
+    expect(res.status).toBe(404)
+  })
+
+  it('serve devuelve los bytes con su content-type', async () => {
+    prisma.game.findUnique.mockResolvedValue({ imageData: Buffer.from([1, 2, 3]), imageMimeType: 'image/png' })
+    const res = await request(app).get('/api/gamification/games/5/image')
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toContain('image/png')
   })
 })

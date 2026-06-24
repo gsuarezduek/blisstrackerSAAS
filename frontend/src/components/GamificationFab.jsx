@@ -88,11 +88,21 @@ function GamePanel({ game, userId, voting, onVote }) {
 
   return (
     <div>
+      {game.hasImage && (
+        <img src={gameImageUrl(game)} alt="" className="w-full aspect-[3/1] object-cover rounded-lg mb-2 border border-gray-100 dark:border-gray-700" />
+      )}
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h4 className="font-semibold text-gray-900 dark:text-white leading-snug">{game.title}</h4>
           {game.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{game.description}</p>}
           {game.prize && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">🎁 {game.prize}</p>}
+          {game.endDate && !game.finished && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              📅 {game.startDate ? `${fmtDate(game.startDate)} – ` : ''}{fmtDate(game.endDate)}
+              <span className="mx-1">·</span>
+              <span className="font-medium text-primary-600 dark:text-primary-400">{countdown(game.endDate)}</span>
+            </p>
+          )}
         </div>
         {game.finished && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">Finalizado</span>}
       </div>
@@ -163,4 +173,28 @@ function formatScore(n, isVote, metricMeta) {
     if (metricMeta.unit === '$') return `$${n}`
   }
   return String(n)
+}
+
+const API_URL = import.meta.env.VITE_API_URL || ''
+function gameImageUrl(game) {
+  return `${API_URL}/api/gamification/games/${game.id}/image?v=${encodeURIComponent(game.updatedAt || '')}`
+}
+
+function fmtDate(d) {
+  if (!d) return ''
+  try { return new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) } catch { return '' }
+}
+
+// Cuenta regresiva hasta el cierre. endDate es fecha (medianoche UTC) y se considera
+// inclusive hasta el final de ese día — igual que el motor de visibilidad del backend.
+function countdown(endDate) {
+  const closeMs = new Date(endDate).getTime() + 24 * 60 * 60 * 1000
+  const ms = closeMs - Date.now()
+  if (ms <= 0) return 'Cierra hoy'
+  const days = Math.floor(ms / 86400000)
+  if (days >= 1) return `Quedan ${days} día${days === 1 ? '' : 's'}`
+  const hours = Math.floor(ms / 3600000)
+  if (hours >= 1) return `Quedan ${hours} h`
+  const mins = Math.max(1, Math.floor(ms / 60000))
+  return `Quedan ${mins} min`
 }
