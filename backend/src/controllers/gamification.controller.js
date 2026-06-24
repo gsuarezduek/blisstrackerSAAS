@@ -216,16 +216,9 @@ async function adminGameDetail(game) {
   const eligible = await activeMemberCount(game.workspaceId)
 
   if (game.scoring === 'vote') {
-    const votes = await prisma.gameVote.findMany({ where: { gameId: game.id }, orderBy: { createdAt: 'asc' } })
-    const names = await memberNameMap(game.workspaceId)
-    return {
-      participation: { voted: votes.length, eligible },
-      votes: votes.map((v) => ({
-        voterId: v.voterId, voterName: names.get(v.voterId) || `Usuario ${v.voterId}`,
-        targetId: v.targetUserId, targetName: names.get(v.targetUserId) || `Usuario ${v.targetUserId}`,
-        at: v.createdAt,
-      })),
-    }
+    // El voto es secreto: el admin ve cuántos votaron y el ranking, pero NO quién votó a quién.
+    const voted = await prisma.gameVote.count({ where: { gameId: game.id } })
+    return { participation: { voted, eligible } }
   }
 
   if (game.scoring === 'quiz') {

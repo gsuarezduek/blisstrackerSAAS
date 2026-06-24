@@ -2,7 +2,7 @@ jest.mock('../../src/lib/prisma', () => ({
   workspace:            { findUnique: jest.fn() },
   workspaceMember:      { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
   game:                 { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
-  gameVote:             { findMany: jest.fn(), upsert: jest.fn() },
+  gameVote:             { findMany: jest.fn(), upsert: jest.fn(), count: jest.fn() },
   gameScore:            { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
   gameQuestion:         { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn(), groupBy: jest.fn() },
   gameQuizSubmission:   { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
@@ -192,15 +192,12 @@ describe('PUT /api/gamification/games/:id/scores', () => {
 // ─── Detalle de votación (admin) ──────────────────────────────────────────────
 
 describe('GET /api/gamification/games/:id (admin) — detalle de votación', () => {
-  it('devuelve quién votó a quién + participación', async () => {
+  it('devuelve participación + ranking, pero NO quién votó a quién (voto secreto)', async () => {
     mockWorkspace('admin')
     prisma.game.findFirst.mockResolvedValue(voteGame())
-    prisma.gameVote.findMany.mockResolvedValue([
-      { voterId: 1, targetUserId: 2, createdAt: new Date() },
-      { voterId: 3, targetUserId: 2, createdAt: new Date() },
-    ])
+    prisma.gameVote.count.mockResolvedValue(2)
+    prisma.gameVote.findMany.mockResolvedValue([{ targetUserId: 2 }, { targetUserId: 2 }]) // para el ranking
     prisma.workspaceMember.findMany.mockResolvedValue([
-      { userId: 1, active: true, user: { id: 1, name: 'Yo' } },
       { userId: 2, active: true, user: { id: 2, name: 'Ana' } },
       { userId: 3, active: true, user: { id: 3, name: 'Beto' } },
     ])
@@ -212,8 +209,9 @@ describe('GET /api/gamification/games/:id (admin) — detalle de votación', () 
 
     expect(res.status).toBe(200)
     expect(res.body.participation).toEqual({ voted: 2, eligible: 3 })
-    expect(res.body.votes).toHaveLength(2)
-    expect(res.body.votes[0]).toMatchObject({ voterName: 'Yo', targetName: 'Ana' })
+    expect(res.body.votes).toBeUndefined()
+    // El ranking (no enmascarado para el admin) sí trae el conteo por candidato.
+    expect(res.body.leaderboard.subjects[0]).toMatchObject({ label: 'Ana', score: 2 })
   })
 })
 

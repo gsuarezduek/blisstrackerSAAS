@@ -751,7 +751,9 @@ function GameDetailModal({ game, onClose }) {
   const [data, setData] = useState(null)
   useEffect(() => { api.get(`/gamification/games/${game.id}`).then((r) => setData(r.data)).catch(() => setData({ error: true })) }, [game.id])
 
-  const subjects = data?.leaderboard?.subjects || []
+  const allSubjects = data?.leaderboard?.subjects || []
+  // En votaciones mostramos solo a quienes tienen al menos un voto.
+  const subjects = game.scoring === 'vote' ? allSubjects.filter((s) => s.score > 0) : allSubjects
   const part = data?.participation
 
   return (
@@ -767,8 +769,8 @@ function GameDetailModal({ game, onClose }) {
           )}
 
           <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Ranking</h4>
-          <ol className="space-y-1 mb-4">
-            {subjects.length === 0 && <li className="text-xs text-gray-400">Sin datos todavía.</li>}
+          <ol className="space-y-1">
+            {subjects.length === 0 && <li className="text-xs text-gray-400">{game.scoring === 'vote' ? 'Todavía nadie recibió votos.' : 'Sin datos todavía.'}</li>}
             {subjects.map((s, i) => (
               <li key={s.subjectId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
                 <span className="truncate text-gray-800 dark:text-gray-100">{['🥇', '🥈', '🥉'][i] || `${i + 1}.`} {s.label}</span>
@@ -776,22 +778,6 @@ function GameDetailModal({ game, onClose }) {
               </li>
             ))}
           </ol>
-
-          {game.scoring === 'vote' && (
-            <>
-              <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Quién votó a quién</h4>
-              <ul className="space-y-0.5 max-h-52 overflow-y-auto">
-                {(data.votes || []).length === 0 && <li className="text-xs text-gray-400">Nadie votó todavía.</li>}
-                {(data.votes || []).map((v) => (
-                  <li key={v.voterId} className="text-sm text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
-                    <span className="truncate">{v.voterName}</span>
-                    <span className="text-gray-400">→</span>
-                    <span className="font-medium truncate">{v.targetName}</span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
         </>
       )}
     </Modal>
