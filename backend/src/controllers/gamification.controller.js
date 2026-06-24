@@ -197,8 +197,56 @@ async function getGame(req, res, next) {
     const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE, include: { teams: true } })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     const leaderboard = await computeLeaderboard(game)
-    res.json({ game: shapeGame(game, { teams: game.teams }), leaderboard })
+    const extra = await adminGameDetail(game)
+    res.json({ game: shapeGame(game, { teams: game.teams }), leaderboard, ...extra })
   } catch (err) { next(err) }
+}
+
+// Detalle extra para el admin según el tipo de juego.
+async function adminGameDetail(game) {
+  const eligible = await activeMemberCount(game.workspaceId)
+
+  if (game.scoring === 'vote') {
+    const votes = await prisma.gameVote.findMany({ where: { gameId: game.id }, orderBy: { createdAt: 'asc' } })
+    const names = await memberNameMap(game.workspaceId)
+    return {
+      participation: { voted: votes.length, eligible },
+      votes: votes.map((v) => ({
+        voterId: v.voterId, voterName: names.get(v.voterId) || `Usuario ${v.voterId}`,
+        targetId: v.targetUserId, targetName: names.get(v.targetUserId) || `Usuario ${v.targetUserId}`,
+        at: v.createdAt,
+      })),
+    }
+  }
+
+  if (game.scoring === 'quiz') {
+    const [questions, subs] = await Promise.all([
+      prisma.gameQuestion.findMany({ where: { gameId: game.id }, orderBy: { order: 'asc' } }),
+      prisma.gameQuizSubmission.findMany({ where: { gameId: game.id }, orderBy: { submittedAt: 'asc' } }),
+    ])
+    const names = await memberNameMap(game.workspaceId)
+    const maxScore = questions.reduce((s, q) => s + (q.points || 0), 0)
+    return {
+      questions: questions.map(shapeQuestion),
+      participation: { submitted: subs.length, eligible },
+      maxScore,
+      submissions: subs.map((s) => ({ userId: s.userId, userName: names.get(s.userId) || `Usuario ${s.userId}`, score: s.score, submittedAt: s.submittedAt })),
+    }
+  }
+  return {}
+}
+
+async function activeMemberCount(workspaceId) {
+  return prisma.workspaceMember.count({ where: { workspaceId, active: true } })
+}
+async function memberNameMap(workspaceId) {
+  const members = await prisma.workspaceMember.findMany({ where: { workspaceId }, include: { user: { select: { id: true, name: true } } } })
+  return new Map(members.map((m) => [m.userId, m.user?.name]))
+}
+
+// Pregunta para el admin (incluye la respuesta correcta).
+function shapeQuestion(q) {
+  return { id: q.id, order: q.order, text: q.text, options: Array.isArray(q.options) ? q.options : [], correctOptionId: q.correctOptionId, points: q.points }
 }
 
 /** PATCH /api/gamification/games/:id (admin) */
@@ -384,6 +432,13 @@ async function getActive(req, res, next) {
     })
     const myVoteByGame = new Map(myVotes.map((v) => [v.gameId, v.targetUserId]))
 
+    // Quiz: entrega del usuario + cantidad de preguntas por juego.
+    const quizIds = shown.filter((g) => g.scoring === 'quiz').map((g) => g.id)
+    const mySubs = quizIds.length ? await prisma.gameQuizSubmission.findMany({ where: { gameId: { in: quizIds }, userId: req.user.userId } }) : []
+    const mySubByGame = new Map(mySubs.map((s) => [s.gameId, s]))
+    const qCounts = quizIds.length ? await prisma.gameQuestion.groupBy({ by: ['gameId'], where: { gameId: { in: quizIds } }, _count: { _all: true } }) : []
+    const qCountByGame = new Map(qCounts.map((c) => [c.gameId, c._count._all]))
+
     const out = []
     for (const g of shown) {
       const leaderboard = maskLeaderboard(g, await computeLeaderboard(g))
@@ -393,6 +448,9 @@ async function getActive(req, res, next) {
         leaderboard,
         ...(g.scoring === 'vote'
           ? { myVote: myVoteByGame.has(g.id) ? String(myVoteByGame.get(g.id)) : null }
+          : {}),
+        ...(g.scoring === 'quiz'
+          ? { questionCount: qCountByGame.get(g.id) || 0, mySubmission: mySubByGame.has(g.id) ? { score: mySubByGame.get(g.id).score } : null }
           : {}),
       })
     }
@@ -441,6 +499,101 @@ async function castVote(req, res, next) {
 
     const leaderboard = maskLeaderboard(game, await computeLeaderboard(game))
     res.json({ ok: true, myVote: String(targetUserId), leaderboard })
+  } catch (err) { next(err) }
+}
+
+// ─── Cuestionario (quiz) ──────────────────────────────────────────────────────
+
+/** PUT /api/gamification/games/:id/questions (admin) — reemplaza todas las preguntas */
+async function putQuestions(req, res, next) {
+  try {
+    const game = await findGame(req)
+    if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
+    if (game.scoring !== 'quiz') return res.status(400).json({ error: 'Este juego no es un cuestionario' })
+
+    const incoming = Array.isArray(req.body.questions) ? req.body.questions : []
+    const rows = []
+    for (let i = 0; i < incoming.length; i++) {
+      const q = incoming[i] || {}
+      const text = String(q.text || '').trim()
+      if (!text) return res.status(400).json({ error: `La pregunta ${i + 1} no tiene enunciado` })
+      const options = (Array.isArray(q.options) ? q.options : [])
+        .map((o, idx) => ({ id: String(o?.id || `o${idx + 1}`), text: String(o?.text || '').trim() }))
+        .filter((o) => o.text)
+      if (options.length < 2) return res.status(400).json({ error: `La pregunta ${i + 1} necesita al menos 2 opciones` })
+      if (!options.some((o) => o.id === q.correctOptionId)) return res.status(400).json({ error: `Marcá la opción correcta de la pregunta ${i + 1}` })
+      const points = Number(q.points) > 0 ? Number(q.points) : 1
+      rows.push({ gameId: game.id, order: i, text, options, correctOptionId: q.correctOptionId, points })
+    }
+
+    await prisma.$transaction([
+      prisma.gameQuestion.deleteMany({ where: { gameId: game.id } }),
+      ...(rows.length ? [prisma.gameQuestion.createMany({ data: rows })] : []),
+    ])
+    res.json({ ok: true, count: rows.length })
+  } catch (err) { next(err) }
+}
+
+// Pregunta para el usuario (oculta la respuesta correcta salvo que `reveal`).
+function publicQuestion(q, reveal) {
+  return {
+    id: q.id, order: q.order, text: q.text, points: q.points,
+    options: (Array.isArray(q.options) ? q.options : []).map((o) => ({ id: o.id, text: o.text })),
+    ...(reveal ? { correctOptionId: q.correctOptionId } : {}),
+  }
+}
+
+/** GET /api/gamification/games/:id/quiz (cualquier miembro) — preguntas sin la respuesta correcta */
+async function getQuiz(req, res, next) {
+  try {
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE })
+    if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
+    if (game.scoring !== 'quiz') return res.status(400).json({ error: 'Este juego no es un cuestionario' })
+
+    const [questions, mine] = await Promise.all([
+      prisma.gameQuestion.findMany({ where: { gameId: game.id }, orderBy: { order: 'asc' } }),
+      prisma.gameQuizSubmission.findUnique({ where: { gameId_userId: { gameId: game.id, userId: req.user.userId } } }),
+    ])
+    const reveal = !!mine || game.status === 'finished'
+    res.json({
+      game: shapeGame(game),
+      open: isGameVisible(game, new Date(), tzOf(req)) && game.status === 'active' && !mine,
+      submitted: !!mine,
+      mySubmission: mine ? { score: mine.score, answers: mine.answers, submittedAt: mine.submittedAt } : null,
+      maxScore: questions.reduce((s, q) => s + (q.points || 0), 0),
+      questions: questions.map((q) => publicQuestion(q, reveal)),
+    })
+  } catch (err) { next(err) }
+}
+
+/** POST /api/gamification/games/:id/quiz/submit (cualquier miembro) — body { answers:[{questionId,optionId}] } */
+async function submitQuiz(req, res, next) {
+  try {
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE })
+    if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
+    if (game.scoring !== 'quiz') return res.status(400).json({ error: 'Este juego no es un cuestionario' })
+    if (!isGameVisible(game, new Date(), tzOf(req))) return res.status(400).json({ error: 'El cuestionario no está abierto en este momento' })
+
+    const existing = await prisma.gameQuizSubmission.findUnique({ where: { gameId_userId: { gameId: game.id, userId: req.user.userId } } })
+    if (existing) return res.status(400).json({ error: 'Ya respondiste este cuestionario' })
+
+    const questions = await prisma.gameQuestion.findMany({ where: { gameId: game.id } })
+    if (!questions.length) return res.status(400).json({ error: 'El cuestionario no tiene preguntas' })
+
+    const answers = Array.isArray(req.body.answers) ? req.body.answers : []
+    const ansMap = new Map(answers.map((a) => [String(a.questionId), String(a.optionId)]))
+    let score = 0
+    const results = questions.map((q) => {
+      const chosen = ansMap.get(String(q.id)) || null
+      const correct = chosen != null && chosen === q.correctOptionId
+      if (correct) score += q.points || 0
+      return { questionId: q.id, chosenOptionId: chosen, correctOptionId: q.correctOptionId, correct, points: q.points }
+    })
+
+    await prisma.gameQuizSubmission.create({
+      data: { gameId: game.id, userId: req.user.userId, answers: answers.map((a) => ({ questionId: String(a.questionId), optionId: String(a.optionId) })), score },
+    })
+    res.json({ ok: true, score, maxScore: questions.reduce((s, q) => s + (q.points || 0), 0), results })
   } catch (err) { next(err) }
 }
 
@@ -494,6 +647,7 @@ module.exports = {
   listGames, createGame, getGame, updateGame, deleteGame, finishGame,
   createTeam, updateTeam, deleteTeam,
   setScores,
+  putQuestions, getQuiz, submitQuiz,
   getActive, getLeaderboard, castVote,
   uploadImage, deleteImage, serveImage,
 }

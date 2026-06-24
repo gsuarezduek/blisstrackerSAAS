@@ -13,7 +13,7 @@
 //   - defaultVisibility    : visibilityRule sugerida al crear
 
 const SUBJECT_TYPES   = ['project', 'person', 'team']
-const SCORING_MODES   = ['auto_metric', 'vote', 'manual']
+const SCORING_MODES   = ['auto_metric', 'vote', 'manual', 'quiz']
 const VISIBILITY_MODES = ['always', 'date_range', 'recurring']
 // Tipos de ventana recurrente soportados por el motor de visibilidad.
 const RECURRING_KINDS = ['last_n_days_of_month', 'first_n_days_of_month', 'day_range_of_month', 'weekdays']
@@ -39,6 +39,15 @@ const GAME_TYPES = {
     subjectConfigurable: false,
     // Por defecto solo visible la última semana del mes (configurable).
     defaultVisibility: { mode: 'recurring', kind: 'last_n_days_of_month', n: 7 },
+  },
+  quiz_challenge: {
+    name: 'Cuestionario (preguntas y respuestas)',
+    description: 'Un cuestionario con preguntas de opción múltiple (una correcta por pregunta y un puntaje por cada una). Cada persona responde una vez y suma puntos por las respuestas correctas. Gana quien más puntos hace.',
+    subjectType: 'person',
+    scoring: 'quiz',
+    requiresPeriod: false,
+    subjectConfigurable: false,
+    defaultVisibility: { mode: 'always' },
   },
   custom_challenge: {
     name: 'Desafío personalizado (puntaje manual)',

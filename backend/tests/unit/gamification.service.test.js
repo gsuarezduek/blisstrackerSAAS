@@ -6,6 +6,7 @@ jest.mock('../../src/lib/prisma', () => ({
   gameTeam:             { findMany: jest.fn() },
   gameVote:             { findMany: jest.fn() },
   gameScore:            { findMany: jest.fn() },
+  gameQuizSubmission:   { findMany: jest.fn() },
   instagramFollowerLog: { findMany: jest.fn() },
   tikTokFollowerLog:    { findMany: jest.fn() },
   linkedinFollowerLog:  { findMany: jest.fn() },
@@ -200,6 +201,29 @@ describe('computeLeaderboard — otras métricas de marketing', () => {
     prisma.adsSnapshot.findMany.mockResolvedValue([{ spend: 100.5, clicks: 10, impressions: 1000, ctr: 1 }, { spend: 49.5, clicks: 5, impressions: 500, ctr: 1 }])
     const lb = await computeLeaderboard({ ...base, config: { metric: 'ads_spend', adsPlatform: 'meta_ads' } })
     expect(lb.subjects[0].score).toBe(150)
+  })
+})
+
+describe('computeLeaderboard — quiz', () => {
+  test('ordena por puntaje desc; a igualdad gana quien entregó antes', async () => {
+    prisma.gameQuizSubmission.findMany.mockResolvedValue([
+      { userId: 2, score: 5, submittedAt: '2026-06-10T10:00:00Z' },
+      { userId: 3, score: 8, submittedAt: '2026-06-10T11:00:00Z' },
+      { userId: 4, score: 5, submittedAt: '2026-06-10T09:00:00Z' },
+    ])
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 2, user: { id: 2, name: 'Ana' } },
+      { userId: 3, user: { id: 3, name: 'Beto' } },
+      { userId: 4, user: { id: 4, name: 'Caro' } },
+    ])
+    const lb = await computeLeaderboard({ id: 9, workspaceId: 1, scoring: 'quiz' })
+    expect(lb.subjects.map((s) => [s.label, s.score])).toEqual([['Beto', 8], ['Caro', 5], ['Ana', 5]])
+  })
+
+  test('sin entregas → ranking vacío', async () => {
+    prisma.gameQuizSubmission.findMany.mockResolvedValue([])
+    const lb = await computeLeaderboard({ id: 9, workspaceId: 1, scoring: 'quiz' })
+    expect(lb.subjects).toHaveLength(0)
   })
 })
 

@@ -1868,12 +1868,45 @@ model Game {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  teams     GameTeam[]
-  votes     GameVote[]
-  scores    GameScore[]
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  teams           GameTeam[]
+  votes           GameVote[]
+  scores          GameScore[]
+  questions       GameQuestion[]
+  quizSubmissions GameQuizSubmission[]
 
   @@index([workspaceId, status])
+}
+
+// Pregunta de un juego de tipo cuestionario (scoring = "quiz"). Una opción es la correcta.
+model GameQuestion {
+  id              String   @id @default(uuid())
+  gameId          Int
+  order           Int      @default(0)
+  text            String   @db.Text
+  options         Json     @default("[]") // [{ id, text }]
+  correctOptionId String // id de la opción correcta dentro de `options`
+  points          Float    @default(1)
+  createdAt       DateTime @default(now())
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([gameId])
+}
+
+// Respuestas de una persona a un cuestionario. Una sola entrega por persona.
+model GameQuizSubmission {
+  id          String   @id @default(uuid())
+  gameId      Int
+  userId      Int
+  answers     Json     @default("[]") // [{ questionId, optionId }]
+  score       Float    @default(0)
+  submittedAt DateTime @default(now())
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, userId])
+  @@index([gameId])
 }
 
 // Equipos custom definidos por el admin POR juego (cuando subjectType = "team").

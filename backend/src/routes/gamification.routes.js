@@ -17,6 +17,8 @@ router.get('/catalog', ctrl.getCatalog)
 router.get('/active', ctrl.getActive)
 router.get('/games/:id/leaderboard', ctrl.getLeaderboard)
 router.post('/games/:id/vote', ctrl.castVote)
+router.get('/games/:id/quiz', ctrl.getQuiz)
+router.post('/games/:id/quiz/submit', ctrl.submitQuiz)
 
 // ─── Solo admin/owner ─────────────────────────────────────────────────────────
 router.get('/games', workspaceAdminOnly, ctrl.listGames)
@@ -29,6 +31,7 @@ router.post('/games/:id/teams', workspaceAdminOnly, ctrl.createTeam)
 router.patch('/games/:id/teams/:teamId', workspaceAdminOnly, ctrl.updateTeam)
 router.delete('/games/:id/teams/:teamId', workspaceAdminOnly, ctrl.deleteTeam)
 router.put('/games/:id/scores', workspaceAdminOnly, ctrl.setScores)
+router.put('/games/:id/questions', workspaceAdminOnly, ctrl.putQuestions)
 router.post('/games/:id/image', workspaceAdminOnly, uploadImage.single('image'), ctrl.uploadImage)
 router.delete('/games/:id/image', workspaceAdminOnly, ctrl.deleteImage)
 

@@ -70,7 +70,7 @@ export default function GamificationFab() {
             </div>
             <div className="overflow-y-auto px-5 py-4 space-y-5">
               {games.map((g) => (
-                <GamePanel key={g.id} game={g} userId={user.id} voting={voting === g.id} onVote={vote} />
+                <GamePanel key={g.id} game={g} userId={user.id} voting={voting === g.id} onVote={vote} onRefresh={load} />
               ))}
             </div>
           </div>
@@ -80,10 +80,11 @@ export default function GamificationFab() {
   )
 }
 
-function GamePanel({ game, userId, voting, onVote }) {
+function GamePanel({ game, userId, voting, onVote, onRefresh }) {
   const subjects = game.leaderboard?.subjects || []
   const hidden = game.leaderboard?.resultsHidden
   const isVote = game.scoring === 'vote'
+  const isQuiz = game.scoring === 'quiz'
   const metricMeta = game.leaderboard?.metric || null
 
   return (
@@ -145,8 +146,15 @@ function GamePanel({ game, userId, voting, onVote }) {
             )
           })}
         </div>
+      ) : isQuiz && !game.finished ? (
+        <div className="mt-2">
+          {game.mySubmission
+            ? <p className="text-sm text-green-600 dark:text-green-400 mb-2">✓ Ya respondiste · tu puntaje: <strong>{game.mySubmission.score}</strong></p>
+            : <QuizTaker gameId={game.id} questionCount={game.questionCount} onDone={onRefresh} />}
+          {(game.mySubmission || subjects.length > 0) && <QuizRanking subjects={subjects} />}
+        </div>
       ) : (
-        /* Ranking (competencias, manual, o votación finalizada) */
+        /* Ranking (competencias, manual, o votación/quiz finalizado) */
         <ol className="mt-2 space-y-1">
           {subjects.length === 0 && <li className="text-xs text-gray-400">Todavía sin puntajes.</li>}
           {subjects.map((s, i) => (
@@ -173,6 +181,92 @@ function formatScore(n, isVote, metricMeta) {
     if (metricMeta.unit === '$') return `$${n}`
   }
   return String(n)
+}
+
+function QuizRanking({ subjects }) {
+  if (!subjects.length) return null
+  return (
+    <ol className="mt-1 space-y-1">
+      {subjects.map((s, i) => (
+        <li key={s.subjectId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="w-5 text-center">{MEDAL[i] || `${i + 1}.`}</span>
+            {s.avatar && <img src={avatarUrl(s.avatar)} alt="" className="w-6 h-6 rounded-full object-cover" />}
+            <span className="truncate text-gray-800 dark:text-gray-100">{s.label}</span>
+          </span>
+          <span className="text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0">{s.score} pts</span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+// Cuestionario: el usuario abre, responde y envía. Una sola entrega.
+function QuizTaker({ gameId, questionCount, onDone }) {
+  const [quiz, setQuiz] = useState(null)
+  const [answers, setAnswers] = useState({})
+  const [result, setResult] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  function open() {
+    api.get(`/gamification/games/${gameId}/quiz`)
+      .then((r) => setQuiz(r.data))
+      .catch(() => window.alert('No se pudo cargar el cuestionario'))
+  }
+
+  async function submit() {
+    setBusy(true)
+    try {
+      const payload = { answers: Object.entries(answers).map(([questionId, optionId]) => ({ questionId, optionId })) }
+      const { data } = await api.post(`/gamification/games/${gameId}/quiz/submit`, payload)
+      setResult(data)
+    } catch (e) {
+      window.alert(e.response?.data?.error || 'No se pudo enviar el cuestionario')
+    } finally { setBusy(false) }
+  }
+
+  if (result) {
+    return (
+      <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/40 px-3 py-2 text-sm">
+        <p className="font-semibold text-green-700 dark:text-green-300">¡Listo! Tu puntaje: {result.score} / {result.maxScore}</p>
+        <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+          {result.results.filter((r) => r.correct).length} de {result.results.length} correctas.
+        </p>
+        <button onClick={onDone} className="mt-2 text-xs font-medium text-primary-600 dark:text-primary-400">Ver ranking</button>
+      </div>
+    )
+  }
+
+  if (!quiz) {
+    return (
+      <button onClick={open} className="w-full text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg py-2 transition-colors">
+        📝 Responder cuestionario{questionCount ? ` (${questionCount} preguntas)` : ''}
+      </button>
+    )
+  }
+
+  const allAnswered = quiz.questions.length > 0 && quiz.questions.every((q) => answers[q.id])
+  return (
+    <div className="space-y-3">
+      {quiz.questions.map((q, i) => (
+        <div key={q.id}>
+          <p className="text-sm font-medium text-gray-800 dark:text-gray-100 mb-1">{i + 1}. {q.text} <span className="text-xs text-gray-400">({q.points} pts)</span></p>
+          <div className="space-y-1">
+            {q.options.map((o) => (
+              <label key={o.id} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-sm cursor-pointer transition-colors ${answers[q.id] === o.id ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                <input type="radio" name={`q-${q.id}`} checked={answers[q.id] === o.id} onChange={() => setAnswers((a) => ({ ...a, [q.id]: o.id }))} />
+                <span className="text-gray-800 dark:text-gray-100">{o.text}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+      <button disabled={!allAnswered || busy} onClick={submit} className="w-full text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg py-2 transition-colors disabled:opacity-50">
+        {busy ? 'Enviando…' : 'Enviar respuestas'}
+      </button>
+      {!allAnswered && <p className="text-xs text-gray-400 text-center">Respondé todas las preguntas para enviar.</p>}
+    </div>
+  )
 }
 
 const API_URL = import.meta.env.VITE_API_URL || ''

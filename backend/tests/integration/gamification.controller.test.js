@@ -1,9 +1,11 @@
 jest.mock('../../src/lib/prisma', () => ({
   workspace:            { findUnique: jest.fn() },
-  workspaceMember:      { findUnique: jest.fn(), findMany: jest.fn() },
+  workspaceMember:      { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
   game:                 { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
   gameVote:             { findMany: jest.fn(), upsert: jest.fn() },
   gameScore:            { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
+  gameQuestion:         { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn(), groupBy: jest.fn() },
+  gameQuizSubmission:   { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
   gameTeam:             { findMany: jest.fn() },
   project:              { findMany: jest.fn() },
   user:                 { findMany: jest.fn() },
@@ -184,6 +186,101 @@ describe('PUT /api/gamification/games/:id/scores', () => {
     expect(res.status).toBe(200)
     expect(prisma.$transaction).toHaveBeenCalled()
     expect(res.body.leaderboard.subjects.map((s) => s.label)).toEqual(['Equipo B', 'Equipo A'])
+  })
+})
+
+// ─── Detalle de votación (admin) ──────────────────────────────────────────────
+
+describe('GET /api/gamification/games/:id (admin) — detalle de votación', () => {
+  it('devuelve quién votó a quién + participación', async () => {
+    mockWorkspace('admin')
+    prisma.game.findFirst.mockResolvedValue(voteGame())
+    prisma.gameVote.findMany.mockResolvedValue([
+      { voterId: 1, targetUserId: 2, createdAt: new Date() },
+      { voterId: 3, targetUserId: 2, createdAt: new Date() },
+    ])
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 1, active: true, user: { id: 1, name: 'Yo' } },
+      { userId: 2, active: true, user: { id: 2, name: 'Ana' } },
+      { userId: 3, active: true, user: { id: 3, name: 'Beto' } },
+    ])
+    prisma.workspaceMember.count.mockResolvedValue(3)
+
+    const res = await request(app)
+      .get('/api/gamification/games/5')
+      .set('Authorization', authHeader(1, 'admin')).set('X-Workspace', SLUG)
+
+    expect(res.status).toBe(200)
+    expect(res.body.participation).toEqual({ voted: 2, eligible: 3 })
+    expect(res.body.votes).toHaveLength(2)
+    expect(res.body.votes[0]).toMatchObject({ voterName: 'Yo', targetName: 'Ana' })
+  })
+})
+
+// ─── Cuestionario ─────────────────────────────────────────────────────────────
+
+describe('PUT /api/gamification/games/:id/questions (admin)', () => {
+  function quizGame() { return { id: 7, workspaceId: WS, scoring: 'quiz', subjectType: 'person', config: {}, status: 'draft' } }
+
+  it('rechaza una pregunta sin opción correcta marcada', async () => {
+    mockWorkspace('admin')
+    prisma.game.findFirst.mockResolvedValue(quizGame())
+    const res = await request(app)
+      .put('/api/gamification/games/7/questions')
+      .set('Authorization', authHeader(1, 'admin')).set('X-Workspace', SLUG)
+      .send({ questions: [{ text: '¿2+2?', options: [{ id: 'a', text: '4' }, { id: 'b', text: '5' }], correctOptionId: 'zzz', points: 1 }] })
+    expect(res.status).toBe(400)
+  })
+
+  it('guarda preguntas válidas', async () => {
+    mockWorkspace('admin')
+    prisma.game.findFirst.mockResolvedValue(quizGame())
+    prisma.gameQuestion.deleteMany.mockResolvedValue({ count: 0 })
+    prisma.gameQuestion.createMany.mockResolvedValue({ count: 1 })
+    const res = await request(app)
+      .put('/api/gamification/games/7/questions')
+      .set('Authorization', authHeader(1, 'admin')).set('X-Workspace', SLUG)
+      .send({ questions: [{ text: '¿2+2?', options: [{ id: 'a', text: '4' }, { id: 'b', text: '5' }], correctOptionId: 'a', points: 2 }] })
+    expect(res.status).toBe(200)
+    expect(res.body.count).toBe(1)
+    expect(prisma.$transaction).toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/gamification/games/:id/quiz/submit', () => {
+  function quizGame() { return { id: 7, workspaceId: WS, scoring: 'quiz', subjectType: 'person', config: {}, status: 'active', visibilityRule: { mode: 'always' } } }
+
+  it('calcula el puntaje y registra la entrega', async () => {
+    mockWorkspace('member')
+    prisma.game.findFirst.mockResolvedValue(quizGame())
+    prisma.gameQuizSubmission.findUnique.mockResolvedValue(null)
+    prisma.gameQuestion.findMany.mockResolvedValue([
+      { id: 'q1', correctOptionId: 'a', points: 2 },
+      { id: 'q2', correctOptionId: 'x', points: 3 },
+    ])
+    prisma.gameQuizSubmission.create.mockResolvedValue({})
+
+    const res = await request(app)
+      .post('/api/gamification/games/7/quiz/submit')
+      .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
+      .send({ answers: [{ questionId: 'q1', optionId: 'a' }, { questionId: 'q2', optionId: 'y' }] })
+
+    expect(res.status).toBe(200)
+    expect(res.body.score).toBe(2)      // q1 correcta (2), q2 incorrecta
+    expect(res.body.maxScore).toBe(5)
+    expect(prisma.gameQuizSubmission.create).toHaveBeenCalled()
+  })
+
+  it('rechaza una segunda entrega', async () => {
+    mockWorkspace('member')
+    prisma.game.findFirst.mockResolvedValue(quizGame())
+    prisma.gameQuizSubmission.findUnique.mockResolvedValue({ id: 'sub1', score: 2 })
+    const res = await request(app)
+      .post('/api/gamification/games/7/quiz/submit')
+      .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
+      .send({ answers: [] })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/ya respondiste/i)
   })
 })
 

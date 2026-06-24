@@ -39,6 +39,7 @@ export default function Gamification() {
   const [filter, setFilter] = useState('all')     // all | active | draft | finished
   const [editing, setEditing] = useState(null)   // game o {} para nuevo
   const [scoresFor, setScoresFor] = useState(null) // game manual para cargar puntos
+  const [detailFor, setDetailFor] = useState(null) // game para ver detalle (votación/quiz)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -148,6 +149,7 @@ export default function Gamification() {
                 game={g}
                 onEdit={() => setEditing(g)}
                 onScores={() => setScoresFor(g)}
+                onDetail={() => setDetailFor(g)}
                 onActivate={() => setStatus(g, 'active')}
                 onPause={() => setStatus(g, 'draft')}
                 onFinish={() => finish(g)}
@@ -180,13 +182,15 @@ export default function Gamification() {
           onSaved={() => { setScoresFor(null); load() }}
         />
       )}
+
+      {detailFor && <GameDetailModal game={detailFor} onClose={() => setDetailFor(null)} />}
     </div>
   )
 }
 
 // ─── Card de un juego ─────────────────────────────────────────────────────────
 
-function GameCard({ game, onEdit, onScores, onActivate, onPause, onFinish, onRemove }) {
+function GameCard({ game, onEdit, onScores, onDetail, onActivate, onPause, onFinish, onRemove }) {
   const pill = STATUS_PILL[game.status] || STATUS_PILL.draft
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
@@ -216,6 +220,7 @@ function GameCard({ game, onEdit, onScores, onActivate, onPause, onFinish, onRem
         {game.status === 'draft' && <Btn onClick={onActivate} kind="primary">▶ Activar</Btn>}
         {game.status === 'active' && <Btn onClick={onPause}>⏸ Pausar</Btn>}
         {game.scoring === 'manual' && game.status !== 'finished' && <Btn onClick={onScores}>🔢 Cargar puntos</Btn>}
+        {(game.scoring === 'vote' || game.scoring === 'quiz') && <Btn onClick={onDetail}>{game.scoring === 'vote' ? '👁 Ver votación' : '👁 Ver resultados'}</Btn>}
         <Btn onClick={onEdit}>✏️ Editar</Btn>
         {game.status !== 'finished' && <Btn onClick={onFinish}>🏁 Finalizar</Btn>}
         <Btn onClick={onRemove} kind="danger">🗑 Eliminar</Btn>
@@ -250,8 +255,18 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
   const [adsPlatform, setAdsPlatform] = useState(game?.config?.adsPlatform || '')
   const [imageFile, setImageFile] = useState(null)
   const [removeImg, setRemoveImg] = useState(false)
+  const [questions, setQuestions] = useState([])
   const apiUrl = import.meta.env.VITE_API_URL || ''
   const showExistingImg = game?.hasImage && !removeImg && !imageFile
+
+  // Carga las preguntas existentes al editar un cuestionario.
+  useEffect(() => {
+    if (game?.id && game.scoring === 'quiz') {
+      api.get(`/gamification/games/${game.id}`)
+        .then(({ data }) => setQuestions((data.questions || []).map((q) => ({ text: q.text, options: q.options || [], correctOptionId: q.correctOptionId, points: q.points }))))
+        .catch(() => {})
+    }
+  }, [game?.id, game?.scoring])
   const [startDate, setStartDate] = useState(game?.startDate ? game.startDate.slice(0, 10) : '')
   const [endDate, setEndDate] = useState(game?.endDate ? game.endDate.slice(0, 10) : '')
   const [vis, setVis] = useState(game?.visibilityRule || { mode: 'always' })
@@ -280,6 +295,15 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
     if (def?.metricRequired && !metric) return setError('Elegí la métrica de la competencia')
     if (metricDef?.needsPlatform && !adsPlatform) return setError('Elegí la plataforma de anuncios (Meta o Google)')
     if (def?.requiresPeriod && (!startDate || !endDate)) return setError('Este juego necesita fecha de inicio y fin')
+    if (scoring === 'quiz') {
+      if (activate && questions.length === 0) return setError('Agregá al menos una pregunta para activar el cuestionario')
+      for (let i = 0; i < questions.length; i++) {
+        if (!questions[i].text.trim()) return setError(`La pregunta ${i + 1} no tiene enunciado`)
+        const opts = questions[i].options.filter((o) => o.text.trim())
+        if (opts.length < 2) return setError(`La pregunta ${i + 1} necesita al menos 2 opciones`)
+        if (!opts.some((o) => o.id === questions[i].correctOptionId)) return setError(`Marcá la opción correcta de la pregunta ${i + 1}`)
+      }
+    }
 
     const config = {}
     if (scoring === 'auto_metric') {
@@ -320,6 +344,10 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
         } else if (removeImg && game?.hasImage) {
           await api.delete(`/gamification/games/${gameId}/image`)
         }
+      }
+      // Cuestionario: guardar las preguntas.
+      if (gameId && scoring === 'quiz') {
+        await api.put(`/gamification/games/${gameId}/questions`, { questions })
       }
       onSaved()
     } catch (e) {
@@ -436,6 +464,11 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
             <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1 mb-3">
               Después de guardar el juego vas a poder cargar los puntos con el botón <strong>🔢 Cargar puntos</strong>.
             </p>
+          )}
+          {scoring === 'quiz' && (
+            <Field label="Preguntas">
+              <QuizEditor questions={questions} setQuestions={setQuestions} />
+            </Field>
           )}
           {effSubjectType === 'team' && (
             isNew ? (
@@ -656,6 +689,109 @@ function ManualScores({ game, members, projects, onClose, onSaved }) {
             <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl">Cancelar</button>
             <button disabled={saving} onClick={save} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar puntos'}</button>
           </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
+// ─── Editor de preguntas (quiz) ───────────────────────────────────────────────
+
+const oid = () => `o${Math.random().toString(36).slice(2, 8)}`
+
+function QuizEditor({ questions, setQuestions }) {
+  function updateQ(i, patch) { setQuestions((qs) => qs.map((q, idx) => idx === i ? { ...q, ...patch } : q)) }
+  function addQ() { setQuestions((qs) => { const a = oid(), b = oid(); return [...qs, { text: '', options: [{ id: a, text: '' }, { id: b, text: '' }], correctOptionId: a, points: 1 }] }) }
+  function removeQ(i) { setQuestions((qs) => qs.filter((_, idx) => idx !== i)) }
+  function updateOpt(i, oi, text) { updateQ(i, { options: questions[i].options.map((o, idx) => idx === oi ? { ...o, text } : o) }) }
+  function addOpt(i) { updateQ(i, { options: [...questions[i].options, { id: oid(), text: '' }] }) }
+  function removeOpt(i, oi) {
+    const q = questions[i]
+    if (q.options.length <= 2) return
+    const removed = q.options[oi]
+    const options = q.options.filter((_, idx) => idx !== oi)
+    updateQ(i, { options, correctOptionId: removed.id === q.correctOptionId ? options[0].id : q.correctOptionId })
+  }
+
+  return (
+    <div className="space-y-3">
+      {questions.length === 0 && <p className="text-xs text-gray-400">Todavía no hay preguntas.</p>}
+      {questions.map((q, i) => (
+        <div key={i} className="border border-gray-200 dark:border-gray-600 rounded-xl p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 shrink-0">P{i + 1}</span>
+            <input value={q.text} onChange={(e) => updateQ(i, { text: e.target.value })} placeholder="Enunciado de la pregunta" className={`${inputCls} flex-1`} />
+            <button type="button" onClick={() => removeQ(i)} className="text-gray-400 hover:text-red-500 px-1">🗑</button>
+          </div>
+          <p className="text-[11px] text-gray-400">Marcá la opción correcta con el círculo.</p>
+          {q.options.map((o, oi) => (
+            <div key={o.id} className="flex items-center gap-2 pl-5">
+              <input type="radio" name={`correct-${i}`} checked={q.correctOptionId === o.id} onChange={() => updateQ(i, { correctOptionId: o.id })} title="Correcta" />
+              <input value={o.text} onChange={(e) => updateOpt(i, oi, e.target.value)} placeholder={`Opción ${oi + 1}`} className={`${inputCls} flex-1`} />
+              {q.options.length > 2 && <button type="button" onClick={() => removeOpt(i, oi)} className="text-gray-400 hover:text-red-500 px-1">✕</button>}
+            </div>
+          ))}
+          <div className="flex items-center justify-between pl-5">
+            <button type="button" onClick={() => addOpt(i)} className="text-xs text-primary-600 dark:text-primary-400 font-medium">+ Opción</button>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              Puntos:
+              <input type="number" min={1} value={q.points} onChange={(e) => updateQ(i, { points: Number(e.target.value) })} className="w-16 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" />
+            </label>
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={addQ} className="text-sm text-primary-600 dark:text-primary-400 font-medium">+ Agregar pregunta</button>
+    </div>
+  )
+}
+
+// ─── Detalle (admin): votación o resultados del quiz ──────────────────────────
+
+function GameDetailModal({ game, onClose }) {
+  const [data, setData] = useState(null)
+  useEffect(() => { api.get(`/gamification/games/${game.id}`).then((r) => setData(r.data)).catch(() => setData({ error: true })) }, [game.id])
+
+  const subjects = data?.leaderboard?.subjects || []
+  const part = data?.participation
+
+  return (
+    <Modal title={`Detalle · ${game.title}`} onClose={onClose}>
+      {!data ? <p className="text-sm text-gray-400">Cargando…</p> : (
+        <>
+          {part && (
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
+              {game.scoring === 'vote'
+                ? <>Votaron <strong>{part.voted}</strong> de <strong>{part.eligible}</strong> personas.</>
+                : <>Respondieron <strong>{part.submitted}</strong> de <strong>{part.eligible}</strong>{data.maxScore ? <> · puntaje máximo <strong>{data.maxScore}</strong></> : null}.</>}
+            </p>
+          )}
+
+          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Ranking</h4>
+          <ol className="space-y-1 mb-4">
+            {subjects.length === 0 && <li className="text-xs text-gray-400">Sin datos todavía.</li>}
+            {subjects.map((s, i) => (
+              <li key={s.subjectId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
+                <span className="truncate text-gray-800 dark:text-gray-100">{['🥇', '🥈', '🥉'][i] || `${i + 1}.`} {s.label}</span>
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{s.score} {game.scoring === 'vote' ? (s.score === 1 ? 'voto' : 'votos') : 'pts'}</span>
+              </li>
+            ))}
+          </ol>
+
+          {game.scoring === 'vote' && (
+            <>
+              <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Quién votó a quién</h4>
+              <ul className="space-y-0.5 max-h-52 overflow-y-auto">
+                {(data.votes || []).length === 0 && <li className="text-xs text-gray-400">Nadie votó todavía.</li>}
+                {(data.votes || []).map((v) => (
+                  <li key={v.voterId} className="text-sm text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
+                    <span className="truncate">{v.voterName}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="font-medium truncate">{v.targetName}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </>
       )}
     </Modal>

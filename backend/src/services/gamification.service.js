@@ -127,7 +127,31 @@ async function computeLeaderboard(game) {
   if (game.scoring === 'vote')        return leaderboardVote(game)
   if (game.scoring === 'manual')      return leaderboardManual(game)
   if (game.scoring === 'auto_metric') return leaderboardAutoMetric(game)
+  if (game.scoring === 'quiz')        return leaderboardQuiz(game)
   return { subjects: [], warnings: [] }
+}
+
+/** Cuestionario: ranking por puntaje de las entregas. */
+async function leaderboardQuiz(game) {
+  const subs = await prisma.gameQuizSubmission.findMany({ where: { gameId: game.id } })
+  if (!subs.length) return { subjects: [], warnings: [] }
+
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId: game.workspaceId, userId: { in: subs.map((s) => s.userId) } },
+    include: { user: { select: { id: true, name: true, avatar: true } } },
+  })
+  const byId = new Map(members.map((m) => [m.userId, m.user]))
+
+  const subjects = subs.map((s) => ({
+    subjectId: String(s.userId),
+    label: byId.get(s.userId)?.name || `Usuario ${s.userId}`,
+    avatar: byId.get(s.userId)?.avatar || null,
+    score: s.score,
+    detail: { submittedAt: s.submittedAt },
+  }))
+  // Mayor puntaje primero; a igualdad, quien entregó antes va arriba.
+  subjects.sort((a, b) => b.score - a.score || new Date(a.detail.submittedAt) - new Date(b.detail.submittedAt))
+  return { subjects, warnings: [] }
 }
 
 /** Votación: cuenta votos por persona candidata. */
