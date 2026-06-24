@@ -1,9 +1,13 @@
 const prisma = require('../lib/prisma')
 const {
   GAME_TYPES, SUBJECT_TYPES, VISIBILITY_MODES, RECURRING_KINDS,
-  gameTypeDef, isValidGameType,
+  MARKETING_METRICS, MARKETING_CATEGORIES,
+  gameTypeDef, isValidGameType, marketingMetricDef, isValidMarketingMetric,
 } = require('../lib/gameCatalog')
 const { isGameVisible, computeLeaderboard, resolveWinner } = require('../services/gamification.service')
+const { sendGameFinishedEmail } = require('../services/email.service')
+
+const ADS_PLATFORMS = ['meta_ads', 'google_ads']
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +75,14 @@ function parseDate(v) {
 /** GET /api/gamification/catalog */
 function getCatalog(_req, res) {
   const types = Object.entries(GAME_TYPES).map(([key, def]) => ({ key, ...def }))
-  res.json({ types, subjectTypes: SUBJECT_TYPES, recurringKinds: RECURRING_KINDS })
+  const marketingMetrics = Object.entries(MARKETING_METRICS).map(([key, def]) => ({ key, ...def }))
+  res.json({
+    types,
+    subjectTypes: SUBJECT_TYPES,
+    recurringKinds: RECURRING_KINDS,
+    marketingMetrics,
+    marketingCategories: MARKETING_CATEGORIES,
+  })
 }
 
 // ─── Admin: CRUD de juegos ────────────────────────────────────────────────────
@@ -108,6 +119,9 @@ async function createGame(req, res, next) {
     const { error: visError, rule } = validateVisibility(req.body.visibilityRule, def)
     if (visError) return res.status(400).json({ error: visError })
 
+    const metricError = validateMarketingConfig(def, req.body)
+    if (metricError) return res.status(400).json({ error: metricError })
+
     const game = await prisma.game.create({
       data: {
         workspaceId: req.workspace.id,
@@ -135,8 +149,41 @@ function sanitizeConfig(cfg) {
   const out = {}
   if (Array.isArray(cfg.candidateIds)) out.candidateIds = cfg.candidateIds.map(Number).filter(Number.isInteger)
   if (Array.isArray(cfg.projectIds))   out.projectIds = cfg.projectIds.map(Number).filter(Number.isInteger)
+  if (typeof cfg.metric === 'string' && isValidMarketingMetric(cfg.metric)) out.metric = cfg.metric
+  if (ADS_PLATFORMS.includes(cfg.adsPlatform)) out.adsPlatform = cfg.adsPlatform
   if (cfg.metricNote) out.metricNote = String(cfg.metricNote).slice(0, 500)
+  // Votación a ciegas: por defecto los votos quedan ocultos hasta el cierre.
+  // Solo guardamos el override explícito a `false` (mostrar en vivo).
+  if (cfg.hideLiveResults === false) out.hideLiveResults = false
   return out
+}
+
+// Valida la métrica de una competencia de marketing. Devuelve string de error o null.
+function validateMarketingConfig(def, body) {
+  if (!def?.metricRequired) return null
+  const metricKey = body.config?.metric
+  const md = marketingMetricDef(metricKey)
+  if (!md) return 'Elegí una métrica válida para la competencia'
+  if (md.needsPlatform && !ADS_PLATFORMS.includes(body.config?.adsPlatform)) {
+    return 'Para métricas de anuncios, elegí la plataforma (Meta Ads o Google Ads)'
+  }
+  return null
+}
+
+// ¿Hay que ocultar el ranking a los usuarios? Aplica a votaciones en curso, salvo
+// que el juego haya optado explícitamente por mostrar resultados en vivo.
+function resultsHidden(game) {
+  return game.scoring === 'vote' && game.status !== 'finished' && game.config?.hideLiveResults !== false
+}
+
+// Versión del leaderboard para los USUARIOS. En votaciones a ciegas oculta los
+// puntajes y reordena por nombre (para no filtrar quién va ganando por el orden).
+function maskLeaderboard(game, leaderboard) {
+  if (!resultsHidden(game)) return leaderboard
+  const subjects = [...(leaderboard.subjects || [])]
+    .sort((a, b) => String(a.label).localeCompare(String(b.label)))
+    .map(({ score, ...rest }) => rest)
+  return { subjects, resultsHidden: true, totalVotes: leaderboard.totalVotes }
 }
 
 /** GET /api/gamification/games/:id (admin) — incluye leaderboard */
@@ -163,7 +210,13 @@ async function updateGame(req, res, next) {
     }
     if (req.body.description !== undefined) data.description = req.body.description?.trim() || null
     if (req.body.prize !== undefined) data.prize = req.body.prize?.trim() || null
-    if (req.body.config !== undefined) data.config = sanitizeConfig(req.body.config)
+    if (req.body.config !== undefined) {
+      if (def?.metricRequired) {
+        const metricError = validateMarketingConfig(def, req.body)
+        if (metricError) return res.status(400).json({ error: metricError })
+      }
+      data.config = sanitizeConfig(req.body.config)
+    }
     if (req.body.startDate !== undefined) data.startDate = parseDate(req.body.startDate)
     if (req.body.endDate !== undefined) data.endDate = parseDate(req.body.endDate)
     if (req.body.subjectType !== undefined && def?.subjectConfigurable) {
@@ -205,8 +258,21 @@ async function finishGame(req, res, next) {
       data: { status: 'finished', winnerSubject: winner },
       include: { teams: true },
     })
+    // Notificar al equipo por email (fire-and-forget: nunca bloquea ni rompe el finish).
+    notifyGameFinished(req.workspace, updated, winner).catch((e) => console.error('[Gamification] email ganador:', e.message))
     res.json({ game: shapeGame(updated, { teams: updated.teams }), winner })
   } catch (err) { next(err) }
+}
+
+// Envía el email de "juego finalizado" a todos los miembros activos del workspace.
+async function notifyGameFinished(workspace, game, winner) {
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId: workspace.id, active: true },
+    select: { user: { select: { email: true } } },
+  })
+  const emails = members.map((m) => m.user?.email).filter(Boolean)
+  if (!emails.length) return
+  await sendGameFinishedEmail(emails, workspace.name, game, winner, process.env.FRONTEND_URL, workspace.id)
 }
 
 // ─── Admin: equipos custom ────────────────────────────────────────────────────
@@ -291,28 +357,34 @@ async function setScores(req, res, next) {
 
 // ─── Usuario: vista + votación ────────────────────────────────────────────────
 
-/** GET /api/gamification/active — juegos visibles ahora para el usuario (alimenta el botón flotante) */
+/** GET /api/gamification/active — juegos visibles ahora + finalizados recientes (alimenta el botón flotante) */
 async function getActive(req, res, next) {
   try {
     const now = new Date(), tz = tzOf(req)
+    const RECENT_MS = 7 * 24 * 60 * 60 * 1000 // los finalizados se muestran 7 días
     const games = await prisma.game.findMany({
-      where: { workspaceId: req.workspace.id, status: 'active' },
+      where: { workspaceId: req.workspace.id, status: { in: ['active', 'finished'] } },
       include: { teams: true },
       orderBy: { createdAt: 'desc' },
     })
-    const visible = games.filter((g) => isGameVisible(g, now, tz))
+    const shown = games.filter((g) => {
+      if (g.status === 'active') return isGameVisible(g, now, tz)
+      // Finalizado: se sigue mostrando un tiempo para celebrar al ganador.
+      return g.winnerSubject && (now - new Date(g.updatedAt)) <= RECENT_MS
+    })
 
     // Votos del usuario actual en estos juegos.
     const myVotes = await prisma.gameVote.findMany({
-      where: { gameId: { in: visible.map((g) => g.id) }, voterId: req.user.userId },
+      where: { gameId: { in: shown.map((g) => g.id) }, voterId: req.user.userId },
     })
     const myVoteByGame = new Map(myVotes.map((v) => [v.gameId, v.targetUserId]))
 
     const out = []
-    for (const g of visible) {
-      const leaderboard = await computeLeaderboard(g)
+    for (const g of shown) {
+      const leaderboard = maskLeaderboard(g, await computeLeaderboard(g))
       out.push({
         ...shapeGame(g, { teams: g.teams }),
+        finished: g.status === 'finished',
         leaderboard,
         ...(g.scoring === 'vote'
           ? { myVote: myVoteByGame.has(g.id) ? String(myVoteByGame.get(g.id)) : null }
@@ -328,7 +400,7 @@ async function getLeaderboard(req, res, next) {
   try {
     const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, include: { teams: true } })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
-    const leaderboard = await computeLeaderboard(game)
+    const leaderboard = maskLeaderboard(game, await computeLeaderboard(game))
     res.json({ game: shapeGame(game, { teams: game.teams }), leaderboard })
   } catch (err) { next(err) }
 }
@@ -362,7 +434,7 @@ async function castVote(req, res, next) {
       create: { gameId: game.id, voterId: req.user.userId, targetUserId },
     })
 
-    const leaderboard = await computeLeaderboard(game)
+    const leaderboard = maskLeaderboard(game, await computeLeaderboard(game))
     res.json({ ok: true, myVote: String(targetUserId), leaderboard })
   } catch (err) { next(err) }
 }

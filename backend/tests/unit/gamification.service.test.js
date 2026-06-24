@@ -7,6 +7,16 @@ jest.mock('../../src/lib/prisma', () => ({
   gameVote:             { findMany: jest.fn() },
   gameScore:            { findMany: jest.fn() },
   instagramFollowerLog: { findMany: jest.fn() },
+  tikTokFollowerLog:    { findMany: jest.fn() },
+  linkedinFollowerLog:  { findMany: jest.fn() },
+  facebookFollowerLog:  { findMany: jest.fn() },
+  instagramSnapshot:    { findMany: jest.fn() },
+  tikTokSnapshot:       { findMany: jest.fn() },
+  linkedinSnapshot:     { findMany: jest.fn() },
+  facebookSnapshot:     { findMany: jest.fn() },
+  analyticsSnapshot:    { findMany: jest.fn() },
+  adsSnapshot:          { findMany: jest.fn() },
+  geoAudit:             { findFirst: jest.fn() },
 }))
 
 const prisma = require('../../src/lib/prisma')
@@ -129,13 +139,13 @@ describe('computeLeaderboard — manual', () => {
   })
 })
 
-describe('computeLeaderboard — auto_metric instagram_followers', () => {
+describe('computeLeaderboard — competencia de marketing (followers_instagram)', () => {
   const game = {
-    id: 9, workspaceId: 1, scoring: 'auto_metric', type: 'instagram_followers_competition',
-    config: {}, startDate: '2026-06-01T00:00:00Z', endDate: '2026-06-30T00:00:00Z',
+    id: 9, workspaceId: 1, scoring: 'auto_metric', type: 'marketing_project_competition',
+    config: { metric: 'followers_instagram' }, startDate: '2026-06-01T00:00:00Z', endDate: '2026-06-30T00:00:00Z',
   }
 
-  test('calcula el delta de seguidores por proyecto y ordena', async () => {
+  test('calcula el delta de seguidores por proyecto y ordena; incluye meta', async () => {
     prisma.project.findMany.mockResolvedValue([
       { id: 10, name: 'Proyecto X' },
       { id: 11, name: 'Proyecto Y' },
@@ -150,6 +160,7 @@ describe('computeLeaderboard — auto_metric instagram_followers', () => {
     })
     const lb = await computeLeaderboard(game)
     expect(lb.subjects.map((s) => [s.label, s.score])).toEqual([['Proyecto X', 150], ['Proyecto Y', 40]])
+    expect(lb.metric).toMatchObject({ key: 'followers_instagram', growth: true })
   })
 
   test('proyecto sin datos suficientes queda en 0 con warning', async () => {
@@ -158,6 +169,37 @@ describe('computeLeaderboard — auto_metric instagram_followers', () => {
     const lb = await computeLeaderboard(game)
     expect(lb.subjects[0].score).toBe(0)
     expect(lb.warnings.length).toBeGreaterThan(0)
+  })
+
+  test('métrica no configurada → warning y sin subjects', async () => {
+    const lb = await computeLeaderboard({ ...game, config: {} })
+    expect(lb.subjects).toHaveLength(0)
+    expect(lb.warnings.length).toBeGreaterThan(0)
+  })
+})
+
+describe('computeLeaderboard — otras métricas de marketing', () => {
+  const base = { id: 9, workspaceId: 1, scoring: 'auto_metric', type: 'marketing_project_competition', startDate: '2026-06-01T00:00:00Z', endDate: '2026-06-30T00:00:00Z' }
+
+  test('web_visits suma sesiones del período', async () => {
+    prisma.project.findMany.mockResolvedValue([{ id: 10, name: 'X' }, { id: 11, name: 'Y' }])
+    prisma.analyticsSnapshot.findMany.mockImplementation(({ where }) =>
+      Promise.resolve(where.projectId === 10 ? [{ sessions: 300 }] : [{ sessions: 120 }]))
+    const lb = await computeLeaderboard({ ...base, config: { metric: 'web_visits' } })
+    expect(lb.subjects.map((s) => [s.label, s.score])).toEqual([['X', 300], ['Y', 120]])
+  })
+
+  test('domain_rating usa el DR cacheado del proyecto', async () => {
+    prisma.project.findMany.mockResolvedValue([{ id: 10, name: 'X', domainRating: 42 }, { id: 11, name: 'Y', domainRating: 67 }])
+    const lb = await computeLeaderboard({ ...base, config: { metric: 'domain_rating' } })
+    expect(lb.subjects.map((s) => [s.label, s.score])).toEqual([['Y', 67], ['X', 42]])
+  })
+
+  test('ads_spend suma inversión de la plataforma elegida', async () => {
+    prisma.project.findMany.mockResolvedValue([{ id: 10, name: 'X' }])
+    prisma.adsSnapshot.findMany.mockResolvedValue([{ spend: 100.5, clicks: 10, impressions: 1000, ctr: 1 }, { spend: 49.5, clicks: 5, impressions: 500, ctr: 1 }])
+    const lb = await computeLeaderboard({ ...base, config: { metric: 'ads_spend', adsPlatform: 'meta_ads' } })
+    expect(lb.subjects[0].score).toBe(150)
   })
 })
 

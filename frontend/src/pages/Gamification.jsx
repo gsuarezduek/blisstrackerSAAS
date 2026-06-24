@@ -31,9 +31,12 @@ export default function Gamification() {
   const { enabled, loading: flagLoading } = useFeatureFlag('gamification')
   const [games, setGames] = useState([])
   const [catalog, setCatalog] = useState([])
+  const [metrics, setMetrics] = useState([])
+  const [metricCategories, setMetricCategories] = useState([])
   const [members, setMembers] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')     // all | active | draft | finished
   const [editing, setEditing] = useState(null)   // game o {} para nuevo
   const [scoresFor, setScoresFor] = useState(null) // game manual para cargar puntos
 
@@ -47,6 +50,8 @@ export default function Gamification() {
     ]).then(([g, c, m, p]) => {
       setGames(g.data.games || [])
       setCatalog(c.data.types || [])
+      setMetrics(c.data.marketingMetrics || [])
+      setMetricCategories(c.data.marketingCategories || [])
       setMembers((m.data || []).filter((u) => u.active))
       setProjects((p.data || []).filter((pr) => pr.active !== false))
     }).catch(() => {}).finally(() => setLoading(false))
@@ -104,6 +109,28 @@ export default function Gamification() {
           </button>
         </div>
 
+        {games.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {[
+              { k: 'all', label: 'Todos' },
+              { k: 'active', label: 'Activos' },
+              { k: 'draft', label: 'Borradores' },
+              { k: 'finished', label: 'Finalizados' },
+            ].map((f) => {
+              const n = f.k === 'all' ? games.length : games.filter((g) => g.status === f.k).length
+              return (
+                <button
+                  key={f.k}
+                  onClick={() => setFilter(f.k)}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${filter === f.k ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                >
+                  {f.label} <span className="opacity-60">{n}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {loading ? (
           <p className="text-sm text-gray-400">Cargando…</p>
         ) : games.length === 0 ? (
@@ -115,7 +142,7 @@ export default function Gamification() {
           </div>
         ) : (
           <div className="space-y-3">
-            {games.map((g) => (
+            {games.filter((g) => filter === 'all' || g.status === filter).map((g) => (
               <GameCard
                 key={g.id}
                 game={g}
@@ -135,6 +162,8 @@ export default function Gamification() {
         <GameEditor
           game={editing.id ? editing : null}
           catalog={catalog}
+          metrics={metrics}
+          metricCategories={metricCategories}
           members={members}
           projects={projects}
           onClose={() => setEditing(null)}
@@ -206,7 +235,7 @@ function Btn({ children, onClick, kind }) {
 
 // ─── Editor de juego (crear/editar) ───────────────────────────────────────────
 
-function GameEditor({ game, catalog, members, projects, onClose, onSaved }) {
+function GameEditor({ game, catalog, metrics, metricCategories, members, projects, onClose, onSaved }) {
   const isNew = !game
   const [type, setType] = useState(game?.type || '')
   const def = catalog.find((c) => c.key === type) || null
@@ -217,9 +246,12 @@ function GameEditor({ game, catalog, members, projects, onClose, onSaved }) {
   const [subjectType, setSubjectType] = useState(game?.subjectType || 'team')
   const [projectIds, setProjectIds] = useState(game?.config?.projectIds || [])
   const [candidateIds, setCandidateIds] = useState(game?.config?.candidateIds || [])
+  const [metric, setMetric] = useState(game?.config?.metric || '')
+  const [adsPlatform, setAdsPlatform] = useState(game?.config?.adsPlatform || '')
   const [startDate, setStartDate] = useState(game?.startDate ? game.startDate.slice(0, 10) : '')
   const [endDate, setEndDate] = useState(game?.endDate ? game.endDate.slice(0, 10) : '')
   const [vis, setVis] = useState(game?.visibilityRule || { mode: 'always' })
+  const [hideLiveResults, setHideLiveResults] = useState(game?.config?.hideLiveResults !== false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -235,16 +267,22 @@ function GameEditor({ game, catalog, members, projects, onClose, onSaved }) {
 
   const scoring = def?.scoring || game?.scoring
   const effSubjectType = def?.subjectConfigurable ? subjectType : (def?.subjectType || game?.subjectType)
+  const metricDef = metrics.find((m) => m.key === metric) || null
 
   async function save(activate) {
     setError('')
     if (!type) return setError('Elegí un tipo de juego')
     if (!title.trim()) return setError('El enunciado es obligatorio')
+    if (def?.metricRequired && !metric) return setError('Elegí la métrica de la competencia')
+    if (metricDef?.needsPlatform && !adsPlatform) return setError('Elegí la plataforma de anuncios (Meta o Google)')
     if (def?.requiresPeriod && (!startDate || !endDate)) return setError('Este juego necesita fecha de inicio y fin')
 
     const config = {}
-    if (scoring === 'auto_metric') config.projectIds = projectIds
-    if (scoring === 'vote') config.candidateIds = candidateIds
+    if (scoring === 'auto_metric') {
+      config.projectIds = projectIds
+      if (def?.metricRequired) { config.metric = metric; if (metricDef?.needsPlatform) config.adsPlatform = adsPlatform }
+    }
+    if (scoring === 'vote') { config.candidateIds = candidateIds; config.hideLiveResults = hideLiveResults }
 
     const payload = {
       title: title.trim(),
@@ -321,20 +359,59 @@ function GameEditor({ game, catalog, members, projects, onClose, onSaved }) {
 
           {/* Config por scoring */}
           {scoring === 'auto_metric' && (
-            <Field label="Proyectos que participan (vacío = todos)">
-              <CheckList items={projects.map((p) => ({ id: p.id, label: p.name }))} selected={projectIds} onChange={setProjectIds} />
-            </Field>
+            <>
+              {def?.metricRequired && (
+                <Field label="¿Qué métrica define al ganador?">
+                  <select value={metric} onChange={(e) => { setMetric(e.target.value); setAdsPlatform('') }} className={inputCls}>
+                    <option value="">Elegí una métrica…</option>
+                    {metricCategories.map((cat) => (
+                      <optgroup key={cat.key} label={cat.label}>
+                        {metrics.filter((m) => m.category === cat.key).map((m) => (
+                          <option key={m.key} value={m.key}>{m.label}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  {metricDef?.needsPlatform && (
+                    <select value={adsPlatform} onChange={(e) => setAdsPlatform(e.target.value)} className={`${inputCls} mt-2`}>
+                      <option value="">Plataforma de anuncios…</option>
+                      <option value="meta_ads">Meta Ads</option>
+                      <option value="google_ads">Google Ads</option>
+                    </select>
+                  )}
+                </Field>
+              )}
+              <Field label="Proyectos que participan (vacío = todos)">
+                <CheckList items={projects.map((p) => ({ id: p.id, label: p.name }))} selected={projectIds} onChange={setProjectIds} />
+              </Field>
+            </>
           )}
           {scoring === 'vote' && (
-            <Field label="Candidatos (vacío = todo el equipo)">
-              <CheckList items={members.map((m) => ({ id: m.id, label: m.name }))} selected={candidateIds} onChange={setCandidateIds} />
-            </Field>
+            <>
+              <Field label="Candidatos (vacío = todo el equipo)">
+                <CheckList items={members.map((m) => ({ id: m.id, label: m.name }))} selected={candidateIds} onChange={setCandidateIds} />
+              </Field>
+              <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200 mb-3 cursor-pointer">
+                <input type="checkbox" checked={hideLiveResults} onChange={(e) => setHideLiveResults(e.target.checked)} className="rounded mt-0.5" />
+                <span>Ocultar los votos hasta que finalice la votación <span className="block text-xs text-gray-400">Nadie ve quién va ganando mientras está abierta. Recomendado.</span></span>
+              </label>
+            </>
           )}
-          {scoring === 'manual' && (
+          {scoring === 'manual' && effSubjectType !== 'team' && (
             <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1 mb-3">
-              Después de crear el juego vas a poder cargar los puntos con el botón <strong>🔢 Cargar puntos</strong>.
-              {effSubjectType === 'team' && ' Cada fila representa un equipo.'}
+              Después de guardar el juego vas a poder cargar los puntos con el botón <strong>🔢 Cargar puntos</strong>.
             </p>
+          )}
+          {effSubjectType === 'team' && (
+            isNew ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1 mb-3">
+                Guardá el juego y volvé a abrirlo (✏️ Editar) para armar los equipos y luego cargar sus puntos.
+              </p>
+            ) : (
+              <Field label="Equipos">
+                <TeamsManager game={game} members={members} projects={projects} />
+              </Field>
+            )
           )}
 
           {/* Período (date_range / auto_metric) */}
@@ -407,19 +484,98 @@ function VisibilityEditor({ vis, setVis }) {
   )
 }
 
+// ─── Gestor de equipos custom (por juego) ─────────────────────────────────────
+
+function TeamsManager({ game, members, projects }) {
+  const [teams, setTeams] = useState(game.teams || [])
+  const [editing, setEditing] = useState(null) // team | {} (nuevo) | null
+
+  async function saveTeam(payload) {
+    if (editing.id) {
+      const { data } = await api.patch(`/gamification/games/${game.id}/teams/${editing.id}`, payload)
+      setTeams((t) => t.map((x) => x.id === editing.id ? data.team : x))
+    } else {
+      const { data } = await api.post(`/gamification/games/${game.id}/teams`, payload)
+      setTeams((t) => [...t, data.team])
+    }
+    setEditing(null)
+  }
+  async function del(id) {
+    if (!window.confirm('¿Eliminar el equipo?')) return
+    await api.delete(`/gamification/games/${game.id}/teams/${id}`)
+    setTeams((t) => t.filter((x) => x.id !== id))
+  }
+
+  return (
+    <div className="space-y-2">
+      {teams.length === 0 && <p className="text-xs text-gray-400">Todavía no hay equipos.</p>}
+      {teams.map((t) => (
+        <div key={t.id} className="flex items-center justify-between gap-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+          <span className="min-w-0">
+            <span className="font-medium text-gray-800 dark:text-gray-100">{t.name}</span>
+            <span className="text-xs text-gray-400 ml-2">{(t.memberIds || []).length} pers · {(t.projectIds || []).length} proy</span>
+          </span>
+          <span className="flex gap-1 shrink-0">
+            <button onClick={() => setEditing(t)} className="text-xs px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">✏️</button>
+            <button onClick={() => del(t.id)} className="text-xs px-2 py-1 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20">🗑</button>
+          </span>
+        </div>
+      ))}
+      {editing ? (
+        <TeamForm team={editing} members={members} projects={projects} onSave={saveTeam} onCancel={() => setEditing(null)} />
+      ) : (
+        <button onClick={() => setEditing({})} className="text-sm text-primary-600 dark:text-primary-400 font-medium">+ Agregar equipo</button>
+      )}
+    </div>
+  )
+}
+
+function TeamForm({ team, members, projects, onSave, onCancel }) {
+  const [name, setName] = useState(team.name || '')
+  const [memberIds, setMemberIds] = useState(team.memberIds || [])
+  const [projectIds, setProjectIds] = useState(team.projectIds || [])
+  const [busy, setBusy] = useState(false)
+  async function submit() {
+    if (!name.trim()) return
+    setBusy(true)
+    try { await onSave({ name: name.trim(), memberIds, projectIds }) } finally { setBusy(false) }
+  }
+  return (
+    <div className="border border-primary-200 dark:border-primary-900/40 rounded-xl p-3 space-y-2 bg-primary-50/40 dark:bg-primary-900/10">
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del equipo" className={inputCls} />
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Integrantes</p>
+      <CheckList items={members.map((m) => ({ id: m.id, label: m.name }))} selected={memberIds} onChange={setMemberIds} />
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Proyectos (opcional)</p>
+      <CheckList items={projects.map((p) => ({ id: p.id, label: p.name }))} selected={projectIds} onChange={setProjectIds} />
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Cancelar</button>
+        <button disabled={busy} onClick={submit} className="text-xs px-3 py-1.5 rounded-lg text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50">Guardar equipo</button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Carga manual de puntos ───────────────────────────────────────────────────
 
 function ManualScores({ game, members, projects, onClose, onSaved }) {
   const [rows, setRows] = useState([])
   const [saving, setSaving] = useState(false)
+  const isTeam = game.subjectType === 'team'
 
   useEffect(() => {
     api.get(`/gamification/games/${game.id}`).then(({ data }) => {
       const existing = data.leaderboard?.subjects || []
-      if (existing.length) setRows(existing.map((s) => ({ subjectId: s.subjectId, label: s.label, points: s.score })))
-      else setRows([{ subjectId: `s${Date.now()}`, label: '', points: 0 }])
-    }).catch(() => setRows([{ subjectId: `s${Date.now()}`, label: '', points: 0 }]))
-  }, [game.id])
+      const byId = new Map(existing.map((s) => [s.subjectId, s.score]))
+      if (isTeam) {
+        const t = data.game?.teams || []
+        setRows(t.map((team) => ({ subjectId: team.id, label: team.name, points: byId.get(team.id) ?? 0, locked: true })))
+      } else if (existing.length) {
+        setRows(existing.map((s) => ({ subjectId: s.subjectId, label: s.label, points: s.score })))
+      } else {
+        setRows([{ subjectId: `s${Date.now()}`, label: '', points: 0 }])
+      }
+    }).catch(() => setRows(isTeam ? [] : [{ subjectId: `s${Date.now()}`, label: '', points: 0 }]))
+  }, [game.id, isTeam])
 
   function update(i, patch) { setRows((r) => r.map((row, idx) => idx === i ? { ...row, ...patch } : row)) }
   function add() { setRows((r) => [...r, { subjectId: `s${Date.now()}${r.length}`, label: '', points: 0 }]) }
@@ -428,33 +584,45 @@ function ManualScores({ game, members, projects, onClose, onSaved }) {
   async function save() {
     setSaving(true)
     try {
-      const scores = rows.filter((r) => r.label.trim()).map((r) => ({ subjectId: r.subjectId, label: r.label.trim(), points: Number(r.points) || 0 }))
+      const scores = rows.filter((r) => String(r.label).trim()).map((r) => ({ subjectId: r.subjectId, label: String(r.label).trim(), points: Number(r.points) || 0 }))
       await api.put(`/gamification/games/${game.id}/scores`, { scores })
       onSaved()
     } catch { setSaving(false) }
   }
 
-  // Sugerencias rápidas de etiqueta según el sujeto del juego
   const suggestions = game.subjectType === 'person' ? members.map((m) => m.name) : game.subjectType === 'project' ? projects.map((p) => p.name) : []
 
   return (
     <Modal onClose={onClose} title={`Puntos · ${game.title}`}>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Cargá el puntaje de cada participante. El de mayor puntaje gana.</p>
-      <div className="space-y-2">
-        {rows.map((row, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input list={suggestions.length ? 'ms-sug' : undefined} value={row.label} onChange={(e) => update(i, { label: e.target.value })} placeholder="Nombre / equipo" className={`${inputCls} flex-1`} />
-            <input type="number" value={row.points} onChange={(e) => update(i, { points: e.target.value })} className="w-24 px-2 py-2 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm" />
-            <button onClick={() => removeRow(i)} className="text-gray-400 hover:text-red-500 px-1">✕</button>
+      {isTeam && rows.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">Este juego no tiene equipos. Agregalos desde <strong>✏️ Editar</strong> y volvé a cargar los puntos.</p>
+      ) : (
+        <>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Cargá el puntaje de cada participante. El de mayor puntaje gana.</p>
+          <div className="space-y-2">
+            {rows.map((row, i) => (
+              <div key={row.subjectId || i} className="flex items-center gap-2">
+                <input
+                  list={!row.locked && suggestions.length ? 'ms-sug' : undefined}
+                  value={row.label}
+                  onChange={(e) => update(i, { label: e.target.value })}
+                  readOnly={row.locked}
+                  placeholder="Nombre / equipo"
+                  className={`${inputCls} flex-1 ${row.locked ? 'bg-gray-50 dark:bg-gray-800' : ''}`}
+                />
+                <input type="number" value={row.points} onChange={(e) => update(i, { points: e.target.value })} className="w-24 px-2 py-2 rounded-xl border border-gray-300 dark:border-gray-600 dark:bg-gray-700 text-sm" />
+                {!isTeam && <button onClick={() => removeRow(i)} className="text-gray-400 hover:text-red-500 px-1">✕</button>}
+              </div>
+            ))}
+            {suggestions.length > 0 && <datalist id="ms-sug">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>}
           </div>
-        ))}
-        {suggestions.length > 0 && <datalist id="ms-sug">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>}
-      </div>
-      <button onClick={add} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-medium">+ Agregar fila</button>
-      <div className="flex justify-end gap-2 mt-5">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl">Cancelar</button>
-        <button disabled={saving} onClick={save} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar puntos'}</button>
-      </div>
+          {!isTeam && <button onClick={add} className="mt-2 text-sm text-primary-600 dark:text-primary-400 font-medium">+ Agregar fila</button>}
+          <div className="flex justify-end gap-2 mt-5">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl">Cancelar</button>
+            <button disabled={saving} onClick={save} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-xl disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar puntos'}</button>
+          </div>
+        </>
+      )}
     </Modal>
   )
 }

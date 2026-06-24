@@ -82,22 +82,37 @@ export default function GamificationFab() {
 
 function GamePanel({ game, userId, voting, onVote }) {
   const subjects = game.leaderboard?.subjects || []
+  const hidden = game.leaderboard?.resultsHidden
   const isVote = game.scoring === 'vote'
+  const metricMeta = game.leaderboard?.metric || null
 
   return (
     <div>
-      <div className="mb-1">
-        <h4 className="font-semibold text-gray-900 dark:text-white leading-snug">{game.title}</h4>
-        {game.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{game.description}</p>}
-        {game.prize && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">🎁 {game.prize}</p>}
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h4 className="font-semibold text-gray-900 dark:text-white leading-snug">{game.title}</h4>
+          {game.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{game.description}</p>}
+          {game.prize && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">🎁 {game.prize}</p>}
+        </div>
+        {game.finished && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shrink-0">Finalizado</span>}
       </div>
 
-      {isVote ? (
+      {/* Ganador (juego finalizado) */}
+      {game.finished && game.winnerSubject && (
+        <div className="mt-2 mb-1 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 px-3 py-2 text-sm">
+          🏆 <span className="font-semibold text-amber-700 dark:text-amber-300">{game.winnerSubject.label}</span>
+          <span className="text-amber-600 dark:text-amber-400"> · {isVote ? `${game.winnerSubject.score} votos` : formatScore(game.winnerSubject.score, false, metricMeta)}</span>
+        </div>
+      )}
+
+      {/* Votación en curso */}
+      {isVote && !game.finished ? (
         <div className="mt-2 space-y-1">
+          {hidden && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">🔒 Los votos se revelan recién al cierre.</p>}
           {game.myVote
             ? <p className="text-xs text-green-600 dark:text-green-400 mb-1">✓ Ya votaste. Podés cambiar tu voto.</p>
             : <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Elegí a tu candidato:</p>}
-          {subjects.map((s, i) => {
+          {subjects.map((s) => {
             const isSelf = String(userId) === s.subjectId
             const isMine = game.myVote === s.subjectId
             return (
@@ -113,12 +128,15 @@ function GamePanel({ game, userId, voting, onVote }) {
                   {s.avatar && <img src={avatarUrl(s.avatar)} alt="" className="w-6 h-6 rounded-full object-cover" />}
                   <span className="truncate text-gray-800 dark:text-gray-100">{s.label}{isSelf ? ' (vos)' : ''}</span>
                 </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{s.score} {s.score === 1 ? 'voto' : 'votos'}{isMine ? ' · tu voto' : ''}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                  {isMine ? 'tu voto' : ''}{!hidden ? ` ${s.score} ${s.score === 1 ? 'voto' : 'votos'}` : ''}
+                </span>
               </button>
             )
           })}
         </div>
       ) : (
+        /* Ranking (competencias, manual, o votación finalizada) */
         <ol className="mt-2 space-y-1">
           {subjects.length === 0 && <li className="text-xs text-gray-400">Todavía sin puntajes.</li>}
           {subjects.map((s, i) => (
@@ -127,7 +145,7 @@ function GamePanel({ game, userId, voting, onVote }) {
                 <span className="w-5 text-center">{MEDAL[i] || `${i + 1}.`}</span>
                 <span className="truncate text-gray-800 dark:text-gray-100">{s.label}</span>
               </span>
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0">{formatScore(s.score)}</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-300 shrink-0">{formatScore(s.score, isVote, metricMeta)}</span>
             </li>
           ))}
         </ol>
@@ -136,7 +154,13 @@ function GamePanel({ game, userId, voting, onVote }) {
   )
 }
 
-function formatScore(n) {
-  if (n > 0) return `+${n}`
+function formatScore(n, isVote, metricMeta) {
+  if (n == null) return ''
+  if (isVote) return `${n} ${n === 1 ? 'voto' : 'votos'}`
+  if (metricMeta) {
+    if (metricMeta.growth) return n > 0 ? `+${n}` : String(n) // delta (seguidores)
+    if (metricMeta.unit === '%') return `${n}%`
+    if (metricMeta.unit === '$') return `$${n}`
+  }
   return String(n)
 }

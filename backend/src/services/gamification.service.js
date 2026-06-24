@@ -9,7 +9,7 @@
 //   - manual      : lee GameScore (puntos cargados por el admin)
 
 const prisma = require('../lib/prisma')
-const { gameTypeDef } = require('../lib/gameCatalog')
+const { marketingMetricDef } = require('../lib/gameCatalog')
 
 // ─── Helpers de fecha en la timezone del workspace ────────────────────────────
 
@@ -172,58 +172,151 @@ async function leaderboardManual(game) {
   return { subjects, warnings: [] }
 }
 
-/** Auto por métrica. Hoy: instagram_followers (delta de seguidores por proyecto en el período). */
+/**
+ * Auto por métrica (tipo marketing_project_competition). La métrica concreta sale
+ * de `game.config.metric` (catálogo MARKETING_METRICS). Compatibilidad: un juego
+ * legacy del tipo viejo `instagram_followers_competition` se mapea a seguidores IG.
+ */
 async function leaderboardAutoMetric(game) {
-  const def = gameTypeDef(game.type)
-  if (def?.metric === 'instagram_followers') return leaderboardInstagramFollowers(game)
-  return { subjects: [], warnings: ['Métrica automática no soportada'] }
-}
+  const metricKey = game.config?.metric
+    || (game.type === 'instagram_followers_competition' ? 'followers_instagram' : null)
+  const metric = marketingMetricDef(metricKey)
+  if (!metric) return { subjects: [], warnings: ['La competencia no tiene una métrica configurada'] }
 
-async function leaderboardInstagramFollowers(game) {
   const tz = await workspaceTz(game.workspaceId)
   const cfg = game.config || {}
   const projectIds = Array.isArray(cfg.projectIds) ? cfg.projectIds.map(Number) : null
-
   const projects = await prisma.project.findMany({
     where: { workspaceId: game.workspaceId, active: true, ...(projectIds?.length ? { id: { in: projectIds } } : {}) },
-    select: { id: true, name: true },
+    select: { id: true, name: true, domainRating: true },
   })
-
-  // Período: el delta se mide entre startDate y endDate (inclusive). Sin período
-  // medimos sobre todos los logs disponibles.
-  const fromStr = game.startDate ? ymdString(game.startDate, tz) : null
-  const toStr   = game.endDate ? ymdString(game.endDate, tz) : null
+  const months = monthsBetween(game.startDate, game.endDate, tz)
 
   const warnings = []
   const subjects = []
-
   for (const p of projects) {
-    const logs = await prisma.instagramFollowerLog.findMany({
-      where: {
-        projectId: p.id,
-        ...(fromStr || toStr ? { date: { ...(fromStr ? { gte: fromStr } : {}), ...(toStr ? { lte: toStr } : {}) } } : {}),
-      },
-      orderBy: { date: 'asc' },
-    })
+    let r
+    try { r = await marketingMetricValue(metric, p, game, months, tz) }
+    catch { r = { value: null, detail: { error: true } } }
 
-    if (logs.length < 2) {
-      subjects.push({ subjectId: String(p.id), label: p.name, score: 0, detail: { startFollowers: logs[0]?.followersCount ?? null, endFollowers: logs[0]?.followersCount ?? null, insufficientData: true } })
-      warnings.push(`${p.name}: sin datos suficientes de Instagram en el período`)
+    if (r.value == null) {
+      subjects.push({ subjectId: String(p.id), label: p.name, score: 0, detail: { ...r.detail, noData: true } })
+      warnings.push(`${p.name}: sin datos para esta métrica en el período`)
       continue
     }
-
-    const start = logs[0].followersCount
-    const end = logs[logs.length - 1].followersCount
-    subjects.push({
-      subjectId: String(p.id),
-      label: p.name,
-      score: end - start,
-      detail: { startFollowers: start, endFollowers: end, startDate: logs[0].date, endDate: logs[logs.length - 1].date },
-    })
+    subjects.push({ subjectId: String(p.id), label: p.name, score: r.value, detail: r.detail })
   }
 
   subjects.sort((a, b) => b.score - a.score)
-  return { subjects, warnings }
+  return { subjects, warnings, metric: { key: metricKey, label: metric.label, unit: metric.unit, growth: !!metric.growth } }
+}
+
+// Tabla de modelos de log diario de seguidores por red (nombres del client Prisma).
+const FOLLOWER_LOG = {
+  instagram: 'instagramFollowerLog',
+  tiktok:    'tikTokFollowerLog',
+  linkedin:  'linkedinFollowerLog',
+  facebook:  'facebookFollowerLog',
+}
+
+// Calcula el valor de la métrica de marketing para un proyecto.
+// Devuelve { value, detail }; value=null cuando no hay datos.
+async function marketingMetricValue(metric, project, game, months, tz) {
+  switch (metric.kind) {
+    case 'followers':     return followerDelta(metric.network, project.id, game, tz)
+    case 'interaction':   return interactionSum(metric.network, project.id, game.workspaceId, months)
+    case 'web_visits':    return webVisits(project.id, game.workspaceId, months)
+    case 'geo_score':     return geoScore(project.id, game.workspaceId)
+    case 'domain_rating': return { value: project.domainRating ?? null, detail: {} }
+    case 'ads_ctr':       return adsMetric('ctr', project.id, game.workspaceId, game.config?.adsPlatform, months)
+    case 'ads_spend':     return adsMetric('spend', project.id, game.workspaceId, game.config?.adsPlatform, months)
+    default:              return { value: null, detail: {} }
+  }
+}
+
+// Delta de seguidores en el período (logs diarios, exacto por rango de fechas).
+async function followerDelta(network, projectId, game, tz) {
+  const model = prisma[FOLLOWER_LOG[network]]
+  if (!model) return { value: null, detail: {} }
+  const fromStr = game.startDate ? ymdString(game.startDate, tz) : null
+  const toStr   = game.endDate ? ymdString(game.endDate, tz) : null
+  const logs = await model.findMany({
+    where: { projectId, ...(fromStr || toStr ? { date: { ...(fromStr ? { gte: fromStr } : {}), ...(toStr ? { lte: toStr } : {}) } } : {}) },
+    orderBy: { date: 'asc' },
+  })
+  if (logs.length < 2) return { value: null, detail: { insufficientData: true, endFollowers: logs[0]?.followersCount ?? null } }
+  const start = logs[0].followersCount, end = logs[logs.length - 1].followersCount
+  return { value: end - start, detail: { startFollowers: start, endFollowers: end } }
+}
+
+// Interacciones del período (snapshots mensuales). Fórmulas espejo del motor de objetivos.
+async function interactionSum(network, projectId, workspaceId, months) {
+  if (network === 'instagram') {
+    const rows = await prisma.instagramSnapshot.findMany({ where: { projectId, workspaceId, month: { in: months } }, select: { avgLikes: true, avgComments: true, postsCount: true } })
+    if (!rows.length) return { value: null, detail: {} }
+    return { value: Math.round(rows.reduce((s, r) => s + ((r.avgLikes ?? 0) + (r.avgComments ?? 0)) * (r.postsCount ?? 0), 0)), detail: { approx: true } }
+  }
+  if (network === 'tiktok') {
+    const rows = await prisma.tikTokSnapshot.findMany({ where: { projectId, workspaceId, month: { in: months } }, select: { avgLikes: true, avgComments: true, avgShares: true, postsThisMonth: true } })
+    if (!rows.length) return { value: null, detail: {} }
+    return { value: Math.round(rows.reduce((s, r) => s + ((r.avgLikes ?? 0) + (r.avgComments ?? 0) + (r.avgShares ?? 0)) * (r.postsThisMonth ?? 0), 0)), detail: { approx: true } }
+  }
+  const model = network === 'facebook' ? prisma.facebookSnapshot : prisma.linkedinSnapshot
+  const rows = await model.findMany({ where: { projectId, workspaceId, month: { in: months } }, select: { totalLikes: true, totalComments: true, totalShares: true } })
+  if (!rows.length) return { value: null, detail: {} }
+  return { value: rows.reduce((s, r) => s + (r.totalLikes ?? 0) + (r.totalComments ?? 0) + (r.totalShares ?? 0), 0), detail: {} }
+}
+
+// Visitas web (suma de sesiones de AnalyticsSnapshot del período).
+async function webVisits(projectId, workspaceId, months) {
+  const rows = await prisma.analyticsSnapshot.findMany({ where: { projectId, workspaceId, month: { in: months } }, select: { sessions: true } })
+  if (!rows.length) return { value: null, detail: {} }
+  return { value: rows.reduce((s, r) => s + (r.sessions ?? 0), 0), detail: { monthsWithData: rows.length } }
+}
+
+// Score GEO más reciente (GeoAudit completado).
+async function geoScore(projectId, workspaceId) {
+  const a = await prisma.geoAudit.findFirst({
+    where: { projectId, workspaceId, status: 'completed', score: { not: null } },
+    orderBy: { updatedAt: 'desc' }, select: { score: true, updatedAt: true },
+  })
+  return { value: a?.score ?? null, detail: { date: a?.updatedAt ?? null } }
+}
+
+// Ads: CTR (ponderado por impresiones) o inversión (suma de spend) del período.
+async function adsMetric(which, projectId, workspaceId, platform, months) {
+  const type = platform === 'google_ads' ? 'google_ads' : 'meta_ads'
+  const rows = await prisma.adsSnapshot.findMany({ where: { projectId, workspaceId, type, month: { in: months } }, select: { spend: true, clicks: true, impressions: true, ctr: true } })
+  if (!rows.length) return { value: null, detail: { platform: type, disconnected: true } }
+  if (which === 'spend') {
+    return { value: parseFloat(rows.reduce((s, r) => s + (r.spend ?? 0), 0).toFixed(2)), detail: { platform: type } }
+  }
+  const totImp = rows.reduce((s, r) => s + (r.impressions ?? 0), 0)
+  const totClk = rows.reduce((s, r) => s + (r.clicks ?? 0), 0)
+  let ctr
+  if (totImp > 0) ctr = parseFloat((totClk / totImp * 100).toFixed(2))
+  else {
+    const ctrs = rows.map((r) => r.ctr).filter((v) => v != null)
+    ctr = ctrs.length ? parseFloat((ctrs.reduce((s, v) => s + v, 0) / ctrs.length).toFixed(2)) : null
+  }
+  return { value: ctr, detail: { platform: type } }
+}
+
+// Enumera los meses "YYYY-MM" cubiertos por [startDate, endDate] (en la TZ del workspace).
+// Sin fechas, usa el mes actual.
+function monthsBetween(startDate, endDate, tz) {
+  const end = endDate ? ymdString(endDate, tz).slice(0, 7) : ymdString(new Date(), tz).slice(0, 7)
+  const start = startDate ? ymdString(startDate, tz).slice(0, 7) : end
+  const [ey, em] = end.split('-').map(Number)
+  let [y, m] = start.split('-').map(Number)
+  const out = []
+  let guard = 0
+  while ((y < ey || (y === ey && m <= em)) && guard < 120) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`)
+    m++; if (m > 12) { m = 1; y++ }
+    guard++
+  }
+  return out.length ? out : [end]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -265,7 +358,7 @@ async function resolveWinner(game) {
 
 module.exports = {
   // visibilidad (puro)
-  isGameVisible, isInRecurringWindow, localParts, daysInMonth, ymdString,
+  isGameVisible, isInRecurringWindow, localParts, daysInMonth, ymdString, monthsBetween,
   // leaderboards (DB)
   computeLeaderboard, resolveWinner, resolveSubjectLabels,
 }
