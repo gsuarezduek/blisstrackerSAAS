@@ -31,13 +31,22 @@ async function canWrite(req, projectId) {
   return !!member
 }
 
-async function getMembers(workspaceId) {
-  const rows = await prisma.workspaceMember.findMany({
-    where:   { workspaceId, active: true },
-    include: { user: { select: { id: true, name: true, avatar: true } } },
-    orderBy: { user: { name: 'asc' } },
-  })
-  return rows.map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar, role: m.role }))
+// Devuelve los miembros activos del workspace marcando quiénes son del equipo
+// del proyecto (`inTeam`), para poder agrupar el selector de responsable.
+async function getMembers(workspaceId, projectId) {
+  const [rows, teamRows] = await Promise.all([
+    prisma.workspaceMember.findMany({
+      where:   { workspaceId, active: true },
+      include: { user: { select: { id: true, name: true, avatar: true } } },
+      orderBy: { user: { name: 'asc' } },
+    }),
+    prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } }),
+  ])
+  const teamIds = new Set(teamRows.map(t => t.userId))
+  return rows.map(m => ({
+    id: m.user.id, name: m.user.name, avatar: m.user.avatar, role: m.role,
+    inTeam: teamIds.has(m.user.id),
+  }))
 }
 
 function formatTodo(t) {
@@ -88,7 +97,7 @@ async function listMeetings(req, res, next) {
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
     const [members, meetings] = await Promise.all([
-      getMembers(workspaceId),
+      getMembers(workspaceId, projectId),
       prisma.projectMeeting.findMany({
         where:   { projectId, workspaceId },
         orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],

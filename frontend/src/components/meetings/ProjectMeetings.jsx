@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
-import { adminMemberOptions } from '../../utils/adminMembers'
 import { avatarUrl } from '../../utils/avatarUrl'
 import RichTextEditor from '../RichTextEditor'
 import DOMPurify from 'dompurify'
@@ -17,6 +16,28 @@ const MEETING_TYPES = [
     border: 'border-emerald-200 dark:border-emerald-800' },
 ]
 const typeMeta = (t) => MEETING_TYPES.find(x => x.value === t) || MEETING_TYPES[0]
+
+// Opciones del selector de responsable: equipo del proyecto primero, resto del
+// workspace después (mismo criterio que AddTaskModal). Cualquiera es asignable.
+function OwnerOptions({ members }) {
+  const team   = members.filter(m => m.inTeam)
+  const others = members.filter(m => !m.inTeam)
+  return (
+    <>
+      <option value="">—</option>
+      {team.length > 0 && (
+        <optgroup label="Equipo del proyecto">
+          {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </optgroup>
+      )}
+      {others.length > 0 && (
+        <optgroup label="Otros del workspace">
+          {others.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </optgroup>
+      )}
+    </>
+  )
+}
 
 const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
@@ -157,8 +178,7 @@ function TodoItem({ todo, members, canEdit, onUpdate, onDelete, onSendToDashboar
           onChange={e => onUpdate(todo.id, { ownerId: e.target.value || null })}
           className="text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-400 max-w-[120px]"
         >
-          <option value="">—</option>
-          {adminMemberOptions(members, todo.ownerId).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          <OwnerOptions members={members} />
         </select>
       ) : owner ? (
         <span className="text-xs text-gray-500 dark:text-gray-400 max-w-[120px] truncate">{owner.name}</span>
