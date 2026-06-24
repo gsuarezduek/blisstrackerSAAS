@@ -11,6 +11,7 @@ import TaskCommentsModal from '../components/TaskCommentsModal'
 import ProjectSituation from '../components/ProjectSituation'
 import ProjectInfoTab from '../components/ProjectInfoTab'
 import ProjectBriefs from '../components/briefs/ProjectBriefs'
+import ProjectMeetings from '../components/meetings/ProjectMeetings'
 import ProjectAccesos from '../components/ProjectAccesos'
 import { useAuth } from '../context/AuthContext'
 import { avatarUrl } from '../utils/avatarUrl'
@@ -346,6 +347,7 @@ export default function ProjectDetail() {
                   {data.project.linksEnabled !== false && <option value="links">Links/Accesos</option>}
                   <option value="info">Info</option>
                   {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
+                  <option value="reuniones">Reuniones</option>
                   {marketingEnabled && <option value="marketing">Marketing ↗</option>}
                 </select>
                 {/* Desktop */}
@@ -380,6 +382,12 @@ export default function ProjectDetail() {
                       Briefs
                     </button>
                   )}
+                  <button
+                    onClick={() => setInfoTab('reuniones')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'reuniones' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                  >
+                    Reuniones
+                  </button>
                   {marketingEnabled && (
                     <button
                       onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)}
@@ -599,6 +607,14 @@ export default function ProjectDetail() {
               {/* Tab: Briefs */}
               {infoTab === 'briefs' && data.project.briefsEnabled !== false && (
                 <ProjectBriefs
+                  projectId={data.project.id}
+                  canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
+                />
+              )}
+
+              {/* Tab: Reuniones */}
+              {infoTab === 'reuniones' && (
+                <ProjectMeetings
                   projectId={data.project.id}
                   canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
                 />

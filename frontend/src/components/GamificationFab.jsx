@@ -18,6 +18,7 @@ export default function GamificationFab() {
   const [games, setGames] = useState([])
   const [open, setOpen] = useState(false)
   const [voting, setVoting] = useState(null) // gameId en curso
+  const [tab, setTab] = useState(0)          // juego seleccionado cuando hay varios
 
   const load = useCallback(() => {
     api.get('/gamification/active')
@@ -46,6 +47,10 @@ export default function GamificationFab() {
     }
   }
 
+  // Con varios juegos mostramos uno a la vez (pestañas); con uno solo, ese.
+  const safeTab = Math.min(tab, games.length - 1)
+  const shownGames = games.length > 1 ? [games[safeTab]] : games
+
   return (
     <>
       {/* Botón flotante — arriba del de feedback para no solaparse */}
@@ -65,11 +70,35 @@ export default function GamificationFab() {
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
           <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md mx-4 sm:mx-0 max-h-[80vh] flex flex-col z-10">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
-              <h3 className="font-semibold text-gray-900 dark:text-white">🏆 Juegos y desafíos</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                🏆 Juegos y desafíos
+                {games.length > 1 && <span className="ml-1.5 text-xs font-normal text-gray-400">({games.length} activos)</span>}
+              </h3>
               <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
             </div>
+
+            {/* Pestañas cuando hay varios juegos, para no perderse los de abajo */}
+            {games.length > 1 && (
+              <div className="flex gap-1.5 overflow-x-auto px-4 py-2 border-b border-gray-100 dark:border-gray-700 shrink-0">
+                {games.map((g, i) => {
+                  const active = i === safeTab
+                  return (
+                    <button
+                      key={g.id}
+                      onClick={() => setTab(i)}
+                      className={`flex items-center gap-1 shrink-0 max-w-[42%] px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${active ? 'bg-amber-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                      title={g.title}
+                    >
+                      {actionPending(g, user.id) && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? 'bg-white' : 'bg-red-500'}`} />}
+                      <span className="truncate">{g.title}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
             <div className="overflow-y-auto px-5 py-4 space-y-5">
-              {games.map((g) => (
+              {shownGames.map((g) => (
                 <GamePanel key={g.id} game={g} userId={user.id} voting={voting === g.id} onVote={vote} onRefresh={load} />
               ))}
             </div>
@@ -86,6 +115,8 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
   const isVote = game.scoring === 'vote'
   const isQuiz = game.scoring === 'quiz'
   const metricMeta = game.leaderboard?.metric || null
+  // En competencias de marketing solo listamos proyectos con puntaje > 0.
+  const rankSubjects = metricMeta ? subjects.filter((s) => s.score > 0) : subjects
 
   return (
     <div>
@@ -156,8 +187,8 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
       ) : (
         /* Ranking (competencias, manual, o votación/quiz finalizado) */
         <ol className="mt-2 space-y-1">
-          {subjects.length === 0 && <li className="text-xs text-gray-400">Todavía sin puntajes.</li>}
-          {subjects.map((s, i) => (
+          {rankSubjects.length === 0 && <li className="text-xs text-gray-400">{metricMeta ? 'Todavía sin movimientos en esta métrica.' : 'Todavía sin puntajes.'}</li>}
+          {rankSubjects.map((s, i) => (
             <li key={s.subjectId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
               <span className="flex items-center gap-2 min-w-0">
                 <span className="w-5 text-center">{MEDAL[i] || `${i + 1}.`}</span>
@@ -181,6 +212,14 @@ function formatScore(n, isVote, metricMeta) {
     if (metricMeta.unit === '$') return `$${n}`
   }
   return String(n)
+}
+
+// ¿El juego tiene una acción pendiente del usuario? (votar / responder el quiz)
+function actionPending(g, userId) {
+  if (g.finished) return false
+  if (g.scoring === 'vote') return !g.myVote
+  if (g.scoring === 'quiz') return !g.mySubmission && (g.questionCount || 0) > 0
+  return false
 }
 
 function QuizRanking({ subjects }) {

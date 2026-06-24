@@ -1,6 +1,7 @@
 const router = require('express').Router()
 const c = require('../controllers/projects.controller')
 const briefs = require('../controllers/briefs.controller')
+const meetings = require('../controllers/projectMeetings.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
@@ -30,5 +31,17 @@ router.patch('/:id/info',                  c.saveInfo)
 router.get('/:id/briefs',                  briefs.listBriefs)
 router.put('/:id/briefs/:type',            briefs.saveBrief)
 router.delete('/:id/briefs/:type',         briefs.deleteBrief)
+
+// Reuniones del proyecto (formato L10 sin puntaje; con cronómetro y to-dos al dashboard)
+router.get('/:id/meetings',                                 meetings.listMeetings)
+router.post('/:id/meetings',                                meetings.createMeeting)
+router.patch('/:id/meetings/:mid',                          meetings.updateMeeting)
+router.delete('/:id/meetings/:mid',                         meetings.deleteMeeting)
+router.post('/:id/meetings/:mid/start',                     meetings.startMeeting)
+router.post('/:id/meetings/:mid/finish',                    meetings.finishMeeting)
+router.post('/:id/meetings/:mid/todos',                     meetings.createTodo)
+router.patch('/:id/meetings/:mid/todos/:tid',               meetings.updateTodo)
+router.delete('/:id/meetings/:mid/todos/:tid',              meetings.deleteTodo)
+router.post('/:id/meetings/:mid/todos/:tid/send-to-dashboard', meetings.sendTodoToDashboard)
 
 module.exports = router
