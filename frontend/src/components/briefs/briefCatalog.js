@@ -3,10 +3,26 @@
 // transversal. Los briefs 2–6 son específicos por servicio y asumen que Marca ya está
 // completo (no repiten lo ya respondido). Cada brief se completa modularmente.
 //
-// Cada campo: { k: claveEstable, q: pregunta, short?: true (input de una línea, default textarea) }
+// Cada campo: { k: claveEstable, q: pregunta, short?: true (input de una línea, default textarea),
+//   big?: true (textarea alto para notas libres) }
 // Las claves (k) solo necesitan ser únicas dentro de cada brief.
 
 export const BRIEFS = [
+  {
+    key: 'memoria',
+    title: 'Memoria',
+    badge: 'Notas internas',
+    intro: 'Anotaciones libres sobre el cliente: cosas que nos dijo, pedidos especiales y todo lo que tengamos que tener en cuenta. Un espacio para notas varias que no encajan en los otros briefs.',
+    sections: [
+      {
+        title: 'Anotaciones',
+        fields: [
+          { k: 'notas', q: 'Notas y cosas a tener en cuenta', big: true },
+        ],
+      },
+    ],
+  },
+
   {
     key: 'marca',
     title: 'Marca',

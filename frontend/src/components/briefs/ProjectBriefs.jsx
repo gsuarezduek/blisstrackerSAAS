@@ -54,11 +54,13 @@ function BriefCard({ brief, answers, onOpen }) {
 }
 
 // Editor de un brief: secciones + campos. Guarda el brief completo de una.
-function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSaved }) {
+function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSaved, onDeleted }) {
   const [draft, setDraft]   = useState(() => ({ ...initialAnswers }))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved]   = useState(false)
   const [error, setError]   = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const dirty = useMemo(() => {
     const keys = new Set([...Object.keys(draft), ...Object.keys(initialAnswers)])
@@ -88,6 +90,19 @@ function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSave
     }
   }
 
+  async function handleDelete() {
+    setDeleting(true)
+    setError('')
+    try {
+      await api.delete(`/projects/${projectId}/briefs/${brief.key}`)
+      onDeleted(brief.key)
+    } catch (e) {
+      setError(e.response?.data?.error || 'No se pudo eliminar el brief')
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
+
   const { answered, total } = briefProgress(brief, draft)
 
   return (
@@ -112,6 +127,18 @@ function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSave
             {answered}/{total} campos completados{brief.estimate ? ` · ⏱ ${brief.estimate}` : ''}
           </p>
         </div>
+
+        {canEdit && (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="flex-shrink-0 flex items-center gap-1.5 text-sm text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 px-2.5 py-1.5 rounded-lg transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
+            </svg>
+            Eliminar
+          </button>
+        )}
       </div>
 
       {!canEdit && (
@@ -138,7 +165,7 @@ function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSave
                   />
                 ) : (
                   <textarea
-                    rows={2}
+                    rows={f.big ? 10 : 2}
                     value={draft[f.k] ?? ''}
                     onChange={e => setField(f.k, e.target.value)}
                     disabled={!canEdit}
@@ -165,6 +192,37 @@ function BriefEditor({ projectId, brief, initialAnswers, canEdit, onBack, onSave
           </button>
           {saved && !dirty && <span className="text-sm text-emerald-500">Los cambios se guardaron correctamente</span>}
           {dirty && !saving && <span className="text-xs text-gray-400 dark:text-gray-500">Cambios sin guardar</span>}
+        </div>
+      )}
+
+      {/* Confirmación de eliminación */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => !deleting && setConfirmDelete(false)}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl w-full max-w-md p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">¿Eliminar el {brief.title}?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Se borrarán todas las respuestas cargadas de este brief. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                {deleting ? 'Eliminando…' : 'Eliminar brief'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -202,9 +260,20 @@ export default function ProjectBriefs({ projectId, canEdit }) {
     setActiveKeys(prev => (prev.includes(type) ? prev : [...prev, type]))
   }
 
-  // Marca siempre visible (documento madre, primero); el resto solo si fue agregado.
-  const activeBriefs   = BRIEFS.filter(b => b.key === 'marca' || activeKeys.includes(b.key))
-  const availableToAdd = BRIEFS.filter(b => b.key !== 'marca' && !activeKeys.includes(b.key))
+  function handleDeleted(type) {
+    setAnswersByType(prev => {
+      const next = { ...prev }
+      delete next[type]
+      return next
+    })
+    setActiveKeys(prev => prev.filter(k => k !== type))
+    setOpenKey(null)
+  }
+
+  // Memoria (notas libres) y Marca (documento madre) siempre visibles; el resto solo si fue agregado.
+  const ALWAYS = ['memoria', 'marca']
+  const activeBriefs   = BRIEFS.filter(b => ALWAYS.includes(b.key) || activeKeys.includes(b.key))
+  const availableToAdd = BRIEFS.filter(b => !ALWAYS.includes(b.key) && !activeKeys.includes(b.key))
 
   async function handleAdd(key) {
     setAddingKey(key)
@@ -237,6 +306,7 @@ export default function ProjectBriefs({ projectId, canEdit }) {
         canEdit={canEdit}
         onBack={() => setOpenKey(null)}
         onSaved={handleSaved}
+        onDeleted={handleDeleted}
       />
     )
   }

@@ -92,4 +92,26 @@ async function saveBrief(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listBriefs, saveBrief }
+/**
+ * DELETE /api/projects/:id/briefs/:type
+ * Elimina por completo el brief (la fila en DB). Mismo criterio de escritura que saveBrief.
+ */
+async function deleteBrief(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const { type } = req.params
+    if (!isValidBriefType(type)) return res.status(400).json({ error: 'Tipo de brief inválido' })
+
+    if (!(await canWrite(req, projectId))) {
+      return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    }
+
+    await prisma.projectBrief.deleteMany({ where: { projectId, workspaceId, type } })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listBriefs, saveBrief, deleteBrief }

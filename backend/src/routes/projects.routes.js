@@ -29,5 +29,6 @@ router.patch('/:id/situation',             c.saveSituation)
 router.patch('/:id/info',                  c.saveInfo)
 router.get('/:id/briefs',                  briefs.listBriefs)
 router.put('/:id/briefs/:type',            briefs.saveBrief)
+router.delete('/:id/briefs/:type',         briefs.deleteBrief)
 
 module.exports = router

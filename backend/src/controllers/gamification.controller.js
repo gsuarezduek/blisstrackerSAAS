@@ -14,13 +14,22 @@ const ADS_PLATFORMS = ['meta_ads', 'google_ads']
 
 function tzOf(req) { return req.workspace.timezone || 'America/Argentina/Buenos_Aires' }
 
-// Nunca cargamos los bytes de la imagen en las consultas que vuelven al cliente.
-const OMIT_IMAGE = { imageData: true }
+// Campos de Game que devolvemos al cliente: TODOS menos los bytes de la imagen
+// (imageData). Se usa `select` explícito en vez de `omit` para no depender de un
+// preview feature de Prisma. Si agregás un campo a Game, sumalo acá.
+const GAME_FIELDS = {
+  id: true, workspaceId: true, type: true, title: true, description: true, prize: true,
+  subjectType: true, scoring: true, config: true, visibilityRule: true,
+  startDate: true, endDate: true, status: true, winnerSubject: true,
+  imageMimeType: true, createdById: true, createdAt: true, updatedAt: true,
+}
+const GAME_SELECT = GAME_FIELDS
+const GAME_SELECT_TEAMS = { ...GAME_FIELDS, teams: true }
 
 async function findGame(req) {
   const id = Number(req.params.id)
   if (!Number.isInteger(id)) return null
-  return prisma.game.findFirst({ where: { id, workspaceId: req.workspace.id }, omit: OMIT_IMAGE })
+  return prisma.game.findFirst({ where: { id, workspaceId: req.workspace.id }, select: GAME_SELECT })
 }
 
 // Da forma a un juego para la respuesta (sin leaderboard).
@@ -97,7 +106,7 @@ async function listGames(req, res, next) {
   try {
     const games = await prisma.game.findMany({
       where: { workspaceId: req.workspace.id },
-      omit: OMIT_IMAGE, include: { teams: true },
+      select: GAME_SELECT_TEAMS,
       orderBy: { createdAt: 'desc' },
     })
     const now = new Date(), tz = tzOf(req)
@@ -143,7 +152,7 @@ async function createGame(req, res, next) {
         status: req.body.status === 'active' ? 'active' : 'draft',
         createdById: req.user.userId,
       },
-      omit: OMIT_IMAGE, include: { teams: true },
+      select: GAME_SELECT_TEAMS,
     })
     res.status(201).json({ game: shapeGame(game, { teams: game.teams }) })
   } catch (err) { next(err) }
@@ -194,7 +203,7 @@ function maskLeaderboard(game, leaderboard) {
 /** GET /api/gamification/games/:id (admin) — incluye leaderboard */
 async function getGame(req, res, next) {
   try {
-    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE, include: { teams: true } })
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, select: GAME_SELECT_TEAMS })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     const leaderboard = await computeLeaderboard(game)
     const extra = await adminGameDetail(game)
@@ -286,7 +295,7 @@ async function updateGame(req, res, next) {
       data.status = req.body.status
     }
 
-    const updated = await prisma.game.update({ where: { id: game.id }, data, include: { teams: true } })
+    const updated = await prisma.game.update({ where: { id: game.id }, data, select: GAME_SELECT_TEAMS })
     res.json({ game: shapeGame(updated, { teams: updated.teams }) })
   } catch (err) { next(err) }
 }
@@ -309,7 +318,7 @@ async function finishGame(req, res, next) {
     const updated = await prisma.game.update({
       where: { id: game.id },
       data: { status: 'finished', winnerSubject: winner },
-      omit: OMIT_IMAGE, include: { teams: true },
+      select: GAME_SELECT_TEAMS,
     })
     // Notificar al equipo por email (fire-and-forget: nunca bloquea ni rompe el finish).
     notifyGameFinished(req.workspace, updated, winner).catch((e) => console.error('[Gamification] email ganador:', e.message))
@@ -417,7 +426,7 @@ async function getActive(req, res, next) {
     const RECENT_MS = 7 * 24 * 60 * 60 * 1000 // los finalizados se muestran 7 días
     const games = await prisma.game.findMany({
       where: { workspaceId: req.workspace.id, status: { in: ['active', 'finished'] } },
-      omit: OMIT_IMAGE, include: { teams: true },
+      select: GAME_SELECT_TEAMS,
       orderBy: { createdAt: 'desc' },
     })
     const shown = games.filter((g) => {
@@ -461,7 +470,7 @@ async function getActive(req, res, next) {
 /** GET /api/gamification/games/:id/leaderboard (cualquier miembro) */
 async function getLeaderboard(req, res, next) {
   try {
-    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE, include: { teams: true } })
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, select: GAME_SELECT_TEAMS })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     const leaderboard = maskLeaderboard(game, await computeLeaderboard(game))
     res.json({ game: shapeGame(game, { teams: game.teams }), leaderboard })
@@ -471,7 +480,7 @@ async function getLeaderboard(req, res, next) {
 /** POST /api/gamification/games/:id/vote (cualquier miembro) — body { targetUserId } */
 async function castVote(req, res, next) {
   try {
-    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE })
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, select: GAME_SELECT })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     if (game.scoring !== 'vote') return res.status(400).json({ error: 'Este juego no es de votación' })
     if (!isGameVisible(game, new Date(), tzOf(req))) return res.status(400).json({ error: 'La votación no está abierta en este momento' })
@@ -546,7 +555,7 @@ function publicQuestion(q, reveal) {
 /** GET /api/gamification/games/:id/quiz (cualquier miembro) — preguntas sin la respuesta correcta */
 async function getQuiz(req, res, next) {
   try {
-    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE })
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, select: GAME_SELECT })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     if (game.scoring !== 'quiz') return res.status(400).json({ error: 'Este juego no es un cuestionario' })
 
@@ -569,7 +578,7 @@ async function getQuiz(req, res, next) {
 /** POST /api/gamification/games/:id/quiz/submit (cualquier miembro) — body { answers:[{questionId,optionId}] } */
 async function submitQuiz(req, res, next) {
   try {
-    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, omit: OMIT_IMAGE })
+    const game = await prisma.game.findFirst({ where: { id: Number(req.params.id), workspaceId: req.workspace.id }, select: GAME_SELECT })
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     if (game.scoring !== 'quiz') return res.status(400).json({ error: 'Este juego no es un cuestionario' })
     if (!isGameVisible(game, new Date(), tzOf(req))) return res.status(400).json({ error: 'El cuestionario no está abierto en este momento' })
