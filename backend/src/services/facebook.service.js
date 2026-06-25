@@ -81,10 +81,13 @@ function normalizeGraphPost(p) {
 }
 
 // Métricas de página que mapeamos a reach/impressions/pageViews.
+// Cada campo lleva una CADENA de candidatos: Meta fue deprecando nombres
+// (v21.0 ya rechaza page_impressions / page_impressions_unique con error #100),
+// así que probamos en orden y usamos el primero que la Graph API acepte.
 const PAGE_INSIGHT_METRICS = [
-  { key: 'reach',       metric: 'page_impressions_unique' },
-  { key: 'impressions', metric: 'page_impressions' },
-  { key: 'pageViews',   metric: 'page_views_total' },
+  { key: 'reach',       candidates: ['page_impressions_unique', 'page_posts_impressions_unique'] },
+  { key: 'impressions', candidates: ['page_impressions', 'page_posts_impressions'] },
+  { key: 'pageViews',   candidates: ['page_views_total'] },
 ]
 const INSIGHT_PERIOD = 'days_28'
 
@@ -106,37 +109,24 @@ async function fetchOneInsight(pageId, pageToken, metric, period = INSIGHT_PERIO
 /**
  * Insights de página (best-effort). Devuelve { reach, impressions, pageViews }.
  *
- * Resiliente: primero intenta las 3 métricas en UNA llamada. Si la Graph API la
- * rechaza entera (típico cuando UNA métrica está deprecada → tira todo el request),
- * cae a pedir cada métrica por separado para no perder las que sí existen.
- * Cualquier campo no disponible queda en null.
+ * Resiliente a la deprecación de nombres de métricas de Meta: para cada campo
+ * recorre su cadena de candidatos y usa el primero que la Graph API acepte (no
+ * lanza #100) y que traiga un valor. Cualquier campo sin candidato válido queda
+ * en null sin romper los demás.
  */
 async function fetchPageInsights(pageId, pageToken) {
-  try {
-    const { data } = await axios.get(`${GRAPH_BASE}/${pageId}/insights`, {
-      params: {
-        metric:       PAGE_INSIGHT_METRICS.map(m => m.metric).join(','),
-        period:       INSIGHT_PERIOD,
-        access_token: pageToken,
-      },
-    })
-    const out = { reach: null, impressions: null, pageViews: null }
-    for (const { key, metric } of PAGE_INSIGHT_METRICS) {
-      out[key] = lastInsightValue(data?.data, metric)
-    }
-    return out
-  } catch (err) {
-    console.warn('[Facebook] Insights combinados fallaron, probando métrica por métrica:',
-      err.response?.data?.error?.message || err.message)
-  }
-
-  // Fallback: cada métrica aislada — una deprecada no se lleva puestas las otras.
   const out = { reach: null, impressions: null, pageViews: null }
-  await Promise.all(PAGE_INSIGHT_METRICS.map(async ({ key, metric }) => {
-    try {
-      out[key] = await fetchOneInsight(pageId, pageToken, metric)
-    } catch (err) {
-      console.warn(`[Facebook] Insight "${metric}" no disponible:`, err.response?.data?.error?.message || err.message)
+
+  await Promise.all(PAGE_INSIGHT_METRICS.map(async ({ key, candidates }) => {
+    for (const metric of candidates) {
+      try {
+        const v = await fetchOneInsight(pageId, pageToken, metric)
+        if (v != null) { out[key] = v; return }
+        // métrica válida pero sin dato → seguimos probando candidatos por las dudas
+      } catch (err) {
+        // nombre inválido/deprecado (#100) → probamos el siguiente candidato
+        console.warn(`[Facebook] Insight "${metric}" no disponible:`, err.response?.data?.error?.message || err.message)
+      }
     }
   }))
   return out
@@ -174,10 +164,11 @@ async function debugPageInsights(pageId, pageToken) {
     out.tokenInfo = { error: 'META_APP_ID/META_APP_SECRET no configurados — no se puede inspeccionar el token.' }
   }
 
-  // 2) Llamada combinada (réplica exacta de producción).
+  // 2) Llamada combinada con los candidatos primarios (réplica de la base de producción).
+  const primaries = PAGE_INSIGHT_METRICS.map(m => m.candidates[0])
   try {
     const { data } = await axios.get(`${GRAPH_BASE}/${pageId}/insights`, {
-      params: { metric: PAGE_INSIGHT_METRICS.map(m => m.metric).join(','), period: INSIGHT_PERIOD, access_token: pageToken },
+      params: { metric: primaries.join(','), period: INSIGHT_PERIOD, access_token: pageToken },
     })
     out.combined = { ok: true, rows: data?.data ?? [] }
   } catch (err) {
@@ -190,18 +181,33 @@ async function debugPageInsights(pageId, pageToken) {
     }
   }
 
-  // 3) Cada métrica por separado — aísla cuál está deprecada / sin permiso.
-  const probes = PAGE_INSIGHT_METRICS.map(m => m.metric)
-  for (const metric of probes) {
+  // 3) Sonda amplia — qué nombres de métrica acepta esta página en v21.0.
+  //    Con fallback de período: algunas métricas no soportan days_28.
+  const PROBE_METRICS = [
+    'page_impressions', 'page_impressions_unique',
+    'page_posts_impressions', 'page_posts_impressions_unique',
+    'page_posts_impressions_organic', 'page_posts_impressions_paid',
+    'page_impressions_organic_v2', 'page_impressions_paid',
+    'page_views_total', 'page_views_unique',
+    'page_total_actions', 'page_post_engagements',
+    'page_daily_follows_unique', 'page_fan_adds_unique', 'page_fans',
+  ]
+  const PROBE_PERIODS = ['days_28', 'week', 'day']
+  for (const metric of PROBE_METRICS) {
     const entry = { metric }
-    try {
-      const value = await fetchOneInsight(pageId, pageToken, metric)
-      entry.ok = true
-      entry.value = value
-    } catch (err) {
-      entry.ok = false
-      entry.error = err.response?.data?.error?.message || err.message
-      entry.code  = err.response?.data?.error?.code ?? null
+    for (const period of PROBE_PERIODS) {
+      try {
+        entry.value  = await fetchOneInsight(pageId, pageToken, metric, period)
+        entry.ok     = true
+        entry.period = period
+        break
+      } catch (err) {
+        entry.ok    = false
+        entry.error = err.response?.data?.error?.message || err.message
+        entry.code  = err.response?.data?.error?.code ?? null
+        // nombre inválido (#100 "valid insights metric") → no tiene sentido otro período
+        if (entry.code === 100 && /valid insights metric/i.test(entry.error || '')) break
+      }
     }
     out.perMetric.push(entry)
   }
