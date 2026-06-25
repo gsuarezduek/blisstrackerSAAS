@@ -39,6 +39,8 @@ router.patch('/:id/meetings/:mid',                          meetings.updateMeeti
 router.delete('/:id/meetings/:mid',                         meetings.deleteMeeting)
 router.post('/:id/meetings/:mid/start',                     meetings.startMeeting)
 router.post('/:id/meetings/:mid/finish',                    meetings.finishMeeting)
+router.post('/:id/meetings/:mid/participants',              meetings.addParticipant)
+router.delete('/:id/meetings/:mid/participants/:uid',       meetings.removeParticipant)
 router.post('/:id/meetings/:mid/todos',                     meetings.createTodo)
 router.patch('/:id/meetings/:mid/todos/:tid',               meetings.updateTodo)
 router.delete('/:id/meetings/:mid/todos/:tid',              meetings.deleteTodo)

@@ -676,10 +676,10 @@ export default function FacebookTab({ projectId, onSelectProject }) {
         </div>
       )}
 
-      {!scraped && isCurrentMonth && (displayData?.reach == null || displayData?.impressions == null) && (
+      {!scraped && isCurrentMonth && displayData?.impressions == null && (
         <div className="bg-amber-50/70 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span>👁 No se están trayendo Alcance e Impresiones. Suele ser el permiso <code className="font-mono">read_insights</code> sin asignar al token, o una métrica deprecada por Meta. Corré el diagnóstico para ver qué responde la Graph API.</span>
+            <span>👁 No se están trayendo las Impresiones. Suele ser el permiso <code className="font-mono">read_insights</code> sin asignar al token, o una métrica deprecada por Meta. Corré el diagnóstico para ver qué responde la Graph API.</span>
             <button onClick={handleInsightsDebug} disabled={debugLoading}
               className="shrink-0 px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50 transition-colors font-medium">
               {debugLoading ? 'Diagnosticando…' : '🔍 Diagnóstico de insights'}
@@ -743,8 +743,10 @@ export default function FacebookTab({ projectId, onSelectProject }) {
           />
           {!scraped && (
             <KpiCard icon="👁" label="Alcance"
-              value={displayData.reach != null ? fmtK(displayData.reach) : '—'}
-              sub={`orgánico · suma posts · ${isCurrentMonth ? 'este mes' : 'ese mes'}`}
+              value={displayData.reach != null ? fmtK(displayData.reach) : 'n/d'}
+              sub={displayData.reach != null
+                ? `orgánico · suma posts · ${isCurrentMonth ? 'este mes' : 'ese mes'}`
+                : 'no disponible en la API de Meta'}
             />
           )}
           {!scraped && (

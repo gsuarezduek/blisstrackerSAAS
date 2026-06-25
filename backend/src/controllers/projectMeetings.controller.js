@@ -62,6 +62,17 @@ function formatTodo(t) {
   }
 }
 
+function formatParticipant(p) {
+  return {
+    id:         p.id,
+    userId:     p.userId,
+    name:       p.user?.name,
+    avatar:     p.user?.avatar,
+    taskId:     p.taskId ?? null,
+    taskStatus: p.task?.status ?? null,
+  }
+}
+
 function formatMeeting(m) {
   return {
     id:           m.id,
@@ -72,19 +83,42 @@ function formatMeeting(m) {
     endedAt:      m.endedAt,
     durationMins: m.durationMins,
     running:      !!m.startedAt && !m.endedAt,
+    started:      !!m.startedAt,
     createdAt:    m.createdAt,
     todos:        m.todos ? m.todos.map(formatTodo) : undefined,
+    participants: m.participants ? m.participants.map(formatParticipant) : undefined,
   }
 }
 
 const TODO_INCLUDE = { task: { select: { id: true, status: true, description: true } } }
+const MEETING_INCLUDE = {
+  todos:        { orderBy: [{ order: 'asc' }, { createdAt: 'asc' }], include: TODO_INCLUDE },
+  participants: { orderBy: { createdAt: 'asc' }, include: { user: { select: { id: true, name: true, avatar: true } }, task: { select: { status: true } } } },
+}
 
 // Carga una reunión del proyecto + su workspace para validar pertenencia.
 async function loadMeeting(mid, projectId, workspaceId) {
   return prisma.projectMeeting.findFirst({
     where:   { id: Number(mid), projectId, workspaceId },
-    include: { todos: { orderBy: [{ order: 'asc' }, { createdAt: 'asc' }], include: TODO_INCLUDE } },
+    include: MEETING_INCLUDE,
   })
+}
+
+const typeLabel = (t) => (t === 'client' ? 'Reunión con cliente' : 'Reunión de equipo')
+
+// WorkDay de hoy del usuario (crear si falta — mismo patrón que tasks.create).
+async function ensureWorkDay(userId, workspaceId, today) {
+  const wdKey = { userId_workspaceId_date: { userId, workspaceId, date: today } }
+  let workDay = await prisma.workDay.findUnique({ where: wdKey })
+  if (!workDay) {
+    try {
+      workDay = await prisma.workDay.create({ data: { userId, workspaceId, date: today } })
+    } catch (e) {
+      if (e.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
+      else throw e
+    }
+  }
+  return workDay
 }
 
 // ─── MEETINGS ─────────────────────────────────────────────────────────────────
@@ -101,7 +135,7 @@ async function listMeetings(req, res, next) {
       prisma.projectMeeting.findMany({
         where:   { projectId, workspaceId },
         orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-        include: { todos: { orderBy: [{ order: 'asc' }, { createdAt: 'asc' }], include: TODO_INCLUDE } },
+        include: MEETING_INCLUDE,
       }),
     ])
 
@@ -125,7 +159,7 @@ async function createMeeting(req, res, next) {
     const meeting = await prisma.projectMeeting.create({
       data: { projectId, workspaceId, date: d, type: t },
     })
-    res.status(201).json(formatMeeting({ ...meeting, todos: [] }))
+    res.status(201).json(formatMeeting({ ...meeting, todos: [], participants: [] }))
   } catch (err) { next(err) }
 }
 
@@ -174,28 +208,81 @@ async function deleteMeeting(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// POST /api/projects/:id/meetings/:mid/start — arranca el cronómetro.
+// POST /api/projects/:id/meetings/:mid/start — arranca el cronómetro y, por cada
+// participante, crea una Task IN_PROGRESS en el proyecto (su tiempo cuenta para el
+// proyecto y aparece en Actividad). Bloquea si algún participante tiene una tarea en curso.
 async function startMeeting(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    const tz          = req.workspace.timezone
+    const requesterId = req.user.userId
+    const projectId   = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
     if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
-    const existing = await prisma.projectMeeting.findFirst({ where: { id: Number(req.params.mid), projectId, workspaceId } })
+    const existing = await loadMeeting(req.params.mid, projectId, workspaceId)
     if (!existing) return res.status(404).json({ error: 'Reunión no encontrada' })
+    if (existing.startedAt && !existing.endedAt) return res.status(409).json({ error: 'La reunión ya está en curso' })
+    if (existing.endedAt) return res.status(409).json({ error: 'La reunión ya fue finalizada' })
 
-    // (Re)inicia: marca startedAt = ahora y limpia un fin previo.
+    const participants = existing.participants
+    const participantIds = participants.map(p => p.userId)
+
+    // Bloqueo: nadie del grupo puede tener una tarea en curso al iniciar.
+    if (participantIds.length) {
+      const busy = await prisma.task.findMany({
+        where:   { userId: { in: participantIds }, status: 'IN_PROGRESS' },
+        include: { user: { select: { name: true } } },
+      })
+      if (busy.length) {
+        const names = [...new Set(busy.map(b => b.user.name))].join(', ')
+        return res.status(409).json({
+          error: `No se puede iniciar: ${names} ${busy.length > 1 ? 'tienen' : 'tiene'} una tarea en curso. Debe pausarla o completarla primero.`,
+        })
+      }
+    }
+
+    const now   = new Date()
+    const today = todayString(tz)
+
+    // Una Task IN_PROGRESS + TaskSession por participante, vinculada al participante.
+    for (const p of participants) {
+      const workDay = await ensureWorkDay(p.userId, workspaceId, today)
+      if (!workDay) continue
+      try {
+        const task = await prisma.task.create({
+          data: {
+            description: typeLabel(existing.type),
+            projectId,
+            userId:      p.userId,
+            workDayId:   workDay.id,
+            status:      'IN_PROGRESS',
+            startedAt:   now,
+            createdById: p.userId !== requesterId ? requesterId : null,
+          },
+        })
+        await prisma.taskSession.create({ data: { taskId: task.id, startedAt: now } })
+        await prisma.projectMeetingParticipant.update({ where: { id: p.id }, data: { taskId: task.id } })
+      } catch (e) {
+        // Si justo arrancó una tarea (race con el constraint one_active_task), abortamos claro.
+        if (e.code === 'P2002') {
+          return res.status(409).json({ error: `${p.user?.name || 'Un participante'} acaba de iniciar otra tarea. Reintentá.` })
+        }
+        throw e
+      }
+    }
+
     await prisma.projectMeeting.update({
       where: { id: existing.id },
-      data:  { startedAt: new Date(), endedAt: null, durationMins: null },
+      data:  { startedAt: now, endedAt: null, durationMins: null },
     })
     const fresh = await loadMeeting(existing.id, projectId, workspaceId)
     res.json(formatMeeting(fresh))
   } catch (err) { next(err) }
 }
 
-// POST /api/projects/:id/meetings/:mid/finish — frena el cronómetro y congela la duración.
+// POST /api/projects/:id/meetings/:mid/finish — frena el cronómetro, congela la
+// duración y completa las tareas de los participantes (su tiempo se suma al proyecto).
 async function finishMeeting(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -203,17 +290,81 @@ async function finishMeeting(req, res, next) {
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
     if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
-    const existing = await prisma.projectMeeting.findFirst({ where: { id: Number(req.params.mid), projectId, workspaceId } })
+    const existing = await loadMeeting(req.params.mid, projectId, workspaceId)
     if (!existing) return res.status(404).json({ error: 'Reunión no encontrada' })
     if (!existing.startedAt) return res.status(400).json({ error: 'La reunión no fue iniciada' })
 
     const now = new Date()
     const durationMins = Math.max(0, Math.round((now.getTime() - new Date(existing.startedAt).getTime()) / 60000))
+
+    // Completar las tareas de los participantes que sigan en curso (cerrar su sesión).
+    const taskIds = existing.participants.map(p => p.taskId).filter(Boolean)
+    if (taskIds.length) {
+      await prisma.taskSession.updateMany({ where: { taskId: { in: taskIds }, endedAt: null }, data: { endedAt: now } })
+      await prisma.task.updateMany({
+        where: { id: { in: taskIds }, status: 'IN_PROGRESS' },
+        data:  { status: 'COMPLETED', completedAt: now, pausedAt: null },
+      })
+    }
+
     await prisma.projectMeeting.update({
       where: { id: existing.id },
       data:  { endedAt: now, durationMins },
     })
     const fresh = await loadMeeting(existing.id, projectId, workspaceId)
+    res.json(formatMeeting(fresh))
+  } catch (err) { next(err) }
+}
+
+// ─── PARTICIPANTES ────────────────────────────────────────────────────────────
+
+// POST /api/projects/:id/meetings/:mid/participants — agrega un participante.
+// Solo antes de iniciar (una vez iniciada, el grupo queda fijo).
+async function addParticipant(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+
+    const meeting = await prisma.projectMeeting.findFirst({ where: { id: Number(req.params.mid), projectId, workspaceId } })
+    if (!meeting) return res.status(404).json({ error: 'Reunión no encontrada' })
+    if (meeting.startedAt) return res.status(409).json({ error: 'No se pueden editar los participantes después de iniciar la reunión' })
+
+    const userId = Number(req.body.userId)
+    if (!userId) return res.status(400).json({ error: 'userId es requerido' })
+
+    const member = await prisma.workspaceMember.findUnique({
+      where:  { workspaceId_userId: { workspaceId, userId } },
+      select: { active: true },
+    })
+    if (!member || !member.active) return res.status(400).json({ error: 'No es un miembro activo del workspace' })
+
+    try {
+      await prisma.projectMeetingParticipant.create({ data: { meetingId: meeting.id, workspaceId, userId } })
+    } catch (e) {
+      if (e.code !== 'P2002') throw e // ya estaba: idempotente
+    }
+
+    const fresh = await loadMeeting(meeting.id, projectId, workspaceId)
+    res.status(201).json(formatMeeting(fresh))
+  } catch (err) { next(err) }
+}
+
+// DELETE /api/projects/:id/meetings/:mid/participants/:uid — quita un participante.
+async function removeParticipant(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+
+    const meeting = await prisma.projectMeeting.findFirst({ where: { id: Number(req.params.mid), projectId, workspaceId } })
+    if (!meeting) return res.status(404).json({ error: 'Reunión no encontrada' })
+    if (meeting.startedAt) return res.status(409).json({ error: 'No se pueden editar los participantes después de iniciar la reunión' })
+
+    await prisma.projectMeetingParticipant.deleteMany({ where: { meetingId: meeting.id, userId: Number(req.params.uid) } })
+    const fresh = await loadMeeting(meeting.id, projectId, workspaceId)
     res.json(formatMeeting(fresh))
   } catch (err) { next(err) }
 }
@@ -370,5 +521,6 @@ async function sendTodoToDashboard(req, res, next) {
 
 module.exports = {
   listMeetings, createMeeting, updateMeeting, deleteMeeting, startMeeting, finishMeeting,
+  addParticipant, removeParticipant,
   createTodo, updateTodo, deleteTodo, sendTodoToDashboard,
 }

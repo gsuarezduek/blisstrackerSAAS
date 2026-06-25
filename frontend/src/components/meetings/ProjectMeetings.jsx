@@ -65,6 +65,57 @@ function fmtElapsed(secs) {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
 }
 
+// ─── AddParticipant ─────────────────────────────────────────────────────────
+// Dropdown para sumar un participante (equipo del proyecto primero, resto después).
+
+function AddParticipant({ members, existingIds, onAdd }) {
+  const [open, setOpen] = useState(false)
+  const avail = members.filter(m => !existingIds.has(m.id))
+  if (avail.length === 0) return null
+  const team   = avail.filter(m => m.inTeam)
+  const others = avail.filter(m => !m.inTeam)
+
+  function pick(id) { onAdd(id); setOpen(false) }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+      >
+        + Participante
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg w-56 max-h-72 overflow-y-auto py-1">
+            {team.length > 0 && (
+              <>
+                <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Equipo del proyecto</p>
+                {team.map(m => (
+                  <button key={m.id} onClick={() => pick(m.id)} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 flex items-center gap-2">
+                    <img src={avatarUrl(m.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />{m.name}
+                  </button>
+                ))}
+              </>
+            )}
+            {others.length > 0 && (
+              <>
+                <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Otros del workspace</p>
+                {others.map(m => (
+                  <button key={m.id} onClick={() => pick(m.id)} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 flex items-center gap-2">
+                    <img src={avatarUrl(m.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />{m.name}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── TodoDashboardLink ────────────────────────────────────────────────────────
 // Botón/badge para enviar el to-do al dashboard del responsable (en este proyecto).
 
@@ -268,19 +319,9 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
 
   if (meeting.durationMins != null) {
     return (
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-          ⏱ {fmtDuration(meeting.durationMins)}
-        </span>
-        {canEdit && (
-          <button
-            onClick={onStart}
-            className="text-xs font-medium px-3 py-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            ↻ Reiniciar
-          </button>
-        )}
-      </div>
+      <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+        ⏱ {fmtDuration(meeting.durationMins)}
+      </span>
     )
   }
 
@@ -299,7 +340,7 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
 // ─── MeetingCard ──────────────────────────────────────────────────────────────
 
 function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, onDelete, onStart, onFinish,
-                       onAddTodo, onUpdateTodo, onDeleteTodo, onSendToDashboard }) {
+                       onAddParticipant, onRemoveParticipant, onAddTodo, onUpdateTodo, onDeleteTodo, onSendToDashboard }) {
   const tm = typeMeta(meeting.type)
   const notes = meeting.notes || ''
   const notesIsEmpty = !notes || notes === '<p></p>'
@@ -371,7 +412,7 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
               <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tipo</label>
               <select
                 value={meeting.type}
-                disabled={!canEdit}
+                disabled={!canEdit || meeting.started}
                 onChange={e => onSave(meeting.id, { type: e.target.value })}
                 className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400 disabled:opacity-60"
               >
@@ -387,6 +428,53 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
                 onFinish={() => onFinish(meeting.id)}
               />
             </div>
+          </div>
+
+          {/* Participantes */}
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Participantes</label>
+            <div className="flex flex-wrap items-center gap-2">
+              {(meeting.participants || []).map(p => {
+                const live = p.taskStatus === 'IN_PROGRESS'
+                const done = p.taskStatus === 'COMPLETED'
+                return (
+                  <span
+                    key={p.id}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium pl-1 pr-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200"
+                    title={live ? 'En reunión' : done ? 'Tiempo registrado' : ''}
+                  >
+                    <img src={avatarUrl(p.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />
+                    {p.name}
+                    {live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
+                    {done && <span className="text-green-500">✓</span>}
+                    {canEdit && !meeting.started && (
+                      <button
+                        onClick={() => onRemoveParticipant(meeting.id, p.userId)}
+                        className="text-gray-400 hover:text-red-500 ml-0.5"
+                        title="Quitar"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </span>
+                )
+              })}
+              {canEdit && !meeting.started && (
+                <AddParticipant
+                  members={members}
+                  existingIds={new Set((meeting.participants || []).map(p => p.userId))}
+                  onAdd={userId => onAddParticipant(meeting.id, userId)}
+                />
+              )}
+            </div>
+            {(meeting.participants || []).length === 0 && !canEdit && (
+              <p className="text-xs text-gray-400 dark:text-gray-500">Sin participantes.</p>
+            )}
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 leading-snug">
+              {meeting.started
+                ? 'Al iniciar se cuenta el tiempo de cada participante en este proyecto; al finalizar queda registrado como tiempo del proyecto.'
+                : 'Al iniciar la reunión se contará el tiempo de cada participante en este proyecto. No se puede iniciar si alguien tiene una tarea en curso.'}
+            </p>
           </div>
 
           {/* Notas */}
@@ -576,6 +664,20 @@ export default function ProjectMeetings({ projectId, canEdit }) {
     } catch (e) { setError(e.response?.data?.error || 'No se pudo finalizar') }
   }
 
+  async function handleAddParticipant(meetingId, userId) {
+    try {
+      const { data } = await api.post(`/projects/${projectId}/meetings/${meetingId}/participants`, { userId })
+      replaceMeeting(data)
+    } catch (e) { setError(e.response?.data?.error || 'No se pudo agregar el participante') }
+  }
+
+  async function handleRemoveParticipant(meetingId, userId) {
+    try {
+      const { data } = await api.delete(`/projects/${projectId}/meetings/${meetingId}/participants/${userId}`)
+      replaceMeeting(data)
+    } catch (e) { setError(e.response?.data?.error || 'No se pudo quitar el participante') }
+  }
+
   function patchTodos(meetingId, fn) {
     setMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, todos: fn(m.todos) } : m))
   }
@@ -667,6 +769,8 @@ export default function ProjectMeetings({ projectId, canEdit }) {
               onDelete={handleDeleteMeeting}
               onStart={handleStart}
               onFinish={handleFinish}
+              onAddParticipant={handleAddParticipant}
+              onRemoveParticipant={handleRemoveParticipant}
               onAddTodo={handleAddTodo}
               onUpdateTodo={handleUpdateTodo}
               onDeleteTodo={handleDeleteTodo}
