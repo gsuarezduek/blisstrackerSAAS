@@ -119,6 +119,7 @@ router.delete('/projects/:id/facebook/snapshots/:month', facebook.deleteSnapshot
 router.get('/projects/:id/facebook/followers',           facebook.getFollowerLog)
 router.post('/projects/:id/facebook/scrape/refresh',     facebook.refreshScrape)
 router.get('/projects/:id/facebook/scrape-debug',        facebook.scrapeDebug)
+router.get('/projects/:id/facebook/insights-debug',      facebook.insightsDebug)
 router.get('/projects/:id/facebook',                     facebook.getMetrics)
 
 // Snapshots mensuales + Insights IA

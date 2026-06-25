@@ -593,6 +593,16 @@ export default function FacebookTab({ projectId, onSelectProject }) {
     } finally { setDebugLoading(false) }
   }
 
+  async function handleInsightsDebug() {
+    setDebugLoading(true); setDebugError(null); setDebugData(null)
+    try {
+      const { data } = await api.get(`/marketing/projects/${projectId}/facebook/insights-debug`)
+      setDebugData(data)
+    } catch (err) {
+      setDebugError(err.response?.data?.error || 'No se pudo correr el diagnóstico.')
+    } finally { setDebugLoading(false) }
+  }
+
   if (!projectId) return <CrossProjectFacebookPanel onSelectProject={onSelectProject} />
 
   if (loading) return (
@@ -659,6 +669,43 @@ export default function FacebookTab({ projectId, onSelectProject }) {
                 Si "items" es 0 → el actor no recibió bien la entrada. Si hay items pero posts/seguidores en 0 → el actor usa otros nombres de campo. Copiá este JSON y pasámelo para ajustar el mapeo.
               </p>
               <pre className="max-h-80 overflow-auto bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-[11px] leading-relaxed text-gray-700 dark:text-gray-300 select-all whitespace-pre-wrap break-all">
+{JSON.stringify(debugData, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!scraped && isCurrentMonth && (displayData?.reach == null || displayData?.impressions == null) && (
+        <div className="bg-amber-50/70 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span>👁 No se están trayendo Alcance e Impresiones. Suele ser el permiso <code className="font-mono">read_insights</code> sin asignar al token, o una métrica deprecada por Meta. Corré el diagnóstico para ver qué responde la Graph API.</span>
+            <button onClick={handleInsightsDebug} disabled={debugLoading}
+              className="shrink-0 px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50 transition-colors font-medium">
+              {debugLoading ? 'Diagnosticando…' : '🔍 Diagnóstico de insights'}
+            </button>
+          </div>
+
+          {debugError && <p className="mt-2 text-red-600 dark:text-red-400">{debugError}</p>}
+
+          {debugData?.perMetric && (
+            <div className="mt-3 space-y-2">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-amber-900 dark:text-amber-200 font-medium">
+                <span>read_insights: {debugData.tokenInfo?.hasReadInsights === true ? '✅ sí' : debugData.tokenInfo?.hasReadInsights === false ? '❌ no' : '—'}</span>
+                <span>token válido: {debugData.tokenInfo?.isValid === true ? '✅' : debugData.tokenInfo?.isValid === false ? '❌' : '—'}</span>
+                <span>llamada combinada: {debugData.combined?.ok ? '✅ ok' : `❌ ${debugData.combined?.error || 'falló'}`}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {debugData.perMetric.map(m => (
+                  <span key={m.metric} className={`px-2 py-0.5 rounded-full font-mono text-[11px] ${m.ok ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'}`}>
+                    {m.metric}: {m.ok ? (m.value ?? 'null') : `error ${m.code ?? ''}`}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                Si <code className="font-mono">read_insights</code> es ❌ → regenerá el System User Token incluyendo ese permiso y asignale la página con acceso a métricas. Si una métrica puntual da error y las otras ✅ → esa está deprecada (ya las pedimos por separado, así no tumba a las demás). Copiá este JSON y pasámelo.
+              </p>
+              <pre className="max-h-80 overflow-auto bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-[11px] leading-relaxed text-gray-700 dark:text-gray-300 select-all whitespace-pre-wrap break-all">
 {JSON.stringify(debugData, null, 2)}
               </pre>
             </div>

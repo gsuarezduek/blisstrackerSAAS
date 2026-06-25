@@ -80,33 +80,132 @@ function normalizeGraphPost(p) {
   }
 }
 
+// Métricas de página que mapeamos a reach/impressions/pageViews.
+const PAGE_INSIGHT_METRICS = [
+  { key: 'reach',       metric: 'page_impressions_unique' },
+  { key: 'impressions', metric: 'page_impressions' },
+  { key: 'pageViews',   metric: 'page_views_total' },
+]
+const INSIGHT_PERIOD = 'days_28'
+
+// Último valor de una serie de insights para una métrica puntual. null si no parsea.
+function lastInsightValue(dataRows, metric) {
+  const row = (dataRows ?? []).find(r => r.name === metric)
+  const val = row?.values?.[row.values.length - 1]?.value
+  return typeof val === 'number' ? val : null
+}
+
+// Pide UNA métrica de insights. Lanza si la Graph API la rechaza.
+async function fetchOneInsight(pageId, pageToken, metric, period = INSIGHT_PERIOD) {
+  const { data } = await axios.get(`${GRAPH_BASE}/${pageId}/insights`, {
+    params: { metric, period, access_token: pageToken },
+  })
+  return lastInsightValue(data?.data, metric)
+}
+
 /**
  * Insights de página (best-effort). Devuelve { reach, impressions, pageViews }.
+ *
+ * Resiliente: primero intenta las 3 métricas en UNA llamada. Si la Graph API la
+ * rechaza entera (típico cuando UNA métrica está deprecada → tira todo el request),
+ * cae a pedir cada métrica por separado para no perder las que sí existen.
  * Cualquier campo no disponible queda en null.
  */
 async function fetchPageInsights(pageId, pageToken) {
   try {
     const { data } = await axios.get(`${GRAPH_BASE}/${pageId}/insights`, {
       params: {
-        metric:       'page_impressions_unique,page_impressions,page_views_total',
-        period:       'days_28',
+        metric:       PAGE_INSIGHT_METRICS.map(m => m.metric).join(','),
+        period:       INSIGHT_PERIOD,
         access_token: pageToken,
       },
     })
-    const byName = {}
-    for (const row of data?.data ?? []) {
-      const val = row.values?.[row.values.length - 1]?.value
-      byName[row.name] = typeof val === 'number' ? val : null
+    const out = { reach: null, impressions: null, pageViews: null }
+    for (const { key, metric } of PAGE_INSIGHT_METRICS) {
+      out[key] = lastInsightValue(data?.data, metric)
     }
-    return {
-      reach:       byName.page_impressions_unique ?? null,
-      impressions: byName.page_impressions        ?? null,
-      pageViews:   byName.page_views_total         ?? null,
-    }
+    return out
   } catch (err) {
-    console.warn('[Facebook] Insights no disponibles:', err.response?.data?.error?.message || err.message)
-    return { reach: null, impressions: null, pageViews: null }
+    console.warn('[Facebook] Insights combinados fallaron, probando métrica por métrica:',
+      err.response?.data?.error?.message || err.message)
   }
+
+  // Fallback: cada métrica aislada — una deprecada no se lleva puestas las otras.
+  const out = { reach: null, impressions: null, pageViews: null }
+  await Promise.all(PAGE_INSIGHT_METRICS.map(async ({ key, metric }) => {
+    try {
+      out[key] = await fetchOneInsight(pageId, pageToken, metric)
+    } catch (err) {
+      console.warn(`[Facebook] Insight "${metric}" no disponible:`, err.response?.data?.error?.message || err.message)
+    }
+  }))
+  return out
+}
+
+/**
+ * Diagnóstico de insights — NO best-effort, devuelve crudo qué dice la Graph API.
+ * Usado por el endpoint de debug para entender por qué reach/impressions quedan null.
+ */
+async function debugPageInsights(pageId, pageToken) {
+  const out = { pageId, graphVersion: GRAPH_BASE, period: INSIGHT_PERIOD, tokenInfo: null, combined: null, perMetric: [] }
+
+  // 1) Scopes/validez del token vía debug_token (requiere app token).
+  const appId = process.env.META_APP_ID
+  const appSecret = process.env.META_APP_SECRET
+  if (appId && appSecret) {
+    try {
+      const { data } = await axios.get(`${GRAPH_BASE}/debug_token`, {
+        params: { input_token: pageToken, access_token: `${appId}|${appSecret}` },
+      })
+      const d = data?.data ?? {}
+      out.tokenInfo = {
+        type:            d.type ?? null,
+        isValid:         d.is_valid ?? null,
+        appId:           d.app_id ?? null,
+        expiresAt:       d.expires_at ? new Date(d.expires_at * 1000).toISOString() : null,
+        scopes:          d.scopes ?? null,
+        granularScopes:  d.granular_scopes ?? null,
+        hasReadInsights: Array.isArray(d.scopes) ? d.scopes.includes('read_insights') : null,
+      }
+    } catch (err) {
+      out.tokenInfo = { error: err.response?.data?.error?.message || err.message }
+    }
+  } else {
+    out.tokenInfo = { error: 'META_APP_ID/META_APP_SECRET no configurados — no se puede inspeccionar el token.' }
+  }
+
+  // 2) Llamada combinada (réplica exacta de producción).
+  try {
+    const { data } = await axios.get(`${GRAPH_BASE}/${pageId}/insights`, {
+      params: { metric: PAGE_INSIGHT_METRICS.map(m => m.metric).join(','), period: INSIGHT_PERIOD, access_token: pageToken },
+    })
+    out.combined = { ok: true, rows: data?.data ?? [] }
+  } catch (err) {
+    out.combined = {
+      ok:      false,
+      status:  err.response?.status ?? null,
+      error:   err.response?.data?.error?.message || err.message,
+      code:    err.response?.data?.error?.code ?? null,
+      subcode: err.response?.data?.error?.error_subcode ?? null,
+    }
+  }
+
+  // 3) Cada métrica por separado — aísla cuál está deprecada / sin permiso.
+  const probes = PAGE_INSIGHT_METRICS.map(m => m.metric)
+  for (const metric of probes) {
+    const entry = { metric }
+    try {
+      const value = await fetchOneInsight(pageId, pageToken, metric)
+      entry.ok = true
+      entry.value = value
+    } catch (err) {
+      entry.ok = false
+      entry.error = err.response?.data?.error?.message || err.message
+      entry.code  = err.response?.data?.error?.code ?? null
+    }
+    out.perMetric.push(entry)
+  }
+  return out
 }
 
 /**
@@ -255,4 +354,4 @@ function computeFacebookScrapeMetrics(profile, posts, targetMonth = null) {
   )
 }
 
-module.exports = { fetchFacebookMetrics, computeFacebookMetrics, computeFacebookScrapeMetrics }
+module.exports = { fetchFacebookMetrics, computeFacebookMetrics, computeFacebookScrapeMetrics, debugPageInsights }

@@ -1,6 +1,6 @@
 const prisma = require('../lib/prisma')
 const { getValidFacebookToken }  = require('../services/metaTokenRefresh.service')
-const { fetchFacebookMetrics }   = require('../services/facebook.service')
+const { fetchFacebookMetrics, debugPageInsights } = require('../services/facebook.service')
 const { saveFacebookSnapshot }   = require('../services/facebookSnapshot.service')
 const { scrapeFacebookPage, parseFacebookPage, debugScrapeFacebook } = require('../services/socialScrape.service')
 
@@ -372,4 +372,36 @@ async function scrapeDebug(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, scrapeDebug }
+/**
+ * GET /api/marketing/projects/:id/facebook/insights-debug
+ * Diagnóstico de los insights (alcance/impresiones/pageViews) de la conexión por
+ * API oficial / token: scopes del token + respuesta cruda de la Graph API por métrica.
+ */
+async function insightsDebug(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const { integration, error } = await getIntegrationForProject(projectId, workspaceId)
+    if (error) return res.status(error.status).json(error.body)
+
+    if (integration.scopes === 'scrape') {
+      return res.status(400).json({ error: 'Esta integración es por scraping; el diagnóstico de insights aplica solo a la conexión oficial o por token. Usá "🔍 Diagnóstico" de scraping.', code: 'SCRAPE_MODE' })
+    }
+    if (!integration.propertyId) {
+      return res.status(400).json({ error: 'Seleccioná la página de Facebook primero.', code: 'NO_PAGE' })
+    }
+
+    let token
+    try {
+      token = getValidFacebookToken(integration)
+    } catch (tokenErr) {
+      return res.status(400).json({ error: tokenErr.message, code: 'TOKEN_EXPIRED' })
+    }
+
+    const result = await debugPageInsights(integration.propertyId, token)
+    res.json({ propertyId: integration.propertyId, scopes: integration.scopes, ...result })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, scrapeDebug, insightsDebug }

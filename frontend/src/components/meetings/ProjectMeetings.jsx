@@ -307,6 +307,8 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesDraft, setNotesDraft]     = useState(notes)
   const [savingNotes, setSavingNotes]   = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting]         = useState(false)
 
   const doneCount  = meeting.todos.filter(t => t.done).length
   const totalCount = meeting.todos.length
@@ -459,13 +461,44 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
           {canEdit && (
             <div className="flex justify-end pt-1 border-t border-gray-100 dark:border-gray-700">
               <button
-                onClick={() => { if (confirm('¿Eliminar esta reunión y sus tareas?')) onDelete(meeting.id) }}
+                onClick={() => setConfirmDelete(true)}
                 className="text-xs text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded-lg transition-colors mt-2"
               >
                 Eliminar reunión
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Confirmación de eliminación */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => !deleting && setConfirmDelete(false)}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl w-full max-w-md p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">¿Eliminar la reunión del {dateLabel(meeting.date)}?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Se borrarán las notas y las tareas de la reunión. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setDeleting(true); onDelete(meeting.id) }}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                {deleting ? 'Eliminando…' : 'Eliminar reunión'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
