@@ -97,7 +97,7 @@ function LineChart({ data, valueAccessor, labelAccessor, color = TEAL, formatY =
 
 // ── Navegación por mes ────────────────────────────────────────────────────────
 
-function MonthNav({ selectedMonth, availableMonths, onChange }) {
+function MonthNav({ selectedMonth, availableMonths, onChange, canDelete, onDelete, deleting }) {
   const idx = availableMonths.indexOf(selectedMonth)
   const canPrev = idx < availableMonths.length - 1
   const canNext = idx > 0
@@ -112,6 +112,12 @@ function MonthNav({ selectedMonth, availableMonths, onChange }) {
           ? <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">En vivo</span>
           : <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-medium">Snapshot</span>
         }
+        {canDelete && (
+          <button onClick={onDelete} disabled={deleting} title="Borrar el snapshot de este mes"
+            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-sm leading-none">
+            {deleting ? '…' : '🗑'}
+          </button>
+        )}
       </div>
       <button onClick={() => canNext && onChange(availableMonths[idx - 1])} disabled={!canNext}
         className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-lg">›</button>
@@ -326,6 +332,7 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
 function CrossProjectTikTokPanel({ onSelectProject }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(null)
 
   useEffect(() => {
     api.get('/marketing/summary/tiktok')
@@ -333,6 +340,18 @@ function CrossProjectTikTokPanel({ onSelectProject }) {
       .catch(() => setData([]))
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleDelete(p) {
+    if (!window.confirm(`¿Borrar el último snapshot de TikTok de "${p.projectName}" (${p.month})? También se eliminarán los registros diarios de seguidores de ese mes. No se puede deshacer.`)) return
+    setDeleting(p.projectId)
+    try {
+      await api.delete(`/marketing/projects/${p.projectId}/tiktok/snapshots/${p.month}`)
+      const r = await api.get('/marketing/summary/tiktok')
+      setData(r.data)
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo borrar el snapshot.')
+    } finally { setDeleting(null) }
+  }
 
   if (loading) return (
     <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${TEAL} transparent ${TEAL} ${TEAL}` }} /></div>
@@ -350,6 +369,13 @@ function CrossProjectTikTokPanel({ onSelectProject }) {
       title="TikTok por proyecto"
       gradient={`linear-gradient(90deg, #000 0%, ${TEAL} 100%)`}
       onSelectProject={onSelectProject}
+      renderRowAction={p => (
+        <button onClick={() => handleDelete(p)} disabled={deleting === p.projectId}
+          title="Borrar este snapshot"
+          className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-sm leading-none">
+          {deleting === p.projectId ? '…' : '🗑'}
+        </button>
+      )}
       renderSecondary={p => (
         <>
           <span className="text-gray-400">{fmtK(p.followersCount)} seguidores</span>
@@ -379,6 +405,7 @@ export default function TikTokTab({ projectId, onSelectProject }) {
   const [loading,         setLoading]        = useState(false)
   const [error,           setError]          = useState(null)
   const [disconnecting,   setDisconnecting]  = useState(false)
+  const [deletingSnapshot, setDeletingSnapshot] = useState(false)
 
   const fetchData = useCallback(async () => {
     if (!projectId) return
@@ -449,6 +476,18 @@ export default function TikTokTab({ projectId, onSelectProject }) {
     } finally { setDisconnecting(false) }
   }
 
+  async function handleDeleteSnapshot() {
+    if (!window.confirm(`¿Borrar el snapshot de ${monthLabel(selectedMonth)}? También se eliminarán los registros diarios de seguidores de ese mes. No se puede deshacer.`)) return
+    setDeletingSnapshot(true)
+    try {
+      await api.delete(`/marketing/projects/${projectId}/tiktok/snapshots/${selectedMonth}`)
+      setSelectedMonth(currentMonth)
+      await fetchData()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo borrar el snapshot.')
+    } finally { setDeletingSnapshot(false) }
+  }
+
   if (!projectId) return <CrossProjectTikTokPanel onSelectProject={onSelectProject} />
 
   if (loading) return (
@@ -474,6 +513,7 @@ export default function TikTokTab({ projectId, onSelectProject }) {
   const availableMonths = [...new Set([currentMonth, ...snapshots.map(s => s.month)])].sort().reverse()
   const isCurrentMonth  = selectedMonth === currentMonth
   const displayData     = isCurrentMonth ? metrics : (snapshots.find(s => s.month === selectedMonth) ?? null)
+  const canDeleteSnapshot = snapshots.some(s => s.month === selectedMonth)
 
   // Seguidores ganados en el mes actual: primer log del mes (fijado en la carga inicial) vs. valor actual
   const monthlyGain = (isCurrentMonth && displayData?.followersCount != null && monthStartFollowers != null)
@@ -490,7 +530,8 @@ export default function TikTokTab({ projectId, onSelectProject }) {
       )}
 
       {availableMonths.length > 0 && (
-        <MonthNav selectedMonth={selectedMonth} availableMonths={availableMonths} onChange={setSelectedMonth} />
+        <MonthNav selectedMonth={selectedMonth} availableMonths={availableMonths} onChange={setSelectedMonth}
+          canDelete={canDeleteSnapshot} onDelete={handleDeleteSnapshot} deleting={deletingSnapshot} />
       )}
 
       {displayData && (

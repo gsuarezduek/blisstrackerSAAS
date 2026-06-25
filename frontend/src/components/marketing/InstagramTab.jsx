@@ -120,7 +120,7 @@ function monthLabel(ym) {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
-function MonthNav({ selectedMonth, availableMonths, onChange }) {
+function MonthNav({ selectedMonth, availableMonths, onChange, canDelete, onDelete, deleting }) {
   const idx = availableMonths.indexOf(selectedMonth)
   const canPrev = idx < availableMonths.length - 1
   const canNext = idx > 0
@@ -146,6 +146,12 @@ function MonthNav({ selectedMonth, availableMonths, onChange }) {
           <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-medium">
             Snapshot
           </span>
+        )}
+        {canDelete && (
+          <button onClick={onDelete} disabled={deleting} title="Borrar el snapshot de este mes"
+            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-sm leading-none">
+            {deleting ? '…' : '🗑'}
+          </button>
         )}
       </div>
 
@@ -753,8 +759,9 @@ function ConnectPrompt({ projectId, onConnected }) {
 // ── Panel cross-proyecto ──────────────────────────────────────────────────────
 
 function CrossProjectInstagramPanel({ onSelectProject }) {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [data,     setData]     = useState(null)
+  const [loading,  setLoading]  = useState(true)
+  const [deleting, setDeleting] = useState(null)
 
   useEffect(() => {
     api.get('/marketing/summary/instagram')
@@ -762,6 +769,18 @@ function CrossProjectInstagramPanel({ onSelectProject }) {
       .catch(() => setData([]))
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleDelete(p) {
+    if (!window.confirm(`¿Borrar el último snapshot de Instagram de "${p.projectName}" (${p.month})? También se eliminarán los registros diarios de seguidores de ese mes. No se puede deshacer.`)) return
+    setDeleting(p.projectId)
+    try {
+      await api.delete(`/marketing/projects/${p.projectId}/instagram/snapshots/${p.month}`)
+      const r = await api.get('/marketing/summary/instagram')
+      setData(r.data)
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo borrar el snapshot.')
+    } finally { setDeleting(null) }
+  }
 
   if (loading) return (
     <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" /></div>
@@ -786,6 +805,13 @@ function CrossProjectInstagramPanel({ onSelectProject }) {
       title="Instagram por proyecto"
       gradient="linear-gradient(90deg, #a855f7 0%, #ec4899 100%)"
       onSelectProject={onSelectProject}
+      renderRowAction={p => (
+        <button onClick={() => handleDelete(p)} disabled={deleting === p.projectId}
+          title="Borrar este snapshot"
+          className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-sm leading-none">
+          {deleting === p.projectId ? '…' : '🗑'}
+        </button>
+      )}
       renderSecondary={p => (
         <>
           <span className="text-gray-400">{fmtK(p.followersCount)} seguidores</span>
@@ -815,6 +841,7 @@ export default function InstagramTab({ projectId, onSelectProject }) {
   const [loading,        setLoading]        = useState(false)
   const [error,          setError]          = useState(null)
   const [disconnecting,  setDisconnecting]  = useState(false)
+  const [deletingSnapshot, setDeletingSnapshot] = useState(false)
 
   const fetchData = useCallback(async () => {
     if (!projectId) return
@@ -882,6 +909,18 @@ export default function InstagramTab({ projectId, onSelectProject }) {
     } finally { setDisconnecting(false) }
   }
 
+  async function handleDeleteSnapshot() {
+    if (!window.confirm(`¿Borrar el snapshot de ${monthLabel(selectedMonth)}? También se eliminarán los registros diarios de seguidores de ese mes. No se puede deshacer.`)) return
+    setDeletingSnapshot(true)
+    try {
+      await api.delete(`/marketing/projects/${projectId}/instagram/snapshots/${selectedMonth}`)
+      setSelectedMonth(currentMonth)
+      await fetchData()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo borrar el snapshot.')
+    } finally { setDeletingSnapshot(false) }
+  }
+
   const [refreshing, setRefreshing] = useState(false)
   async function handleRefreshScrape() {
     setRefreshing(true)
@@ -920,6 +959,7 @@ export default function InstagramTab({ projectId, onSelectProject }) {
   const displayData = isCurrentMonth
     ? metrics
     : (snapshots.find(s => s.month === selectedMonth) ?? null)
+  const canDeleteSnapshot = snapshots.some(s => s.month === selectedMonth)
 
   // Insights (reach/saved/shares) — el mes actual usa nombres *ThisMonth (en vivo),
   // los snapshots guardados usan las columnas reach/views. Normalizamos a un solo shape.
@@ -957,6 +997,9 @@ export default function InstagramTab({ projectId, onSelectProject }) {
           selectedMonth={selectedMonth}
           availableMonths={availableMonths}
           onChange={setSelectedMonth}
+          canDelete={canDeleteSnapshot}
+          onDelete={handleDeleteSnapshot}
+          deleting={deletingSnapshot}
         />
       )}
 

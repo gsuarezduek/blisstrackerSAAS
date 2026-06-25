@@ -220,6 +220,33 @@ async function saveSnapshot(req, res, next) {
 }
 
 /**
+ * DELETE /api/marketing/projects/:id/linkedin/snapshots/:month
+ * Borra el snapshot de un mes (YYYY-MM) + sus logs diarios de seguidores.
+ */
+async function deleteSnapshot(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const month       = req.params.month
+
+    if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'Mes inválido (YYYY-MM)' })
+
+    const project = await prisma.project.findFirst({
+      where:  { id: projectId, workspaceId },
+      select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const { count } = await prisma.linkedinSnapshot.deleteMany({ where: { projectId, workspaceId, month } })
+    if (count === 0) return res.status(404).json({ error: 'Snapshot no encontrado' })
+
+    await prisma.linkedinFollowerLog.deleteMany({ where: { projectId, workspaceId, date: { startsWith: month } } })
+
+    res.json({ ok: true, month })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/marketing/projects/:id/linkedin/followers?from=YYYY-MM-DD&to=YYYY-MM-DD
  */
 async function getFollowerLog(req, res, next) {
@@ -410,4 +437,4 @@ async function scrapeDebug(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, getFollowerLog, listOrganizations, connectScrape, refreshScrape, scrapeDebug }
+module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, listOrganizations, connectScrape, refreshScrape, scrapeDebug }

@@ -78,7 +78,7 @@ function LineChart({ data, valueAccessor, labelAccessor, color = LI_BLUE, format
 }
 
 // ── Navegación por mes ────────────────────────────────────────────────────────
-function MonthNav({ selectedMonth, availableMonths, onChange }) {
+function MonthNav({ selectedMonth, availableMonths, onChange, canDelete, onDelete, deleting }) {
   const idx = availableMonths.indexOf(selectedMonth)
   const canPrev = idx < availableMonths.length - 1
   const canNext = idx > 0
@@ -93,6 +93,12 @@ function MonthNav({ selectedMonth, availableMonths, onChange }) {
           ? <span className="text-[10px] bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">En vivo</span>
           : <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded-full font-medium">Snapshot</span>
         }
+        {canDelete && (
+          <button onClick={onDelete} disabled={deleting} title="Borrar el snapshot de este mes"
+            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-sm leading-none">
+            {deleting ? '…' : '🗑'}
+          </button>
+        )}
       </div>
       <button onClick={() => canNext && onChange(availableMonths[idx - 1])} disabled={!canNext}
         className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-lg">›</button>
@@ -416,6 +422,7 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
 function CrossProjectLinkedinPanel({ onSelectProject }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(null)
 
   useEffect(() => {
     api.get('/marketing/summary/linkedin')
@@ -423,6 +430,18 @@ function CrossProjectLinkedinPanel({ onSelectProject }) {
       .catch(() => setData([]))
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleDelete(p) {
+    if (!window.confirm(`¿Borrar el último snapshot de LinkedIn de "${p.projectName}" (${p.month})? También se eliminarán los registros diarios de seguidores de ese mes. No se puede deshacer.`)) return
+    setDeleting(p.projectId)
+    try {
+      await api.delete(`/marketing/projects/${p.projectId}/linkedin/snapshots/${p.month}`)
+      const r = await api.get('/marketing/summary/linkedin')
+      setData(r.data)
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo borrar el snapshot.')
+    } finally { setDeleting(null) }
+  }
 
   if (loading) return (
     <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${LI_BLUE} transparent ${LI_BLUE} ${LI_BLUE}` }} /></div>
@@ -453,6 +472,11 @@ function CrossProjectLinkedinPanel({ onSelectProject }) {
                 <div className="flex items-center gap-3 flex-shrink-0 ml-2">
                   <span className="text-xs text-gray-400">{p.month}</span>
                   <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtK(p.followersCount)}</span>
+                  <button onClick={() => handleDelete(p)} disabled={deleting === p.projectId}
+                    title="Borrar este snapshot"
+                    className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-40 transition-colors text-sm leading-none">
+                    {deleting === p.projectId ? '…' : '🗑'}
+                  </button>
                 </div>
               </div>
               <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
@@ -488,6 +512,7 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
   const [disconnecting,       setDisconnecting]   = useState(false)
   const [showOrgPicker,       setShowOrgPicker]   = useState(false)
   const [refreshing,          setRefreshing]      = useState(false)
+  const [deletingSnapshot,    setDeletingSnapshot] = useState(false)
   const [debugData,           setDebugData]       = useState(null)
   const [debugLoading,        setDebugLoading]    = useState(false)
   const [debugError,          setDebugError]      = useState(null)
@@ -570,6 +595,18 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
     } finally { setRefreshing(false) }
   }
 
+  async function handleDeleteSnapshot() {
+    if (!window.confirm(`¿Borrar el snapshot de ${monthLabel(selectedMonth)}? También se eliminarán los registros diarios de seguidores de ese mes. No se puede deshacer.`)) return
+    setDeletingSnapshot(true)
+    try {
+      await api.delete(`/marketing/projects/${projectId}/linkedin/snapshots/${selectedMonth}`)
+      setSelectedMonth(currentMonth)
+      await fetchData()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo borrar el snapshot.')
+    } finally { setDeletingSnapshot(false) }
+  }
+
   async function handleScrapeDebug() {
     setDebugLoading(true); setDebugError(null); setDebugData(null)
     try {
@@ -610,6 +647,7 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
   const availableMonths = [...new Set([currentMonth, ...snapshots.map(s => s.month)])].sort().reverse()
   const isCurrentMonth  = selectedMonth === currentMonth
   const displayData     = isCurrentMonth ? metrics : (snapshots.find(s => s.month === selectedMonth) ?? null)
+  const canDeleteSnapshot = snapshots.some(s => s.month === selectedMonth)
 
   const monthlyGain = (isCurrentMonth && displayData?.followersCount != null && monthStartFollowers != null)
     ? displayData.followersCount - monthStartFollowers
@@ -659,7 +697,8 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
       )}
 
       {availableMonths.length > 0 && (
-        <MonthNav selectedMonth={selectedMonth} availableMonths={availableMonths} onChange={setSelectedMonth} />
+        <MonthNav selectedMonth={selectedMonth} availableMonths={availableMonths} onChange={setSelectedMonth}
+          canDelete={canDeleteSnapshot} onDelete={handleDeleteSnapshot} deleting={deletingSnapshot} />
       )}
 
       {displayData && (

@@ -51,10 +51,11 @@ function pctBarColor(v) {
  * @param {string}   gradient     CSS background del relleno de barra para órdenes no-%
  * @param {string}   accentColor  color del spinner / acentos
  * @param {function} renderSecondary  (p) => JSX con stats secundarias de la fila
+ * @param {function} [renderRowAction]  (p) => JSX con una acción por fila (ej. borrar snapshot)
  * @param {string}   title        encabezado del panel
  * @param {function} onSelectProject
  */
-export default function CrossProjectRRSSPanel({ data, gradient, renderSecondary, title, onSelectProject }) {
+export default function CrossProjectRRSSPanel({ data, gradient, renderSecondary, renderRowAction, title, onSelectProject }) {
   const [sortKey, setSortKey] = useState('newFollowers')
   const sort = SORTS.find(s => s.key === sortKey) || SORTS[0]
 
@@ -99,6 +100,7 @@ export default function CrossProjectRRSSPanel({ data, gradient, renderSecondary,
                   <div className="flex items-center gap-3 flex-shrink-0 ml-2">
                     <span className="text-xs text-gray-400">{fmtDate(p.lastDataDate)}</span>
                     <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{sort.fmt(val)}</span>
+                    {renderRowAction?.(p)}
                   </div>
                 </div>
                 <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
