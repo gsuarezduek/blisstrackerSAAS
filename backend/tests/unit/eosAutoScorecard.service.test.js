@@ -1,21 +1,21 @@
 jest.mock('../../src/lib/prisma', () => ({
   workspace:          { findUnique: jest.fn() },
-  workspaceMember:    { findMany: jest.fn() },
+  workspaceMember:    { findMany: jest.fn(), findFirst: jest.fn() },
   userLogin:          { findMany: jest.fn() },
   vacationRequest:    { findMany: jest.fn() },
   task:               { findMany: jest.fn() },
   project:            { findMany: jest.fn() },
   rrhhMetricSnapshot: { findMany: jest.fn() },
   eOSTodo:            { findMany: jest.fn() },
-  monthlyReport:      { findMany: jest.fn() },
-  marketingObjective: { findMany: jest.fn() },
-  instagramSnapshot:  { findMany: jest.fn() },
-  tikTokSnapshot:     { findMany: jest.fn() },
-  linkedinSnapshot:   { findMany: jest.fn() },
+  monthlyReport:      { findMany: jest.fn(), findFirst: jest.fn() },
+  marketingObjective: { findMany: jest.fn(), findFirst: jest.fn() },
+  instagramSnapshot:  { findMany: jest.fn(), findFirst: jest.fn() },
+  tikTokSnapshot:     { findMany: jest.fn(), findFirst: jest.fn() },
+  linkedinSnapshot:   { findMany: jest.fn(), findFirst: jest.fn() },
 }))
 
 const prisma = require('../../src/lib/prisma')
-const { computeAutoScorecardYear, isoWeekPeriodOf } = require('../../src/services/eosAutoScorecard.service')
+const { computeAutoScorecardYear, computeCurrentMonthStatus, isoWeekPeriodOf } = require('../../src/services/eosAutoScorecard.service')
 
 const TZ = 'America/Argentina/Buenos_Aires' // UTC-3
 
@@ -35,6 +35,13 @@ function resetAll() {
   prisma.instagramSnapshot.findMany.mockResolvedValue([])
   prisma.tikTokSnapshot.findMany.mockResolvedValue([])
   prisma.linkedinSnapshot.findMany.mockResolvedValue([])
+  // findFirst (usados por computeCurrentMonthStatus) — por defecto "no hay fuente".
+  prisma.workspaceMember.findFirst.mockResolvedValue(null)
+  prisma.monthlyReport.findFirst.mockResolvedValue(null)
+  prisma.marketingObjective.findFirst.mockResolvedValue(null)
+  prisma.instagramSnapshot.findFirst.mockResolvedValue(null)
+  prisma.tikTokSnapshot.findFirst.mockResolvedValue(null)
+  prisma.linkedinSnapshot.findFirst.mockResolvedValue(null)
 }
 
 beforeEach(resetAll)
@@ -197,6 +204,16 @@ describe('computeAutoScorecardYear — mensuales (a mes vencido)', () => {
     expect(out.proyectos_perdidos['2026-04'].top3[0].name).toBe('Perdido X')
   })
 
+  it('eventos: un mes cerrado sin altas/bajas es 0, no "sin datos"', async () => {
+    prisma.project.findMany.mockResolvedValue([]) // sin proyectos en ningún mes
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['proyectos_nuevos', 'proyectos_perdidos'])
+    // Enero es un mes cerrado (today = 2026-06): debe valer 0, no quedar undefined.
+    expect(out.proyectos_nuevos['2026-01']).toEqual({ value: 0, top3: [] })
+    expect(out.proyectos_perdidos['2026-05']).toEqual({ value: 0, top3: [] })
+    // El mes en curso (2026-06) no es cerrado: sigue sin entrada.
+    expect(out.proyectos_nuevos['2026-06']).toBeUndefined()
+  })
+
   it('equipo: lee activeMembers del histórico de RRHH por mes', async () => {
     prisma.rrhhMetricSnapshot.findMany.mockResolvedValue([
       { month: '2026-04', value: 7 },
@@ -294,5 +311,43 @@ describe('computeAutoScorecardYear — semanales nuevas', () => {
     expect(out.todos_completados['2026-W11'].value).toBe(1)
     expect(out.todos_completados['2026-W11'].top3).toHaveLength(0)
     expect(out.todos_completados['2025-W10']).toBeUndefined()
+  })
+})
+
+describe('computeCurrentMonthStatus', () => {
+  it('ignora las métricas semanales', async () => {
+    const out = await computeCurrentMonthStatus(1, TZ, ['tardanzas', 'ocupacion'])
+    expect(out).toEqual({})
+  })
+
+  it('RRHH: collecting si existe snapshot del mes en curso, not_saving si no', async () => {
+    // Solo activeMembers (equipo) tiene snapshot de este mes.
+    prisma.rrhhMetricSnapshot.findMany.mockResolvedValue([{ metric: 'activeMembers' }])
+    const out = await computeCurrentMonthStatus(1, TZ, ['equipo', 'antiguedad', 'proyectos_por_persona'])
+    expect(out.equipo).toBe('collecting')
+    expect(out.antiguedad).toBe('not_saving')
+    expect(out.proyectos_por_persona).toBe('not_saving')
+  })
+
+  it('delta_horas: collecting solo si alguien tiene horario completo', async () => {
+    prisma.workspaceMember.findFirst.mockResolvedValue({ userId: 1 })
+    expect((await computeCurrentMonthStatus(1, TZ, ['delta_horas'])).delta_horas).toBe('collecting')
+    prisma.workspaceMember.findFirst.mockResolvedValue(null)
+    expect((await computeCurrentMonthStatus(1, TZ, ['delta_horas'])).delta_horas).toBe('not_saving')
+  })
+
+  it('eventos siempre collecting (no dependen de configuración)', async () => {
+    const out = await computeCurrentMonthStatus(1, TZ, ['proyectos_nuevos', 'proyectos_perdidos'])
+    expect(out).toEqual({ proyectos_nuevos: 'collecting', proyectos_perdidos: 'collecting' })
+  })
+
+  it('marketing: collecting si existe la fuente (snapshot/informe/objetivo)', async () => {
+    prisma.tikTokSnapshot.findFirst.mockResolvedValue({ id: 9 }) // hay una red con datos
+    prisma.monthlyReport.findFirst.mockResolvedValue(null)
+    prisma.marketingObjective.findFirst.mockResolvedValue({ id: 3 })
+    const out = await computeCurrentMonthStatus(1, TZ, ['seguidores_nuevos', 'informes_entregados', 'objetivos_cumplidos'])
+    expect(out.seguidores_nuevos).toBe('collecting')
+    expect(out.informes_entregados).toBe('not_saving')
+    expect(out.objetivos_cumplidos).toBe('collecting')
   })
 })

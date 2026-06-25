@@ -369,7 +369,49 @@ function autoRankRow(autoKey, p, i) {
   )
 }
 
-function AutoMetricCard({ metric, value, detail }) {
+// Cartel para una tarjeta automática sin valor. Distingue semanal/mensual y, en las
+// mensuales, explica el porqué del vacío según el estado de captura del mes en curso
+// (`collecting` = ya se registran, aparecen en el próximo cierre · `not_saving` = no se
+// están guardando, falta configurar la fuente).
+function AutoEmptyValue({ metric, period, status }) {
+  if (metric.frequency !== 'monthly') {
+    return (
+      <span className="text-sm text-gray-400 dark:text-gray-500">
+        {period === TODAY_WEEK ? 'Aún sin datos esta semana' : 'Sin datos de esta semana'}
+      </span>
+    )
+  }
+
+  const isCurrent  = period === TODAY_MONTH
+  const notSaving  = status === 'not_saving'
+  const collecting = status === 'collecting'
+
+  const main = isCurrent
+    ? 'El mes en curso se cierra el 1° del próximo mes.'
+    : 'Sin datos de este período.'
+
+  let note = null
+  if (notSaving) {
+    note = 'No se están guardando estos datos todavía — revisá la configuración de la fuente.'
+  } else if (collecting && !isCurrent) {
+    note = 'Los del mes en curso ya se están registrando y aparecerán en el próximo cierre mensual.'
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-sm text-gray-400 dark:text-gray-500">{main}</span>
+      {note && (
+        <span className={`text-[11px] leading-snug ${
+          notSaving ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'
+        }`}>
+          {note}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function AutoMetricCard({ metric, value, detail, period, monthStatus }) {
   const hasGoal = metric.goal != null
   const status  = goalStatus(value, metric.goal, metric.lowerIsBetter)
   const onTrack = status === 'on'
@@ -408,7 +450,7 @@ function AutoMetricCard({ metric, value, detail }) {
             {hasGoal && <span className="ml-1 text-base">{onTrack ? '✅' : '🔴'}</span>}
           </>
         ) : (
-          <span className="text-sm text-gray-400 dark:text-gray-500">Sin datos esta semana</span>
+          <AutoEmptyValue metric={metric} period={period} status={monthStatus} />
         )}
       </div>
 
@@ -433,7 +475,7 @@ function AutoMetricCard({ metric, value, detail }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function CurrentPeriodPanel({
-  metrics, entriesMap, autoData, members, period, title, subtitle, onEntryChange,
+  metrics, entriesMap, autoData, currentStatus, members, period, title, subtitle, onEntryChange,
   isCurrent, canGoForward, onPrev, onNext, onToday,
 }) {
   if (metrics.length === 0 || !period) return null
@@ -483,6 +525,8 @@ function CurrentPeriodPanel({
                 metric={metric}
                 value={metricValueAt(metric, period, entriesMap, autoData)}
                 detail={metricDetailAt(metric, period, autoData)}
+                period={period}
+                monthStatus={currentStatus?.[metric.autoKey]}
               />
             )
           }
@@ -1081,6 +1125,7 @@ export default function DatosTab() {
   const [metrics,     setMetrics]     = useState([])
   const [entriesMap,  setEntriesMap]  = useState({})
   const [autoData,    setAutoData]    = useState({})   // { autoKey: { 'YYYY-Www': { value, top3 } } }
+  const [currentStatus, setCurrentStatus] = useState({}) // { autoKey: 'collecting' | 'not_saving' } (mes en curso)
   const [autoCatalog, setAutoCatalog] = useState([])
   const [autoPicker,  setAutoPicker]  = useState(false)
   const [loading,     setLoading]     = useState(true)
@@ -1122,6 +1167,9 @@ export default function DatosTab() {
         for (const k of Object.keys(data)) next[k] = { ...(next[k] || {}), ...data[k] }
         return next
       })
+      // El estado del mes en curso solo viene en la respuesta del año actual.
+      const status = res.data?.currentStatus
+      if (status && Object.keys(status).length) setCurrentStatus(prev => ({ ...prev, ...status }))
     } catch {
       loadedAutoYears.current.delete(year)
     }
@@ -1131,6 +1179,7 @@ export default function DatosTab() {
   const reloadAuto = useCallback(() => {
     loadedAutoYears.current = new Set()
     setAutoData({})
+    setCurrentStatus({})
     const years = new Set([weekYear, monthYear, parseInt(panelWeek.split('-W')[0]), parseInt(panelMonth.split('-')[0])])
     years.forEach(y => fetchAutoYear(y))
   }, [fetchAutoYear, weekYear, monthYear, panelWeek, panelMonth])
@@ -1381,6 +1430,7 @@ export default function DatosTab() {
             metrics={weeklyMetrics}
             entriesMap={entriesMap}
             autoData={autoData}
+            currentStatus={currentStatus}
             members={members}
             period={panelWeek}
             title={weekPanelTitle}
@@ -1439,6 +1489,7 @@ export default function DatosTab() {
             metrics={monthlyMetrics}
             entriesMap={entriesMap}
             autoData={autoData}
+            currentStatus={currentStatus}
             members={members}
             period={panelMonth}
             title={monthPanelTitle}

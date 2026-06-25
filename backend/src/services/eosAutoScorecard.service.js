@@ -310,6 +310,8 @@ async function computeProyectosNuevosMonthly(workspaceId, tz, offset, rangeStart
     byMonth.get(m).push({ name: p.name })
   }
   for (const [m, items] of byMonth) out[m] = { value: items.length, top3: items.slice(0, 5) }
+  // Conteo de eventos: un mes cerrado sin altas es "0", no "sin datos".
+  for (const m of closedMonths) if (!out[m]) out[m] = { value: 0, top3: [] }
   return out
 }
 
@@ -329,6 +331,8 @@ async function computeProyectosPerdidosMonthly(workspaceId, tz, offset, rangeSta
     byMonth.get(m).push({ name: p.name })
   }
   for (const [m, items] of byMonth) out[m] = { value: items.length, top3: items.slice(0, 5) }
+  // Conteo de eventos: un mes cerrado sin bajas es "0", no "sin datos".
+  for (const m of closedMonths) if (!out[m]) out[m] = { value: 0, top3: [] }
   return out
 }
 
@@ -455,6 +459,69 @@ async function computeObjetivosCumplidosMonthly(workspaceId, closedMonths) {
   return out
 }
 
+// Estado de captura del MES EN CURSO para las métricas mensuales pedidas.
+// Sirve para explicar una tarjeta vacía: un mes cerrado sin valor puede deberse a que
+// los datos recién se están empezando a registrar (`collecting` → aparecerán en el
+// próximo cierre) o a que directamente no se están guardando (`not_saving` → falta
+// configurar la fuente). Solo tiene sentido para el año/mes actual.
+// Devuelve { [autoKey]: 'collecting' | 'not_saving' }.
+async function computeCurrentMonthStatus(workspaceId, tz, autoKeys = []) {
+  const status = {}
+  const monthlyKeys = autoKeys.filter(k => EOS_AUTO_METRICS[k]?.frequency === 'monthly')
+  if (!monthlyKeys.length) return status
+  const curMonth = todayString(tz).slice(0, 7)
+
+  // RRHH: los snapshots del mes en curso se upsertean en vivo (al visitar RRHH/Dashboard).
+  // Que exista el snapshot de este mes = los datos se están registrando.
+  const rrhhMap = { equipo: 'activeMembers', antiguedad: 'tenure', proyectos_por_persona: 'projectsPerPerson' }
+  const rrhhKeys = monthlyKeys.filter(k => rrhhMap[k])
+  if (rrhhKeys.length) {
+    const snaps = await prisma.rrhhMetricSnapshot.findMany({
+      where:  { workspaceId, month: curMonth, metric: { in: rrhhKeys.map(k => rrhhMap[k]) } },
+      select: { metric: true },
+    })
+    const present = new Set(snaps.map(s => s.metric))
+    for (const k of rrhhKeys) status[k] = present.has(rrhhMap[k]) ? 'collecting' : 'not_saving'
+  }
+
+  // Δ horas: se acumula en vivo si al menos alguien tiene horario completo cargado.
+  if (monthlyKeys.includes('delta_horas')) {
+    const m = await prisma.workspaceMember.findFirst({
+      where:  { workspaceId, active: true, workStartTime: { not: null }, workEndTime: { not: null } },
+      select: { userId: true },
+    })
+    status.delta_horas = m ? 'collecting' : 'not_saving'
+  }
+
+  // Eventos siempre trackeados por el sistema (no dependen de configurar nada).
+  for (const k of ['proyectos_nuevos', 'proyectos_perdidos']) {
+    if (monthlyKeys.includes(k)) status[k] = 'collecting'
+  }
+
+  // Marketing: la fuente está "viva" si ya existe al menos un dato de ese tipo en el
+  // workspace (snapshot de red / informe / objetivo). Robusto al timing de fin de mes.
+  if (monthlyKeys.includes('seguidores_nuevos')) {
+    const [ig, tk, li] = await Promise.all([
+      prisma.instagramSnapshot.findFirst({ where: { workspaceId }, select: { id: true } }),
+      prisma.tikTokSnapshot.findFirst({   where: { workspaceId }, select: { id: true } }),
+      prisma.linkedinSnapshot.findFirst({ where: { workspaceId }, select: { id: true } }),
+    ])
+    status.seguidores_nuevos = (ig || tk || li) ? 'collecting' : 'not_saving'
+  }
+  if (monthlyKeys.includes('informes_entregados')) {
+    const r = await prisma.monthlyReport.findFirst({
+      where: { workspaceId, OR: GENERATED_REPORT_OR }, select: { id: true },
+    })
+    status.informes_entregados = r ? 'collecting' : 'not_saving'
+  }
+  if (monthlyKeys.includes('objetivos_cumplidos')) {
+    const o = await prisma.marketingObjective.findFirst({ where: { workspaceId }, select: { id: true } })
+    status.objetivos_cumplidos = o ? 'collecting' : 'not_saving'
+  }
+
+  return status
+}
+
 // Computa las métricas automáticas pedidas para un año calendario.
 // year = número (ej 2026). autoKeys = subset de las claves del catálogo.
 // Devuelve { [autoKey]: { period: { value, top3? } } } solo con las claves pedidas.
@@ -509,4 +576,4 @@ async function computeAutoScorecardYear(workspaceId, tz, year, autoKeys = []) {
   return out
 }
 
-module.exports = { computeAutoScorecardYear, isoWeekPeriodOf }
+module.exports = { computeAutoScorecardYear, computeCurrentMonthStatus, isoWeekPeriodOf }

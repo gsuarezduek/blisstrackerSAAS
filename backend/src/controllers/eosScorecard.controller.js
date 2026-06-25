@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { EOS_AUTO_METRICS, EOS_AUTO_KEYS, isAutoKey, autoCatalogList } = require('../lib/eosAutoMetricCatalog')
-const { computeAutoScorecardYear } = require('../services/eosAutoScorecard.service')
+const { computeAutoScorecardYear, computeCurrentMonthStatus } = require('../services/eosAutoScorecard.service')
+const { todayString } = require('../utils/dates')
 
 // ─── Helpers de períodos ──────────────────────────────────────────────────────
 
@@ -111,7 +112,14 @@ async function getAutoScorecard(req, res, next) {
       ? await computeAutoScorecardYear(workspaceId, tz, year, autoKeys)
       : {}
 
-    res.json({ year, data })
+    // Estado de captura del mes en curso (solo aplica al año actual): explica por qué
+    // una tarjeta mensual está vacía (los datos se están registrando vs. no se guardan).
+    const isCurrentYear = year === Number(todayString(tz).slice(0, 4))
+    const currentStatus = (autoKeys.length && isCurrentYear)
+      ? await computeCurrentMonthStatus(workspaceId, tz, autoKeys)
+      : {}
+
+    res.json({ year, data, currentStatus })
   } catch (err) { next(err) }
 }
 
