@@ -702,6 +702,18 @@ export default function FacebookTab({ projectId, onSelectProject }) {
                   </span>
                 ))}
               </div>
+              {debugData.postProbe?.metrics?.length > 0 && (
+                <div>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 mb-1">Alcance a nivel post (el de página está deprecado):</p>
+                  <div className="flex flex-wrap gap-2">
+                    {debugData.postProbe.metrics.map(m => (
+                      <span key={m.metric} className={`px-2 py-0.5 rounded-full font-mono text-[11px] ${m.ok ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'}`}>
+                        {m.metric}: {m.ok ? (m.value ?? 'null') : `error ${m.code ?? ''}`}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
                 Si <code className="font-mono">read_insights</code> es ❌ → regenerá el System User Token incluyendo ese permiso y asignale la página con acceso a métricas. Si una métrica puntual da error y las otras ✅ → esa está deprecada (ya las pedimos por separado, así no tumba a las demás). Copiá este JSON y pasámelo.
               </p>
@@ -732,7 +744,7 @@ export default function FacebookTab({ projectId, onSelectProject }) {
           {!scraped && (
             <KpiCard icon="👁" label="Alcance"
               value={displayData.reach != null ? fmtK(displayData.reach) : '—'}
-              sub={`orgánico · ${isCurrentMonth ? 'este mes' : 'ese mes'}`}
+              sub={`orgánico · suma posts · ${isCurrentMonth ? 'este mes' : 'ese mes'}`}
             />
           )}
           {!scraped && (

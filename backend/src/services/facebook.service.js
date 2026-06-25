@@ -89,11 +89,16 @@ function normalizeGraphPost(p) {
 // como fallback por si alguna página/versión todavía las acepta. Las impresiones/
 // alcance resultantes son ORGÁNICOS (lo pago se ve en Meta Ads).
 const PAGE_INSIGHT_METRICS = [
-  { key: 'reach',       candidates: ['page_posts_impressions_organic_unique', 'page_impressions_unique'] },
+  // El alcance a nivel PÁGINA fue deprecado por completo en v21.0 (todas las
+  // variantes *_unique dan #100) → se calcula sumando por post (fetchPostsReach).
+  { key: 'reach',       candidates: [] },
   { key: 'impressions', candidates: ['page_posts_impressions_organic', 'page_impressions'] },
   { key: 'pageViews',   candidates: ['page_views_total'] },
 ]
 const INSIGHT_PERIOD = 'days_28'
+const POST_INSIGHT_PERIOD = 'lifetime'
+// Reach por publicación (organic_unique sobrevive a nivel post; unique como fallback).
+const POST_REACH_METRICS = ['post_impressions_organic_unique', 'post_impressions_unique']
 
 // Último valor de una serie de insights para una métrica puntual. null si no parsea.
 function lastInsightValue(dataRows, metric) {
@@ -154,6 +159,58 @@ async function fetchPageInsights(pageId, pageToken) {
     }
   }))
   return out
+}
+
+// Insight de UN post (period lifetime). Reintenta transitorios; lanza en #100/permiso.
+async function fetchPostInsight(postId, pageToken, metric) {
+  let lastErr
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data } = await axios.get(`${GRAPH_BASE}/${postId}/insights`, {
+        params: { metric, period: POST_INSIGHT_PERIOD, access_token: pageToken },
+      })
+      return lastInsightValue(data?.data, metric)
+    } catch (err) {
+      lastErr = err
+      if (!isTransientGraphError(err) || attempt === 2) throw err
+      await sleep(400 * (attempt + 1))
+    }
+  }
+  throw lastErr
+}
+
+/**
+ * Alcance del mes aproximado a nivel POST: suma del alcance orgánico único de cada
+ * publicación del mes. Meta deprecó el reach a nivel página en v21.0, así que es lo
+ * más cercano disponible. Es una SUMA por post → puede contar dos veces a quien vio
+ * varias publicaciones (sobreestima el reach único real). Devuelve null si no hay
+ * posts con id o ninguna métrica de post es válida.
+ */
+async function fetchPostsReach(posts, pageToken) {
+  const withId = (posts || []).filter(p => p.id)
+  if (!withId.length) return null
+
+  // Descubrir el nombre de métrica válido (una sola vez) con el primer post.
+  let metric = null
+  for (const cand of POST_REACH_METRICS) {
+    try {
+      await fetchPostInsight(withId[0].id, pageToken, cand)
+      metric = cand
+      break
+    } catch (err) {
+      console.warn(`[Facebook] post insight "${cand}" no disponible:`, err.response?.data?.error?.message || err.message)
+    }
+  }
+  if (!metric) return null
+
+  let sum = 0, got = 0
+  await Promise.all(withId.map(async p => {
+    try {
+      const v = await fetchPostInsight(p.id, pageToken, metric)
+      if (typeof v === 'number') { sum += v; got++ }
+    } catch { /* best-effort por post */ }
+  }))
+  return got ? sum : null
 }
 
 /**
@@ -238,6 +295,36 @@ async function debugPageInsights(pageId, pageToken) {
     }
     out.perMetric.push(entry)
   }
+
+  // 4) Sonda a nivel POST — el reach de página está deprecado; lo aproximamos por post.
+  try {
+    const { data } = await axios.get(`${GRAPH_BASE}/${pageId}/published_posts`, {
+      params: { fields: 'id,created_time', limit: 1, access_token: pageToken },
+    })
+    const post = data?.data?.[0]
+    out.postProbe = { postId: post?.id ?? null, metrics: [] }
+    if (post?.id) {
+      const POST_PROBE = ['post_impressions_organic_unique', 'post_impressions_unique', 'post_impressions_organic', 'post_impressions']
+      for (const metric of POST_PROBE) {
+        const e = { metric }
+        try {
+          const { data: pd } = await axios.get(`${GRAPH_BASE}/${post.id}/insights`, {
+            params: { metric, period: POST_INSIGHT_PERIOD, access_token: pageToken },
+          })
+          e.ok = true
+          e.value = lastInsightValue(pd?.data, metric)
+        } catch (err) {
+          e.ok = false
+          e.error = err.response?.data?.error?.message || err.message
+          e.code  = err.response?.data?.error?.code ?? null
+        }
+        out.postProbe.metrics.push(e)
+      }
+    }
+  } catch (err) {
+    out.postProbe = { error: err.response?.data?.error?.message || err.message }
+  }
+
   return out
 }
 
@@ -282,6 +369,12 @@ async function fetchFacebookMetrics(pageId, pageToken, targetMonth = null) {
   const normalized = posts.map(normalizeGraphPost)
   const inMonth    = normalized.filter(p => p.publishedAt && monthOfTimestamp(p.publishedAt) === filterMonth)
   const insights   = await fetchPageInsights(pageId, pageToken)
+
+  // Reach a nivel página está deprecado en v21.0 → lo aproximamos sumando por post.
+  if (insights.reach == null) {
+    try { insights.reach = await fetchPostsReach(inMonth, pageToken) }
+    catch (err) { console.warn('[Facebook] Reach por post falló:', err.response?.data?.error?.message || err.message) }
+  }
 
   return computeFacebookMetrics(
     {
