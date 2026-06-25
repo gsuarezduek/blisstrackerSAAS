@@ -732,13 +732,13 @@ export default function FacebookTab({ projectId, onSelectProject }) {
           {!scraped && (
             <KpiCard icon="👁" label="Alcance"
               value={displayData.reach != null ? fmtK(displayData.reach) : '—'}
-              sub={isCurrentMonth ? 'este mes' : 'ese mes'}
+              sub={`orgánico · ${isCurrentMonth ? 'este mes' : 'ese mes'}`}
             />
           )}
           {!scraped && (
             <KpiCard icon="📣" label="Impresiones"
               value={displayData.impressions != null ? fmtK(displayData.impressions) : '—'}
-              sub={isCurrentMonth ? 'este mes' : 'ese mes'}
+              sub={`orgánico · ${isCurrentMonth ? 'este mes' : 'ese mes'}`}
             />
           )}
           <KpiCard icon="📅" label="Posts del mes"

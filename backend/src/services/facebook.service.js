@@ -84,9 +84,13 @@ function normalizeGraphPost(p) {
 // Cada campo lleva una CADENA de candidatos: Meta fue deprecando nombres
 // (v21.0 ya rechaza page_impressions / page_impressions_unique con error #100),
 // así que probamos en orden y usamos el primero que la Graph API acepte.
+// En v21.0 Meta dejó vivas solo las variantes `_organic` (las "a secas" y `_paid`
+// devuelven #100). Por eso el candidato primario es la orgánica; las viejas quedan
+// como fallback por si alguna página/versión todavía las acepta. Las impresiones/
+// alcance resultantes son ORGÁNICOS (lo pago se ve en Meta Ads).
 const PAGE_INSIGHT_METRICS = [
-  { key: 'reach',       candidates: ['page_impressions_unique', 'page_posts_impressions_unique'] },
-  { key: 'impressions', candidates: ['page_impressions', 'page_posts_impressions'] },
+  { key: 'reach',       candidates: ['page_posts_impressions_organic_unique', 'page_impressions_unique'] },
+  { key: 'impressions', candidates: ['page_posts_impressions_organic', 'page_impressions'] },
   { key: 'pageViews',   candidates: ['page_views_total'] },
 ]
 const INSIGHT_PERIOD = 'days_28'
@@ -98,12 +102,32 @@ function lastInsightValue(dataRows, metric) {
   return typeof val === 'number' ? val : null
 }
 
-// Pide UNA métrica de insights. Lanza si la Graph API la rechaza.
+// Errores transitorios de la Graph API (NO deprecación): conviene reintentar.
+function isTransientGraphError(err) {
+  const code   = err.response?.data?.error?.code
+  const status = err.response?.status
+  return code === 1 || code === 2 || code === 4 || code === 17 || code === 341 || (status >= 500)
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+// Pide UNA métrica de insights, con reintentos ante errores transitorios (ej. code 2
+// "retry later"). Lanza si la Graph API la rechaza por deprecación/permiso (#100/#200).
 async function fetchOneInsight(pageId, pageToken, metric, period = INSIGHT_PERIOD) {
-  const { data } = await axios.get(`${GRAPH_BASE}/${pageId}/insights`, {
-    params: { metric, period, access_token: pageToken },
-  })
-  return lastInsightValue(data?.data, metric)
+  let lastErr
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data } = await axios.get(`${GRAPH_BASE}/${pageId}/insights`, {
+        params: { metric, period, access_token: pageToken },
+      })
+      return lastInsightValue(data?.data, metric)
+    } catch (err) {
+      lastErr = err
+      if (!isTransientGraphError(err) || attempt === 2) throw err
+      await sleep(400 * (attempt + 1))
+    }
+  }
+  throw lastErr
 }
 
 /**
@@ -184,13 +208,14 @@ async function debugPageInsights(pageId, pageToken) {
   // 3) Sonda amplia — qué nombres de métrica acepta esta página en v21.0.
   //    Con fallback de período: algunas métricas no soportan days_28.
   const PROBE_METRICS = [
-    'page_impressions', 'page_impressions_unique',
-    'page_posts_impressions', 'page_posts_impressions_unique',
-    'page_posts_impressions_organic', 'page_posts_impressions_paid',
-    'page_impressions_organic_v2', 'page_impressions_paid',
-    'page_views_total', 'page_views_unique',
-    'page_total_actions', 'page_post_engagements',
-    'page_daily_follows_unique', 'page_fan_adds_unique', 'page_fans',
+    // impresiones (orgánica es la que sobrevive en v21.0)
+    'page_posts_impressions_organic', 'page_posts_impressions', 'page_impressions',
+    // alcance / unique (candidatos)
+    'page_posts_impressions_organic_unique', 'page_posts_served_impressions_organic_unique',
+    'page_impressions_organic_unique_v2', 'page_posts_impressions_unique', 'page_impressions_unique',
+    // visitas / engagement / seguidores (contexto)
+    'page_views_total', 'page_total_actions', 'page_post_engagements',
+    'page_daily_follows_unique', 'page_follows', 'page_fans',
   ]
   const PROBE_PERIODS = ['days_28', 'week', 'day']
   for (const metric of PROBE_METRICS) {
@@ -200,6 +225,8 @@ async function debugPageInsights(pageId, pageToken) {
         entry.value  = await fetchOneInsight(pageId, pageToken, metric, period)
         entry.ok     = true
         entry.period = period
+        delete entry.error
+        delete entry.code
         break
       } catch (err) {
         entry.ok    = false
