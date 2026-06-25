@@ -10,6 +10,10 @@ jest.mock('../../src/lib/prisma', () => ({
     count:      jest.fn(),
     update:     jest.fn(),
   },
+  workDay: {
+    findUnique: jest.fn(),
+    create:     jest.fn(),
+  },
 }))
 
 const request = require('supertest')
@@ -106,6 +110,39 @@ describe('PATCH /api/tasks/:id/star — ciclo de estrellas', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.starred).toBe(0)
+  })
+
+  it('3 → 0 re-aloja una pendiente arrastrada de un día previo en la jornada de hoy', async () => {
+    prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 3, status: 'PENDING', isBacklog: false, workDay: { id: 50, date: '2000-01-01' } }))
+    prisma.workDay.findUnique.mockResolvedValue({ id: 77 }) // jornada de hoy ya existente
+    prisma.task.update.mockResolvedValue(makeTask({ starred: 0 }))
+
+    const res = await request(app)
+      .patch('/api/tasks/1/star')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(prisma.task.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ starred: 0, workDayId: 77 }),
+    }))
+  })
+
+  it('3 → 0 NO re-aloja si la tarea ya es de hoy (mismo workDay, sin fecha previa)', async () => {
+    // workDay.date >= hoy → no entra al re-alojo; solo cambia la estrella.
+    prisma.task.findUnique.mockResolvedValue(makeTask({ starred: 3, status: 'PENDING', isBacklog: false, workDay: { id: 77, date: '2999-01-01' } }))
+    prisma.task.update.mockResolvedValue(makeTask({ starred: 0 }))
+
+    const res = await request(app)
+      .patch('/api/tasks/1/star')
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(prisma.workDay.findUnique).not.toHaveBeenCalled()
+    expect(prisma.task.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { starred: 0 },
+    }))
   })
 
   it('retorna 409 si ya hay 3 tareas destacadas y se intenta agregar otra', async () => {

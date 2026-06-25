@@ -552,9 +552,10 @@ async function setDuration(req, res, next) {
 async function starTask(req, res, next) {
   try {
     const userId = req.user.userId
+    const workspaceId = req.workspace.id
     const id = Number(req.params.id)
 
-    const task = await prisma.task.findUnique({ where: { id } })
+    const task = await prisma.task.findUnique({ where: { id }, include: { workDay: true } })
     if (!task || task.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
 
     const currentLevel = task.starred || 0
@@ -562,16 +563,39 @@ async function starTask(req, res, next) {
 
     if (nextLevel === 1) {
       const starredCount = await prisma.task.count({
-        where: { userId, starred: { gt: 0 }, status: { not: 'COMPLETED' }, workDay: { workspaceId: req.workspace.id } },
+        where: { userId, starred: { gt: 0 }, status: { not: 'COMPLETED' }, workDay: { workspaceId } },
       })
       if (starredCount >= 3) {
         return res.status(409).json({ error: 'Máximo 3 tareas destacadas. Quitá una primero.' })
       }
     }
 
+    const data = { starred: nextLevel }
+
+    // Una tarea destacada se mantiene en el foco aunque se arrastre de días anteriores (no cae al
+    // backlog mientras tenga estrella). Al quitarle la estrella (volver a 0), si era una pendiente
+    // arrastrada de un día previo, se re-aloja en la jornada de hoy para que quede como pendiente
+    // del día. Recién cuando pase un día sin completarla volverá a arrastrarse como pendiente → backlog.
+    if (nextLevel === 0 && task.status === 'PENDING' && !task.isBacklog) {
+      const date = todayString(req.workspace.timezone)
+      if (task.workDay && task.workDay.date < date) {
+        const wdKey = { userId_workspaceId_date: { userId, workspaceId, date } }
+        let workDay = await prisma.workDay.findUnique({ where: wdKey })
+        if (!workDay) {
+          try {
+            workDay = await prisma.workDay.create({ data: { userId, workspaceId, date } })
+          } catch (createErr) {
+            if (createErr.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
+            else throw createErr
+          }
+        }
+        if (workDay) data.workDayId = workDay.id
+      }
+    }
+
     const updated = await prisma.task.update({
       where: { id },
-      data: { starred: nextLevel },
+      data,
       include: taskInclude,
     })
     res.json(updated)

@@ -248,8 +248,9 @@ export default function Dashboard() {
 
   function handleUpdateTask(updated) {
     if (carryOver.find(t => t.id === updated.id)) {
-      if (updated.status === 'COMPLETED') {
-        // Quitar de carry-over y agregar a las tareas del día para que aparezca en el conteo
+      // Si la tarea pasó a la jornada de hoy (se completó, o se re-alojó al quitarle la estrella),
+      // sale del carry-over y entra a las tareas del día para que cuente y quede como pendiente de hoy.
+      if (updated.status === 'COMPLETED' || updated.workDayId === workDay?.id) {
         setCarryOver(prev => prev.filter(t => t.id !== updated.id))
         setWorkDay(prev => ({ ...prev, tasks: [...prev.tasks, updated] }))
       } else {
@@ -305,10 +306,13 @@ export default function Dashboard() {
   // Derived state
   const tasks = workDay?.tasks ?? []
 
-  // Carry-over activos (IN_PROGRESS/PAUSED/BLOCKED sin isBacklog) se muestran en el foco normal
-  // Carry-over con isBacklog=true siempre van al backlog, sin importar el status
-  const carryOverActive  = useMemo(() => carryOver.filter(t => t.status !== 'PENDING' && !t.isBacklog), [carryOver])
-  const carryOverPending = useMemo(() => carryOver.filter(t => t.status === 'PENDING'  || t.isBacklog),  [carryOver])
+  // Carry-over activos: IN_PROGRESS/PAUSED/BLOCKED (sin isBacklog) o DESTACADAS (con estrella) se
+  // muestran en el foco normal. Una pendiente destacada NO cae al backlog: se mantiene en el foco
+  // (sección Destacadas) hasta que se complete o se le quite la estrella.
+  // Carry-over con isBacklog=true siempre van al backlog, sin importar el status.
+  const isStarred = t => (t.starred ?? 0) > 0
+  const carryOverActive  = useMemo(() => carryOver.filter(t => !t.isBacklog && (t.status !== 'PENDING' || isStarred(t))), [carryOver])
+  const carryOverPending = useMemo(() => carryOver.filter(t => t.isBacklog || (t.status === 'PENDING' && !isStarred(t))),  [carryOver])
 
   // Today focus = tasks in today's workday that are NOT backlog + carry-over activos, newest first
   const focusTasks = useMemo(() =>
