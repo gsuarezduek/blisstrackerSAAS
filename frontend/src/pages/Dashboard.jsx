@@ -11,10 +11,75 @@ import { useInactivity } from '../hooks/useInactivity'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useAuth } from '../context/AuthContext'
-import { completedMinutes, fmtMins } from '../utils/format'
+import { completedMinutes, fmtMins, completedDuration } from '../utils/format'
 
 function todayLabel() {
   return new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+function fmtShortDate(iso) {
+  if (!iso) return null
+  return new Date(iso).toLocaleDateString('es-AR', {
+    day: 'numeric', month: 'short', timeZone: 'America/Argentina/Buenos_Aires',
+  })
+}
+
+const SEGUIMIENTO_STATUS_LABEL = {
+  PENDING: 'Pendiente', IN_PROGRESS: 'En curso', PAUSED: 'Pausada', BLOCKED: 'Bloqueada', COMPLETED: 'Completada',
+}
+const SEGUIMIENTO_STATUS_COLOR = {
+  PENDING: 'text-gray-400 dark:text-gray-500',
+  IN_PROGRESS: 'text-primary-600 dark:text-primary-400',
+  PAUSED: 'text-gray-500 dark:text-gray-400',
+  BLOCKED: 'text-red-600 dark:text-red-400',
+  COMPLETED: 'text-green-600 dark:text-green-400',
+}
+
+// Fila de la sección Seguimiento (Seguidas / Delegadas). Muestra responsable, comentarios,
+// estado, y los metadatos: fecha de creación, fecha de finalización y duración.
+function TrackedTaskRow({ task: t, onClick }) {
+  const dur = completedDuration(t)
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+      onClick={onClick}
+    >
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-medium leading-snug truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+          {t.description}
+        </p>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          <img src={avatarUrl(t.user.avatar)} alt={t.user.name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
+          <span className="text-xs text-gray-400 dark:text-gray-500">{t.user.name}</span>
+          {(t._count?.comments ?? 0) > 0 && (
+            <>
+              <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">💬 {t._count.comments}</span>
+            </>
+          )}
+        </div>
+        {/* Metadatos: creación, finalización, duración */}
+        <div className="flex items-center gap-x-2 gap-y-0.5 mt-1 flex-wrap text-[11px] text-gray-400 dark:text-gray-500">
+          {t.createdAt && <span>📅 {fmtShortDate(t.createdAt)}</span>}
+          {t.completedAt && (
+            <>
+              <span className="text-gray-300 dark:text-gray-600">·</span>
+              <span>✓ {fmtShortDate(t.completedAt)}</span>
+            </>
+          )}
+          {dur && (
+            <>
+              <span className="text-gray-300 dark:text-gray-600">·</span>
+              <span>⏱ {dur}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <span className={`text-xs font-medium flex-shrink-0 ${SEGUIMIENTO_STATUS_COLOR[t.status]}`}>
+        {SEGUIMIENTO_STATUS_LABEL[t.status]}
+      </span>
+    </div>
+  )
 }
 
 export default function Dashboard() {
@@ -29,7 +94,9 @@ export default function Dashboard() {
   const [future, setFuture] = useState([])
   const [futureOpen, setFutureOpen] = useState(false)
   const [delegated, setDelegated] = useState([])
+  const [followedTasks, setFollowedTasks] = useState([])
   const [delegatedOpen, setDelegatedOpen] = useState(false)
+  const [seguimientoTab, setSeguimientoTab] = useState('SEGUIDAS')  // 'SEGUIDAS' | 'DELEGADAS'
   const [delegatedFilter, setDelegatedFilter] = useState('ALL')
   const [dismissConfirm, setDismissConfirm] = useState(false)
   const [dismissing, setDismissing] = useState(false)
@@ -86,8 +153,20 @@ export default function Dashboard() {
     return () => window.removeEventListener('bliss:task-created', onTaskCreated)
   }, [loadToday])
 
+  const seguimientoTabInit = useRef(false)
   useEffect(() => {
-    api.get('/tasks/delegated').then(r => setDelegated(r.data)).catch(() => {})
+    Promise.all([
+      api.get('/tasks/delegated').then(r => r.data).catch(() => []),
+      api.get('/tasks/followed').then(r => r.data).catch(() => []),
+    ]).then(([del, fol]) => {
+      setDelegated(del)
+      setFollowedTasks(fol)
+      // Pestaña por defecto: Seguidas si hay alguna, si no Delegadas.
+      if (!seguimientoTabInit.current) {
+        seguimientoTabInit.current = true
+        if (fol.length === 0 && del.length > 0) setSeguimientoTab('DELEGADAS')
+      }
+    })
   }, [])
 
   // Load AI insight once workday is available
@@ -294,31 +373,34 @@ export default function Dashboard() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Delegadas agrupadas por proyecto
-  const delegatedByProject = useMemo(() => {
+  // Lista de la pestaña activa de Seguimiento (Seguidas / Delegadas)
+  const seguimientoSource = seguimientoTab === 'SEGUIDAS' ? followedTasks : delegated
+
+  // Tareas de la pestaña activa agrupadas por proyecto
+  const seguimientoByProject = useMemo(() => {
     const map = {}
-    for (const t of delegated) {
+    for (const t of seguimientoSource) {
       const pid = t.project.id
       if (!map[pid]) map[pid] = { project: t.project, tasks: [] }
       map[pid].tasks.push(t)
     }
     return Object.values(map)
-  }, [delegated])
+  }, [seguimientoSource])
 
-  // Estados presentes en delegadas (para los pills de filtro)
-  const delegatedStatuses = useMemo(() => {
+  // Estados presentes (para los pills de filtro)
+  const seguimientoStatuses = useMemo(() => {
     const order = ['ALL', 'PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED', 'COMPLETED']
-    const present = new Set(delegated.map(t => t.status))
+    const present = new Set(seguimientoSource.map(t => t.status))
     return order.filter(s => s === 'ALL' || present.has(s))
-  }, [delegated])
+  }, [seguimientoSource])
 
-  // Delegadas filtradas por estado
-  const filteredDelegatedByProject = useMemo(() => {
-    if (delegatedFilter === 'ALL') return delegatedByProject
-    return delegatedByProject
+  // Tareas de la pestaña activa filtradas por estado
+  const filteredSeguimientoByProject = useMemo(() => {
+    if (delegatedFilter === 'ALL') return seguimientoByProject
+    return seguimientoByProject
       .map(g => ({ ...g, tasks: g.tasks.filter(t => t.status === delegatedFilter) }))
       .filter(g => g.tasks.length > 0)
-  }, [delegatedByProject, delegatedFilter])
+  }, [seguimientoByProject, delegatedFilter])
   const hasActiveTask = !!activeTask
 
   async function handleDismissDelegated() {
@@ -332,6 +414,11 @@ export default function Dashboard() {
       setDismissConfirm(false)
     } catch (_) {}
     setDismissing(false)
+  }
+
+  // Tras seguir/dejar de seguir una tarea desde el modal, refrescar la lista de Seguidas.
+  function handleFollowChanged() {
+    api.get('/tasks/followed').then(r => setFollowedTasks(r.data)).catch(() => {})
   }
 
   // Inactivity detection
@@ -719,17 +806,17 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* 7. Delegadas — collapsible */}
-        {delegatedByProject.length > 0 && (
+        {/* 7. Seguimiento (Seguidas + Delegadas) — collapsible */}
+        {(followedTasks.length > 0 || delegated.length > 0) && (
           <section className="mb-6">
             <button
               onClick={() => setDelegatedOpen(v => !v)}
               className="w-full flex items-center justify-between py-2 group"
             >
               <div className="flex items-center gap-2">
-                <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Delegadas</h2>
+                <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Seguimiento</h2>
                 <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
-                  {delegated.length}
+                  {followedTasks.length + delegated.length}
                 </span>
               </div>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
@@ -740,10 +827,27 @@ export default function Dashboard() {
 
             {delegatedOpen && (
               <div className="mt-2 space-y-4">
-                {/* Pills de filtro + botón borrar */}
+                {/* Sub-pestañas: Seguidas / Delegadas */}
+                <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50 dark:bg-gray-800">
+                  {[['SEGUIDAS', 'Seguidas', followedTasks.length], ['DELEGADAS', 'Delegadas', delegated.length]].map(([key, label, n]) => (
+                    <button
+                      key={key}
+                      onClick={() => { setSeguimientoTab(key); setDelegatedFilter('ALL'); setDismissConfirm(false) }}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                        seguimientoTab === key
+                          ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                      }`}
+                    >
+                      {label} <span className="opacity-60">{n}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Pills de filtro + botón borrar (borrar solo en Delegadas) */}
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex flex-wrap gap-1.5">
-                    {delegatedStatuses.length > 2 && delegatedStatuses.map(s => {
+                    {seguimientoStatuses.length > 2 && seguimientoStatuses.map(s => {
                       const label = { ALL: 'Todas', PENDING: 'Pendiente', IN_PROGRESS: 'En curso', PAUSED: 'Pausada', BLOCKED: 'Bloqueada', COMPLETED: 'Completada' }[s]
                       const active = delegatedFilter === s
                       const color = active ? {
@@ -766,8 +870,8 @@ export default function Dashboard() {
                     })}
                   </div>
 
-                  {/* Borrar del dashboard */}
-                  {filteredDelegatedByProject.length > 0 && (
+                  {/* Borrar del dashboard (solo Delegadas) */}
+                  {seguimientoTab === 'DELEGADAS' && filteredSeguimientoByProject.length > 0 && (
                     dismissConfirm ? (
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <span className="text-xs text-gray-500 dark:text-gray-400">¿Confirmar?</span>
@@ -794,61 +898,25 @@ export default function Dashboard() {
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
                           <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 3.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
                         </svg>
-                        {delegatedFilter === 'ALL' ? 'Borrar todas' : `Borrar ${filteredDelegatedByProject.reduce((s, g) => s + g.tasks.length, 0)}`}
+                        {delegatedFilter === 'ALL' ? 'Borrar todas' : `Borrar ${filteredSeguimientoByProject.reduce((s, g) => s + g.tasks.length, 0)}`}
                       </button>
                     )
                   )}
                 </div>
-                {filteredDelegatedByProject.map(({ project, tasks }) => (
+
+                {filteredSeguimientoByProject.length === 0 ? (
+                  <p className="text-xs text-gray-400 dark:text-gray-500 italic px-1">
+                    {seguimientoTab === 'SEGUIDAS'
+                      ? 'No estás siguiendo ninguna tarea. Abrí una tarea y tocá "Seguir" para que te avise si se completa o comenta.'
+                      : 'No tenés tareas delegadas.'}
+                  </p>
+                ) : filteredSeguimientoByProject.map(({ project, tasks }) => (
                   <div key={project.id}>
                     <p className="text-xs font-medium text-primary-600 dark:text-primary-400 mb-1.5 px-1">{project.name}</p>
                     <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
-                      {tasks.map(t => {
-                        const statusLabel = {
-                          PENDING:     'Pendiente',
-                          IN_PROGRESS: 'En curso',
-                          PAUSED:      'Pausada',
-                          BLOCKED:     'Bloqueada',
-                          COMPLETED:   'Completada',
-                        }
-                        const statusColor = {
-                          PENDING:     'text-gray-400 dark:text-gray-500',
-                          IN_PROGRESS: 'text-primary-600 dark:text-primary-400',
-                          PAUSED:      'text-gray-500 dark:text-gray-400',
-                          BLOCKED:     'text-red-600 dark:text-red-400',
-                          COMPLETED:   'text-green-600 dark:text-green-400',
-                        }
-                        return (
-                          <div
-                            key={t.id}
-                            className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                            onClick={() => setCommentTask(t)}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-medium leading-snug truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
-                                {t.description}
-                              </p>
-                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                <img
-                                  src={avatarUrl(t.user.avatar)}
-                                  alt={t.user.name}
-                                  className="w-4 h-4 rounded-full object-cover flex-shrink-0"
-                                />
-                                <span className="text-xs text-gray-400 dark:text-gray-500">{t.user.name}</span>
-                                {(t._count?.comments ?? 0) > 0 && (
-                                  <>
-                                    <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                                    <span className="text-xs text-gray-400 dark:text-gray-500">💬 {t._count.comments}</span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            <span className={`text-xs font-medium flex-shrink-0 ${statusColor[t.status]}`}>
-                              {statusLabel[t.status]}
-                            </span>
-                          </div>
-                        )
-                      })}
+                      {tasks.map(t => (
+                        <TrackedTaskRow key={t.id} task={t} onClick={() => setCommentTask(t)} />
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -1107,7 +1175,8 @@ export default function Dashboard() {
             setCompletedHistory(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t))
             setCommentTask(updated)
           }}
-          onTaskDeleted={id => { handleDeleteTask(id); setCompletedHistory(prev => prev.filter(t => t.id !== id)); setDelegated(prev => prev.filter(t => t.id !== id)) }}
+          onTaskDeleted={id => { handleDeleteTask(id); setCompletedHistory(prev => prev.filter(t => t.id !== id)); setDelegated(prev => prev.filter(t => t.id !== id)); setFollowedTasks(prev => prev.filter(t => t.id !== id)) }}
+          onFollowChanged={handleFollowChanged}
         />
       )}
 

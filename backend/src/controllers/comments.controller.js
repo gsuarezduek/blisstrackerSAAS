@@ -117,10 +117,19 @@ async function addComment(req, res, next) {
       distinct: ['userId'],
     })
 
+    // Seguidores de la tarea (sección Seguimiento): reciben aviso de comentario.
+    const followers = await prisma.taskFollow.findMany({
+      where: { taskId, userId: { not: userId } },
+      select: { userId: true },
+    })
+
     const toNotify = new Set()
     if (task.userId !== userId && !mentionedUserIds.has(task.userId)) toNotify.add(task.userId)
     for (const c of prevCommenters) {
       if (!mentionedUserIds.has(c.userId)) toNotify.add(c.userId)
+    }
+    for (const f of followers) {
+      if (!mentionedUserIds.has(f.userId)) toNotify.add(f.userId)
     }
 
     if (toNotify.size > 0) {

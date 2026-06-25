@@ -4,6 +4,7 @@ jest.mock('../../src/lib/prisma', () => ({
   task:            { findUnique: jest.fn(), findFirst: jest.fn() },
   projectMember:   { findUnique: jest.fn(), findMany: jest.fn() },
   taskComment:     { create: jest.fn(), findMany: jest.fn() },
+  taskFollow:      { findMany: jest.fn() },
   notification:    { createMany: jest.fn() },
 }))
 
@@ -99,7 +100,7 @@ describe('GET /api/tasks/:id/comments', () => {
 // ── POST /api/tasks/:id/comments ─────────────────────────────────────────────
 
 describe('POST /api/tasks/:id/comments', () => {
-  beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
+  beforeEach(() => { jest.clearAllMocks(); mockWorkspace(); prisma.taskFollow.findMany.mockResolvedValue([]) })
 
   it('crea el comentario y devuelve 201', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask())

@@ -54,7 +54,7 @@ const STATUS_CLASS = {
   COMPLETED:   'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400',
 }
 
-export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTaskEdited, onTaskDeleted }) {
+export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTaskEdited, onTaskDeleted, onFollowChanged }) {
   const { user } = useAuth()
   const [comments, setComments]   = useState([])
   const [loading, setLoading]     = useState(true)
@@ -115,6 +115,32 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
 
   // Admin/owner del workspace, dueño de la tarea, o quien la delegó (creador)
   const canEdit = user && (user.isAdmin || user.id === task.userId || user.id === task.createdById)
+
+  // Seguimiento de la tarea
+  const [following, setFollowing]       = useState(null)  // null = aún cargando
+  const [followSaving, setFollowSaving] = useState(false)
+
+  useEffect(() => {
+    api.get(`/tasks/${task.id}/follow`)
+      .then(r => setFollowing(!!r.data.following))
+      .catch(() => setFollowing(false))
+  }, [task.id])
+
+  async function handleToggleFollow() {
+    if (followSaving || following === null) return
+    setFollowSaving(true)
+    const next = !following
+    setFollowing(next)  // optimista
+    try {
+      if (next) await api.post(`/tasks/${task.id}/follow`)
+      else      await api.delete(`/tasks/${task.id}/follow`)
+      onFollowChanged?.(task.id, next)
+    } catch {
+      setFollowing(!next)  // revertir
+    } finally {
+      setFollowSaving(false)
+    }
+  }
 
   useEffect(() => {
     api.get(`/tasks/${task.id}/comments`)
@@ -282,12 +308,28 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
         <div className="px-5 pt-5 pb-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-start justify-between gap-3 mb-3">
             <p className="text-xs text-gray-400 dark:text-gray-500">{currentProject}</p>
-            <button
-              onClick={onClose}
-              className="text-2xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 leading-none flex-shrink-0 -mt-1"
-            >
-              ×
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0 -mt-1">
+              {/* Seguir tarea: notifica al seguidor cuando se completa o se comenta */}
+              <button
+                onClick={handleToggleFollow}
+                disabled={following === null || followSaving}
+                title={following ? 'Dejar de seguir esta tarea' : 'Seguir esta tarea (te avisa si se completa o comenta)'}
+                className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full transition-colors disabled:opacity-50 ${
+                  following
+                    ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                <span>{following ? '👁️' : '👁'}</span>
+                {following ? 'Siguiendo' : 'Seguir'}
+              </button>
+              <button
+                onClick={onClose}
+                className="text-2xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 leading-none"
+              >
+                ×
+              </button>
+            </div>
           </div>
 
           {/* Descripción editable */}
