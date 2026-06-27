@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { roleColor } from '../../utils/roleColor'
+import UserLink from '../UserLink'
 
 const emptyInvite = { email: '', memberRole: 'member', teamRole: '' }
 
@@ -264,10 +265,10 @@ export default function TeamTab() {
             <div key={u.id} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-hidden">
               {/* Fila principal */}
               <div className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{u.name}</p>
+                <UserLink userId={u.id} as="div" className="rounded-lg -m-1 p-1 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">{u.name}</p>
                   <p className="text-xs text-gray-400 dark:text-gray-500">{u.email}</p>
-                </div>
+                </UserLink>
                 <div className="flex items-center gap-3">
                   {u.isAdmin && (
                     <span className="text-xs px-2 py-1 rounded-full font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">

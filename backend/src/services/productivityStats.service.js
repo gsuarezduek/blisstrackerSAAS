@@ -8,6 +8,7 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { tzOffsetStr, getNWeeksAgoMonday, daysAgo, taskMins, addDays, businessDaysBetween } = require('../lib/timeMetrics')
+const { inArrivalWindow, laborableDays } = require('../lib/attendance')
 
 const STUCK_DAYS = 7
 
@@ -240,18 +241,6 @@ async function getWorkspaceStats(workspaceId, tz, period = null) {
   return result
 }
 
-// Días hábiles (YYYY-MM-DD) entre dos fechas inclusive.
-function businessDayList(startStr, endStr) {
-  const out = []
-  if (!startStr || !endStr || startStr > endStr) return out
-  const end = new Date(endStr + 'T00:00:00Z')
-  for (let d = new Date(startStr + 'T00:00:00Z'); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-    const dow = d.getUTCDay()
-    if (dow !== 0 && dow !== 6) out.push(d.toISOString().slice(0, 10))
-  }
-  return out
-}
-
 function loginMinsFromMidnight(iso, tz) {
   const d = new Date(iso)
   const h = Number(d.toLocaleString('en-CA', { hour: 'numeric', hour12: false, timeZone: tz }))
@@ -265,9 +254,6 @@ function loginMinsFromMidnight(iso, tz) {
 async function getAttendanceStats(workspaceId, tz, period) {
   const { curStart, curEnd } = period
   const offset = tzOffsetStr(tz)
-  const bizDays = businessDayList(curStart, curEnd)
-  const bizSet  = new Set(bizDays)
-  const businessDays = bizDays.length
 
   const [ws, members, workDays, leaves, logins] = await Promise.all([
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { attendanceTrackingEnabled: true, lateToleranceMins: true } }),
@@ -287,6 +273,14 @@ async function getAttendanceStats(workspaceId, tz, period) {
   const attendanceEnabled = ws?.attendanceTrackingEnabled !== false
   const tolerance = ws?.lateToleranceMins ?? 0
 
+  // Días laborables del período: un día cuenta solo si >50% del equipo activo se logueó ese día.
+  // Reemplaza la vieja base "lunes a viernes": excluye fines de semana y feriados, y da a todo
+  // el equipo la MISMA cantidad de días esperados (antes variaba por logins sueltos de finde).
+  const activeIds = new Set(members.map(m => m.userId))
+  const activeLogins = logins.filter(l => activeIds.has(l.userId))
+  const laborSet = laborableDays(activeLogins, members.length, tz)
+  const businessDays = laborSet.size
+
   const scheduleMap = {}  // userId -> minuto de inicio (para tardanzas)
   const dayMinsMap  = {}  // userId -> minutos de jornada (workEnd - workStart), para horas disponibles
   for (const m of members) {
@@ -302,37 +296,41 @@ async function getAttendanceStats(workspaceId, tz, period) {
     }
   }
 
-  // Días hábiles presentes por usuario (intersección con días hábiles del período).
+  // Días laborables presentes por usuario (intersección con los días laborables del período).
   const presentByUser = new Map()
   for (const wd of workDays) {
-    if (!bizSet.has(wd.date)) continue
+    if (!laborSet.has(wd.date)) continue
     if (!presentByUser.has(wd.userId)) presentByUser.set(wd.userId, new Set())
     presentByUser.get(wd.userId).add(wd.date)
   }
 
-  // Días hábiles de licencia aprobada por usuario (recortados al período).
+  // Días laborables de licencia aprobada por usuario (recortados al período).
   const leaveByUser = new Map()
   for (const lv of leaves) {
     const start = lv.startDate > curStart ? lv.startDate : curStart
     const end   = lv.endDate   < curEnd   ? lv.endDate   : curEnd
     if (!leaveByUser.has(lv.userId)) leaveByUser.set(lv.userId, new Set())
     const set = leaveByUser.get(lv.userId)
-    for (const d of businessDayList(start, end)) set.add(d)
+    for (const d of laborSet) if (d >= start && d <= end) set.add(d)
   }
 
-  // Tardanzas: primer login del día vs horario + tolerancia.
+  // Tardanzas: primer login del día (la "llegada") vs horario + tolerancia. Solo cuenta en
+  // días laborables y si la llegada cae dentro de la ventana de ±2h (un login fuera de la
+  // ventana no es una llegada → no es tardanza).
   const firstLogin = new Map()
-  for (const l of logins) {
+  for (const l of activeLogins) {
     const date = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: tz })
-    if (date < curStart || date > curEnd) continue
+    if (!laborSet.has(date)) continue
     const key = `${l.userId}::${date}`
     if (!firstLogin.has(key)) firstLogin.set(key, loginMinsFromMidnight(l.loginAt, tz))
   }
   const lateByUser = new Map()
   for (const [key, mins] of firstLogin) {
     const uid = Number(key.split('::')[0])
-    if (scheduleMap[uid] == null) continue
-    if (mins - scheduleMap[uid] - tolerance > 0) lateByUser.set(uid, (lateByUser.get(uid) || 0) + 1)
+    const start = scheduleMap[uid]
+    if (start == null) continue
+    if (!inArrivalWindow(mins, start)) continue
+    if (mins - start - tolerance > 0) lateByUser.set(uid, (lateByUser.get(uid) || 0) + 1)
   }
 
   const result = new Map()

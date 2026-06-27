@@ -3,7 +3,7 @@ import { avatarUrl } from '../utils/avatarUrl'
 
 /**
  * Dos modos:
- * - Simple (UserTasksModal): src + alt + onClose
+ * - Simple (UserProfile): src + alt + onClose
  * - Navegable (MyProfile): avatars[{file,label}] + index + onNavigate + onClose
  */
 export default function AvatarLightbox({ src, alt, onClose, avatars, index, onNavigate }) {

@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { saveAllCurrentMonth, METRIC_KEYS } = require('../services/rrhhMetricSnapshot.service')
 const { monthLabel, prevMonthsArr } = require('../lib/monthUtils')
+const { inArrivalWindow, laborableDays } = require('../lib/attendance')
 
 function defaultDateRange(tz) {
   const to   = new Date().toLocaleDateString('en-CA', { timeZone: tz })
@@ -128,19 +129,6 @@ async function userSummary(req, res, next) {
       }),
     ])
 
-    const byDay = {}
-    for (const l of logins) {
-      const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: tz })
-      if (!byDay[day]) byDay[day] = l   // primer ingreso del día (orden asc)
-    }
-    const firstLogins = Object.values(byDay).map(l => l.loginAt)
-
-    let avgLoginTime = null
-    if (firstLogins.length > 0) {
-      const totalMins = firstLogins.reduce((acc, iso) => acc + loginMinsFromMidnight(iso, tz), 0)
-      avgLoginTime = minsToTime(totalMins / firstLogins.length)
-    }
-
     const attendanceTrackingEnabled = req.workspace.attendanceTrackingEnabled !== false
     const tolerance = req.workspace.lateToleranceMins ?? 0  // minutos de gracia para tardanza
     const start = member?.workStartTime
@@ -148,8 +136,25 @@ async function userSummary(req, res, next) {
       ? (() => { const [sh, sm] = start.split(':').map(Number); return sh * 60 + sm })()
       : null
 
-    // Desglose día por día del PRIMER ingreso (más reciente primero).
-    // lateBy = minutos por encima del límite tolerado (workStartTime + tolerancia).
+    const byDay = {}
+    for (const l of logins) {
+      const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: tz })
+      if (!byDay[day]) byDay[day] = l   // primer ingreso del día (orden asc)
+    }
+    // "Llegadas" válidas = primer ingreso dentro de la ventana de ±2h del horario (si hay horario).
+    // Un ingreso fuera de la ventana (domingo a la tarde, chequeo nocturno) no es una llegada:
+    // no entra al promedio ni a la puntualidad. Sin horario configurado no se filtra (no hay referencia).
+    const isArrival = iso => inArrivalWindow(loginMinsFromMidnight(iso, tz), startMins)
+    const arrivals = Object.values(byDay).map(l => l.loginAt).filter(isArrival)
+
+    let avgLoginTime = null
+    if (arrivals.length > 0) {
+      const totalMins = arrivals.reduce((acc, iso) => acc + loginMinsFromMidnight(iso, tz), 0)
+      avgLoginTime = minsToTime(totalMins / arrivals.length)
+    }
+
+    // Desglose día por día del PRIMER ingreso (más reciente primero). Se muestran todos los días
+    // (para poder corregir/eliminar el ingreso), pero lateBy queda null fuera de la ventana → sin badge.
     const loginDays = Object.entries(byDay)
       .map(([date, l]) => {
         const mins = loginMinsFromMidnight(l.loginAt, tz)
@@ -157,21 +162,21 @@ async function userSummary(req, res, next) {
           id: l.id,   // id del UserLogin del primer ingreso (para editar/eliminar)
           date,
           time: minsToTime(mins),
-          lateBy: startMins != null ? Math.max(0, mins - startMins - tolerance) : null,
+          lateBy: (startMins != null && inArrivalWindow(mins, startMins)) ? Math.max(0, mins - startMins - tolerance) : null,
         }
       })
       .sort((a, b) => (a.date < b.date ? 1 : -1))
 
-    // Puntualidad: compara el primer ingreso de cada día con el horario + tolerancia.
+    // Puntualidad: compara cada llegada válida (dentro de la ventana) con el horario + tolerancia.
     // Solo si el seguimiento de horarios está habilitado para el workspace.
     let punctuality = null
-    if (startMins != null && firstLogins.length > 0) {
+    if (startMins != null && arrivals.length > 0) {
       let lateDays = 0, totalLateMins = 0
-      for (const iso of firstLogins) {
+      for (const iso of arrivals) {
         const lateBy = loginMinsFromMidnight(iso, tz) - startMins - tolerance
         if (lateBy > 0) { lateDays++; totalLateMins += lateBy }
       }
-      const daysCount = firstLogins.length
+      const daysCount = arrivals.length
       punctuality = {
         expectedStart: start,
         toleranceMins: tolerance,
@@ -303,41 +308,48 @@ async function dashboardStats(req, res, next) {
       }
     }
 
+    // Días laborables del mes: un día cuenta solo si >50% del equipo activo se logueó (excluye
+    // fines de semana y feriados). Un login de domingo a la tarde no hace "laborable" al domingo.
+    const laborSet = laborableDays(monthLogins, activeMembers, tz)
+
     const byUserDay = {}
     for (const l of monthLogins) {
       const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: tz })
       const key = `${l.userId}::${day}`
       if (!byUserDay[key]) byUserDay[key] = l.loginAt
     }
-    // Hora promedio de ingreso: solo personas con horario configurado (los freelancers
-    // o quienes trabajan en otra franja horaria no tienen horario → no se cuentan).
-    const firstLoginMins = Object.entries(byUserDay)
-      .filter(([key]) => scheduleMap[Number(key.split('::')[0])] != null)
-      .map(([, iso]) => loginMinsFromMidnight(iso, tz))
+    // Hora promedio y puntualidad: solo personas con horario, en días laborables y cuando la
+    // llegada cae dentro de la ventana de ±2h (descarta conexiones sueltas que ensucian el promedio).
+    const firstLoginMins = []
+    let scheduledDays = 0, lateCount = 0
+    for (const [key, iso] of Object.entries(byUserDay)) {
+      const [uidStr, day] = key.split('::')
+      const startMins = scheduleMap[Number(uidStr)]
+      if (startMins == null) continue
+      if (!laborSet.has(day)) continue
+      const mins = loginMinsFromMidnight(iso, tz)
+      if (!inArrivalWindow(mins, startMins)) continue
+      firstLoginMins.push(mins)
+      scheduledDays++
+      if (mins - startMins - tolerance > 0) lateCount++
+    }
     const avgFirstLoginTime = firstLoginMins.length > 0
       ? minsToTime(firstLoginMins.reduce((a, b) => a + b, 0) / firstLoginMins.length)
       : null
-
-    // Puntualidad del equipo: sobre el primer ingreso de cada día de quienes tienen horario
-    let scheduledDays = 0, lateCount = 0
-    for (const [key, iso] of Object.entries(byUserDay)) {
-      const uid = Number(key.split('::')[0])
-      const startMins = scheduleMap[uid]
-      if (startMins == null) continue
-      scheduledDays++
-      if (loginMinsFromMidnight(iso, tz) - startMins > tolerance) lateCount++
-    }
     const teamPunctualityPct = scheduledDays > 0
       ? Math.round(((scheduledDays - lateCount) / scheduledDays) * 100)
       : null
 
-    // Tardanzas de hoy: primer ingreso de hoy vs horario, por persona
+    // Tardanzas de hoy: primer ingreso de hoy vs horario, dentro de la ventana de ±2h.
+    // (No exige "día laborable": a la mañana temprano todavía no se logueó >50% del equipo.)
     const today = new Date().toLocaleDateString('en-CA', { timeZone: tz })
     const lateToday = []
     for (const uid of Object.keys(scheduleMap)) {
       const iso = byUserDay[`${uid}::${today}`]
       if (!iso) continue
-      const lateBy = loginMinsFromMidnight(iso, tz) - scheduleMap[uid] - tolerance
+      const mins = loginMinsFromMidnight(iso, tz)
+      if (!inArrivalWindow(mins, scheduleMap[uid])) continue
+      const lateBy = mins - scheduleMap[uid] - tolerance
       if (lateBy > 0) lateToday.push({ userId: Number(uid), lateBy })
     }
     lateToday.sort((a, b) => b.lateBy - a.lateBy)

@@ -10,6 +10,7 @@ import OnboardingTour from '../components/OnboardingTour'
 import { useInactivity } from '../hooks/useInactivity'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
+import UserLink from '../components/UserLink'
 import { useAuth } from '../context/AuthContext'
 import { completedMinutes, fmtMins, completedDuration } from '../utils/format'
 
@@ -49,8 +50,10 @@ function TrackedTaskRow({ task: t, onClick }) {
           {t.description}
         </p>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          <img src={avatarUrl(t.user.avatar)} alt={t.user.name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
-          <span className="text-xs text-gray-400 dark:text-gray-500">{t.user.name}</span>
+          <UserLink userId={t.user.id} className="flex items-center gap-2 min-w-0">
+            <img src={avatarUrl(t.user.avatar)} alt={t.user.name} className="w-4 h-4 rounded-full object-cover flex-shrink-0 hover:opacity-90 transition-opacity" />
+            <span className="text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">{t.user.name}</span>
+          </UserLink>
           {(t._count?.comments ?? 0) > 0 && (
             <>
               <span className="text-xs text-gray-300 dark:text-gray-600">·</span>

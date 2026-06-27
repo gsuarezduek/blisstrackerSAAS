@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { linkify } from '../utils/linkify'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import useRoles from '../hooks/useRoles'
-import UserTasksModal from '../components/UserTasksModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import { fmtMins, fmtDuration, activeSeconds } from '../utils/format'
 import { roleColor } from '../utils/roleColor'
@@ -53,7 +53,7 @@ function UserCard({ entry, now, onOpenUser, onOpenTask }) {
         <button
           onClick={() => onOpenUser(user)}
           className="flex items-center gap-3.5 flex-1 min-w-0 text-left group rounded-xl -m-1 p-1 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
-          title="Ver tareas de esta persona"
+          title="Ver perfil de esta persona"
         >
           <div className="relative flex-shrink-0">
             <Avatar user={user} size="w-16 h-16" />
@@ -135,7 +135,7 @@ export default function RealTime() {
   const [loading, setLoading] = useState(true)
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
   const [lastUpdate, setLastUpdate] = useState(null)
-  const [selectedUser, setSelectedUser] = useState(null)
+  const navigate = useNavigate()
   const [commentTask, setCommentTask] = useState(null)
   const [search, setSearch] = useState('')
   const now = useNow()
@@ -274,7 +274,7 @@ export default function RealTime() {
                   key={entry.user.id}
                   entry={entry}
                   now={now}
-                  onOpenUser={setSelectedUser}
+                  onOpenUser={u => navigate(`/users/${u.id}`)}
                   onOpenTask={setCommentTask}
                 />
               ))}
@@ -292,7 +292,7 @@ export default function RealTime() {
                   key={entry.user.id}
                   entry={entry}
                   now={now}
-                  onOpenUser={setSelectedUser}
+                  onOpenUser={u => navigate(`/users/${u.id}`)}
                   onOpenTask={setCommentTask}
                 />
               ))}
@@ -306,7 +306,7 @@ export default function RealTime() {
             <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">No iniciaron jornada</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filteredNotStarted.map(user => (
-                <button key={user.id} className="text-left" onClick={() => setSelectedUser(user)} title="Ver tareas de esta persona">
+                <button key={user.id} className="text-left" onClick={() => navigate(`/users/${user.id}`)} title="Ver perfil de esta persona">
                   <div className="bg-white dark:bg-gray-800 rounded-2xl border-2 border-gray-100 dark:border-gray-700 opacity-50 p-5 flex items-center gap-3.5 hover:opacity-70 transition-opacity">
                     <Avatar user={user} size="w-14 h-14" />
                     <div className="min-w-0">
@@ -323,10 +323,6 @@ export default function RealTime() {
           </section>
         )}
       </main>
-
-      {selectedUser && (
-        <UserTasksModal user={selectedUser} onClose={() => setSelectedUser(null)} />
-      )}
 
       {commentTask && (
         <TaskCommentsModal

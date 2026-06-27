@@ -1,8 +1,11 @@
 // Cálculo de las métricas AUTOMÁTICAS del Scorecard EOS, bucketeadas por semana ISO
 // (semanales) o por mes calendario (mensuales). Reutiliza los mismos criterios que la
 // sección de Productividad / Asistencia:
-//   - Tardanza = primer login del día > workStartTime + tolerancia (TZ del workspace).
-//   - Horas disponibles = días hábiles esperados (sin licencia) × jornada (workEnd − workStart).
+//   - Tardanza = primer login del día > workStartTime + tolerancia (TZ del workspace), y solo
+//     si la llegada cae en la ventana de ±2h (lib/attendance.inArrivalWindow).
+//   - Día laborable = día donde >50% del equipo activo se logueó (lib/attendance.laborableDays).
+//     Reemplaza la base "lunes a viernes": excluye fines de semana y feriados.
+//   - Horas disponibles = días laborables esperados (sin licencia) × jornada (workEnd − workStart).
 //   - Horas trabajadas = tiempo activo de tareas completadas (taskMins, tope 8h, descuenta pausas).
 //   - Ocupación = Σ horas trabajadas ÷ Σ horas disponibles (solo quienes tienen horario) — ya
 //     ponderada por horas, así normaliza jornadas de 4h vs 8h.
@@ -16,6 +19,7 @@ const { todayString } = require('../utils/dates')
 const { monthBounds, prevMonthStr } = require('../lib/monthUtils')
 const { EOS_AUTO_METRICS } = require('../lib/eosAutoMetricCatalog')
 const { computeObjectives } = require('./marketingObjectives.service')
+const { inArrivalWindow, laborableDays } = require('../lib/attendance')
 
 // Filtro de informes "generados" (no placeholders vacíos) — espejo de GENERATED_WHERE.
 const GENERATED_REPORT_OR = [
@@ -35,18 +39,6 @@ function isoWeekPeriodOf(dateStr) {
 }
 
 const monthOf = dateStr => dateStr.slice(0, 7)
-
-// Días hábiles (lun-vie) YYYY-MM-DD entre dos fechas inclusive.
-function businessDayList(startStr, endStr) {
-  const out = []
-  if (!startStr || !endStr || startStr > endStr) return out
-  const end = new Date(endStr + 'T00:00:00Z')
-  for (let d = new Date(startStr + 'T00:00:00Z'); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-    const dow = d.getUTCDay()
-    if (dow !== 0 && dow !== 6) out.push(d.toISOString().slice(0, 10))
-  }
-  return out
-}
 
 function loginMinsFromMidnight(iso, tz) {
   const d = new Date(iso)
@@ -97,7 +89,7 @@ async function occupancyByBucket(workspaceId, tz, offset, rangeStart, rangeEnd, 
   if (!scheduled.length) return out
   const scheduledIds = new Set(scheduled.map(([uid]) => uid))
 
-  const [leaves, tasks] = await Promise.all([
+  const [leaves, tasks, logins] = await Promise.all([
     prisma.vacationRequest.findMany({
       where: { workspaceId, status: 'approved', startDate: { lte: rangeEnd }, endDate: { gte: rangeStart } },
       select: { userId: true, startDate: true, endDate: true },
@@ -110,9 +102,18 @@ async function occupancyByBucket(workspaceId, tz, offset, rangeStart, rangeEnd, 
       },
       select: { userId: true, completedAt: true, pausedMinutes: true, minutesOverride: true, startedAt: true },
     }),
+    prisma.userLogin.findMany({
+      where: { workspaceId, loginAt: { gte: new Date(rangeStart + 'T00:00:00' + offset), lte: new Date(rangeEnd + 'T23:59:59' + offset) } },
+      select: { userId: true, loginAt: true },
+    }),
   ])
 
-  // Días de licencia (set) por usuario, recortados al rango.
+  // Días laborables del rango: días donde >50% del equipo activo se logueó (excluye fines de
+  // semana y feriados). Las horas disponibles se asignan solo en esos días.
+  const activeIds = new Set(info.keys())
+  const laborSet = laborableDays(logins.filter(l => activeIds.has(l.userId)), info.size, tz)
+
+  // Días laborables de licencia (set) por usuario, recortados al rango.
   const leaveDays = new Map()
   for (const lv of leaves) {
     if (!scheduledIds.has(lv.userId)) continue
@@ -120,12 +121,12 @@ async function occupancyByBucket(workspaceId, tz, offset, rangeStart, rangeEnd, 
     const end   = lv.endDate   < rangeEnd   ? lv.endDate   : rangeEnd
     if (!leaveDays.has(lv.userId)) leaveDays.set(lv.userId, new Set())
     const set = leaveDays.get(lv.userId)
-    for (const d of businessDayList(start, end)) set.add(d)
+    for (const d of laborSet) if (d >= start && d <= end) set.add(d)
   }
 
-  // Horas disponibles por (bucket, usuario): días hábiles sin licencia × jornada.
+  // Horas disponibles por (bucket, usuario): días laborables sin licencia × jornada.
   const availByBucket = new Map()
-  for (const day of businessDayList(rangeStart, rangeEnd)) {
+  for (const day of laborSet) {
     const period = periodOf(day)
     if (!availByBucket.has(period)) availByBucket.set(period, new Map())
     const wm = availByBucket.get(period)
@@ -185,6 +186,11 @@ async function computeTardanzasWeekly(workspaceId, tz, offset, rangeStart, range
     orderBy: { loginAt: 'asc' },
   })
 
+  // Días laborables del rango (>50% del equipo activo logueado): una tardanza solo cuenta en
+  // un día laborable (un domingo con una conexión suelta no es un día de trabajo).
+  const activeIds = new Set(ctx.info.keys())
+  const laborSet = laborableDays(logins.filter(l => activeIds.has(l.userId)), ctx.info.size, tz)
+
   // Primer login por (usuario, día local).
   const firstByUserDay = new Map()
   for (const l of logins) {
@@ -200,6 +206,9 @@ async function computeTardanzasWeekly(workspaceId, tz, offset, rangeStart, range
     const uid = Number(uidStr)
     const startMins = ctx.info.get(uid)?.startMins
     if (startMins == null) continue
+    if (!laborSet.has(date)) continue
+    // Fuera de la ventana de ±2h no es una llegada → no es tardanza (descarta domingo a la tarde, etc.).
+    if (!inArrivalWindow(mins, startMins)) continue
     const lateBy = mins - startMins - ctx.tolerance
     if (lateBy <= 0) continue
     const period = isoWeekPeriodOf(date)

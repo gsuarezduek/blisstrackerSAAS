@@ -847,6 +847,12 @@ function TabIngresos({ users }) {
     return m
   }, [users, attendanceEnabled])
 
+  // Ventana de llegada ±2h alrededor del horario: un ingreso fuera de la ventana no es una "llegada"
+  // (descarta conexiones sueltas de finde/noche que ensucian el promedio). Sin horario no se filtra.
+  // (La normalización de "días laborables" >50% vive en Productividad/dashboard/snapshots, que ven
+  // todo el equipo en un período; acá el rango puede ser un solo día o una sola persona.)
+  const ARRIVAL_WINDOW = 120
+
   const byUser = useMemo(() => {
     const map = {}
     for (const l of logins) {
@@ -856,29 +862,37 @@ function TabIngresos({ users }) {
     for (const uid of Object.keys(map))
       map[uid].logins.sort((a, b) => new Date(a.loginAt) - new Date(b.loginAt))
     return Object.values(map).map(({ user, logins }) => {
-      // Solo el primer ingreso del día para calcular el promedio y la tardanza
+      // Primer ingreso de cada día
       const byDay = {}
       for (const l of logins) {
         const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: TZ })
         if (!byDay[day]) byDay[day] = l   // logins ya ordenados asc → primero gana
       }
-      const firstPerDay = Object.values(byDay)
-      const firstIds = new Set(firstPerDay.map(l => l.id))   // ids de "primer ingreso del día"
-      const avgMins = firstPerDay.reduce((acc, l) => acc + minutesFromMidnight(l.loginAt), 0) / firstPerDay.length
       const schedule = startMinsMap[user.id] ?? null
+      // "Llegadas" válidas para promedio/tardanza: dentro de la ventana ±2h (sin horario, todas).
+      const arrivals = Object.values(byDay).filter(l => {
+        if (!schedule) return true
+        const mins = minutesFromMidnight(l.loginAt)
+        return mins >= schedule.mins - ARRIVAL_WINDOW && mins <= schedule.mins + ARRIVAL_WINDOW
+      })
+      const firstIds = new Set(arrivals.map(l => l.id))   // solo llegadas válidas llevan badge
+      const avgMins = arrivals.length
+        ? arrivals.reduce((acc, l) => acc + minutesFromMidnight(l.loginAt), 0) / arrivals.length
+        : null
       let lateDays = 0
       if (schedule) {
-        for (const l of firstPerDay) {
+        for (const l of arrivals) {
           if (minutesFromMidnight(l.loginAt) - schedule.mins > tolerance) lateDays++
         }
       }
       return {
-        user, logins, avgMins, avgTime: minsToTime(avgMins),
-        schedule, firstIds, daysCount: firstPerDay.length, lateDays,
+        user, logins, avgMins, avgTime: avgMins != null ? minsToTime(avgMins) : '—',
+        schedule, firstIds, daysCount: arrivals.length, lateDays,
       }
-    }).sort((a, b) =>
-      sortOrder === 'asc' ? a.avgMins - b.avgMins : b.avgMins - a.avgMins
-    )
+    }).sort((a, b) => {
+      const av = a.avgMins ?? Infinity, bv = b.avgMins ?? Infinity
+      return sortOrder === 'asc' ? av - bv : bv - av
+    })
   }, [logins, sortOrder, startMinsMap, tolerance])
 
   return (

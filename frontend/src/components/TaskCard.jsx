@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import { fmtMins, activeMinutes, completedDuration, completedMinutes } from '../utils/format'
+import UserLink from './UserLink'
 
 export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments }) {
   const [loading, setLoading] = useState(false)
@@ -272,7 +273,10 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
             )}
             {task.createdBy && (
               <span className="text-xs text-gray-400 dark:text-gray-500">
-                Asignada por {task.createdBy.name.split(' ')[0]}
+                Asignada por{' '}
+                <UserLink userId={task.createdBy.id} className="hover:text-primary-600 dark:hover:text-primary-400">
+                  {task.createdBy.name.split(' ')[0]}
+                </UserLink>
               </span>
             )}
             {onOpenComments && (task._count?.comments ?? 0) > 0 && (

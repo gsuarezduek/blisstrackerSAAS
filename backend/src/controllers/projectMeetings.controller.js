@@ -159,7 +159,24 @@ async function createMeeting(req, res, next) {
     const meeting = await prisma.projectMeeting.create({
       data: { projectId, workspaceId, date: d, type: t },
     })
-    res.status(201).json(formatMeeting({ ...meeting, todos: [], participants: [] }))
+
+    // El creador queda como participante por defecto (si es miembro activo del workspace).
+    const creator = await prisma.workspaceMember.findUnique({
+      where:  { workspaceId_userId: { workspaceId, userId: req.user.userId } },
+      select: { active: true },
+    })
+    if (creator?.active) {
+      try {
+        await prisma.projectMeetingParticipant.create({
+          data: { meetingId: meeting.id, workspaceId, userId: req.user.userId },
+        })
+      } catch (e) {
+        if (e.code !== 'P2002') throw e // idempotente
+      }
+    }
+
+    const fresh = await loadMeeting(meeting.id, projectId, workspaceId)
+    res.status(201).json(formatMeeting(fresh))
   } catch (err) { next(err) }
 }
 

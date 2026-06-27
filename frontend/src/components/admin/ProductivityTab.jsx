@@ -5,6 +5,7 @@ import { avatarUrl } from '../../utils/avatarUrl'
 import { linkify } from '../../utils/linkify'
 import ProductivityPeriodLabel from './ProductivityPeriodLabel'
 import RoleBadge from '../RoleBadge'
+import UserLink from '../UserLink'
 
 // Selector de modo de período (aplica a ambas vistas).
 function ModeToggle({ mode, onChange }) {
@@ -319,10 +320,13 @@ function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mo
         <td className="py-2.5 px-3">
           <div className="flex items-center gap-2.5">
             <span className={`text-gray-300 dark:text-gray-600 transition-transform ${expanded ? 'rotate-90' : ''}`}>›</span>
-            <img src={avatarUrl(m.avatar)} alt={m.name} className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600" />
+            <UserLink userId={m.id}><img src={avatarUrl(m.avatar)} alt={m.name} className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600 hover:opacity-90 transition-opacity" /></UserLink>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-white truncate leading-tight">{m.name}</p>
-              <RoleBadge role={m.role} userId={m.id} className="inline-block mt-0.5" />
+              <UserLink userId={m.id} as="p" className="text-sm font-medium text-gray-900 dark:text-white truncate leading-tight hover:text-primary-600 dark:hover:text-primary-400">{m.name}</UserLink>
+              <div className="flex items-center gap-2">
+                <RoleBadge role={m.role} userId={m.id} className="inline-block mt-0.5" />
+                <UserLink userId={m.id} className="text-[11px] text-primary-600 dark:text-primary-400 hover:underline mt-0.5">Ver perfil →</UserLink>
+              </div>
             </div>
           </div>
         </td>

@@ -19,6 +19,25 @@ const { computeAutoScorecardYear, computeCurrentMonthStatus, isoWeekPeriodOf } =
 
 const TZ = 'America/Argentina/Buenos_Aires' // UTC-3
 
+// Genera logins (uno por usuario por día) para que esos días superen el >50% y sean "laborables".
+// Las horas disponibles de la ocupación solo se asignan en días laborables, así que los tests de
+// ocupación necesitan que el equipo "haya ingresado" esos días.
+function loginsFor(userIds, days, time = '09:00') {
+  return days.flatMap(d => userIds.map(uid => ({ userId: uid, loginAt: `${d}T${time}:00-03:00` })))
+}
+// Días hábiles (lun-vie) YYYY-MM-DD de un mes (year, month 1-12).
+function weekdaysIn(year, month) {
+  const days = []
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  for (let d = 1; d <= last; d++) {
+    const dow = new Date(Date.UTC(year, month - 1, d)).getUTCDay()
+    if (dow !== 0 && dow !== 6) days.push(`${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+  }
+  return days
+}
+// Lun-vie de la semana ISO W10 de 2026 (2026-03-02..06).
+const W10_WEEKDAYS = ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06']
+
 function resetAll() {
   Object.values(prisma).forEach(model => Object.values(model).forEach(fn => fn.mockReset()))
   // defaults
@@ -110,9 +129,10 @@ describe('computeAutoScorecardYear — ocupación', () => {
       { userId: 1, workStartTime: '09:00', workEndTime: '17:00', user: { name: 'Ana', avatar: 'a.png' } }, // 8h/día
       { userId: 2, workStartTime: '09:00', workEndTime: '13:00', user: { name: 'Beto', avatar: 'b.png' } }, // 4h/día
     ])
-    // Semana W10 (2026-03-02..08): 5 días hábiles.
+    // Semana W10 (2026-03-02..08): 5 días laborables (todo el equipo ingresa lun-vie).
     //   Ana disponible = 5×8h = 40h. Beto disponible = 5×4h = 20h. Total = 60h.
     //   Ana trabaja 20h, Beto trabaja 5h → total 25h. Ocupación = 25/60 ≈ 42%.
+    prisma.userLogin.findMany.mockResolvedValue(loginsFor([1, 2], W10_WEEKDAYS))
     prisma.task.findMany.mockResolvedValue([
       { userId: 1, completedAt: '2026-03-02T12:00:00-03:00', startedAt: '2026-03-02T02:00:00-03:00', pausedMinutes: 0, minutesOverride: 1200 }, // 20h (override)
       { userId: 2, completedAt: '2026-03-03T12:00:00-03:00', startedAt: '2026-03-03T07:00:00-03:00', pausedMinutes: 0, minutesOverride: 300 },  // 5h
@@ -129,7 +149,8 @@ describe('computeAutoScorecardYear — ocupación', () => {
     prisma.workspaceMember.findMany.mockResolvedValue([
       { userId: 1, workStartTime: '09:00', workEndTime: '17:00', user: { name: 'Ana', avatar: 'a.png' } },
     ])
-    // Licencia lun+mar de W10 → quedan 3 días hábiles disponibles = 24h.
+    // Licencia lun+mar de W10 → quedan 3 días laborables disponibles = 24h.
+    prisma.userLogin.findMany.mockResolvedValue(loginsFor([1], W10_WEEKDAYS))
     prisma.vacationRequest.findMany.mockResolvedValue([
       { userId: 1, startDate: '2026-03-02', endDate: '2026-03-03' },
     ])
@@ -161,7 +182,8 @@ describe('computeAutoScorecardYear — mensuales (a mes vencido)', () => {
     prisma.workspaceMember.findMany.mockResolvedValue([
       { userId: 1, workStartTime: '09:00', workEndTime: '17:00', user: { name: 'Ana', avatar: 'a.png' } }, // 8h/día
     ])
-    // Marzo 2026 tiene 22 días hábiles → disponible = 22×8 = 176h. Trabaja 88h → 50%.
+    // Marzo 2026 tiene 22 días laborables (equipo ingresa lun-vie) → disponible = 22×8 = 176h. Trabaja 88h → 50%.
+    prisma.userLogin.findMany.mockResolvedValue(loginsFor([1], weekdaysIn(2026, 3)))
     prisma.task.findMany.mockResolvedValue([
       { userId: 1, completedAt: '2026-03-10T12:00:00-03:00', startedAt: '2026-03-10T00:00:00-03:00', pausedMinutes: 0, minutesOverride: 5280 },
     ])

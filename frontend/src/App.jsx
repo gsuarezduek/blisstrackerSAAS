@@ -48,6 +48,7 @@ import ResetPassword from './pages/ResetPassword'
 import OAuthPopup from './pages/OAuthPopup'
 import AuthCallback from './pages/AuthCallback'
 import MyProfile from './pages/MyProfile'
+import UserProfile from './pages/UserProfile'
 import Preferences from './pages/Preferences'
 import Docs from './pages/Docs'
 import SuperAdmin from './pages/SuperAdmin'
@@ -114,6 +115,7 @@ export default function App() {
           <Route path="/my-projects" element={<PrivateRoute><MyProjects /></PrivateRoute>} />
           <Route path="/my-projects/:id" element={<PrivateRoute><ProjectDetail /></PrivateRoute>} />
           <Route path="/profile"      element={<PrivateRoute><MyProfile    /></PrivateRoute>} />
+          <Route path="/users/:id"    element={<PrivateRoute><UserProfile  /></PrivateRoute>} />
           <Route path="/preferences"  element={<PrivateRoute><Preferences  /></PrivateRoute>} />
           <Route path="/docs"         element={<PrivateRoute><Docs         /></PrivateRoute>} />
           <Route path="/realtime"   element={<PrivateRoute><RealTime  /></PrivateRoute>} />

@@ -8,6 +8,7 @@
 //             los logins al mes; mid-mes dan el acumulado hasta la fecha, el cron congela el mes completo.
 const prisma = require('../lib/prisma')
 const { monthBounds } = require('../lib/monthUtils')
+const { inArrivalWindow, laborableDays } = require('../lib/attendance')
 
 // Mes actual "YYYY-MM" en la timezone del workspace.
 function currentMonth(tz) {
@@ -73,58 +74,69 @@ async function computeMonthlyAttendance(workspaceId, month, tz) {
   if (!ws || ws.attendanceTrackingEnabled === false) return null
   const tolerance = ws.lateToleranceMins ?? 0
 
-  const members = await prisma.workspaceMember.findMany({
-    where: { workspaceId, active: true, workStartTime: { not: null } },
+  // Todos los miembros activos (denominador de la regla del 50%); de ahí los que tienen horario.
+  const allMembers = await prisma.workspaceMember.findMany({
+    where: { workspaceId, active: true },
     select: { userId: true, workStartTime: true },
   })
-  if (members.length === 0) return null
   const scheduleMap = {}
-  for (const m of members) {
+  for (const m of allMembers) {
+    if (!m.workStartTime) continue
     const [h, mm] = m.workStartTime.split(':').map(Number)
     scheduleMap[m.userId] = h * 60 + mm
   }
+  const membersWithSchedule = Object.keys(scheduleMap).length
+  if (membersWithSchedule === 0) return null
 
   // Rango UTC con ±1 día de padding (cubre cualquier offset de TZ); luego se filtra por mes local.
   const { startDate, endDate } = monthBounds(month)
   const fromUTC = new Date(`${startDate}T00:00:00Z`); fromUTC.setUTCDate(fromUTC.getUTCDate() - 1)
   const toUTC   = new Date(`${endDate}T23:59:59Z`);   toUTC.setUTCDate(toUTC.getUTCDate() + 1)
 
+  // Logins de TODOS los miembros activos (no solo los que tienen horario): hacen falta para
+  // determinar qué días son laborables (>50% del equipo logueado).
   const logins = await prisma.userLogin.findMany({
     where: {
       workspaceId,
-      userId: { in: Object.keys(scheduleMap).map(Number) },
+      userId: { in: allMembers.map(m => m.userId) },
       loginAt: { gte: fromUTC, lte: toUTC },
     },
     select: { userId: true, loginAt: true },
     orderBy: { loginAt: 'asc' },
   })
 
-  // Primer login por usuario por día, dentro del mes (en TZ del workspace).
+  // Logins del mes (en TZ del workspace) → días laborables del mes.
+  const monthLogins = logins.filter(l =>
+    new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: tz }).slice(0, 7) === month)
+  const laborSet = laborableDays(monthLogins, allMembers.length, tz)
+
+  // Primer login por usuario con horario, por día laborable (en TZ del workspace).
   const byUserDay = {}
-  for (const l of logins) {
+  for (const l of monthLogins) {
+    if (scheduleMap[l.userId] == null) continue
     const day = new Date(l.loginAt).toLocaleDateString('en-CA', { timeZone: tz })
-    if (day.slice(0, 7) !== month) continue
+    if (!laborSet.has(day)) continue
     const key = `${l.userId}::${day}`
     if (!byUserDay[key]) byUserDay[key] = l.loginAt
   }
 
-  const entries = Object.entries(byUserDay)
-  if (entries.length === 0) return null
-
-  let totalMins = 0, lateCount = 0
-  for (const [key, iso] of entries) {
+  // Solo llegadas dentro de la ventana de ±2h cuentan para el promedio/puntualidad.
+  let totalMins = 0, lateCount = 0, scheduledDays = 0
+  for (const [key, iso] of Object.entries(byUserDay)) {
     const uid = Number(key.split('::')[0])
     const mins = loginMinsFromMidnight(iso, tz)
+    if (!inArrivalWindow(mins, scheduleMap[uid])) continue
     totalMins += mins
+    scheduledDays++
     if (mins - scheduleMap[uid] - tolerance > 0) lateCount++
   }
-  const scheduledDays = entries.length
+  if (scheduledDays === 0) return null
   return {
     avgLoginMins: Math.round(totalMins / scheduledDays),
     punctualityPct: Math.round(((scheduledDays - lateCount) / scheduledDays) * 100),
     scheduledDays,
     lateCount,
-    membersWithSchedule: members.length,
+    membersWithSchedule,
   }
 }
 

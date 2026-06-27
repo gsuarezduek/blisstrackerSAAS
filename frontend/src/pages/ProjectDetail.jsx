@@ -5,8 +5,8 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { linkify } from '../utils/linkify'
 import { fmtMins, completedDuration } from '../utils/format'
 import api from '../api/client'
-import UserTasksModal from '../components/UserTasksModal'
 import AddTaskModal from '../components/AddTaskModal'
+import UserLink from '../components/UserLink'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import ProjectSituation from '../components/ProjectSituation'
 import ProjectInfoTab from '../components/ProjectInfoTab'
@@ -59,7 +59,6 @@ export default function ProjectDetail() {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
-  const [selectedUser, setSelectedUser] = useState(null)
   const [showAddTask, setShowAddTask] = useState(false)
   const [linkForm, setLinkForm] = useState(null) // null = oculto, { label, url } = visible
   const [linkSaving, setLinkSaving] = useState(false)
@@ -587,13 +586,13 @@ export default function ProjectDetail() {
                     ) : (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {data.project.members.map(pm => (
-                          <div key={pm.user.id} className="flex items-center gap-2 min-w-0">
+                          <UserLink key={pm.user.id} userId={pm.user.id} as="div" className="flex items-center gap-2 min-w-0 rounded-lg -m-1 p-1 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
                             <Avatar user={pm.user} size="sm" />
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight truncate">{pm.user.name}</p>
+                              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors">{pm.user.name}</p>
                               <RoleBadge role={pm.user.role} userId={pm.user.id} className="inline-block mt-0.5" />
                             </div>
-                          </div>
+                          </UserLink>
                         ))}
                       </div>
                     )}
@@ -720,7 +719,8 @@ export default function ProjectDetail() {
                     <div key={user.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                       <button
                         className="w-full text-left flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
-                        onClick={() => setSelectedUser(user)}
+                        onClick={() => navigate(`/users/${user.id}`)}
+                        title="Ver perfil de esta persona"
                       >
                         <Avatar user={user} />
                         <div className="min-w-0">
@@ -902,10 +902,6 @@ export default function ProjectDetail() {
           </>
         )}
       </main>
-
-      {selectedUser && (
-        <UserTasksModal user={selectedUser} onClose={() => setSelectedUser(null)} />
-      )}
 
       {showAddTask && data && (
         <AddTaskModal

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import LoadingSpinner from './LoadingSpinner'
 import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
 import { avatarUrl } from '../utils/avatarUrl'
+import UserLink from './UserLink'
 
 // Resalta @menciones en texto plano. Captura exactamente una palabra después del @.
 // El backend maneja la detección de nombres de dos palabras por su cuenta.
@@ -505,7 +506,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
             {task.createdAt && (
               <p className="text-xs text-gray-400 dark:text-gray-500">
                 Creada el {fmtDate(task.createdAt)}
-                {task.createdBy && <span className="text-gray-500 dark:text-gray-400"> · Asignada por <span className="font-medium">{task.createdBy.name}</span></span>}
+                {task.createdBy && <span className="text-gray-500 dark:text-gray-400"> · Asignada por <UserLink userId={task.createdBy.id} className="font-medium hover:text-primary-600 dark:hover:text-primary-400">{task.createdBy.name}</UserLink></span>}
               </p>
             )}
             {task.completedAt && (
@@ -531,14 +532,16 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
           )}
           {comments.map(c => (
             <div key={c.id} className="flex items-start gap-3">
-              <img
-                src={avatarUrl(c.user.avatar)}
-                alt={c.user.name}
-                className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0 mt-0.5"
-              />
+              <UserLink userId={c.user.id} className="flex-shrink-0 mt-0.5">
+                <img
+                  src={avatarUrl(c.user.avatar)}
+                  alt={c.user.name}
+                  className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600 hover:opacity-90 transition-opacity"
+                />
+              </UserLink>
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{c.user.name}</span>
+                  <UserLink userId={c.user.id} className="text-xs font-semibold text-gray-800 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400">{c.user.name}</UserLink>
                   <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(c.createdAt)}</span>
                 </div>
                 <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug mt-0.5 whitespace-pre-wrap break-words">

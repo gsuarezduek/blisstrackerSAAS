@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { inArrivalWindow } = require('../lib/attendance')
 
 // Texto por defecto del email de tardanza. Placeholders: [Nombre] y [workspace].
 const DEFAULT_LATE_TEMPLATE = `Hola [Nombre],
@@ -49,7 +50,9 @@ async function checkAndNotifyLate(userId, workspaceId) {
 
     const [sh, sm] = member.workStartTime.split(':').map(Number)
     const startMins = sh * 60 + sm
-    const isLate = iso => lateMinutes(iso, tz, startMins, tolerance) > 0
+    // Tarde = llegada dentro de la ventana de ±2h Y por encima del horario + tolerancia.
+    // Un ingreso fuera de la ventana (domingo a la tarde) no es una llegada → no es tardanza.
+    const isLate = iso => inArrivalWindow(loginMinsFromMidnight(iso, tz), startMins) && lateMinutes(iso, tz, startMins, tolerance) > 0
 
     const since = new Date(); since.setDate(since.getDate() - 30)
     const logins = await prisma.userLogin.findMany({
