@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
 
-const EMPTY_FORM = { account: '', username: '', password: '', extra: '' }
+const EMPTY_FORM = { account: '', username: '', password: '', twofa: '', extra: '' }
 
 export default function ProjectAccesos({ projectId }) {
   const [accesses, setAccesses] = useState([])
@@ -10,11 +10,12 @@ export default function ProjectAccesos({ projectId }) {
 
   const [form, setForm]         = useState(null)   // null = oculto
   const [showFormPw, setShowFormPw] = useState(false)
+  const [showFormTwofa, setShowFormTwofa] = useState(false)
   const [saving, setSaving]     = useState(false)
   const [formError, setFormError] = useState('')
 
-  const [revealed, setRevealed]     = useState({}) // { [id]: plaintext }
-  const [revealingId, setRevealingId] = useState(null)
+  const [revealed, setRevealed]     = useState({}) // { [`${id}:${field}`]: plaintext }
+  const [revealingKey, setRevealingKey] = useState(null)
   const [copied, setCopied]         = useState(null) // `${id}:${field}`
 
   useEffect(() => {
@@ -28,8 +29,8 @@ export default function ProjectAccesos({ projectId }) {
   }, [projectId])
 
   async function handleAdd() {
-    const { account, username, password, extra } = form
-    if (![account, username, password, extra].some(v => v.trim())) {
+    const { account, username, password, twofa, extra } = form
+    if (![account, username, password, twofa, extra].some(v => v.trim())) {
       setFormError('Completá al menos un campo.')
       return
     }
@@ -40,11 +41,13 @@ export default function ProjectAccesos({ projectId }) {
         account: account.trim(),
         username: username.trim(),
         password: password.trim(),
+        twofa: twofa.trim(),
         extra: extra.trim(),
       })
       setAccesses(prev => [...prev, data])
       setForm(null)
       setShowFormPw(false)
+      setShowFormTwofa(false)
     } catch (err) {
       setFormError(err.response?.data?.error || 'Error al guardar el acceso.')
     } finally {
@@ -52,20 +55,21 @@ export default function ProjectAccesos({ projectId }) {
     }
   }
 
-  async function handleReveal(id) {
-    // Si ya está revelado, lo ocultamos.
-    if (revealed[id] !== undefined) {
-      setRevealed(prev => { const n = { ...prev }; delete n[id]; return n })
+  // Revela (o vuelve a ocultar) un dato sensible — field = "password" | "twofa".
+  async function handleReveal(id, field) {
+    const key = `${id}:${field}`
+    if (revealed[key] !== undefined) {
+      setRevealed(prev => { const n = { ...prev }; delete n[key]; return n })
       return
     }
-    setRevealingId(id)
+    setRevealingKey(key)
     try {
-      const { data } = await api.get(`/projects/${projectId}/accesos/${id}/reveal`)
-      setRevealed(prev => ({ ...prev, [id]: data.password ?? '' }))
+      const { data } = await api.get(`/projects/${projectId}/accesos/${id}/reveal`, { params: { field } })
+      setRevealed(prev => ({ ...prev, [key]: data.value ?? '' }))
     } catch {
       // silencioso: el botón vuelve a su estado
     } finally {
-      setRevealingId(null)
+      setRevealingKey(null)
     }
   }
 
@@ -105,7 +109,7 @@ export default function ProjectAccesos({ projectId }) {
         <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Accesos</p>
         {!form && (
           <button
-            onClick={() => { setForm({ ...EMPTY_FORM }); setFormError(''); setShowFormPw(false) }}
+            onClick={() => { setForm({ ...EMPTY_FORM }); setFormError(''); setShowFormPw(false); setShowFormTwofa(false) }}
             className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
           >
             + Agregar nuevo acceso
@@ -141,22 +145,19 @@ export default function ProjectAccesos({ projectId }) {
                 )}
 
                 {a.hasPassword && (
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <span className="text-gray-400 dark:text-gray-500 text-xs w-16 flex-shrink-0">Contraseña</span>
-                    <span className="text-gray-700 dark:text-gray-200 font-mono break-all">
-                      {revealed[a.id] !== undefined ? (revealed[a.id] || '—') : '••••••••'}
-                    </span>
-                    <button
-                      onClick={() => handleReveal(a.id)}
-                      disabled={revealingId === a.id}
-                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium disabled:opacity-50"
-                    >
-                      {revealingId === a.id ? '…' : (revealed[a.id] !== undefined ? 'ocultar' : 'ver')}
-                    </button>
-                    {revealed[a.id] !== undefined && revealed[a.id] && (
-                      <CopyBtn onClick={() => copy(revealed[a.id], `${a.id}:pw`)} done={copied === `${a.id}:pw`} />
-                    )}
-                  </div>
+                  <SecretRow
+                    label="Contraseña" id={a.id} field="password"
+                    revealed={revealed} revealingKey={revealingKey}
+                    onReveal={handleReveal} onCopy={copy} copied={copied}
+                  />
+                )}
+
+                {a.hasTwofa && (
+                  <SecretRow
+                    label="2FA" id={a.id} field="twofa"
+                    revealed={revealed} revealingKey={revealingKey}
+                    onReveal={handleReveal} onCopy={copy} copied={copied}
+                  />
                 )}
 
                 {a.extra && (
@@ -216,6 +217,23 @@ export default function ProjectAccesos({ projectId }) {
               {showFormPw ? 'ocultar' : 'ver'}
             </button>
           </div>
+          <div className="relative">
+            <input
+              type={showFormTwofa ? 'text' : 'password'}
+              placeholder="2FA / Segundo factor (opcional)"
+              autoComplete="new-password"
+              value={form.twofa}
+              onChange={e => setForm(p => ({ ...p, twofa: e.target.value }))}
+              className="w-full text-sm px-3 py-1.5 pr-14 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
+            />
+            <button
+              type="button"
+              onClick={() => setShowFormTwofa(s => !s)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+            >
+              {showFormTwofa ? 'ocultar' : 'ver'}
+            </button>
+          </div>
           <input
             type="text"
             placeholder="Extra (opcional)"
@@ -233,14 +251,38 @@ export default function ProjectAccesos({ projectId }) {
               {saving ? 'Guardando…' : 'Guardar'}
             </button>
             <button
-              onClick={() => { setForm(null); setShowFormPw(false); setFormError('') }}
+              onClick={() => { setForm(null); setShowFormPw(false); setShowFormTwofa(false); setFormError('') }}
               className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
             >
               Cancelar
             </button>
-            <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">La contraseña se guarda cifrada.</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">La contraseña y el 2FA se guardan cifrados.</span>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// Fila de un dato sensible (contraseña / 2FA): oculto por defecto, se revela bajo demanda.
+function SecretRow({ label, id, field, revealed, revealingKey, onReveal, onCopy, copied }) {
+  const key = `${id}:${field}`
+  const shown = revealed[key] !== undefined
+  return (
+    <div className="flex items-center gap-1.5 text-sm">
+      <span className="text-gray-400 dark:text-gray-500 text-xs w-16 flex-shrink-0">{label}</span>
+      <span className="text-gray-700 dark:text-gray-200 font-mono break-all">
+        {shown ? (revealed[key] || '—') : '••••••••'}
+      </span>
+      <button
+        onClick={() => onReveal(id, field)}
+        disabled={revealingKey === key}
+        className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium disabled:opacity-50"
+      >
+        {revealingKey === key ? '…' : (shown ? 'ocultar' : 'ver')}
+      </button>
+      {shown && revealed[key] && (
+        <CopyBtn onClick={() => onCopy(revealed[key], `${key}:copy`)} done={copied === `${key}:copy`} />
       )}
     </div>
   )

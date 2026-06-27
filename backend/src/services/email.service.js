@@ -186,6 +186,62 @@ async function sendPasswordReset(email, name, resetUrl, workspaceId) {
   }
 }
 
+// Verificación de cambio de email primario. Se envía al NUEVO correo; el cambio
+// solo se aplica cuando el usuario abre el link.
+async function sendEmailChangeVerification(newEmail, name, verifyUrl, workspaceId) {
+  const from = await getEmailFrom(workspaceId)
+  const subject = 'Confirmá tu nuevo email — BlissTracker'
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: newEmail,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">Confirmá tu nuevo email</h2>
+          <p style="color:#475569;margin:0 0 24px;">Hola <strong>${name}</strong>, pediste cambiar el email de tu cuenta a esta dirección. Confirmá para aplicar el cambio.</p>
+          <a href="${verifyUrl}"
+             style="display:inline-block;background:#E67A1F;color:white;text-decoration:none;
+                    padding:12px 24px;border-radius:8px;font-weight:600;margin-bottom:24px;">
+            Confirmar nuevo email
+          </a>
+          <p style="color:#94a3b8;font-size:14px;margin:0;">Este enlace expira en 1 hora. Si no solicitaste el cambio, podés ignorar este correo.</p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: newEmail, subject, type: 'emailChange', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: newEmail, subject, type: 'emailChange', status: 'failed', errorMsg: err.message })
+    throw err
+  }
+}
+
+// Aviso de seguridad al email ANTERIOR cuando el cambio se concretó.
+async function sendEmailChangedNotice(oldEmail, name, newEmail, workspaceId) {
+  const from = await getEmailFrom(workspaceId)
+  const subject = 'Se cambió el email de tu cuenta — BlissTracker'
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: oldEmail,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">Se cambió el email de tu cuenta</h2>
+          <p style="color:#475569;margin:0 0 16px;">Hola <strong>${name}</strong>, el email de acceso de tu cuenta se cambió a <strong>${newEmail}</strong>.</p>
+          <p style="color:#94a3b8;font-size:14px;margin:0;">Si no fuiste vos, contactá al soporte de inmediato: alguien podría tener acceso a tu cuenta.</p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: oldEmail, subject, type: 'emailChange', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: oldEmail, subject, type: 'emailChange', status: 'failed', errorMsg: err.message })
+    // No relanzamos: es un aviso best-effort, no debe romper el flujo de confirmación.
+  }
+}
+
 async function sendWelcomeEmail(email, name, workspaceId) {
   const from = await getEmailFrom(workspaceId)
   const loginUrl = `${process.env.FRONTEND_URL}/login`
@@ -678,6 +734,8 @@ async function sendGameFinishedEmail(emails, workspaceName, game, winner, appUrl
 module.exports = {
   sendGameFinishedEmail,
   sendPasswordReset,
+  sendEmailChangeVerification,
+  sendEmailChangedNotice,
   sendWelcomeEmail,
   sendLateNotificationEmail,
   sendProductivityDigestEmail,

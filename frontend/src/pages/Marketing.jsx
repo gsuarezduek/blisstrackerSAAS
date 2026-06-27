@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import GeoTab      from '../components/marketing/GeoTab'
@@ -186,23 +186,33 @@ export default function Marketing() {
               Herramientas de optimización y análisis para tus proyectos
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-64">
-              <ProjectSearchSelect
-                projects={projects}
-                value={projectId}
-                onChange={handleProjectChange}
-                placeholder="Todos los proyectos…"
-              />
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <div className="w-64">
+                <ProjectSearchSelect
+                  projects={projects}
+                  value={projectId}
+                  onChange={handleProjectChange}
+                  placeholder="Todos los proyectos…"
+                />
+              </div>
+              {projectId && (
+                <button
+                  onClick={() => handleProjectChange('')}
+                  title="Ver todos los proyectos"
+                  className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  ✕
+                </button>
+              )}
             </div>
             {projectId && (
-              <button
-                onClick={() => handleProjectChange('')}
-                title="Ver todos los proyectos"
-                className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              <Link
+                to={`/my-projects/${projectId}`}
+                className="self-start text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center gap-1"
               >
-                ✕
-              </button>
+                Ir al proyecto →
+              </Link>
             )}
           </div>
         </div>

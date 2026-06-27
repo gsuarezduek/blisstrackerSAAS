@@ -45,6 +45,7 @@ import MyProjects from './pages/MyProjects'
 import ProjectDetail from './pages/ProjectDetail'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
+import VerifyEmailChange from './pages/VerifyEmailChange'
 import OAuthPopup from './pages/OAuthPopup'
 import AuthCallback from './pages/AuthCallback'
 import MyProfile from './pages/MyProfile'
@@ -110,6 +111,7 @@ export default function App() {
           <Route path="/join"     element={<JoinWorkspace />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email-change" element={<VerifyEmailChange />} />
           <Route path="/" element={<RootPage />} />
           <Route path="/my-reports"  element={<PrivateRoute><MyReports  /></PrivateRoute>} />
           <Route path="/my-projects" element={<PrivateRoute><MyProjects /></PrivateRoute>} />

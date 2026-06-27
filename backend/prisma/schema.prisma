@@ -108,6 +108,7 @@ model Workspace {
   projectBriefs          ProjectBrief[]
   rrhhMetricSnapshots    RrhhMetricSnapshot[]
   projectAccesses        ProjectAccess[]
+  projectAccessLogs      ProjectAccessLog[]
   games                  Game[]
   taskFollows            TaskFollow[]
 
@@ -170,6 +171,10 @@ model User {
   name      String
   email     String   @unique
   password  String
+  // ID estable de la cuenta de Google vinculada (el `sub` del token de Google).
+  // Permite iniciar sesión con Google aunque el email de esa cuenta difiera del
+  // email primario, y sobrevive a un cambio de email. null = sin Google conectado.
+  googleId  String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -212,6 +217,7 @@ model User {
   notifications             Notification[]             @relation("NotificationRecipient")
   notificationsAsActor      Notification[]             @relation("NotificationActor")
   passwordResetTokens       PasswordResetToken[]
+  emailChangeTokens         EmailChangeToken[]
   loginEvents               UserLogin[]
   sentInvitations           WorkspaceInvitation[]      @relation("InvitedByUser")
   deletionRequestsMade      WorkspaceDeletionRequest[] @relation("DeletionRequestedBy")
@@ -235,6 +241,7 @@ model User {
   orgAssessmentResponses    OrgAssessmentResponse[]
   generatedReports          MonthlyReport[]            @relation("ReportGeneratedBy")
   platformSettingChanges    PlatformSettingLog[]       @relation("SettingChangedBy")
+  accessRevealLogs          ProjectAccessLog[]
 }
 
 model UserLogin {
@@ -274,6 +281,19 @@ model PasswordResetToken {
   token     String   @unique
   userId    Int
   user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// Token de verificación para el cambio de email primario. Se confirma desde el
+// link enviado al NUEVO correo; recién ahí se actualiza User.email.
+model EmailChangeToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  newEmail  String
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -365,6 +385,7 @@ model Project {
   marketingObjectives    MarketingObjective[]
   briefs                 ProjectBrief[]
   accesses               ProjectAccess[]
+  accessLogs             ProjectAccessLog[]
   meetings               ProjectMeeting[]
 
   @@unique([workspaceId, name])
@@ -427,9 +448,9 @@ model ProjectLink {
   @@index([projectId])
 }
 
-// Accesos / credenciales por proyecto (Cuenta, Usuario, Contraseña, Extra).
-// La contraseña se guarda cifrada con AES-256-GCM (lib/encryption.js) y solo se
-// descifra bajo demanda en el endpoint reveal. Todos los campos son opcionales.
+// Accesos / credenciales por proyecto (Cuenta, Usuario, Contraseña, 2FA, Extra).
+// La contraseña y el 2FA se guardan cifrados con AES-256-GCM (lib/encryption.js) y
+// solo se descifran bajo demanda en el endpoint reveal. Todos los campos son opcionales.
 model ProjectAccess {
   id          Int      @id @default(autoincrement())
   projectId   Int
@@ -437,14 +458,40 @@ model ProjectAccess {
   account     String?  // Cuenta (ej. "Instagram")
   username    String?  // Usuario
   password    String?  // Contraseña cifrada ("iv:tag:ciphertext")
+  twofa       String?  // Segundo factor (2FA) cifrado ("iv:tag:ciphertext")
   extra       String?  // Notas / dato extra
   createdAt   DateTime @default(now())
 
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  revealLogs ProjectAccessLog[]
 
   @@index([projectId])
   @@index([workspaceId])
+}
+
+// Log de auditoría: registra quién solicitó ver un dato sensible (contraseña o 2FA)
+// de un acceso. Por ahora solo se persiste el evento; la visualización del log se
+// desarrollará más adelante. accessId queda en SetNull para conservar el historial
+// aunque el acceso se elimine.
+model ProjectAccessLog {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  accessId    Int?
+  userId      Int
+  field       String   // "password" | "twofa" — qué dato se solicitó
+  createdAt   DateTime @default(now())
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  access    ProjectAccess? @relation(fields: [accessId], references: [id], onDelete: SetNull)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([accessId])
+  @@index([userId])
 }
 
 // ─── WORKDAY & TASKS ─────────────────────────────────────────────────────────

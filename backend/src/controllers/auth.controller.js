@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const crypto = require('crypto')
-const { sendPasswordReset } = require('../services/email.service')
+const { sendPasswordReset, sendEmailChangedNotice } = require('../services/email.service')
 const { triggerLateCheck } = require('../services/lateNotification.service')
 const { OAuth2Client } = require('google-auth-library')
 const prisma = require('../lib/prisma')
@@ -204,6 +204,49 @@ async function resetPassword(req, res, next) {
 }
 
 /**
+ * POST /api/auth/verify-email-change
+ * Body: { token }
+ * Confirma el cambio de email primario desde el link enviado al nuevo correo.
+ * Público (el usuario puede abrirlo desde otro dispositivo / sin sesión).
+ */
+async function verifyEmailChange(req, res, next) {
+  try {
+    const { token } = req.body
+    if (!token) return res.status(400).json({ error: 'Token requerido' })
+
+    const record = await prisma.emailChangeToken.findUnique({ where: { token } })
+    if (!record || record.used || record.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'El enlace es inválido o ha expirado' })
+    }
+
+    // Revalida que el email siga libre (alguien pudo tomarlo entre el pedido y la confirmación).
+    const taken = await prisma.user.findFirst({
+      where: { email: { equals: record.newEmail, mode: 'insensitive' }, NOT: { id: record.userId } },
+      select: { id: true },
+    })
+    if (taken) {
+      await prisma.emailChangeToken.update({ where: { id: record.id }, data: { used: true } })
+      return res.status(409).json({ error: 'Ese email ya fue tomado por otra cuenta' })
+    }
+
+    const before = await prisma.user.findUnique({ where: { id: record.userId }, select: { email: true, name: true } })
+
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: record.userId }, data: { email: record.newEmail } }),
+      prisma.emailChangeToken.update({ where: { id: record.id }, data: { used: true } }),
+    ])
+
+    // Aviso de seguridad al email anterior (best-effort).
+    if (before?.email) {
+      sendEmailChangedNotice(before.email, before.name, record.newEmail)
+        .catch(err => console.error('[EmailChange] Aviso al email anterior falló:', err.message))
+    }
+
+    res.json({ message: 'Email actualizado correctamente', email: record.newEmail })
+  } catch (err) { next(err) }
+}
+
+/**
  * POST /api/auth/google
  * Header X-Workspace opcional — mismo comportamiento que login.
  */
@@ -225,7 +268,11 @@ async function googleLogin(req, res, next) {
       return res.status(401).json({ error: 'El email de Google no está verificado' })
     }
 
-    const user = await prisma.user.findUnique({ where: { email: payload.email } })
+    // Preferimos el vínculo explícito por googleId (sobrevive a cambios de email y
+    // funciona aunque el email de Google difiera del primario). Si no hay vínculo,
+    // caemos al match por email (cuentas que entran con Google sin haberlo conectado).
+    let user = await prisma.user.findUnique({ where: { googleId: payload.sub } })
+    if (!user) user = await prisma.user.findUnique({ where: { email: payload.email } })
     if (!user) return res.status(404).json({ error: 'No existe una cuenta con ese email de Google' })
 
     if (slug) {
@@ -323,4 +370,4 @@ function logout(req, res) {
   res.json({ ok: true })
 }
 
-module.exports = { login, me, forgotPassword, resetPassword, googleLogin, switchWorkspace, recordLogin, logout }
+module.exports = { login, me, forgotPassword, resetPassword, verifyEmailChange, googleLogin, switchWorkspace, recordLogin, logout }

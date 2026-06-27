@@ -672,13 +672,14 @@ async function resolveAccessGuard(req) {
   return { projectId }
 }
 
-// Forma pública de un acceso: nunca expone la contraseña, solo si tiene una.
+// Forma pública de un acceso: nunca expone la contraseña ni el 2FA, solo si los tiene.
 const publicAccess = (a) => ({
   id: a.id,
   account: a.account,
   username: a.username,
   extra: a.extra,
   hasPassword: !!a.password,
+  hasTwofa: !!a.twofa,
   createdAt: a.createdAt,
 })
 
@@ -703,9 +704,10 @@ async function addAccess(req, res, next) {
     const account  = clean(req.body.account)
     const username = clean(req.body.username)
     const password = clean(req.body.password)
+    const twofa    = clean(req.body.twofa)
     const extra    = clean(req.body.extra)
 
-    if (!account && !username && !password && !extra) {
+    if (!account && !username && !password && !twofa && !extra) {
       return res.status(400).json({ error: 'Completá al menos un campo del acceso' })
     }
 
@@ -716,6 +718,7 @@ async function addAccess(req, res, next) {
         account,
         username,
         password: password ? encrypt(password) : null,
+        twofa: twofa ? encrypt(twofa) : null,
         extra,
       },
     })
@@ -723,15 +726,30 @@ async function addAccess(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Revela bajo demanda un dato sensible (password o 2FA) y registra la solicitud
+// en el log de auditoría. ?field=password (default) | twofa.
 async function revealAccess(req, res, next) {
   try {
     const guard = await resolveAccessGuard(req)
     if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const field = req.query.field === 'twofa' ? 'twofa' : 'password'
     const access = await prisma.projectAccess.findFirst({
       where: { id: Number(req.params.accessId), projectId: guard.projectId },
     })
     if (!access) return res.status(404).json({ error: 'Acceso no encontrado' })
-    res.json({ password: access.password ? decrypt(access.password) : null })
+
+    // Log de quién solicitó ver el dato (la visualización del log se hará más adelante).
+    await prisma.projectAccessLog.create({
+      data: {
+        workspaceId: req.workspace.id,
+        projectId:   guard.projectId,
+        accessId:    access.id,
+        userId:      req.user.userId,
+        field,
+      },
+    })
+
+    res.json({ value: access[field] ? decrypt(access[field]) : null })
   } catch (err) { next(err) }
 }
 

@@ -1,6 +1,11 @@
 const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
+const { OAuth2Client } = require('google-auth-library')
 const prisma = require('../lib/prisma')
 const { resolveLegajoFields, coerceCustomValue } = require('../lib/legajoCatalog')
+const { sendEmailChangeVerification } = require('../services/email.service')
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 // Campos personales globales del User (no dependen del workspace)
 const PERSONAL_FIELDS = [
@@ -12,6 +17,7 @@ const PERSONAL_FIELDS = [
 
 const USER_SELECT = {
   id: true, name: true, email: true,
+  googleId: true,
   createdAt: true, avatar: true,
   phone: true, birthday: true, address: true, dni: true,
   cuit: true, alias: true, bankName: true, maritalStatus: true, children: true,
@@ -26,8 +32,10 @@ const PREF_FLAGS = ['weeklyEmailEnabled', 'dailyInsightEnabled', 'insightMemoryE
 
 // Arma la respuesta de perfil (datos del User + preferencias y legajoData del WorkspaceMember).
 function buildProfileResponse(user, member) {
+  const { googleId, ...rest } = user
   return {
-    ...user,
+    ...rest,
+    googleConnected: !!googleId,
     role: member?.teamRole ?? '',
     isAdmin: member?.role === 'admin' || member?.role === 'owner',
     weeklyEmailEnabled: member?.weeklyEmailEnabled ?? true,
@@ -154,6 +162,114 @@ async function changePassword(req, res, next) {
 }
 
 /**
+ * POST /api/profile/change-email
+ * Body: { newEmail, password }
+ * Pide la contraseña actual como re-autenticación y envía un link de verificación
+ * al NUEVO correo. El email solo se cambia cuando se confirma ese link.
+ */
+async function requestEmailChange(req, res, next) {
+  try {
+    const { newEmail, password } = req.body
+    if (!newEmail || !password) {
+      return res.status(400).json({ error: 'Datos incompletos' })
+    }
+    const email = newEmail.trim()
+    if (!EMAIL_RE.test(email)) {
+      return res.status(400).json({ error: 'El email no es válido' })
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId } })
+    const valid = await bcrypt.compare(password, user.password)
+    if (!valid) {
+      return res.status(400).json({ error: 'La contraseña es incorrecta' })
+    }
+
+    if (email.toLowerCase() === user.email.toLowerCase()) {
+      return res.status(400).json({ error: 'Ese ya es tu email actual' })
+    }
+
+    const taken = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    })
+    if (taken) {
+      return res.status(409).json({ error: 'Ya existe una cuenta con ese email' })
+    }
+
+    // Invalida pedidos previos pendientes del mismo usuario.
+    await prisma.emailChangeToken.updateMany({
+      where: { userId: user.id, used: false },
+      data: { used: true },
+    })
+
+    const token = crypto.randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+    await prisma.emailChangeToken.create({
+      data: { token, userId: user.id, newEmail: email, expiresAt },
+    })
+
+    const domain = process.env.APP_DOMAIN
+    const slug = req.headers['x-workspace']
+    const verifyUrl = domain && slug
+      ? `https://${slug}.${domain}/verify-email-change?token=${token}`
+      : `${process.env.FRONTEND_URL}/verify-email-change?token=${token}`
+
+    await sendEmailChangeVerification(email, user.name, verifyUrl, req.workspace?.id)
+
+    res.json({ message: `Te enviamos un correo de confirmación a ${email}. Abrí el link para aplicar el cambio.` })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/profile/connect-google
+ * Body: { credential }  (ID token de Google Identity Services)
+ * Vincula la cuenta de Google (su `sub`) al usuario autenticado.
+ */
+async function connectGoogle(req, res, next) {
+  try {
+    const { credential } = req.body
+    if (!credential) return res.status(400).json({ error: 'Token de Google requerido' })
+
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    })
+    const payload = ticket.getPayload()
+    if (!payload?.sub) return res.status(401).json({ error: 'Token de Google inválido' })
+
+    const inUse = await prisma.user.findUnique({
+      where: { googleId: payload.sub },
+      select: { id: true },
+    })
+    if (inUse && inUse.id !== req.user.userId) {
+      return res.status(409).json({ error: 'Esa cuenta de Google ya está vinculada a otro usuario' })
+    }
+
+    await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { googleId: payload.sub },
+    })
+
+    res.json({ googleConnected: true, googleEmail: payload.email ?? null })
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/profile/connect-google
+ * Desvincula la cuenta de Google. La contraseña sigue siendo método de acceso.
+ */
+async function disconnectGoogle(req, res, next) {
+  try {
+    await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { googleId: null },
+    })
+    res.json({ googleConnected: false })
+  } catch (err) { next(err) }
+}
+
+/**
  * PATCH /api/profile/preferences
  * Actualiza flags de preferencias en WorkspaceMember.
  */
@@ -208,4 +324,4 @@ async function sendTestWeeklyEmail(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getProfile, updateProfile, changePassword, updateAvatar, updatePreferences, sendTestWeeklyEmail }
+module.exports = { getProfile, updateProfile, changePassword, requestEmailChange, connectGoogle, disconnectGoogle, updateAvatar, updatePreferences, sendTestWeeklyEmail }

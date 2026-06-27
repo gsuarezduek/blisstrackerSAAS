@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { GoogleLogin } from '@react-oauth/google'
 import Navbar from '../components/Navbar'
 import AvatarLightbox from '../components/AvatarLightbox'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -160,6 +161,13 @@ export default function MyProfile() {
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMsg, setPwMsg] = useState({ text: '', error: false })
 
+  const [emailForm, setEmailForm] = useState({ newEmail: '', password: '' })
+  const [emailSaving, setEmailSaving] = useState(false)
+  const [emailMsg, setEmailMsg] = useState({ text: '', error: false })
+
+  const [googleBusy, setGoogleBusy] = useState(false)
+  const [googleMsg, setGoogleMsg] = useState({ text: '', error: false })
+
   const [avatars, setAvatars] = useState([])  // lista desde API: [{ id, filename, label }]
   const [avatarSaving, setAvatarSaving] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(null)
@@ -284,6 +292,52 @@ export default function MyProfile() {
       setPwMsg({ text: err.response?.data?.error || 'Error al cambiar la contraseña.', error: true })
     } finally {
       setPwSaving(false)
+    }
+  }
+
+  async function handleRequestEmailChange(e) {
+    e.preventDefault()
+    setEmailSaving(true)
+    setEmailMsg({ text: '', error: false })
+    try {
+      const { data } = await api.post('/profile/change-email', {
+        newEmail: emailForm.newEmail.trim(),
+        password: emailForm.password,
+      })
+      setEmailMsg({ text: data.message || 'Te enviamos un correo de confirmación.', error: false })
+      setEmailForm({ newEmail: '', password: '' })
+    } catch (err) {
+      setEmailMsg({ text: err.response?.data?.error || 'No se pudo solicitar el cambio de email.', error: true })
+    } finally {
+      setEmailSaving(false)
+    }
+  }
+
+  async function handleConnectGoogle(credential) {
+    setGoogleBusy(true)
+    setGoogleMsg({ text: '', error: false })
+    try {
+      await api.post('/profile/connect-google', { credential })
+      setProfile(p => ({ ...p, googleConnected: true }))
+      setGoogleMsg({ text: 'Cuenta de Google conectada. Ya podés iniciar sesión con Google.', error: false })
+    } catch (err) {
+      setGoogleMsg({ text: err.response?.data?.error || 'No se pudo conectar la cuenta de Google.', error: true })
+    } finally {
+      setGoogleBusy(false)
+    }
+  }
+
+  async function handleDisconnectGoogle() {
+    setGoogleBusy(true)
+    setGoogleMsg({ text: '', error: false })
+    try {
+      await api.delete('/profile/connect-google')
+      setProfile(p => ({ ...p, googleConnected: false }))
+      setGoogleMsg({ text: 'Cuenta de Google desconectada.', error: false })
+    } catch (err) {
+      setGoogleMsg({ text: err.response?.data?.error || 'No se pudo desconectar la cuenta de Google.', error: true })
+    } finally {
+      setGoogleBusy(false)
     }
   }
 
@@ -557,6 +611,97 @@ export default function MyProfile() {
               </button>
             </div>
           </form>
+        </div>
+
+        {/* Email de la cuenta */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Email de la cuenta</h2>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+            Email actual: <strong className="text-gray-600 dark:text-gray-300">{profile.email}</strong>. Te enviaremos un link de confirmación al nuevo correo antes de aplicar el cambio.
+          </p>
+          <form onSubmit={handleRequestEmailChange} className="space-y-3">
+            <Field label="Nuevo email">
+              <input
+                type="email"
+                required
+                value={emailForm.newEmail}
+                onChange={e => setEmailForm(f => ({ ...f, newEmail: e.target.value }))}
+                placeholder="nuevo@email.com"
+                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </Field>
+            <Field label="Contraseña actual">
+              <input
+                type="password"
+                required
+                value={emailForm.password}
+                onChange={e => setEmailForm(f => ({ ...f, password: e.target.value }))}
+                placeholder="••••••••"
+                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </Field>
+
+            {emailMsg.text && (
+              <p className={`text-sm rounded-lg px-3 py-2 ${
+                emailMsg.error
+                  ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                  : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+              }`}>
+                {emailMsg.text}
+              </p>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={emailSaving}
+                className="bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg px-5 py-2 transition-colors"
+              >
+                {emailSaving ? 'Enviando...' : 'Cambiar email'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Iniciar sesión con Google */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Iniciar sesión con Google</h2>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+            Conectá tu cuenta de Google para poder iniciar sesión con un clic. Funciona aunque el email de Google sea distinto a tu email primario.
+          </p>
+
+          {profile.googleConnected ? (
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="inline-flex items-center gap-2 text-sm font-medium text-green-700 dark:text-green-400">
+                <span className="w-2 h-2 rounded-full bg-green-500" /> Cuenta de Google conectada
+              </span>
+              <button
+                onClick={handleDisconnectGoogle}
+                disabled={googleBusy}
+                className="text-sm font-medium text-red-600 dark:text-red-400 hover:underline disabled:opacity-60"
+              >
+                {googleBusy ? 'Procesando...' : 'Desconectar'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex">
+              <GoogleLogin
+                onSuccess={({ credential }) => handleConnectGoogle(credential)}
+                onError={() => setGoogleMsg({ text: 'No se pudo conectar con Google.', error: true })}
+                useOneTap={false} text="continue_with" locale="es"
+              />
+            </div>
+          )}
+
+          {googleMsg.text && (
+            <p className={`mt-3 text-sm rounded-lg px-3 py-2 ${
+              googleMsg.error
+                ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+            }`}>
+              {googleMsg.text}
+            </p>
+          )}
         </div>
 
         {/* Personal data */}
