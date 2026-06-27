@@ -1,12 +1,12 @@
 const prisma = require('../lib/prisma')
 const { taskMins, tzOffsetStr } = require('../lib/timeMetrics')
 
-// Rango UTC [from, to] para un intervalo de días [startStr, endStr] (YYYY-MM-DD), en la TZ dada.
+// Filtro Prisma { gte, lte } para un intervalo de días [startStr, endStr] (YYYY-MM-DD), en la TZ dada.
 function utcRange(startStr, endStr, tz) {
   const off = tzOffsetStr(tz) // ej "-03:00"
   return {
-    fromUTC: new Date(`${startStr}T00:00:00.000${off}`),
-    toUTC: new Date(`${endStr}T23:59:59.999${off}`),
+    gte: new Date(`${startStr}T00:00:00.000${off}`),
+    lte: new Date(`${endStr}T23:59:59.999${off}`),
   }
 }
 
@@ -221,8 +221,8 @@ async function getUserProfile(req, res, next) {
     ])
 
     // Resumen de completadas: hoy / semana / mes (a la fecha), con minutos vía taskMins.
-    const { fromUTC: dayFrom } = utcRange(todayStr, todayStr, TZ)
-    const { fromUTC: weekFrom } = utcRange(weekStart, todayStr, TZ)
+    const { gte: dayFrom } = utcRange(todayStr, todayStr, TZ)
+    const { gte: weekFrom } = utcRange(weekStart, todayStr, TZ)
     const summary = { day: { count: 0, minutes: 0 }, week: { count: 0, minutes: 0 }, month: { count: 0, minutes: 0 } }
     for (const t of completedMonth) {
       const mins = taskMins(t)
