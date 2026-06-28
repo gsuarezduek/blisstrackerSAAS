@@ -7,6 +7,8 @@ const { getValidMetaToken }              = require('./metaTokenRefresh.service')
 const { fetchInstagramMetrics }          = require('./instagram.service')
 const { getValidTikTokToken }            = require('./tiktokTokenRefresh.service')
 const { fetchTikTokMetrics }             = require('./tiktok.service')
+const { getValidAccessToken }            = require('./tokenRefresh.service')
+const { fetchYouTubeMetrics }            = require('./youtube.service')
 const { getValidLinkedinToken }          = require('./linkedinTokenRefresh.service')
 const { fetchLinkedinMetrics }           = require('./linkedin.service')
 const { getValidFacebookToken }          = require('./metaTokenRefresh.service')
@@ -155,6 +157,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     instagramPrev,
     tiktokSnap,
     tiktokPrev,
+    youtubeSnap,
+    youtubePrev,
     linkedinSnap,
     linkedinPrev,
     facebookSnap,
@@ -230,6 +234,18 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     prisma.tikTokSnapshot.findFirst({
       where:   { projectId, workspaceId, month: prev },
       select:  { followersCount: true, engagementRate: true },
+    }),
+
+    // YouTube snapshots
+    prisma.youTubeSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: dataMonth },
+      select:  { subscriberCount: true, engagementRate: true, avgViews: true, monthViews: true,
+                 viewCountTotal: true, videosThisMonth: true, longsThisMonth: true,
+                 shortsThisMonth: true, videoCount: true, topVideos: true },
+    }),
+    prisma.youTubeSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: prev },
+      select:  { subscriberCount: true, engagementRate: true, viewCountTotal: true },
     }),
 
     // LinkedIn snapshots
@@ -623,6 +639,77 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     }
   }
 
+  // ── YouTube (con fallback a snapshot más reciente o datos en vivo) ────────────
+  function parseYtTopVideos(json) {
+    if (!json) return []
+    try { const v = JSON.parse(json); return Array.isArray(v) ? v : [] }
+    catch { return [] }
+  }
+  function buildYt(snap, prevSnap, fallbackMonth) {
+    const topVideos = parseYtTopVideos(snap.topVideos)
+    return {
+      subscriberCount:  snap.subscriberCount,
+      engagementRate:   snap.engagementRate,
+      avgViews:         snap.avgViews,
+      monthViews:       snap.monthViews,
+      videosThisMonth:  snap.videosThisMonth,
+      shortsThisMonth:  snap.shortsThisMonth,
+      longsThisMonth:   snap.longsThisMonth,
+      topVideos,
+      bestVideo:        topVideos[0] ?? null,
+      deltaSubscribers: prevSnap ? pct(snap.subscriberCount, prevSnap.subscriberCount) : null,
+      deltaViews:       (prevSnap?.viewCountTotal != null && snap.viewCountTotal != null)
+                          ? snap.viewCountTotal - prevSnap.viewCountTotal : null,
+      ...(fallbackMonth ? { _fallbackMonth: fallbackMonth } : {}),
+    }
+  }
+
+  let youtube = null
+  if (youtubeSnap) {
+    youtube = buildYt(youtubeSnap, youtubePrev)
+  } else {
+    // Fallback 1: snapshot más reciente disponible (cualquier mes)
+    const recentYt = await prisma.youTubeSnapshot.findFirst({
+      where:   { projectId, workspaceId },
+      orderBy: { month: 'desc' },
+      select:  { subscriberCount: true, engagementRate: true, avgViews: true, monthViews: true,
+                 viewCountTotal: true, videosThisMonth: true, longsThisMonth: true,
+                 shortsThisMonth: true, topVideos: true, month: true },
+    })
+    if (recentYt) {
+      const prevYt = await prisma.youTubeSnapshot.findFirst({
+        where:  { projectId, workspaceId, month: prevMonthStr(recentYt.month) },
+        select: { subscriberCount: true, viewCountTotal: true },
+      })
+      youtube = buildYt(recentYt, prevYt, recentYt.month)
+    } else {
+      // Fallback 2: datos en vivo de la API
+      const ytIntegration = integrations.find(i => i.type === 'google_youtube')
+      if (ytIntegration && wants('youtube')) {
+        try {
+          const token = await getValidAccessToken(ytIntegration)
+          const live  = await fetchYouTubeMetrics(token, null, ytIntegration.propertyId || null)
+          youtube = {
+            subscriberCount:  live.subscriberCount,
+            engagementRate:   live.engagementRate,
+            avgViews:         live.avgViews,
+            monthViews:       live.monthViews,
+            videosThisMonth:  live.videosThisMonth,
+            shortsThisMonth:  live.shortsThisMonth,
+            longsThisMonth:   live.longsThisMonth,
+            topVideos:        live.topVideos ?? [],
+            bestVideo:        live.bestVideo ?? null,
+            deltaSubscribers: null,
+            deltaViews:       null,
+            _fallbackMonth:   'live',
+          }
+        } catch (err) {
+          console.warn('[MonthlyReport] YouTube live fallback fallido:', err.message)
+        }
+      }
+    }
+  }
+
   // ── LinkedIn (con fallback a snapshot más reciente o datos en vivo) ──────────
   function parseLi(snap) {
     if (!snap) return null
@@ -882,7 +969,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Secciones (filtradas según enabledSections) ───────────────────────────────
   // Si el informe define secciones habilitadas, las demás se excluyen por completo
   // (no se guardan en el caché ni viajan al link público del cliente).
-  const allSections = { geo, analytics, evolution, instagram, tiktok, linkedin, facebook, seo, keywords, googleAds, metaAds, performance, tasks, competitors }
+  const allSections = { geo, analytics, evolution, instagram, tiktok, youtube, linkedin, facebook, seo, keywords, googleAds, metaAds, performance, tasks, competitors }
   const sections = {}
   for (const [key, val] of Object.entries(allSections)) {
     sections[key] = wants(key) ? val : null
@@ -903,7 +990,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     ? validCachedAnalysis
     : await generateAnalysis({ project, month: dataMonth,
         geo: sections.geo, analytics: sections.analytics, instagram: sections.instagram,
-        tiktok: sections.tiktok, linkedin: sections.linkedin, facebook: sections.facebook, keywords: sections.keywords,
+        tiktok: sections.tiktok, youtube: sections.youtube, linkedin: sections.linkedin, facebook: sections.facebook, keywords: sections.keywords,
         seo: sections.seo, performance: sections.performance, googleAds: sections.googleAds,
         metaAds: sections.metaAds, competitors: sections.competitors,
         workspaceId, objectives: objectivesResults, services })
@@ -924,13 +1011,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     analysisError:  analysis?._error ?? null,
     _analysisIsNew:  !validCachedAnalysis && !!analysis?.resumen,
     // No cachear si estamos usando datos en vivo (cambian a diario)
-    _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live' && linkedin?._fallbackMonth !== 'live' && facebook?._fallbackMonth !== 'live',
+    _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live' && youtube?._fallbackMonth !== 'live' && linkedin?._fallbackMonth !== 'live' && facebook?._fallbackMonth !== 'live',
   }
 }
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, linkedin, facebook, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = [], services = [] }) {
+async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, youtube, linkedin, facebook, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = [], services = [] }) {
   // Cumplimiento de objetivos (array calculado por computeObjectives)
   const fmtVal = (v, unit) => v == null ? '—' : (unit === '$' ? `$${v}` : unit === '%' ? `${v}%` : unit === 'pos' ? `#${v}` : `${v}`)
   const objCtx = (Array.isArray(objectives) ? objectives : [])
@@ -972,6 +1059,15 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
       seguidores:      tiktok.followersCount,
       deltaSeguidores: tiktok.deltaFollowers,
       engagement:      tiktok.engagementRate != null ? `${tiktok.engagementRate.toFixed(2)}%` : null,
+    } : null,
+    youtube: youtube ? {
+      suscriptores:      youtube.subscriberCount,
+      deltaSuscriptores: youtube.deltaSubscribers,
+      vistasDelMes:      youtube.monthViews,
+      videosNuevos:      youtube.videosThisMonth,
+      shorts:            youtube.shortsThisMonth,
+      videosLargos:      youtube.longsThisMonth,
+      engagement:        youtube.engagementRate != null ? `${youtube.engagementRate.toFixed(2)}%` : null,
     } : null,
     linkedin: linkedin ? {
       seguidores:       linkedin.followersCount,
@@ -1133,7 +1229,7 @@ function emptyAnalysis(error) {
 async function getAvailableSections(projectId, workspaceId) {
   const [
     integrations, project, analyticsSnap, pageSpeed, geoAudit, seoSnap,
-    keyword, igSnap, tkSnap, liSnap, fbSnap, metaAdsSnap, googleAdsSnap, competitor, objective,
+    keyword, igSnap, tkSnap, ytSnap, liSnap, fbSnap, metaAdsSnap, googleAdsSnap, competitor, objective,
   ] = await Promise.all([
     prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true, status: true } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true } }),
@@ -1144,6 +1240,7 @@ async function getAvailableSections(projectId, workspaceId) {
     prisma.trackedKeyword.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.instagramSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.tikTokSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
+    prisma.youTubeSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.linkedinSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.facebookSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.adsSnapshot.findFirst({ where: { projectId, workspaceId, type: 'meta_ads' }, select: { id: true } }),
@@ -1171,6 +1268,7 @@ async function getAvailableSections(projectId, workspaceId) {
     keywords:        build(has('google_search_console') || !!keyword,       'google_search_console'),
     instagram:       build(has('instagram')             || !!igSnap,        'instagram'),
     tiktok:          build(has('tiktok')                || !!tkSnap,        'tiktok'),
+    youtube:         build(has('google_youtube')        || !!ytSnap,        'google_youtube'),
     linkedin:        build(has('linkedin')              || !!liSnap,        'linkedin'),
     facebook:        build(has('facebook')              || !!fbSnap,        'facebook'),
     metaAds:         build(has('meta_ads')              || !!metaAdsSnap,   'meta_ads'),

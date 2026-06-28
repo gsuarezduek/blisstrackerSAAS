@@ -79,7 +79,7 @@ async function login(req, res, next) {
 
     if (slug) {
       // Login desde subdominio de workspace
-      const workspace = await prisma.workspace.findUnique({ where: { slug } })
+      const workspace = await prisma.workspace.findUnique({ where: { slug }, omit: { logoData: true, bannerData: true } })
       if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
 
       const member = await prisma.workspaceMember.findUnique({
@@ -276,7 +276,7 @@ async function googleLogin(req, res, next) {
     if (!user) return res.status(404).json({ error: 'No existe una cuenta con ese email de Google' })
 
     if (slug) {
-      const workspace = await prisma.workspace.findUnique({ where: { slug } })
+      const workspace = await prisma.workspace.findUnique({ where: { slug }, omit: { logoData: true, bannerData: true } })
       if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
 
       const member = await prisma.workspaceMember.findUnique({
@@ -321,7 +321,7 @@ async function switchWorkspace(req, res, next) {
 
     const [user, workspace] = await Promise.all([
       prisma.user.findUnique({ where: { id: req.user.userId } }),
-      prisma.workspace.findUnique({ where: { slug: targetSlug } }),
+      prisma.workspace.findUnique({ where: { slug: targetSlug }, omit: { logoData: true, bannerData: true } }),
     ])
 
     if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })

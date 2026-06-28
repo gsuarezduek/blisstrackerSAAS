@@ -55,6 +55,7 @@ const { captureAllSerpSnapshots } = require('./services/serpApi.service')
 const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.service')
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
 const { saveAllMonthlyTikTokSnapshots }    = require('./services/tiktokSnapshot.service')
+const { saveAllMonthlyYouTubeSnapshots }   = require('./services/youtubeSnapshot.service')
 const { saveAllMonthlyLinkedinSnapshots }  = require('./services/linkedinSnapshot.service')
 const { saveAllMonthlyFacebookSnapshots }  = require('./services/facebookSnapshot.service')
 const { saveAllSearchConsoleSnapshots }   = require('./services/searchConsoleSnapshot.service')
@@ -217,6 +218,7 @@ const MONTHLY_CHAIN = [
   ['KeywordRankings',    saveAllKeywordRankings],
   ['InstagramSnapshot',  saveAllMonthlyInstagramSnapshots],
   ['TikTokSnapshot',     saveAllMonthlyTikTokSnapshots],
+  ['YouTubeSnapshot',    saveAllMonthlyYouTubeSnapshots],
   ['LinkedinSnapshot',   saveAllMonthlyLinkedinSnapshots],
   ['FacebookSnapshot',   saveAllMonthlyFacebookSnapshots],
   ['AdsSnapshot',        saveAllAdsSnapshots],

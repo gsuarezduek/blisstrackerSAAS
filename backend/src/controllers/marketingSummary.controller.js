@@ -350,6 +350,55 @@ async function getTikTokSummary(req, res, next) {
 }
 
 /**
+ * GET /api/marketing/summary/youtube
+ * Snapshot de YouTube más reciente por proyecto, ordenado por suscriptores desc.
+ */
+async function getYouTubeSummary(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+
+    const currentMonth = todayString().slice(0, 7)
+    const monthStart   = `${currentMonth}-01`
+
+    const snapshots = await prisma.youTubeSnapshot.findMany({
+      where:   { workspaceId },
+      orderBy: { month: 'desc' },
+      include: { project: { select: { id: true, name: true } } },
+    })
+
+    const seen = new Set()
+    const result = []
+    for (const s of snapshots) {
+      if (seen.has(s.projectId)) continue
+      seen.add(s.projectId)
+      result.push({
+        projectId:       s.projectId,
+        projectName:     s.project.name,
+        month:           s.month,
+        followersCount:  s.subscriberCount,
+        engagementRate:  s.engagementRate  ?? null,
+        avgViews:        s.avgViews        ?? null,
+        videosThisMonth: s.videosThisMonth ?? null,
+        monthViews:      s.monthViews      ?? null,
+        newFollowers:    null,
+        lastDataDate:    `${s.month}-01`,
+      })
+    }
+
+    const newFollowersMap = await newFollowersByProject(prisma.youTubeFollowerLog, workspaceId, monthStart)
+    for (const r of result) {
+      const nf = newFollowersMap.get(r.projectId)
+      if (nf) { r.newFollowers = nf.last - nf.first; r.lastDataDate = nf.lastDate }
+    }
+
+    result.sort((a, b) => b.followersCount - a.followersCount)
+    res.json(result)
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * GET /api/marketing/summary/linkedin
  * Snapshot de LinkedIn más reciente por proyecto, ordenado por followersCount desc.
  */
@@ -548,6 +597,7 @@ module.exports = {
   getPerformanceSummary,
   getInstagramSummary,
   getTikTokSummary,
+  getYouTubeSummary,
   getLinkedinSummary,
   getFacebookSummary,
   getAdsSummary,

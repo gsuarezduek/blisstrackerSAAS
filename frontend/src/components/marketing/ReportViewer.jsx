@@ -340,6 +340,49 @@ function BestTikTokVideo({ video }) {
   )
 }
 
+// Mejor video del mes (YouTube)
+function BestYouTubeVideo({ video }) {
+  if (!video) return null
+  const inner = (
+    <div className="flex items-stretch gap-3">
+      <div className="relative w-28 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+        {video.coverUrl ? (
+          <img src={video.coverUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-red-500 to-red-700" />
+        )}
+        <div className="absolute top-1 left-1 text-base leading-none">🏆</div>
+        {video.isShort && <span className="absolute bottom-1 right-1 text-[8px] bg-black/70 text-white px-1 py-0.5 rounded-full font-semibold">SHORT</span>}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-semibold text-red-700 dark:text-red-300 uppercase tracking-wide">
+          Mejor video del mes
+        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-600 dark:text-gray-400 mt-1">
+          {video.viewCount    != null && <span>▶️ {fmt(video.viewCount)}</span>}
+          {video.likeCount    != null && <span>❤️ {fmt(video.likeCount)}</span>}
+          {video.commentCount != null && <span>💬 {fmt(video.commentCount)}</span>}
+        </div>
+        {video.title && (
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight mt-1">
+            {video.title}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="mt-4 rounded-xl border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10 p-3">
+      {video.url ? (
+        <a href={video.url} target="_blank" rel="noopener noreferrer" className="block hover:opacity-90 transition-opacity">
+          {inner}
+        </a>
+      ) : inner}
+    </div>
+  )
+}
+
 // Mejor post del mes (LinkedIn)
 function BestLinkedinPost({ post }) {
   if (!post) return null
@@ -810,7 +853,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   const contextSEO   = analysis?.contextSEO   || ''
 
   // Flags de disponibilidad por grupo
-  const hasRRSS   = !!(s.instagram || s.tiktok || s.linkedin || s.facebook)
+  const hasRRSS   = !!(s.instagram || s.tiktok || s.youtube || s.linkedin || s.facebook)
   const hasAds    = !!(s.metaAds || s.googleAds)
   const hasSeoGeo = !!(s.keywords || s.seo || s.geo || aiTrafficEntries)
   const hasSitio  = !!(s.analytics || evolutionPoints || s.performance)
@@ -828,6 +871,8 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       items.push({ label: 'Seguidores IG', value: fmt(s.instagram.followersCount), delta: s.instagram.deltaFollowers })
     } else if (s.tiktok) {
       items.push({ label: 'Seguidores TK', value: fmt(s.tiktok.followersCount), delta: s.tiktok.deltaFollowers })
+    } else if (s.youtube) {
+      items.push({ label: 'Suscriptores YT', value: fmt(s.youtube.subscriberCount), delta: s.youtube.deltaSubscribers })
     } else if (s.linkedin) {
       items.push({ label: 'Seguidores LI', value: fmt(s.linkedin.followersCount), delta: s.linkedin.deltaFollowers })
     } else if (s.facebook) {
@@ -1163,7 +1208,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       {hasRRSS && (
         <>
           <GroupHeader title="Redes Sociales" />
-          <div className={`grid gap-5 ${[s.instagram, s.tiktok, s.linkedin, s.facebook].filter(Boolean).length >= 2 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+          <div className={`grid gap-5 ${[s.instagram, s.tiktok, s.youtube, s.linkedin, s.facebook].filter(Boolean).length >= 2 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
             {s.instagram && (
               <SectionCard title="Instagram" icon={<SocialIcon network="instagram" className="w-5 h-5" />}>
                 <KpiGrid items={[
@@ -1204,6 +1249,29 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                     {s.tiktok._fallbackMonth === 'live'
                       ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
                       : `📅 Datos más recientes disponibles: ${monthLabel(s.tiktok._fallbackMonth)}`
+                    }
+                  </p>
+                )}
+              </SectionCard>
+            )}
+
+            {s.youtube && (
+              <SectionCard title="YouTube" icon={<SocialIcon network="youtube" className="w-5 h-5" />}>
+                <KpiGrid items={[
+                  { label: 'Suscriptores',  value: fmt(s.youtube.subscriberCount), delta: s.youtube.deltaSubscribers },
+                  { label: 'Vistas del mes', value: fmt(s.youtube.monthViews, 0) },
+                  { label: 'Videos / mes',  value: fmt(s.youtube.videosThisMonth) },
+                  { label: 'Engagement',   value: s.youtube.engagementRate != null ? `${s.youtube.engagementRate.toFixed(2)}%` : '—' },
+                  ...(s.youtube.shortsThisMonth != null || s.youtube.longsThisMonth != null
+                    ? [{ label: 'Largos / Shorts', value: `${s.youtube.longsThisMonth ?? 0} / ${s.youtube.shortsThisMonth ?? 0}` }] : []),
+                  ...(s.youtube.avgViews != null ? [{ label: 'Avg. views', value: fmt(s.youtube.avgViews, 0) }] : []),
+                ]} />
+                {s.youtube.bestVideo && <BestYouTubeVideo video={s.youtube.bestVideo} />}
+                {s.youtube._fallbackMonth && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
+                    {s.youtube._fallbackMonth === 'live'
+                      ? '⚡ Datos en tiempo real (aún no hay snapshot del mes anterior)'
+                      : `📅 Datos más recientes disponibles: ${monthLabel(s.youtube._fallbackMonth)}`
                     }
                   </p>
                 )}

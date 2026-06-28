@@ -15,11 +15,23 @@ const GOOGLE_COMBINED_SCOPES = [
 // (no requieren verificación de Google).
 const GOOGLE_IDENTITY_SCOPES = ['openid', 'email']
 
+// Scopes de DATOS por tipo (sin identidad) — son los que se persisten en la integración.
+const DATA_SCOPES = {
+  google_analytics:      GOOGLE_COMBINED_SCOPES,
+  google_search_console: GOOGLE_COMBINED_SCOPES,
+  google_ads:            ['https://www.googleapis.com/auth/adwords'],
+  // YouTube Data API v3 — lectura del canal del usuario (suscriptores, videos, vistas).
+  // youtube.readonly es un scope SENSIBLE: con la app OAuth publicada, agregarlo dispara
+  // la re-verificación de Google (mismo trámite ya hecho para analytics.readonly).
+  google_youtube:        ['https://www.googleapis.com/auth/youtube.readonly'],
+}
+
 // Scopes que se piden en el consent de OAuth (datos + identidad).
 const SCOPES = {
-  google_analytics:      [...GOOGLE_COMBINED_SCOPES, ...GOOGLE_IDENTITY_SCOPES],
-  google_ads:            ['https://www.googleapis.com/auth/adwords', ...GOOGLE_IDENTITY_SCOPES],
-  google_search_console: [...GOOGLE_COMBINED_SCOPES, ...GOOGLE_IDENTITY_SCOPES],
+  google_analytics:      [...DATA_SCOPES.google_analytics,      ...GOOGLE_IDENTITY_SCOPES],
+  google_ads:            [...DATA_SCOPES.google_ads,            ...GOOGLE_IDENTITY_SCOPES],
+  google_search_console: [...DATA_SCOPES.google_search_console, ...GOOGLE_IDENTITY_SCOPES],
+  google_youtube:        [...DATA_SCOPES.google_youtube,        ...GOOGLE_IDENTITY_SCOPES],
 }
 
 // Tipos que comparten tokens entre sí
@@ -64,7 +76,7 @@ async function getAuthUrl(req, res, next) {
   try {
     const { projectId, type } = req.query
     if (!projectId || !SCOPES[type]) {
-      return res.status(400).json({ error: 'projectId y type (google_analytics | google_ads | google_search_console) requeridos' })
+      return res.status(400).json({ error: 'projectId y type (google_analytics | google_ads | google_search_console | google_youtube) requeridos' })
     }
 
     const project = await prisma.project.findFirst({
@@ -221,7 +233,7 @@ async function handleCallback(req, res, next) {
     const baseData = {
       workspaceId,
       status:        'active',
-      scopes:        GOOGLE_COMBINED_SCOPES.join(' '),
+      scopes:        (DATA_SCOPES[type] || GOOGLE_COMBINED_SCOPES).join(' '),
       accessToken:   encAccessToken,
       refreshToken:  encRefreshToken,
       expiresAt,

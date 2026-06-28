@@ -21,8 +21,13 @@ async function resolveWorkspace(req, res, next) {
   }
 
   try {
+    // omit: NO traer los blobs pesados (logo/banner, hasta 5 MB c/u). Este query
+    // corre en CADA request autenticado; arrastrarlos disparaba el egress de
+    // Postgres. Quien necesita los bytes (serve de logo/banner) hace su propio
+    // select explícito.
     const workspace = await prisma.workspace.findUnique({
       where: { slug },
+      omit: { logoData: true, bannerData: true },
     })
 
     if (!workspace) {
