@@ -400,3 +400,9 @@ export function briefProgress(brief, answers = {}) {
   }).length
   return { answered, total: keys.length }
 }
+
+// Se considera "completo" con 80% o más de los campos respondidos (mismo criterio que la pill de la tarjeta).
+export function briefIsComplete(brief, answers = {}) {
+  const { answered, total } = briefProgress(brief, answers)
+  return total > 0 && answered / total >= 0.8
+}

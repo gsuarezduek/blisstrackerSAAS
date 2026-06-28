@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
-const { OAuth2Client } = require('google-auth-library')
+const jwt = require('jsonwebtoken')
 const prisma = require('../lib/prisma')
 const { resolveLegajoFields, coerceCustomValue } = require('../lib/legajoCatalog')
 const { sendEmailChangeVerification } = require('../services/email.service')
@@ -221,37 +221,20 @@ async function requestEmailChange(req, res, next) {
 }
 
 /**
- * POST /api/profile/connect-google
- * Body: { credential }  (ID token de Google Identity Services)
- * Vincula la cuenta de Google (su `sub`) al usuario autenticado.
+ * POST /api/profile/google-link-token
+ * Devuelve un token corto (5 min) que identifica al usuario, para vincular su
+ * cuenta de Google desde el popup servido en el dominio raíz (único origen
+ * registrado en Google). El popup lo presenta junto al credential de Google a
+ * POST /api/auth/connect-google, evitando depender de window.opener (COOP).
  */
-async function connectGoogle(req, res, next) {
+async function googleLinkToken(req, res, next) {
   try {
-    const { credential } = req.body
-    if (!credential) return res.status(400).json({ error: 'Token de Google requerido' })
-
-    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
-    const ticket = await client.verifyIdToken({
-      idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    })
-    const payload = ticket.getPayload()
-    if (!payload?.sub) return res.status(401).json({ error: 'Token de Google inválido' })
-
-    const inUse = await prisma.user.findUnique({
-      where: { googleId: payload.sub },
-      select: { id: true },
-    })
-    if (inUse && inUse.id !== req.user.userId) {
-      return res.status(409).json({ error: 'Esa cuenta de Google ya está vinculada a otro usuario' })
-    }
-
-    await prisma.user.update({
-      where: { id: req.user.userId },
-      data: { googleId: payload.sub },
-    })
-
-    res.json({ googleConnected: true, googleEmail: payload.email ?? null })
+    const linkToken = jwt.sign(
+      { userId: req.user.userId, purpose: 'google-link' },
+      process.env.JWT_SECRET,
+      { expiresIn: '5m' }
+    )
+    res.json({ linkToken })
   } catch (err) { next(err) }
 }
 
@@ -324,4 +307,4 @@ async function sendTestWeeklyEmail(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getProfile, updateProfile, changePassword, requestEmailChange, connectGoogle, disconnectGoogle, updateAvatar, updatePreferences, sendTestWeeklyEmail }
+module.exports = { getProfile, updateProfile, changePassword, requestEmailChange, googleLinkToken, disconnectGoogle, updateAvatar, updatePreferences, sendTestWeeklyEmail }

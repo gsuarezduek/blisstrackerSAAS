@@ -312,50 +312,51 @@ export default function MyProfile() {
     }
   }
 
-  async function handleConnectGoogle(credential) {
-    setGoogleBusy(true)
-    setGoogleMsg({ text: '', error: false })
-    try {
-      await api.post('/profile/connect-google', { credential })
-      setProfile(p => ({ ...p, googleConnected: true }))
-      setGoogleMsg({ text: 'Cuenta de Google conectada. Ya podés iniciar sesión con Google.', error: false })
-    } catch (err) {
-      setGoogleMsg({ text: err.response?.data?.error || 'No se pudo conectar la cuenta de Google.', error: true })
-    } finally {
-      setGoogleBusy(false)
-    }
-  }
-
   // El botón de Google (GIS) solo funciona en el origen registrado en Google Cloud
   // (el dominio raíz). Como el perfil corre en el subdominio del workspace, abrimos
-  // un popup a /oauth servido desde la raíz (mismo patrón que el login), que nos
-  // devuelve el credential por postMessage. En localhost el origen es único, así
-  // que el popup se abre en el mismo origen.
-  function connectGoogleViaPopup() {
+  // un popup a /oauth servido desde la raíz. El popup hace la vinculación contra el
+  // backend usando un token corto (no dependemos de window.opener, que COOP corta
+  // entre subdominios distintos). Acá detectamos el cierre del popup y refrescamos.
+  async function connectGoogleViaPopup() {
     setGoogleMsg({ text: '', error: false })
+    setGoogleBusy(true)
+
+    let linkToken
+    try {
+      const { data } = await api.post('/profile/google-link-token')
+      linkToken = data.linkToken
+    } catch {
+      setGoogleBusy(false)
+      setGoogleMsg({ text: 'No se pudo iniciar la conexión. Intentá de nuevo.', error: true })
+      return
+    }
+
     const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
     const onAppDomain = window.location.hostname === appDomain || window.location.hostname.endsWith(`.${appDomain}`)
-    const rootOrigin = `https://${appDomain}`
-    const oauthUrl = onAppDomain ? `${rootOrigin}/oauth` : '/oauth'
+    const base = onAppDomain ? `https://${appDomain}` : ''
+    const oauthUrl = `${base}/oauth?link=${encodeURIComponent(linkToken)}`
 
     const popup = window.open(oauthUrl, 'bliss-google-connect', 'width=500,height=620')
     if (!popup) {
+      setGoogleBusy(false)
       setGoogleMsg({ text: 'Tu navegador bloqueó la ventana emergente. Permitila e intentá de nuevo.', error: true })
       return
     }
 
-    function onMessage(e) {
-      // Solo aceptamos mensajes del origen del popup (raíz en prod, mismo origen en dev).
-      if (e.origin !== rootOrigin && e.origin !== window.location.origin) return
-      if (e.data?.type === 'GOOGLE_CREDENTIAL') {
-        window.removeEventListener('message', onMessage)
-        handleConnectGoogle(e.data.credential)
-      } else if (e.data?.type === 'GOOGLE_AUTH_ERROR') {
-        window.removeEventListener('message', onMessage)
-        setGoogleMsg({ text: e.data.error || 'No se pudo conectar con Google.', error: true })
-      }
-    }
-    window.addEventListener('message', onMessage)
+    const timer = setInterval(async () => {
+      if (!popup.closed) return
+      clearInterval(timer)
+      try {
+        const { data } = await api.get('/profile')
+        if (data.googleConnected) {
+          setProfile(p => ({ ...p, googleConnected: true }))
+          setGoogleMsg({ text: 'Cuenta de Google conectada. Ya podés iniciar sesión con Google.', error: false })
+        } else {
+          setGoogleMsg({ text: 'No se completó la conexión con Google.', error: false })
+        }
+      } catch { /* ignore */ }
+      finally { setGoogleBusy(false) }
+    }, 800)
   }
 
   async function handleDisconnectGoogle() {

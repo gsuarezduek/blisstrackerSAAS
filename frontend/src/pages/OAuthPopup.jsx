@@ -3,46 +3,75 @@
  * Siempre se sirve desde el dominio raíz (blisstracker.app), que es
  * el único origen registrado en Google Cloud Console.
  *
- * Flujo:
- *   1. Login2 abre window.open('blisstracker.app/oauth?workspace=slug')
- *   2. Esta página muestra el botón de Google y ejecuta el Sign-In
- *   3. Obtiene el ID token → llama al backend con X-Workspace: slug
- *   4. Recibe el JWT → postMessage al opener → cierra el popup
+ * Dos modos:
+ *  - Login (legacy): devuelve el ID token al opener por postMessage.
+ *  - Vincular cuenta (?link=<token>): hace la llamada al backend directamente
+ *    (POST /auth/connect-google con { linkToken, credential }). No depende de
+ *    window.opener — que COOP puede cortar entre subdominios distintos.
  */
+import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import axios from 'axios'
 import { GoogleLogin } from '@react-oauth/google'
 
 export default function OAuthPopup() {
+  const [params] = useSearchParams()
+  const linkToken = params.get('link')
+  const [status, setStatus] = useState('') // '' | 'ok' | 'err'
+  const [errMsg, setErrMsg] = useState('')
 
-  function handleSuccess({ credential }) {
-    // Devuelve el credential al opener — es quien tiene el X-Workspace correcto
-    window.opener?.postMessage(
-      { type: 'GOOGLE_CREDENTIAL', credential },
-      '*'
-    )
+  async function handleSuccess({ credential }) {
+    if (linkToken) {
+      try {
+        await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/connect-google`, { linkToken, credential })
+        setStatus('ok')
+        setTimeout(() => window.close(), 1200)
+      } catch (err) {
+        setStatus('err')
+        setErrMsg(err.response?.data?.error || 'No se pudo conectar la cuenta de Google.')
+      }
+      return
+    }
+    // Modo login: devolver el credential al opener (es quien tiene el X-Workspace correcto)
+    window.opener?.postMessage({ type: 'GOOGLE_CREDENTIAL', credential }, '*')
     window.close()
   }
 
   function handleError() {
-    window.opener?.postMessage(
-      { type: 'GOOGLE_AUTH_ERROR', error: 'No se pudo iniciar sesión con Google' },
-      '*'
-    )
+    if (linkToken) {
+      setStatus('err')
+      setErrMsg('No se pudo iniciar sesión con Google.')
+      return
+    }
+    window.opener?.postMessage({ type: 'GOOGLE_AUTH_ERROR', error: 'No se pudo iniciar sesión con Google' }, '*')
     window.close()
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-gray-900 gap-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-gray-900 gap-6 px-6 text-center">
       <img src="/blisstracker_logo.svg" alt="BlissTracker" className="w-12 h-12" />
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        Iniciando sesión con Google…
-      </p>
-      <GoogleLogin
-        onSuccess={handleSuccess}
-        onError={handleError}
-        useOneTap={false}
-        text="continue_with"
-        locale="es"
-      />
+
+      {status === 'ok' ? (
+        <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+          ✅ Cuenta de Google conectada. Podés cerrar esta ventana.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {linkToken ? 'Elegí la cuenta de Google a conectar' : 'Iniciando sesión con Google…'}
+          </p>
+          <GoogleLogin
+            onSuccess={handleSuccess}
+            onError={handleError}
+            useOneTap={false}
+            text="continue_with"
+            locale="es"
+          />
+          {status === 'err' && (
+            <p className="text-sm text-red-600 dark:text-red-400 max-w-xs">{errMsg}</p>
+          )}
+        </>
+      )}
     </div>
   )
 }

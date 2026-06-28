@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import api from '../../api/client'
-import { BRIEFS, briefByKey, briefProgress } from './briefCatalog'
+import { BRIEFS, briefByKey, briefProgress, briefIsComplete } from './briefCatalog'
+import { linkify } from '../../utils/linkify'
 
 // Tarjeta de un brief en la grilla.
 function BriefCard({ brief, answers, onOpen }) {
@@ -50,6 +51,75 @@ function BriefCard({ brief, answers, onOpen }) {
         </div>
       </div>
     </button>
+  )
+}
+
+// Vista de lectura amigable de un brief: muestra solo las secciones/campos con respuesta.
+function BriefView({ brief, answers, canEdit, onBack, onEdit }) {
+  const { answered, total } = briefProgress(brief, answers)
+
+  // Secciones que tienen al menos un campo respondido (sin huecos vacíos).
+  const sections = brief.sections
+    .map(section => ({
+      title: section.title,
+      fields: section.fields.filter(f => {
+        const v = answers[f.k]
+        return v != null && String(v).trim() !== ''
+      }),
+    }))
+    .filter(section => section.fields.length > 0)
+
+  return (
+    <div className="space-y-5">
+      {/* Cabecera */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors mb-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
+            </svg>
+            Todos los briefs
+          </button>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{brief.title}</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{brief.intro}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            {answered}/{total} campos completados{brief.estimate ? ` · ⏱ ${brief.estimate}` : ''}
+          </p>
+        </div>
+
+        {canEdit && (
+          <button
+            onClick={onEdit}
+            className="flex-shrink-0 flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+            </svg>
+            Editar
+          </button>
+        )}
+      </div>
+
+      {/* Secciones (solo las que tienen contenido) */}
+      {sections.map(section => (
+        <div key={section.title} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">{section.title}</p>
+          <div className="space-y-4">
+            {section.fields.map(f => (
+              <div key={f.k}>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{f.q}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-words leading-relaxed">
+                  {linkify(answers[f.k])}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -234,6 +304,7 @@ export default function ProjectBriefs({ projectId, canEdit }) {
   const [activeKeys, setActiveKeys]   = useState([])     // briefs con fila en DB
   const [loading, setLoading] = useState(true)
   const [openKey, setOpenKey] = useState(null)
+  const [mode, setMode]       = useState('view')         // 'view' (lectura amigable) | 'edit' (formulario)
   const [adding, setAdding]   = useState(false)          // menú "Agregar brief" abierto
   const [addingKey, setAddingKey] = useState(null)       // alta en curso
   const [addError, setAddError]   = useState('')
@@ -260,6 +331,13 @@ export default function ProjectBriefs({ projectId, canEdit }) {
     setActiveKeys(prev => (prev.includes(type) ? prev : [...prev, type]))
   }
 
+  // Al abrir un brief: si ya está completo se muestra la vista de lectura; si no, el editor.
+  function handleOpen(brief) {
+    const complete = briefIsComplete(brief, answersByType[brief.key] || {})
+    setMode(complete ? 'view' : 'edit')
+    setOpenKey(brief.key)
+  }
+
   function handleDeleted(type) {
     setAnswersByType(prev => {
       const next = { ...prev }
@@ -283,6 +361,7 @@ export default function ProjectBriefs({ projectId, canEdit }) {
       const { data } = await api.put(`/projects/${projectId}/briefs/${key}`, { answers: {} })
       handleSaved(key, data.brief.answers || {})
       setAdding(false)
+      setMode('edit')   // brief recién agregado: arranca vacío, directo al formulario
       setOpenKey(key)
     } catch (e) {
       setAddError(e.response?.data?.error || 'No se pudo agregar el brief')
@@ -298,13 +377,29 @@ export default function ProjectBriefs({ projectId, canEdit }) {
   const openBrief = openKey ? briefByKey(openKey) : null
 
   if (openBrief) {
+    if (mode === 'view') {
+      return (
+        <BriefView
+          brief={openBrief}
+          answers={answersByType[openKey] || {}}
+          canEdit={canEdit}
+          onBack={() => setOpenKey(null)}
+          onEdit={() => setMode('edit')}
+        />
+      )
+    }
     return (
       <BriefEditor
         projectId={projectId}
         brief={openBrief}
         initialAnswers={answersByType[openKey] || {}}
         canEdit={canEdit}
-        onBack={() => setOpenKey(null)}
+        // Si el brief tiene contenido, "volver" lleva a la vista de lectura; si está vacío, a la grilla.
+        onBack={() =>
+          briefIsComplete(openBrief, answersByType[openKey] || {})
+            ? setMode('view')
+            : setOpenKey(null)
+        }
         onSaved={handleSaved}
         onDeleted={handleDeleted}
       />
@@ -356,7 +451,7 @@ export default function ProjectBriefs({ projectId, canEdit }) {
             key={brief.key}
             brief={brief}
             answers={answersByType[brief.key] || {}}
-            onOpen={() => setOpenKey(brief.key)}
+            onOpen={() => handleOpen(brief)}
           />
         ))}
       </div>

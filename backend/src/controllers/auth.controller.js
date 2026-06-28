@@ -247,6 +247,44 @@ async function verifyEmailChange(req, res, next) {
 }
 
 /**
+ * POST /api/auth/connect-google
+ * Body: { linkToken, credential }
+ * Vincula la cuenta de Google al usuario identificado por el linkToken (emitido
+ * por POST /api/profile/google-link-token). Público: lo invoca el popup servido
+ * desde el dominio raíz, que no tiene la sesión del subdominio. El linkToken
+ * (JWT corto, purpose 'google-link') es la credencial.
+ */
+async function connectGoogleWithToken(req, res, next) {
+  try {
+    const { linkToken, credential } = req.body
+    if (!linkToken || !credential) return res.status(400).json({ error: 'Datos incompletos' })
+
+    let claims
+    try {
+      claims = jwt.verify(linkToken, process.env.JWT_SECRET)
+    } catch {
+      return res.status(401).json({ error: 'El enlace de conexión expiró. Volvé a intentar.' })
+    }
+    if (claims.purpose !== 'google-link' || !claims.userId) {
+      return res.status(401).json({ error: 'Enlace de conexión inválido' })
+    }
+
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+    const ticket = await client.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID })
+    const gp = ticket.getPayload()
+    if (!gp?.sub) return res.status(401).json({ error: 'Token de Google inválido' })
+
+    const inUse = await prisma.user.findUnique({ where: { googleId: gp.sub }, select: { id: true } })
+    if (inUse && inUse.id !== claims.userId) {
+      return res.status(409).json({ error: 'Esa cuenta de Google ya está vinculada a otro usuario' })
+    }
+
+    await prisma.user.update({ where: { id: claims.userId }, data: { googleId: gp.sub } })
+    res.json({ googleConnected: true })
+  } catch (err) { next(err) }
+}
+
+/**
  * POST /api/auth/google
  * Header X-Workspace opcional — mismo comportamiento que login.
  */
@@ -370,4 +408,4 @@ function logout(req, res) {
   res.json({ ok: true })
 }
 
-module.exports = { login, me, forgotPassword, resetPassword, verifyEmailChange, googleLogin, switchWorkspace, recordLogin, logout }
+module.exports = { login, me, forgotPassword, resetPassword, verifyEmailChange, connectGoogleWithToken, googleLogin, switchWorkspace, recordLogin, logout }

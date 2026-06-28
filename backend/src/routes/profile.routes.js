@@ -1,5 +1,5 @@
 const router = require('express').Router()
-const { getProfile, updateProfile, changePassword, requestEmailChange, connectGoogle, disconnectGoogle, updateAvatar, updatePreferences, sendTestWeeklyEmail } = require('../controllers/profile.controller')
+const { getProfile, updateProfile, changePassword, requestEmailChange, googleLinkToken, disconnectGoogle, updateAvatar, updatePreferences, sendTestWeeklyEmail } = require('../controllers/profile.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 
@@ -13,7 +13,7 @@ router.patch('/preferences',        updatePreferences)
 router.post('/weekly-email/send',   sendTestWeeklyEmail)
 router.post('/change-password',     changePassword)
 router.post('/change-email',        requestEmailChange)
-router.post('/connect-google',      connectGoogle)
+router.post('/google-link-token',   googleLinkToken)
 router.delete('/connect-google',    disconnectGoogle)
 
 module.exports = router
