@@ -158,11 +158,12 @@ function metricDetailAt(metric, period, autoData) {
   return autoData?.[metric.autoKey]?.[period] ?? null
 }
 
-// Badge "Automático" reutilizable.
+// Badge "Automático" reutilizable — solo el rayo (el icono ya comunica que es automático).
 function AutoBadge({ className = '' }) {
   return (
-    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 ${className}`}>
-      ⚡ Auto
+    <span title="Dato automático"
+      className={`inline-flex items-center justify-center w-4 h-4 rounded text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 ${className}`}>
+      ⚡
     </span>
   )
 }
@@ -845,17 +846,7 @@ function ScorecardTable({
               Métrica
             </th>
 
-            {/* En semanal mantenemos columnas separadas; en mensual se fusionan dentro de la columna métrica */}
-            {isWeekly && (
-              <>
-                <th className="px-2 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-center min-w-[72px]">
-                  Resp.
-                </th>
-                <th className="px-3 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 text-right min-w-[58px]">
-                  Meta
-                </th>
-              </>
-            )}
+            {/* Meta y responsable van apilados dentro de la columna métrica (semanal y mensual) */}
 
             {/* Columnas de período */}
             {periods.map(p => (
@@ -896,69 +887,34 @@ function ScorecardTable({
 
             return (
               <tr key={metric.id} className="group hover:bg-gray-50/50 dark:hover:bg-gray-700/20">
-                {/* Métrica sticky — en mensual lleva nombre + meta + responsable apilados */}
+                {/* Métrica sticky — nombre + meta + responsable apilados (semanal y mensual) */}
                 <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20 px-4 py-2 transition-colors align-top">
-                  {isWeekly ? (
+                  <div className="flex flex-col gap-1 py-1">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{metric.name}</span>
+                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight">{metric.name}</span>
                       {isAuto && <AutoBadge />}
                     </span>
-                  ) : (
-                    <div className="flex flex-col gap-1 py-1">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight">{metric.name}</span>
-                        {isAuto && <AutoBadge />}
-                      </span>
-                      {hasGoal && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-medium">Meta</span>
-                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                            {goalDisplay(metric)}
-                          </span>
-                        </div>
-                      )}
-                      {isAuto ? (
-                        <span className="text-[11px] text-indigo-500 dark:text-indigo-300 font-medium">Calculado por el sistema</span>
-                      ) : owner ? (
-                        <div className="flex items-center gap-1.5">
-                          <img src={avatarUrl(owner.avatar)} alt={owner.name}
-                            className="w-4 h-4 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{owner.name}</span>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-gray-300 dark:text-gray-600 italic">Sin responsable</span>
-                      )}
-                    </div>
-                  )}
-                </td>
-
-                {/* En semanal: columnas separadas de Responsable y Meta */}
-                {isWeekly && (
-                  <>
-                    <td className="px-2 py-2 text-center">
-                      {isAuto ? (
-                        <span className="text-[10px] text-indigo-500 dark:text-indigo-300 font-medium">Sistema</span>
-                      ) : owner ? (
-                        <div className="flex items-center justify-center gap-1">
-                          <img src={avatarUrl(owner.avatar)} alt={owner.name}
-                            className="w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
-                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[44px] hidden md:inline">{owner.name.split(' ')[0]}</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {hasGoal ? (
-                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                    {hasGoal && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-medium">Meta</span>
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                           {goalDisplay(metric)}
                         </span>
-                      ) : (
-                        <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
-                      )}
-                    </td>
-                  </>
-                )}
+                      </div>
+                    )}
+                    {isAuto ? (
+                      <span className="text-[11px] text-indigo-500 dark:text-indigo-300 font-medium">Calculado por el sistema</span>
+                    ) : owner ? (
+                      <div className="flex items-center gap-1.5">
+                        <img src={avatarUrl(owner.avatar)} alt={owner.name}
+                          className="w-4 h-4 rounded-full object-cover border border-gray-200 dark:border-gray-600 shrink-0" />
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{owner.name}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-gray-300 dark:text-gray-600 italic">Sin responsable</span>
+                    )}
+                  </div>
+                </td>
 
                 {/* Celdas de período */}
                 {periods.map(period => (
