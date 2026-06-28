@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
+import SocialIcon from './SocialIcon'
 
 // Configuración por plataforma — UI label + URL externa + accent color + handle prefix
 const PLATFORMS = {
@@ -174,7 +175,7 @@ function CompetitorCard({ projectId, c, onChanged }) {
                 target="_blank" rel="noopener noreferrer"
                 className={`font-semibold text-gray-900 dark:text-white truncate block ${cfg.accentText}`}
               >
-                <span className="mr-1 text-xs">{cfg.icon}</span>
+                <SocialIcon network={c.platform} className="inline-block w-3.5 h-3.5 mr-1 align-text-bottom" />
                 {cfg.handle(c.username)}
               </a>
               {c.displayName && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.displayName}</p>}
@@ -360,7 +361,8 @@ export default function CompetitorsTab({ projectId, onSelectProject }) {
               onClick={() => setFilter(k)}
               className={`px-3 py-1 text-xs rounded-lg transition-colors ${filter === k ? 'bg-gray-700 text-white dark:bg-gray-200 dark:text-gray-900' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
             >
-              {PLATFORMS[k].icon} {PLATFORMS[k].label} ({counts[k]})
+              <SocialIcon network={k} className="inline-block w-3.5 h-3.5 mr-1 align-text-bottom" />
+              {PLATFORMS[k].label} ({counts[k]})
             </button>
           ))}
         </div>

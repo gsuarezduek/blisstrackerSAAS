@@ -9,10 +9,17 @@ const GOOGLE_COMBINED_SCOPES = [
   'https://www.googleapis.com/auth/webmasters.readonly',
 ]
 
+// Scopes de identidad: pedimos openid+email SOLO para recibir un id_token y saber
+// QUÉ cuenta de Google autorizó. No se persisten como scopes de la integración;
+// sirven para scopear la propagación de tokens por cuenta. No son sensibles
+// (no requieren verificación de Google).
+const GOOGLE_IDENTITY_SCOPES = ['openid', 'email']
+
+// Scopes que se piden en el consent de OAuth (datos + identidad).
 const SCOPES = {
-  google_analytics:      GOOGLE_COMBINED_SCOPES,
-  google_ads:            ['https://www.googleapis.com/auth/adwords'],
-  google_search_console: GOOGLE_COMBINED_SCOPES,
+  google_analytics:      [...GOOGLE_COMBINED_SCOPES, ...GOOGLE_IDENTITY_SCOPES],
+  google_ads:            ['https://www.googleapis.com/auth/adwords', ...GOOGLE_IDENTITY_SCOPES],
+  google_search_console: [...GOOGLE_COMBINED_SCOPES, ...GOOGLE_IDENTITY_SCOPES],
 }
 
 // Tipos que comparten tokens entre sí
@@ -141,6 +148,8 @@ async function connectExisting(req, res, next) {
         refreshToken: source.refreshToken,
         expiresAt:    source.expiresAt,
         scopes:       source.scopes,
+        accountId:    source.accountId,
+        accountEmail: source.accountEmail,
         connectedById: req.user.userId,
         connectedAt:  new Date(),
       },
@@ -153,6 +162,8 @@ async function connectExisting(req, res, next) {
         refreshToken: source.refreshToken,
         expiresAt:    source.expiresAt,
         scopes:       source.scopes,
+        accountId:    source.accountId,
+        accountEmail: source.accountEmail,
         connectedById: req.user.userId,
         connectedAt:  new Date(),
         ...rememberedFieldsFor(parseIntegrationDefaults(project.integrationDefaults), type),
@@ -201,6 +212,12 @@ async function handleCallback(req, res, next) {
     const encRefreshToken = tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined
     const expiresAt       = tokens.expiry_date   ? new Date(tokens.expiry_date)  : null
 
+    // Identidad de la cuenta de Google que autorizó (del id_token recibido en el
+    // intercambio directo con Google sobre TLS — no requiere verificar firma).
+    const idPayload   = tokens.id_token ? (jwt.decode(tokens.id_token) || {}) : {}
+    const accountId   = idPayload.sub   || null
+    const accountEmail = idPayload.email || null
+
     const baseData = {
       workspaceId,
       status:        'active',
@@ -208,6 +225,8 @@ async function handleCallback(req, res, next) {
       accessToken:   encAccessToken,
       refreshToken:  encRefreshToken,
       expiresAt,
+      accountId,
+      accountEmail,
       connectedById: userId,
       connectedAt:   new Date(),
     }
@@ -234,24 +253,29 @@ async function handleCallback(req, res, next) {
       })
     }
 
-    // Propagar el nuevo refresh_token a todos los proyectos del workspace que comparten ESTE token.
+    // Propagar el nuevo refresh_token a los proyectos del workspace que comparten ESTE token.
     // Evita que otros proyectos queden con un refresh token viejo (→ invalid_grant) tras reconectar uno.
     // `typesToSave` es exactamente el grupo que comparte el mismo token/scope:
     //   - GA4/GSC comparten una sola auth (GOOGLE_LINKED_TYPES).
     //   - google_ads usa el scope `adwords` por separado, pero entre proyectos con google_ads
     //     comparten el refresh token del mismo usuario de Google → se propaga solo a otros google_ads.
-    if (encRefreshToken) {
+    // IMPORTANTE: se scopea por `accountId` (cuenta de Google). Con 2 cuentas distintas en el
+    // mismo workspace, reconectar una NO pisa el token de la otra. Si no sabemos la cuenta
+    // (sin id_token), NO propagamos (mejor no propagar que pisar la cuenta equivocada).
+    if (encRefreshToken && accountId) {
       await prisma.projectIntegration.updateMany({
         where: {
           workspaceId,
           type:        { in: typesToSave },
           NOT:         { projectId },          // no pisar el que acabamos de guardar
           refreshToken: { not: null },
+          accountId,                           // solo filas de la MISMA cuenta de Google
         },
         data: {
           accessToken:  encAccessToken,
           refreshToken: encRefreshToken,
           expiresAt,
+          accountEmail,
           status:       'active',              // reactiva los que estaban expired
         },
       })

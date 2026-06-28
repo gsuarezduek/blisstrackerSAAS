@@ -951,6 +951,12 @@ model ProjectIntegration {
   expiresAt    DateTime?
   scopes       String    @default("")
 
+  // Identidad de la cuenta de Google que autorizó (sub del id_token; email como apoyo).
+  // Permite scopear la propagación de tokens POR CUENTA: con 2 cuentas de Google
+  // distintas en el mismo workspace, reconectar una NO pisa el token de la otra.
+  accountId    String? // sub estable del id_token de Google
+  accountEmail String? // email de la cuenta autorizada (informativo/UI)
+
   connectedById Int?
   connectedAt   DateTime @default(now())
   createdAt     DateTime @default(now())
@@ -962,6 +968,7 @@ model ProjectIntegration {
   @@unique([projectId, type])
   @@index([workspaceId])
   @@index([projectId])
+  @@index([workspaceId, type, accountId])
 }
 
 // ─── AVATARES ─────────────────────────────────────────────────────────────────
