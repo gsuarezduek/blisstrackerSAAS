@@ -1510,7 +1510,8 @@ function SectionStorage() {
       const { data: res } = await api.post('/superadmin/storage/cleanup-orphan-images', { olderThanDays: 1 })
       window.alert(
         `Eliminadas ${res.deleted} imagen(es).` +
-        (res.vacuumed ? ' Espacio liberado (VACUUM ejecutado).' : '')
+        (res.r2Deleted ? ` ${res.r2Deleted} borradas del bucket (R2).` : '') +
+        (res.vacuumed ? ' Espacio de la DB liberado (VACUUM ejecutado).' : '')
       )
       await load()
     } catch (err) {
@@ -1549,6 +1550,25 @@ function SectionStorage() {
           valueColor={socialImages.orphan.count > 0 ? 'text-amber-600 dark:text-amber-400' : undefined}
         />
       </div>
+
+      {/* Ubicación de los blobs: object storage (R2) vs DB legacy */}
+      {socialImages.location && (
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+          <span>
+            En object storage (R2):{' '}
+            <b className="text-gray-700 dark:text-gray-300">{socialImages.location.r2.count.toLocaleString()}</b>{' '}
+            ({fmtBytes(socialImages.location.r2.bytes)})
+          </span>
+          <span>
+            En la base de datos (legacy):{' '}
+            <b className={socialImages.location.db.count > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'}>
+              {socialImages.location.db.count.toLocaleString()}
+            </b>{' '}
+            ({fmtBytes(socialImages.location.db.bytes)})
+            {socialImages.location.db.count > 0 && ' — pendientes de migrar'}
+          </span>
+        </div>
+      )}
 
       {/* Limpieza de huérfanas */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">

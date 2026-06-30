@@ -1,5 +1,6 @@
 const axios = require('axios')
 const prisma = require('../lib/prisma')
+const objectStorage = require('./objectStorage.service')
 
 // Las URLs de imágenes de los CDN de Instagram / Facebook / TikTok vienen firmadas
 // y vencen (horas/días). Para que los top posts guardados en snapshots e informes
@@ -24,9 +25,10 @@ function publicBase() {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-/** True si la URL ya apunta a nuestro propio cache (idempotencia). */
+/** True si la URL ya apunta a nuestro cache (endpoint propio o bucket público). */
 function isCachedUrl(url) {
-  return typeof url === 'string' && url.includes('/api/social-image/')
+  if (typeof url !== 'string') return false
+  return url.includes('/api/social-image/') || objectStorage.isPublicUrl(url)
 }
 
 /**
@@ -58,8 +60,20 @@ async function cacheSocialImage(url, workspaceId) {
       const buffer = Buffer.from(resp.data)
       if (buffer.length === 0 || buffer.length > MAX_BYTES) return url
 
+      // Con object storage configurado: subir a R2 y guardar solo la key (sin
+      // bytes en DB). Devolvemos la URL pública del CDN directo (sin hop por
+      // nuestro backend). Sin configurar: legacy → bytes en DB + endpoint propio.
+      if (objectStorage.isConfigured()) {
+        const { key, url: publicCdnUrl, size } = await objectStorage.putObject(buffer, mimeType, { prefix: 'social' })
+        await prisma.socialImage.create({
+          data: { workspaceId, sourceUrl: url, objectKey: key, sizeBytes: size, mimeType },
+          select: { id: true },
+        })
+        return publicCdnUrl
+      }
+
       const row = await prisma.socialImage.create({
-        data: { workspaceId, sourceUrl: url, imageData: buffer, mimeType },
+        data: { workspaceId, sourceUrl: url, imageData: buffer, sizeBytes: buffer.length, mimeType },
         select: { id: true },
       })
 

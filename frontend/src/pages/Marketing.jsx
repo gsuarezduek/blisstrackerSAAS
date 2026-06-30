@@ -60,6 +60,7 @@ const NAV = [
       { id: 'meta-ads',     label: '📘 Meta Ads' },
       { id: 'google-ads',   label: '🔍 Google Ads' },
       { id: 'linkedin-ads', label: '💼 LinkedIn Ads', soon: true },
+      { id: 'tiktok-ads',   label: '🎵 TikTok Ads',   soon: true },
     ],
   },
   {

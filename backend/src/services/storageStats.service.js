@@ -14,6 +14,7 @@
  * storage, esta detección se reutiliza tal cual; solo cambia el borrado físico.
  */
 const prisma = require('../lib/prisma')
+const objectStorage = require('./objectStorage.service')
 
 // Fuentes que referencian SocialImage por su URL pública. Cada entrada es
 // { model: <nombre del modelo Prisma>, field: <columna JSON/string> }.
@@ -24,8 +25,8 @@ const IMAGE_REF_SOURCES = [
   { model: 'facebookSnapshot',   field: 'topPosts' },
   { model: 'linkedinSnapshot',   field: 'topPosts' },
   { model: 'competitorSnapshot', field: 'topPosts' },
-  { model: 'tiktokSnapshot',     field: 'topVideos' },
-  { model: 'youtubeSnapshot',    field: 'topVideos' },
+  { model: 'tikTokSnapshot',     field: 'topVideos' },
+  { model: 'youTubeSnapshot',    field: 'topVideos' },
   { model: 'monthlyReport',      field: 'dataCache' },
 ]
 
@@ -94,22 +95,33 @@ async function getDatabaseSize(limit = 12) {
  */
 async function getSocialImageStats() {
   const used = await collectUsedImageIds()
-  // id + peso de cada imagen (sin traer los bytes de la imagen en sí).
+  // Peso por fila (sizeBytes, válido esté en DB o en R2; fallback al tamaño real
+  // del blob legacy) + dónde vive (objectKey != null → R2).
   const rows = await prisma.$queryRawUnsafe(
-    `SELECT id, octet_length("imageData")::bigint AS bytes, "createdAt" FROM "SocialImage"`
+    `SELECT id,
+            COALESCE("sizeBytes", octet_length("imageData"), 0)::bigint AS bytes,
+            ("objectKey" IS NOT NULL) AS in_r2
+     FROM "SocialImage"`
   )
 
-  let inUse = { count: 0, bytes: 0 }
-  let orphan = { count: 0, bytes: 0 }
+  const inUse  = { count: 0, bytes: 0 }
+  const orphan = { count: 0, bytes: 0 }
+  const r2     = { count: 0, bytes: 0 } // en object storage (no pesan en la DB)
+  const db     = { count: 0, bytes: 0 } // legacy: bytes en Postgres
   for (const r of rows) {
-    const bucket = used.has(r.id) ? inUse : orphan
-    bucket.count += 1
-    bucket.bytes += Number(r.bytes || 0)
+    const b = Number(r.bytes || 0)
+    const useBucket = used.has(r.id) ? inUse : orphan
+    useBucket.count += 1
+    useBucket.bytes += b
+    const locBucket = r.in_r2 ? r2 : db
+    locBucket.count += 1
+    locBucket.bytes += b
   }
   return {
-    total:  { count: rows.length, bytes: inUse.bytes + orphan.bytes },
+    total:    { count: rows.length, bytes: inUse.bytes + orphan.bytes },
     inUse,
     orphan,
+    location: { r2, db }, // db = lo que todavía pesa en Postgres
   }
 }
 
@@ -146,13 +158,23 @@ async function findOrphanImageIds({ olderThanDays = 0 } = {}) {
  */
 async function cleanupOrphanImages({ olderThanDays = 0, vacuum = true } = {}) {
   const ids = await findOrphanImageIds({ olderThanDays })
-  if (ids.length === 0) return { deleted: 0, vacuumed: false }
+  if (ids.length === 0) return { deleted: 0, vacuumed: false, r2Deleted: 0 }
 
   // Borrar en lotes para no armar un IN (...) gigantesco.
   let deleted = 0
+  let r2Deleted = 0
   const BATCH = 500
   for (let i = 0; i < ids.length; i += BATCH) {
     const slice = ids.slice(i, i + BATCH)
+    // Primero borrar del bucket las que viven en R2 (las legacy no tienen objectKey).
+    const inR2 = await prisma.socialImage.findMany({
+      where:  { id: { in: slice }, objectKey: { not: null } },
+      select: { objectKey: true },
+    })
+    if (inR2.length > 0) {
+      const { deleted: n } = await objectStorage.deleteObjects(inR2.map(r => r.objectKey))
+      r2Deleted += n
+    }
     const { count } = await prisma.socialImage.deleteMany({ where: { id: { in: slice } } })
     deleted += count
   }
@@ -168,7 +190,7 @@ async function cleanupOrphanImages({ olderThanDays = 0, vacuum = true } = {}) {
       console.warn('[storageStats] VACUUM FULL falló (el borrado sí se aplicó):', err.message)
     }
   }
-  return { deleted, vacuumed }
+  return { deleted, vacuumed, r2Deleted }
 }
 
 module.exports = {
