@@ -8,6 +8,7 @@ const av    = require('../controllers/avatars.controller')
 const ff    = require('../controllers/featureFlags.controller')
 const legal = require('../controllers/legal.controller')
 const ps    = require('../controllers/platformSettings.controller')
+const st    = require('../controllers/storage.controller')
 
 const AVATAR_MAX_MB = 2
 const upload = multer({
@@ -69,6 +70,10 @@ router.put('/settings',                 ps.updateSettings)
 router.get('/settings/log',             ps.listLog)
 router.get('/settings/cleanup-preview', ps.previewCleanup)
 router.post('/settings/cleanup-now',    ps.runCleanup)
+
+// Almacenamiento (tamaño de la DB + limpieza de imágenes sociales huérfanas)
+router.get('/storage',                       st.getStorage)
+router.post('/storage/cleanup-orphan-images', st.cleanupOrphanImagesHandler)
 
 // Anuncios
 router.get('/announcements',              ann.listAll)

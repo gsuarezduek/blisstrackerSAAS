@@ -176,6 +176,16 @@ const PLATFORM_SETTINGS = [
     label:   'Retención de logs de emails (días)',
     help:    'Después de cuántos días se borran los EmailLog. Afecta el panel SuperAdmin → Emails.',
   },
+  {
+    key:     'socialImageOrphanRetentionDays',
+    type:    'integer',
+    default: 7,
+    min:     1,
+    max:     365,
+    group:   'operational',
+    label:   'Retención de imágenes sociales huérfanas (días)',
+    help:    'Las imágenes de RRSS (SocialImage) que ya no referencia ningún snapshot ni informe ("huérfanas", típicamente generadas al refrescar) se borran en la limpieza semanal si tienen más de estos días. NO afecta las imágenes en uso. La limpieza inmediata con VACUUM está en SuperAdmin → Almacenamiento.',
+  },
 
   // ─── Scraping (Apify) ──────────────────────────────────────────────────────
   // Actores y topes de posts por red. El token de Apify (APIFY_API_TOKEN) sigue

@@ -57,8 +57,9 @@ const NAV = [
     id: 'anuncios',
     label: '📣 Anuncios',
     subs: [
-      { id: 'meta-ads',   label: '📘 Meta Ads' },
-      { id: 'google-ads', label: '🔍 Google Ads' },
+      { id: 'meta-ads',     label: '📘 Meta Ads' },
+      { id: 'google-ads',   label: '🔍 Google Ads' },
+      { id: 'linkedin-ads', label: '💼 LinkedIn Ads', soon: true },
     ],
   },
   {

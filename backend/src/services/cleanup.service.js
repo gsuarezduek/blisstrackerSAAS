@@ -8,6 +8,7 @@
  */
 const prisma = require('../lib/prisma')
 const { getSettings } = require('../lib/platformSettings')
+const { findOrphanImageIds, cleanupOrphanImages } = require('./storageStats.service')
 
 const RETENTION_KEYS = [
   'notificationReadRetentionDays',
@@ -16,6 +17,7 @@ const RETENTION_KEYS = [
   'loginHistoryRetentionDays',
   'dailyInsightRetentionDays',
   'emailLogRetentionDays',
+  'socialImageOrphanRetentionDays',
 ]
 
 function daysAgo(d) {
@@ -59,6 +61,10 @@ async function previewWeeklyCleanup(tables = null) {
     result.emailLog = await prisma.emailLog.count({
       where: { createdAt: { lt: daysAgo(s.emailLogRetentionDays) } },
     })
+  }
+  if (!tables || tables.includes('socialImages')) {
+    const ids = await findOrphanImageIds({ olderThanDays: s.socialImageOrphanRetentionDays })
+    result.socialImages = ids.length
   }
   return result
 }
@@ -106,6 +112,16 @@ async function runWeeklyCleanup(tables = null) {
       where: { createdAt: { lt: daysAgo(s.emailLogRetentionDays) } },
     })
     result.emailLog = count
+  }
+  if (!tables || tables.includes('socialImages')) {
+    // En el cron no corremos VACUUM FULL (toma lock); el hueco que deja el
+    // DELETE se reutiliza con las próximas imágenes. El VACUUM manual está en
+    // SuperAdmin → Almacenamiento para recuperar disco físico cuando haga falta.
+    const { deleted } = await cleanupOrphanImages({
+      olderThanDays: s.socialImageOrphanRetentionDays,
+      vacuum: false,
+    })
+    result.socialImages = deleted
   }
 
   return result
