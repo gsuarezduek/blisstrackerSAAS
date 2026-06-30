@@ -389,6 +389,25 @@ async function fetchFacebookMetrics(pageId, pageToken, targetMonth = null) {
 }
 
 /**
+ * Refresco liviano del perfil de la página: una sola llamada a la Graph API
+ * (followers + page likes + nombre), sin posts ni insights. Rápida (~0,5s).
+ * La usa la carga normal para mantener frescos seguidores/nombre/log diario
+ * mientras el resto de las métricas se sirven del snapshot cacheado.
+ */
+async function fetchFacebookProfile(pageId, pageToken) {
+  const { data } = await axios.get(`${GRAPH_BASE}/${pageId}`, {
+    params:  { fields: 'followers_count,fan_count,name', access_token: pageToken },
+    timeout: 8000,
+  })
+  return {
+    id:             String(data?.id ?? pageId),
+    name:           data?.name ?? null,
+    followersCount: data?.followers_count ?? data?.fan_count ?? null,
+    fanCount:       data?.fan_count ?? null,
+  }
+}
+
+/**
  * Calcula el bloque de métricas a partir de un perfil + posts del mes ya
  * normalizados. Compartido por la API oficial (con insights) y el scraping (sin).
  * @param {object} profile — { id, name, followers_count, fan_count }
@@ -480,4 +499,4 @@ function computeFacebookScrapeMetrics(profile, posts, targetMonth = null) {
   )
 }
 
-module.exports = { fetchFacebookMetrics, computeFacebookMetrics, computeFacebookScrapeMetrics, debugPageInsights }
+module.exports = { fetchFacebookMetrics, fetchFacebookProfile, computeFacebookMetrics, computeFacebookScrapeMetrics, debugPageInsights }

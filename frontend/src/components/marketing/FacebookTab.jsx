@@ -131,7 +131,7 @@ function FollowersCard({ followersCount, monthlyGain }) {
 }
 
 // ── Header de cuenta ──────────────────────────────────────────────────────────
-function AccountHeader({ page, integration, scraped, onDisconnect, disconnecting, onRefresh, refreshing }) {
+function AccountHeader({ page, integration, scraped, lastUpdated, onDisconnect, disconnecting, onRefresh, refreshing }) {
   const slug = integration?.propertyId
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
@@ -154,12 +154,10 @@ function AccountHeader({ page, integration, scraped, onDisconnect, disconnecting
               )}
             </div>
             <div className="flex gap-3 shrink-0">
-              {scraped && (
-                <button onClick={onRefresh} disabled={refreshing}
-                  className="text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50">
-                  {refreshing ? 'Actualizando…' : '↻ Actualizar'}
-                </button>
-              )}
+              <button onClick={onRefresh} disabled={refreshing}
+                className="text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-50">
+                {refreshing ? 'Actualizando…' : '↻ Actualizar'}
+              </button>
               <button onClick={onDisconnect} disabled={disconnecting}
                 className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50">
                 {disconnecting ? 'Desconectando…' : 'Desconectar'}
@@ -168,6 +166,7 @@ function AccountHeader({ page, integration, scraped, onDisconnect, disconnecting
           </div>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             Conectado el {new Date(integration.connectedAt).toLocaleDateString('es-AR')}
+            {lastUpdated && ` · Actualizado ${new Date(lastUpdated).toLocaleDateString('es-AR')}`}
           </p>
         </div>
       </div>
@@ -561,13 +560,18 @@ export default function FacebookTab({ projectId, onSelectProject }) {
     } finally { setDisconnecting(false) }
   }
 
-  async function handleRefreshScrape() {
+  async function handleRefresh() {
     setRefreshing(true); setError(null)
     try {
-      await api.post(`/marketing/projects/${projectId}/facebook/scrape/refresh`)
+      if (integration?.scopes === 'scrape') {
+        await api.post(`/marketing/projects/${projectId}/facebook/scrape/refresh`)
+      } else {
+        // Modo oficial/token: fuerza el fetch completo a la Graph API (lento).
+        await api.get(`/marketing/projects/${projectId}/facebook`, { params: { refresh: 1 } })
+      }
       await fetchData()
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo actualizar el scraping.')
+      setError(err.response?.data?.error || 'No se pudo actualizar.')
     } finally { setRefreshing(false) }
   }
 
@@ -638,8 +642,9 @@ export default function FacebookTab({ projectId, onSelectProject }) {
     <div className="space-y-4">
 
       <AccountHeader page={metrics?.page} integration={integration} scraped={scraped}
+        lastUpdated={metrics?.lastScrapedAt}
         onDisconnect={handleDisconnect} disconnecting={disconnecting}
-        onRefresh={handleRefreshScrape} refreshing={refreshing} />
+        onRefresh={handleRefresh} refreshing={refreshing} />
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">{error}</div>

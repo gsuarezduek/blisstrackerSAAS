@@ -1,6 +1,6 @@
 const prisma = require('../lib/prisma')
 const { getValidFacebookToken }  = require('../services/metaTokenRefresh.service')
-const { fetchFacebookMetrics, debugPageInsights } = require('../services/facebook.service')
+const { fetchFacebookMetrics, fetchFacebookProfile, debugPageInsights } = require('../services/facebook.service')
 const { saveFacebookSnapshot }   = require('../services/facebookSnapshot.service')
 const { scrapeFacebookPage, parseFacebookPage, debugScrapeFacebook } = require('../services/socialScrape.service')
 
@@ -35,7 +35,7 @@ async function getIntegrationForProject(projectId, workspaceId) {
 }
 
 // Persiste snapshot mensual + log diario de seguidores a partir de métricas ya obtenidas.
-async function persistScrapeData(projectId, workspaceId, metrics) {
+async function persistFacebookData(projectId, workspaceId, metrics) {
   const month = currentMonthStr()
   const date  = todayStr()
   await Promise.allSettled([
@@ -98,6 +98,43 @@ async function getMetrics(req, res, next) {
       return res.status(400).json({ error: 'Seleccioná la página de Facebook para empezar a ver métricas.', code: 'NO_PAGE' })
     }
 
+    const wantRefresh = req.query.refresh === '1' || req.query.refresh === 'true'
+
+    // ── Carga normal — servir el snapshot del mes al instante (no el fetch lento) ──
+    // El fetch completo a la Graph API (perfil + posts paginados + insights + reach
+    // por post) tarda varios segundos; solo se hace bajo demanda con ?refresh=1.
+    // Acá devolvemos el último snapshot y refrescamos en vivo solo el perfil
+    // (1 llamada liviana ~0,5s) para mantener seguidores/nombre/log diario al día.
+    if (!wantRefresh) {
+      const [snap, lastLog] = await Promise.all([
+        prisma.facebookSnapshot.findFirst({ where: { projectId }, orderBy: { month: 'desc' } }),
+        prisma.facebookFollowerLog.findFirst({ where: { projectId }, orderBy: { date: 'desc' } }),
+      ])
+      if (snap) {
+        const base = { ...snapshotToMetrics(snap, integration, lastLog?.createdAt ?? null), scraped: false, cached: true }
+        try {
+          const token   = getValidFacebookToken(integration)
+          const profile = await fetchFacebookProfile(integration.propertyId, token)
+          if (profile.name)               base.page           = { id: profile.id, name: profile.name }
+          if (profile.followersCount != null) base.followersCount = profile.followersCount
+          if (profile.fanCount != null)       base.fanCount       = profile.fanCount
+          if (profile.followersCount != null) {
+            const date = todayStr()
+            prisma.facebookFollowerLog.upsert({
+              where:  { projectId_date: { projectId, date } },
+              update: { followersCount: profile.followersCount },
+              create: { projectId, workspaceId, date, followersCount: profile.followersCount },
+            }).catch(err => console.warn('[Facebook] Follower log failed:', err.message))
+          }
+        } catch (err) {
+          // Sin token vigente o perfil no disponible → mostramos el snapshot tal cual.
+          console.warn('[Facebook] Refresco liviano de perfil falló, sirvo snapshot:', err.message)
+        }
+        return res.json(base)
+      }
+      // Sin snapshot todavía (primera carga) → cae al fetch completo de abajo.
+    }
+
     let token
     try {
       token = getValidFacebookToken(integration)
@@ -125,21 +162,20 @@ async function getMetrics(req, res, next) {
       return res.status(502).json({ error: `Facebook devolvió un error${status ? ` (${status})` : ''}: ${fbMsg}`, code: 'API_ERROR' })
     }
 
-    res.json(metrics)
+    // Refresh manual: persistimos el snapshot antes de responder, así la siguiente
+    // carga (que lee del snapshot) muestra los datos frescos sin condición de carrera.
+    if (wantRefresh && metrics.followersCount != null) {
+      await persistFacebookData(projectId, workspaceId, metrics)
+        .catch(err => console.warn('[Facebook] Persistencia tras refresh falló:', err.message))
+      return res.json({ ...metrics, scraped: false, cached: false })
+    }
 
+    // Primera carga sin snapshot: respondemos ya y persistimos en segundo plano.
+    res.json({ ...metrics, scraped: false, cached: false })
     setImmediate(async () => {
-      const month = currentMonthStr()
-      const date  = todayStr()
       if (metrics.followersCount != null) {
-        await Promise.allSettled([
-          saveFacebookSnapshot(projectId, workspaceId, month, metrics)
-            .catch(err => console.warn('[Facebook] Auto-snapshot failed:', err.message)),
-          prisma.facebookFollowerLog.upsert({
-            where:  { projectId_date: { projectId, date } },
-            update: { followersCount: metrics.followersCount },
-            create: { projectId, workspaceId, date, followersCount: metrics.followersCount },
-          }).catch(err => console.warn('[Facebook] Follower log failed:', err.message)),
-        ])
+        await persistFacebookData(projectId, workspaceId, metrics)
+          .catch(err => console.warn('[Facebook] Auto-snapshot failed:', err.message))
       }
     })
   } catch (err) { next(err) }
@@ -292,7 +328,7 @@ async function connectScrape(req, res, next) {
       },
     })
 
-    await persistScrapeData(projectId, workspaceId, metrics)
+    await persistFacebookData(projectId, workspaceId, metrics)
 
     res.json({ ok: true, identifier, followersCount: metrics.followersCount })
   } catch (err) { next(err) }
@@ -333,7 +369,7 @@ async function refreshScrape(req, res, next) {
     }
 
     scrapeCooldownMap.set(integration.id, Date.now())
-    await persistScrapeData(projectId, workspaceId, metrics)
+    await persistFacebookData(projectId, workspaceId, metrics)
 
     res.json({ ...metrics, lastScrapedAt: new Date() })
   } catch (err) { next(err) }
