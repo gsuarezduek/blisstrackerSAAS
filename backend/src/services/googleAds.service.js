@@ -72,22 +72,51 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
     LIMIT 50
   `
 
-  const { data } = await axios.post(
-    `${GADS_BASE}/customers/${customerId}/googleAds:search`,
-    { query },
-    {
-      headers: {
-        'Authorization':     `Bearer ${accessToken}`,
-        'developer-token':   devToken,
-        // Si la cuenta es cliente de un MCC, login-customer-id debe ser el ID del manager.
-        // Se guarda en integration.propertyId; si no está, se usa el propio customerId (cuenta directa).
-        'login-customer-id': integration.propertyId
-          ? normalizeCustomerId(integration.propertyId)
-          : customerId,
-        'Content-Type':      'application/json',
-      },
-    },
-  )
+  const headers = {
+    'Authorization':     `Bearer ${accessToken}`,
+    'developer-token':   devToken,
+    // Si la cuenta es cliente de un MCC, login-customer-id debe ser el ID del manager.
+    // Se guarda en integration.propertyId; si no está, se usa el propio customerId (cuenta directa).
+    'login-customer-id': integration.propertyId
+      ? normalizeCustomerId(integration.propertyId)
+      : customerId,
+    'Content-Type':      'application/json',
+  }
+  const searchUrl = `${GADS_BASE}/customers/${customerId}/googleAds:search`
+
+  // Query de anuncios individuales (best-effort; si falla seguimos sin topAds).
+  // Google Ads no expone "alcance único" (reach) → se ordena por impresiones.
+  // En Búsqueda el anuncio es texto (headlines/descriptions); no hay imagen.
+  const adsQuery = `
+    SELECT
+      ad_group_ad.ad.id,
+      ad_group_ad.ad.name,
+      ad_group_ad.ad.type,
+      ad_group_ad.ad.responsive_search_ad.headlines,
+      ad_group_ad.ad.responsive_search_ad.descriptions,
+      ad_group.name,
+      campaign.name,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.ctr,
+      metrics.conversions
+    FROM ad_group_ad
+    WHERE segments.date ${dateRange ? dateClause : `DURING ${dateClause}`}
+      AND ad_group_ad.status != 'REMOVED'
+    ORDER BY metrics.impressions DESC
+    LIMIT 25
+  `
+
+  const [{ data }, adsData] = await Promise.all([
+    axios.post(searchUrl, { query }, { headers }),
+    axios.post(searchUrl, { query: adsQuery }, { headers })
+      .then(r => r.data)
+      .catch(err => {
+        console.warn('[GoogleAds] Query ad_group_ad falló (se omite topAds):', err.response?.data?.error?.message || err.message)
+        return null
+      }),
+  ])
 
   const rows = data.results ?? []
 
@@ -124,6 +153,33 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
     ? parseFloat((totalCost / totalClicks).toFixed(4))
     : 0
 
+  // Anuncios individuales: preview de texto para Búsqueda (RSA), etiqueta de tipo
+  // para el resto. No hay imagen ni reach en Google Ads.
+  const topAds = (adsData?.results ?? [])
+    .map(row => {
+      const ad = row.adGroupAd?.ad ?? {}
+      const headlines    = (ad.responsiveSearchAd?.headlines    ?? []).map(h => h.text).filter(Boolean)
+      const descriptions = (ad.responsiveSearchAd?.descriptions ?? []).map(d => d.text).filter(Boolean)
+      return {
+        id:           ad.id,
+        name:         ad.name || null,
+        type:         ad.type || null,
+        adGroupName:  row.adGroup?.name    ?? null,
+        campaignName: row.campaign?.name   ?? null,
+        // Preview de texto (RSA): hasta 3 títulos + 1 descripción
+        headline:     headlines.slice(0, 3).join(' · ') || null,
+        description:  descriptions[0]      ?? null,
+        impressions:  parseInt(row.metrics?.impressions ?? 0, 10),
+        clicks:       parseInt(row.metrics?.clicks      ?? 0, 10),
+        cost:         (parseInt(row.metrics?.costMicros ?? 0, 10)) / 1_000_000,
+        ctr:          parseFloat((parseFloat(row.metrics?.ctr ?? 0) * 100).toFixed(2)),
+        conversions:  parseFloat(row.metrics?.conversions ?? 0),
+      }
+    })
+    .filter(a => a.impressions > 0 || a.cost > 0)
+    .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, 10)
+
   return {
     cost:        parseFloat(totalCost.toFixed(2)),
     impressions: totalImpressions,
@@ -132,6 +188,7 @@ async function fetchGoogleAdsData(integration, datePreset = 'this_month', dateRa
     ctr:         avgCtr,
     avgCpc:      parseFloat(avgCpc.toFixed(2)),
     campaigns,
+    topAds,
     customerName,
     datePreset,
   }

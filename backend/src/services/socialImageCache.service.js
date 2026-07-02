@@ -61,22 +61,20 @@ async function cacheSocialImage(url, workspaceId) {
       if (buffer.length === 0 || buffer.length > MAX_BYTES) return url
 
       // Con object storage configurado: subir a R2 y guardar solo la key (sin
-      // bytes en DB). Devolvemos la URL pública del CDN directo (sin hop por
-      // nuestro backend). Sin configurar: legacy → bytes en DB + endpoint propio.
-      if (objectStorage.isConfigured()) {
-        const { key, url: publicCdnUrl, size } = await objectStorage.putObject(buffer, mimeType, { prefix: 'social' })
-        await prisma.socialImage.create({
-          data: { workspaceId, sourceUrl: url, objectKey: key, sizeBytes: size, mimeType },
-          select: { id: true },
-        })
-        return publicCdnUrl
-      }
+      // bytes en DB). Sin configurar: legacy → bytes en DB.
+      // En AMBOS casos la URL que devolvemos apunta a NUESTRO endpoint
+      // (`/api/social-image/:id`), no al dominio del bucket: así las URLs
+      // horneadas en snapshots/informes NO quedan atadas al dominio de R2. El
+      // endpoint redirige a `R2_PUBLIC_BASE` (cambiable por env, sin regenerar
+      // nada) cuando la fila tiene objectKey, o sirve los bytes legacy.
+      const data = objectStorage.isConfigured()
+        ? await (async () => {
+            const { key, size } = await objectStorage.putObject(buffer, mimeType, { prefix: 'social' })
+            return { workspaceId, sourceUrl: url, objectKey: key, sizeBytes: size, mimeType }
+          })()
+        : { workspaceId, sourceUrl: url, imageData: buffer, sizeBytes: buffer.length, mimeType }
 
-      const row = await prisma.socialImage.create({
-        data: { workspaceId, sourceUrl: url, imageData: buffer, sizeBytes: buffer.length, mimeType },
-        select: { id: true },
-      })
-
+      const row = await prisma.socialImage.create({ data, select: { id: true } })
       return `${publicBase()}/api/social-image/${row.id}`
     } catch (err) {
       lastErr = err

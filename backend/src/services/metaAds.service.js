@@ -74,7 +74,7 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
     ? `insights.time_range(${JSON.stringify({ since: dateRange.startDate, until: dateRange.endDate })}){spend,reach,impressions,clicks,ctr}`
     : `insights.date_preset(${datePreset}){spend,reach,impressions,clicks,ctr}`
 
-  const [summaryRes, campaignsRes] = await Promise.all([
+  const [summaryRes, campaignsRes, adsRes] = await Promise.all([
     // Métricas globales de la cuenta
     axios.get(`${FB_GRAPH}/${adAccountId}/insights`, {
       params: {
@@ -90,6 +90,18 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
         limit:        50,
         access_token: accessToken,
       },
+    }),
+    // Anuncios individuales con creativo (miniatura) + métricas incorporadas.
+    // El edge /ads es best-effort: si falla (permiso/rate limit) seguimos sin topAds.
+    axios.get(`${FB_GRAPH}/${adAccountId}/ads`, {
+      params: {
+        fields:       `id,name,effective_status,creative{thumbnail_url},${insightsParam}`,
+        limit:        50,
+        access_token: accessToken,
+      },
+    }).catch(err => {
+      console.warn('[MetaAds] Edge /ads falló (se omite topAds):', err.response?.data?.error?.message || err.message)
+      return null
     }),
   ])
 
@@ -110,6 +122,24 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
     .filter(c => c.spend > 0 || c.status === 'ACTIVE')
     .sort((a, b) => b.spend - a.spend)
 
+  // Anuncios individuales: solo los que tuvieron actividad en el período. Se
+  // ordenan por alcance desc; los consumidores derivan "mejor CTR" del array.
+  const topAds = (adsRes?.data?.data ?? [])
+    .map(a => ({
+      id:           a.id,
+      name:         a.name,
+      status:       a.effective_status ?? null,
+      thumbnailUrl: a.creative?.thumbnail_url ?? null,
+      spend:        parseFloat(a.insights?.data?.[0]?.spend       ?? 0),
+      reach:        parseInt(  a.insights?.data?.[0]?.reach       ?? 0, 10),
+      impressions:  parseInt(  a.insights?.data?.[0]?.impressions ?? 0, 10),
+      clicks:       parseInt(  a.insights?.data?.[0]?.clicks      ?? 0, 10),
+      ctr:          parseFloat(a.insights?.data?.[0]?.ctr         ?? 0),
+    }))
+    .filter(a => a.impressions > 0 || a.spend > 0)
+    .sort((a, b) => b.reach - a.reach)
+    .slice(0, 10)
+
   return {
     spend:       parseFloat(summary.spend       ?? 0),
     reach:       parseInt(  summary.reach       ?? 0, 10),
@@ -119,6 +149,7 @@ async function fetchMetaAdsData(adAccountId, accessToken, datePreset = 'this_mon
     cpm:         parseFloat(summary.cpm         ?? 0),
     cpc:         parseFloat(summary.cpc         ?? 0),
     campaigns,
+    topAds,
     datePreset,
   }
 }

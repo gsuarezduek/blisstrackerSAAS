@@ -21,8 +21,10 @@ async function serveImage(req, res, next) {
     if (!img) return res.status(404).send('Not found')
 
     if (img.objectKey) {
-      // Redirect cacheable al CDN (el navegador cachea el 302 con este header).
-      res.set('Cache-Control', 'public, max-age=31536000, immutable') // 1 año
+      // Redirect al CDN. Cache moderado (1 día, NO 1 año inmutable) para que el
+      // navegador no quede clavado si se cambia R2_PUBLIC_BASE (dominio del
+      // bucket). El objeto final en R2 sí se cachea 1 año (CacheControl en putObject).
+      res.set('Cache-Control', 'public, max-age=86400') // 1 día
       return res.redirect(302, objectStorage.publicUrl(img.objectKey))
     }
 
