@@ -304,6 +304,7 @@ const AUTO_RANK_TITLE = {
   proyectos_perdidos:  'Cuáles',
   tareas_completadas:  'Quién completó más',
   todos_completados:   'Quién completó más',
+  faltas:              'Quiénes',
   informes_entregados: 'Proyectos',
   seguidores_nuevos:   'Por red',
   objetivos_cumplidos: 'No cumplidos',
@@ -325,6 +326,7 @@ function autoEmptyHint(autoKey) {
     case 'proyectos_perdidos':  return 'Sin bajas 🎉'
     case 'tareas_completadas':  return 'Sin tareas completadas'
     case 'todos_completados':   return 'Sin to-dos completados'
+    case 'faltas':              return 'Sin faltas registradas 🎉'
     case 'informes_entregados': return 'Sin informes este mes'
     case 'seguidores_nuevos':   return 'Sin datos de redes'
     case 'objetivos_cumplidos': return '¡Todos cumplidos! 🎉'
@@ -355,6 +357,8 @@ function autoRankRow(autoKey, p, i) {
     detail = `${p.count} ${p.count === 1 ? 'tarea' : 'tareas'}`
   } else if (autoKey === 'todos_completados') {
     detail = `${p.done} to-do${p.done === 1 ? '' : 's'}`
+  } else if (autoKey === 'faltas') {
+    detail = `${p.strikes} ${p.strikes === 1 ? 'falta' : 'faltas'}`
   } else if (p.util != null) {
     // ocupación / Δ horas: solo si el dato trae `util` (evita "undefined%").
     detail = `${p.util}% · ${formatVal(p.registeredHours)}/${formatVal(p.availableHours)}h`

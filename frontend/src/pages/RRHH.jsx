@@ -93,8 +93,9 @@ function StatCard({ icon, label, value, sub, onClick }) {
 
 // Tarjeta de People Score (EOS) — salud del equipo según el Analizador de Personas.
 function PeopleScoreCard({ peopleScore }) {
-  const { score, rightPeople, total } = peopleScore
+  const { score, rightPeople, total, strikesPeople = 0 } = peopleScore
   const band = scoreBand(score)
+  const strikesColor = strikesPeople > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
       <div className="flex items-center justify-between mb-3">
@@ -106,7 +107,7 @@ function PeopleScoreCard({ peopleScore }) {
           Analizador de Personas →
         </Link>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* People Score */}
         <div>
           <div className="flex items-baseline gap-2">
@@ -119,13 +120,23 @@ function PeopleScoreCard({ peopleScore }) {
           </div>
         </div>
         {/* Personas correctas */}
-        <div className="border-l border-gray-100 dark:border-gray-700 pl-4">
+        <div className="sm:border-l border-gray-100 dark:border-gray-700 sm:pl-4">
           <span className="text-3xl font-bold leading-none text-gray-900 dark:text-white">
             {rightPeople}<span className="text-xl text-gray-400 dark:text-gray-500">/{total}</span>
           </span>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Personas correctas en el asiento</p>
           <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 leading-snug">
             Con <span className="font-medium text-green-600 dark:text-green-400">+</span> en todos sus valores y GWC
+          </p>
+        </div>
+        {/* Personas con faltas */}
+        <div className="sm:border-l border-gray-100 dark:border-gray-700 sm:pl-4">
+          <span className={`text-3xl font-bold leading-none ${strikesColor}`}>
+            {strikesPeople}<span className="text-xl text-gray-400 dark:text-gray-500">/{total}</span>
+          </span>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Personas con faltas</p>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 leading-snug">
+            Con una o más faltas (strikes) registradas
           </p>
         </div>
       </div>
@@ -1767,9 +1778,10 @@ export default function RRHH() {
     if (!eosEnabled) { setPeopleScore(null); return }
     api.get('/eos/personas')
       .then(r => {
-        const { members, coreValues, ratingsMap } = r.data
+        const { members, coreValues, ratingsMap, strikesMap } = r.data
         if (!coreValues?.length) { setPeopleScore(null); return }
-        setPeopleScore(computePeopleScore(members, peopleColumnKeys(coreValues), ratingsMap))
+        const strikesPeople = Object.values(strikesMap || {}).filter(a => a?.length > 0).length
+        setPeopleScore({ ...computePeopleScore(members, peopleColumnKeys(coreValues), ratingsMap), strikesPeople })
       })
       .catch(() => {})
   }, [eosEnabled])

@@ -777,6 +777,10 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   const [alertasDraft,     setAlertasDraft]     = useState('')
   const [savingAlertas,    setSavingAlertas]    = useState(false)
 
+  const [editingHighlights, setEditingHighlights] = useState(false)
+  const [highlightsDraft,   setHighlightsDraft]   = useState('')
+  const [savingHighlights,  setSavingHighlights]  = useState(false)
+
   // Contexto editorial por sección: 'rrss' | 'sitio' | 'seo' | null
   const [editingContext, setEditingContext] = useState(null)
   const [contextDraft,   setContextDraft]  = useState('')
@@ -875,6 +879,29 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       setEditingAlertas(false)
     } finally {
       setSavingAlertas(false)
+    }
+  }
+
+  async function handleSaveHighlights() {
+    if (!onSaveAnalysis) return
+    setSavingHighlights(true)
+    try {
+      await onSaveAnalysis({ ...analysis, highlights: highlightsDraft })
+      setEditingHighlights(false)
+    } finally {
+      setSavingHighlights(false)
+    }
+  }
+
+  async function handleDeleteHighlights() {
+    if (!onSaveAnalysis) return
+    if (!window.confirm('¿Eliminar la sección "Logros del mes"? No aparecerá en el informe del cliente.')) return
+    setSavingHighlights(true)
+    try {
+      await onSaveAnalysis({ ...analysis, highlights: [] })
+      setEditingHighlights(false)
+    } finally {
+      setSavingHighlights(false)
     }
   }
 
@@ -1198,17 +1225,74 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                 <span className="text-gray-400 dark:text-gray-500 italic text-sm">Sin resumen todavía.</span>
               )}
 
-              {analysis?.highlights?.length > 0 && (
-                <div className="mt-4 space-y-1.5">
-                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Logros del mes</p>
-                  {analysis.highlights.map((hl, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <span className="text-green-500 mt-0.5 shrink-0">✓</span>
-                      <span className="text-sm text-gray-700 dark:text-gray-300">{hl}</span>
+              {(() => {
+                const hls = analysis?.highlights
+                const hasHighlights = Array.isArray(hls) ? hls.length > 0 : !!hls
+                if (!hasHighlights && !canEdit) return null
+
+                function openHighlightsEditor() {
+                  let initial = ''
+                  if (Array.isArray(hls) && hls.length > 0) initial = '<ul>' + hls.map(h => `<li>${h}</li>`).join('') + '</ul>'
+                  else if (typeof hls === 'string') initial = hls
+                  setHighlightsDraft(initial)
+                  setEditingHighlights(true)
+                }
+
+                return (
+                  <div className="mt-4 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Logros del mes</p>
+                      {canEdit && !editingHighlights && (
+                        <div className="no-print flex items-center gap-2">
+                          <button onClick={openHighlightsEditor} className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">✏️ Editar</button>
+                          {hasHighlights && (
+                            <button onClick={handleDeleteHighlights} className="text-xs text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors">🗑 Eliminar</button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    {editingHighlights ? (
+                      <div className="space-y-3 no-print">
+                        <RichTextEditor
+                          defaultContent={highlightsDraft}
+                          onChange={setHighlightsDraft}
+                          minHeight={140}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setEditingHighlights(false)}
+                            className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={handleSaveHighlights}
+                            disabled={savingHighlights}
+                            className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                          >
+                            {savingHighlights ? 'Guardando…' : 'Guardar'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : Array.isArray(hls) && hls.length > 0 ? (
+                      hls.map((hl, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className="text-green-500 mt-0.5 shrink-0">✓</span>
+                          <span className="text-sm text-gray-700 dark:text-gray-300">{hl}</span>
+                        </div>
+                      ))
+                    ) : typeof hls === 'string' && hls ? (
+                      <div
+                        className="situation-content text-sm text-gray-700 dark:text-gray-300"
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(hls) }}
+                      />
+                    ) : (
+                      <span className="text-gray-400 dark:text-gray-500 italic text-sm">Sin logros cargados.</span>
+                    )}
+                  </div>
+                )
+              })()}
 
               {(() => {
                 const al = analysis?.alertas

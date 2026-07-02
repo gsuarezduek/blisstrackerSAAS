@@ -42,6 +42,14 @@ const EOS_AUTO_METRICS = {
     frequency:     'weekly',
     description:   'Tareas que el equipo completó en la semana (por fecha de completado). La tarjeta muestra el top 3 de quienes más completaron.',
   },
+  faltas: {
+    key:           'faltas',
+    name:          'Personas con faltas',
+    unit:          null,            // conteo de personas
+    lowerIsBetter: true,            // menos es mejor
+    frequency:     'weekly',
+    description:   'Cantidad de personas del equipo que acumulan una o más faltas (strikes de Personas) al cierre de la semana. La tarjeta lista quiénes y cuántas.',
+  },
 
   // ── Mensuales (a mes vencido: solo se llenan los meses cerrados) ─────────────
   delta_horas: {

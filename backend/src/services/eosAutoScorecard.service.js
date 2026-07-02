@@ -272,6 +272,47 @@ async function computeTareasCompletadasWeekly(workspaceId, tz, offset, rangeStar
   return out
 }
 
+// Personas con una o más faltas (strikes), acumuladas al cierre de cada semana ISO.
+// Las faltas son un "stock": una persona las acumula en el tiempo (no es un evento de la
+// semana). Por eso el valor de cada semana es la cantidad de personas distintas que, al
+// cierre de esa semana (domingo), tenían ≥1 falta registrada (por `createdAt`). Solo se
+// emiten semanas desde la primera falta en adelante (antes quedan vacías). No depende del
+// horario del equipo — usa la relación `user` de cada strike para nombres/avatares.
+async function computeFaltasWeekly(workspaceId, tz, offset, rangeStart, rangeEnd) {
+  const out = {}
+  const strikes = await prisma.eOSStrike.findMany({
+    where:   { workspaceId },
+    select:  { userId: true, createdAt: true, user: { select: { name: true, avatar: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
+  if (!strikes.length) return out
+
+  // Lunes de la semana ISO que contiene rangeStart; iteramos de a 7 días hasta rangeEnd.
+  const d0  = new Date(rangeStart + 'T00:00:00Z')
+  const dow = d0.getUTCDay() || 7 // 1=Lun … 7=Dom
+  let monday = addDays(rangeStart, -(dow - 1))
+
+  while (monday <= rangeEnd) {
+    const weekEnd = addDays(monday, 6)                       // domingo de la semana
+    const cutoff  = new Date(weekEnd + 'T23:59:59' + offset) // fin del domingo local
+    const perUser = new Map()
+    for (const s of strikes) {
+      if (s.createdAt > cutoff) break // ordenadas asc → el resto es futuro
+      const cur = perUser.get(s.userId) || {
+        userId: s.userId, name: s.user?.name || '—', avatar: s.user?.avatar || null, strikes: 0,
+      }
+      cur.strikes += 1
+      perUser.set(s.userId, cur)
+    }
+    if (perUser.size) {
+      const people = [...perUser.values()].sort((a, b) => b.strikes - a.strikes)
+      out[isoWeekPeriodOf(monday)] = { value: people.length, top3: people.slice(0, 3) }
+    }
+    monday = addDays(monday, 7)
+  }
+  return out
+}
+
 // To-Dos de L10 completados por semana ISO. Cada EOSTodo ya está asignado a su
 // semana (`week`, formato "YYYY-Www"); contamos los `done` de las semanas del año.
 async function computeTodosCompletadosWeekly(workspaceId, year, info) {
@@ -545,8 +586,9 @@ async function computeAutoScorecardYear(workspaceId, tz, year, autoKeys = []) {
   const weeklyKeys  = autoKeys.filter(k => EOS_AUTO_METRICS[k]?.frequency === 'weekly')
   const monthlyKeys = autoKeys.filter(k => EOS_AUTO_METRICS[k]?.frequency === 'monthly')
 
-  // Horarios del equipo: los necesitan tardanzas, ocupacion y delta_horas.
-  const needsSchedule = weeklyKeys.length || monthlyKeys.includes('delta_horas')
+  // Horarios del equipo: los necesitan tardanzas, ocupacion, tareas/todos (nombres) y
+  // delta_horas. `faltas` es independiente (trae sus propios nombres/avatares).
+  const needsSchedule = weeklyKeys.some(k => k !== 'faltas') || monthlyKeys.includes('delta_horas')
   const ctx = needsSchedule ? await loadMemberInfo(workspaceId) : null
 
   // ── Semanales: rango = año calendario con padding ±7 días, sin futuro.
@@ -559,6 +601,7 @@ async function computeAutoScorecardYear(workspaceId, tz, year, autoKeys = []) {
       if (weeklyKeys.includes('ocupacion'))         out.ocupacion         = await occupancyByBucket(workspaceId, tz, offset, wStart, wEnd, isoWeekPeriodOf, ctx.info)
       if (weeklyKeys.includes('tareas_completadas')) out.tareas_completadas = await computeTareasCompletadasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx.info)
       if (weeklyKeys.includes('todos_completados'))  out.todos_completados  = await computeTodosCompletadosWeekly(workspaceId, year, ctx.info)
+      if (weeklyKeys.includes('faltas'))             out.faltas             = await computeFaltasWeekly(workspaceId, tz, offset, wStart, wEnd)
     }
   }
 
