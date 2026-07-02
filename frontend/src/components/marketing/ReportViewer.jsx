@@ -297,6 +297,46 @@ function BestInstagramPost({ post, label = 'Mejor publicación del mes', medal =
   )
 }
 
+// Anuncio destacado del mes (Meta con creativo / Google con preview de texto)
+function BestAd({ ad, accent = 'blue' }) {
+  if (!ad) return null
+  const ACCENT = {
+    blue:  { box: 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10',   text: 'text-blue-700 dark:text-blue-300' },
+    green: { box: 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10', text: 'text-green-700 dark:text-green-300' },
+  }[accent] ?? {}
+  const spend = ad.spend ?? ad.cost
+  return (
+    <div className={`mt-4 rounded-xl border p-3 ${ACCENT.box}`}>
+      <p className={`text-[10px] font-semibold uppercase tracking-wide mb-2 ${ACCENT.text}`}>
+        🏆 Anuncio destacado
+      </p>
+      <div className="flex items-stretch gap-3">
+        {ad.thumbnailUrl && (
+          <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+            <img src={ad.thumbnailUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          {ad.headline ? (
+            <>
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 line-clamp-2" title={ad.headline}>{ad.headline}</p>
+              {ad.description && <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5">{ad.description}</p>}
+            </>
+          ) : (
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
+          )}
+          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400 mt-1.5">
+            {ad.reach       != null && ad.reach > 0 && <span>👁️ {fmt(ad.reach)} alcance</span>}
+            {ad.impressions != null && <span>📢 {fmt(ad.impressions)} imp.</span>}
+            {ad.ctr         != null && <span>📊 {Number(ad.ctr).toFixed(2)}% CTR</span>}
+            {spend          != null && spend > 0 && <span>💰 ${fmt(spend, 2)}</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Mejor video del mes (TikTok)
 function BestTikTokVideo({ video }) {
   if (!video) return null
@@ -1336,10 +1376,12 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
               <SectionCard title="Meta Ads" icon="📣">
                 <KpiGrid items={[
                   { label: 'Inversión',    value: s.metaAds.spend != null ? `$${fmt(s.metaAds.spend, 2)}` : '—' },
+                  ...(s.metaAds.reach != null && s.metaAds.reach > 0 ? [{ label: 'Alcance', value: fmt(s.metaAds.reach) }] : []),
                   { label: 'Impresiones', value: fmt(s.metaAds.impressions) },
                   { label: 'Clics',       value: fmt(s.metaAds.clicks) },
                   { label: 'CTR',         value: s.metaAds.ctr != null ? `${Number(s.metaAds.ctr).toFixed(2)}%` : '—' },
                 ]} />
+                <BestAd ad={s.metaAds.topAds?.[0]} accent="blue" />
               </SectionCard>
             )}
             {s.googleAds && (
@@ -1349,7 +1391,9 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                   { label: 'Impresiones', value: fmt(s.googleAds.impressions) },
                   { label: 'Clics',       value: fmt(s.googleAds.clicks) },
                   { label: 'CTR',         value: s.googleAds.ctr != null ? `${Number(s.googleAds.ctr).toFixed(2)}%` : '—' },
+                  ...(s.googleAds.conversions != null && s.googleAds.conversions > 0 ? [{ label: 'Conversiones', value: fmt(s.googleAds.conversions) }] : []),
                 ]} />
+                <BestAd ad={s.googleAds.topAds?.[0]} accent="green" />
               </SectionCard>
             )}
           </div>

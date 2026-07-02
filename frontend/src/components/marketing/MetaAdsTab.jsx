@@ -136,6 +136,57 @@ function CampaignsTable({ campaigns }) {
   )
 }
 
+// ── Mejores anuncios (creativo + destacados) ──────────────────────────────────
+
+function MetaTopAds({ ads }) {
+  if (!ads || ads.length === 0) return null
+
+  const bestReachId = ads[0]?.id // ya vienen ordenados por alcance desc
+  const bestCtrId   = [...ads].filter(a => a.ctr > 0).sort((a, b) => b.ctr - a.ctr)[0]?.id
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          🏆 Mejores anuncios ({ads.length})
+        </p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4">
+        {ads.map(ad => {
+          const badges = []
+          if (ad.id === bestReachId) badges.push({ label: 'Mayor alcance', cls: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' })
+          if (ad.id === bestCtrId)   badges.push({ label: 'Mejor CTR',     cls: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' })
+          return (
+            <div key={ad.id} className="flex flex-col border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800/50">
+              <div className="aspect-square bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+                {ad.thumbnailUrl
+                  ? <img src={ad.thumbnailUrl} alt={ad.name} className="w-full h-full object-cover" loading="lazy" />
+                  : <span className="text-3xl opacity-30">🖼️</span>}
+              </div>
+              <div className="p-2.5 flex flex-col gap-1.5">
+                {badges.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {badges.map(b => (
+                      <span key={b.label} className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                  <span>👁️ {fmtK(ad.reach)}</span>
+                  <span>📊 {fmtPct(ad.ctr)}</span>
+                  <span>📢 {fmtK(ad.impressions)}</span>
+                  <span>💰 {fmtUSD(ad.spend)}</span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Prompt de conexión ────────────────────────────────────────────────────────
 
 function ConnectPrompt({ projectId, onConnected }) {
@@ -605,6 +656,9 @@ export default function MetaAdsTab({ projectId, onSelectProject }) {
 
       {/* Objetivos de Meta Ads del proyecto */}
       <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Meta Ads" />
+
+      {/* Mejores anuncios (creativo) */}
+      {data && <MetaTopAds ads={data.topAds} />}
 
       {/* Tabla de campañas */}
       {data && <CampaignsTable campaigns={data.campaigns} />}

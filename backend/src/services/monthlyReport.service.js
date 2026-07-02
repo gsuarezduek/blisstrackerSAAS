@@ -373,7 +373,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     clicks:      googleAdsRaw.clicks,
     ctr:         googleAdsRaw.ctr,
     conversions: googleAdsRaw.conversions,
+    avgCpc:      googleAdsRaw.avgCpc,
     campaigns:   (googleAdsRaw.campaigns ?? []).slice(0, 5),
+    topAds:      (googleAdsRaw.topAds ?? []).slice(0, 5),  // preview de texto, sin imagen
   } : null
 
   const metaAds = metaAdsRaw ? {
@@ -382,7 +384,10 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     clicks:      metaAdsRaw.clicks,
     ctr:         metaAdsRaw.ctr,
     reach:       metaAdsRaw.reach,
+    cpm:         metaAdsRaw.cpm,
     campaigns:   (metaAdsRaw.campaigns ?? []).slice(0, 5),
+    // Miniaturas del creativo cacheadas (las URLs de Meta vencen)
+    topAds:      await cacheImagesInArray((metaAdsRaw.topAds ?? []).slice(0, 5), 'thumbnailUrl', workspaceId),
   } : null
 
   // ── GEO ──────────────────────────────────────────────────────────────────────

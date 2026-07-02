@@ -134,6 +134,74 @@ function CampaignsTable({ campaigns }) {
   )
 }
 
+// ── Mejores anuncios (preview de texto) ───────────────────────────────────────
+
+const AD_TYPE_LABEL = {
+  RESPONSIVE_SEARCH_AD:  'Búsqueda',
+  EXPANDED_TEXT_AD:      'Búsqueda',
+  RESPONSIVE_DISPLAY_AD: 'Display',
+  IMAGE_AD:              'Display',
+  VIDEO_AD:             'Video',
+  VIDEO_RESPONSIVE_AD:   'Video',
+  APP_AD:               'App',
+}
+
+function GoogleTopAds({ ads }) {
+  if (!ads || ads.length === 0) return null
+
+  const bestImpId = ads[0]?.id // ya vienen ordenados por impresiones desc
+  const bestCtrId = [...ads].filter(a => a.ctr > 0).sort((a, b) => b.ctr - a.ctr)[0]?.id
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          🏆 Mejores anuncios ({ads.length})
+        </p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+        {ads.map(ad => {
+          const badges = []
+          if (ad.id === bestImpId) badges.push({ label: 'Más impresiones', cls: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' })
+          if (ad.id === bestCtrId) badges.push({ label: 'Mejor CTR',       cls: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' })
+          const typeLabel = AD_TYPE_LABEL[ad.type] ?? ad.type
+          return (
+            <div key={ad.id} className="flex flex-col gap-2 border border-gray-100 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800/50">
+              <div className="flex items-center justify-between gap-2">
+                {typeLabel && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">{typeLabel}</span>
+                )}
+                <div className="flex flex-wrap gap-1 justify-end">
+                  {badges.map(b => (
+                    <span key={b.label} className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
+                  ))}
+                </div>
+              </div>
+              {/* Preview del anuncio de texto (estilo resultado de búsqueda) */}
+              {ad.headline
+                ? (
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-blue-700 dark:text-blue-400 line-clamp-2" title={ad.headline}>{ad.headline}</p>
+                    {ad.description && <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5">{ad.description}</p>}
+                  </div>
+                )
+                : (
+                  <p className="text-sm text-gray-700 dark:text-gray-300 truncate" title={ad.name}>{ad.name || 'Anuncio'}</p>
+                )}
+              {ad.campaignName && <p className="text-[10px] text-gray-400 truncate">📁 {ad.campaignName}</p>}
+              <div className="grid grid-cols-3 gap-x-2 text-[11px] text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-2 mt-auto">
+                <span>📢 {fmtK(ad.impressions)}</span>
+                <span>📊 {fmtPct(ad.ctr)}</span>
+                <span>💰 {fmtUSD(ad.cost)}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Formulario de Customer ID (+ Manager Account ID opcional) ────────────────
 
 function CustomerIdForm({ projectId, onSaved, initialCustomerId = '', initialManagerId = '' }) {
@@ -655,6 +723,9 @@ export default function GoogleAdsTab({ projectId, onSelectProject }) {
 
       {/* Objetivos de Google Ads del proyecto */}
       <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Google Ads" />
+
+      {/* Mejores anuncios (preview de texto) */}
+      {data && <GoogleTopAds ads={data.topAds} />}
 
       {/* Tabla de campañas */}
       {data && <CampaignsTable campaigns={data.campaigns} />}

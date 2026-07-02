@@ -1,6 +1,7 @@
 const prisma                         = require('../lib/prisma')
 const { getValidFbToken, fetchMetaAdsData }  = require('./metaAds.service')
 const { fetchGoogleAdsData }         = require('./googleAds.service')
+const { cacheImagesInArray }         = require('./socialImageCache.service')
 
 function prevMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -44,6 +45,14 @@ async function saveMetaAdsSnapshot(projectId, workspaceId, month) {
     reach:       c.reach ?? null,
   }))
 
+  // Top 5 anuncios (por alcance) con la miniatura del creativo cacheada — las
+  // thumbnail_url de Meta vencen, así que las persistimos como SocialImage/R2.
+  const topAds = await cacheImagesInArray(
+    (data.topAds ?? []).slice(0, 5),
+    'thumbnailUrl',
+    workspaceId,
+  )
+
   await prisma.adsSnapshot.upsert({
     where: { projectId_month_type: { projectId, month, type: 'meta_ads' } },
     update: {
@@ -55,6 +64,7 @@ async function saveMetaAdsSnapshot(projectId, workspaceId, month) {
       cpm:           data.cpm     ?? null,
       cpc:           data.cpc     ?? null,
       topCampaigns:  JSON.stringify(topCampaigns),
+      topAds:        JSON.stringify(topAds),
       campaignsCount: topCampaigns.length,
     },
     create: {
@@ -70,6 +80,7 @@ async function saveMetaAdsSnapshot(projectId, workspaceId, month) {
       cpm:           data.cpm     ?? null,
       cpc:           data.cpc     ?? null,
       topCampaigns:  JSON.stringify(topCampaigns),
+      topAds:        JSON.stringify(topAds),
       campaignsCount: topCampaigns.length,
     },
   })
@@ -110,6 +121,20 @@ async function saveGoogleAdsSnapshot(projectId, workspaceId, month) {
     conversions:  c.conversions,
   }))
 
+  // Top 5 anuncios (por impresiones) — preview de texto, sin imagen que cachear.
+  const topAds = (data.topAds ?? []).slice(0, 5).map(a => ({
+    id:           a.id,
+    name:         a.name,
+    type:         a.type,
+    headline:     a.headline,
+    description:  a.description,
+    impressions:  a.impressions,
+    clicks:       a.clicks,
+    ctr:          a.ctr,
+    cost:         a.cost,
+    conversions:  a.conversions,
+  }))
+
   const totalCost = parseFloat(data.cost?.toFixed(2) ?? 0)
 
   await prisma.adsSnapshot.upsert({
@@ -122,6 +147,7 @@ async function saveGoogleAdsSnapshot(projectId, workspaceId, month) {
       conversions:    data.conversions ?? null,
       avgCpc:         data.avgCpc      ?? null,
       topCampaigns:   JSON.stringify(topCampaigns),
+      topAds:         JSON.stringify(topAds),
       campaignsCount: topCampaigns.length,
     },
     create: {
@@ -136,6 +162,7 @@ async function saveGoogleAdsSnapshot(projectId, workspaceId, month) {
       conversions:    data.conversions ?? null,
       avgCpc:         data.avgCpc      ?? null,
       topCampaigns:   JSON.stringify(topCampaigns),
+      topAds:         JSON.stringify(topAds),
       campaignsCount: topCampaigns.length,
     },
   })

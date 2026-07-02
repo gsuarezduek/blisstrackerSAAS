@@ -1480,6 +1480,12 @@ model AdsSnapshot {
   // Top campañas (JSON): [{ id, name, spend, impressions, clicks, ctr }]
   topCampaigns String @default("[]")
 
+  // Top anuncios individuales (JSON):
+  //   Meta:   [{ id, name, thumbnailUrl, reach, impressions, clicks, ctr, spend }]
+  //   Google: [{ id, name, type, headline, description, impressions, clicks, ctr, cost, conversions }]
+  // La thumbnailUrl de Meta se cachea (SocialImage/R2) al guardar el snapshot.
+  topAds String @default("[]")
+
   // Metadata
   currency       String @default("USD")
   campaignsCount Int    @default(0)
