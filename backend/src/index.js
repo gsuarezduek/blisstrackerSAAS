@@ -54,6 +54,7 @@ const { saveAllKeywordRankings, saveCurrentMonthKeywordRankings } = require('./s
 const { captureAllSerpSnapshots } = require('./services/serpApi.service')
 const { runAllMonthlyGeoAudits }           = require('./services/geoAudit.service')
 const { saveAllMonthlyInstagramSnapshots } = require('./services/instagramSnapshot.service')
+const { captureAllStories }                = require('./services/instagramStories.service')
 const { saveAllMonthlyTikTokSnapshots }    = require('./services/tiktokSnapshot.service')
 const { saveAllMonthlyYouTubeSnapshots }   = require('./services/youtubeSnapshot.service')
 const { saveAllMonthlyLinkedinSnapshots }  = require('./services/linkedinSnapshot.service')
@@ -71,6 +72,7 @@ let insightMemoryRunning        = false
 let keywordWeeklyRunning        = false
 let serpSnapshotRunning         = false
 let monthlyChainRunning         = false  // cadena mensual de snapshots del día 1°
+let storiesCaptureRunning       = false  // captura de stories de Instagram (efímeras 24h)
 let productivityDigestRunning   = false
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
@@ -201,6 +203,19 @@ cron.schedule('0 3 * * *', async () => {
   } catch (err) {
     console.error('[BillingTier] Error en cron de reconciliación de tiers:', err.message)
   }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: capturar stories de Instagram — cada 6 horas.
+// Las stories viven 24h y no tienen histórico en la API, así que hay que leerlas
+// antes de que expiren. Corriendo cada 6h vemos toda story y refinamos sus insights
+// (que crecen mientras está viva) hasta 4 veces. La agregación mensual del informe
+// lee de InstagramStory (ya persistido).
+cron.schedule('0 */6 * * *', async () => {
+  if (storiesCaptureRunning) { console.log('[InstagramStories] Ya en ejecución, se omite.'); return }
+  storiesCaptureRunning = true
+  try { await captureAllStories() }
+  catch (err) { console.error('[InstagramStories] Error en cron:', err.message) }
+  finally { storiesCaptureRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // ── Cadena mensual de snapshots — 1° del mes 01:00 ART ─────────────────────────

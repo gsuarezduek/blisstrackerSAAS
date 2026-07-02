@@ -824,6 +824,86 @@ function CrossProjectInstagramPanel({ onSelectProject }) {
   )
 }
 
+// ── Sección de Stories (historias del mes) ─────────────────────────────────────
+
+function StoriesSection({ stories, isCurrentMonth, onCapture, capturing }) {
+  const thumbs = (stories?.topStories?.length ? stories.topStories : stories?.recent) ?? []
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">📸 Stories del mes</p>
+        {isCurrentMonth && (
+          <button
+            onClick={onCapture}
+            disabled={capturing}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            {capturing ? 'Capturando…' : '🔄 Capturar ahora'}
+          </button>
+        )}
+      </div>
+
+      {!stories || !stories.count ? (
+        <div className="p-6 text-center">
+          <p className="text-sm text-gray-400 dark:text-gray-500">
+            {isCurrentMonth
+              ? 'Todavía no se capturaron stories este mes. Se capturan automáticamente cada 6 horas; podés forzar una captura ahora.'
+              : 'No se capturaron stories en este mes.'}
+          </p>
+        </div>
+      ) : (
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <StoryKpi label="Publicadas" value={fmtNum(stories.count)} />
+            {stories.avgReach      != null && <StoryKpi label="Alcance prom." value={fmtK(stories.avgReach)} />}
+            {stories.avgViews      != null && <StoryKpi label="Vistas prom."  value={fmtK(stories.avgViews)} />}
+            {stories.totalReplies  != null && <StoryKpi label="Respuestas"    value={fmtNum(stories.totalReplies)} />}
+            {stories.retentionRate != null && <StoryKpi label="Retención"     value={`${stories.retentionRate}%`} />}
+          </div>
+
+          {thumbs.length > 0 && (
+            <div className="flex gap-2.5 overflow-x-auto pb-1">
+              {thumbs.map(st => {
+                const inner = (
+                  <div className="relative w-20 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+                    {st.imgSrc
+                      ? <img src={st.imgSrc} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      : <div className="w-full h-full bg-gradient-to-br from-fuchsia-400 to-purple-400" />}
+                    {(st.reach != null || st.replies != null) && (
+                      <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] flex items-center justify-center gap-2 py-0.5">
+                        {st.reach   != null && <span>👁️ {fmtK(st.reach)}</span>}
+                        {st.replies != null && st.replies > 0 && <span>💬 {fmtK(st.replies)}</span>}
+                      </div>
+                    )}
+                  </div>
+                )
+                return st.permalink
+                  ? <a key={st.id} href={st.permalink} target="_blank" rel="noopener noreferrer" className="hover:opacity-90 transition-opacity">{inner}</a>
+                  : <div key={st.id}>{inner}</div>
+              })}
+            </div>
+          )}
+
+          {!stories.hasInsights && (
+            <p className="text-[11px] text-gray-400 dark:text-gray-500">
+              Se registran las stories publicadas, pero las métricas de rendimiento (alcance, respuestas, retención) aún no están disponibles — requieren el permiso de insights de Meta.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StoryKpi({ label, value }) {
+  return (
+    <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-lg p-3">
+      <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
+      <div className="text-xl font-bold text-gray-900 dark:text-white">{value}</div>
+    </div>
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function InstagramTab({ projectId, onSelectProject }) {
@@ -842,6 +922,9 @@ export default function InstagramTab({ projectId, onSelectProject }) {
   const [error,          setError]          = useState(null)
   const [disconnecting,  setDisconnecting]  = useState(false)
   const [deletingSnapshot, setDeletingSnapshot] = useState(false)
+  const [stories,          setStories]          = useState(null)
+  const [storiesScrapeOnly, setStoriesScrapeOnly] = useState(false)
+  const [capturingStories, setCapturingStories] = useState(false)
 
   const fetchData = useCallback(async () => {
     if (!projectId) return
@@ -897,6 +980,26 @@ export default function InstagramTab({ projectId, onSelectProject }) {
   }, [projectId])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Stories del mes seleccionado (se leen de la DB; el cron las captura cada 6h).
+  useEffect(() => {
+    if (!projectId || !integration) { setStories(null); return }
+    let active = true
+    api.get(`/marketing/projects/${projectId}/instagram/stories`, { params: { month: selectedMonth } })
+      .then(r => { if (active) { setStories(r.data.summary); setStoriesScrapeOnly(!!r.data.scrapeOnly) } })
+      .catch(() => { if (active) setStories(null) })
+    return () => { active = false }
+  }, [projectId, selectedMonth, integration])
+
+  async function handleCaptureStories() {
+    setCapturingStories(true)
+    try {
+      const { data } = await api.post(`/marketing/projects/${projectId}/instagram/stories/capture`)
+      setStories(data.summary)
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudieron capturar las stories.')
+    } finally { setCapturingStories(false) }
+  }
 
   async function handleDisconnect() {
     if (!window.confirm('¿Desconectar la cuenta de Instagram de este proyecto?')) return
@@ -1084,6 +1187,16 @@ export default function InstagramTab({ projectId, onSelectProject }) {
           postsThisMonth={displayData.postsThisMonth ?? displayData.postsCount}
           label={monthLabel(selectedMonth)}
           isPast
+        />
+      )}
+
+      {/* Stories del mes — solo con conexión por API oficial (por scraping no son accesibles) */}
+      {!storiesScrapeOnly && (
+        <StoriesSection
+          stories={stories}
+          isCurrentMonth={isCurrentMonth}
+          onCapture={handleCaptureStories}
+          capturing={capturingStories}
         />
       )}
 

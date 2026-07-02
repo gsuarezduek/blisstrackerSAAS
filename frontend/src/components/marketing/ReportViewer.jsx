@@ -297,6 +297,48 @@ function BestInstagramPost({ post, label = 'Mejor publicación del mes', medal =
   )
 }
 
+// Stories de Instagram del mes (efímeras — capturadas a diario). Muestra cantidad,
+// alcance/retención y las miniaturas de las mejores. `stories` puede ser null.
+function StoriesBlock({ stories }) {
+  if (!stories || !stories.count) return null
+  const thumbs = (stories.topStories?.length ? stories.topStories : stories.recent) ?? []
+  return (
+    <div className="mt-4 rounded-xl border border-fuchsia-200 dark:border-fuchsia-800 bg-fuchsia-50/50 dark:bg-fuchsia-900/10 p-3">
+      <p className="text-[10px] font-semibold text-fuchsia-700 dark:text-fuchsia-300 uppercase tracking-wide mb-2">
+        📸 Stories del mes
+      </p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
+        <span><strong className="text-gray-800 dark:text-gray-200">{fmt(stories.count)}</strong> publicadas</span>
+        {stories.avgReach     != null && <span>👁️ {fmt(stories.avgReach)} alcance prom.</span>}
+        {stories.avgViews     != null && <span>▶️ {fmt(stories.avgViews)} vistas prom.</span>}
+        {stories.totalReplies != null && <span>💬 {fmt(stories.totalReplies)} respuestas</span>}
+        {stories.retentionRate != null && <span>📈 {stories.retentionRate}% retención</span>}
+      </div>
+      {thumbs.length > 0 && (
+        <div className="flex gap-2 mt-3 overflow-x-auto">
+          {thumbs.map(st => (
+            <div key={st.id} className="relative w-14 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+              {st.imgSrc
+                ? <img src={st.imgSrc} alt="" className="w-full h-full object-cover" loading="lazy" />
+                : <div className="w-full h-full bg-gradient-to-br from-fuchsia-400 to-purple-400" />}
+              {st.reach != null && (
+                <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[9px] text-center py-0.5">
+                  👁️ {fmt(st.reach)}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {!stories.hasInsights && (
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">
+          Métricas de rendimiento no disponibles todavía (requiere el permiso de insights de Meta).
+        </p>
+      )}
+    </div>
+  )
+}
+
 // Anuncio destacado del mes (Meta con creativo / Google con preview de texto)
 function BestAd({ ad, accent = 'blue' }) {
   if (!ad) return null
@@ -1264,6 +1306,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                 {s.instagram.bestByReach && s.instagram.bestByReach.id !== s.instagram.bestPost?.id && (
                   <BestInstagramPost post={s.instagram.bestByReach} label="Mayor alcance del mes" medal="📡" />
                 )}
+                <StoriesBlock stories={s.instagram.stories} />
                 {s.instagram._fallbackMonth && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-3 text-center">
                     {s.instagram._fallbackMonth === 'live'

@@ -3,6 +3,7 @@ const { getValidMetaToken }        = require('../services/metaTokenRefresh.servi
 const { fetchInstagramMetrics }    = require('../services/instagram.service')
 const { saveInstagramSnapshot }    = require('../services/instagramSnapshot.service')
 const { scrapeInstagramProfile, parseInstagramUsername } = require('../services/socialScrape.service')
+const { getStoriesSummary, captureStoriesForProject }    = require('../services/instagramStories.service')
 
 // Cooldown en memoria para el refresh manual de scraping (protege costo del proveedor).
 const SCRAPE_REFRESH_COOLDOWN_MS = 30 * 60 * 1000
@@ -366,4 +367,69 @@ async function refreshScrape(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape }
+/**
+ * GET /api/marketing/projects/:id/instagram/stories?month=YYYY-MM
+ * Devuelve el resumen agregado de stories del mes (cantidad, alcance, retención, top).
+ * Las stories las captura el cron cada 6h; acá solo se leen de la DB.
+ */
+async function getStories(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const month       = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : currentMonthStr()
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const integration = await prisma.projectIntegration.findUnique({
+      where: { projectId_type: { projectId, type: 'instagram' } },
+      select: { scopes: true },
+    })
+    // Las stories solo existen vía API oficial (por scraping no son accesibles).
+    const scrapeOnly = integration?.scopes === 'scrape'
+
+    const summary = await getStoriesSummary(projectId, month)
+    res.json({ month, scrapeOnly, summary })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/marketing/projects/:id/instagram/stories/capture
+ * Fuerza una captura inmediata de las stories activas (útil para no esperar al cron).
+ */
+async function captureStories(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const integration = await prisma.projectIntegration.findUnique({
+      where: { projectId_type: { projectId, type: 'instagram' } },
+    })
+    if (!integration || integration.status !== 'active') {
+      return res.status(404).json({ error: 'Sin integración de Instagram activa', code: 'NOT_CONNECTED' })
+    }
+    if (integration.scopes === 'scrape') {
+      return res.status(400).json({ error: 'Las stories solo están disponibles con la conexión por API oficial (token de Business Manager), no por scraping.', code: 'SCRAPE_UNSUPPORTED' })
+    }
+
+    let captured
+    try {
+      captured = await captureStoriesForProject(projectId, workspaceId, integration)
+    } catch (err) {
+      const igMsg = err.response?.data?.error?.message
+      return res.status(400).json({ error: igMsg || err.message || 'No se pudieron capturar las stories.' })
+    }
+
+    const summary = await getStoriesSummary(projectId, currentMonthStr())
+    res.json({ ok: true, captured, summary })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, getStories, captureStories }

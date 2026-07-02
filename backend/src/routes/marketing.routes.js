@@ -81,6 +81,8 @@ router.post('/projects/:id/instagram/snapshots', instagram.saveSnapshot)
 router.delete('/projects/:id/instagram/snapshots/:month', instagram.deleteSnapshot)
 router.get('/projects/:id/instagram/followers',  instagram.getFollowerLog)
 router.post('/projects/:id/instagram/scrape/refresh', instagram.refreshScrape)
+router.get('/projects/:id/instagram/stories',    instagram.getStories)
+router.post('/projects/:id/instagram/stories/capture', instagram.captureStories)
 router.get('/projects/:id/instagram',            instagram.getMetrics)
 
 // Competidores (RRSS) — scraping de cuentas de la competencia

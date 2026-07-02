@@ -5,6 +5,7 @@ const { fetchGoogleAdsData }             = require('./googleAds.service')
 const { fetchMetaAdsData, getValidFbToken } = require('./metaAds.service')
 const { getValidMetaToken }              = require('./metaTokenRefresh.service')
 const { fetchInstagramMetrics }          = require('./instagram.service')
+const { getStoriesSummary }              = require('./instagramStories.service')
 const { getValidTikTokToken }            = require('./tiktokTokenRefresh.service')
 const { fetchTikTokMetrics }             = require('./tiktok.service')
 const { getValidAccessToken }            = require('./tokenRefresh.service')
@@ -554,6 +555,17 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
           console.warn('[MonthlyReport] Instagram live fallback fallido:', err.message)
         }
       }
+    }
+  }
+
+  // Stories del mes (efímeras, capturadas a diario por el cron → persistidas en
+  // InstagramStory). Se adjuntan al bloque de Instagram si hay al menos una.
+  if (instagram) {
+    try {
+      instagram.stories = await getStoriesSummary(projectId, dataMonth)
+    } catch (err) {
+      console.warn('[MonthlyReport] Stories de Instagram no disponibles:', err.message)
+      instagram.stories = null
     }
   }
 
