@@ -2,6 +2,7 @@ const { OAuth2Client }     = require('google-auth-library')
 const jwt                  = require('jsonwebtoken')
 const prisma               = require('../lib/prisma')
 const { encrypt, decrypt } = require('../lib/encryption')
+const { saveCurrentMonthSnapshotSafe } = require('../services/analyticsSnapshot.service')
 
 // GA4 y Search Console comparten el mismo scope set — una sola auth sirve para ambos
 const GOOGLE_COMBINED_SCOPES = [
@@ -183,6 +184,11 @@ async function connectExisting(req, res, next) {
       select: { type: true, status: true, propertyId: true, customerId: true, scopes: true, connectedAt: true },
     })
 
+    // Auto-guardar snapshot del mes en curso al conectar GA4 (fire-and-forget, no bloquea).
+    if (type === 'google_analytics') {
+      saveCurrentMonthSnapshotSafe(projectId, req.workspace.id, req.workspace.timezone)
+    }
+
     res.json(integration)
   } catch (err) { next(err) }
 }
@@ -263,6 +269,13 @@ async function handleCallback(req, res, next) {
         update: baseData,
         create: { projectId, type: t, ...baseData, ...rememberedFieldsFor(defaults, t) },
       })
+    }
+
+    // Auto-guardar snapshot del mes en curso al conectar GA4 (fire-and-forget).
+    // No-op si el propertyId aún no está seteado (recién se elige después); en ese
+    // caso el snapshot se dispara desde updateIntegration al guardar el Property ID.
+    if (typesToSave.includes('google_analytics')) {
+      saveCurrentMonthSnapshotSafe(projectId, workspaceId)
     }
 
     // Propagar el nuevo refresh_token a los proyectos del workspace que comparten ESTE token.
@@ -385,6 +398,12 @@ async function updateIntegration(req, res, next) {
       data:  updateData,
       select: { type: true, status: true, propertyId: true, customerId: true, country: true, scopes: true },
     })
+
+    // Al setear el Property ID de GA4 la integración recién queda usable: auto-guardar
+    // snapshot del mes en curso (fire-and-forget) para no dejar el proyecto "sin datos".
+    if (type === 'google_analytics' && updated.status === 'active' && updated.propertyId) {
+      saveCurrentMonthSnapshotSafe(projectId, req.workspace.id, req.workspace.timezone)
+    }
 
     res.json(updated)
   } catch (err) {

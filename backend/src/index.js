@@ -48,7 +48,7 @@ app.listen(PORT, async () => {
 const cron = require('node-cron')
 const { sendAllWeeklyReports }          = require('./services/weeklyReport.service')
 const { updateAllMemories }             = require('./services/insightMemory.service')
-const { saveAllPreviousMonthSnapshots } = require('./services/analyticsSnapshot.service')
+const { saveAllPreviousMonthSnapshots, refreshAllCurrentMonthSnapshots } = require('./services/analyticsSnapshot.service')
 const { runAllMonthlyPageSpeed }        = require('./services/pageSpeed.service')
 const { saveAllKeywordRankings, saveCurrentMonthKeywordRankings } = require('./services/keywordTracking.service')
 const { captureAllSerpSnapshots } = require('./services/serpApi.service')
@@ -70,6 +70,7 @@ const { sendAllProductivityDigests } = require('./services/productivityDigest.se
 let weeklyReportRunning         = false
 let insightMemoryRunning        = false
 let keywordWeeklyRunning        = false
+let analyticsWeeklyRunning      = false
 let serpSnapshotRunning         = false
 let monthlyChainRunning         = false  // cadena mensual de snapshots del día 1°
 let storiesCaptureRunning       = false  // captura de stories de Instagram (efímeras 24h)
@@ -105,6 +106,18 @@ cron.schedule('0 6 * * 1', async () => {
   try { await saveCurrentMonthKeywordRankings() }
   catch (err) { console.error('[KeywordTracking] Error en cron semanal:', err.message) }
   finally { keywordWeeklyRunning = false }
+}, { timezone: 'America/Argentina/Buenos_Aires' })
+
+// Cron: refrescar snapshots GA4 del mes en curso — lunes 06:15 ART (semanal, upsert).
+// Mantiene la lista cross-proyecto (Marketing → Web) al día durante el mes en curso y
+// evita que un proyecto recién conectado quede en "sin datos" hasta el 1° del mes.
+cron.schedule('15 6 * * 1', async () => {
+  if (analyticsWeeklyRunning) { console.log('[AnalyticsSnapshot] Semanal ya en ejecución, se omite.'); return }
+  analyticsWeeklyRunning = true
+  console.log('[AnalyticsSnapshot] Iniciando refresco semanal de snapshots del mes en curso...')
+  try { await refreshAllCurrentMonthSnapshots() }
+  catch (err) { console.error('[AnalyticsSnapshot] Error en cron semanal:', err.message) }
+  finally { analyticsWeeklyRunning = false }
 }, { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: capturar SERP snapshots — lunes 06:30 ART (después del cron de keywords GSC)
