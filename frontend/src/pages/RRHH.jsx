@@ -11,7 +11,7 @@ import useRoles from '../hooks/useRoles'
 import RoleBadge from '../components/RoleBadge'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
-import { computePeopleScore, peopleColumnKeys, scoreBand } from '../utils/peopleScore'
+import { computePeopleScore, peopleColumnKeys } from '../utils/peopleScore'
 
 const TZ = 'America/Argentina/Buenos_Aires'
 
@@ -91,11 +91,29 @@ function StatCard({ icon, label, value, sub, onClick }) {
   )
 }
 
+// Banda de color por porcentaje (compartida por People Score y "correctas en el asiento"):
+// <40% rojo · 40–70% amarillo · >70% verde. null = sin evaluar (gris).
+function healthBand(pct) {
+  if (pct == null) return { text: 'text-gray-500 dark:text-gray-400',  bar: 'bg-gray-300 dark:bg-gray-600', label: 'Sin evaluar' }
+  if (pct > 70)    return { text: 'text-green-600 dark:text-green-400', bar: 'bg-green-500',                 label: 'Equipo saludable' }
+  if (pct >= 40)   return { text: 'text-amber-600 dark:text-amber-400', bar: 'bg-amber-500',                 label: 'Requiere atención' }
+  return             { text: 'text-red-600 dark:text-red-400',          bar: 'bg-red-500',                   label: 'Crítico' }
+}
+
+// Color del total de faltas: 0 verde · 1–3 amarillo · >3 rojo.
+function faltasColor(n) {
+  if (n === 0) return 'text-green-600 dark:text-green-400'
+  if (n <= 3)  return 'text-amber-600 dark:text-amber-400'
+  return         'text-red-600 dark:text-red-400'
+}
+
 // Tarjeta de People Score (EOS) — salud del equipo según el Analizador de Personas.
 function PeopleScoreCard({ peopleScore }) {
-  const { score, rightPeople, total, strikesPeople = 0 } = peopleScore
-  const band = scoreBand(score)
-  const strikesColor = strikesPeople > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
+  const { score, rightPeople, total, strikesTotal = 0 } = peopleScore
+  const band = healthBand(score)
+  const seatPct = total > 0 ? Math.round(rightPeople / total * 100) : null
+  const seatColor = healthBand(seatPct).text
+  const strikesColor = faltasColor(strikesTotal)
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
       <div className="flex items-center justify-between mb-3">
@@ -121,7 +139,7 @@ function PeopleScoreCard({ peopleScore }) {
         </div>
         {/* Personas correctas */}
         <div className="sm:border-l border-gray-100 dark:border-gray-700 sm:pl-4">
-          <span className="text-3xl font-bold leading-none text-gray-900 dark:text-white">
+          <span className={`text-3xl font-bold leading-none ${seatColor}`}>
             {rightPeople}<span className="text-xl text-gray-400 dark:text-gray-500">/{total}</span>
           </span>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Personas correctas en el asiento</p>
@@ -129,14 +147,12 @@ function PeopleScoreCard({ peopleScore }) {
             Con <span className="font-medium text-green-600 dark:text-green-400">+</span> en todos sus valores y GWC
           </p>
         </div>
-        {/* Personas con faltas */}
+        {/* Faltas del equipo */}
         <div className="sm:border-l border-gray-100 dark:border-gray-700 sm:pl-4">
-          <span className={`text-3xl font-bold leading-none ${strikesColor}`}>
-            {strikesPeople}<span className="text-xl text-gray-400 dark:text-gray-500">/{total}</span>
-          </span>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Personas con faltas</p>
+          <span className={`text-3xl font-bold leading-none ${strikesColor}`}>{strikesTotal}</span>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Faltas del equipo</p>
           <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 leading-snug">
-            Con una o más faltas (strikes) registradas
+            Total de faltas (strikes) registradas
           </p>
         </div>
       </div>
@@ -1780,8 +1796,8 @@ export default function RRHH() {
       .then(r => {
         const { members, coreValues, ratingsMap, strikesMap } = r.data
         if (!coreValues?.length) { setPeopleScore(null); return }
-        const strikesPeople = Object.values(strikesMap || {}).filter(a => a?.length > 0).length
-        setPeopleScore({ ...computePeopleScore(members, peopleColumnKeys(coreValues), ratingsMap), strikesPeople })
+        const strikesTotal = Object.values(strikesMap || {}).reduce((a, arr) => a + (arr?.length || 0), 0)
+        setPeopleScore({ ...computePeopleScore(members, peopleColumnKeys(coreValues), ratingsMap), strikesTotal })
       })
       .catch(() => {})
   }, [eosEnabled])

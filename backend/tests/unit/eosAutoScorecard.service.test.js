@@ -7,12 +7,19 @@ jest.mock('../../src/lib/prisma', () => ({
   project:            { findMany: jest.fn() },
   rrhhMetricSnapshot: { findMany: jest.fn() },
   eOSTodo:            { findMany: jest.fn() },
+  eOSStrike:          { findMany: jest.fn() },
   monthlyReport:      { findMany: jest.fn(), findFirst: jest.fn() },
   marketingObjective: { findMany: jest.fn(), findFirst: jest.fn() },
   instagramSnapshot:  { findMany: jest.fn(), findFirst: jest.fn() },
   tikTokSnapshot:     { findMany: jest.fn(), findFirst: jest.fn() },
   linkedinSnapshot:   { findMany: jest.fn(), findFirst: jest.fn() },
 }))
+
+// Estos tests fueron escritos asumiendo "hoy = junio 2026" (qué meses están cerrados, qué
+// semana es la actual). El servicio lee "hoy" SOLO vía todayString() (todo lo demás usa
+// fechas explícitas), así que fijándolo acá los asserts de "mes en curso" quedan estables
+// y no se rompen cuando pasa el tiempo real.
+jest.mock('../../src/utils/dates', () => ({ todayString: () => '2026-06-15' }))
 
 const prisma = require('../../src/lib/prisma')
 const { computeAutoScorecardYear, computeCurrentMonthStatus, isoWeekPeriodOf } = require('../../src/services/eosAutoScorecard.service')
@@ -49,6 +56,7 @@ function resetAll() {
   prisma.project.findMany.mockResolvedValue([])
   prisma.rrhhMetricSnapshot.findMany.mockResolvedValue([])
   prisma.eOSTodo.findMany.mockResolvedValue([])
+  prisma.eOSStrike.findMany.mockResolvedValue([])
   prisma.monthlyReport.findMany.mockResolvedValue([])
   prisma.marketingObjective.findMany.mockResolvedValue([])
   prisma.instagramSnapshot.findMany.mockResolvedValue([])
@@ -333,6 +341,23 @@ describe('computeAutoScorecardYear — semanales nuevas', () => {
     expect(out.todos_completados['2026-W11'].value).toBe(1)
     expect(out.todos_completados['2026-W11'].top3).toHaveLength(0)
     expect(out.todos_completados['2025-W10']).toBeUndefined()
+  })
+
+  it('faltas: acumula personas con ≥1 strike al cierre de cada semana (stock)', async () => {
+    // Ana recibe 2 faltas en W10 (una el lun, otra el mié); Beto 1 en W11.
+    prisma.eOSStrike.findMany.mockResolvedValue([
+      { userId: 1, createdAt: new Date('2026-03-02T10:00:00-03:00'), user: { name: 'Ana Lopez', avatar: 'a.png' } },
+      { userId: 1, createdAt: new Date('2026-03-04T10:00:00-03:00'), user: { name: 'Ana Lopez', avatar: 'a.png' } },
+      { userId: 2, createdAt: new Date('2026-03-11T10:00:00-03:00'), user: { name: 'Beto Ruiz', avatar: 'b.png' } },
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['faltas'])
+    // W10: solo Ana tiene faltas → 1 persona, con 2 strikes.
+    expect(out.faltas['2026-W10']).toMatchObject({ value: 1 })
+    expect(out.faltas['2026-W10'].top3[0]).toMatchObject({ userId: 1, strikes: 2 })
+    // W11: se acumula Beto → 2 personas (stock, no se reinicia).
+    expect(out.faltas['2026-W11'].value).toBe(2)
+    // Antes de la primera falta (W09) no hay entrada.
+    expect(out.faltas['2026-W09']).toBeUndefined()
   })
 })
 
