@@ -792,13 +792,31 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   const [hasBanner,       setHasBanner]       = useState(report?.hasBanner ?? false)
   const bannerInputRef = useRef()
 
+  // "Próximos pasos → tareas": estado por índice de paso ('creating' | 'done' | 'error')
+  const [createdSteps, setCreatedSteps] = useState({})
+
   if (!data) return null
 
-  const { project, month, dataMonth, sections, analysis } = data
+  const { project, month, dataMonth, sections, analysis, period } = data
   const objectives = data.objectives || []
   const displayMonth = dataMonth || month
+  const periodTitle = period?.label || monthLabel(displayMonth)   // "Junio 2026" | "Abril–Junio 2026" | "1–29 Jun 2026"
+  const periodRange = period?.dataLabel || (dataMonth && dataMonth !== month ? dataPeriodLabel(dataMonth) : null)
   const s = sections
   const canEdit = !isPublic && !!onSaveAnalysis
+
+  // Crea una tarea del proyecto a partir de un "próximo paso" (solo vista admin).
+  async function handleCreateTaskFromStep(step, i) {
+    if (!project?.id || createdSteps[i] === 'creating' || createdSteps[i] === 'done') return
+    const desc = `Marketing - ${String(step).replace(/<[^>]+>/g, '').trim()}`.slice(0, 280)
+    setCreatedSteps(prev => ({ ...prev, [i]: 'creating' }))
+    try {
+      await api.post('/tasks', { description: desc, projectId: String(project.id) })
+      setCreatedSteps(prev => ({ ...prev, [i]: 'done' }))
+    } catch {
+      setCreatedSteps(prev => ({ ...prev, [i]: 'error' }))
+    }
+  }
 
   // ── Banner upload ────────────────────────────────────────────────────────────
   async function handleBannerFile(e) {
@@ -1122,11 +1140,11 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                 {project.name}
               </h1>
               <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">
-                Informe mensual — {monthLabel(month)}
+                Informe — {periodTitle}
               </p>
-              {dataMonth && dataMonth !== month && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 capitalize">
-                  {dataPeriodLabel(dataMonth)}
+              {periodRange && (
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  {periodRange}
                 </p>
               )}
               {project.websiteUrl && (
@@ -1141,14 +1159,12 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                 </a>
               )}
             </div>
-            {isPublic && (
-              <button
-                onClick={() => window.print()}
-                className="no-print flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
-              >
-                🖨️ Imprimir / PDF
-              </button>
-            )}
+            <button
+              onClick={() => window.print()}
+              className="no-print flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
+            >
+              🖨️ Descargar PDF
+            </button>
           </div>
         </div>
       </div>
@@ -2013,9 +2029,23 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             ) : Array.isArray(ns) && ns.length > 0 ? (
               <ul className="space-y-2">
                 {ns.map((step, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
+                  <li key={i} className="flex items-start gap-2 text-sm group">
                     <span className="text-primary-500 font-bold shrink-0">{i + 1}.</span>
-                    <span className="text-gray-700 dark:text-gray-300">{step}</span>
+                    <span className="text-gray-700 dark:text-gray-300 flex-1 min-w-0">{step}</span>
+                    {canEdit && (
+                      createdSteps[i] === 'done' ? (
+                        <span className="no-print text-[11px] text-green-600 dark:text-green-400 shrink-0 whitespace-nowrap">✓ Tarea creada</span>
+                      ) : (
+                        <button
+                          onClick={() => handleCreateTaskFromStep(step, i)}
+                          disabled={createdSteps[i] === 'creating'}
+                          title="Crear una tarea del proyecto con este próximo paso"
+                          className="no-print text-[11px] text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 shrink-0 whitespace-nowrap opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-50"
+                        >
+                          {createdSteps[i] === 'creating' ? 'Creando…' : createdSteps[i] === 'error' ? '⚠ Reintentar' : '+ Crear tarea'}
+                        </button>
+                      )
+                    )}
                   </li>
                 ))}
               </ul>
@@ -2070,7 +2100,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             <p className="text-xs font-semibold" style={{ color: brandPrimary }}>{workspace.companyName}</p>
           )}
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            Informe de Marketing · {monthLabel(displayMonth)}
+            Informe de Marketing · {periodTitle}
           </p>
           <p className="text-xs text-gray-300 dark:text-gray-600">
             Generado con BlissTracker

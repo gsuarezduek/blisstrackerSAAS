@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import api from '../../api/client'
 import ReportViewer from './ReportViewer'
 import ObjectivesManager from './ObjectivesManager'
@@ -28,6 +28,23 @@ function monthLabel(month) {
   if (!month) return ''
   const [y, m] = month.split('-').map(Number)
   return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+}
+
+// ─── Helpers de rango de fechas (selector de período del informe) ──────────────
+const pad2 = n => String(n).padStart(2, '0')
+function monthFirstDay(month) { return `${month}-01` }
+function monthLastDay(month) {
+  const [y, m] = month.split('-').map(Number)
+  return `${month}-${pad2(new Date(y, m, 0).getDate())}`
+}
+function todayYmd() {
+  const d = new Date()
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+function dmy(ymd) {
+  if (!ymd) return ''
+  const [y, m, d] = ymd.split('-')
+  return `${d}/${m}/${y}`
 }
 
 // ─── Modal de generación (selección de secciones) ──────────────────────────────
@@ -64,9 +81,29 @@ function IntegrationChip({ integration }) {
   return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Datos guardados</span>
 }
 
-function GenerateModal({ projectId, availableSections: initialAvailable, initialSelected, onGenerate, onClose, generating }) {
+function GenerateModal({ projectId, month, availableSections: initialAvailable, initialSelected, initialPeriod, onGenerate, onClose, generating }) {
   const [available, setAvailable]   = useState(initialAvailable)
   const [refreshing, setRefreshing] = useState(false)
+
+  // ── Período de datos del informe ──
+  const prevMonth = prevMonthStr(month)
+  // Si el informe ya tenía un rango elegido, reabrir en "Personalizado" con esas fechas
+  const [preset, setPreset] = useState(initialPeriod?.start ? 'custom' : 'prev')
+  const [customStart, setCustomStart] = useState(initialPeriod?.start || monthFirstDay(prevMonth))
+  const [customEnd,   setCustomEnd]   = useState(initialPeriod?.end   || monthLastDay(prevMonth))
+
+  const period = useMemo(() => {
+    if (preset === 'prev')       { const pm = prevMonthStr(month); return { start: monthFirstDay(pm), end: monthLastDay(pm) } }
+    if (preset === 'thisToDate') return { start: monthFirstDay(month), end: todayYmd() }
+    if (preset === 'last3') {
+      const endM = prevMonthStr(month)
+      let s = endM; for (let i = 0; i < 2; i++) s = prevMonthStr(s)
+      return { start: monthFirstDay(s), end: monthLastDay(endM) }
+    }
+    return { start: customStart, end: customEnd }
+  }, [preset, month, customStart, customEnd])
+
+  const periodInvalid = !period.start || !period.end || period.start > period.end
 
   // Refresca el estado de conexión al abrir (por si se reconectó algo en otra pestaña)
   async function refreshStatus() {
@@ -114,8 +151,54 @@ function GenerateModal({ projectId, availableSections: initialAvailable, initial
         </div>
 
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          Elegí qué secciones querés incluir. Solo se muestran las que tienen datos o una fuente conectada. Las que dejes sin marcar no se generan ni aparecen en el link del cliente.
+          Elegí el período de datos y qué secciones incluir. Solo se muestran las secciones con datos o fuente conectada. Las que dejes sin marcar no se generan ni aparecen en el link del cliente.
         </p>
+
+        {/* ── Período de datos ── */}
+        <div className="mb-4 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+          <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">📅 Período de datos</p>
+          <div className="grid grid-cols-2 gap-1.5 mb-2">
+            {[
+              { k: 'prev',       label: `Mes anterior (${monthLabel(prevMonth)})` },
+              { k: 'thisToDate', label: 'Este mes hasta hoy' },
+              { k: 'last3',      label: 'Últimos 3 meses' },
+              { k: 'custom',     label: 'Personalizado' },
+            ].map(p => (
+              <button
+                key={p.k}
+                onClick={() => setPreset(p.k)}
+                className={`text-[11px] px-2 py-1.5 rounded-lg border transition-colors text-left capitalize ${
+                  preset === p.k
+                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 font-medium'
+                    : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/60'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {preset === 'custom' && (
+            <div className="flex items-center gap-2 mb-2">
+              <input type="date" value={customStart} max={customEnd || undefined} onChange={e => setCustomStart(e.target.value)}
+                className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200" />
+              <span className="text-gray-400 text-xs">al</span>
+              <input type="date" value={customEnd} min={customStart || undefined} onChange={e => setCustomEnd(e.target.value)}
+                className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200" />
+            </div>
+          )}
+
+          {periodInvalid ? (
+            <p className="text-[11px] text-red-600 dark:text-red-400">La fecha de inicio no puede ser posterior a la de fin.</p>
+          ) : (
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+              Datos del <strong>{dmy(period.start)}</strong> al <strong>{dmy(period.end)}</strong>.
+              {period.end >= todayYmd() && (
+                <span className="text-amber-600 dark:text-amber-400"> Incluye días del mes en curso: las RRSS pueden ser aproximadas (datos en vivo).</span>
+              )}
+            </p>
+          )}
+        </div>
 
         {offered.length === 0 ? (
           <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -175,8 +258,8 @@ function GenerateModal({ projectId, availableSections: initialAvailable, initial
             Cancelar
           </button>
           <button
-            onClick={() => onGenerate([...selected])}
-            disabled={generating || selected.size === 0}
+            onClick={() => onGenerate([...selected], { periodStart: period.start, periodEnd: period.end })}
+            disabled={generating || selected.size === 0 || periodInvalid}
             className="flex-1 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
           >
             {generating ? 'Generando…' : 'Generar informe'}
@@ -333,11 +416,16 @@ export default function InformesTab({ projectId, onSelectProject }) {
     return () => controller.abort()
   }, [projectId, month, retryKey])
 
-  async function handleGenerate(enabledSections) {
+  async function handleGenerate(enabledSections, period) {
     setGenerating(true)
     setError(null)
     try {
-      const res = await api.post(`/marketing/projects/${projectId}/reports/${month}/regenerate`, { enabledSections })
+      const body = { enabledSections }
+      if (period?.periodStart && period?.periodEnd) {
+        body.periodStart = period.periodStart
+        body.periodEnd   = period.periodEnd
+      }
+      const res = await api.post(`/marketing/projects/${projectId}/reports/${month}/regenerate`, body)
       setReportMeta(res.data.report)
       setReportData(res.data.data)
       setShowGenModal(false)
@@ -345,6 +433,17 @@ export default function InformesTab({ projectId, onSelectProject }) {
       setError(err.response?.data?.error || 'Error al generar el informe')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function handleTogglePublish() {
+    if (!reportMeta) return
+    const next = reportMeta.status === 'published' ? 'draft' : 'published'
+    try {
+      await api.patch(`/marketing/projects/${projectId}/reports/${month}/status`, { status: next })
+      setReportMeta(prev => prev ? { ...prev, status: next } : prev)
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo cambiar el estado del informe')
     }
   }
 
@@ -398,7 +497,16 @@ export default function InformesTab({ projectId, onSelectProject }) {
             ◀
           </button>
           <div className="text-center min-w-[160px]">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{monthLabel(month)}</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{reportMeta?.periodLabel || monthLabel(month)}</p>
+            {isGenerated && reportMeta?.status && (
+              <span className={`inline-block mt-0.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                reportMeta.status === 'published'
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                  : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+              }`}>
+                {reportMeta.status === 'published' ? '● Publicado' : '● Borrador'}
+              </span>
+            )}
           </div>
           <button
             onClick={() => canGoNext && setMonth(nextMonthStr(month))}
@@ -428,8 +536,22 @@ export default function InformesTab({ projectId, onSelectProject }) {
           </button>
           {isGenerated && (
             <button
+              onClick={handleTogglePublish}
+              title={reportMeta?.status === 'published' ? 'Volver a borrador (el link del cliente dejará de funcionar)' : 'Publicar (habilita el link del cliente)'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors border ${
+                reportMeta?.status === 'published'
+                  ? 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  : 'border-green-600 bg-green-600 hover:bg-green-700 text-white'
+              }`}
+            >
+              {reportMeta?.status === 'published' ? '↩ Despublicar' : '✅ Publicar'}
+            </button>
+          )}
+          {isGenerated && (
+            <button
               onClick={handleCopyLink}
-              disabled={!reportMeta?.token}
+              disabled={!reportMeta?.token || reportMeta?.status !== 'published'}
+              title={reportMeta?.status !== 'published' ? 'Publicá el informe para habilitar el link del cliente' : ''}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-40"
             >
               {copied ? '✓ Copiado' : '📋 Link del cliente'}
@@ -519,8 +641,10 @@ export default function InformesTab({ projectId, onSelectProject }) {
       {showGenModal && (
         <GenerateModal
           projectId={projectId}
+          month={month}
           availableSections={availableSections}
           initialSelected={reportMeta?.enabledSections ?? null}
+          initialPeriod={reportMeta?.periodStart ? { start: reportMeta.periodStart, end: reportMeta.periodEnd } : null}
           onGenerate={handleGenerate}
           onClose={() => setShowGenModal(false)}
           generating={generating}

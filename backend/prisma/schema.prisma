@@ -1542,7 +1542,10 @@ model MonthlyReport {
   id             Int      @id @default(autoincrement())
   projectId      Int
   workspaceId    Int
-  month          String // "YYYY-MM"
+  month          String // "YYYY-MM" — ancla estable de id/URL. El NOMBRE visible sale del período (periodStart/End).
+  periodStart    DateTime? // Inicio del período de datos (fecha real). null en informes legacy → se deriva del mes completo prevMonthStr(month).
+  periodEnd      DateTime? // Fin del período de datos (fecha real). null en legacy → último día de prevMonthStr(month).
+  status         String   @default("draft") // "draft" | "published" — el link público solo sirve informes publicados
   token          String   @unique
   objectives     String   @default("{}") // JSON: { sessions, followersIg, followersTk, ... }
   notes          String?

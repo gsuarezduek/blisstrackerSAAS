@@ -149,6 +149,7 @@ router.get('/projects/:id/report-sections',                                    m
 router.get('/projects/:id/reports/:month',                                     monthlyReport.getReport)
 router.patch('/projects/:id/reports/:month',                                   monthlyReport.updateReport)
 router.post('/projects/:id/reports/:month/regenerate',                         monthlyReport.regenerateReport)
+router.patch('/projects/:id/reports/:month/status',                            monthlyReport.setReportStatus)
 router.post('/projects/:id/reports/:month/banner', uploadBanner.single('image'), monthlyReport.uploadReportBanner)
 router.delete('/projects/:id/reports/:month/banner',                           monthlyReport.deleteReportBanner)
 

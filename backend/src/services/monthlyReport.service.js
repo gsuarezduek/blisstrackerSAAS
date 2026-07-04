@@ -16,7 +16,35 @@ const { getValidFacebookToken }          = require('./metaTokenRefresh.service')
 const { fetchFacebookMetrics }           = require('./facebook.service')
 const { computeObjectives }              = require('./marketingObjectives.service')
 const { cacheImagesInArray }             = require('./socialImageCache.service')
-const { monthBounds, prevMonthStr, prevMonthsArr } = require('../lib/monthUtils')
+const { monthBounds, prevMonthStr, prevMonthsArr, monthsInRange, rangeLabel, rangeDataLabel } = require('../lib/monthUtils')
+
+// Resuelve el período de datos de un informe.
+//   - Con periodStart/End explícitos → ese rango (fechas "YYYY-MM-DD").
+//   - Sin ellos (legacy/default)      → el mes calendario anterior completo a `month`.
+function resolveReportPeriod(month, periodStart, periodEnd) {
+  const toYmd = (v) => {
+    if (!v) return null
+    if (typeof v === 'string') return v.slice(0, 10)
+    return new Date(v).toISOString().slice(0, 10) // DateTime → YYYY-MM-DD
+  }
+  const s = toYmd(periodStart)
+  const e = toYmd(periodEnd)
+  if (s && e) return { start: s, end: e }
+  const { startDate, endDate } = monthBounds(prevMonthStr(month))
+  return { start: startDate, end: endDate }
+}
+
+// Metadata del período para el frontend (label + rango legible + meses cubiertos).
+function buildPeriodMeta(period, monthsCovered, multiMonth) {
+  return {
+    start:      period.start,
+    end:        period.end,
+    label:      rangeLabel(period.start, period.end),      // "Junio 2026" | "Abril–Junio 2026" | "1–29 Jun 2026"
+    dataLabel:  rangeDataLabel(period.start, period.end),  // "Datos del 01/06/2026 al 30/06/2026"
+    months:     monthsCovered,
+    multiMonth,
+  }
+}
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -101,10 +129,15 @@ function monthOfDate(d) {
  * Recopila todos los datos necesarios para el informe mensual de un proyecto.
  * Retorna un objeto estructurado con secciones condicionales.
  */
-async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null, objectives = {}, cachedData = null, enabledSections = null) {
-  // El informe del mes X muestra datos del mes X-1.
-  // Ej: "Informe de Mayo 2026" → período de datos: Abril 2026.
-  const dataMonth = prevMonthStr(month)
+async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis = null, objectives = {}, cachedData = null, enabledSections = null, opts = {}) {
+  // Período de datos del informe. Con periodStart/End explícitos se usa ese rango;
+  // sin ellos (informes legacy / default) el período es el mes calendario anterior completo.
+  // Ej: "Informe de Junio 2026" → período de datos: 01/06/2026–30/06/2026.
+  const period       = resolveReportPeriod(month, opts.periodStart, opts.periodEnd)
+  const monthsCovered = monthsInRange(period.start, period.end)
+  const dataMonth    = monthsCovered[monthsCovered.length - 1] // mes ancla (más reciente) — stock + objetivos + label
+  const multiMonth   = monthsCovered.length > 1                // rango que abarca >1 mes calendario
+  const briefs       = opts.briefs ?? null
 
   // Ignorar análisis cacheado sin resumen válido (ej: guardado vacío tras un error de Claude)
   const validCachedAnalysis = cachedAnalysis?.resumen ? cachedAnalysis : null
@@ -129,6 +162,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       project:        cachedData.project,
       month,
       dataMonth:      cachedData.dataMonth,
+      period:         buildPeriodMeta(period, monthsCovered, multiMonth),
       connectedTypes: cachedData.connectedTypes,
       sections:       cachedData.sections,
       objectives:     objectivesResults,
@@ -139,13 +173,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     }
   }
 
-  const prev      = prevMonthStr(dataMonth)   // mes anterior al período (para deltas)
+  const prev      = prevMonthStr(monthsCovered[0])   // mes anterior al inicio del período (para deltas mes-completo)
   const last6     = prevMonthsArr(dataMonth, 6)
 
-  // Rango de fechas del período de datos (para tasks)
-  const [y, mo] = dataMonth.split('-').map(Number)
-  const monthStart = new Date(Date.UTC(y, mo - 1, 1))
-  const monthEnd   = new Date(Date.UTC(y, mo, 0, 23, 59, 59, 999))
+  // Rango de fechas real del período de datos (para tasks). Usa el rango elegido,
+  // no el mes ancla — así un informe parcial o multi-mes cuenta las tareas correctas.
+  const monthStart = new Date(`${period.start}T00:00:00.000Z`)
+  const monthEnd   = new Date(`${period.end}T23:59:59.999Z`)
 
   const [
     project,
@@ -344,9 +378,38 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Integrations map ─────────────────────────────────────────────────────────
   const connectedTypes = new Set(integrations.map(i => i.type))
 
-  // ── Google Ads + Meta Ads (fetch async con rango de fechas exacto) ────────────
-  const { startDate, endDate } = monthBounds(dataMonth)
-  const dateRange = { startDate, endDate }
+  // ── Suma de flujos multi-mes (rama aditiva) ──────────────────────────────────
+  // Para un informe que abarca varios meses completos, las métricas de FLUJO
+  // (sesiones, clicks, posts, vistas…) se SUMAN a lo largo de los meses cubiertos.
+  // Las de STOCK (seguidores, engagement, posición) se toman del mes ancla (dataMonth).
+  // En informes de un solo mes esta rama no corre → comportamiento idéntico al actual.
+  let flow = null
+  if (multiMonth) {
+    const inMonths = { projectId, workspaceId, month: { in: monthsCovered } }
+    const [ga4Rows, seoRows, igRows, tkRows, ytRows, liRows, fbRows] = await Promise.all([
+      prisma.analyticsSnapshot.findMany({ where: inMonths, select: { sessions: true, activeUsers: true, newUsers: true, pageviews: true, conversions: true } }),
+      prisma.searchConsoleSnapshot.findMany({ where: inMonths, select: { clicks: true, impressions: true } }),
+      prisma.instagramSnapshot.findMany({ where: inMonths, select: { postsCount: true } }),
+      prisma.tikTokSnapshot.findMany({ where: inMonths, select: { postsThisMonth: true } }),
+      prisma.youTubeSnapshot.findMany({ where: inMonths, select: { monthViews: true, videosThisMonth: true, shortsThisMonth: true, longsThisMonth: true } }),
+      prisma.linkedinSnapshot.findMany({ where: inMonths, select: { postsThisMonth: true, impressions: true, clicks: true, totalLikes: true, totalComments: true, totalShares: true } }),
+      prisma.facebookSnapshot.findMany({ where: inMonths, select: { postsThisMonth: true, totalLikes: true, totalComments: true, totalShares: true } }),
+    ])
+    const sum = (rows, f) => rows.reduce((s, r) => s + (r[f] ?? 0), 0)
+    flow = {
+      ga4: { sessions: sum(ga4Rows, 'sessions'), activeUsers: sum(ga4Rows, 'activeUsers'), newUsers: sum(ga4Rows, 'newUsers'), pageviews: sum(ga4Rows, 'pageviews'), conversions: sum(ga4Rows, 'conversions') },
+      seo: { clicks: sum(seoRows, 'clicks'), impressions: sum(seoRows, 'impressions') },
+      ig:  { postsCount: sum(igRows, 'postsCount') },
+      tk:  { postsThisMonth: sum(tkRows, 'postsThisMonth') },
+      yt:  { monthViews: sum(ytRows, 'monthViews'), videosThisMonth: sum(ytRows, 'videosThisMonth'), shortsThisMonth: sum(ytRows, 'shortsThisMonth'), longsThisMonth: sum(ytRows, 'longsThisMonth') },
+      li:  { postsThisMonth: sum(liRows, 'postsThisMonth'), impressions: sum(liRows, 'impressions'), clicks: sum(liRows, 'clicks'), totalLikes: sum(liRows, 'totalLikes'), totalComments: sum(liRows, 'totalComments'), totalShares: sum(liRows, 'totalShares') },
+      fb:  { postsThisMonth: sum(fbRows, 'postsThisMonth'), totalLikes: sum(fbRows, 'totalLikes'), totalComments: sum(fbRows, 'totalComments'), totalShares: sum(fbRows, 'totalShares') },
+    }
+  }
+
+  // ── Google Ads + Meta Ads (fetch async con el rango de fechas REAL del informe) ──
+  // Ads es range-native: para informes parciales o multi-mes trae el rango exacto.
+  const dateRange = { startDate: period.start, endDate: period.end }
 
   const gadsIntegration = integrations.find(i => i.type === 'google_ads')
   const metaIntegration = integrations.find(i => i.type === 'meta_ads')
@@ -415,13 +478,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
   // ── Analytics GA4 ────────────────────────────────────────────────────────────
   const analytics = analyticsSnap ? {
-    sessions:    analyticsSnap.sessions    ?? 0,
-    activeUsers: analyticsSnap.activeUsers ?? 0,
-    newUsers:    analyticsSnap.newUsers    ?? 0,
-    pageviews:   analyticsSnap.pageviews   ?? 0,
+    sessions:    flow ? flow.ga4.sessions    : (analyticsSnap.sessions    ?? 0),
+    activeUsers: flow ? flow.ga4.activeUsers : (analyticsSnap.activeUsers ?? 0),
+    newUsers:    flow ? flow.ga4.newUsers    : (analyticsSnap.newUsers    ?? 0),
+    pageviews:   flow ? flow.ga4.pageviews   : (analyticsSnap.pageviews   ?? 0),
     bounceRate:  analyticsSnap.bounceRate  ?? 0,
     avgDuration: analyticsSnap.avgDuration ?? 0,
-    conversions: analyticsSnap.conversions ?? 0,
+    conversions: flow ? flow.ga4.conversions : (analyticsSnap.conversions ?? 0),
     topChannels: (() => {
       try { return JSON.parse(analyticsSnap.topChannels || '[]') } catch { return [] }
     })(),
@@ -438,7 +501,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         return Object.fromEntries(Object.entries(raw).filter(([, v]) => v > 0))
       } catch { return {} }
     })(),
-    delta: analyticsPrev ? {
+    // Deltas mes-a-mes solo tienen sentido en informes de un mes; en multi-mes se omiten.
+    delta: (!flow && analyticsPrev) ? {
       sessions:    pct(analyticsSnap.sessions    ?? 0, analyticsPrev.sessions),
       activeUsers: pct(analyticsSnap.activeUsers ?? 0, analyticsPrev.activeUsers),
       newUsers:    pct(analyticsSnap.newUsers    ?? 0, analyticsPrev.newUsers),
@@ -475,7 +539,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       engagementRate:  instagramSnap.engagementRate,
       avgLikes:        instagramSnap.avgLikes,
       avgComments:     instagramSnap.avgComments,
-      postsCount:      instagramSnap.postsCount,
+      postsCount:      flow ? flow.ig.postsCount : instagramSnap.postsCount,
       topPosts,
       bestPost:        topPosts[0] ?? null,
       reach:           instagramSnap.reach,
@@ -484,9 +548,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       totalShares:     instagramSnap.totalShares,
       avgReach:        instagramSnap.avgReach,
       bestByReach:     bestPostByReach(topPosts),
-      deltaFollowers:  instagramPrev ? pct(instagramSnap.followersCount, instagramPrev.followersCount) : null,
-      deltaEngagement: instagramPrev ? pct(instagramSnap.engagementRate ?? 0, instagramPrev.engagementRate) : null,
-      deltaReach:      instagramPrev?.reach != null && instagramSnap.reach != null ? pct(instagramSnap.reach, instagramPrev.reach) : null,
+      deltaFollowers:  (!flow && instagramPrev) ? pct(instagramSnap.followersCount, instagramPrev.followersCount) : null,
+      deltaEngagement: (!flow && instagramPrev) ? pct(instagramSnap.engagementRate ?? 0, instagramPrev.engagementRate) : null,
+      deltaReach:      (!flow && instagramPrev?.reach != null && instagramSnap.reach != null) ? pct(instagramSnap.reach, instagramPrev.reach) : null,
     }
   } else {
     // Fallback 1: snapshot más reciente disponible (cualquier mes)
@@ -595,12 +659,12 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       engagementRate:  tiktokSnap.engagementRate,
       avgViews:        tiktokSnap.avgViews,
       avgLikes:        tiktokSnap.avgLikes,
-      postsThisMonth:  tiktokSnap.postsThisMonth,
+      postsThisMonth:  flow ? flow.tk.postsThisMonth : tiktokSnap.postsThisMonth,
       likesCount:      tiktokSnap.likesCount,
       topVideos,
       bestVideo:       topVideos[0] ?? null,
-      deltaFollowers:  tiktokPrev ? pct(tiktokSnap.followersCount, tiktokPrev.followersCount) : null,
-      deltaEngagement: tiktokPrev ? pct(tiktokSnap.engagementRate ?? 0, tiktokPrev.engagementRate) : null,
+      deltaFollowers:  (!flow && tiktokPrev) ? pct(tiktokSnap.followersCount, tiktokPrev.followersCount) : null,
+      deltaEngagement: (!flow && tiktokPrev) ? pct(tiktokSnap.engagementRate ?? 0, tiktokPrev.engagementRate) : null,
     }
   } else {
     // Fallback 1: snapshot más reciente disponible (cualquier mes)
@@ -662,20 +726,22 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     try { const v = JSON.parse(json); return Array.isArray(v) ? v : [] }
     catch { return [] }
   }
-  function buildYt(snap, prevSnap, fallbackMonth) {
+  // `useFlow` = aplicar la suma multi-mes (solo para el snapshot del mes ancla, no en fallbacks)
+  function buildYt(snap, prevSnap, fallbackMonth, useFlow = false) {
     const topVideos = parseYtTopVideos(snap.topVideos)
+    const f = useFlow ? flow : null
     return {
       subscriberCount:  snap.subscriberCount,
       engagementRate:   snap.engagementRate,
       avgViews:         snap.avgViews,
-      monthViews:       snap.monthViews,
-      videosThisMonth:  snap.videosThisMonth,
-      shortsThisMonth:  snap.shortsThisMonth,
-      longsThisMonth:   snap.longsThisMonth,
+      monthViews:       f ? f.yt.monthViews      : snap.monthViews,
+      videosThisMonth:  f ? f.yt.videosThisMonth : snap.videosThisMonth,
+      shortsThisMonth:  f ? f.yt.shortsThisMonth : snap.shortsThisMonth,
+      longsThisMonth:   f ? f.yt.longsThisMonth  : snap.longsThisMonth,
       topVideos,
       bestVideo:        topVideos[0] ?? null,
-      deltaSubscribers: prevSnap ? pct(snap.subscriberCount, prevSnap.subscriberCount) : null,
-      deltaViews:       (prevSnap?.viewCountTotal != null && snap.viewCountTotal != null)
+      deltaSubscribers: (!f && prevSnap) ? pct(snap.subscriberCount, prevSnap.subscriberCount) : null,
+      deltaViews:       (!f && prevSnap?.viewCountTotal != null && snap.viewCountTotal != null)
                           ? snap.viewCountTotal - prevSnap.viewCountTotal : null,
       ...(fallbackMonth ? { _fallbackMonth: fallbackMonth } : {}),
     }
@@ -683,7 +749,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
   let youtube = null
   if (youtubeSnap) {
-    youtube = buildYt(youtubeSnap, youtubePrev)
+    youtube = buildYt(youtubeSnap, youtubePrev, null, true)
   } else {
     // Fallback 1: snapshot más reciente disponible (cualquier mes)
     const recentYt = await prisma.youTubeSnapshot.findFirst({
@@ -743,18 +809,18 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     linkedin = {
       followersCount:  s.followersCount,
       engagementRate:  s.engagementRate,
-      impressions:     s.impressions,
-      clicks:          s.clicks,
-      ctr:             s.ctr,
-      totalLikes:      s.totalLikes,
-      totalComments:   s.totalComments,
-      totalShares:     s.totalShares,
-      postsThisMonth:  s.postsThisMonth,
+      impressions:     flow ? flow.li.impressions : s.impressions,
+      clicks:          flow ? flow.li.clicks      : s.clicks,
+      ctr:             flow ? (flow.li.impressions > 0 ? parseFloat((flow.li.clicks / flow.li.impressions * 100).toFixed(2)) : null) : s.ctr,
+      totalLikes:      flow ? flow.li.totalLikes    : s.totalLikes,
+      totalComments:   flow ? flow.li.totalComments : s.totalComments,
+      totalShares:     flow ? flow.li.totalShares   : s.totalShares,
+      postsThisMonth:  flow ? flow.li.postsThisMonth : s.postsThisMonth,
       topPosts:        s.topPosts,
       demographics:    s.demographics,
-      deltaFollowers:  linkedinPrev ? pct(s.followersCount, linkedinPrev.followersCount) : null,
-      deltaEngagement: linkedinPrev ? pct(s.engagementRate ?? 0, linkedinPrev.engagementRate) : null,
-      deltaImpressions: linkedinPrev ? pct(s.impressions ?? 0, linkedinPrev.impressions) : null,
+      deltaFollowers:  (!flow && linkedinPrev) ? pct(s.followersCount, linkedinPrev.followersCount) : null,
+      deltaEngagement: (!flow && linkedinPrev) ? pct(s.engagementRate ?? 0, linkedinPrev.engagementRate) : null,
+      deltaImpressions: (!flow && linkedinPrev) ? pct(s.impressions ?? 0, linkedinPrev.impressions) : null,
     }
   } else {
     // Fallback 1: snapshot más reciente disponible
@@ -837,14 +903,14 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       engagementRate:  s.engagementRate,
       reach:           s.reach,
       impressions:     s.impressions,
-      totalLikes:      s.totalLikes,
-      totalComments:   s.totalComments,
-      totalShares:     s.totalShares,
-      postsThisMonth:  s.postsThisMonth,
+      totalLikes:      flow ? flow.fb.totalLikes    : s.totalLikes,
+      totalComments:   flow ? flow.fb.totalComments : s.totalComments,
+      totalShares:     flow ? flow.fb.totalShares   : s.totalShares,
+      postsThisMonth:  flow ? flow.fb.postsThisMonth : s.postsThisMonth,
       topPosts:        s.topPosts,
-      deltaFollowers:  facebookPrev ? pct(s.followersCount, facebookPrev.followersCount) : null,
-      deltaEngagement: facebookPrev ? pct(s.engagementRate ?? 0, facebookPrev.engagementRate) : null,
-      deltaReach:      facebookPrev ? pct(s.reach ?? 0, facebookPrev.reach) : null,
+      deltaFollowers:  (!flow && facebookPrev) ? pct(s.followersCount, facebookPrev.followersCount) : null,
+      deltaEngagement: (!flow && facebookPrev) ? pct(s.engagementRate ?? 0, facebookPrev.engagementRate) : null,
+      deltaReach:      (!flow && facebookPrev) ? pct(s.reach ?? 0, facebookPrev.reach) : null,
     }
   } else {
     // Fallback 1: snapshot más reciente disponible
@@ -922,9 +988,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
   // ── Search Console (SEO) ────────────────────────────────────────────────────
   const seo = seoSnap ? {
-    clicks:      seoSnap.clicks      ?? 0,
-    impressions: seoSnap.impressions ?? 0,
-    ctr:         seoSnap.ctr         ?? 0,
+    clicks:      flow ? flow.seo.clicks      : (seoSnap.clicks      ?? 0),
+    impressions: flow ? flow.seo.impressions : (seoSnap.impressions ?? 0),
+    ctr:         flow ? (flow.seo.impressions > 0 ? flow.seo.clicks / flow.seo.impressions : 0) : (seoSnap.ctr ?? 0),
     avgPosition: seoSnap.avgPosition  != null ? parseFloat(Number(seoSnap.avgPosition).toFixed(1)) : null,
     topQueries: (() => {
       try { return (JSON.parse(seoSnap.topQueries || '[]')).slice(0, 10) } catch { return [] }
@@ -932,7 +998,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     topPages: (() => {
       try { return (JSON.parse(seoSnap.topPages || '[]')).slice(0, 5) } catch { return [] }
     })(),
-    delta: seoPrev ? {
+    delta: (!flow && seoPrev) ? {
       clicks:      pct(seoSnap.clicks      ?? 0, seoPrev.clicks),
       impressions: pct(seoSnap.impressions ?? 0, seoPrev.impressions),
       ctr:         pct(seoSnap.ctr         ?? 0, seoPrev.ctr),
@@ -1003,14 +1069,15 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // ── Análisis IA ──────────────────────────────────────────────────────────────
   // Si ya existe un análisis cacheado con resumen válido, no se regenera.
   // El análisis solo considera las secciones habilitadas.
+  const periodMeta = buildPeriodMeta(period, monthsCovered, multiMonth)
   const analysis = validCachedAnalysis
     ? validCachedAnalysis
-    : await generateAnalysis({ project, month: dataMonth,
+    : await generateAnalysis({ project, month: dataMonth, periodLabel: periodMeta.label,
         geo: sections.geo, analytics: sections.analytics, instagram: sections.instagram,
         tiktok: sections.tiktok, youtube: sections.youtube, linkedin: sections.linkedin, facebook: sections.facebook, keywords: sections.keywords,
         seo: sections.seo, performance: sections.performance, googleAds: sections.googleAds,
         metaAds: sections.metaAds, competitors: sections.competitors,
-        workspaceId, objectives: objectivesResults, services })
+        workspaceId, objectives: objectivesResults, services, briefs })
 
   return {
     project: {
@@ -1019,8 +1086,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       websiteUrl: project?.websiteUrl,
       services,
     },
-    month,        // mes del informe (ej: "2026-05") — para identificación/navegación
-    dataMonth,    // período de los datos (ej: "2026-04") — para mostrar al usuario
+    month,        // mes ancla del informe (ej: "2026-06") — id/navegación
+    dataMonth,    // mes ancla del período (más reciente cubierto)
+    period:         periodMeta,   // { start, end, label, dataLabel, months, multiMonth }
     connectedTypes: [...connectedTypes],
     sections,
     objectives: objectivesResults,
@@ -1034,7 +1102,39 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
 
 // ─── Análisis IA ──────────────────────────────────────────────────────────────
 
-async function generateAnalysis({ project, month, geo, analytics, instagram, tiktok, youtube, linkedin, facebook, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = [], services = [] }) {
+// Arma un contexto compacto de los briefs del cliente para el prompt de IA.
+// Los briefs (memoria, marca, y los por-servicio) aportan objetivos, tono y contexto.
+// Se recorta agresivamente por tokens: máx ~3500 chars totales, ~400 por valor.
+function buildBriefsContext(briefs) {
+  if (!briefs) return ''
+  const arr = Array.isArray(briefs) ? briefs : Object.entries(briefs).map(([type, answers]) => ({ type, answers }))
+  const TYPE_LABEL = {
+    memoria: 'Memoria / notas del cliente', marca: 'Marca (documento madre)',
+    organico: 'Orgánico / RRSS', meta_ads: 'Meta Ads', web: 'Web', seo_sem: 'SEO / SEM', crm: 'CRM',
+  }
+  const parts = []
+  let budget = 3500
+  for (const b of arr) {
+    const answers = b.answers && typeof b.answers === 'object' ? b.answers : {}
+    const lines = []
+    for (const [k, v] of Object.entries(answers)) {
+      if (v == null || v === '' || v === false) continue
+      const val = String(v).replace(/\s+/g, ' ').trim().slice(0, 400)
+      if (!val) continue
+      const line = `- ${k}: ${val}`
+      lines.push(line)
+    }
+    if (lines.length === 0) continue
+    const block = `[${TYPE_LABEL[b.type] || b.type}]\n${lines.join('\n')}`
+    if (budget - block.length < 0) { parts.push(block.slice(0, Math.max(0, budget))); break }
+    parts.push(block)
+    budget -= block.length
+  }
+  if (parts.length === 0) return ''
+  return `\nCONTEXTO DEL CLIENTE (briefs cargados — usalos para entender los objetivos de negocio, la marca y el tono; alineá el análisis a esto):\n${parts.join('\n\n')}\n`
+}
+
+async function generateAnalysis({ project, month, periodLabel, geo, analytics, instagram, tiktok, youtube, linkedin, facebook, keywords, seo, performance, googleAds, metaAds, competitors, workspaceId, objectives = [], services = [], briefs = null }) {
   // Cumplimiento de objetivos (array calculado por computeObjectives)
   const fmtVal = (v, unit) => v == null ? '—' : (unit === '$' ? `$${v}` : unit === '%' ? `${v}%` : unit === 'pos' ? `#${v}` : `${v}`)
   const objCtx = (Array.isArray(objectives) ? objectives : [])
@@ -1140,29 +1240,34 @@ async function generateAnalysis({ project, month, geo, analytics, instagram, tik
     ? `\nSERVICIOS CONTRATADOS (enfocá el análisis solo en estas áreas):\n${services.map(s => `- ${s}`).join('\n')}\n`
     : ''
 
+  const briefsBloque = buildBriefsContext(briefs)
+  const periodoTxt   = periodLabel || month
+
   const prompt = `Sos un analista de marketing digital experto en comunicación con clientes.
-Redactá un análisis mensual en español para el informe del proyecto "${project?.name}" correspondiente al período ${month}.
-${serviciosBloque}
-DATOS DEL MES:
+Redactá un análisis en español para el informe del proyecto "${project?.name}" correspondiente al período: ${periodoTxt}.
+${serviciosBloque}${briefsBloque}
+DATOS DEL PERÍODO:
 ${dataCtx}
 ${objetivosBloque}
 INSTRUCCIONES DE TONO (MUY IMPORTANTE):
+- El NORTE del análisis son los OBJETIVOS del cliente (y el contexto de sus briefs si están): leé cada resultado a la luz de si acerca o aleja de esos objetivos.
 - El informe tiene sesgo POSITIVO: destacá primero los logros y avances
 - Si hay objetivos definidos, mencioná explícitamente si se cumplieron o no, con el porcentaje de avance
 - Si hay métricas negativas o por debajo del objetivo, mencionálas brevemente y siempre con una propuesta de mejora concreta
 - Estilo motivador, profesional y constructivo — como un partner estratégico, no como un auditor
 - Si no hay datos de una área, omitila — no menciones ausencias a menos que sea relevante
 - Usá números concretos en el resumen y en los highlights
+- "highlights" = los 3 LOGROS concretos del período (con números); "nextSteps" = los 3 FOCOS/prioridades accionables para el próximo período (no genéricas)
 
 Respondé SOLO con un JSON con esta estructura exacta:
 {
-  "resumen": "2-3 párrafos: primero los logros del mes (con números), luego oportunidades de mejora con propuestas concretas",
+  "resumen": "2-3 párrafos: primero los logros del período (con números) leídos contra los objetivos, luego oportunidades de mejora con propuestas concretas",
   "highlights": ["logro 1 concreto con número", "logro 2 concreto con número", "logro 3 concreto con número"],
   "alertas": ["solo si hay algo importante que mejorar, máximo 2, siempre con propuesta de solución concreta"],
-  "nextSteps": ["acción concreta 1", "acción concreta 2", "acción concreta 3"]
+  "nextSteps": ["foco/acción concreta 1", "foco 2", "foco 3"]
 }`
 
-  const tag = `Proyecto "${project?.name}" (${month})`
+  const tag = `Proyecto "${project?.name}" (${periodoTxt})`
 
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error(`[MonthlyReport] ${tag}: ANTHROPIC_API_KEY no configurada — no se puede generar el análisis IA`)

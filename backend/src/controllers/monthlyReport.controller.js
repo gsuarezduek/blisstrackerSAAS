@@ -1,7 +1,7 @@
 const { randomUUID }           = require('crypto')
 const prisma                   = require('../lib/prisma')
 const { aggregateReportData, getAvailableSections }  = require('../services/monthlyReport.service')
-const { monthLabel }           = require('../lib/monthUtils')
+const { monthLabel, prevMonthStr, monthBounds, rangeLabel, isWholeSingleMonth } = require('../lib/monthUtils')
 
 // Filtro Prisma para informes "generados" (no placeholders vacíos)
 const GENERATED_WHERE = {
@@ -10,6 +10,51 @@ const GENERATED_WHERE = {
     { dataCache:       { not: null } },
     { analysis:        { not: null } },
   ],
+}
+
+// ─── Período de un informe ──────────────────────────────────────────────────────
+// Resuelve el rango de datos (YYYY-MM-DD). Legacy (sin periodStart) → mes completo anterior.
+function reportPeriod(report) {
+  if (report.periodStart && report.periodEnd) {
+    return {
+      start: new Date(report.periodStart).toISOString().slice(0, 10),
+      end:   new Date(report.periodEnd).toISOString().slice(0, 10),
+    }
+  }
+  const { startDate, endDate } = monthBounds(prevMonthStr(report.month))
+  return { start: startDate, end: endDate }
+}
+
+function reportLabel(report) {
+  const p = reportPeriod(report)
+  return rangeLabel(p.start, p.end)
+}
+
+// Valida un rango recibido del cliente. Devuelve { periodStart, periodEnd } (Date) o null si inválido/ausente.
+// `null` (sin rango) es válido → se usa el default (mes anterior completo).
+function parsePeriodInput(body) {
+  const s = body?.periodStart
+  const e = body?.periodEnd
+  if (!s && !e) return { ok: true, value: null }
+  if (!s || !e) return { ok: false, error: 'Rango incompleto: enviá inicio y fin.' }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || !/^\d{4}-\d{2}-\d{2}$/.test(e)) {
+    return { ok: false, error: 'Formato de fecha inválido (esperado YYYY-MM-DD).' }
+  }
+  if (s > e) return { ok: false, error: 'La fecha de inicio no puede ser posterior a la de fin.' }
+  return { ok: true, value: { periodStart: new Date(`${s}T00:00:00.000Z`), periodEnd: new Date(`${e}T00:00:00.000Z`) } }
+}
+
+// Carga los briefs del proyecto (para contextualizar el análisis IA).
+async function loadBriefs(projectId) {
+  try {
+    const rows = await prisma.projectBrief.findMany({
+      where:  { projectId },
+      select: { type: true, answers: true },
+    })
+    return rows.map(r => ({ type: r.type, answers: r.answers || {} }))
+  } catch {
+    return null
+  }
 }
 
 const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
@@ -55,10 +100,14 @@ async function listReports(req, res, next) {
     const reports = await prisma.monthlyReport.findMany({
       where:   { projectId, workspaceId },
       orderBy: { month: 'desc' },
-      select:  { id: true, month: true, token: true, objectives: true, notes: true, createdAt: true },
+      select:  { id: true, month: true, token: true, objectives: true, notes: true, createdAt: true, status: true, periodStart: true, periodEnd: true },
     })
 
-    res.json({ reports: reports.map(r => ({ ...r, objectives: safeParseObj(r.objectives) })) })
+    res.json({ reports: reports.map(r => ({
+      ...r,
+      objectives:  safeParseObj(r.objectives),
+      periodLabel: reportLabel(r),
+    })) })
   } catch (err) {
     next(err)
   }
@@ -121,8 +170,11 @@ async function getReport(req, res, next) {
       const cachedAnalysis = report.analysis   ? safeParseObj(report.analysis)   : null
       const cachedData     = report.dataCache  ? safeParseObj(report.dataCache)  : null
       const objectives     = safeParseObj(report.objectives)
+      const briefs         = await loadBriefs(projectId)
 
-      data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis, objectives, cachedData, enabledSections)
+      data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis, objectives, cachedData, enabledSections, {
+        periodStart: report.periodStart, periodEnd: report.periodEnd, briefs,
+      })
 
       // Persistir cachés nuevos en DB
       const dbUpdate = {}
@@ -142,6 +194,7 @@ async function getReport(req, res, next) {
       delete data._dataCacheIsNew
     }
 
+    const period = reportPeriod(report)
     res.json({
       report: {
         id:              report.id,
@@ -151,6 +204,10 @@ async function getReport(req, res, next) {
         notes:           report.notes,
         hasBanner:       !!report.bannerData,
         createdAt:       report.createdAt,
+        status:          report.status,
+        periodStart:     period.start,
+        periodEnd:       period.end,
+        periodLabel:     reportLabel(report),
         enabledSections,
         isGenerated,
       },
@@ -247,6 +304,11 @@ async function getPublicReport(req, res, next) {
     const report = await prisma.monthlyReport.findUnique({ where: { token } })
     if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
 
+    // El link público solo sirve informes PUBLICADOS (los borradores no se exponen al cliente).
+    if (report.status !== 'published') {
+      return res.status(404).json({ error: 'Este informe todavía no está publicado.', code: 'REPORT_DRAFT' })
+    }
+
     const [cachedAnalysis, workspace] = await Promise.all([
       Promise.resolve(report.analysis ? safeParseObj(report.analysis) : null),
       prisma.workspace.findUnique({
@@ -258,16 +320,19 @@ async function getPublicReport(req, res, next) {
     const objectives      = safeParseObj(report.objectives)
     const enabledSections = report.enabledSections ? safeParseArr(report.enabledSections) : null
     const cachedData      = report.dataCache ? safeParseObj(report.dataCache) : null
+    const briefs          = await loadBriefs(report.projectId)
     const [data, siblingRows] = await Promise.all([
-      aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives, cachedData, enabledSections),
-      // Otros informes generados del mismo proyecto, para navegar desde el link público
+      aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives, cachedData, enabledSections, {
+        periodStart: report.periodStart, periodEnd: report.periodEnd, briefs,
+      }),
+      // Otros informes PUBLICADOS del mismo proyecto, para navegar desde el link público
       prisma.monthlyReport.findMany({
-        where:   { projectId: report.projectId, workspaceId: report.workspaceId, ...GENERATED_WHERE },
-        select:  { token: true, month: true },
+        where:   { projectId: report.projectId, workspaceId: report.workspaceId, status: 'published', ...GENERATED_WHERE },
+        select:  { token: true, month: true, periodStart: true, periodEnd: true },
         orderBy: { month: 'desc' },
       }),
     ])
-    const siblings = siblingRows.map(r => ({ token: r.token, month: r.month, label: monthLabel(r.month) }))
+    const siblings = siblingRows.map(r => ({ token: r.token, month: r.month, label: reportLabel(r) }))
 
     // Si se generó un análisis nuevo también lo guardamos (ej: primera vez que el cliente abre el link)
     if (data._analysisIsNew && data.analysis) {
@@ -280,11 +345,12 @@ async function getPublicReport(req, res, next) {
 
     res.json({
       report: {
-        month:      report.month,
-        token:      report.token,
-        objectives: safeParseObj(report.objectives),
-        notes:      report.notes,
-        hasBanner:  !!report.bannerData,
+        month:       report.month,
+        token:       report.token,
+        objectives:  safeParseObj(report.objectives),
+        notes:       report.notes,
+        hasBanner:   !!report.bannerData,
+        periodLabel: reportLabel(report),
       },
       workspace: workspace ? {
         slug:               workspace.slug,
@@ -316,18 +382,22 @@ async function getPublicReportMeta(req, res, next) {
       where:  { token: req.params.token },
       select: {
         month:          true,
+        periodStart:    true,
+        periodEnd:      true,
+        status:         true,
         bannerMimeType: true,
         project:        { select: { name: true } },
         workspace:      { select: { name: true, companyName: true } },
       },
     })
     if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
+    if (report.status !== 'published') return res.status(404).json({ error: 'Informe no publicado' })
 
     res.set('Cache-Control', 'public, max-age=300')
     res.json({
       projectName:   report.project?.name ?? 'Proyecto',
       month:         report.month,
-      monthLabel:    monthLabel(report.month),
+      monthLabel:    reportLabel(report),
       workspaceName: report.workspace?.companyName || report.workspace?.name || 'BlissTracker',
       hasBanner:     !!report.bannerMimeType,
     })
@@ -424,6 +494,10 @@ async function regenerateReport(req, res, next) {
     const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
+    // Rango de fechas del informe (opcional; sin él = mes anterior completo)
+    const periodParse = parsePeriodInput(req.body)
+    if (!periodParse.ok) return res.status(400).json({ error: periodParse.error })
+
     // Limpiar análisis cacheado (o crear el registro si no existe)
     let report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month } })
     const userId = req.user?.userId ?? null
@@ -435,20 +509,29 @@ async function regenerateReport(req, res, next) {
     const sectionsToUse = fromBody ?? existing
     const sectionsJson  = sectionsToUse ? JSON.stringify(sectionsToUse) : null
 
+    // Período: si el body trae rango, se persiste. Si no y ya existía uno, se conserva.
+    const periodData = periodParse.value
+      ? { periodStart: periodParse.value.periodStart, periodEnd: periodParse.value.periodEnd }
+      : {}
+
     if (report) {
       await prisma.monthlyReport.update({
         where: { id: report.id },
-        data:  { analysis: null, dataCache: null, generatedById: userId, ...(sectionsJson != null ? { enabledSections: sectionsJson } : {}) },
+        data:  { analysis: null, dataCache: null, generatedById: userId, ...(sectionsJson != null ? { enabledSections: sectionsJson } : {}), ...periodData },
       })
+      report = await prisma.monthlyReport.findUnique({ where: { id: report.id } })
     } else {
       report = await prisma.monthlyReport.create({
-        data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}', generatedById: userId, enabledSections: sectionsJson },
+        data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}', generatedById: userId, enabledSections: sectionsJson, ...periodData },
       })
     }
 
     // Re-agregar los datos de las secciones elegidas sin caché de análisis (fuerza regeneración con Claude)
     const objectives = report ? safeParseObj(report.objectives) : {}
-    const data = await aggregateReportData(projectId, workspaceId, month, null, objectives, null, sectionsToUse)
+    const briefs     = await loadBriefs(projectId)
+    const data = await aggregateReportData(projectId, workspaceId, month, null, objectives, null, sectionsToUse, {
+      periodStart: report.periodStart, periodEnd: report.periodEnd, briefs,
+    })
 
     // Guardar nuevo análisis y caché de datos en DB
     const regenUpdate = {}
@@ -467,6 +550,7 @@ async function regenerateReport(req, res, next) {
     delete data._dataCacheIsNew
 
     const updatedReport = await prisma.monthlyReport.findUnique({ where: { id: report.id } })
+    const period = reportPeriod(updatedReport)
 
     res.json({
       report: {
@@ -477,6 +561,10 @@ async function regenerateReport(req, res, next) {
         notes:           updatedReport.notes,
         hasBanner:       !!updatedReport.bannerData,
         createdAt:       updatedReport.createdAt,
+        status:          updatedReport.status,
+        periodStart:     period.start,
+        periodEnd:       period.end,
+        periodLabel:     reportLabel(updatedReport),
         enabledSections: updatedReport.enabledSections ? safeParseArr(updatedReport.enabledSections) : null,
         isGenerated:     updatedReport.enabledSections != null,
       },
@@ -487,4 +575,36 @@ async function regenerateReport(req, res, next) {
   }
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, uploadReportBanner, deleteReportBanner }
+/**
+ * PATCH /api/marketing/projects/:id/reports/:month/status
+ * Publica o vuelve a borrador un informe. body: { status: 'draft' | 'published' }
+ * Solo los informes publicados son visibles por el link público del cliente.
+ */
+async function setReportStatus(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.params
+    const { status }  = req.body
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
+    }
+    if (status !== 'draft' && status !== 'published') {
+      return res.status(400).json({ error: 'Estado inválido (draft | published)' })
+    }
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month }, select: { id: true } })
+    if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
+
+    await prisma.monthlyReport.update({ where: { id: report.id }, data: { status } })
+    res.json({ status })
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, setReportStatus, uploadReportBanner, deleteReportBanner }
