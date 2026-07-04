@@ -287,8 +287,11 @@ export const BRIEFS = [
         title: 'SEO (posicionamiento orgánico)',
         fields: [
           { k: 'terminos', q: '¿Con qué términos creen que un cliente los buscaría? (lluvia de ideas)' },
+          { k: 'keywords_objetivo', q: '¿Hay keywords o frases exactas que quieran rankear sí o sí? (una por línea)' },
           { k: 'servicios_posicionar', q: '¿Qué productos/servicios les interesa más posicionar?' },
+          { k: 'urls_prioritarias', q: '¿Cuáles son las 3-5 páginas/landings más importantes a posicionar? (pegá las URLs)' },
           { k: 'blog', q: '¿Tienen blog o generan contenido escrito? ¿Pueden hacerlo?' },
+          { k: 'autor_experto', q: '¿Quién es el/los autor(es) o referente(s) de la marca? (nombre, cargo, credenciales — señal E-E-A-T para Google e IA)' },
           { k: 'google_business', q: '¿Tienen ficha de Google Business Profile (Google Maps)? ¿Está actualizada?' },
         ],
       },

@@ -29,6 +29,8 @@ const competitors       = require('../controllers/competitors.controller')
 const adsSnapshot       = require('../controllers/adsSnapshot.controller')
 const summary           = require('../controllers/marketingSummary.controller')
 const objectives        = require('../controllers/marketingObjectives.controller')
+const seoOpportunities  = require('../controllers/seoOpportunities.controller')
+const contentBrief      = require('../controllers/contentBrief.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -176,6 +178,16 @@ router.post('/projects/:id/seo/ai-insights',      searchConsole.createSeoAiInsig
 // SEO — Domain Rating (Ahrefs, endpoint free sin API key)
 router.get('/projects/:id/domain-rating',          searchConsole.getDomainRating)
 router.post('/projects/:id/domain-rating/refresh', searchConsole.refreshDomainRating)
+
+// SEO — Oportunidades (striking distance, CTR bajo, content decay) + Plan de acción
+router.get('/projects/:id/seo/opportunities', seoOpportunities.getOpportunities)
+router.get('/projects/:id/seo/action-plan',   seoOpportunities.getActionPlan)
+
+// SEO — Content Brief (generador de briefs de contenido con IA + SERP)
+router.get('/projects/:id/content-briefs',           contentBrief.listContentBriefs)
+router.post('/projects/:id/content-briefs',          contentBrief.createContentBrief)
+router.get('/projects/:id/content-briefs/:briefId',  contentBrief.getContentBrief)
+router.delete('/projects/:id/content-briefs/:briefId', contentBrief.deleteContentBrief)
 
 // Keywords Tracking — rutas estáticas ANTES de las dinámicas /:kwId
 router.get('/projects/:id/keywords/suggest',              keywords.suggestKeywords)
