@@ -31,6 +31,8 @@ const summary           = require('../controllers/marketingSummary.controller')
 const objectives        = require('../controllers/marketingObjectives.controller')
 const seoOpportunities  = require('../controllers/seoOpportunities.controller')
 const contentBrief      = require('../controllers/contentBrief.controller')
+const onPageAudit       = require('../controllers/onPageAudit.controller')
+const contentGap        = require('../controllers/contentGap.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -188,6 +190,18 @@ router.get('/projects/:id/content-briefs',           contentBrief.listContentBri
 router.post('/projects/:id/content-briefs',          contentBrief.createContentBrief)
 router.get('/projects/:id/content-briefs/:briefId',  contentBrief.getContentBrief)
 router.delete('/projects/:id/content-briefs/:briefId', contentBrief.deleteContentBrief)
+
+// SEO — Auditoría On-Page (crawler multi-página + enlazado interno, async)
+router.post('/projects/:id/onpage/audit',              onPageAudit.runAudit)
+router.get('/projects/:id/onpage/audits',              onPageAudit.listAudits)
+router.get('/projects/:id/onpage/audits/:auditId',     onPageAudit.getAudit)
+router.delete('/projects/:id/onpage/audits/:auditId',  onPageAudit.deleteAudit)
+
+// SEO — Content Gap (vs competidores del SERP, async)
+router.post('/projects/:id/content-gap',             contentGap.runGap)
+router.get('/projects/:id/content-gaps',             contentGap.listGaps)
+router.get('/projects/:id/content-gaps/:gapId',      contentGap.getGap)
+router.delete('/projects/:id/content-gaps/:gapId',   contentGap.deleteGap)
 
 // Keywords Tracking — rutas estáticas ANTES de las dinámicas /:kwId
 router.get('/projects/:id/keywords/suggest',              keywords.suggestKeywords)

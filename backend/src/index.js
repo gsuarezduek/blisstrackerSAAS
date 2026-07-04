@@ -61,6 +61,7 @@ const { saveAllMonthlyLinkedinSnapshots }  = require('./services/linkedinSnapsho
 const { saveAllMonthlyFacebookSnapshots }  = require('./services/facebookSnapshot.service')
 const { saveAllSearchConsoleSnapshots }   = require('./services/searchConsoleSnapshot.service')
 const { refreshAllDomainRatings }         = require('./services/ahrefs.service')
+const { checkAndSendAllSeoAlerts }        = require('./services/seoAlerts.service')
 const { saveAllAdsSnapshots }             = require('./services/adsSnapshot.service')
 const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnapshot.service')
 const { saveAllPreviousMonthSnapshots: saveAllPrevRrhhMetrics } = require('./services/rrhhMetricSnapshot.service')
@@ -252,6 +253,7 @@ const MONTHLY_CHAIN = [
   ['AdsSnapshot',        saveAllAdsSnapshots],
   ['CompetitorSnapshot', saveAllMonthlyCompetitorSnapshots],
   ['RrhhMetricSnapshot', saveAllPrevRrhhMetrics],
+  ['SeoAlerts',          checkAndSendAllSeoAlerts], // compara el mes cerrado vs anterior y avisa retrocesos
 ]
 cron.schedule('0 1 1 * *', async () => {
   if (monthlyChainRunning) { console.log('[MonthlyChain] Ya en ejecución, se omite.'); return }
