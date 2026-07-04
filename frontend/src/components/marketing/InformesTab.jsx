@@ -487,6 +487,22 @@ export default function InformesTab({ projectId, onSelectProject }) {
     }
   }
 
+  async function handleRemoveSections(keys) {
+    if (!keys || keys.length === 0) return
+    const res = await api.patch(`/marketing/projects/${projectId}/reports/${month}/sections`, { remove: keys })
+    const removeSet = new Set(keys)
+    // Podado optimista local (el backend ya persistió enabledSections + caché)
+    setReportData(prev => {
+      if (!prev) return prev
+      const sections = { ...(prev.sections || {}) }
+      for (const k of keys) if (k in sections) sections[k] = null
+      if (removeSet.has('analytics') && 'evolution' in sections) sections.evolution = null
+      const objectives = removeSet.has('objectives') ? [] : prev.objectives
+      return { ...prev, sections, objectives }
+    })
+    setReportMeta(prev => prev ? { ...prev, enabledSections: res.data.enabledSections } : prev)
+  }
+
   async function handleTogglePublish() {
     if (!reportMeta) return
     const next = reportMeta.status === 'published' ? 'draft' : 'published'
@@ -656,6 +672,7 @@ export default function InformesTab({ projectId, onSelectProject }) {
           onSaveAnalysis={handleSaveAnalysis}
           onBannerUpload={handleBannerUpload}
           onBannerDelete={handleBannerDelete}
+          onRemoveSection={handleRemoveSections}
           report={reportMeta}
           workspace={reportWorkspace}
         />

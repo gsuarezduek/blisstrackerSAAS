@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import RichTextEditor from '../RichTextEditor'
@@ -350,6 +350,14 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
   const [savingNotes, setSavingNotes]   = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting]         = useState(false)
+  const [titleDraft, setTitleDraft]     = useState(meeting.title || '')
+
+  useEffect(() => { setTitleDraft(meeting.title || '') }, [meeting.title])
+
+  function saveTitle() {
+    const trimmed = titleDraft.trim()
+    if (trimmed !== (meeting.title || '')) onSave(meeting.id, { title: trimmed })
+  }
 
   const doneCount  = meeting.todos.filter(t => t.done).length
   const totalCount = meeting.todos.length
@@ -377,7 +385,14 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${tm.badge}`}>
           {tm.emoji} {tm.short}
         </span>
-        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{dateLabel(meeting.date)}</span>
+        {meeting.title ? (
+          <span className="flex items-baseline gap-2 min-w-0">
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{meeting.title}</span>
+            <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">{dateLabel(meeting.date)}</span>
+          </span>
+        ) : (
+          <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{dateLabel(meeting.date)}</span>
+        )}
         <div className="flex-1" />
         {meeting.running && (
           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-600 dark:text-red-400">
@@ -396,6 +411,25 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
       {/* Cuerpo */}
       {expanded && (
         <div className="px-4 pb-4 pt-1 space-y-4 border-t border-gray-100 dark:border-gray-700" onClick={e => e.stopPropagation()}>
+          {/* Título */}
+          <div className="pt-3">
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Título</label>
+            <input
+              type="text"
+              value={titleDraft}
+              disabled={!canEdit}
+              maxLength={120}
+              placeholder="Ej: Kickoff de campaña, Revisión mensual…"
+              onChange={e => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={e => {
+                if (e.key === 'Enter')  { e.target.blur() }
+                if (e.key === 'Escape') { setTitleDraft(meeting.title || ''); e.target.blur() }
+              }}
+              className="w-full max-w-md text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400 disabled:opacity-60"
+            />
+          </div>
+
           {/* Fecha · Tipo · Cronómetro */}
           <div className="flex flex-wrap gap-x-6 gap-y-3 items-end pt-3">
             <div>
@@ -566,7 +600,7 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
             className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl w-full max-w-md p-5"
             onClick={e => e.stopPropagation()}
           >
-            <h3 className="text-base font-bold text-gray-900 dark:text-white">¿Eliminar la reunión del {dateLabel(meeting.date)}?</h3>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">¿Eliminar {meeting.title ? `“${meeting.title}”` : `la reunión del ${dateLabel(meeting.date)}`}?</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
               Se borrarán las notas y las tareas de la reunión. Esta acción no se puede deshacer.
             </p>
@@ -602,6 +636,17 @@ export default function ProjectMeetings({ projectId, canEdit }) {
   const [error, setError]       = useState('')
   const [openId, setOpenId]     = useState(null)
   const [creating, setCreating] = useState(false)
+  const [query, setQuery]       = useState('')
+
+  // Buscador: filtra en memoria por título y fecha (label legible + fecha cruda).
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return meetings
+    return meetings.filter(m => {
+      const hay = `${m.title || ''} ${m.date || ''} ${dateLabel(m.date)}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [meetings, query])
 
   useEffect(() => {
     let alive = true
@@ -747,6 +792,28 @@ export default function ProjectMeetings({ projectId, canEdit }) {
 
       {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
 
+      {meetings.length > 3 && (
+        <div className="relative mb-3">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">🔍</span>
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar por título o fecha…"
+            className="w-full text-sm border border-gray-200 dark:border-gray-600 rounded-xl pl-9 pr-9 py-2 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm"
+              title="Limpiar"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      )}
+
       {meetings.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-4xl mb-3">🗓️</p>
@@ -755,9 +822,13 @@ export default function ProjectMeetings({ projectId, canEdit }) {
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Creá la primera con "+ Nueva reunión".</p>
           )}
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-10">
+          <p className="text-sm text-gray-500 dark:text-gray-400">Ninguna reunión coincide con "{query}".</p>
+        </div>
       ) : (
         <div className="space-y-2">
-          {meetings.map(meeting => (
+          {filtered.map(meeting => (
             <MeetingCard
               key={meeting.id}
               meeting={meeting}

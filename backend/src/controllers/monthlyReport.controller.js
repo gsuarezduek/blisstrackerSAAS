@@ -623,6 +623,61 @@ async function setReportStatus(req, res, next) {
 }
 
 /**
+ * PATCH /api/marketing/projects/:id/reports/:month/sections
+ * Elimina secciones/sub-secciones de un informe ya generado, sin regenerar ni
+ * llamar a la IA. Actualiza `enabledSections` y poda el `dataCache` para que las
+ * secciones borradas no viajen al link del cliente. body: { remove: [keys] }
+ */
+async function removeReportSections(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.params
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
+    }
+
+    const remove = sanitizeSections(req.body?.remove)
+    if (!remove || remove.length === 0) {
+      return res.status(400).json({ error: 'No se indicaron secciones válidas a eliminar.' })
+    }
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month } })
+    if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
+
+    const isGenerated = report.enabledSections != null || report.dataCache != null || report.analysis != null
+    if (!isGenerated) return res.status(400).json({ error: 'El informe todavía no está generado.' })
+
+    // enabledSections null (legacy) = todas → materializamos el catálogo completo antes de restar.
+    const current   = report.enabledSections ? safeParseArr(report.enabledSections) : [...SECTION_KEYS]
+    const removeSet = new Set(remove)
+    const next      = (current || [...SECTION_KEYS]).filter(k => !removeSet.has(k))
+
+    const update = { enabledSections: JSON.stringify(next) }
+    // Podar el caché para que la sección no viaje al informe público.
+    if (report.dataCache) {
+      const dc = safeParseObj(report.dataCache)
+      if (dc && dc.sections) {
+        for (const k of remove) if (k in dc.sections) dc.sections[k] = null
+        // `evolution` es la serie histórica de `analytics`: si se borra analytics, también se va.
+        if (removeSet.has('analytics') && 'evolution' in dc.sections) dc.sections.evolution = null
+        update.dataCache = JSON.stringify(dc)
+      }
+    }
+
+    await prisma.monthlyReport.update({ where: { id: report.id }, data: update })
+
+    res.json({ enabledSections: next })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * POST /api/public/report/:token/feedback
  * Endpoint PÚBLICO (sin auth). El cliente califica el informe 1–5 + comentario opcional.
  * Solo se acepta feedback de informes publicados.
@@ -698,4 +753,4 @@ async function notifyReportFeedback(report, feedback) {
   }, workspaceId)
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, setReportStatus, uploadReportBanner, deleteReportBanner, submitReportFeedback }
+module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, uploadReportBanner, deleteReportBanner, submitReportFeedback }

@@ -1650,6 +1650,7 @@ model ProjectMeeting {
   projectId   Int
   workspaceId Int
   date        String // "YYYY-MM-DD"
+  title       String? // título opcional de la reunión (para identificarla entre varias)
   type        String   @default("internal") // 'internal' (equipo) | 'client' (cliente)
   notes       String? // HTML del editor de notas
   startedAt   DateTime? // cronómetro: arranca al iniciar la reunión

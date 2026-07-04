@@ -16,7 +16,15 @@ const METRICS = {
   leads:          { category: 'web',  label: 'Leads (eventos clave)', unit: '',   direction: 'higher', aggregation: 'flow',  param: null },
   performance:    { category: 'web',  label: 'Performance web',      unit: '',    direction: 'higher', aggregation: 'stock', param: null },
   // SEO / GEO
-  posicionamiento:{ category: 'seo',  label: 'Posicionamiento SEO',  unit: 'pos', direction: 'lower',  aggregation: 'stock', param: 'trackedKeywordId' },
+  posicionamiento:{ category: 'seo',  label: 'Posicionamiento SEO (keyword)', unit: 'pos', direction: 'lower', aggregation: 'stock', param: 'trackedKeywordId' },
+  seo_clicks:     { category: 'seo',  label: 'Clics orgánicos (GSC)',       unit: '',    direction: 'higher', aggregation: 'flow',  param: null },
+  seo_impressions:{ category: 'seo',  label: 'Impresiones orgánicas (GSC)', unit: '',    direction: 'higher', aggregation: 'flow',  param: null },
+  seo_ctr:        { category: 'seo',  label: 'CTR orgánico (GSC)',          unit: '%',   direction: 'higher', aggregation: 'stock', param: null },
+  seo_position:   { category: 'seo',  label: 'Posición media del sitio (GSC)', unit: 'pos', direction: 'lower', aggregation: 'stock', param: null },
+  keywords_top3:  { category: 'seo',  label: 'Keywords en Top 3',           unit: '',    direction: 'higher', aggregation: 'stock', param: null },
+  keywords_top10: { category: 'seo',  label: 'Keywords en Top 10',          unit: '',    direction: 'higher', aggregation: 'stock', param: null },
+  domain_rating:  { category: 'seo',  label: 'Domain Rating (autoridad)',   unit: '',    direction: 'higher', aggregation: 'stock', param: null },
+  geo_score:      { category: 'seo',  label: 'Presencia en IAs (GEO)',      unit: '',    direction: 'higher', aggregation: 'stock', param: null },
   // RRSS
   seguidores:     { category: 'rrss', label: 'Seguidores nuevos',    unit: '',    direction: 'higher', aggregation: 'flow',  param: null, rrssPlatform: true },
   interaccion:    { category: 'rrss', label: 'Interacciones',        unit: '',    direction: 'higher', aggregation: 'flow',  param: null, rrssPlatform: true },

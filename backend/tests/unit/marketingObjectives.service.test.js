@@ -8,6 +8,10 @@ jest.mock('../../src/lib/prisma', () => ({
   linkedinSnapshot:   { findMany: jest.fn() },
   competitorSnapshot: { findMany: jest.fn() },
   adsSnapshot:        { findMany: jest.fn() },
+  searchConsoleSnapshot: { findMany: jest.fn(), findFirst: jest.fn() },
+  trackedKeyword:     { findMany: jest.fn() },
+  geoAudit:           { findFirst: jest.fn() },
+  project:            { findUnique: jest.fn() },
 }))
 
 const prisma = require('../../src/lib/prisma')
@@ -24,6 +28,11 @@ function resetAll() {
   prisma.adsSnapshot.findMany.mockResolvedValue([])
   prisma.pageSpeedResult.findFirst.mockResolvedValue(null)
   prisma.keywordRanking.findFirst.mockResolvedValue(null)
+  prisma.searchConsoleSnapshot.findMany.mockResolvedValue([])
+  prisma.searchConsoleSnapshot.findFirst.mockResolvedValue(null)
+  prisma.trackedKeyword.findMany.mockResolvedValue([])
+  prisma.geoAudit.findFirst.mockResolvedValue(null)
+  prisma.project.findUnique.mockResolvedValue(null)
 }
 
 const CTX = { projectId: 1, workspaceId: 1, dataMonth: '2026-05' }
@@ -164,6 +173,80 @@ it('competidores arma head-to-head aunque vayamos perdiendo', async () => {
   expect(r.detail.headToHead.metrics).toHaveLength(3)
   expect(r.status).toBe('fail')   // perdemos en engagement
   expect(r.label).toContain('Rival SA')
+})
+
+it('seo_clicks (flujo) suma los clics de GSC del período', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 20, projectId: 1, workspaceId: 1, category: 'seo', metric: 'seo_clicks', periodicity: 'quarterly', target: 1000 },
+  ])
+  prisma.searchConsoleSnapshot.findMany.mockResolvedValue([
+    { month: '2026-04', clicks: 300, impressions: 9000 },
+    { month: '2026-05', clicks: 450, impressions: 11000 },
+  ])
+  const [r] = await computeObjectives(CTX)
+  expect(r.actual).toBe(750)
+  expect(r.pct).toBe(75)
+  expect(r.label).toBe('Clics orgánicos')
+})
+
+it('seo_position (stock, menor es mejor) toma el último mes del período', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 21, projectId: 1, workspaceId: 1, category: 'seo', metric: 'seo_position', periodicity: 'monthly', target: 10 },
+  ])
+  prisma.searchConsoleSnapshot.findFirst.mockResolvedValue({ avgPosition: 8, month: '2026-05' })
+  const [r] = await computeObjectives(CTX)
+  expect(r.actual).toBe(8)
+  expect(r.pct).toBe(125)          // target/actual = 10/8
+  expect(r.status).toBe('ok')
+})
+
+it('keywords_top3 cuenta las rastreadas que rankean ≤ 3', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 22, projectId: 1, workspaceId: 1, category: 'seo', metric: 'keywords_top3', periodicity: 'monthly', target: 5 },
+  ])
+  prisma.trackedKeyword.findMany.mockResolvedValue([
+    { id: 1, rankings: [{ position: 2 }] },
+    { id: 2, rankings: [{ position: 3 }] },
+    { id: 3, rankings: [{ position: 7 }] },   // fuera del top 3
+    { id: 4, rankings: [] },                   // sin ranking en el período
+  ])
+  const [r] = await computeObjectives(CTX)
+  expect(r.actual).toBe(2)
+  expect(r.detail).toMatchObject({ totalKeywords: 4, thresholdN: 3 })
+})
+
+it('keywords_top10 sin rankings en el período → no_data', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 23, projectId: 1, workspaceId: 1, category: 'seo', metric: 'keywords_top10', periodicity: 'monthly', target: 5 },
+  ])
+  prisma.trackedKeyword.findMany.mockResolvedValue([{ id: 1, rankings: [] }])
+  const [r] = await computeObjectives(CTX)
+  expect(r.actual).toBeNull()
+  expect(r.status).toBe('no_data')
+})
+
+it('domain_rating usa el snapshot y, si falta, cae al valor del proyecto', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 24, projectId: 1, workspaceId: 1, category: 'seo', metric: 'domain_rating', periodicity: 'monthly', target: 40 },
+  ])
+  prisma.searchConsoleSnapshot.findFirst.mockResolvedValue(null)   // sin DR en snapshot
+  prisma.project.findUnique.mockResolvedValue({ domainRating: 32 })
+  const [r] = await computeObjectives(CTX)
+  expect(r.actual).toBe(32)
+  expect(r.detail.latestGlobal).toBe(true)
+  expect(r.pct).toBe(80)            // 32/40
+  expect(r.status).toBe('partial')  // 80 ≥ 70
+})
+
+it('geo_score toma el score del último audit disponible', async () => {
+  prisma.marketingObjective.findMany.mockResolvedValue([
+    { id: 25, projectId: 1, workspaceId: 1, category: 'seo', metric: 'geo_score', periodicity: 'monthly', target: 70 },
+  ])
+  prisma.geoAudit.findFirst.mockResolvedValue({ score: 72, createdAt: new Date('2026-05-20') })
+  const [r] = await computeObjectives(CTX)
+  expect(r.actual).toBe(72)
+  expect(r.status).toBe('ok')
+  expect(r.detail.latestGlobal).toBe(true)
 })
 
 it('sin objetivos devuelve array vacío', async () => {

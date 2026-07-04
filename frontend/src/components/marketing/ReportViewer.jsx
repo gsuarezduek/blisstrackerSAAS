@@ -9,7 +9,7 @@
  *   onSaveAnalysis   — función async(updatedAnalysis) — solo en vista interna
  */
 
-import { useState, useRef } from 'react'
+import { useState, useRef, createContext, useContext } from 'react'
 import DOMPurify from 'dompurify'
 import RichTextEditor from '../RichTextEditor'
 import SocialIcon from './SocialIcon'
@@ -36,6 +36,28 @@ const PRINT_STYLES = `
   .print-break-avoid { break-inside: avoid; }
 }
 `
+
+// ─── Contexto de edición (solo vista agencia) ──────────────────────────────────
+// Permite borrar secciones/grupos del informe generado. En la vista del cliente
+// (isPublic) el contexto queda deshabilitado y no se renderiza ningún control.
+const ReportEditContext = createContext({ enabled: false, requestRemove: () => {} })
+
+function DeleteSectionBtn({ keys, label, className = '' }) {
+  const { enabled, requestRemove } = useContext(ReportEditContext)
+  if (!enabled || !keys || keys.length === 0) return null
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); requestRemove(keys, label) }}
+      title={`Eliminar "${label}" del informe`}
+      className={`no-print text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-colors ${className}`}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        <line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
+      </svg>
+    </button>
+  )
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -211,23 +233,29 @@ function LineChart({ points, color = '#f97316', height = 60, showLabels = true, 
 
 // ─── Secciones ────────────────────────────────────────────────────────────────
 
-function SectionCard({ title, icon, children, className = '', action }) {
+function SectionCard({ title, icon, children, className = '', action, sectionKey = null, sectionLabel = null }) {
   return (
     <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 print-break-avoid ${className}`}>
       <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4 flex items-center justify-between gap-2">
         <span className="flex items-center gap-2"><span>{icon}</span> {title}</span>
-        {action}
+        <span className="flex items-center gap-2">
+          {action}
+          {sectionKey && <DeleteSectionBtn keys={[sectionKey]} label={sectionLabel || title} />}
+        </span>
       </h3>
       {children}
     </div>
   )
 }
 
-function GroupHeader({ title }) {
+function GroupHeader({ title, groupKeys = null }) {
   return (
     <div className="flex items-center gap-3 pt-1">
       <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-      <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{title}</span>
+      <span className="flex items-center gap-1.5">
+        <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{title}</span>
+        {groupKeys && <DeleteSectionBtn keys={groupKeys} label={`todo: ${title}`} />}
+      </span>
       <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
     </div>
   )
@@ -713,7 +741,7 @@ function ObjectiveCard({ obj }) {
 function ObjectivesResults({ objectives }) {
   if (!objectives || objectives.length === 0) return null
   return (
-    <SectionCard title="Objetivos" icon="🎯">
+    <SectionCard title="Objetivos" icon="🎯" sectionKey="objectives">
       <div className="grid sm:grid-cols-2 gap-3">
         {objectives.map(o => <ObjectiveCard key={o.id} obj={o} />)}
       </div>
@@ -729,7 +757,7 @@ function CompetitorComparison({ data }) {
     : `${Number(v).toFixed(w.decimals ?? 1)}${w.unit ?? ''}`
 
   return (
-    <SectionCard title="Comparación con competidores" icon="🏁" className="mt-5">
+    <SectionCard title="Comparación con competidores" icon="🏁" className="mt-5" sectionKey="competitors">
       <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
         Frente a {data.competitorsCount} competidor{data.competitorsCount > 1 ? 'es' : ''} analizado{data.competitorsCount > 1 ? 's' : ''}, la cuenta lidera en:
       </p>
@@ -764,7 +792,9 @@ function CompetitorComparison({ data }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onBannerUpload, onBannerDelete, report = null, workspace = null }) {
+export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onBannerUpload, onBannerDelete, onRemoveSection, report = null, workspace = null }) {
+  const [pendingRemove,    setPendingRemove]    = useState(null)   // { keys, label } — confirmación de borrado de sección
+  const [removing,         setRemoving]         = useState(false)
   const [editingResumen,   setEditingResumen]   = useState(false)
   const [resumenDraft,     setResumenDraft]     = useState('')
   const [savingResumen,    setSavingResumen]    = useState(false)
@@ -804,6 +834,20 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   const periodRange = period?.dataLabel || (dataMonth && dataMonth !== month ? dataPeriodLabel(dataMonth) : null)
   const s = sections
   const canEdit = !isPublic && !!onSaveAnalysis
+
+  // Borrado de secciones/grupos (solo vista agencia)
+  const editEnabled = canEdit && !!onRemoveSection
+  function requestRemove(keys, label) { setPendingRemove({ keys, label }) }
+  async function confirmRemove() {
+    if (!pendingRemove || !onRemoveSection) return
+    setRemoving(true)
+    try {
+      await onRemoveSection(pendingRemove.keys)
+      setPendingRemove(null)
+    } finally {
+      setRemoving(false)
+    }
+  }
 
   // Crea una tarea del proyecto a partir de un "próximo paso" (solo vista admin).
   async function handleCreateTaskFromStep(step, i) {
@@ -924,11 +968,12 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
     }
   }
 
-  async function handleSaveContext(analysisKey) {
+  async function handleSaveContext(analysisKey, override) {
     if (!onSaveAnalysis) return
+    const value = override !== undefined ? override : contextDraft
     setSavingContext(true)
     try {
-      await onSaveAnalysis({ ...analysis, [analysisKey]: contextDraft })
+      await onSaveAnalysis({ ...analysis, [analysisKey]: value })
       setEditingContext(null)
       setContextDraft('')
     } finally {
@@ -976,9 +1021,10 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   }
 
   // Notas de contexto editorial por sección
-  const contextRRSS  = analysis?.contextRRSS  || ''
-  const contextSitio = analysis?.contextSitio || ''
-  const contextSEO   = analysis?.contextSEO   || ''
+  const contextRRSS       = analysis?.contextRRSS       || ''
+  const contextPublicidad = analysis?.contextPublicidad || ''
+  const contextSitio      = analysis?.contextSitio      || ''
+  const contextSEO        = analysis?.contextSEO        || ''
 
   // Flags de disponibilidad por grupo
   const hasRRSS   = !!(s.instagram || s.tiktok || s.youtube || s.linkedin || s.facebook)
@@ -1025,61 +1071,93 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
     return items.slice(0, 6)
   })()
 
-  // ── Helpers de contexto editorial ───────────────────────────────────────────
+  // ── "Agregar info" por grupo (bloque editorial, WYSIWYG) ──────────────────────
+  // Va debajo del título del grupo y arriba de las tarjetas. Reemplaza al viejo
+  // "Contexto del período". Reutiliza los campos analysis.context* ya guardados.
   function ContextNote({ sectionKey, analysisKey, contextValue }) {
     if (!contextValue && !canEdit) return null
     const isEditing = editingContext === sectionKey
+    const isHtml = typeof contextValue === 'string' && contextValue.trim().startsWith('<')
 
-    return (
-      <SectionCard
-        title="Contexto del período"
-        icon="💬"
-        action={canEdit && !isEditing && (
-          <button
-            onClick={() => { setContextDraft(contextValue); setEditingContext(sectionKey) }}
-            className="no-print text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-1 transition-colors"
-          >
-            ✏️ {contextValue ? 'Editar' : 'Agregar nota'}
-          </button>
-        )}
-      >
-        {isEditing ? (
-          <div className="space-y-3 no-print">
-            <textarea
-              value={contextDraft}
-              onChange={e => setContextDraft(e.target.value)}
-              rows={4}
-              placeholder="Explicá qué pasó en esta área: campañas lanzadas, factores externos, acciones realizadas, etc."
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => { setEditingContext(null); setContextDraft('') }}
-                className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => handleSaveContext(analysisKey)}
-                disabled={savingContext}
-                className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                {savingContext ? 'Guardando…' : 'Guardar'}
-              </button>
-            </div>
+    if (isEditing) {
+      return (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 no-print space-y-3">
+          <RichTextEditor defaultContent={contextValue} onChange={setContextDraft} minHeight={120} />
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => { setEditingContext(null); setContextDraft('') }}
+              className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => handleSaveContext(analysisKey)}
+              disabled={savingContext}
+              className="px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {savingContext ? 'Guardando…' : 'Guardar'}
+            </button>
           </div>
-        ) : contextValue ? (
-          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">{contextValue}</p>
-        ) : (
-          <p className="text-gray-400 dark:text-gray-500 italic text-sm">Sin nota del período.</p>
-        )}
-      </SectionCard>
+        </div>
+      )
+    }
+
+    // Con contenido: bloque de info + acciones de admin
+    if (contextValue) {
+      return (
+        <div className="bg-primary-50/60 dark:bg-primary-900/10 border border-primary-100 dark:border-primary-900/30 rounded-2xl px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            {isHtml ? (
+              <div className="situation-content text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(contextValue) }} />
+            ) : (
+              <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line flex-1 min-w-0">{contextValue}</p>
+            )}
+            {canEdit && (
+              <div className="no-print flex items-center gap-2 shrink-0">
+                <button onClick={() => { setContextDraft(contextValue); setEditingContext(sectionKey) }} className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">✏️ Editar</button>
+                <button onClick={() => handleSaveContext(analysisKey, '')} className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors">🗑</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    // Vacío + admin: botón para agregar
+    return (
+      <button
+        onClick={() => { setContextDraft(''); setEditingContext(sectionKey) }}
+        className="no-print w-full text-left text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 transition-colors"
+      >
+        ➕ Agregar información a esta sección
+      </button>
     )
   }
 
   // ── JSX ─────────────────────────────────────────────────────────────────────
 
   return (
+   <ReportEditContext.Provider value={{ enabled: editEnabled, requestRemove }}>
+    {/* Modal de confirmación de borrado de sección */}
+    {pendingRemove && (
+      <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && !removing && setPendingRemove(null)}>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Eliminar del informe</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+            ¿Seguro que querés eliminar <strong className="text-gray-700 dark:text-gray-200">{pendingRemove.label}</strong>? No se verá en el informe del cliente. Podés recuperarlo regenerando el informe.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => setPendingRemove(null)} disabled={removing} className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50">
+              Cancelar
+            </button>
+            <button onClick={confirmRemove} disabled={removing} className="flex-1 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50">
+              {removing ? 'Eliminando…' : 'Eliminar'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className={isPublic ? 'space-y-6 max-w-4xl mx-auto' : 'space-y-5'}>
 
       {/* Print CSS */}
@@ -1429,10 +1507,11 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       {/* ── 2. Redes Sociales ── */}
       {hasRRSS && (
         <>
-          <GroupHeader title="Redes Sociales" />
+          <GroupHeader title="Redes Sociales" groupKeys={['instagram', 'tiktok', 'youtube', 'linkedin', 'facebook', 'competitors']} />
+          <ContextNote sectionKey="rrss" analysisKey="contextRRSS" contextValue={contextRRSS} />
           <div className={`grid gap-5 ${[s.instagram, s.tiktok, s.youtube, s.linkedin, s.facebook].filter(Boolean).length >= 2 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
             {s.instagram && (
-              <SectionCard title="Instagram" icon={<SocialIcon network="instagram" className="w-5 h-5" />}>
+              <SectionCard title="Instagram" icon={<SocialIcon network="instagram" className="w-5 h-5" />} sectionKey="instagram">
                 <KpiGrid items={[
                   { label: 'Seguidores',   value: fmt(s.instagram.followersCount), delta: s.instagram.deltaFollowers },
                   { label: 'Engagement',  value: s.instagram.engagementRate != null ? `${s.instagram.engagementRate.toFixed(2)}%` : '—', delta: s.instagram.deltaEngagement },
@@ -1459,7 +1538,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             )}
 
             {s.tiktok && (
-              <SectionCard title="TikTok" icon={<SocialIcon network="tiktok" className="w-5 h-5" />}>
+              <SectionCard title="TikTok" icon={<SocialIcon network="tiktok" className="w-5 h-5" />} sectionKey="tiktok">
                 <KpiGrid items={[
                   { label: 'Seguidores',   value: fmt(s.tiktok.followersCount), delta: s.tiktok.deltaFollowers },
                   { label: 'Engagement',  value: s.tiktok.engagementRate != null ? `${s.tiktok.engagementRate.toFixed(2)}%` : '—', delta: s.tiktok.deltaEngagement },
@@ -1479,7 +1558,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             )}
 
             {s.youtube && (
-              <SectionCard title="YouTube" icon={<SocialIcon network="youtube" className="w-5 h-5" />}>
+              <SectionCard title="YouTube" icon={<SocialIcon network="youtube" className="w-5 h-5" />} sectionKey="youtube">
                 <KpiGrid items={[
                   { label: 'Suscriptores',  value: fmt(s.youtube.subscriberCount), delta: s.youtube.deltaSubscribers },
                   { label: 'Vistas del mes', value: fmt(s.youtube.monthViews, 0) },
@@ -1502,7 +1581,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             )}
 
             {s.linkedin && (
-              <SectionCard title="LinkedIn" icon={<SocialIcon network="linkedin" className="w-5 h-5" />}>
+              <SectionCard title="LinkedIn" icon={<SocialIcon network="linkedin" className="w-5 h-5" />} sectionKey="linkedin">
                 <KpiGrid items={[
                   { label: 'Seguidores',   value: fmt(s.linkedin.followersCount), delta: s.linkedin.deltaFollowers },
                   { label: 'Engagement',  value: s.linkedin.engagementRate != null ? `${s.linkedin.engagementRate.toFixed(2)}%` : '—', delta: s.linkedin.deltaEngagement },
@@ -1525,7 +1604,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             )}
 
             {s.facebook && (
-              <SectionCard title="Facebook" icon={<SocialIcon network="facebook" className="w-5 h-5" />}>
+              <SectionCard title="Facebook" icon={<SocialIcon network="facebook" className="w-5 h-5" />} sectionKey="facebook">
                 <KpiGrid items={[
                   { label: 'Seguidores',   value: fmt(s.facebook.followersCount), delta: s.facebook.deltaFollowers },
                   { label: 'Engagement',  value: s.facebook.engagementRate != null ? `${s.facebook.engagementRate.toFixed(2)}%` : '—', delta: s.facebook.deltaEngagement },
@@ -1546,17 +1625,17 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             )}
           </div>
           {s.competitors && <CompetitorComparison data={s.competitors} />}
-          <ContextNote sectionKey="rrss" analysisKey="contextRRSS" contextValue={contextRRSS} />
         </>
       )}
 
       {/* ── 3. Publicidad ── */}
       {hasAds && (
         <>
-          <GroupHeader title="Publicidad" />
+          <GroupHeader title="Publicidad" groupKeys={['metaAds', 'googleAds']} />
+          <ContextNote sectionKey="publicidad" analysisKey="contextPublicidad" contextValue={contextPublicidad} />
           <div className={`grid gap-5 ${s.metaAds && s.googleAds ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
             {s.metaAds && (
-              <SectionCard title="Meta Ads" icon="📣">
+              <SectionCard title="Meta Ads" icon="📣" sectionKey="metaAds">
                 <KpiGrid items={[
                   { label: 'Inversión',    value: s.metaAds.spend != null ? `$${fmt(s.metaAds.spend)}` : '—' },
                   ...(s.metaAds.reach != null && s.metaAds.reach > 0 ? [{ label: 'Alcance', value: fmt(s.metaAds.reach) }] : []),
@@ -1568,7 +1647,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
               </SectionCard>
             )}
             {s.googleAds && (
-              <SectionCard title="Google Ads" icon="🅖">
+              <SectionCard title="Google Ads" icon="🅖" sectionKey="googleAds">
                 <KpiGrid items={[
                   { label: 'Inversión',    value: s.googleAds.cost != null ? `$${fmt(s.googleAds.cost)}` : '—' },
                   { label: 'Impresiones', value: fmt(s.googleAds.impressions) },
@@ -1586,11 +1665,12 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       {/* ── 4. SEO y GEO ── */}
       {hasSeoGeo && (
         <>
-          <GroupHeader title="SEO y GEO" />
+          <GroupHeader title="SEO y GEO" groupKeys={['keywords', 'seo', 'geo']} />
+          <ContextNote sectionKey="seo" analysisKey="contextSEO" contextValue={contextSEO} />
 
           {/* Keywords */}
           {s.keywords && (
-            <SectionCard title="Posicionamiento SEO — Keywords objetivo" icon="🔑">
+            <SectionCard title="Posicionamiento SEO — Keywords objetivo" icon="🔑" sectionKey="keywords">
               <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-4">
                 Cómo posicionan las keywords que elegimos seguir, y su variación mes a mes.
               </p>
@@ -1647,7 +1727,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
           {/* SEO — Search Console */}
           {s.seo && (
-            <SectionCard title="Rendimiento del sitio — Search Console" icon="🔍">
+            <SectionCard title="Rendimiento del sitio — Search Console" icon="🔍" sectionKey="seo">
               <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-4">
                 Tráfico orgánico total del sitio y las consultas y páginas que más visitas traen.
               </p>
@@ -1715,7 +1795,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
           {/* GEO */}
           {s.geo && (
-            <SectionCard title="Presencia en IAs (GEO)" icon="🌐">
+            <SectionCard title="Presencia en IAs (GEO)" icon="🌐" sectionKey="geo">
               <div className="flex flex-col sm:flex-row gap-6 items-start">
                 <div className="shrink-0 flex flex-col items-center gap-1">
                   <ScoreRing score={s.geo.score} band={s.geo.band} />
@@ -1784,18 +1864,18 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             </SectionCard>
           )}
 
-          <ContextNote sectionKey="seo" analysisKey="contextSEO" contextValue={contextSEO} />
         </>
       )}
 
       {/* ── 5. Sitio web ── */}
       {hasSitio && (
         <>
-          <GroupHeader title="Sitio web" />
+          <GroupHeader title="Sitio web" groupKeys={['analytics', 'performance']} />
+          <ContextNote sectionKey="sitio" analysisKey="contextSitio" contextValue={contextSitio} />
 
           {/* Analytics GA4 */}
           {s.analytics && (
-            <SectionCard title="Analytics web" icon="📊">
+            <SectionCard title="Analytics web" icon="📊" sectionKey="analytics">
               <KpiGrid items={[
                 { label: 'Sesiones',        value: fmt(s.analytics.sessions),    delta: s.analytics.delta?.sessions },
                 { label: 'Usuarios nuevos', value: fmt(s.analytics.newUsers),    delta: s.analytics.delta?.newUsers },
@@ -1932,7 +2012,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
           {/* Performance */}
           {s.performance && (
-            <SectionCard title="Performance web" icon="⚡">
+            <SectionCard title="Performance web" icon="⚡" sectionKey="performance">
               {/* Scores móvil / desktop */}
               <div className="grid grid-cols-2 gap-4 mb-5">
                 {s.performance.mobile && (
@@ -2004,8 +2084,6 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
               })()}
             </SectionCard>
           )}
-
-          <ContextNote sectionKey="sitio" analysisKey="contextSitio" contextValue={contextSitio} />
         </>
       )}
 
@@ -2109,7 +2187,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
       {/* ── Trabajo realizado en el mes ── */}
       {s.tasks && s.tasks.length > 0 && (
-        <SectionCard title="Trabajo realizado en el mes" icon="🔧">
+        <SectionCard title="Trabajo realizado en el mes" icon="🔧" sectionKey="tasks">
           <ul className="space-y-2">
             {s.tasks.map((task) => {
               const mins = task.minutesOverride != null
@@ -2154,5 +2232,6 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
         </div>
       )}
     </div>
+   </ReportEditContext.Provider>
   )
 }

@@ -154,6 +154,88 @@ async function computeOne(obj, ctx) {
     return finalize(base, def, actual, { keyword: obj.trackedKeyword?.query ?? null, month: r?.month ?? null })
   }
 
+  // ── SEO: clics / impresiones orgánicas (flujo, Search Console) ──
+  if (obj.metric === 'seo_clicks' || obj.metric === 'seo_impressions') {
+    const field = obj.metric === 'seo_clicks' ? 'clicks' : 'impressions'
+    const snaps = await prisma.searchConsoleSnapshot.findMany({
+      where:  { projectId, workspaceId, month: { in: months } },
+      select: { month: true, clicks: true, impressions: true },
+    })
+    const actual = snaps.length ? snaps.reduce((s, x) => s + (x[field] ?? 0), 0) : null
+    base.label = field === 'clicks' ? 'Clics orgánicos' : 'Impresiones orgánicas'
+    return finalize(base, def, actual, { monthsWithData: snaps.length, monthsExpected: months.length })
+  }
+
+  // ── SEO: CTR orgánico (stock, ponderado por impresiones del período) ──
+  if (obj.metric === 'seo_ctr') {
+    const snaps = await prisma.searchConsoleSnapshot.findMany({
+      where:  { projectId, workspaceId, month: { in: months } },
+      select: { clicks: true, impressions: true },
+    })
+    const totImp = snaps.reduce((s, x) => s + (x.impressions ?? 0), 0)
+    const totClk = snaps.reduce((s, x) => s + (x.clicks ?? 0), 0)
+    const actual = totImp > 0 ? parseFloat((totClk / totImp * 100).toFixed(2)) : null
+    base.label = 'CTR orgánico'
+    return finalize(base, def, actual, { monthsWithData: snaps.length, monthsExpected: months.length })
+  }
+
+  // ── SEO: posición media del sitio (stock, menor es mejor) ──
+  if (obj.metric === 'seo_position') {
+    const snap = await prisma.searchConsoleSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: { in: months } },
+      orderBy: { month: 'desc' },
+      select:  { avgPosition: true, month: true },
+    })
+    const actual = snap?.avgPosition != null ? parseFloat(Number(snap.avgPosition).toFixed(1)) : null
+    base.label = 'Posición media del sitio'
+    return finalize(base, def, actual, { month: snap?.month ?? null })
+  }
+
+  // ── SEO: Domain Rating / autoridad (stock, Ahrefs) ──
+  if (obj.metric === 'domain_rating') {
+    const snap = await prisma.searchConsoleSnapshot.findFirst({
+      where:   { projectId, workspaceId, month: { in: months }, domainRating: { not: null } },
+      orderBy: { month: 'desc' },
+      select:  { domainRating: true, month: true },
+    })
+    let actual = snap?.domainRating ?? null
+    let latestGlobal = false
+    if (actual == null) {
+      const proj = await prisma.project.findUnique({ where: { id: projectId }, select: { domainRating: true } })
+      actual = proj?.domainRating ?? null
+      latestGlobal = actual != null
+    }
+    base.label = 'Domain Rating (autoridad)'
+    return finalize(base, def, actual != null ? Math.round(Number(actual)) : null, { latestGlobal, month: snap?.month ?? null })
+  }
+
+  // ── SEO: keywords en Top N (stock, conteo de rastreadas rankeando ≤ N) ──
+  if (obj.metric === 'keywords_top3' || obj.metric === 'keywords_top10') {
+    const threshold = obj.metric === 'keywords_top3' ? 3 : 10
+    const kws = await prisma.trackedKeyword.findMany({
+      where:  { projectId, workspaceId },
+      select: { id: true, rankings: { where: { month: { in: months } }, orderBy: { month: 'desc' }, take: 1, select: { position: true } } },
+    })
+    const ranked = kws.filter(k => k.rankings.length > 0 && k.rankings[0].position != null && k.rankings[0].position > 0)
+    // Sin keywords, o con keywords pero sin ranking en el período → no_data (no reportamos 0 engañoso).
+    const actual = kws.length === 0 || ranked.length === 0
+      ? null
+      : ranked.filter(k => k.rankings[0].position <= threshold).length
+    base.label = threshold === 3 ? 'Keywords en Top 3' : 'Keywords en Top 10'
+    return finalize(base, def, actual, { totalKeywords: kws.length, rankedKeywords: ranked.length, thresholdN: threshold })
+  }
+
+  // ── SEO/GEO: score de presencia en IAs (stock, último audit disponible) ──
+  if (obj.metric === 'geo_score') {
+    const audit = await prisma.geoAudit.findFirst({
+      where:   { projectId, workspaceId, status: 'completed' },
+      orderBy: { createdAt: 'desc' },
+      select:  { score: true, createdAt: true },
+    })
+    base.label = 'Presencia en IAs (GEO)'
+    return finalize(base, def, audit?.score ?? null, { latestGlobal: true, date: audit?.createdAt ?? null })
+  }
+
   // ── RRSS: seguidores nuevos (flujo). Por red si hay platform, si no suma todas. ──
   if (obj.metric === 'seguidores') {
     const networks = RRSS_NETWORKS.includes(obj.platform) ? [obj.platform] : RRSS_NETWORKS

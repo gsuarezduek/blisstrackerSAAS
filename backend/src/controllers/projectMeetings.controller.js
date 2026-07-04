@@ -77,6 +77,7 @@ function formatMeeting(m) {
   return {
     id:           m.id,
     date:         m.date,
+    title:        m.title,
     type:         m.type,
     notes:        m.notes,
     startedAt:    m.startedAt,
@@ -152,12 +153,13 @@ async function createMeeting(req, res, next) {
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
     if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
-    const { date, type } = req.body
+    const { date, type, title } = req.body
     const d = date && DATE_RE.test(date) ? date : todayString(tz)
     const t = VALID_TYPE.includes(type) ? type : 'internal'
+    const ti = typeof title === 'string' && title.trim() ? title.trim().slice(0, 120) : null
 
     const meeting = await prisma.projectMeeting.create({
-      data: { projectId, workspaceId, date: d, type: t },
+      data: { projectId, workspaceId, date: d, type: t, title: ti },
     })
 
     // El creador queda como participante por defecto (si es miembro activo del workspace).
@@ -191,12 +193,13 @@ async function updateMeeting(req, res, next) {
     const existing = await loadMeeting(req.params.mid, projectId, workspaceId)
     if (!existing) return res.status(404).json({ error: 'Reunión no encontrada' })
 
-    const { date, type, notes } = req.body
+    const { date, type, notes, title } = req.body
     const data = {}
     if (date  !== undefined) {
       if (date && !DATE_RE.test(date)) return res.status(400).json({ error: 'date inválida (YYYY-MM-DD)' })
       data.date = date
     }
+    if (title !== undefined) data.title = typeof title === 'string' && title.trim() ? title.trim().slice(0, 120) : null
     if (type  !== undefined) {
       if (!VALID_TYPE.includes(type)) return res.status(400).json({ error: 'type inválido' })
       data.type = type
