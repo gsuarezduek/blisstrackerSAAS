@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
+import OportunidadesTab from './OportunidadesTab'
 
 // ─── Países disponibles (ISO 3166-1 alpha-3 lowercase) ────────────────────────
 
@@ -1418,6 +1419,12 @@ export default function KeywordsTab({ projectId, projects }) {
       <p className="text-xs text-gray-400 mt-3 text-right">
         Rankings guardados automáticamente el 1° de cada mes · {countryLabel(integrationCountry)} · Google Search Console
       </p>
+
+      {/* Oportunidades SEO (striking distance, CTR bajo, content decay) */}
+      <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+        <h2 className="text-sm font-semibold text-gray-800 dark:text-white mb-3">🎯 Oportunidades</h2>
+        <OportunidadesTab projectId={projectId} projects={projects} />
+      </div>
 
       {/* Modal sugerencias */}
       {suggestOpen && (

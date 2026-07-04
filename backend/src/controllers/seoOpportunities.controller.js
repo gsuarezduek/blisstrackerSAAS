@@ -32,6 +32,56 @@ function mapRow(r) {
   }
 }
 
+// ─── Agrupamiento de variantes casi idénticas (mismo intent de búsqueda) ────────
+
+// Stopwords en español que no cambian la intención (de, en, el, para…).
+const STOPWORDS = new Set(['de', 'en', 'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'para', 'por', 'a', 'y', 'o', 'con', 'del', 'al', 'e', 'u', 'lo'])
+
+// Clave canónica de una query: minúsculas, sin acentos, sin stopwords, con
+// singularización cruda (quita 's' final en palabras >3 chars) y tokens ordenados.
+// Así "alquiler de autos en mendoza" y "alquiler de auto mendoza" caen en el mismo grupo.
+function canonicalKey(q) {
+  const tokens = String(q).toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9ñ\s]/g, ' ')
+    .split(/\s+/).filter(Boolean)
+    .filter(t => !STOPWORDS.has(t))
+    .map(t => (t.length > 3 && t.endsWith('s')) ? t.slice(0, -1) : t)
+  return [...new Set(tokens)].sort().join(' ')
+}
+
+// Agrupa un conjunto de queries (striking distance) por intención. Cada cluster suma
+// impresiones/clicks de sus variantes; la variante de más impresiones es la representativa.
+function clusterQueries(items) {
+  const map = new Map()
+  for (const it of items) {
+    const key = canonicalKey(it.query) || it.query
+    if (!map.has(key)) map.set(key, [])
+    map.get(key).push(it)
+  }
+  const clusters = []
+  for (const variants of map.values()) {
+    variants.sort((a, b) => b.impressions - a.impressions)
+    const rep         = variants[0]
+    const impressions = variants.reduce((s, v) => s + v.impressions, 0)
+    const clicks      = variants.reduce((s, v) => s + v.clicks, 0)
+    const position    = impressions
+      ? parseFloat((variants.reduce((s, v) => s + v.position * v.impressions, 0) / impressions).toFixed(1))
+      : rep.position
+    clusters.push({
+      query:        rep.query,
+      position,
+      impressions,
+      clicks,
+      ctr:          impressions ? clicks / impressions : 0,
+      zone:         position <= 10 ? 'casi_top3' : 'pagina_2',
+      variantCount: variants.length,
+      variants:     variants.map(v => ({ query: v.query, impressions: v.impressions, clicks: v.clicks, ctr: v.ctr, position: v.position })),
+    })
+  }
+  return clusters.sort((a, b) => b.impressions - a.impressions).slice(0, 25)
+}
+
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -107,19 +157,12 @@ async function getOpportunities(req, res, next) {
     const curQ = curQueries.map(mapRow)
     const curP = curPages.map(mapRow)
 
-    // Striking distance: posición 4-20, con impresiones que valgan la pena
-    const strikingDistance = curQ
+    // Striking distance: posición 4-20 con impresiones relevantes, agrupadas por
+    // intención (variantes casi idénticas colapsan en un solo cluster).
+    const strikingCandidates = curQ
       .filter(r => r.position >= 3.5 && r.position <= 20 && r.impressions >= 20)
-      .map(r => ({
-        query:       r.key,
-        position:    parseFloat(r.position.toFixed(1)),
-        impressions: r.impressions,
-        clicks:      r.clicks,
-        ctr:         r.ctr,
-        zone:        r.position <= 10 ? 'casi_top3' : 'pagina_2',
-      }))
-      .sort((a, b) => b.impressions - a.impressions)
-      .slice(0, 25)
+      .map(r => ({ query: r.key, position: parseFloat(r.position.toFixed(1)), impressions: r.impressions, clicks: r.clicks, ctr: r.ctr }))
+    const strikingDistance = clusterQueries(strikingCandidates)
 
     // CTR bajo: páginas con muchas impresiones y CTR < 5%
     const lowCtr = curP

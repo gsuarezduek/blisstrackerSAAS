@@ -6,7 +6,6 @@ import GeoTab      from '../components/marketing/GeoTab'
 import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
 import KeywordsTab from '../components/marketing/KeywordsTab'
-import OportunidadesTab from '../components/marketing/OportunidadesTab'
 import ActionPlanTab     from '../components/marketing/ActionPlanTab'
 import ContentBriefTab   from '../components/marketing/ContentBriefTab'
 import OnPageTab         from '../components/marketing/OnPageTab'
@@ -36,7 +35,6 @@ const NAV = [
       { id: 'seo',            label: '🔍 SEO' },
       { id: 'onpage',         label: '🔬 On-Page' },
       { id: 'keywords',       label: '🔑 Keywords' },
-      { id: 'oportunidades',  label: '🎯 Oportunidades' },
       { id: 'contenido',      label: '✍️ Content Brief' },
       { id: 'content-gap',    label: '🆚 Content Gap' },
       { id: 'plan',           label: '📋 Plan de acción' },
@@ -172,7 +170,6 @@ export default function Marketing() {
     if (tab === 'geo-seo' && sub === 'seo')            return <SeoTab            projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
     if (tab === 'geo-seo' && sub === 'onpage')         return <OnPageTab         projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'keywords')       return <KeywordsTab       projectId={projectId} projects={projects} />
-    if (tab === 'geo-seo' && sub === 'oportunidades')  return <OportunidadesTab  projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
     if (tab === 'geo-seo' && sub === 'contenido')      return <ContentBriefTab   projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'content-gap')    return <ContentGapTab     projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'plan')           return <ActionPlanTab     projectId={projectId} projects={projects} />

@@ -85,6 +85,44 @@ function PosBadge({ position, zone }) {
   return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${color}`}>#{position}</span>
 }
 
+function StrikingRow({ r, onTask }) {
+  const [open, setOpen] = useState(false)
+  const hasVariants = r.variantCount > 1
+  const extra = r.variantCount - 1
+  return (
+    <div className="px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/40">
+      <div className="flex items-center gap-3">
+        <PosBadge position={r.position} zone={r.zone} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
+            {r.query}
+            {hasVariants && (
+              <button onClick={() => setOpen(o => !o)} className="ml-2 text-xs font-medium text-primary-600 dark:text-primary-400 whitespace-nowrap">
+                +{extra} variante{extra > 1 ? 's' : ''} {open ? '▲' : '▼'}
+              </button>
+            )}
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            {r.impressions.toLocaleString()} impresiones · {r.clicks} clicks · CTR {pct(r.ctr)}{hasVariants ? ' · sumadas' : ''}
+          </p>
+        </div>
+        <button onClick={() => onTask(`Subir "${r.query}" a top 3 (hoy #${r.position})`)}
+          className="flex-shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">+ tarea</button>
+      </div>
+      {open && hasVariants && (
+        <div className="mt-2 ml-11 space-y-1 border-l-2 border-gray-100 dark:border-gray-700 pl-3">
+          {r.variants.map((v, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-gray-500 dark:text-gray-400 truncate">{v.query}</span>
+              <span className="text-gray-400 dark:text-gray-500 whitespace-nowrap flex-shrink-0">#{v.position} · {v.impressions.toLocaleString()} impr · {v.clicks} clk</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Section({ icon, title, subtitle, count, children }) {
   if (!count) return null
   return (
@@ -124,7 +162,7 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
   function exportCsv() {
     if (!data) return
     const rows = [['tipo', 'query/página', 'posición', 'impresiones', 'clicks', 'ctr']]
-    data.strikingDistance.forEach(r => rows.push(['striking', r.query, r.position, r.impressions, r.clicks, pct(r.ctr)]))
+    data.strikingDistance.forEach(r => rows.push(['striking', r.variantCount > 1 ? `${r.query} (+${r.variantCount - 1} variantes)` : r.query, r.position, r.impressions, r.clicks, pct(r.ctr)]))
     data.lowCtr.forEach(r => rows.push(['ctr_bajo', r.page, r.position, r.impressions, r.clicks, pct(r.ctr)]))
     data.decay.queries.forEach(r => rows.push(['decay_query', r.query, r.position, r.impressions, r.clicks, '']))
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -193,17 +231,9 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
 
       {/* Striking distance */}
       <Section icon="🎯" title="A un empujón del top 3" count={data.strikingDistance.length}
-        subtitle="Keywords en posición 4-20. Un pequeño refuerzo de contenido y enlaces internos puede subirlas a la primera plana.">
+        subtitle="Keywords en posición 4-20, agrupadas por intención (las variantes casi idénticas se cuentan como una: son la misma búsqueda y las trabaja una sola página). Un refuerzo de contenido y enlaces internos puede subir todo el grupo a la primera plana.">
         {data.strikingDistance.map((r, i) => (
-          <div key={i} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/40">
-            <PosBadge position={r.position} zone={r.zone} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{r.query}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">{r.impressions.toLocaleString()} impresiones · {r.clicks} clicks · CTR {pct(r.ctr)}</p>
-            </div>
-            <button onClick={() => setTaskModal({ title: `Subir "${r.query}" a top 3 (hoy #${r.position})` })}
-              className="flex-shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">+ tarea</button>
-          </div>
+          <StrikingRow key={i} r={r} onTask={(title) => setTaskModal({ title })} />
         ))}
       </Section>
 
