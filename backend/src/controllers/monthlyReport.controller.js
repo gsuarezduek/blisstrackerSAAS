@@ -44,6 +44,18 @@ function parsePeriodInput(body) {
   return { ok: true, value: { periodStart: new Date(`${s}T00:00:00.000Z`), periodEnd: new Date(`${e}T00:00:00.000Z`) } }
 }
 
+// Resumen del feedback del cliente sobre un informe (para la vista admin).
+async function loadFeedbackSummary(reportId) {
+  const items = await prisma.reportFeedback.findMany({
+    where:   { reportId },
+    orderBy: { createdAt: 'desc' },
+    select:  { id: true, name: true, rating: true, comment: true, createdAt: true },
+  })
+  const count = items.length
+  const avg   = count ? parseFloat((items.reduce((s, i) => s + i.rating, 0) / count).toFixed(1)) : null
+  return { count, avg, items }
+}
+
 // Carga los briefs del proyecto (para contextualizar el análisis IA).
 async function loadBriefs(projectId) {
   try {
@@ -195,6 +207,7 @@ async function getReport(req, res, next) {
     }
 
     const period = reportPeriod(report)
+    const feedback = await loadFeedbackSummary(report.id)
     res.json({
       report: {
         id:              report.id,
@@ -208,6 +221,7 @@ async function getReport(req, res, next) {
         periodStart:     period.start,
         periodEnd:       period.end,
         periodLabel:     reportLabel(report),
+        feedback,
         enabledSections,
         isGenerated,
       },
@@ -607,4 +621,39 @@ async function setReportStatus(req, res, next) {
   }
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, setReportStatus, uploadReportBanner, deleteReportBanner }
+/**
+ * POST /api/public/report/:token/feedback
+ * Endpoint PÚBLICO (sin auth). El cliente califica el informe 1–5 + comentario opcional.
+ * Solo se acepta feedback de informes publicados.
+ */
+async function submitReportFeedback(req, res, next) {
+  try {
+    const { token } = req.params
+    const { name, rating, comment } = req.body
+
+    const r = Number(rating)
+    if (!Number.isInteger(r) || r < 1 || r > 5) {
+      return res.status(400).json({ error: 'Elegí una calificación de 1 a 5 estrellas.' })
+    }
+
+    const report = await prisma.monthlyReport.findUnique({
+      where:  { token },
+      select: { id: true, workspaceId: true, status: true },
+    })
+    if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
+    if (report.status !== 'published') return res.status(404).json({ error: 'Informe no disponible' })
+
+    const cleanName    = (name    ?? '').toString().trim().slice(0, 120)  || null
+    const cleanComment = (comment ?? '').toString().trim().slice(0, 2000) || null
+
+    await prisma.reportFeedback.create({
+      data: { reportId: report.id, workspaceId: report.workspaceId, name: cleanName, rating: r, comment: cleanComment },
+    })
+
+    res.status(201).json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, setReportStatus, uploadReportBanner, deleteReportBanner, submitReportFeedback }

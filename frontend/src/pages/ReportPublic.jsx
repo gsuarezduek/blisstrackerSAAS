@@ -2,26 +2,26 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import ReportViewer from '../components/marketing/ReportViewer'
+import ReportFeedbackWidget from '../components/marketing/ReportFeedbackWidget'
 
 const API = import.meta.env.VITE_API_URL || ''
 
 // Selector de informes del mismo proyecto (navegación entre meses)
-function ReportSwitcher({ siblings, currentToken, onSelect }) {
+function ReportSwitcher({ siblings, currentToken, onSelect, brandPrimary }) {
   if (!siblings || siblings.length < 2) return null
   return (
-    <div className="max-w-3xl mx-auto mb-4">
-      <div className="bg-white rounded-xl border border-gray-200 px-3 py-2 flex items-center gap-2 overflow-x-auto">
-        <span className="text-xs text-gray-400 shrink-0 pr-1">Informes:</span>
+    <div className="max-w-3xl mx-auto mb-5">
+      <div className="bg-white/80 backdrop-blur rounded-xl border border-gray-200/80 shadow-sm px-3 py-2 flex items-center gap-2 overflow-x-auto">
+        <span className="text-xs text-gray-400 shrink-0 pr-1 font-medium">Informes</span>
         {siblings.map(s => {
           const active = s.token === currentToken
           return (
             <button
               key={s.token}
               onClick={() => !active && onSelect(s.token)}
-              className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg capitalize transition-colors ${
-                active
-                  ? 'bg-orange-500 text-white'
-                  : 'text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
+                active ? 'text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
+              style={active ? { backgroundColor: brandPrimary } : undefined}
             >
               {s.label}
             </button>
@@ -60,6 +60,9 @@ export default function ReportPublic() {
       .finally(() => setLoading(false))
   }, [token])
 
+  const brandPrimary = workspace?.brandColors?.[0]?.hex || '#f97316'
+  const agencyName   = workspace?.companyName || workspace?.name || ''
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -86,8 +89,11 @@ export default function ReportPublic() {
   if (!data) return null
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <ReportSwitcher siblings={siblings} currentToken={token} onSelect={(t) => navigate(`/report/${t}`)} />
+    <div
+      className="min-h-screen py-8 px-4"
+      style={{ background: `radial-gradient(1200px 500px at 50% -10%, ${brandPrimary}14, transparent 60%), #f6f7f9` }}
+    >
+      <ReportSwitcher siblings={siblings} currentToken={token} onSelect={(t) => navigate(`/report/${t}`)} brandPrimary={brandPrimary} />
       <div className="max-w-3xl mx-auto">
         <ReportViewer
           data={data}
@@ -96,6 +102,9 @@ export default function ReportPublic() {
           workspace={workspace}
         />
       </div>
+
+      {/* Feedback flotante del cliente */}
+      <ReportFeedbackWidget token={token} brandPrimary={brandPrimary} agencyName={agencyName} />
     </div>
   )
 }

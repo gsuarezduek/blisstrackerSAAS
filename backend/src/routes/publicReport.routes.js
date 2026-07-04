@@ -1,10 +1,11 @@
 const express             = require('express')
 const router              = express.Router()
 const prisma              = require('../lib/prisma')
-const { getPublicReport, getPublicReportMeta } = require('../controllers/monthlyReport.controller')
+const { getPublicReport, getPublicReportMeta, submitReportFeedback } = require('../controllers/monthlyReport.controller')
 
 // Sin auth — endpoint público para informes mensuales de clientes
 router.get('/report/:token/meta', getPublicReportMeta)   // metadata liviana para Open Graph (Vercel)
+router.post('/report/:token/feedback', submitReportFeedback) // el cliente califica el informe (1–5 + comentario)
 router.get('/report/:token', getPublicReport)
 
 /**

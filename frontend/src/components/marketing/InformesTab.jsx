@@ -55,8 +55,8 @@ const SECTION_CATALOG = [
   { key: 'analytics',       label: 'Analítica web (GA4)',  icon: '📊' },
   { key: 'performance',     label: 'Performance web',       icon: '⚡' },
   { key: 'geo',             label: 'Presencia en IA (GEO)', icon: '🤖' },
-  { key: 'seo',             label: 'SEO / Search Console',  icon: '🔍' },
-  { key: 'keywords',        label: 'Keywords',              icon: '🔑' },
+  { key: 'seo',             label: 'Rendimiento del sitio (Search Console)', icon: '🔍' },
+  { key: 'keywords',        label: 'Posicionamiento SEO (keywords)',         icon: '🔑' },
   { key: 'instagram',       label: 'Instagram',             icon: '📸' },
   { key: 'tiktok',          label: 'TikTok',                icon: '🎵' },
   { key: 'youtube',         label: 'YouTube',               icon: '▶️' },
@@ -375,6 +375,57 @@ function AllReportsPanel({ onSelectProject }) {
   )
 }
 
+// ─── Feedback del cliente (vista agencia) ─────────────────────────────────────
+
+function StarRow({ value, size = 14 }) {
+  return (
+    <span className="inline-flex">
+      {[1, 2, 3, 4, 5].map(n => {
+        const on = n <= Math.round(value)
+        return (
+          <svg key={n} width={size} height={size} viewBox="0 0 24 24" fill={on ? '#f59e0b' : 'none'} stroke={on ? '#f59e0b' : '#cbd5e1'} strokeWidth="1.6" strokeLinejoin="round">
+            <path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.06 1.1-6.47L2.6 9.35l6.5-.95L12 2.5z" />
+          </svg>
+        )
+      })}
+    </span>
+  )
+}
+
+function ClientFeedbackPanel({ feedback }) {
+  const [open, setOpen] = useState(false)
+  if (!feedback || !feedback.count) return null
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">💬 Feedback del cliente</span>
+          <StarRow value={feedback.avg} />
+          <span className="text-sm font-bold text-gray-900 dark:text-white">{feedback.avg}</span>
+          <span className="text-xs text-gray-400">({feedback.count} {feedback.count === 1 ? 'respuesta' : 'respuestas'})</span>
+        </div>
+        <span className="text-gray-400 text-xs shrink-0">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+          {feedback.items.map(it => (
+            <div key={it.id} className="text-sm">
+              <div className="flex items-center gap-2 flex-wrap">
+                <StarRow value={it.rating} size={12} />
+                <span className="font-medium text-gray-700 dark:text-gray-200">{it.name || 'Anónimo'}</span>
+                <span className="text-xs text-gray-400">
+                  {new Date(it.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              {it.comment && <p className="text-gray-600 dark:text-gray-400 mt-0.5 whitespace-pre-line">{it.comment}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function InformesTab({ projectId, onSelectProject }) {
@@ -559,6 +610,9 @@ export default function InformesTab({ projectId, onSelectProject }) {
           )}
         </div>
       </div>
+
+      {/* ── Feedback del cliente ── */}
+      {isGenerated && <ClientFeedbackPanel feedback={reportMeta?.feedback} />}
 
       {/* ── Contenido ── */}
       {loading && (

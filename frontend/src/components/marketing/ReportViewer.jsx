@@ -840,6 +840,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   const brandColors = workspace?.brandColors || []
   const brandPrimary   = brandColors[0]?.hex || '#f97316'
   const brandSecondary = brandColors[1]?.hex || '#3b82f6'
+  const agencyName     = workspace?.companyName || workspace?.name || ''
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -1079,24 +1080,77 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   // ── JSX ─────────────────────────────────────────────────────────────────────
 
   return (
-    <div className={`space-y-5 ${isPublic ? 'max-w-3xl mx-auto' : ''}`}>
+    <div className={isPublic ? 'space-y-6 max-w-3xl mx-auto' : 'space-y-5'}>
 
       {/* Print CSS */}
       <style>{PRINT_STYLES}</style>
 
       {/* ── Header ── */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden print-break-avoid">
-        {/* Banner del informe */}
-        {hasBanner && (report?.token || isPublic) ? (
-          <div className="relative w-full overflow-hidden group" style={{ height: isPublic ? '12rem' : '15rem' }}>
-            <img
-              key={bannerKey}
-              src={`${import.meta.env.VITE_API_URL}/api/public/report-banner/${report?.token}?t=${bannerKey}`}
-              alt="Banner"
-              className="w-full h-full object-cover"
-              onError={() => setHasBanner(false)}
-            />
-            {!isPublic && (
+      {isPublic ? (
+        /* Hero premium para el cliente: portada con overlay o gradiente de marca */
+        <div className="relative rounded-2xl overflow-hidden print-break-avoid shadow-sm">
+          {hasBanner && report?.token ? (
+            <>
+              <img
+                key={bannerKey}
+                src={`${import.meta.env.VITE_API_URL}/api/public/report-banner/${report?.token}?t=${bannerKey}`}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={() => setHasBanner(false)}
+              />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,.80), rgba(0,0,0,.28) 48%, rgba(0,0,0,.08))' }} />
+            </>
+          ) : (
+            <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})` }} />
+          )}
+
+          <div className="relative flex flex-col justify-end p-6 sm:p-8" style={{ minHeight: hasBanner ? '17rem' : '12rem' }}>
+            {/* fila superior: logo de la agencia + PDF */}
+            <div className="absolute top-5 left-6 right-6 sm:left-8 sm:right-8 flex items-center justify-between gap-3">
+              {workspace?.hasLogo && workspace?.slug ? (
+                <img
+                  src={`${import.meta.env.VITE_API_URL}/api/public/logo/${workspace.slug}`}
+                  alt={agencyName}
+                  className="h-9 max-w-[150px] object-contain"
+                  style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.45))' }}
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                />
+              ) : agencyName ? (
+                <span className="text-white/90 text-sm font-semibold" style={{ textShadow: '0 1px 4px rgba(0,0,0,.4)' }}>{agencyName}</span>
+              ) : <span />}
+              <button
+                onClick={() => window.print()}
+                className="no-print flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/15 hover:bg-white/25 text-white backdrop-blur-sm transition-colors shrink-0"
+              >
+                🖨️ PDF
+              </button>
+            </div>
+
+            <div>
+              <p className="text-white/75 text-[11px] font-semibold uppercase tracking-[0.18em] mb-1.5">Informe de marketing</p>
+              <h1 className="text-white text-3xl sm:text-4xl font-bold leading-tight" style={{ textShadow: '0 2px 14px rgba(0,0,0,.35)' }}>{project.name}</h1>
+              <p className="text-white/90 text-lg font-medium mt-1.5 capitalize">{periodTitle}</p>
+              {periodRange && <p className="text-white/65 text-xs mt-1">{periodRange}</p>}
+              {project.websiteUrl && (
+                <a href={project.websiteUrl} target="_blank" rel="noreferrer" className="inline-block text-white/80 hover:text-white text-xs mt-2 underline underline-offset-2">
+                  {project.websiteUrl.replace(/^https?:\/\//, '')}
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Header de edición (vista agencia) */
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden print-break-avoid">
+          {hasBanner && report?.token ? (
+            <div className="relative w-full overflow-hidden group" style={{ height: '15rem' }}>
+              <img
+                key={bannerKey}
+                src={`${import.meta.env.VITE_API_URL}/api/public/report-banner/${report?.token}?t=${bannerKey}`}
+                alt="Banner"
+                className="w-full h-full object-cover"
+                onError={() => setHasBanner(false)}
+              />
               <button
                 onClick={() => bannerInputRef.current?.click()}
                 disabled={bannerUploading}
@@ -1107,67 +1161,51 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                   {bannerUploading ? 'Subiendo...' : 'Cambiar imagen'}
                 </span>
               </button>
-            )}
-          </div>
-        ) : !isPublic ? (
-          <button
-            onClick={() => bannerInputRef.current?.click()}
-            disabled={bannerUploading}
-            className="no-print w-full flex flex-col items-center justify-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            style={{ height: '15rem' }}
-          >
-            <span className="text-3xl text-gray-300 dark:text-gray-500">{bannerUploading ? '⏳' : '🖼️'}</span>
-            <span className="text-sm font-medium text-gray-400 dark:text-gray-500">
-              {bannerUploading ? 'Subiendo...' : 'Agregar imagen de fondo al informe'}
-            </span>
-            <span className="text-xs text-gray-300 dark:text-gray-600">PNG, JPG o WebP · máx. 5 MB</span>
-          </button>
-        ) : (
-          <div className="h-2 w-full" style={{ backgroundColor: brandPrimary }} />
-        )}
-        <input
-          ref={bannerInputRef}
-          type="file"
-          accept=".png,.jpg,.jpeg,.webp"
-          className="hidden"
-          onChange={handleBannerFile}
-        />
-
-        <div className="p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {project.name}
-              </h1>
-              <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">
-                Informe — {periodTitle}
-              </p>
-              {periodRange && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                  {periodRange}
-                </p>
-              )}
-              {project.websiteUrl && (
-                <a
-                  href={project.websiteUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs hover:underline mt-1 block"
-                  style={{ color: brandPrimary }}
-                >
-                  {project.websiteUrl}
-                </a>
-              )}
             </div>
+          ) : (
             <button
-              onClick={() => window.print()}
-              className="no-print flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
+              onClick={() => bannerInputRef.current?.click()}
+              disabled={bannerUploading}
+              className="no-print w-full flex flex-col items-center justify-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              style={{ height: '15rem' }}
             >
-              🖨️ Descargar PDF
+              <span className="text-3xl text-gray-300 dark:text-gray-500">{bannerUploading ? '⏳' : '🖼️'}</span>
+              <span className="text-sm font-medium text-gray-400 dark:text-gray-500">
+                {bannerUploading ? 'Subiendo...' : 'Agregar imagen de fondo al informe'}
+              </span>
+              <span className="text-xs text-gray-300 dark:text-gray-600">PNG, JPG o WebP · máx. 5 MB</span>
             </button>
+          )}
+          <input
+            ref={bannerInputRef}
+            type="file"
+            accept=".png,.jpg,.jpeg,.webp"
+            className="hidden"
+            onChange={handleBannerFile}
+          />
+
+          <div className="p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{project.name}</h1>
+                <p className="text-gray-500 dark:text-gray-400 capitalize mt-0.5">Informe — {periodTitle}</p>
+                {periodRange && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{periodRange}</p>}
+                {project.websiteUrl && (
+                  <a href={project.websiteUrl} target="_blank" rel="noreferrer" className="text-xs hover:underline mt-1 block" style={{ color: brandPrimary }}>
+                    {project.websiteUrl}
+                  </a>
+                )}
+              </div>
+              <button
+                onClick={() => window.print()}
+                className="no-print flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
+              >
+                🖨️ Descargar PDF
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── 0. Scorecard ejecutivo ── */}
       {heroMetrics.length > 0 && (
@@ -1550,7 +1588,10 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
           {/* Keywords */}
           {s.keywords && (
-            <SectionCard title="Posicionamiento SEO" icon="🔑">
+            <SectionCard title="Posicionamiento SEO — Keywords objetivo" icon="🔑">
+              <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-4">
+                Cómo posicionan las keywords que elegimos seguir, y su variación mes a mes.
+              </p>
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <div className="text-center">
                   <p className="text-xl font-bold text-gray-900 dark:text-white">{s.keywords.avgPosition}</p>
@@ -1604,7 +1645,10 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
           {/* SEO — Search Console */}
           {s.seo && (
-            <SectionCard title="SEO — Google Search Console" icon="🔍">
+            <SectionCard title="Rendimiento del sitio — Search Console" icon="🔍">
+              <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-4">
+                Tráfico orgánico total del sitio y las consultas y páginas que más visitas traen.
+              </p>
               <KpiGrid items={[
                 { label: 'Clicks orgánicos', value: fmt(s.seo.clicks),      delta: s.seo.delta?.clicks },
                 { label: 'Impresiones',      value: fmt(s.seo.impressions), delta: s.seo.delta?.impressions },
