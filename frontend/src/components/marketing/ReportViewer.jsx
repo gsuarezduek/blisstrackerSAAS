@@ -237,8 +237,8 @@ function KpiGrid({ items }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {items.map((item, i) => (
-        <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
-          <p className="text-lg font-bold text-gray-900 dark:text-white">{item.value ?? '—'}</p>
+        <div key={i} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center min-w-0">
+          <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight [overflow-wrap:anywhere]">{item.value ?? '—'}</p>
           {item.delta !== undefined && <DeltaChip delta={item.delta} invert={item.invertDelta} />}
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{item.label}</p>
         </div>
@@ -610,12 +610,12 @@ function CompetitorHeadToHead({ h2h }) {
   if (!h2h) return null
   return (
     <div className="mt-2 rounded-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
-      <table className="w-full text-xs">
+      <table className="w-full text-xs table-fixed">
         <thead>
           <tr className="bg-gray-50 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400">
-            <th className="text-left py-1.5 px-2 font-medium">Métrica</th>
-            <th className="text-right py-1.5 px-2 font-medium">{h2h.ownLabel}</th>
-            <th className="text-right py-1.5 px-2 font-medium">{h2h.competitorLabel}</th>
+            <th className="text-left py-1.5 px-2 font-medium w-2/5">Métrica</th>
+            <th className="text-right py-1.5 px-2 font-medium break-words">{h2h.ownLabel}</th>
+            <th className="text-right py-1.5 px-2 font-medium break-words">{h2h.competitorLabel}</th>
           </tr>
         </thead>
         <tbody>
@@ -750,7 +750,7 @@ function CompetitorComparison({ data }) {
                       : 'text-gray-600 dark:text-gray-400'
                   }`}
                 >
-                  <span className="truncate">{i + 1}. {r.name}</span>
+                  <span className="truncate min-w-0">{i + 1}. {r.name}</span>
                   <span className="tabular-nums shrink-0 ml-2">{fmtVal(r.value, w)}</span>
                 </div>
               ))}
@@ -1080,7 +1080,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   // ── JSX ─────────────────────────────────────────────────────────────────────
 
   return (
-    <div className={isPublic ? 'space-y-6 max-w-3xl mx-auto' : 'space-y-5'}>
+    <div className={isPublic ? 'space-y-6 max-w-4xl mx-auto' : 'space-y-5'}>
 
       {/* Print CSS */}
       <style>{PRINT_STYLES}</style>
@@ -1213,8 +1213,8 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
           <p className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: brandPrimary }}>Resumen del período</p>
           <div className={`grid gap-4 ${heroMetrics.length <= 3 ? 'grid-cols-3' : heroMetrics.length === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'}`}>
             {heroMetrics.map((m, i) => (
-              <div key={i} className="text-center">
-                <p className="text-2xl font-bold" style={{ color: i === 0 ? brandPrimary : undefined }}>{m.value}</p>
+              <div key={i} className="text-center min-w-0">
+                <p className="text-2xl font-bold leading-tight [overflow-wrap:anywhere]" style={{ color: i === 0 ? brandPrimary : undefined }}>{m.value}</p>
                 <div className="h-4 flex items-center justify-center">
                   {m.delta != null ? <DeltaChip delta={m.delta} invert={m.invertDelta} /> : <span />}
                 </div>
@@ -1271,9 +1271,11 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(analysis.resumen) }}
                   />
                 ) : (
-                  <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed whitespace-pre-line">
-                    {analysis.resumen}
-                  </p>
+                  <div className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed space-y-3">
+                    {String(analysis.resumen).split(/\n+/).map(p => p.trim()).filter(Boolean).map((para, i) => (
+                      <p key={i}>{para}</p>
+                    ))}
+                  </div>
                 )
               ) : (
                 <span className="text-gray-400 dark:text-gray-500 italic text-sm">Sin resumen todavía.</span>
@@ -1556,7 +1558,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             {s.metaAds && (
               <SectionCard title="Meta Ads" icon="📣">
                 <KpiGrid items={[
-                  { label: 'Inversión',    value: s.metaAds.spend != null ? `$${fmt(s.metaAds.spend, 2)}` : '—' },
+                  { label: 'Inversión',    value: s.metaAds.spend != null ? `$${fmt(s.metaAds.spend)}` : '—' },
                   ...(s.metaAds.reach != null && s.metaAds.reach > 0 ? [{ label: 'Alcance', value: fmt(s.metaAds.reach) }] : []),
                   { label: 'Impresiones', value: fmt(s.metaAds.impressions) },
                   { label: 'Clics',       value: fmt(s.metaAds.clicks) },
@@ -1568,7 +1570,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
             {s.googleAds && (
               <SectionCard title="Google Ads" icon="🅖">
                 <KpiGrid items={[
-                  { label: 'Inversión',    value: s.googleAds.cost != null ? `$${fmt(s.googleAds.cost, 2)}` : '—' },
+                  { label: 'Inversión',    value: s.googleAds.cost != null ? `$${fmt(s.googleAds.cost)}` : '—' },
                   { label: 'Impresiones', value: fmt(s.googleAds.impressions) },
                   { label: 'Clics',       value: fmt(s.googleAds.clicks) },
                   { label: 'CTR',         value: s.googleAds.ctr != null ? `${Number(s.googleAds.ctr).toFixed(2)}%` : '—' },

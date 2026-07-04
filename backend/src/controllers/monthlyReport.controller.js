@@ -1,6 +1,7 @@
 const { randomUUID }           = require('crypto')
 const prisma                   = require('../lib/prisma')
 const { aggregateReportData, getAvailableSections }  = require('../services/monthlyReport.service')
+const { sendReportFeedbackEmail } = require('../services/email.service')
 const { monthLabel, prevMonthStr, monthBounds, rangeLabel, isWholeSingleMonth } = require('../lib/monthUtils')
 
 // Filtro Prisma para informes "generados" (no placeholders vacíos)
@@ -638,7 +639,7 @@ async function submitReportFeedback(req, res, next) {
 
     const report = await prisma.monthlyReport.findUnique({
       where:  { token },
-      select: { id: true, workspaceId: true, status: true },
+      select: { id: true, projectId: true, workspaceId: true, status: true },
     })
     if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
     if (report.status !== 'published') return res.status(404).json({ error: 'Informe no disponible' })
@@ -651,9 +652,50 @@ async function submitReportFeedback(req, res, next) {
     })
 
     res.status(201).json({ ok: true })
+
+    // Aviso por email a la agencia (fire-and-forget, no bloquea ni rompe la respuesta)
+    setImmediate(() => {
+      notifyReportFeedback(report, { name: cleanName, rating: r, comment: cleanComment })
+        .catch(err => console.warn('[ReportFeedback] aviso por email fallido (ignorado):', err.message))
+    })
   } catch (err) {
     next(err)
   }
+}
+
+// Avisa a admins/owners del workspace + miembros del proyecto que un cliente dejó feedback.
+async function notifyReportFeedback(report, feedback) {
+  const { id: reportId, projectId, workspaceId } = report
+  const [fullReport, project, workspace, activeMembers, projMembers] = await Promise.all([
+    prisma.monthlyReport.findUnique({ where: { id: reportId }, select: { token: true, month: true, periodStart: true, periodEnd: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true, name: true, companyName: true } }),
+    prisma.workspaceMember.findMany({ where: { workspaceId, active: true }, select: { userId: true, role: true, user: { select: { email: true } } } }),
+    prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } }),
+  ])
+  if (!fullReport || !workspace) return
+
+  const projMemberIds = new Set(projMembers.map(p => p.userId))
+  const emails = new Set()
+  for (const m of activeMembers) {
+    const isAdmin       = m.role === 'admin' || m.role === 'owner'
+    const isProjMember  = projMemberIds.has(m.userId)
+    if ((isAdmin || isProjMember) && m.user?.email) emails.add(m.user.email)
+  }
+  if (emails.size === 0) return
+
+  const domain    = process.env.APP_DOMAIN || 'blisstracker.app'
+  const reportUrl = `https://${workspace.slug}.${domain}/report/${fullReport.token}`
+
+  await sendReportFeedbackEmail([...emails], {
+    projectName:   project?.name || 'Proyecto',
+    periodLabel:   reportLabel(fullReport),
+    reportUrl,
+    name:          feedback.name,
+    rating:        feedback.rating,
+    comment:       feedback.comment,
+    workspaceName: workspace.companyName || workspace.name,
+  }, workspaceId)
 }
 
 module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, setReportStatus, uploadReportBanner, deleteReportBanner, submitReportFeedback }

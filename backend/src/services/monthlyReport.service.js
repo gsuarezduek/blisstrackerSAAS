@@ -1258,10 +1258,11 @@ INSTRUCCIONES DE TONO (MUY IMPORTANTE):
 - Si no hay datos de una área, omitila — no menciones ausencias a menos que sea relevante
 - Usá números concretos en el resumen y en los highlights
 - "highlights" = los 3 LOGROS concretos del período (con números); "nextSteps" = los 3 FOCOS/prioridades accionables para el próximo período (no genéricas)
+- El "resumen" DEBE estar dividido en 2-3 párrafos cortos separados por un doble salto de línea real (\\n\\n) según la idea (logros / análisis / mejoras). NUNCA un solo bloque largo de texto corrido.
 
 Respondé SOLO con un JSON con esta estructura exacta:
 {
-  "resumen": "2-3 párrafos: primero los logros del período (con números) leídos contra los objetivos, luego oportunidades de mejora con propuestas concretas",
+  "resumen": "Párrafo 1: logros del período con números leídos contra los objetivos.\\n\\nPárrafo 2: análisis y contexto.\\n\\nPárrafo 3: oportunidades de mejora con propuestas concretas.",
   "highlights": ["logro 1 concreto con número", "logro 2 concreto con número", "logro 3 concreto con número"],
   "alertas": ["solo si hay algo importante que mejorar, máximo 2, siempre con propuesta de solución concreta"],
   "nextSteps": ["foco/acción concreta 1", "foco 2", "foco 3"]

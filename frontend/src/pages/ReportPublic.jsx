@@ -10,7 +10,7 @@ const API = import.meta.env.VITE_API_URL || ''
 function ReportSwitcher({ siblings, currentToken, onSelect, brandPrimary }) {
   if (!siblings || siblings.length < 2) return null
   return (
-    <div className="max-w-3xl mx-auto mb-5">
+    <div className="max-w-4xl mx-auto mb-5">
       <div className="bg-white/80 backdrop-blur rounded-xl border border-gray-200/80 shadow-sm px-3 py-2 flex items-center gap-2 overflow-x-auto">
         <span className="text-xs text-gray-400 shrink-0 pr-1 font-medium">Informes</span>
         {siblings.map(s => {
@@ -94,7 +94,7 @@ export default function ReportPublic() {
       style={{ background: `radial-gradient(1200px 500px at 50% -10%, ${brandPrimary}14, transparent 60%), #f6f7f9` }}
     >
       <ReportSwitcher siblings={siblings} currentToken={token} onSelect={(t) => navigate(`/report/${t}`)} brandPrimary={brandPrimary} />
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         <ReportViewer
           data={data}
           isPublic={true}
