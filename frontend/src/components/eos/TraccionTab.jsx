@@ -52,6 +52,16 @@ function quarterLabel(q) {
   return `${qPart} ${year}`
 }
 
+// Meses que abarca el trimestre (ej: Q3 → "Jul – Sep").
+function quarterMonths(q) {
+  if (!q) return ''
+  const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+  const n = parseInt(q.split('-')[1]?.replace('Q', ''), 10)
+  if (!(n >= 1 && n <= 4)) return ''
+  const start = (n - 1) * 3
+  return `${MONTHS[start]} – ${MONTHS[start + 2]}`
+}
+
 function adjQuarter(q, delta) {
   const [year, qPart] = q.split('-')
   let y = parseInt(year)
@@ -135,8 +145,16 @@ function AddParticipant({ members, existingIds, onAdd }) {
   const [open, setOpen] = useState(false)
   const avail = members.filter(m => !existingIds.has(m.id))
   if (avail.length === 0) return null
+  const team   = avail.filter(m => m.inTeam)
+  const others = avail.filter(m => !m.inTeam)
 
   function pick(id) { onAdd(id); setOpen(false) }
+
+  const row = (m) => (
+    <button key={m.id} onClick={() => pick(m.id)} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 flex items-center gap-2">
+      <img src={avatarUrl(m.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />{m.name}
+    </button>
+  )
 
   return (
     <div className="relative">
@@ -150,11 +168,18 @@ function AddParticipant({ members, existingIds, onAdd }) {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute left-0 mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg w-56 max-h-72 overflow-y-auto py-1">
-            {avail.map(m => (
-              <button key={m.id} onClick={() => pick(m.id)} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 flex items-center gap-2">
-                <img src={avatarUrl(m.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />{m.name}
-              </button>
-            ))}
+            {team.length > 0 && (
+              <>
+                <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Equipo del proyecto</p>
+                {team.map(row)}
+              </>
+            )}
+            {others.length > 0 && (
+              <>
+                <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Otros del workspace</p>
+                {others.map(row)}
+              </>
+            )}
           </div>
         </>
       )}
@@ -469,8 +494,13 @@ function RocasSection() {
         >
           ◀
         </button>
-        <span className="text-base font-semibold text-gray-800 dark:text-gray-200 min-w-[80px] text-center">
-          {quarterLabel(quarter)}
+        <span className="flex flex-col items-center min-w-[80px] leading-tight">
+          <span className="text-base font-semibold text-gray-800 dark:text-gray-200">
+            {quarterLabel(quarter)}
+          </span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">
+            {quarterMonths(quarter)}
+          </span>
         </span>
         <button
           onClick={() => setQuarter(q => adjQuarter(q, 1))}
@@ -536,11 +566,10 @@ function RocasSection() {
 
 // ─── TodoDashboardLink ────────────────────────────────────────────────────────
 // Botón/badge para vincular un To-Do con una tarea del dashboard del responsable.
-// Si ya está vinculado, muestra el estado; si no, ofrece elegir proyecto y enviarlo.
+// La tarea se crea en el proyecto de EOS configurado (Preferencias → Módulos), así
+// que no se pregunta el proyecto: un clic la envía.
 
-function TodoDashboardLink({ todo, projects, onSend }) {
-  const [open, setOpen]         = useState(false)
-  const [projectId, setProjectId] = useState('')
+function TodoDashboardLink({ todo, meetingProjectReady, onSend }) {
   const [sending, setSending]   = useState(false)
 
   // Ya vinculado → badge de estado (verde si la tarea ya se completó).
@@ -572,56 +601,39 @@ function TodoDashboardLink({ todo, projects, onSend }) {
     )
   }
 
+  // Sin proyecto de EOS configurado → deshabilitado con aviso.
+  if (!meetingProjectReady) {
+    return (
+      <span
+        title="Configurá el proyecto de EOS en Preferencias → Módulos adicionales"
+        className="shrink-0 text-gray-300 dark:text-gray-600 text-sm px-1 cursor-not-allowed select-none"
+      >
+        📋
+      </span>
+    )
+  }
+
   async function submit() {
-    if (!projectId) return
     setSending(true)
-    const ok = await onSend(todo.id, Number(projectId))
+    await onSend(todo.id)   // sin projectId: el backend usa el proyecto de EOS configurado
     setSending(false)
-    if (ok) { setOpen(false); setProjectId('') }
   }
 
   return (
-    <div className="relative shrink-0">
-      <button
-        onClick={() => setOpen(o => !o)}
-        title="Enviar al dashboard del responsable"
-        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-primary-500 text-sm transition-all px-1"
-      >
-        📋
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg w-60 p-3">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Enviar al dashboard</p>
-            <select
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
-              className="w-full text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-primary-400 mb-2"
-            >
-              <option value="">Elegí un proyecto…</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <button
-              onClick={submit}
-              disabled={!projectId || sending}
-              className="w-full text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg py-1.5 transition-colors disabled:opacity-50"
-            >
-              {sending ? 'Enviando…' : 'Crear tarea'}
-            </button>
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 leading-snug">
-              Se crea una tarea en el dashboard del responsable. Al completarla, este To-Do se tilda solo.
-            </p>
-          </div>
-        </>
-      )}
-    </div>
+    <button
+      onClick={submit}
+      disabled={sending}
+      title="Enviar al dashboard del responsable"
+      className="shrink-0 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-primary-500 text-sm transition-all px-1 disabled:opacity-50"
+    >
+      📋
+    </button>
   )
 }
 
 // ─── TodoItem ─────────────────────────────────────────────────────────────────
 
-function TodoItem({ todo, members, projects, onUpdate, onDelete, onSendToDashboard }) {
+function TodoItem({ todo, members, meetingProjectReady, onUpdate, onDelete, onSendToDashboard }) {
   const [editing, setEditing]     = useState(false)
   const [titleDraft, setTitleDraft] = useState(todo.title)
   const inputRef = useRef(null)
@@ -708,7 +720,7 @@ function TodoItem({ todo, members, projects, onUpdate, onDelete, onSendToDashboa
       )}
 
       {/* Vínculo con el dashboard */}
-      <TodoDashboardLink todo={todo} projects={projects} onSend={onSendToDashboard} />
+      <TodoDashboardLink todo={todo} meetingProjectReady={meetingProjectReady} onSend={onSendToDashboard} />
 
       {/* Delete */}
       <button
@@ -761,13 +773,16 @@ const MEETING_TYPES = [
   { value: 'annual',    label: 'Anual' },
 ]
 
-function MeetingCard({ week, meeting, members, meetingProjectReady, onSave, onStart, onFinish, onAddParticipant, onRemoveParticipant }) {
+function MeetingCard({ week, meeting, members, meetingProjectReady, onSave, onStart, onFinish, onAddParticipant, onRemoveParticipant, onSeedFromProject }) {
   const [date, setDate]     = useState(meeting?.date || '')
   const [type, setType]     = useState(meeting?.type || 'weekly')
   const notes               = meeting?.notes || ''
 
   const started      = !!meeting?.started
   const participants = meeting?.participants || []
+  // Miembros del equipo del proyecto que todavía no son participantes.
+  const participantIds = new Set(participants.map(p => p.userId))
+  const teamToAdd = members.filter(m => m.inTeam && !participantIds.has(m.id)).length
 
   // Edit/Save/Cancel del WYSIWYG (sólo para las notas)
   const [editingNotes, setEditingNotes] = useState(false)
@@ -863,7 +878,7 @@ function MeetingCard({ week, meeting, members, meetingProjectReady, onSave, onSt
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Duración</label>
           {!meeting?.running && meeting?.durationMins == null && !meetingProjectReady ? (
             <span className="text-xs text-amber-600 dark:text-amber-400">
-              Configurá el proyecto de reuniones para iniciar ↑
+              Configurá el proyecto de EOS en Preferencias
             </span>
           ) : (
             <MeetingTimer
@@ -911,11 +926,21 @@ function MeetingCard({ week, meeting, members, meetingProjectReady, onSave, onSt
               onAdd={userId => onAddParticipant(week, userId)}
             />
           )}
+          {!started && teamToAdd > 0 && (
+            <button
+              onClick={() => onSeedFromProject(week)}
+              className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border border-dashed border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+            >
+              ⟳ Traer equipo del proyecto ({teamToAdd})
+            </button>
+          )}
         </div>
         <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 leading-snug">
           {started
-            ? 'Se está contando el tiempo de cada participante en el proyecto de reuniones; al finalizar queda registrado como tiempo trabajado.'
-            : 'Al iniciar la reunión se contará el tiempo de cada participante. No se puede iniciar si alguien tiene una tarea en curso.'}
+            ? 'Se está contando el tiempo de cada participante en el proyecto de EOS; al finalizar queda registrado como tiempo trabajado.'
+            : !meetingProjectReady
+              ? 'Asociá un proyecto de EOS en Preferencias → Módulos adicionales para poder iniciar la reunión.'
+              : 'Al iniciar la reunión se contará el tiempo de cada participante. No se puede iniciar si alguien tiene una tarea en curso.'}
         </p>
       </div>
 
@@ -978,30 +1003,15 @@ function MeetingSection() {
   const [todos, setTodos]                = useState([])
   const [meeting, setMeeting]            = useState(null)
   const [members, setMembers]            = useState([])
-  const [projects, setProjects]          = useState([])
   const [specialMeetings, setSpecialMeetings] = useState([])
   const [showSpecials, setShowSpecials]  = useState(false)
   const [meetingProjectId, setMeetingProjectId] = useState(null)
   const [loading, setLoading]            = useState(true)
   const [error, setError]                = useState(null)
+  const seededWeeks = useRef(new Set())   // semanas donde ya auto-traje el equipo
 
   useEffect(() => { loadWeek() }, [week])
   useEffect(() => { loadSpecials() }, [])
-  useEffect(() => {
-    api.get('/projects').then(r => setProjects(r.data || [])).catch(() => {})
-    api.get('/eos').then(r => setMeetingProjectId(r.data?.meetingProjectId ?? null)).catch(() => {})
-  }, [])
-
-  async function handleSaveMeetingProject(projectId) {
-    const pid = projectId ? Number(projectId) : null
-    setMeetingProjectId(pid)
-    try {
-      await api.patch('/eos', { meetingProjectId: pid })
-    } catch {
-      // revertir silenciosamente si falla
-      api.get('/eos').then(r => setMeetingProjectId(r.data?.meetingProjectId ?? null)).catch(() => {})
-    }
-  }
 
   async function handleStartMeeting(wk) {
     try {
@@ -1039,6 +1049,15 @@ function MeetingSection() {
     }
   }
 
+  async function handleSeedFromProject(wk) {
+    try {
+      const { data } = await api.post(`/eos/traction/meetings/${wk}/participants/from-project`)
+      setMeeting(data)
+    } catch (err) {
+      alert(err?.response?.data?.error || 'No se pudo traer el equipo del proyecto')
+    }
+  }
+
   async function loadWeek() {
     try {
       setLoading(true)
@@ -1046,7 +1065,24 @@ function MeetingSection() {
       const { data } = await api.get(`/eos/traction/week?week=${week}`)
       setMembers(data.members)
       setTodos(data.todos)
-      setMeeting(data.meeting)
+      setMeetingProjectId(data.meetingProjectId ?? null)
+
+      let meeting = data.meeting
+      // Auto-traer el equipo del proyecto en la semana actual, la primera vez que se abre.
+      if (
+        !meeting &&
+        week === currentWeekStr() &&
+        data.meetingProjectId &&
+        (data.members || []).some(m => m.inTeam) &&
+        !seededWeeks.current.has(week)
+      ) {
+        seededWeeks.current.add(week)
+        try {
+          const res = await api.post(`/eos/traction/meetings/${week}/participants/from-project`)
+          meeting = res.data
+        } catch { /* si falla, queda sin participantes; se puede traer manualmente */ }
+      }
+      setMeeting(meeting)
     } catch {
       setError('No se pudo cargar la semana')
     } finally {
@@ -1083,11 +1119,11 @@ function MeetingSection() {
     } catch { loadWeek() }
   }
 
-  // Envía el To-Do al dashboard del responsable (crea + vincula la tarea).
-  // Devuelve true si salió bien (para que el popover se cierre).
-  async function handleSendToDashboard(id, projectId) {
+  // Envía el To-Do al dashboard del responsable (crea + vincula la tarea) usando el
+  // proyecto de EOS configurado en Preferencias (el backend lo resuelve solo).
+  async function handleSendToDashboard(id) {
     try {
-      const { data } = await api.post(`/eos/traction/todos/${id}/send-to-dashboard`, { projectId })
+      const { data } = await api.post(`/eos/traction/todos/${id}/send-to-dashboard`, {})
       setTodos(prev => prev.map(t => t.id === id ? data : t))
       return true
     } catch (err) {
@@ -1252,24 +1288,6 @@ function MeetingSection() {
 
       {!loading && !error && (
         <>
-          {/* Config: proyecto donde se registran las tareas de los participantes */}
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              Proyecto de las reuniones
-            </span>
-            <select
-              value={meetingProjectId ?? ''}
-              onChange={e => handleSaveMeetingProject(e.target.value)}
-              className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400"
-            >
-              <option value="">— Elegir proyecto —</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <span className="text-[10px] text-gray-400 dark:text-gray-500 basis-full sm:basis-auto">
-              El tiempo de cada participante se registra como tarea en este proyecto.
-            </span>
-          </div>
-
           {/* Meeting card */}
           <MeetingCard
             week={week}
@@ -1281,6 +1299,7 @@ function MeetingSection() {
             onFinish={handleFinishMeeting}
             onAddParticipant={handleAddParticipant}
             onRemoveParticipant={handleRemoveParticipant}
+            onSeedFromProject={handleSeedFromProject}
           />
 
           {/* To-Dos */}
@@ -1314,7 +1333,7 @@ function MeetingSection() {
                   key={todo.id}
                   todo={todo}
                   members={members}
-                  projects={projects}
+                  meetingProjectReady={!!meetingProjectId}
                   onUpdate={handleUpdateTodo}
                   onDelete={handleDeleteTodo}
                   onSendToDashboard={handleSendToDashboard}

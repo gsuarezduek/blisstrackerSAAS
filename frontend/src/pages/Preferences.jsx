@@ -27,6 +27,10 @@ export default function Preferences() {
   const [aiUsageError,        setAiUsageError]        = useState(false)
   const [wsFeatures,          setWsFeatures]          = useState(null)
   const [togglingFeature,     setTogglingFeature]     = useState(null)
+  // EOS: proyecto asociado para tareas y reuniones
+  const [projects,            setProjects]            = useState([])
+  const [eosMeetingProjectId, setEosMeetingProjectId] = useState('')
+  const [savingEosProject,    setSavingEosProject]    = useState(false)
 
   // Detalle de consumo de IA (desplegable)
   const [showAiDetail,   setShowAiDetail]   = useState(false)
@@ -79,6 +83,28 @@ export default function Preferences() {
       .then(({ data }) => setWsFeatures(data))
       .catch(() => setWsFeatures([]))
   }, [user?.isAdmin])
+
+  // EOS habilitado → cargar proyectos + el proyecto asociado a tareas/reuniones
+  const eosEnabled = !!wsFeatures?.some(f => f.key === 'eos' && !f.disabled)
+  useEffect(() => {
+    if (!user?.isAdmin || !eosEnabled) return
+    api.get('/projects').then(({ data }) => setProjects(data || [])).catch(() => {})
+    api.get('/eos').then(({ data }) => setEosMeetingProjectId(data?.meetingProjectId ?? '')).catch(() => {})
+  }, [user?.isAdmin, eosEnabled])
+
+  async function handleSaveEosProject(value) {
+    const pid = value ? Number(value) : null
+    const prev = eosMeetingProjectId
+    setEosMeetingProjectId(value ? Number(value) : '')
+    setSavingEosProject(true)
+    try {
+      await api.patch('/eos', { meetingProjectId: pid })
+    } catch {
+      setEosMeetingProjectId(prev)   // revertir si falla
+    } finally {
+      setSavingEosProject(false)
+    }
+  }
 
   useEffect(() => {
     if (!showAiDetail || !user?.isAdmin) return
@@ -676,22 +702,51 @@ export default function Preferences() {
                     const meta = MODULE_META[feat.key] ?? { icon: '🔧', detail: feat.description }
                     const isLast = idx === wsFeatures.length - 1
                     return (
-                      <div key={feat.key} className={`flex items-start gap-4 py-4 ${isLast ? '' : 'border-b dark:border-gray-700'}`}>
-                        <span className="text-2xl flex-shrink-0 mt-0.5">{meta.icon}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{feat.name}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">{meta.detail}</p>
-                          {feat.disabled && (
-                            <span className="inline-block mt-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5">
-                              Desactivado en este workspace
-                            </span>
-                          )}
+                      <div key={feat.key} className={`py-4 ${isLast ? '' : 'border-b dark:border-gray-700'}`}>
+                        <div className="flex items-start gap-4">
+                          <span className="text-2xl flex-shrink-0 mt-0.5">{meta.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{feat.name}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">{meta.detail}</p>
+                            {feat.disabled && (
+                              <span className="inline-block mt-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5">
+                                Desactivado en este workspace
+                              </span>
+                            )}
+                          </div>
+                          <Toggle
+                            on={!feat.disabled}
+                            onToggle={() => handleToggleFeature(feat.key, feat.disabled)}
+                            disabled={togglingFeature === feat.key}
+                          />
                         </div>
-                        <Toggle
-                          on={!feat.disabled}
-                          onToggle={() => handleToggleFeature(feat.key, feat.disabled)}
-                          disabled={togglingFeature === feat.key}
-                        />
+
+                        {/* EOS habilitado → proyecto asociado a tareas y reuniones */}
+                        {feat.key === 'eos' && !feat.disabled && (
+                          <div className="mt-3 ml-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 p-3">
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Proyecto para tareas y reuniones de EOS
+                            </label>
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2 leading-snug">
+                              El tiempo de las reuniones L10 y las tareas enviadas al dashboard se registran en este proyecto.
+                              Las reuniones también traen automáticamente a su equipo.
+                            </p>
+                            <select
+                              value={eosMeetingProjectId || ''}
+                              onChange={e => handleSaveEosProject(e.target.value)}
+                              disabled={savingEosProject}
+                              className="w-full sm:w-80 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400 disabled:opacity-60"
+                            >
+                              <option value="">— Elegir proyecto —</option>
+                              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                            {!eosMeetingProjectId && (
+                              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5">
+                                Asociá un proyecto para poder iniciar reuniones y enviar To-Dos al dashboard.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}

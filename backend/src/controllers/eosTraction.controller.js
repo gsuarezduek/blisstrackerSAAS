@@ -8,13 +8,31 @@ const WEEK_RE    = /^\d{4}-W\d{2}$/
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function getMembers(workspaceId) {
+// Miembros activos del workspace. Si se pasa `teamIds`, marca quiénes son del
+// equipo del proyecto de reuniones (`inTeam`), para agrupar el selector.
+async function getMembers(workspaceId, teamIds = null) {
   const rows = await prisma.workspaceMember.findMany({
     where:   { workspaceId, active: true },
     include: { user: { select: { id: true, name: true, avatar: true } } },
     orderBy: { user: { name: 'asc' } },
   })
-  return rows.map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar, role: m.role }))
+  return rows.map(m => ({
+    id: m.user.id, name: m.user.name, avatar: m.user.avatar, role: m.role,
+    inTeam: teamIds ? teamIds.has(m.user.id) : false,
+  }))
+}
+
+// Proyecto configurado para las reuniones/tareas de EOS + ids de su equipo.
+async function getMeetingProjectContext(workspaceId) {
+  const eos = await prisma.eOSData.findUnique({ where: { workspaceId }, select: { meetingProjectId: true } })
+  const meetingProjectId = eos?.meetingProjectId ?? null
+  if (!meetingProjectId) return { meetingProjectId: null, teamIds: new Set() }
+
+  const project = await prisma.project.findFirst({ where: { id: meetingProjectId, workspaceId, active: true }, select: { id: true } })
+  if (!project) return { meetingProjectId: null, teamIds: new Set() }
+
+  const teamRows = await prisma.projectMember.findMany({ where: { projectId: meetingProjectId }, select: { userId: true } })
+  return { meetingProjectId, teamIds: new Set(teamRows.map(t => t.userId)) }
 }
 
 function formatRock(r) {
@@ -217,8 +235,8 @@ async function getWeek(req, res, next) {
       return res.status(400).json({ error: 'week inválida (formato: YYYY-Www)' })
     }
 
-    const [members, todos, meeting] = await Promise.all([
-      getMembers(workspaceId),
+    const [projectCtx, todos, meeting] = await Promise.all([
+      getMeetingProjectContext(workspaceId),
       prisma.eOSTodo.findMany({
         where:   { workspaceId, week },
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
@@ -227,8 +245,11 @@ async function getWeek(req, res, next) {
       prisma.eOSMeeting.findFirst({ where: { workspaceId, week }, include: MEETING_INCLUDE }),
     ])
 
+    const members = await getMembers(workspaceId, projectCtx.teamIds)
+
     res.json({
       members,
+      meetingProjectId: projectCtx.meetingProjectId,
       todos:   todos.map(formatTodo),
       meeting: meeting ? formatMeeting(meeting) : null,
     })
@@ -304,17 +325,25 @@ async function deleteTodo(req, res, next) {
 }
 
 // POST /api/eos/traction/todos/:id/send-to-dashboard
-// body: { projectId } — crea una tarea en el dashboard del responsable del To-Do
-// y la vincula (taskId). Al completar esa tarea, el To-Do se tilda solo.
+// body: { projectId? } — crea una tarea en el dashboard del responsable del To-Do
+// y la vincula (taskId). Si no se pasa projectId, usa el proyecto de EOS configurado
+// (EOSData.meetingProjectId). Al completar esa tarea, el To-Do se tilda solo.
 async function sendTodoToDashboard(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const tz          = req.workspace.timezone
     const requesterId = req.user.userId
     const id          = Number(req.params.id)
-    const projectId   = Number(req.body.projectId)
 
-    if (!projectId) return res.status(400).json({ error: 'projectId es requerido' })
+    // projectId explícito o, si no viene, el proyecto de EOS configurado.
+    let projectId = req.body.projectId ? Number(req.body.projectId) : null
+    if (!projectId) {
+      const eos = await prisma.eOSData.findUnique({ where: { workspaceId }, select: { meetingProjectId: true } })
+      projectId = eos?.meetingProjectId ?? null
+    }
+    if (!projectId) {
+      return res.status(400).json({ error: 'Configurá el proyecto de EOS en Preferencias → Módulos adicionales', code: 'NO_MEETING_PROJECT' })
+    }
 
     const todo = await prisma.eOSTodo.findFirst({ where: { id, workspaceId } })
     if (!todo)         return res.status(404).json({ error: 'To-Do no encontrado' })
@@ -462,6 +491,40 @@ async function removeParticipant(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// POST /api/eos/traction/meetings/:week/participants/from-project — agrega como
+// participantes a todo el equipo del proyecto de EOS configurado. Idempotente.
+async function seedParticipantsFromProject(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const { week } = req.params
+    if (!WEEK_RE.test(week)) return res.status(400).json({ error: 'week inválida' })
+
+    const { meetingProjectId, teamIds } = await getMeetingProjectContext(workspaceId)
+    if (!meetingProjectId) {
+      return res.status(400).json({ error: 'Configurá el proyecto de EOS en Preferencias → Módulos adicionales', code: 'NO_MEETING_PROJECT' })
+    }
+
+    let meeting = await loadMeetingByWeek(week, workspaceId, { create: true })
+    if (meeting.startedAt) return res.status(409).json({ error: 'No se pueden editar los participantes después de iniciar la reunión' })
+
+    // Solo miembros activos del workspace que estén en el equipo del proyecto.
+    const activeIds = new Set(
+      (await prisma.workspaceMember.findMany({ where: { workspaceId, active: true }, select: { userId: true } }))
+        .map(m => m.userId)
+    )
+    const toAdd = [...teamIds].filter(id => activeIds.has(id))
+    if (toAdd.length) {
+      await prisma.eOSMeetingParticipant.createMany({
+        data: toAdd.map(userId => ({ meetingId: meeting.id, workspaceId, userId })),
+        skipDuplicates: true,
+      })
+    }
+
+    meeting = await loadMeetingByWeek(week, workspaceId)
+    res.json(formatMeeting(meeting))
+  } catch (err) { next(err) }
+}
+
 // POST /api/eos/traction/meetings/:week/start — arranca el cronómetro y, por cada
 // participante, crea una Task IN_PROGRESS en el proyecto de reuniones configurado.
 // Bloquea si algún participante tiene una tarea en curso.
@@ -589,5 +652,5 @@ module.exports = {
   getRocks, createRock, updateRock, deleteRock,
   getWeek, createTodo, updateTodo, deleteTodo, sendTodoToDashboard,
   upsertMeeting, listSpecialMeetings,
-  addParticipant, removeParticipant, startMeeting, finishMeeting,
+  addParticipant, removeParticipant, seedParticipantsFromProject, startMeeting, finishMeeting,
 }
