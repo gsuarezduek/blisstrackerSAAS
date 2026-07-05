@@ -1,9 +1,8 @@
-const Anthropic = require('@anthropic-ai/sdk')
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { parseAIJson } = require('../utils/parseAIJson')
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic } = require('../lib/claude')
 const AI_TIMEOUT_MS = 20000
 const { logTokens } = require('../lib/logTokens')
 const { getSetting } = require('../lib/platformSettings')

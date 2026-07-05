@@ -1,11 +1,10 @@
 const prisma     = require('../lib/prisma')
-const Anthropic  = require('@anthropic-ai/sdk')
 const { logTokens }           = require('../lib/logTokens')
 const { getValidAccessToken } = require('./tokenRefresh.service')
 const { querySearchConsole }  = require('./googleSearchConsole.service')
 const { normalizeSiteUrl }    = require('../utils/seo')
 
-const anthropic = new Anthropic()
+const { anthropic, assertTokenBudget } = require('../lib/claude')
 
 // Convierte "90d" → objeto { startDate, endDate } en YYYY-MM-DD
 function dateRangeBounds(range) {
@@ -156,6 +155,7 @@ async function runCannibalizationAnalysis(reportId, projectId, workspaceId, date
       )).join('\n')
 
       try {
+        await assertTokenBudget(workspaceId) // si se agotó el presupuesto, se omite solo el resumen IA
         const message = await anthropic.messages.create({
           model:      'claude-haiku-4-5-20251001',
           max_tokens: 600,

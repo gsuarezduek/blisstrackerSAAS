@@ -1,10 +1,9 @@
 const axios     = require('axios')
 const cheerio   = require('cheerio')
-const Anthropic = require('@anthropic-ai/sdk')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic } = require('../lib/claude')
 
 const MAX_PAGES      = 15   // páginas a crawlear como máximo
 const MAX_LINK_CHECK = 25   // enlaces internos a chequear por roto (además de las páginas crawleadas)

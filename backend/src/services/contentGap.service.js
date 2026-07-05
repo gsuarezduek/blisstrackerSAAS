@@ -1,11 +1,10 @@
 const axios     = require('axios')
 const cheerio   = require('cheerio')
-const Anthropic = require('@anthropic-ai/sdk')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
 const { gscCountryToSerp, extractDomain, fetchSerpData, parseSerpResponse } = require('./serpApi.service')
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic } = require('../lib/claude')
 
 const MAX_COMPETITORS = 4
 const UA = 'BlissTrackerBot/1.0 (+https://blisstracker.app)'

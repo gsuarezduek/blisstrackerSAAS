@@ -1,10 +1,9 @@
-const Anthropic = require('@anthropic-ai/sdk')
 const prisma    = require('../lib/prisma')
 const { parseAIJson } = require('../utils/parseAIJson')
 const { logTokens }   = require('../lib/logTokens')
 const { gscCountryToSerp, extractDomain, fetchSerpData, parseSerpResponse } = require('./serpApi.service')
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic } = require('../lib/claude')
 
 // Etiquetas legibles de los campos del brief SEO/SEM que le interesan al prompt.
 // (El catálogo de preguntas vive en el frontend; acá solo mapeamos lo que usamos.)

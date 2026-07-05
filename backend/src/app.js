@@ -82,7 +82,9 @@ app.use(cors({
 // El webhook de Stripe necesita el body RAW — debe montarse ANTES de express.json()
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleWebhook)
 
-app.use(express.json({ limit: '100kb' }))
+// 1mb: los editores WYSIWYG (informes, briefs, notas) y payloads de regeneración
+// superan holgadamente 100kb. Multipart (uploads de imagen) va por multer, no por acá.
+app.use(express.json({ limit: '1mb' }))
 app.set('trust proxy', 1)
 
 const globalLimiter = rateLimit({
@@ -153,19 +155,6 @@ app.use('/api/public',           publicReportRoutes)
 const eventsController = require('./controllers/events.controller')
 app.post('/api/events', eventsController.track)
 
-// Verificación de webhook de Instagram (GET sin auth)
-app.get('/api/marketing/integrations/meta/webhook', (req, res) => {
-  const mode      = req.query['hub.mode']
-  const token     = req.query['hub.verify_token']
-  const challenge = req.query['hub.challenge']
-  const expected  = process.env.META_WEBHOOK_VERIFY_TOKEN || 'blisstracker_ig_2026'
-  if (mode === 'subscribe' && token === expected) {
-    console.log('[MetaWebhook] Verificación OK')
-    return res.status(200).send(challenge)
-  }
-  console.warn('[MetaWebhook] Verificación fallida:', { mode, token })
-  res.status(403).send('Forbidden')
-})
 app.use('/api/billing',          billingRoutes)
 app.use('/api/superadmin',        superadminRoutes)
 app.use('/api/legal',             legalRoutes)

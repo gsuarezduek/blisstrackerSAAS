@@ -1,11 +1,10 @@
-const Anthropic = require('@anthropic-ai/sdk')
 const prisma    = require('../lib/prisma')
 const { fetchGA4Report, fetchAiTrafficData } = require('./googleAnalytics.service')
 const { parseAIJson }    = require('../utils/parseAIJson')
 const { logTokens }      = require('../lib/logTokens')
 const { todayString }    = require('../utils/dates')
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic, assertTokenBudget } = require('../lib/claude')
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +86,7 @@ async function saveMonthSnapshot(projectId, workspaceId, month) {
  * @returns {Promise<object>}  — { ...insight, content: parsedObject }
  */
 async function generateInsight(projectId, workspaceId, month) {
+  await assertTokenBudget(workspaceId) // 429 si el workspace agotó su presupuesto mensual de IA
   const pm = prevMonth(month)
 
   const [current, previous, project] = await Promise.all([
@@ -168,13 +168,10 @@ Incluí las ${tendencias.length > 0 ? tendencias.length : '3-5'} tendencias prin
     messages:   [{ role: 'user', content: prompt }],
   })
 
-  await logTokens({
-    workspaceId,
-    service:      'analyticsInsight',
-    model:        'claude-haiku-4-5-20251001',
-    inputTokens:  response.usage?.input_tokens  ?? 0,
-    outputTokens: response.usage?.output_tokens ?? 0,
-  }).catch(err => console.error('[AnalyticsSnapshot] Error al registrar tokens de IA:', err.message))
+  // logTokens es posicional: (service, userId, usage, workspaceId). Antes se llamaba con
+  // forma de objeto → usage venía undefined y estos tokens NUNCA se contabilizaban.
+  await logTokens('analyticsInsight', null, response.usage, workspaceId)
+    .catch(err => console.error('[AnalyticsSnapshot] Error al registrar tokens de IA:', err.message))
 
   const parsed = parseAIJson(response.content[0].text)
 

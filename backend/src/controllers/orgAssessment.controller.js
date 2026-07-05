@@ -1,7 +1,7 @@
 const prisma  = require('../lib/prisma')
-const Anthropic = require('@anthropic-ai/sdk')
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic, assertTokenBudget } = require('../lib/claude')
+const { logTokens } = require('../lib/logTokens')
 
 // ─── Preguntas (fuente de verdad compartida con el frontend) ──────────────────
 // Las 18 preguntas de la Evaluación Organizacional EOS, agrupadas en 6 componentes.
@@ -300,11 +300,13 @@ Tono: directo, profesional, constructivo. Sin exagerar ni minimizar.`
 
     let analysis = null
     try {
+      await assertTokenBudget(workspaceId) // si se agotó el presupuesto, se omite solo el análisis IA
       const response = await anthropic.messages.create({
         model:      'claude-haiku-4-5-20251001',
         max_tokens: 1000,
         messages:   [{ role: 'user', content: prompt }],
       })
+      logTokens('orgAssessment', req.user.userId, response.usage, workspaceId).catch(() => {})
       const text = response.content[0]?.text?.trim() || ''
       const jsonMatch = text.match(/\{[\s\S]*\}/)
       if (jsonMatch) analysis = JSON.parse(jsonMatch[0])

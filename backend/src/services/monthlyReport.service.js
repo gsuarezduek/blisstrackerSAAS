@@ -1,5 +1,4 @@
 const prisma    = require('../lib/prisma')
-const Anthropic = require('@anthropic-ai/sdk')
 const { logTokens } = require('../lib/logTokens')
 const { fetchGoogleAdsData }             = require('./googleAds.service')
 const { fetchMetaAdsData, getValidFbToken } = require('./metaAds.service')
@@ -46,7 +45,7 @@ function buildPeriodMeta(period, monthsCovered, multiMonth) {
   }
 }
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic, hasTokenBudget } = require('../lib/claude')
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1273,6 +1272,13 @@ Respondé SOLO con un JSON con esta estructura exacta:
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error(`[MonthlyReport] ${tag}: ANTHROPIC_API_KEY no configurada — no se puede generar el análisis IA`)
     return emptyAnalysis('Falta configurar la IA en el servidor (ANTHROPIC_API_KEY). Avisá al equipo técnico.')
+  }
+
+  // Presupuesto mensual de tokens de IA del workspace. El informe es el flujo más caro:
+  // sin este guard un workspace podía regenerarlo en loop sin tope.
+  if (!(await hasTokenBudget(workspaceId))) {
+    console.warn(`[MonthlyReport] ${tag}: presupuesto de tokens de IA agotado — se omite el análisis`)
+    return emptyAnalysis('Se alcanzó el límite mensual de tokens de IA del workspace. Ajustá el límite en SuperAdmin o esperá al próximo mes.')
   }
 
   try {

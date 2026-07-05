@@ -1,4 +1,3 @@
-const Anthropic = require('@anthropic-ai/sdk')
 const prisma    = require('../lib/prisma')
 const { parseAIJson }         = require('../utils/parseAIJson')
 const { logTokens }           = require('../lib/logTokens')
@@ -6,7 +5,7 @@ const { normalizeSiteUrl }    = require('../utils/seo')
 const { querySearchConsole }  = require('./googleSearchConsole.service')
 const { getValidAccessToken } = require('./tokenRefresh.service')
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic, assertTokenBudget } = require('../lib/claude')
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -116,6 +115,7 @@ async function saveMonthKeywordRankings(projectId, workspaceId, month) {
  * topic cluster, variantes long-tail y recomendaciones.
  */
 async function generateKeywordAnalysis(trackedKeywordId, workspaceId) {
+  await assertTokenBudget(workspaceId) // 429 si el workspace agotó su presupuesto mensual de IA
   const kw = await prisma.trackedKeyword.findUnique({
     where: { id: trackedKeywordId },
     include: {

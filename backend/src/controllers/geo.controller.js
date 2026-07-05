@@ -1,8 +1,8 @@
 const prisma     = require('../lib/prisma')
-const Anthropic  = require('@anthropic-ai/sdk')
 const { runGeoAnalysis } = require('../services/geoAudit.service')
 
-const anthropic = new Anthropic()
+const { anthropic, assertTokenBudget } = require('../lib/claude')
+const { logTokens } = require('../lib/logTokens')
 
 /**
  * POST /api/marketing/geo/audit
@@ -143,6 +143,7 @@ async function generateLlmsTxt(req, res, next) {
     const h2s         = (raw.meta?.h2 || []).slice(0, 5).join('\n- ')
     const url         = audit.url
 
+    await assertTokenBudget(workspaceId) // 429 si el workspace agotó su presupuesto mensual de IA
     const message = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 600,
@@ -172,6 +173,7 @@ El formato estándar de llms.txt es:
 Respondé SOLO con el contenido del archivo llms.txt, sin explicaciones adicionales.`,
       }],
     })
+    logTokens('geoLlmsTxt', req.user.userId, message.usage, workspaceId).catch(() => {})
 
     const content = message.content[0].text.trim()
     res.json({ content })
@@ -210,6 +212,7 @@ async function generateSchemaOrg(req, res, next) {
       return res.json({ schemas: [] })
     }
 
+    await assertTokenBudget(workspaceId) // 429 si el workspace agotó su presupuesto mensual de IA
     const message = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 3000,
@@ -234,6 +237,7 @@ Respondé SOLO con un JSON array válido y completo. Cada elemento tiene esta es
 IMPORTANTE: El JSON-LD dentro de "jsonLd" debe estar en UNA SOLA LÍNEA (sin saltos de línea) para evitar errores de parseo. Usá datos reales del sitio donde sea posible. Para campos desconocidos usá valores de ejemplo realistas.`,
       }],
     })
+    logTokens('geoSchema', req.user.userId, message.usage, workspaceId).catch(() => {})
 
     let schemas = []
     try {

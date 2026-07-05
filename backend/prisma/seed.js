@@ -13,6 +13,16 @@ const DEFAULT_ROLES = [
 ]
 
 async function main() {
+  // Guarda: nunca correr accidentalmente contra producción (pisaría datos / crearía
+  // un admin con credencial conocida). Requiere ALLOW_SEED=true para forzarlo.
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== 'true') {
+    console.error('[seed] Bloqueado en producción. Seteá ALLOW_SEED=true si realmente querés correrlo.')
+    process.exit(1)
+  }
+
+  // Password del admin de seed: por env (recomendado) o el default de desarrollo.
+  const seedPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123'
+
   // Seed default roles
   for (const r of DEFAULT_ROLES) {
     await prisma.userRole.upsert({
@@ -23,7 +33,7 @@ async function main() {
   }
 
   // Create default admin user
-  const hashedPassword = await bcrypt.hash('admin123', 10)
+  const hashedPassword = await bcrypt.hash(seedPassword, 10)
   const admin = await prisma.user.upsert({
     where: { email: 'admin@blissmkt.ar' },
     update: {},
@@ -44,7 +54,7 @@ async function main() {
 
   console.log('Seed completed:')
   console.log('  Roles:', DEFAULT_ROLES.map(r => r.name).join(', '))
-  console.log('  Admin:', admin.email, '/ password: admin123')
+  console.log('  Admin:', admin.email, '/ password:', process.env.SEED_ADMIN_PASSWORD ? '(SEED_ADMIN_PASSWORD)' : 'admin123 (DEFAULT — cambialo)')
   console.log('  Project:', bliss.name)
 }
 

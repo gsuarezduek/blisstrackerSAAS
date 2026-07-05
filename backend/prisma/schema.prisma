@@ -8,6 +8,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Lease de exclusión mutua para crons entre instancias (ver lib/cronLock.js).
+// Una fila por cron; `expiresAt` con TTL para auto-liberar si la instancia se cae.
+model CronLock {
+  name      String   @id
+  lockedAt  DateTime @default(now())
+  expiresAt DateTime
+  owner     String?
+}
+
 // ─── WORKSPACE ───────────────────────────────────────────────────────────────
 
 model Workspace {

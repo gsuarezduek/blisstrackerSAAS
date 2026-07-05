@@ -21,7 +21,7 @@ const { FEATURE_FLAGS } = require('./config/featureFlags')
 const { PLATFORM_SETTINGS } = require('./config/platformSettings')
 
 const PORT = process.env.PORT || 3001
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`)
   // Sincronizar catálogo de feature flags — upsert para que siempre existan en DB
   for (const { key, name, description } of FEATURE_FLAGS) {
@@ -45,7 +45,31 @@ app.listen(PORT, async () => {
   console.log(`[PlatformSettings] ${PLATFORM_SETTINGS.length} setting(s) sincronizado(s).`)
 })
 
+// Graceful shutdown: Railway manda SIGTERM en cada deploy. Cerramos el server para
+// dejar de aceptar conexiones nuevas, drenamos las en vuelo y desconectamos Prisma.
+// Sin esto, cada deploy cortaba requests en seco (502s) y dejaba conexiones colgadas.
+let shuttingDown = false
+async function shutdown(signal) {
+  if (shuttingDown) return
+  shuttingDown = true
+  console.log(`[shutdown] ${signal} recibido — cerrando server...`)
+  const forced = setTimeout(() => {
+    console.error('[shutdown] Timeout de 15s — forzando salida.')
+    process.exit(1)
+  }, 15000)
+  forced.unref()
+  server.close(async () => {
+    try { await prisma.$disconnect() } catch (err) { console.error('[shutdown] Error al desconectar Prisma:', err.message) }
+    clearTimeout(forced)
+    console.log('[shutdown] Cierre limpio completado.')
+    process.exit(0)
+  })
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT',  () => shutdown('SIGINT'))
+
 const cron = require('node-cron')
+const { runCron } = require('./lib/cronLock')
 const { sendAllWeeklyReports }          = require('./services/weeklyReport.service')
 const { updateAllMemories }             = require('./services/insightMemory.service')
 const { saveAllPreviousMonthSnapshots, refreshAllCurrentMonthSnapshots } = require('./services/analyticsSnapshot.service')
@@ -67,73 +91,52 @@ const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnap
 const { saveAllPreviousMonthSnapshots: saveAllPrevRrhhMetrics } = require('./services/rrhhMetricSnapshot.service')
 const { sendAllProductivityDigests } = require('./services/productivityDigest.service')
 
-// In-memory locks — prevent overlapping runs if a job takes longer than its schedule
-let weeklyReportRunning         = false
-let insightMemoryRunning        = false
-let keywordWeeklyRunning        = false
-let analyticsWeeklyRunning      = false
-let serpSnapshotRunning         = false
-let monthlyChainRunning         = false  // cadena mensual de snapshots del día 1°
-let storiesCaptureRunning       = false  // captura de stories de Instagram (efímeras 24h)
-let productivityDigestRunning   = false
+// La exclusión mutua (dentro del proceso y ENTRE instancias/réplicas) la maneja
+// `runCron(name, ttlMs, fn)` vía una lease en DB (ver lib/cronLock.js). El TTL de
+// cada job debe superar su duración máxima esperada.
 
 // Cron: resumen semanal — viernes 00:01 hora Buenos Aires (se envía en baches, todos lo reciben a primera hora)
-cron.schedule('1 0 * * 5', async () => {
-  if (weeklyReportRunning) { console.log('[WeeklyReport] Ya en ejecución, se omite.'); return }
-  weeklyReportRunning = true
+cron.schedule('1 0 * * 5', () => runCron('weeklyReport', 2 * 60 * 60 * 1000, async () => {
   console.log('[WeeklyReport] Iniciando envío automático (viernes 00:01 ART)...')
-  try { await sendAllWeeklyReports() }
-  finally { weeklyReportRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+  await sendAllWeeklyReports()
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: actualizar memoria de insights — sábados 00:00 hora Buenos Aires
-cron.schedule('0 0 * * 6', async () => {
-  if (insightMemoryRunning) { console.log('[InsightMemory] Ya en ejecución, se omite.'); return }
-  insightMemoryRunning = true
+cron.schedule('0 0 * * 6', () => runCron('insightMemory', 2 * 60 * 60 * 1000, async () => {
   console.log('[InsightMemory] Iniciando actualización semanal (sábado 00:00 ART)...')
-  try { await updateAllMemories() }
-  finally { insightMemoryRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+  await updateAllMemories()
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // (Los jobs mensuales del día 1° — GEO, GA4, GSC, PageSpeed, keywords, RRSS, Ads, competidores,
 // RRHH — corren en una única cadena secuencial `MONTHLY_CHAIN`, definida más abajo, en vez de
 // como crons sueltos a distintos horarios que podían solaparse entre sí.)
 
 // Cron: actualizar rankings del mes actual — lunes 06:00 ART (semanal, upsert)
-cron.schedule('0 6 * * 1', async () => {
-  if (keywordWeeklyRunning) { console.log('[KeywordTracking] Semanal ya en ejecución, se omite.'); return }
-  keywordWeeklyRunning = true
+cron.schedule('0 6 * * 1', () => runCron('keywordWeekly', 60 * 60 * 1000, async () => {
   console.log('[KeywordTracking] Iniciando actualización semanal de rankings del mes actual...')
   try { await saveCurrentMonthKeywordRankings() }
   catch (err) { console.error('[KeywordTracking] Error en cron semanal:', err.message) }
-  finally { keywordWeeklyRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: refrescar snapshots GA4 del mes en curso — lunes 06:15 ART (semanal, upsert).
 // Mantiene la lista cross-proyecto (Marketing → Web) al día durante el mes en curso y
 // evita que un proyecto recién conectado quede en "sin datos" hasta el 1° del mes.
-cron.schedule('15 6 * * 1', async () => {
-  if (analyticsWeeklyRunning) { console.log('[AnalyticsSnapshot] Semanal ya en ejecución, se omite.'); return }
-  analyticsWeeklyRunning = true
+cron.schedule('15 6 * * 1', () => runCron('analyticsWeekly', 60 * 60 * 1000, async () => {
   console.log('[AnalyticsSnapshot] Iniciando refresco semanal de snapshots del mes en curso...')
   try { await refreshAllCurrentMonthSnapshots() }
   catch (err) { console.error('[AnalyticsSnapshot] Error en cron semanal:', err.message) }
-  finally { analyticsWeeklyRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: capturar SERP snapshots — lunes 06:30 ART (después del cron de keywords GSC)
-cron.schedule('30 6 * * 1', async () => {
-  if (serpSnapshotRunning) { console.log('[SerpAPI] Ya en ejecución, se omite.'); return }
-  serpSnapshotRunning = true
+cron.schedule('30 6 * * 1', () => runCron('serpSnapshot', 60 * 60 * 1000, async () => {
   console.log('[SerpAPI] Iniciando captura semanal de SERP snapshots...')
   try { await captureAllSerpSnapshots() }
   catch (err) { console.error('[SerpAPI] Error en cron semanal:', err.message) }
-  finally { serpSnapshotRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: limpieza semanal de tablas de crecimiento ilimitado — domingos 03:00 hora Buenos Aires
 const { runWeeklyCleanup } = require('./services/cleanup.service')
-cron.schedule('0 3 * * 0', async () => {
+cron.schedule('0 3 * * 0', () => runCron('weeklyCleanup', 30 * 60 * 1000, async () => {
   try {
     const result = await runWeeklyCleanup()
     const totals = Object.entries(result)
@@ -146,26 +149,21 @@ cron.schedule('0 3 * * 0', async () => {
   } catch (err) {
     console.error('[WeeklyCleanup] Error en limpieza semanal:', err.message)
   }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: email lifecycle del trial — diario a 09:00 ART (días 3, 7, 12, 13)
-let trialLifecycleRunning = false
 const { runTrialLifecycle } = require('./services/trialLifecycle.service')
-cron.schedule('0 9 * * *', async () => {
-  if (trialLifecycleRunning) return
-  trialLifecycleRunning = true
+cron.schedule('0 9 * * *', () => runCron('trialLifecycle', 30 * 60 * 1000, async () => {
   try {
     const result = await runTrialLifecycle()
     console.log(`[TrialLifecycle] ${result.workspacesChecked} workspace(s) revisado(s), ${result.emailsSent} email(s) enviado(s).`)
   } catch (err) {
     console.error('[TrialLifecycle] Error:', err.message)
-  } finally {
-    trialLifecycleRunning = false
   }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: auto-pausar tareas EN CURSO al final del día — medianoche hora Buenos Aires
-cron.schedule('0 0 * * *', async () => {
+cron.schedule('0 0 * * *', () => runCron('autoPause', 10 * 60 * 1000, async () => {
   console.log('[AutoPause] Pausando tareas en curso al cierre del día...')
   try {
     const prisma = require('./lib/prisma')
@@ -187,14 +185,14 @@ cron.schedule('0 0 * * *', async () => {
   } catch (err) {
     console.error('[AutoPause] Error al pausar tareas:', err.message)
   }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: reconciliar tier de billing (free tier ⇄ past_due) — diariamente 03:00 ART.
 // Aplica la regla "hasta N usuarios gratis": trials vencidos con ≤ límite pasan a
 // plan Gratis (active); los que superan el límite quedan en past_due. También
 // rescata workspaces past_due que ahora califican para gratis (ej: bajaron usuarios
 // o se subió el límite desde SuperAdmin).
-cron.schedule('0 3 * * *', async () => {
+cron.schedule('0 3 * * *', () => runCron('billingTier', 30 * 60 * 1000, async () => {
   try {
     const { reconcileWorkspaceTier } = require('./services/billingTier.service')
     const now = new Date()
@@ -217,20 +215,17 @@ cron.schedule('0 3 * * *', async () => {
   } catch (err) {
     console.error('[BillingTier] Error en cron de reconciliación de tiers:', err.message)
   }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: capturar stories de Instagram — cada 6 horas.
 // Las stories viven 24h y no tienen histórico en la API, así que hay que leerlas
 // antes de que expiren. Corriendo cada 6h vemos toda story y refinamos sus insights
 // (que crecen mientras está viva) hasta 4 veces. La agregación mensual del informe
 // lee de InstagramStory (ya persistido).
-cron.schedule('0 */6 * * *', async () => {
-  if (storiesCaptureRunning) { console.log('[InstagramStories] Ya en ejecución, se omite.'); return }
-  storiesCaptureRunning = true
+cron.schedule('0 */6 * * *', () => runCron('storiesCapture', 30 * 60 * 1000, async () => {
   try { await captureAllStories() }
   catch (err) { console.error('[InstagramStories] Error en cron:', err.message) }
-  finally { storiesCaptureRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // ── Cadena mensual de snapshots — 1° del mes 01:00 ART ─────────────────────────
 // Corre TODOS los jobs pesados del día 1° de forma SECUENCIAL (uno arranca al terminar el
@@ -255,62 +250,46 @@ const MONTHLY_CHAIN = [
   ['RrhhMetricSnapshot', saveAllPrevRrhhMetrics],
   ['SeoAlerts',          checkAndSendAllSeoAlerts], // compara el mes cerrado vs anterior y avisa retrocesos
 ]
-cron.schedule('0 1 1 * *', async () => {
-  if (monthlyChainRunning) { console.log('[MonthlyChain] Ya en ejecución, se omite.'); return }
-  monthlyChainRunning = true
+cron.schedule('0 1 1 * *', () => runCron('monthlyChain', 6 * 60 * 60 * 1000, async () => {
   console.log('[MonthlyChain] Iniciando cadena mensual de snapshots (1° del mes)...')
-  try {
-    for (const [name, job] of MONTHLY_CHAIN) {
-      const t0 = Date.now()
-      try {
-        await job()
-        console.log(`[MonthlyChain] ✓ ${name} (${Math.round((Date.now() - t0) / 1000)}s)`)
-      } catch (err) {
-        console.error(`[MonthlyChain] ✗ ${name}: ${err.message}`)
-      }
+  for (const [name, job] of MONTHLY_CHAIN) {
+    const t0 = Date.now()
+    try {
+      await job()
+      console.log(`[MonthlyChain] ✓ ${name} (${Math.round((Date.now() - t0) / 1000)}s)`)
+    } catch (err) {
+      console.error(`[MonthlyChain] ✗ ${name}: ${err.message}`)
     }
-    console.log('[MonthlyChain] Cadena mensual completada.')
-  } finally {
-    monthlyChainRunning = false
   }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+  console.log('[MonthlyChain] Cadena mensual completada.')
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: aviso semanal de Productividad a admins/owners — lunes 08:00 ART
-cron.schedule('0 8 * * 1', async () => {
-  if (productivityDigestRunning) { console.log('[ProductivityDigest] Ya en ejecución, se omite.'); return }
-  productivityDigestRunning = true
+cron.schedule('0 8 * * 1', () => runCron('productivityDigest', 30 * 60 * 1000, async () => {
   console.log('[ProductivityDigest] Iniciando aviso semanal...')
   try { await sendAllProductivityDigests() }
   catch (err) { console.error('[ProductivityDigest] Error en cron semanal:', err.message) }
-  finally { productivityDigestRunning = false }
-}, { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: 'America/Argentina/Buenos_Aires' })
 
 // Cron: eliminar workspaces vencidos — cada 15 minutos
-let deletionRunning = false
-cron.schedule('*/15 * * * *', async () => {
-  if (deletionRunning) return
-  deletionRunning = true
-  try {
-    const prisma = require('./lib/prisma')
-    const { executeWorkspaceDeletion } = require('./controllers/workspace.controller')
-    const expired = await prisma.workspaceDeletionRequest.findMany({
-      where: {
-        scheduledAt: { lte: new Date() },
-        cancelledAt: null,
-      },
-      select: { workspaceId: true },
-    })
-    if (expired.length === 0) { deletionRunning = false; return }
-    console.log(`[WorkspaceDeletion] ${expired.length} workspace(s) a eliminar...`)
-    for (const { workspaceId } of expired) {
-      try {
-        await executeWorkspaceDeletion(workspaceId)
-        console.log(`[WorkspaceDeletion] Workspace ${workspaceId} eliminado.`)
-      } catch (err) {
-        console.error(`[WorkspaceDeletion] Error eliminando workspace ${workspaceId}:`, err.message)
-      }
+cron.schedule('*/15 * * * *', () => runCron('workspaceDeletion', 10 * 60 * 1000, async () => {
+  const prisma = require('./lib/prisma')
+  const { executeWorkspaceDeletion } = require('./controllers/workspace.controller')
+  const expired = await prisma.workspaceDeletionRequest.findMany({
+    where: {
+      scheduledAt: { lte: new Date() },
+      cancelledAt: null,
+    },
+    select: { workspaceId: true },
+  })
+  if (expired.length === 0) return
+  console.log(`[WorkspaceDeletion] ${expired.length} workspace(s) a eliminar...`)
+  for (const { workspaceId } of expired) {
+    try {
+      await executeWorkspaceDeletion(workspaceId)
+      console.log(`[WorkspaceDeletion] Workspace ${workspaceId} eliminado.`)
+    } catch (err) {
+      console.error(`[WorkspaceDeletion] Error eliminando workspace ${workspaceId}:`, err.message)
     }
-  } finally {
-    deletionRunning = false
   }
-})
+}))

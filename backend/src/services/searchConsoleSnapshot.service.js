@@ -1,11 +1,10 @@
-const Anthropic = require('@anthropic-ai/sdk')
 const prisma    = require('../lib/prisma')
 const { fetchSearchConsoleData } = require('./googleSearchConsole.service')
 const { fetchDomainRating }      = require('./ahrefs.service')
 const { logTokens }              = require('../lib/logTokens')
 const { normalizeSiteUrl }       = require('../utils/seo')
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic, assertTokenBudget } = require('../lib/claude')
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -124,6 +123,7 @@ async function saveAllSearchConsoleSnapshots() {
  * @returns {Promise<object>} — el JSON de sugerencias
  */
 async function generateSeoAiInsights(projectId, workspaceId, liveData) {
+  await assertTokenBudget(workspaceId) // 429 si el workspace agotó su presupuesto mensual de IA
   const ov = liveData.overview ?? {}
 
   const queriesText = (liveData.topQueries ?? []).slice(0, 8).map(q =>

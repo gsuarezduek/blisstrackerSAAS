@@ -1,10 +1,9 @@
 const axios     = require('axios')
 const cheerio   = require('cheerio')
-const Anthropic = require('@anthropic-ai/sdk')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const { anthropic } = require('../lib/claude')
 
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
