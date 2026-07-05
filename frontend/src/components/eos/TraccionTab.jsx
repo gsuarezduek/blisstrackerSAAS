@@ -108,29 +108,100 @@ function weekLabel(weekStr) {
   return `Sem. ${week} · ${fmtD(monday)}–${fmtD(sunday)}`
 }
 
-// ─── RatingPicker ─────────────────────────────────────────────────────────────
+// ─── Helpers de cronómetro (reunión L10) ──────────────────────────────────────
 
-function RatingPicker({ value, onChange }) {
+// Duración en minutos → "1h 05m" / "12m".
+function fmtDuration(mins) {
+  if (mins == null) return null
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`
+}
+
+// Segundos transcurridos → "12:34" / "1:02:05".
+function fmtElapsed(secs) {
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  const s = secs % 60
+  const mm = String(m).padStart(2, '0')
+  const ss = String(s).padStart(2, '0')
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
+}
+
+// ─── AddParticipant ────────────────────────────────────────────────────────────
+// Dropdown para sumar un participante a la reunión (miembros activos del workspace).
+
+function AddParticipant({ members, existingIds, onAdd }) {
+  const [open, setOpen] = useState(false)
+  const avail = members.filter(m => !existingIds.has(m.id))
+  if (avail.length === 0) return null
+
+  function pick(id) { onAdd(id); setOpen(false) }
+
   return (
-    <div className="flex gap-1 flex-wrap">
-      {Array.from({ length: 10 }, (_, i) => i + 1).map(n => {
-        const selected = value === n
-        let color = selected
-          ? n <= 4 ? 'bg-red-500 text-white'
-          : n <= 7 ? 'bg-yellow-400 text-gray-900'
-          : 'bg-green-500 text-white'
-          : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-        return (
-          <button
-            key={n}
-            onClick={() => onChange(n === value ? null : n)}
-            className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${color}`}
-          >
-            {n}
-          </button>
-        )
-      })}
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+      >
+        + Participante
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg w-56 max-h-72 overflow-y-auto py-1">
+            {avail.map(m => (
+              <button key={m.id} onClick={() => pick(m.id)} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/60 flex items-center gap-2">
+                <img src={avatarUrl(m.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />{m.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
+  )
+}
+
+// ─── MeetingTimer ──────────────────────────────────────────────────────────────
+
+function MeetingTimer({ meeting, onStart, onFinish }) {
+  const [, force] = useState(0)
+
+  useEffect(() => {
+    if (!meeting?.running) return
+    const id = setInterval(() => force(n => n + 1), 1000)
+    return () => clearInterval(id)
+  }, [meeting?.running])
+
+  if (meeting?.running) {
+    const secs = Math.max(0, Math.floor((Date.now() - new Date(meeting.startedAt).getTime()) / 1000))
+    return (
+      <div className="flex items-center gap-3">
+        <span className="inline-flex items-center gap-1.5 text-sm font-mono font-semibold text-red-600 dark:text-red-400">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          {fmtElapsed(secs)}
+        </span>
+        <button
+          onClick={onFinish}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+        >
+          ■ Finalizar
+        </button>
+      </div>
+    )
+  }
+
+  if (meeting?.durationMins != null) {
+    return <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">⏱ {fmtDuration(meeting.durationMins)}</span>
+  }
+
+  return (
+    <button
+      onClick={onStart}
+      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
+    >
+      ▶ Iniciar reunión
+    </button>
   )
 }
 
@@ -690,11 +761,13 @@ const MEETING_TYPES = [
   { value: 'annual',    label: 'Anual' },
 ]
 
-function MeetingCard({ week, meeting, onSave }) {
+function MeetingCard({ week, meeting, members, meetingProjectReady, onSave, onStart, onFinish, onAddParticipant, onRemoveParticipant }) {
   const [date, setDate]     = useState(meeting?.date || '')
-  const [rating, setRating] = useState(meeting?.rating ?? null)
   const [type, setType]     = useState(meeting?.type || 'weekly')
   const notes               = meeting?.notes || ''
+
+  const started      = !!meeting?.started
+  const participants = meeting?.participants || []
 
   // Edit/Save/Cancel del WYSIWYG (sólo para las notas)
   const [editingNotes, setEditingNotes] = useState(false)
@@ -703,7 +776,6 @@ function MeetingCard({ week, meeting, onSave }) {
 
   useEffect(() => {
     setDate(meeting?.date || '')
-    setRating(meeting?.rating ?? null)
     setType(meeting?.type || 'weekly')
     setEditingNotes(false)
     setNotesDraft(meeting?.notes || '')
@@ -712,7 +784,6 @@ function MeetingCard({ week, meeting, onSave }) {
   function save(patch) {
     const payload = {
       date,
-      rating,
       type,
       ...patch,
     }
@@ -727,7 +798,7 @@ function MeetingCard({ week, meeting, onSave }) {
   async function handleSaveNotes() {
     setSavingNotes(true)
     try {
-      await onSave({ date, rating, type, notes: notesDraft })
+      await onSave({ date, type, notes: notesDraft })
       setEditingNotes(false)
     } finally {
       setSavingNotes(false)
@@ -762,7 +833,7 @@ function MeetingCard({ week, meeting, onSave }) {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-6 items-start">
+      <div className="flex flex-wrap gap-6 items-end">
         {/* Fecha */}
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Fecha</label>
@@ -779,30 +850,73 @@ function MeetingCard({ week, meeting, onSave }) {
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tipo</label>
           <select
             value={type}
+            disabled={started}
             onChange={e => { setType(e.target.value); save({ type: e.target.value }) }}
-            className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400"
+            className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400 disabled:opacity-60"
           >
             {MEETING_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </div>
 
-        {/* Rating */}
+        {/* Cronómetro */}
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-            Puntaje de la reunión
-            {rating && (
-              <span className={`ml-2 font-bold ${
-                rating >= 8 ? 'text-green-600 dark:text-green-400'
-                : rating >= 5 ? 'text-yellow-600 dark:text-yellow-400'
-                : 'text-red-600 dark:text-red-400'
-              }`}>{rating}/10</span>
-            )}
-          </label>
-          <RatingPicker
-            value={rating}
-            onChange={val => { setRating(val); save({ rating: val }) }}
-          />
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Duración</label>
+          {!meeting?.running && meeting?.durationMins == null && !meetingProjectReady ? (
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              Configurá el proyecto de reuniones para iniciar ↑
+            </span>
+          ) : (
+            <MeetingTimer
+              meeting={meeting}
+              onStart={() => onStart(week)}
+              onFinish={() => onFinish(week)}
+            />
+          )}
         </div>
+      </div>
+
+      {/* Participantes */}
+      <div>
+        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Participantes</label>
+        <div className="flex flex-wrap items-center gap-2">
+          {participants.map(p => {
+            const live = p.taskStatus === 'IN_PROGRESS'
+            const done = p.taskStatus === 'COMPLETED'
+            return (
+              <span
+                key={p.id}
+                className="inline-flex items-center gap-1.5 text-xs font-medium pl-1 pr-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200"
+                title={live ? 'En reunión' : done ? 'Tiempo registrado' : ''}
+              >
+                <img src={avatarUrl(p.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />
+                {p.name}
+                {live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
+                {done && <span className="text-green-500">✓</span>}
+                {!started && (
+                  <button
+                    onClick={() => onRemoveParticipant(week, p.userId)}
+                    className="text-gray-400 hover:text-red-500 ml-0.5"
+                    title="Quitar"
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
+            )
+          })}
+          {!started && (
+            <AddParticipant
+              members={members}
+              existingIds={new Set(participants.map(p => p.userId))}
+              onAdd={userId => onAddParticipant(week, userId)}
+            />
+          )}
+        </div>
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 leading-snug">
+          {started
+            ? 'Se está contando el tiempo de cada participante en el proyecto de reuniones; al finalizar queda registrado como tiempo trabajado.'
+            : 'Al iniciar la reunión se contará el tiempo de cada participante. No se puede iniciar si alguien tiene una tarea en curso.'}
+        </p>
       </div>
 
       {/* Notas */}
@@ -867,6 +981,7 @@ function MeetingSection() {
   const [projects, setProjects]          = useState([])
   const [specialMeetings, setSpecialMeetings] = useState([])
   const [showSpecials, setShowSpecials]  = useState(false)
+  const [meetingProjectId, setMeetingProjectId] = useState(null)
   const [loading, setLoading]            = useState(true)
   const [error, setError]                = useState(null)
 
@@ -874,7 +989,55 @@ function MeetingSection() {
   useEffect(() => { loadSpecials() }, [])
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data || [])).catch(() => {})
+    api.get('/eos').then(r => setMeetingProjectId(r.data?.meetingProjectId ?? null)).catch(() => {})
   }, [])
+
+  async function handleSaveMeetingProject(projectId) {
+    const pid = projectId ? Number(projectId) : null
+    setMeetingProjectId(pid)
+    try {
+      await api.patch('/eos', { meetingProjectId: pid })
+    } catch {
+      // revertir silenciosamente si falla
+      api.get('/eos').then(r => setMeetingProjectId(r.data?.meetingProjectId ?? null)).catch(() => {})
+    }
+  }
+
+  async function handleStartMeeting(wk) {
+    try {
+      const { data } = await api.post(`/eos/traction/meetings/${wk}/start`)
+      setMeeting(data)
+    } catch (err) {
+      alert(err?.response?.data?.error || 'No se pudo iniciar la reunión')
+    }
+  }
+
+  async function handleFinishMeeting(wk) {
+    try {
+      const { data } = await api.post(`/eos/traction/meetings/${wk}/finish`)
+      setMeeting(data)
+    } catch (err) {
+      alert(err?.response?.data?.error || 'No se pudo finalizar la reunión')
+    }
+  }
+
+  async function handleAddParticipant(wk, userId) {
+    try {
+      const { data } = await api.post(`/eos/traction/meetings/${wk}/participants`, { userId })
+      setMeeting(data)
+    } catch (err) {
+      alert(err?.response?.data?.error || 'No se pudo agregar el participante')
+    }
+  }
+
+  async function handleRemoveParticipant(wk, userId) {
+    try {
+      const { data } = await api.delete(`/eos/traction/meetings/${wk}/participants/${userId}`)
+      setMeeting(data)
+    } catch (err) {
+      alert(err?.response?.data?.error || 'No se pudo quitar el participante')
+    }
+  }
 
   async function loadWeek() {
     try {
@@ -1071,12 +1234,8 @@ function MeetingSection() {
                           </span>
                           <span className="text-gray-800 dark:text-gray-200">{weekLabel(m.week)}</span>
                         </div>
-                        {m.rating && (
-                          <span className={`text-xs font-semibold ${
-                            m.rating >= 8 ? 'text-green-600 dark:text-green-400'
-                            : m.rating >= 5 ? 'text-yellow-600 dark:text-yellow-400'
-                            : 'text-red-600 dark:text-red-400'
-                          }`}>{m.rating}/10</span>
+                        {m.durationMins != null && (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">⏱ {fmtDuration(m.durationMins)}</span>
                         )}
                       </button>
                     )
@@ -1093,11 +1252,35 @@ function MeetingSection() {
 
       {!loading && !error && (
         <>
+          {/* Config: proyecto donde se registran las tareas de los participantes */}
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Proyecto de las reuniones
+            </span>
+            <select
+              value={meetingProjectId ?? ''}
+              onChange={e => handleSaveMeetingProject(e.target.value)}
+              className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400"
+            >
+              <option value="">— Elegir proyecto —</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <span className="text-[10px] text-gray-400 dark:text-gray-500 basis-full sm:basis-auto">
+              El tiempo de cada participante se registra como tarea en este proyecto.
+            </span>
+          </div>
+
           {/* Meeting card */}
           <MeetingCard
             week={week}
             meeting={meeting}
+            members={members}
+            meetingProjectReady={!!meetingProjectId}
             onSave={handleSaveMeeting}
+            onStart={handleStartMeeting}
+            onFinish={handleFinishMeeting}
+            onAddParticipant={handleAddParticipant}
+            onRemoveParticipant={handleRemoveParticipant}
           />
 
           {/* To-Dos */}

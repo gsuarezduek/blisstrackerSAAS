@@ -59,9 +59,12 @@ function formatRecord(r) {
     threeYearDescription: r.threeYearDescription ?? '',
     threeYearGoals:       safeParseArr(r.threeYearGoals),
     // Plan a 1 año
+    oneYearDate:    r.oneYearDate    ?? '',
     oneYearRevenue: r.oneYearRevenue ?? '',
     oneYearProfit:  r.oneYearProfit  ?? '',
     oneYearGoals:   safeParseArr(r.oneYearGoals),
+    // Reuniones L10 — proyecto por defecto para las tareas de participantes
+    meetingProjectId: r.meetingProjectId ?? null,
   }
 }
 
@@ -100,9 +103,22 @@ async function updateEOS(req, res, next) {
     if (b.threeYearDescription !== undefined) u.threeYearDescription = str(b.threeYearDescription, 2000)
     if (Array.isArray(b.threeYearGoals))      u.threeYearGoals       = arr(b.threeYearGoals, 7)
     // Plan a 1 año
+    if (b.oneYearDate    !== undefined)  u.oneYearDate    = str(b.oneYearDate,    20)
     if (b.oneYearRevenue !== undefined)  u.oneYearRevenue = str(b.oneYearRevenue, 200)
     if (b.oneYearProfit  !== undefined)  u.oneYearProfit  = str(b.oneYearProfit,  200)
     if (Array.isArray(b.oneYearGoals))   u.oneYearGoals   = arr(b.oneYearGoals, 7)
+
+    // Reuniones L10 — proyecto por defecto para las tareas de participantes
+    if (b.meetingProjectId !== undefined) {
+      const pid = b.meetingProjectId ? Number(b.meetingProjectId) : null
+      if (pid) {
+        const project = await prisma.project.findFirst({
+          where: { id: pid, workspaceId, active: true }, select: { id: true },
+        })
+        if (!project) return res.status(400).json({ error: 'Proyecto inválido' })
+      }
+      u.meetingProjectId = pid
+    }
 
     const record = await prisma.eOSData.upsert({
       where:  { workspaceId },

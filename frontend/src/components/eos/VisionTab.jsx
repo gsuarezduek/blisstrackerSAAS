@@ -22,6 +22,17 @@ function quarterLabel(q) {
   return `${qPart} ${year}`
 }
 
+// Formatea una fecha "YYYY-MM-DD" a algo legible (ej: "31 dic 2026"). Sin parseo TZ
+// (se arma la fecha en local con los componentes para evitar corrimientos de día).
+function formatDateLabel(value) {
+  if (!value) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!m) return value
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  if (isNaN(d)) return value
+  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 // ─── VTO Print ───────────────────────────────────────────────────────────────
 
 function printVTO(data, workspaceName, rocks, members, issues, quarter) {
@@ -167,8 +178,9 @@ function printVTO(data, workspaceName, rocks, members, issues, quarter) {
       <div class="box">
         <div class="box-header blue">Plan a 1 Año</div>
         <div class="box-body">
-          ${(data?.oneYearRevenue || data?.oneYearProfit) ? `
+          ${(data?.oneYearDate || data?.oneYearRevenue || data?.oneYearProfit) ? `
           <div class="metrics">
+            ${data?.oneYearDate    ? `<span><span class="label">Fecha: </span>${formatDateLabel(data.oneYearDate)}</span>` : ''}
             ${data?.oneYearRevenue ? `<span><span class="label">Ingresos: </span>${data.oneYearRevenue}</span>` : ''}
             ${data?.oneYearProfit  ? `<span><span class="label">Rentabilidad: </span>${data.oneYearProfit}</span>` : ''}
           </div>` : ''}
@@ -283,7 +295,6 @@ function VTOView({ data, workspaceName, onClose }) {
   const [rocks,  setRocks]   = useState([])
   const [issues, setIssues]  = useState([])
   const [members, setMembers] = useState([])
-  const [page, setPage]      = useState('traccion')   // 'traccion' | 'vision' — las 2 páginas del VTO
   const quarter = currentQuarterStr()
 
   useEffect(() => {
@@ -314,8 +325,9 @@ function VTOView({ data, workspaceName, onClose }) {
       {/* Plan a 1 Año */}
       <VTOBox title="Plan a 1 Año" accent={accentBlue}>
         <div className="space-y-1.5">
-          {(data?.oneYearRevenue || data?.oneYearProfit) && (
+          {(data?.oneYearDate || data?.oneYearRevenue || data?.oneYearProfit) && (
             <div className="flex flex-wrap gap-3 text-xs pb-1 border-b border-gray-100 dark:border-gray-700">
+              {data?.oneYearDate    && <span><span className="text-gray-400">Fecha de realización:</span> {formatDateLabel(data.oneYearDate)}</span>}
               {data?.oneYearRevenue && <span><span className="text-gray-400">Ingresos:</span> {data.oneYearRevenue}</span>}
               {data?.oneYearProfit  && <span><span className="text-gray-400">Rentabilidad:</span> {data.oneYearProfit}</span>}
             </div>
@@ -457,25 +469,6 @@ function VTOView({ data, workspaceName, onClose }) {
           <p className="text-xs text-gray-500 dark:text-gray-400">{workspaceName} · {new Date().toLocaleDateString('es-AR', { year: 'numeric', month: 'long' })}</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Toggle de página del VTO */}
-          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
-            {[
-              { id: 'traccion', label: 'Tracción' },
-              { id: 'vision',   label: 'Visión' },
-            ].map(p => (
-              <button
-                key={p.id}
-                onClick={() => setPage(p.id)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  page === p.id
-                    ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
           <button
             onClick={() => printVTO(data, workspaceName, rocks, members, issues, quarter)}
             title="Imprimir / Exportar PDF"
@@ -494,7 +487,17 @@ function VTOView({ data, workspaceName, onClose }) {
         </div>
       </div>
 
-      {page === 'traccion' ? traccionPage : visionPage}
+      {/* Tracción arriba, Visión abajo — todo junto */}
+      <div className="space-y-6">
+        <section className="space-y-2">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Tracción</h3>
+          {traccionPage}
+        </section>
+        <section className="space-y-2">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Visión</h3>
+          {visionPage}
+        </section>
+      </div>
     </div>
   )
 }
@@ -1100,6 +1103,7 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
   const threeYearGoals       = useDebouncedList( data?.threeYearGoals       ?? [], 'threeYearGoals',       saveFields)
 
   // ── Plan a 1 año
+  const oneYearDate    = useDebouncedField(data?.oneYearDate    ?? '', 'oneYearDate',    saveFields)
   const oneYearRevenue = useDebouncedField(data?.oneYearRevenue ?? '', 'oneYearRevenue', saveFields)
   const oneYearProfit  = useDebouncedField(data?.oneYearProfit  ?? '', 'oneYearProfit',  saveFields)
   const oneYearGoals   = useDebouncedList( data?.oneYearGoals   ?? [], 'oneYearGoals',   saveFields)
@@ -1283,12 +1287,22 @@ export default function VisionTab({ vtoMode = false, setVtoMode = () => {} }) {
       <SectionCard
         title="Plan a 1 año"
         desc="Las prioridades más importantes para los próximos 12 meses, alineadas con la Imagen a 3 años."
-        saving={oneYearRevenue.saving || oneYearProfit.saving || oneYearGoals.saving}
-        saved={oneYearRevenue.saved  || oneYearProfit.saved  || oneYearGoals.saved}
+        saving={oneYearDate.saving || oneYearRevenue.saving || oneYearProfit.saving || oneYearGoals.saving}
+        saved={oneYearDate.saved  || oneYearRevenue.saved  || oneYearProfit.saved  || oneYearGoals.saved}
         onHelp={() => setShowHelp('oneYear')}
       >
         <div className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fecha de realización</label>
+              <input
+                type="date"
+                value={oneYearDate.value}
+                onChange={e => oneYearDate.handleChange(e.target.value)}
+                onBlur={oneYearDate.handleBlur}
+                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
             <InlineField label="Ingresos objetivo del año" value={oneYearRevenue.value} onChange={oneYearRevenue.handleChange} onBlur={oneYearRevenue.handleBlur} onKeyDown={oneYearRevenue.handleKeyDown} placeholder="Ej: $800K" />
             <InlineField label="Rentabilidad objetivo"     value={oneYearProfit.value}  onChange={oneYearProfit.handleChange}  onBlur={oneYearProfit.handleBlur}  onKeyDown={oneYearProfit.handleKeyDown}  placeholder="Ej: 20% margen neto" />
           </div>

@@ -47,15 +47,69 @@ function formatTodo(t) {
   }
 }
 
+function formatParticipant(p) {
+  return {
+    id:         p.id,
+    userId:     p.userId,
+    name:       p.user?.name,
+    avatar:     p.user?.avatar,
+    taskId:     p.taskId ?? null,
+    taskStatus: p.task?.status ?? null,
+  }
+}
+
 function formatMeeting(m) {
   return {
-    id:     m.id,
-    week:   m.week,
-    date:   m.date,
-    rating: m.rating,
-    notes:  m.notes,
-    type:   m.type ?? 'weekly',
+    id:           m.id,
+    week:         m.week,
+    date:         m.date,
+    notes:        m.notes,
+    type:         m.type ?? 'weekly',
+    startedAt:    m.startedAt,
+    endedAt:      m.endedAt,
+    durationMins: m.durationMins,
+    running:      !!m.startedAt && !m.endedAt,
+    started:      !!m.startedAt,
+    participants: m.participants ? m.participants.map(formatParticipant) : undefined,
   }
+}
+
+const MEETING_INCLUDE = {
+  participants: {
+    orderBy: { createdAt: 'asc' },
+    include: { user: { select: { id: true, name: true, avatar: true } }, task: { select: { status: true } } },
+  },
+}
+
+const typeLabel = (t) => (t === 'annual' ? 'Reunión Anual EOS' : t === 'quarterly' ? 'Reunión Trimestral EOS' : 'Reunión L10')
+
+// WorkDay de hoy del usuario (crear si falta — mismo patrón que tasks.create).
+async function ensureWorkDay(userId, workspaceId, today) {
+  const wdKey = { userId_workspaceId_date: { userId, workspaceId, date: today } }
+  let workDay = await prisma.workDay.findUnique({ where: wdKey })
+  if (!workDay) {
+    try {
+      workDay = await prisma.workDay.create({ data: { userId, workspaceId, date: today } })
+    } catch (e) {
+      if (e.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
+      else throw e
+    }
+  }
+  return workDay
+}
+
+// Carga (o crea) la reunión de una semana con sus participantes.
+async function loadMeetingByWeek(week, workspaceId, { create = false } = {}) {
+  let meeting = await prisma.eOSMeeting.findFirst({ where: { workspaceId, week }, include: MEETING_INCLUDE })
+  if (!meeting && create) {
+    try {
+      await prisma.eOSMeeting.create({ data: { workspaceId, week } })
+    } catch (e) {
+      if (e.code !== 'P2002') throw e
+    }
+    meeting = await prisma.eOSMeeting.findFirst({ where: { workspaceId, week }, include: MEETING_INCLUDE })
+  }
+  return meeting
 }
 
 // ─── ROCKS ────────────────────────────────────────────────────────────────────
@@ -170,7 +224,7 @@ async function getWeek(req, res, next) {
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
         include: { task: { select: { id: true, status: true, description: true } } },
       }),
-      prisma.eOSMeeting.findFirst({ where: { workspaceId, week } }),
+      prisma.eOSMeeting.findFirst({ where: { workspaceId, week }, include: MEETING_INCLUDE }),
     ])
 
     res.json({
@@ -333,20 +387,13 @@ async function upsertMeeting(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const { week } = req.params
-    const { date, rating, notes, type } = req.body
+    const { date, notes, type } = req.body
 
     if (!WEEK_RE.test(week)) return res.status(400).json({ error: 'week inválida' })
 
     const data = {}
     if (date   !== undefined) data.date   = date || null
     if (notes  !== undefined) data.notes  = notes?.trim() || null
-    if (rating !== undefined) {
-      const r = rating ? Number(rating) : null
-      if (r !== null && (r < 1 || r > 10)) {
-        return res.status(400).json({ error: 'rating debe ser entre 1 y 10' })
-      }
-      data.rating = r
-    }
     if (type !== undefined) {
       if (!VALID_MEETING_TYPE.includes(type)) {
         return res.status(400).json({ error: 'type inválido' })
@@ -354,13 +401,168 @@ async function upsertMeeting(req, res, next) {
       data.type = type
     }
 
-    const meeting = await prisma.eOSMeeting.upsert({
+    await prisma.eOSMeeting.upsert({
       where:  { workspaceId_week: { workspaceId, week } },
       create: { workspaceId, week, ...data },
       update: data,
     })
 
+    const meeting = await loadMeetingByWeek(week, workspaceId)
     res.json(formatMeeting(meeting))
+  } catch (err) { next(err) }
+}
+
+// ─── PARTICIPANTES + CRONÓMETRO (reunión L10) ──────────────────────────────────
+
+// POST /api/eos/traction/meetings/:week/participants — agrega un participante.
+// Solo antes de iniciar. Crea la reunión de la semana si no existe.
+async function addParticipant(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const { week } = req.params
+    if (!WEEK_RE.test(week)) return res.status(400).json({ error: 'week inválida' })
+
+    const userId = Number(req.body.userId)
+    if (!userId) return res.status(400).json({ error: 'userId es requerido' })
+
+    const member = await prisma.workspaceMember.findUnique({
+      where:  { workspaceId_userId: { workspaceId, userId } },
+      select: { active: true },
+    })
+    if (!member || !member.active) return res.status(400).json({ error: 'No es un miembro activo del workspace' })
+
+    let meeting = await loadMeetingByWeek(week, workspaceId, { create: true })
+    if (meeting.startedAt) return res.status(409).json({ error: 'No se pueden editar los participantes después de iniciar la reunión' })
+
+    try {
+      await prisma.eOSMeetingParticipant.create({ data: { meetingId: meeting.id, workspaceId, userId } })
+    } catch (e) {
+      if (e.code !== 'P2002') throw e // ya estaba: idempotente
+    }
+
+    meeting = await loadMeetingByWeek(week, workspaceId)
+    res.status(201).json(formatMeeting(meeting))
+  } catch (err) { next(err) }
+}
+
+// DELETE /api/eos/traction/meetings/:week/participants/:uid — quita un participante.
+async function removeParticipant(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const { week, uid } = req.params
+    if (!WEEK_RE.test(week)) return res.status(400).json({ error: 'week inválida' })
+
+    const meeting = await loadMeetingByWeek(week, workspaceId)
+    if (!meeting) return res.status(404).json({ error: 'Reunión no encontrada' })
+    if (meeting.startedAt) return res.status(409).json({ error: 'No se pueden editar los participantes después de iniciar la reunión' })
+
+    await prisma.eOSMeetingParticipant.deleteMany({ where: { meetingId: meeting.id, userId: Number(uid) } })
+    const fresh = await loadMeetingByWeek(week, workspaceId)
+    res.json(formatMeeting(fresh))
+  } catch (err) { next(err) }
+}
+
+// POST /api/eos/traction/meetings/:week/start — arranca el cronómetro y, por cada
+// participante, crea una Task IN_PROGRESS en el proyecto de reuniones configurado.
+// Bloquea si algún participante tiene una tarea en curso.
+async function startMeeting(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz          = req.workspace.timezone
+    const requesterId = req.user.userId
+    const { week } = req.params
+    if (!WEEK_RE.test(week)) return res.status(400).json({ error: 'week inválida' })
+
+    const meeting = await loadMeetingByWeek(week, workspaceId)
+    if (!meeting) return res.status(404).json({ error: 'Reunión no encontrada' })
+    if (meeting.startedAt && !meeting.endedAt) return res.status(409).json({ error: 'La reunión ya está en curso' })
+    if (meeting.endedAt) return res.status(409).json({ error: 'La reunión ya fue finalizada' })
+    if (meeting.participants.length === 0) return res.status(400).json({ error: 'Agregá al menos un participante antes de iniciar' })
+
+    // Proyecto configurado para las tareas de reuniones L10 (EOSData.meetingProjectId).
+    const eos = await prisma.eOSData.findUnique({ where: { workspaceId }, select: { meetingProjectId: true } })
+    const meetingProjectId = eos?.meetingProjectId
+    if (!meetingProjectId) {
+      return res.status(400).json({ error: 'Configurá el proyecto para reuniones antes de iniciar', code: 'NO_MEETING_PROJECT' })
+    }
+    const project = await prisma.project.findFirst({ where: { id: meetingProjectId, workspaceId, active: true }, select: { id: true } })
+    if (!project) return res.status(400).json({ error: 'El proyecto configurado para reuniones ya no está disponible', code: 'NO_MEETING_PROJECT' })
+
+    const participantIds = meeting.participants.map(p => p.userId)
+
+    // Bloqueo: nadie del grupo puede tener una tarea en curso al iniciar.
+    const busy = await prisma.task.findMany({
+      where:   { userId: { in: participantIds }, status: 'IN_PROGRESS' },
+      include: { user: { select: { name: true } } },
+    })
+    if (busy.length) {
+      const names = [...new Set(busy.map(b => b.user.name))].join(', ')
+      return res.status(409).json({
+        error: `No se puede iniciar: ${names} ${busy.length > 1 ? 'tienen' : 'tiene'} una tarea en curso. Debe pausarla o completarla primero.`,
+      })
+    }
+
+    const now   = new Date()
+    const today = todayString(tz)
+
+    for (const p of meeting.participants) {
+      const workDay = await ensureWorkDay(p.userId, workspaceId, today)
+      if (!workDay) continue
+      try {
+        const task = await prisma.task.create({
+          data: {
+            description: typeLabel(meeting.type),
+            projectId:   meetingProjectId,
+            userId:      p.userId,
+            workDayId:   workDay.id,
+            status:      'IN_PROGRESS',
+            startedAt:   now,
+            createdById: p.userId !== requesterId ? requesterId : null,
+          },
+        })
+        await prisma.taskSession.create({ data: { taskId: task.id, startedAt: now } })
+        await prisma.eOSMeetingParticipant.update({ where: { id: p.id }, data: { taskId: task.id } })
+      } catch (e) {
+        if (e.code === 'P2002') {
+          return res.status(409).json({ error: `${p.user?.name || 'Un participante'} acaba de iniciar otra tarea. Reintentá.` })
+        }
+        throw e
+      }
+    }
+
+    await prisma.eOSMeeting.update({ where: { id: meeting.id }, data: { startedAt: now, endedAt: null, durationMins: null } })
+    const fresh = await loadMeetingByWeek(week, workspaceId)
+    res.json(formatMeeting(fresh))
+  } catch (err) { next(err) }
+}
+
+// POST /api/eos/traction/meetings/:week/finish — frena el cronómetro, congela la
+// duración y completa las tareas de los participantes (su tiempo se suma al proyecto).
+async function finishMeeting(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const { week } = req.params
+    if (!WEEK_RE.test(week)) return res.status(400).json({ error: 'week inválida' })
+
+    const meeting = await loadMeetingByWeek(week, workspaceId)
+    if (!meeting) return res.status(404).json({ error: 'Reunión no encontrada' })
+    if (!meeting.startedAt) return res.status(400).json({ error: 'La reunión no fue iniciada' })
+
+    const now = new Date()
+    const durationMins = Math.max(0, Math.round((now.getTime() - new Date(meeting.startedAt).getTime()) / 60000))
+
+    const taskIds = meeting.participants.map(p => p.taskId).filter(Boolean)
+    if (taskIds.length) {
+      await prisma.taskSession.updateMany({ where: { taskId: { in: taskIds }, endedAt: null }, data: { endedAt: now } })
+      await prisma.task.updateMany({
+        where: { id: { in: taskIds }, status: 'IN_PROGRESS' },
+        data:  { status: 'COMPLETED', completedAt: now, pausedAt: null },
+      })
+    }
+
+    await prisma.eOSMeeting.update({ where: { id: meeting.id }, data: { endedAt: now, durationMins } })
+    const fresh = await loadMeetingByWeek(week, workspaceId)
+    res.json(formatMeeting(fresh))
   } catch (err) { next(err) }
 }
 
@@ -387,4 +589,5 @@ module.exports = {
   getRocks, createRock, updateRock, deleteRock,
   getWeek, createTodo, updateTodo, deleteTodo, sendTodoToDashboard,
   upsertMeeting, listSpecialMeetings,
+  addParticipant, removeParticipant, startMeeting, finishMeeting,
 }

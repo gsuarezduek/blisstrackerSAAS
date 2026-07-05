@@ -19,6 +19,7 @@ const {
   getRocks, createRock, updateRock, deleteRock,
   getWeek, createTodo, updateTodo, deleteTodo, sendTodoToDashboard,
   upsertMeeting, listSpecialMeetings,
+  addParticipant, removeParticipant, startMeeting, finishMeeting,
 } = require('../controllers/eosTraction.controller')
 const {
   getAssessment, startRound, submitResponse, closeRound,
@@ -84,6 +85,10 @@ router.delete('/traction/todos/:id',      deleteTodo)
 router.post('/traction/todos/:id/send-to-dashboard', sendTodoToDashboard)
 router.get('/traction/meetings/special',  listSpecialMeetings)
 router.put('/traction/meetings/:week',    upsertMeeting)
+router.post('/traction/meetings/:week/participants',       addParticipant)
+router.delete('/traction/meetings/:week/participants/:uid', removeParticipant)
+router.post('/traction/meetings/:week/start',   startMeeting)
+router.post('/traction/meetings/:week/finish',  finishMeeting)
 
 // Evaluación Organizacional
 router.get('/assessment',                          getAssessment)
