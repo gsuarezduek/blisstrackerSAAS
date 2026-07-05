@@ -63,7 +63,8 @@ export default function EOS() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialTab = VALID_TABS.has(searchParams.get('tab')) ? searchParams.get('tab') : 'vision'
   const [tab,     setTab]     = useState(initialTab)
-  const [vtoMode, setVtoMode] = useState(false)
+  // Al entrar a EOS se muestra el VTO por defecto (salvo que se haya deep-linkeado otra pestaña)
+  const [vtoMode, setVtoMode] = useState(!searchParams.get('tab') || searchParams.get('tab') === 'vision')
   const [weeklyOpenCount, setWeeklyOpenCount] = useState(0)
   const current = TABS.find(t => t.id === tab)
 

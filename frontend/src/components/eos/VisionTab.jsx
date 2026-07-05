@@ -283,6 +283,7 @@ function VTOView({ data, workspaceName, onClose }) {
   const [rocks,  setRocks]   = useState([])
   const [issues, setIssues]  = useState([])
   const [members, setMembers] = useState([])
+  const [page, setPage]      = useState('traccion')   // 'traccion' | 'vision' — las 2 páginas del VTO
   const quarter = currentQuarterStr()
 
   useEffect(() => {
@@ -304,15 +305,177 @@ function VTOView({ data, workspaceName, onClose }) {
     return m ? m.name.split(' ')[0] : ''
   }
 
+  const activeRocks = rocks.filter(r => r.status !== 'complete')
+
+  // ── Página 1: Tracción ── (Plan a 1 año · Rocas · Asuntos)
+  const traccionPage = (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+
+      {/* Plan a 1 Año */}
+      <VTOBox title="Plan a 1 Año" accent={accentBlue}>
+        <div className="space-y-1.5">
+          {(data?.oneYearRevenue || data?.oneYearProfit) && (
+            <div className="flex flex-wrap gap-3 text-xs pb-1 border-b border-gray-100 dark:border-gray-700">
+              {data?.oneYearRevenue && <span><span className="text-gray-400">Ingresos:</span> {data.oneYearRevenue}</span>}
+              {data?.oneYearProfit  && <span><span className="text-gray-400">Rentabilidad:</span> {data.oneYearProfit}</span>}
+            </div>
+          )}
+          <VTOList items={data?.oneYearGoals} empty="Sin metas anuales" />
+        </div>
+      </VTOBox>
+
+      {/* Rocas */}
+      <VTOBox title={`Rocas · ${quarterLabel(quarter)}`} accent={accentGray}>
+        {activeRocks.length === 0 ? (
+          <span className="text-gray-400 italic text-xs">Sin rocas para este trimestre</span>
+        ) : (
+          <ul className="space-y-1">
+            {activeRocks.map(rock => (
+              <li key={rock.id} className="flex items-center gap-2 text-xs">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${
+                  rock.status === 'on_track'  ? 'bg-green-500' :
+                  rock.status === 'off_track' ? 'bg-red-500'   : 'bg-gray-400'
+                }`} />
+                <span className="flex-1">{rock.title}</span>
+                {rock.ownerId && <span className="text-gray-400">{ownerName(rock.ownerId)}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </VTOBox>
+
+      {/* Asuntos */}
+      <VTOBox title="Asuntos" accent={accentGray}>
+        {issues.length === 0 ? (
+          <span className="text-gray-400 italic text-xs">Sin issues abiertos</span>
+        ) : (
+          <ul className="space-y-0.5">
+            {issues.slice(0, 12).map(issue => (
+              <li key={issue.id} className="flex items-start gap-1.5 text-xs">
+                <span className={`shrink-0 mt-0.5 text-[8px] font-bold ${
+                  issue.priority === 'high' ? 'text-red-500' :
+                  issue.priority === 'medium' ? 'text-yellow-500' : 'text-gray-400'
+                }`}>●</span>
+                <span>{issue.title}</span>
+              </li>
+            ))}
+            {issues.length > 12 && <li className="text-xs text-gray-400 pl-3">+{issues.length - 12} más</li>}
+          </ul>
+        )}
+      </VTOBox>
+
+    </div>
+  )
+
+  // ── Página 2: Visión ── (col izq 70%: Valores · Foco · 10 años · Marketing | col der 30%: Imagen a 3 años)
+  const visionPage = (
+    <div className="grid grid-cols-1 lg:grid-cols-10 gap-3">
+
+      {/* Columna izquierda (70%) */}
+      <div className="lg:col-span-7 space-y-3">
+
+        {/* Valores Medulares */}
+        <VTOBox title="Valores Medulares" accent={accentBlue}>
+          <CoreValuesVTOList items={data?.coreValues} empty="Sin valores definidos" />
+        </VTOBox>
+
+        {/* Enfoque Medular (Foco) */}
+        <VTOBox title="Enfoque Medular" accent={accentBlue}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Propósito</p>
+              <VTOText value={data?.purpose} empty="Sin definir" />
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Nicho</p>
+              <VTOText value={data?.niche} empty="Sin definir" />
+            </div>
+          </div>
+        </VTOBox>
+
+        {/* Meta a 10 Años */}
+        <VTOBox title="Meta a 10 Años™" accent={accentGray}>
+          <VTOText value={data?.tenYearTarget} empty="Sin meta a 10 años" />
+        </VTOBox>
+
+        {/* Estrategia de Marketing */}
+        <VTOBox title="Estrategia de Marketing" accent={accentGray}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Cliente Ideal</p>
+              <VTOText value={data?.marketingTarget} empty="Sin definir" />
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">3 Diferenciadores</p>
+              <VTOList items={data?.marketingUniques} empty="Sin diferenciadores" />
+            </div>
+            {data?.marketingProcess && (
+              <div>
+                <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Proceso Probado</p>
+                <VTOText value={data.marketingProcess} />
+              </div>
+            )}
+            {data?.marketingGuarantee && (
+              <div>
+                <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Garantía</p>
+                <VTOText value={data.marketingGuarantee} />
+              </div>
+            )}
+          </div>
+        </VTOBox>
+
+      </div>
+
+      {/* Columna derecha (30%) — Imagen a 3 años */}
+      <div className="lg:col-span-3">
+        <VTOBox title="Imagen a 3 Años™" accent={accentBlue} className="h-full">
+          <div className="space-y-1.5">
+            {(data?.threeYearRevenue || data?.threeYearProfit || data?.threeYearHeadcount) && (
+              <div className="flex flex-col gap-0.5 text-xs pb-1.5 mb-1 border-b border-gray-100 dark:border-gray-700">
+                {data?.threeYearRevenue   && <span><span className="text-gray-400">Ingresos:</span> {data.threeYearRevenue}</span>}
+                {data?.threeYearProfit    && <span><span className="text-gray-400">Rentabilidad:</span> {data.threeYearProfit}</span>}
+                {data?.threeYearHeadcount && <span><span className="text-gray-400">Equipo:</span> {data.threeYearHeadcount}</span>}
+              </div>
+            )}
+            <VTOText value={data?.threeYearDescription} empty="Sin descripción" />
+            {data?.threeYearGoals?.length > 0 && (
+              <VTOList items={data.threeYearGoals} />
+            )}
+          </div>
+        </VTOBox>
+      </div>
+
+    </div>
+  )
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Vision/Traction Organizer™</h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">{workspaceName} · {new Date().toLocaleDateString('es-AR', { year: 'numeric', month: 'long' })}</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Toggle de página del VTO */}
+          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+            {[
+              { id: 'traccion', label: 'Tracción' },
+              { id: 'vision',   label: 'Visión' },
+            ].map(p => (
+              <button
+                key={p.id}
+                onClick={() => setPage(p.id)}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  page === p.id
+                    ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => printVTO(data, workspaceName, rocks, members, issues, quarter)}
             title="Imprimir / Exportar PDF"
@@ -331,139 +494,7 @@ function VTOView({ data, workspaceName, onClose }) {
         </div>
       </div>
 
-      {/* VTO Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-
-        {/* Col izquierda */}
-        <div className="space-y-3">
-
-          {/* Core Values + Core Focus side by side */}
-          <div className="grid grid-cols-2 gap-3">
-            <VTOBox title="Core Values" accent={accentBlue}>
-              <CoreValuesVTOList items={data?.coreValues} empty="Sin valores definidos" />
-            </VTOBox>
-            <VTOBox title="Core Focus™" accent={accentBlue}>
-              <div className="space-y-2">
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Propósito</p>
-                  <VTOText value={data?.purpose} empty="Sin definir" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Nicho</p>
-                  <VTOText value={data?.niche} empty="Sin definir" />
-                </div>
-              </div>
-            </VTOBox>
-          </div>
-
-          {/* 3-Year Picture */}
-          <VTOBox title="Imagen a 3 Años™" accent={accentBlue}>
-            <div className="space-y-1.5">
-              {(data?.threeYearRevenue || data?.threeYearProfit || data?.threeYearHeadcount) && (
-                <div className="flex flex-wrap gap-3 text-xs pb-1 border-b border-gray-100 dark:border-gray-700">
-                  {data?.threeYearRevenue   && <span><span className="text-gray-400">Ingresos:</span> {data.threeYearRevenue}</span>}
-                  {data?.threeYearProfit    && <span><span className="text-gray-400">Rentabilidad:</span> {data.threeYearProfit}</span>}
-                  {data?.threeYearHeadcount && <span><span className="text-gray-400">Equipo:</span> {data.threeYearHeadcount}</span>}
-                </div>
-              )}
-              <VTOText value={data?.threeYearDescription} empty="Sin descripción" />
-              {data?.threeYearGoals?.length > 0 && (
-                <VTOList items={data.threeYearGoals} />
-              )}
-            </div>
-          </VTOBox>
-
-          {/* 1-Year Plan */}
-          <VTOBox title="Plan a 1 Año" accent={accentBlue}>
-            <div className="space-y-1.5">
-              {(data?.oneYearRevenue || data?.oneYearProfit) && (
-                <div className="flex flex-wrap gap-3 text-xs pb-1 border-b border-gray-100 dark:border-gray-700">
-                  {data?.oneYearRevenue && <span><span className="text-gray-400">Ingresos:</span> {data.oneYearRevenue}</span>}
-                  {data?.oneYearProfit  && <span><span className="text-gray-400">Rentabilidad:</span> {data.oneYearProfit}</span>}
-                </div>
-              )}
-              <VTOList items={data?.oneYearGoals} empty="Sin metas anuales" />
-            </div>
-          </VTOBox>
-
-        </div>
-
-        {/* Col derecha */}
-        <div className="space-y-3">
-
-          {/* 10-Year Target */}
-          <VTOBox title="Meta a 10 Años™" accent={accentGray} className="min-h-[100px]">
-            <VTOText value={data?.tenYearTarget} empty="Sin meta a 10 años" />
-          </VTOBox>
-
-          {/* Marketing Strategy */}
-          <VTOBox title="Estrategia de Marketing" accent={accentGray}>
-            <div className="space-y-2">
-              <div>
-                <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Cliente Ideal</p>
-                <VTOText value={data?.marketingTarget} empty="Sin definir" />
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">3 Diferenciadores</p>
-                <VTOList items={data?.marketingUniques} empty="Sin diferenciadores" />
-              </div>
-              {data?.marketingProcess && (
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Proceso Probado</p>
-                  <VTOText value={data.marketingProcess} />
-                </div>
-              )}
-              {data?.marketingGuarantee && (
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase mb-0.5">Garantía</p>
-                  <VTOText value={data.marketingGuarantee} />
-                </div>
-              )}
-            </div>
-          </VTOBox>
-
-          {/* Rocks */}
-          <VTOBox title={`Rocas · ${quarterLabel(quarter)}`} accent={accentGray}>
-            {rocks.filter(r => r.status !== 'complete').length === 0 ? (
-              <span className="text-gray-400 italic text-xs">Sin rocas para este trimestre</span>
-            ) : (
-              <ul className="space-y-1">
-                {rocks.filter(r => r.status !== 'complete').map(rock => (
-                  <li key={rock.id} className="flex items-center gap-2 text-xs">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${
-                      rock.status === 'on_track'  ? 'bg-green-500' :
-                      rock.status === 'off_track' ? 'bg-red-500'   : 'bg-gray-400'
-                    }`} />
-                    <span className="flex-1">{rock.title}</span>
-                    {rock.ownerId && <span className="text-gray-400">{ownerName(rock.ownerId)}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </VTOBox>
-
-          {/* Issues */}
-          <VTOBox title="Asuntos" accent={accentGray}>
-            {issues.length === 0 ? (
-              <span className="text-gray-400 italic text-xs">Sin issues abiertos</span>
-            ) : (
-              <ul className="space-y-0.5">
-                {issues.slice(0, 8).map(issue => (
-                  <li key={issue.id} className="flex items-start gap-1.5 text-xs">
-                    <span className={`shrink-0 mt-0.5 text-[8px] font-bold ${
-                      issue.priority === 'high' ? 'text-red-500' :
-                      issue.priority === 'medium' ? 'text-yellow-500' : 'text-gray-400'
-                    }`}>●</span>
-                    <span>{issue.title}</span>
-                  </li>
-                ))}
-                {issues.length > 8 && <li className="text-xs text-gray-400 pl-3">+{issues.length - 8} más</li>}
-              </ul>
-            )}
-          </VTOBox>
-
-        </div>
-      </div>
+      {page === 'traccion' ? traccionPage : visionPage}
     </div>
   )
 }
