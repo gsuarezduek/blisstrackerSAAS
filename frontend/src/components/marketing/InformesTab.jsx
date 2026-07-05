@@ -272,17 +272,86 @@ function GenerateModal({ projectId, month, availableSections: initialAvailable, 
 
 // ─── Vista global de informes (sin proyecto seleccionado) ─────────────────────
 
+function StatCard({ icon, label, value, sub, accent = 'text-gray-900 dark:text-white' }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3.5">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+        <span>{icon}</span>
+        <span>{label}</span>
+      </div>
+      <p className={`mt-1.5 text-2xl font-bold ${accent}`}>{value}</p>
+      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    </div>
+  )
+}
+
+function ReportsStatsCards({ stats }) {
+  if (!stats) return null
+  const { monthLabel, reportsThisMonth, feedbackThisMonth, ratePct, ratedReports, avgRating, generators } = stats
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <StatCard
+        icon="📊"
+        label="Informes este mes"
+        value={reportsThisMonth}
+        sub={<span className="capitalize">{monthLabel}</span>}
+      />
+      <StatCard
+        icon="⭐"
+        label="Calificaciones este mes"
+        value={feedbackThisMonth}
+        sub={avgRating != null ? `${avgRating} de promedio` : 'Sin calificaciones aún'}
+      />
+      <StatCard
+        icon="📈"
+        label="% con calificación"
+        value={`${ratePct}%`}
+        accent="text-primary-600 dark:text-primary-400"
+        sub={`${ratedReports} de ${reportsThisMonth} calificados`}
+      />
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3.5">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+          <span>👤</span>
+          <span>Generado por</span>
+        </div>
+        {generators.length === 0 ? (
+          <p className="mt-1.5 text-sm text-gray-400">—</p>
+        ) : (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {generators.map(g => (
+              <span
+                key={g.id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-200"
+              >
+                {g.name}
+                <span className="font-semibold text-gray-500 dark:text-gray-400">{g.count}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function AllReportsPanel({ onSelectProject }) {
   const [reports, setReports]     = useState([])
   const [total,   setTotal]       = useState(0)
+  const [stats,   setStats]       = useState(null)
   const [loading, setLoading]     = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const PAGE = 20
 
   useEffect(() => {
     setLoading(true)
-    api.get(`/marketing/summary/reports?limit=${PAGE}&offset=0`)
-      .then(r => { setReports(r.data.reports); setTotal(r.data.total) })
+    Promise.all([
+      api.get(`/marketing/summary/reports?limit=${PAGE}&offset=0`),
+      api.get('/marketing/summary/reports-stats'),
+    ])
+      .then(([rep, st]) => {
+        setReports(rep.data.reports); setTotal(rep.data.total)
+        setStats(st.data)
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -304,16 +373,21 @@ function AllReportsPanel({ onSelectProject }) {
   )
 
   if (!reports.length) return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-      <p className="text-4xl mb-3">📊</p>
-      <p className="text-gray-500 dark:text-gray-400 text-sm">
-        Todavía no hay informes generados. Seleccioná un proyecto para crear el primer informe.
-      </p>
+    <div className="space-y-4">
+      <ReportsStatsCards stats={stats} />
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+        <p className="text-4xl mb-3">📊</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">
+          Todavía no hay informes generados. Seleccioná un proyecto para crear el primer informe.
+        </p>
+      </div>
     </div>
   )
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <ReportsStatsCards stats={stats} />
+
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
           Todos los informes <span className="font-normal text-gray-400">({total} en total)</span>

@@ -1183,19 +1183,8 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
           )}
 
           <div className="relative flex flex-col justify-end p-6 sm:p-8" style={{ minHeight: hasBanner ? '17rem' : '12rem' }}>
-            {/* fila superior: logo de la agencia + PDF */}
-            <div className="absolute top-5 left-6 right-6 sm:left-8 sm:right-8 flex items-center justify-between gap-3">
-              {workspace?.hasLogo && workspace?.slug ? (
-                <img
-                  src={`${import.meta.env.VITE_API_URL}/api/public/logo/${workspace.slug}`}
-                  alt={agencyName}
-                  className="h-9 max-w-[150px] object-contain"
-                  style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.45))' }}
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
-                />
-              ) : agencyName ? (
-                <span className="text-white/90 text-sm font-semibold" style={{ textShadow: '0 1px 4px rgba(0,0,0,.4)' }}>{agencyName}</span>
-              ) : <span />}
+            {/* fila superior: PDF */}
+            <div className="absolute top-5 left-6 right-6 sm:left-8 sm:right-8 flex items-center justify-end gap-3">
               <button
                 onClick={() => window.print()}
                 className="no-print flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/15 hover:bg-white/25 text-white backdrop-blur-sm transition-colors shrink-0"
@@ -1204,16 +1193,30 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
               </button>
             </div>
 
-            <div>
-              <p className="text-white/75 text-[11px] font-semibold uppercase tracking-[0.18em] mb-1.5">Informe de marketing</p>
-              <h1 className="text-white text-3xl sm:text-4xl font-bold leading-tight" style={{ textShadow: '0 2px 14px rgba(0,0,0,.35)' }}>{project.name}</h1>
-              <p className="text-white/90 text-lg font-medium mt-1.5 capitalize">{periodTitle}</p>
-              {periodRange && <p className="text-white/65 text-xs mt-1">{periodRange}</p>}
-              {project.websiteUrl && (
-                <a href={project.websiteUrl} target="_blank" rel="noreferrer" className="inline-block text-white/80 hover:text-white text-xs mt-2 underline underline-offset-2">
-                  {project.websiteUrl.replace(/^https?:\/\//, '')}
-                </a>
-              )}
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-white/75 text-[11px] font-semibold uppercase tracking-[0.18em] mb-1.5">Informe de marketing</p>
+                <h1 className="text-white text-3xl sm:text-4xl font-bold leading-tight" style={{ textShadow: '0 2px 14px rgba(0,0,0,.35)' }}>{project.name}</h1>
+                <p className="text-white/90 text-lg font-medium mt-1.5 capitalize">{periodTitle}</p>
+                {periodRange && <p className="text-white/65 text-xs mt-1">{periodRange}</p>}
+                {project.websiteUrl && (
+                  <a href={project.websiteUrl} target="_blank" rel="noreferrer" className="inline-block text-white/80 hover:text-white text-xs mt-2 underline underline-offset-2">
+                    {project.websiteUrl.replace(/^https?:\/\//, '')}
+                  </a>
+                )}
+              </div>
+              {/* logo de la agencia: abajo a la derecha del hero */}
+              {workspace?.hasLogo && workspace?.slug ? (
+                <img
+                  src={`${import.meta.env.VITE_API_URL}/api/public/logo/${workspace.slug}`}
+                  alt={agencyName}
+                  className="h-10 max-w-[160px] object-contain shrink-0"
+                  style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.45))' }}
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                />
+              ) : agencyName ? (
+                <span className="text-white/90 text-sm font-semibold shrink-0" style={{ textShadow: '0 1px 4px rgba(0,0,0,.4)' }}>{agencyName}</span>
+              ) : null}
             </div>
           </div>
         </div>

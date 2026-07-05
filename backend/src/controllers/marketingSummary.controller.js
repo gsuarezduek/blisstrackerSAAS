@@ -8,6 +8,18 @@ const prisma = require('../lib/prisma')
 const { computeObjectives } = require('../services/marketingObjectives.service')
 const { saveMonthSnapshot } = require('../services/analyticsSnapshot.service')
 const { todayString } = require('../utils/dates')
+const { tzOffsetStr } = require('../lib/timeMetrics')
+const { monthBounds, monthLabel } = require('../lib/monthUtils')
+
+// Filtro Prisma para informes "generados" (no placeholders vacíos), espejo del
+// de monthlyReport.controller.js.
+const GENERATED_REPORT_WHERE = {
+  OR: [
+    { enabledSections: { not: null } },
+    { dataCache:       { not: null } },
+    { analysis:        { not: null } },
+  ],
+}
 
 function safeParseArr(v) {
   try { return JSON.parse(v) } catch { return [] }
@@ -524,6 +536,77 @@ async function getReportsSummary(req, res, next) {
 }
 
 /**
+ * GET /api/marketing/summary/reports-stats
+ * Tarjetas resumen de la vista global de Informes (mes calendario en curso,
+ * en la timezone del workspace). "Generado" = createdAt del informe, consistente
+ * con la etiqueta "Generado: {createdAt}" de la lista.
+ *   - reportsThisMonth  : informes generados este mes
+ *   - feedbackThisMonth : calificaciones (ReportFeedback) recibidas este mes
+ *   - ratePct           : % de los informes de este mes que recibieron ≥1 calificación
+ *   - generators        : quiénes generaron esos informes (con conteo)
+ */
+async function getReportsStats(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz     = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
+    const month  = todayString(tz).slice(0, 7)
+    const { startDate, endDate } = monthBounds(month)
+    const offset = tzOffsetStr(tz)
+
+    // Rango [inicio de mes, fin de mes 23:59:59.999] en la TZ del workspace.
+    const gte = new Date(`${startDate}T00:00:00.000${offset}`)
+    const lte = new Date(`${endDate}T23:59:59.999${offset}`)
+
+    const [reports, feedbackThisMonth, ratingAgg] = await Promise.all([
+      prisma.monthlyReport.findMany({
+        where:  { workspaceId, ...GENERATED_REPORT_WHERE, createdAt: { gte, lte } },
+        select: { id: true, generatedBy: { select: { id: true, name: true } } },
+      }),
+      prisma.reportFeedback.count({ where: { workspaceId, createdAt: { gte, lte } } }),
+      prisma.reportFeedback.aggregate({
+        where: { workspaceId, createdAt: { gte, lte } },
+        _avg:  { rating: true },
+      }),
+    ])
+
+    const reportIds = reports.map(r => r.id)
+
+    // Informes de este mes que recibieron al menos una calificación (en cualquier momento).
+    const ratedGroups = reportIds.length
+      ? await prisma.reportFeedback.groupBy({
+          by:    ['reportId'],
+          where: { workspaceId, reportId: { in: reportIds } },
+        })
+      : []
+    const ratedReports = ratedGroups.length
+    const ratePct = reports.length ? Math.round((ratedReports / reports.length) * 100) : 0
+
+    // Quiénes generaron los informes de este mes (con conteo, desc).
+    const byGen = new Map()
+    for (const r of reports) {
+      if (!r.generatedBy) continue
+      const cur = byGen.get(r.generatedBy.id) || { id: r.generatedBy.id, name: r.generatedBy.name, count: 0 }
+      cur.count++
+      byGen.set(r.generatedBy.id, cur)
+    }
+    const generators = [...byGen.values()].sort((a, b) => b.count - a.count)
+
+    res.json({
+      month,
+      monthLabel:        monthLabel(month),
+      reportsThisMonth:  reports.length,
+      feedbackThisMonth,
+      ratedReports,
+      ratePct,
+      avgRating:         ratingAgg._avg.rating ? Number(ratingAgg._avg.rating.toFixed(1)) : null,
+      generators,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * GET /api/marketing/summary/seo
  * Todos los sitios web del workspace (proyectos con websiteUrl) ordenados por
  * Domain Rating de mayor a menor. Los que aún no tienen DR van al final.
@@ -602,5 +685,6 @@ module.exports = {
   getFacebookSummary,
   getAdsSummary,
   getReportsSummary,
+  getReportsStats,
   getSeoSummary,
 }

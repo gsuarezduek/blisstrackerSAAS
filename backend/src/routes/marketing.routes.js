@@ -231,6 +231,7 @@ router.get('/summary/linkedin',    summary.getLinkedinSummary)
 router.get('/summary/facebook',    summary.getFacebookSummary)
 router.get('/summary/ads',         summary.getAdsSummary)
 router.get('/summary/reports',     summary.getReportsSummary)
+router.get('/summary/reports-stats', summary.getReportsStats)
 router.get('/summary/seo',         summary.getSeoSummary)
 
 module.exports = router
