@@ -952,9 +952,18 @@ export default function InstagramTab({ projectId, onSelectProject }) {
       if (logsRes.status      === 'fulfilled') {
         const logs = logsRes.value.data.logs ?? []
         setFollowerLogs(logs)
+        // Baseline de "nuevos del mes" = cierre del mes anterior (último log ANTES del mes):
+        // un valor congelado que no se pisa en cada visita. Antes se usaba el primer log
+        // del mes, que si era el de hoy quedaba igual al valor actual (nuevos = 0) y encima
+        // se sobrescribía en cada carga (de "+3" a "0"). Fallback: el primer log del mes que
+        // NO sea el de hoy; si solo existe el de hoy, sin baseline (no se muestra).
         const monthStart = todayAR().slice(0, 7) + '-01'
-        const firstInMonth = logs.find(l => l.date >= monthStart)
-        setMonthStartFollowers(firstInMonth?.followersCount ?? null)
+        const today      = todayAR()
+        const before     = logs.filter(l => l.date < monthStart)
+        const baseline = before.length
+          ? before[before.length - 1].followersCount            // logs asc → último antes del mes
+          : (logs.find(l => l.date >= monthStart && l.date < today)?.followersCount ?? null)
+        setMonthStartFollowers(baseline)
       }
       if (metricsRes.status   === 'rejected')  setError(metricsRes.reason?.response?.data?.error || 'No se pudieron cargar las métricas.')
     } catch (err) {

@@ -16,6 +16,13 @@ function prevMonthStr(month) {
   return `${py}-${String(pm).padStart(2, '0')}`
 }
 
+// Último día de un mes "YYYY-MM" → "YYYY-MM-DD" (Date.UTC con día 0 del mes siguiente).
+function lastDayOfMonth(month) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m, 0)).getUTCDate()   // m es 1-based; índice m = mes siguiente, día 0 = último del mes m
+  return `${month}-${String(d).padStart(2, '0')}`
+}
+
 /**
  * Guarda un snapshot de Instagram para un proyecto y mes específicos.
  * Usa la integración activa del proyecto.
@@ -84,6 +91,7 @@ async function saveInstagramSnapshot(projectId, workspaceId, month, preloadedMet
   })
 
   console.log(`[InstagramSnapshot] Guardado para proyecto ${projectId}, mes ${month}: ${metrics.followersCount} seguidores`)
+  return metrics
 }
 
 /**
@@ -100,9 +108,22 @@ async function saveAllMonthlyInstagramSnapshots() {
 
   console.log(`[InstagramSnapshot] Procesando ${integrations.length} proyectos (mes: ${month})`)
 
+  const anchorDate = lastDayOfMonth(month)   // cierre del mes que se snapshotea → baseline del mes en curso
+
   for (const intg of integrations) {
     try {
-      await saveInstagramSnapshot(intg.projectId, intg.project.workspaceId, month)
+      const metrics = await saveInstagramSnapshot(intg.projectId, intg.project.workspaceId, month)
+      // Ancla de baseline: deja un log de seguidores al cierre del mes anterior para que
+      // el cálculo de "nuevos" del mes en curso siempre tenga un punto de partida estable,
+      // aunque la cuenta se scrapee/visite una sola vez en el mes. `update: {}` para no pisar
+      // un log real que ya exista de ese día.
+      if (metrics?.followersCount != null) {
+        await prisma.instagramFollowerLog.upsert({
+          where:  { projectId_date: { projectId: intg.projectId, date: anchorDate } },
+          update: {},
+          create: { projectId: intg.projectId, workspaceId: intg.project.workspaceId, date: anchorDate, followersCount: metrics.followersCount },
+        })
+      }
       await new Promise(r => setTimeout(r, 2000))
     } catch (err) {
       console.error(`[InstagramSnapshot] Error en proyecto ${intg.projectId}:`, err.message)

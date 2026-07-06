@@ -125,15 +125,21 @@ async function listCompetitors(req, res, next) {
     const monthStart = `${month}-01`
 
     const result = await Promise.all(competitors.map(async (c) => {
-      const [snap, monthStartLog] = await Promise.all([
+      const [snap, prevCloseLog, firstInMonthLog] = await Promise.all([
         prisma.competitorSnapshot.findFirst({ where: { competitorId: c.id }, orderBy: { month: 'desc' } }),
+        // Baseline = cierre del mes anterior (último log antes del mes), valor congelado.
+        prisma.competitorFollowerLog.findFirst({
+          where: { competitorId: c.id, date: { lt: monthStart } }, orderBy: { date: 'desc' },
+        }),
+        // Fallback: primer log del mes si no hay dato del mes anterior.
         prisma.competitorFollowerLog.findFirst({
           where: { competitorId: c.id, date: { gte: monthStart } }, orderBy: { date: 'asc' },
         }),
       ])
       const followersCount = snap?.followersCount ?? null
-      const monthlyGain = (followersCount != null && monthStartLog)
-        ? followersCount - monthStartLog.followersCount
+      const baselineLog = prevCloseLog ?? firstInMonthLog
+      const monthlyGain = (followersCount != null && baselineLog)
+        ? followersCount - baselineLog.followersCount
         : null
       return {
         id:             c.id,

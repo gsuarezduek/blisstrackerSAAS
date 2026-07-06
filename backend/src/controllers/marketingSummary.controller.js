@@ -25,20 +25,46 @@ function safeParseArr(v) {
   try { return JSON.parse(v) } catch { return [] }
 }
 
+function prevMonthStartOf(monthStart) {
+  const [y, m] = monthStart.split('-').map(Number)
+  const py = m === 1 ? y - 1 : y
+  const pm = m === 1 ? 12 : m - 1
+  return `${py}-${String(pm).padStart(2, '0')}-01`
+}
+
 // Seguidores nuevos en lo que va del mes + fecha del último dato, por proyecto.
 // Usa los follower logs diarios cacheados (no re-scrapea).
-// followerLogModel: prisma.instagramFollowerLog | prisma.tikTokFollowerLog
+// El baseline (`first`) es el cierre del mes anterior (último log del mes previo), un valor
+// congelado — NO el primer log del mes en curso, que si es el de hoy se pisa en cada visita
+// y colapsa "nuevos" a 0. Fallback: primer log del mes si no hay dato del mes anterior.
+// followerLogModel: prisma.instagramFollowerLog | prisma.tikTokFollowerLog | prisma.youTubeFollowerLog
 async function newFollowersByProject(followerLogModel, workspaceId, monthStart) {
-  const logs = await followerLogModel.findMany({
-    where:   { workspaceId, date: { gte: monthStart } },
-    orderBy: { date: 'asc' },
-    select:  { projectId: true, date: true, followersCount: true },
-  })
+  const prevMonthStart = prevMonthStartOf(monthStart)
+  const [inMonth, prevLogs] = await Promise.all([
+    followerLogModel.findMany({
+      where:   { workspaceId, date: { gte: monthStart } },
+      orderBy: { date: 'asc' },
+      select:  { projectId: true, date: true, followersCount: true },
+    }),
+    followerLogModel.findMany({
+      where:   { workspaceId, date: { gte: prevMonthStart, lt: monthStart } },
+      orderBy: { date: 'asc' },   // asc → el último sobrescribe = cierre del mes anterior
+      select:  { projectId: true, followersCount: true },
+    }),
+  ])
+  const prevClose = new Map()
+  for (const l of prevLogs) prevClose.set(l.projectId, l.followersCount)
+
   const byProj = new Map()
-  for (const l of logs) {
+  for (const l of inMonth) {
     const e = byProj.get(l.projectId)
     if (!e) byProj.set(l.projectId, { first: l.followersCount, last: l.followersCount, lastDate: l.date })
     else    { e.last = l.followersCount; e.lastDate = l.date }   // logs asc → último sobrescribe
+  }
+  // Anclar el baseline al cierre del mes anterior cuando exista.
+  for (const [pid, e] of byProj) {
+    const prev = prevClose.get(pid)
+    if (prev != null) e.first = prev
   }
   return byProj
 }
