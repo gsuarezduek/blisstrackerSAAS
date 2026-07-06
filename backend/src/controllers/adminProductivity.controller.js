@@ -3,6 +3,13 @@ const { generateMemoryForUser } = require('../services/insightMemory.service')
 const { getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median } = require('../services/productivityStats.service')
 const { sendTestDigest } = require('../services/productivityDigest.service')
 const { getProductivityPeriod, businessDaysBetween, tzOffsetStr, taskMins } = require('../lib/timeMetrics')
+const { createTtlCache } = require('../lib/ttlCache')
+
+// La tabla de productividad hace bucketing pesado de logins + tareas + asistencia sobre
+// todo el equipo en cada request. TTL 60s: para una vista analítica de admin el desfase
+// es aceptable, y un "Actualizar" manual invalida la entrada (ver refreshProductivity).
+// Clave por workspace+modo (current|closed).
+const prodCache = createTtlCache({ ttlMs: 60 * 1000, max: 200 })
 
 // Modo de período: 'current' (mes en curso vs anterior, default) o 'closed' (mes anterior vs ante-anterior).
 function periodMode(req) {
@@ -12,8 +19,14 @@ function periodMode(req) {
 async function listProductivity(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const mode = periodMode(req)
+
+    const cacheKey = `prod:${workspaceId}:${mode}`
+    const cached = prodCache.get(cacheKey)
+    if (cached) return res.json(cached)
+
     const tz = req.workspace.timezone
-    const period = getProductivityPeriod(periodMode(req), tz)
+    const period = getProductivityPeriod(mode, tz)
 
     const [members, statsMap, attendanceMap, hist] = await Promise.all([
       prisma.workspaceMember.findMany({
@@ -105,7 +118,9 @@ async function listProductivity(req, res, next) {
     }
 
     const periodOut = { ...period, businessDays: businessDaysBetween(period.curStart, period.curEnd) }
-    res.json({ members: result, period: periodOut, benchmark, teamHours })
+    const payload = { members: result, period: periodOut, benchmark, teamHours }
+    prodCache.set(cacheKey, payload)
+    res.json(payload)
   } catch (err) { next(err) }
 }
 
@@ -170,6 +185,10 @@ async function refreshProductivity(req, res, next) {
     if (!member || !member.active) return res.status(404).json({ error: 'Usuario no encontrado' })
 
     await generateMemoryForUser(userId, workspace)
+    // Se regeneró la memoria IA de un miembro → la tabla cacheada quedó desactualizada.
+    // Invalidamos ambos modos del workspace para que el cambio se vea en el próximo fetch.
+    prodCache.del(`prod:${workspace.id}:current`)
+    prodCache.del(`prod:${workspace.id}:closed`)
     const memory = await prisma.userInsightMemory.findFirst({
       where: { userId, workspaceId: workspace.id },
       orderBy: { weekStart: 'desc' },

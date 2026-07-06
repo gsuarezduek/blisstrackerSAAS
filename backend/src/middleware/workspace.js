@@ -21,18 +21,35 @@ async function resolveWorkspace(req, res, next) {
   }
 
   try {
+    // Una sola query por request: el workspace + la membresía de ESTE usuario (si
+    // existe), en vez de dos findUnique secuenciales. `members` viene filtrado por
+    // userId (take: 1). Sin cache → la autorización (rol/active/status) siempre lee
+    // el estado fresco; sólo bajamos de 2 round-trips a Postgres a 1.
+    //
     // omit: NO traer los blobs pesados (logo/banner, hasta 5 MB c/u). Este query
     // corre en CADA request autenticado; arrastrarlos disparaba el egress de
     // Postgres. Quien necesita los bytes (serve de logo/banner) hace su propio
     // select explícito.
-    const workspace = await prisma.workspace.findUnique({
+    const row = await prisma.workspace.findUnique({
       where: { slug },
       omit: { logoData: true, bannerData: true },
+      include: { members: { where: { userId: req.user.userId }, take: 1 } },
     })
 
-    if (!workspace) {
+    if (!row) {
       return res.status(404).json({ error: 'Workspace no encontrado' })
     }
+
+    // Separamos la membresía de los campos del workspace: `workspace` no debe
+    // arrastrar la relación `members` al resto del pipeline.
+    const { members, ...workspace } = row
+    // En producción el include siempre trae `members` (1 query total). El fallback
+    // al findUnique explícito sólo aplica si la relación no vino (defensa; nunca en prod).
+    const member = members
+      ? (members[0] ?? null)
+      : await prisma.workspaceMember.findUnique({
+          where: { workspaceId_userId: { workspaceId: workspace.id, userId: req.user.userId } },
+        })
 
     if (workspace.status === 'suspended' || workspace.status === 'cancelled') {
       return res.status(402).json({ error: 'Workspace suspendido. Verificá el estado de tu suscripción.' })
@@ -53,25 +70,13 @@ async function resolveWorkspace(req, res, next) {
       })
     }
 
-    // Super admins pueden acceder a cualquier workspace.
-    // Si además son miembros, cargamos sus datos de miembro (para isAdmin, teamRole, etc.)
+    // Super admins pueden acceder a cualquier workspace. Si además son miembros,
+    // ya tenemos sus datos de miembro (para isAdmin, teamRole, etc.) sin query extra.
     if (req.user?.isSuperAdmin) {
       req.workspace = workspace
-      const superMember = await prisma.workspaceMember.findUnique({
-        where: { workspaceId_userId: { workspaceId: workspace.id, userId: req.user.userId } },
-      })
-      req.workspaceMember = superMember ?? null
+      req.workspaceMember = member
       return next()
     }
-
-    const member = await prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: {
-          workspaceId: workspace.id,
-          userId: req.user.userId,
-        },
-      },
-    })
 
     if (!member || !member.active) {
       return res.status(403).json({ error: 'No sos miembro de este workspace' })

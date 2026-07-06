@@ -18,6 +18,20 @@ const RETENTION_KEYS = [
   'dailyInsightRetentionDays',
   'emailLogRetentionDays',
   'socialImageOrphanRetentionDays',
+  'serpSnapshotRetentionDays',
+  'followerLogRetentionDays',
+  'conversionEventRetentionDays',
+  'accessLogRetentionDays',
+]
+
+// Los 6 logs DIARIOS de seguidores comparten un solo retention (followerLogRetentionDays).
+const FOLLOWER_LOG_MODELS = [
+  'instagramFollowerLog',
+  'tikTokFollowerLog',
+  'linkedinFollowerLog',
+  'facebookFollowerLog',
+  'youTubeFollowerLog',
+  'competitorFollowerLog',
 ]
 
 function daysAgo(d) {
@@ -26,7 +40,9 @@ function daysAgo(d) {
 
 /**
  * Cuenta cuántas filas se borrarían con los retention actuales (preview).
- * @param {string[]} tables — subset de ['notifications', 'aiTokenLog', 'userLogin', 'dailyInsight', 'emailLog']
+ * @param {string[]} tables — subset de ['notifications', 'aiTokenLog', 'userLogin',
+ *   'dailyInsight', 'emailLog', 'socialImages', 'serpSnapshots', 'followerLogs',
+ *   'conversionEvents', 'accessLogs']
  */
 async function previewWeeklyCleanup(tables = null) {
   const s = await getSettings(RETENTION_KEYS)
@@ -65,6 +81,28 @@ async function previewWeeklyCleanup(tables = null) {
   if (!tables || tables.includes('socialImages')) {
     const ids = await findOrphanImageIds({ olderThanDays: s.socialImageOrphanRetentionDays })
     result.socialImages = ids.length
+  }
+  if ((!tables || tables.includes('serpSnapshots')) && s.serpSnapshotRetentionDays > 0) {
+    result.serpSnapshots = await prisma.serpSnapshot.count({
+      where: { capturedAt: { lt: daysAgo(s.serpSnapshotRetentionDays) } },
+    })
+  }
+  if ((!tables || tables.includes('followerLogs')) && s.followerLogRetentionDays > 0) {
+    const cutoff = daysAgo(s.followerLogRetentionDays)
+    const counts = await Promise.all(
+      FOLLOWER_LOG_MODELS.map(m => prisma[m].count({ where: { createdAt: { lt: cutoff } } }))
+    )
+    result.followerLogs = counts.reduce((a, b) => a + b, 0)
+  }
+  if ((!tables || tables.includes('conversionEvents')) && s.conversionEventRetentionDays > 0) {
+    result.conversionEvents = await prisma.conversionEvent.count({
+      where: { createdAt: { lt: daysAgo(s.conversionEventRetentionDays) } },
+    })
+  }
+  if ((!tables || tables.includes('accessLogs')) && s.accessLogRetentionDays > 0) {
+    result.accessLogs = await prisma.projectAccessLog.count({
+      where: { createdAt: { lt: daysAgo(s.accessLogRetentionDays) } },
+    })
   }
   return result
 }
@@ -122,6 +160,31 @@ async function runWeeklyCleanup(tables = null) {
       vacuum: false,
     })
     result.socialImages = deleted
+  }
+  if ((!tables || tables.includes('serpSnapshots')) && s.serpSnapshotRetentionDays > 0) {
+    const { count } = await prisma.serpSnapshot.deleteMany({
+      where: { capturedAt: { lt: daysAgo(s.serpSnapshotRetentionDays) } },
+    })
+    result.serpSnapshots = count
+  }
+  if ((!tables || tables.includes('followerLogs')) && s.followerLogRetentionDays > 0) {
+    const cutoff = daysAgo(s.followerLogRetentionDays)
+    const counts = await Promise.all(
+      FOLLOWER_LOG_MODELS.map(m => prisma[m].deleteMany({ where: { createdAt: { lt: cutoff } } }))
+    )
+    result.followerLogs = counts.reduce((a, r) => a + r.count, 0)
+  }
+  if ((!tables || tables.includes('conversionEvents')) && s.conversionEventRetentionDays > 0) {
+    const { count } = await prisma.conversionEvent.deleteMany({
+      where: { createdAt: { lt: daysAgo(s.conversionEventRetentionDays) } },
+    })
+    result.conversionEvents = count
+  }
+  if ((!tables || tables.includes('accessLogs')) && s.accessLogRetentionDays > 0) {
+    const { count } = await prisma.projectAccessLog.deleteMany({
+      where: { createdAt: { lt: daysAgo(s.accessLogRetentionDays) } },
+    })
+    result.accessLogs = count
   }
 
   return result

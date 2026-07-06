@@ -186,6 +186,46 @@ const PLATFORM_SETTINGS = [
     label:   'Retención de imágenes sociales huérfanas (días)',
     help:    'Las imágenes de RRSS (SocialImage) que ya no referencia ningún snapshot ni informe ("huérfanas", típicamente generadas al refrescar) se borran en la limpieza semanal si tienen más de estos días. NO afecta las imágenes en uso. La limpieza inmediata con VACUUM está en SuperAdmin → Almacenamiento.',
   },
+  {
+    key:     'serpSnapshotRetentionDays',
+    type:    'integer',
+    default: 180,
+    min:     30,
+    max:     3650,
+    group:   'operational',
+    label:   'Retención de snapshots SERP (días)',
+    help:    'Después de cuántos días se borran los SerpSnapshot (captura completa de SerpAPI por keyword). Es una de las tablas que más crece por keyword; la app sólo usa el snapshot más reciente (<24h), así que los viejos son sólo histórico. No afecta el tracking de posiciones (KeywordRanking).',
+  },
+  {
+    key:     'followerLogRetentionDays',
+    type:    'integer',
+    default: 180,
+    min:     60,
+    max:     3650,
+    group:   'operational',
+    label:   'Retención de logs diarios de seguidores (días)',
+    help:    'Después de cuántos días se borran los logs DIARIOS de seguidores de RRSS (Instagram/TikTok/LinkedIn/Facebook/YouTube + competidores). Se necesitan al menos los del mes en curso para calcular "nuevos en el mes"; por eso el piso es 60 días. NO afecta los snapshots mensuales de los informes.',
+  },
+  {
+    key:     'conversionEventRetentionDays',
+    type:    'integer',
+    default: 365,
+    min:     30,
+    max:     3650,
+    group:   'operational',
+    label:   'Retención de eventos de conversión (días)',
+    help:    'Después de cuántos días se borran los ConversionEvent (instrumentación del funnel signup→trial→paid). El funnel del panel SuperAdmin usa por defecto los últimos 30 días.',
+  },
+  {
+    key:     'accessLogRetentionDays',
+    type:    'integer',
+    default: 365,
+    min:     90,
+    max:     3650,
+    group:   'operational',
+    label:   'Retención de logs de accesos a credenciales (días)',
+    help:    'Después de cuántos días se borran los ProjectAccessLog (auditoría de quién reveló una contraseña/2FA de un proyecto). Piso alto (90 días) por ser un registro de auditoría de seguridad.',
+  },
 
   // ─── Scraping (Apify) ──────────────────────────────────────────────────────
   // Actores y topes de posts por red. El token de Apify (APIFY_API_TOKEN) sigue
@@ -340,6 +380,11 @@ const RETENTION_KEYS = [
   'loginHistoryRetentionDays',
   'dailyInsightRetentionDays',
   'emailLogRetentionDays',
+  'socialImageOrphanRetentionDays',
+  'serpSnapshotRetentionDays',
+  'followerLogRetentionDays',
+  'conversionEventRetentionDays',
+  'accessLogRetentionDays',
 ]
 
 module.exports = { PLATFORM_SETTINGS, SETTINGS_BY_KEY, RETENTION_KEYS }

@@ -40,6 +40,24 @@ describe('resolveWorkspace', () => {
     expect(req.workspaceMember).toEqual(MEMBER)
   })
 
+  it('camino de producción: toma el member del include en UNA sola query (sin findUnique extra)', async () => {
+    // El include filtrado por userId devuelve la membresía embebida en `members`.
+    prisma.workspace.findUnique.mockResolvedValue({ ...WORKSPACE, members: [MEMBER] })
+
+    const req  = { headers: { 'x-workspace': 'bliss' }, user: { userId: 1, isSuperAdmin: false } }
+    const res  = makeRes()
+    const next = jest.fn()
+
+    await resolveWorkspace(req, res, next)
+
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(req.workspaceMember).toEqual(MEMBER)
+    // `members` no debe filtrarse al resto del pipeline.
+    expect(req.workspace).not.toHaveProperty('members')
+    // Clave del 2.3: NO se dispara la segunda query.
+    expect(prisma.workspaceMember.findUnique).not.toHaveBeenCalled()
+  })
+
   it('retorna 400 si no hay header X-Workspace', async () => {
     const req  = { headers: {}, user: { userId: 1, isSuperAdmin: false } }
     const res  = makeRes()

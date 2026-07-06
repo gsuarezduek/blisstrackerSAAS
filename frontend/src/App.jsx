@@ -30,38 +30,47 @@ class ErrorBoundary extends React.Component {
   }
 }
 import { getWorkspaceSlug } from './api/client'
-import Landing from './pages/Landing'
-import Pricing from './pages/Pricing'
-import Login2 from './pages/Login2'
-import Register from './pages/Register'
-import Dashboard from './pages/Dashboard'
-import Admin from './pages/Admin'
-import Productivity from './pages/Productivity'
-import RRHH from './pages/RRHH'
-import RealTime from './pages/RealTime'
-import Reports from './pages/Reports'
-import MyReports from './pages/MyReports'
-import MyProjects from './pages/MyProjects'
-import ProjectDetail from './pages/ProjectDetail'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
-import VerifyEmailChange from './pages/VerifyEmailChange'
+import GlobalShortcuts from './components/GlobalShortcuts'
+
+// Eager: micro-páginas del flujo OAuth/auth (chicas y sensibles a la confiabilidad
+// en popups; no queremos un fetch de chunk en medio del handshake).
 import OAuthPopup from './pages/OAuthPopup'
 import AuthCallback from './pages/AuthCallback'
-import MyProfile from './pages/MyProfile'
-import UserProfile from './pages/UserProfile'
-import Preferences from './pages/Preferences'
-import Docs from './pages/Docs'
-import SuperAdmin from './pages/SuperAdmin'
-import JoinWorkspace from './pages/JoinWorkspace'
-import Marketing   from './pages/Marketing'
-import Billing     from './pages/Billing'
-import EOS         from './pages/EOS'
-import Gamification from './pages/Gamification'
-import OAuthResult  from './pages/OAuthResult'
-import LegalPage    from './pages/TermsPage'
-import ReportPublic from './pages/ReportPublic'
-import GlobalShortcuts from './components/GlobalShortcuts'
+import OAuthResult from './pages/OAuthResult'
+
+// Lazy: el resto de las páginas se parte en chunks propios (code splitting). Antes
+// TODO viajaba en un único bundle (SuperAdmin 4k líneas, Marketing con sus tabs, EOS…);
+// ahora cada visitante baja sólo la ruta que abre. Suspense muestra el spinner mientras
+// el chunk carga.
+const { lazy } = React
+const Landing          = lazy(() => import('./pages/Landing'))
+const Pricing          = lazy(() => import('./pages/Pricing'))
+const Login2           = lazy(() => import('./pages/Login2'))
+const Register         = lazy(() => import('./pages/Register'))
+const Dashboard        = lazy(() => import('./pages/Dashboard'))
+const Admin            = lazy(() => import('./pages/Admin'))
+const Productivity     = lazy(() => import('./pages/Productivity'))
+const RRHH             = lazy(() => import('./pages/RRHH'))
+const RealTime         = lazy(() => import('./pages/RealTime'))
+const Reports          = lazy(() => import('./pages/Reports'))
+const MyReports        = lazy(() => import('./pages/MyReports'))
+const MyProjects       = lazy(() => import('./pages/MyProjects'))
+const ProjectDetail    = lazy(() => import('./pages/ProjectDetail'))
+const ForgotPassword   = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword    = lazy(() => import('./pages/ResetPassword'))
+const VerifyEmailChange = lazy(() => import('./pages/VerifyEmailChange'))
+const MyProfile        = lazy(() => import('./pages/MyProfile'))
+const UserProfile      = lazy(() => import('./pages/UserProfile'))
+const Preferences      = lazy(() => import('./pages/Preferences'))
+const Docs             = lazy(() => import('./pages/Docs'))
+const SuperAdmin       = lazy(() => import('./pages/SuperAdmin'))
+const JoinWorkspace    = lazy(() => import('./pages/JoinWorkspace'))
+const Marketing        = lazy(() => import('./pages/Marketing'))
+const Billing          = lazy(() => import('./pages/Billing'))
+const EOS              = lazy(() => import('./pages/EOS'))
+const Gamification     = lazy(() => import('./pages/Gamification'))
+const LegalPage        = lazy(() => import('./pages/TermsPage'))
+const ReportPublic     = lazy(() => import('./pages/ReportPublic'))
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -98,6 +107,7 @@ export default function App() {
     <WorkspaceProvider>
     <AuthProvider>
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <React.Suspense fallback={<LoadingSpinner size="lg" fullPage />}>
         <Routes>
           <Route path="/login"    element={<Login2     />} />
           <Route path="/register" element={<Register   />} />
@@ -132,6 +142,7 @@ export default function App() {
           <Route path="/admin/gamification" element={<AdminRoute><Gamification /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </React.Suspense>
         <GlobalShortcuts />
       </BrowserRouter>
     </AuthProvider>

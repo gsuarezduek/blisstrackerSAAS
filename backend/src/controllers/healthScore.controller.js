@@ -1,4 +1,10 @@
 const prisma = require('../lib/prisma')
+const { createTtlCache } = require('../lib/ttlCache')
+
+// El health-score agrega GEO + keywords + GA4 + PageSpeed (snapshots mensuales, muy
+// estables) y hoy se recalcula en cada request. TTL 5 min: el desfase es irrelevante
+// para datos que cambian a lo sumo una vez al día. Clave por workspace+proyecto+mes.
+const healthCache = createTtlCache({ ttlMs: 5 * 60 * 1000, max: 300 })
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -35,6 +41,10 @@ async function getHealthScore(req, res, next) {
 
     const month     = currentMonthStr()
     const prevMonth = prevMonthStr(month)
+
+    const cacheKey = `health:${workspaceId}:${projectId}:${month}`
+    const cached = healthCache.get(cacheKey)
+    if (cached) return res.json(cached)
 
     const [geoAudit, kwRankings, snapshot, prevSnapshot, pageSpeedMobile, pageSpeedDesktop] = await Promise.all([
       // GEO: audit más reciente completado
@@ -111,7 +121,9 @@ async function getHealthScore(req, res, next) {
       }
     }
 
-    res.json({ geo, keywords, traffic, performance })
+    const payload = { geo, keywords, traffic, performance }
+    healthCache.set(cacheKey, payload)
+    res.json(payload)
   } catch (err) { next(err) }
 }
 
