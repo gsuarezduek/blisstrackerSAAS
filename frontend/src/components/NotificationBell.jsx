@@ -3,18 +3,23 @@ import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 
-// Las completadas no cuentan como "destacadas": no suman al badge ni a los
-// contadores de los pills. Van al final del listado y del array de filtros.
-const MUTED_TYPES = ['COMPLETED']
+// Cada filtro define un predicado `match`. Un filtro `muted` no destaca: no suma al
+// badge de la campana ni muestra badge en su icono (son informativos / de fondo).
+// "Seguidas" agrupa las completadas de tareas que el usuario sigue o delegó (relación
+// enviada por el backend) — esas SÍ destacan; el resto de completadas quedan muteadas.
+const isFollowedCompleted = n => n.type === 'COMPLETED' && (n.relation === 'followed' || n.relation === 'delegated')
 
 const FILTERS = [
-  { key: 'TASK_MENTION',     label: '@',      title: 'Asignaciones y menciones', types: ['TASK_MENTION'] },
-  { key: 'TASK_COMMENT',     label: '💬',     title: 'Comentarios',              types: ['TASK_COMMENT'] },
-  { key: 'BLOCKED',          label: '🔒',     title: 'Bloqueos',                 types: ['BLOCKED'] },
-  { key: 'ADDED_TO_PROJECT', label: '＋',     title: 'Agregado a proyecto',      types: ['ADDED_TO_PROJECT'] },
-  { key: 'VACATION',         label: '🏖️',     title: 'Licencias',                types: ['VACATION_REQUEST', 'VACATION_REVIEWED'] },
-  { key: 'COMPLETED',        label: '✓',      title: 'Completadas',              types: ['COMPLETED'] },
+  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones', match: n => n.type === 'TASK_MENTION' },
+  { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',              match: n => n.type === 'TASK_COMMENT' },
+  { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                 match: n => n.type === 'BLOCKED' },
+  { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',     match: isFollowedCompleted },
+  { key: 'OTHER',        label: '🔔', title: 'Otras',                    match: n => ['ADDED_TO_PROJECT', 'VACATION_REQUEST', 'VACATION_REVIEWED'].includes(n.type) },
+  { key: 'COMPLETED',    label: '✓',  title: 'Completadas',              match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
+
+// El filtro (único) al que pertenece una notificación; los predicados son disjuntos.
+const filterOf = n => FILTERS.find(f => f.match(n))
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -28,23 +33,31 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState([])
   const [open,          setOpen]          = useState(false)
   const [activeFilter,  setActiveFilter]  = useState(FILTERS[0].key)
+  const [projectQuery,  setProjectQuery]  = useState('')  // buscador de proyecto (filtro Completadas)
   const containerRef = useRef(null)
 
-  // El badge destacado ignora las completadas (no son prioritarias)
-  const unreadCount = notifications.filter(n => !n.read && !MUTED_TYPES.includes(n.type)).length
+  // El badge destacado ignora los filtros muteados (completadas de proyecto, etc.)
+  const unreadCount = notifications.filter(n => {
+    const f = filterOf(n)
+    return !n.read && f && !f.muted
+  }).length
 
   const activeFilterObj = FILTERS.find(f => f.key === activeFilter) ?? FILTERS[0]
 
-  const filtered = useMemo(
-    () => notifications.filter(n => activeFilterObj.types.includes(n.type)),
-    [notifications, activeFilterObj]
-  )
+  const filtered = useMemo(() => {
+    let list = notifications.filter(n => activeFilterObj.match(n))
+    if (activeFilterObj.key === 'COMPLETED' && projectQuery.trim()) {
+      const q = projectQuery.trim().toLowerCase()
+      list = list.filter(n => n.project?.name?.toLowerCase().includes(q))
+    }
+    return list
+  }, [notifications, activeFilterObj, projectQuery])
 
   const unreadByType = useMemo(() => {
     const counts = {}
     for (const f of FILTERS) {
-      if (!f.types || f.types.every(t => MUTED_TYPES.includes(t))) continue
-      counts[f.key] = notifications.filter(n => !n.read && f.types.includes(n.type)).length
+      if (f.muted) continue
+      counts[f.key] = notifications.filter(n => !n.read && f.match(n)).length
     }
     return counts
   }, [notifications])
@@ -76,19 +89,27 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // Marca como leídas solo las notificaciones del tipo (filtro) indicado: así el indicador
-  // de cada icono refleja lo que todavía no viste, y se limpia recién cuando entrás a ese tipo.
+  // Marca como leídas solo las notificaciones del filtro indicado (por IDs, porque un
+  // filtro puede agrupar por relación y no solo por tipo): así el indicador de cada icono
+  // refleja lo que todavía no viste, y se limpia recién cuando entrás a ese filtro.
   const markTypeRead = useCallback(async (filterKey) => {
     const f = FILTERS.find(f => f.key === filterKey)
     if (!f) return
-    const hasUnread = notifications.some(n => !n.read && f.types.includes(n.type))
-    if (!hasUnread) return
-    setNotifications(prev => prev.map(n => f.types.includes(n.type) ? { ...n, read: true } : n))
-    try { await api.post('/notifications/read', { types: f.types }) } catch {}
+    const ids = notifications.filter(n => !n.read && f.match(n)).map(n => n.id)
+    if (ids.length === 0) return
+    setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n))
+    try { await api.post('/notifications/read', { ids }) } catch {}
   }, [notifications])
+
+  async function handleMarkAllRead() {
+    if (!notifications.some(n => !n.read)) return
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    try { await api.post('/notifications/read-all') } catch {}
+  }
 
   function selectFilter(key) {
     setActiveFilter(key)
+    if (key !== 'COMPLETED') setProjectQuery('')  // el buscador es exclusivo de Completadas
     markTypeRead(key)
   }
 
@@ -96,9 +117,8 @@ export default function NotificationBell() {
     const wasOpen = open
     setOpen(prev => !prev)
     if (!wasOpen) {
-      // Al abrir, mostrar el primer tipo con no leídas (o el primero de la lista) y marcarlo visto
-      const firstUnread = FILTERS.find(f => f.types.some(t => !MUTED_TYPES.includes(t))
-        && notifications.some(n => !n.read && f.types.includes(n.type)))
+      // Al abrir, mostrar el primer filtro (no muteado) con no leídas, o el primero de la lista
+      const firstUnread = FILTERS.find(f => !f.muted && notifications.some(n => !n.read && f.match(n)))
       const initial = firstUnread?.key ?? FILTERS[0].key
       setActiveFilter(initial)
       markTypeRead(initial)
@@ -131,7 +151,16 @@ export default function NotificationBell() {
           <div className="px-4 pt-3 pb-2 border-b dark:border-gray-700">
             <div className="flex items-baseline gap-1.5 mb-2.5 min-w-0">
               <span className="font-semibold text-gray-900 dark:text-white text-sm flex-shrink-0">Notificaciones</span>
-              <span className="text-xs text-primary-600 dark:text-primary-400 font-medium truncate">· {activeFilterObj.title}</span>
+              <span className="text-xs text-primary-600 dark:text-primary-400 font-medium truncate flex-1">· {activeFilterObj.title}</span>
+              {notifications.some(n => !n.read) && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="text-[11px] text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 font-medium flex-shrink-0 transition-colors"
+                  title="Marcar todas como leídas"
+                >
+                  Marcar todas
+                </button>
+              )}
             </div>
             {/* Filter icons — solo iconos, con indicador de no leídas por tipo */}
             <div className="flex gap-1.5">
@@ -160,6 +189,16 @@ export default function NotificationBell() {
                 )
               })}
             </div>
+            {/* Buscador por proyecto — solo en Completadas */}
+            {activeFilterObj.key === 'COMPLETED' && (
+              <input
+                type="text"
+                value={projectQuery}
+                onChange={e => setProjectQuery(e.target.value)}
+                placeholder="Filtrar por proyecto…"
+                className="mt-2.5 w-full text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-300 dark:focus:ring-primary-700"
+              />
+            )}
           </div>
 
           <div className="max-h-80 overflow-y-auto">
@@ -167,7 +206,11 @@ export default function NotificationBell() {
               <div className="text-center py-10 text-gray-400 dark:text-gray-500">
                 <p className="text-2xl mb-2">🔔</p>
                 <p className="text-sm">
-                  {notifications.length === 0 ? 'Sin notificaciones todavía' : 'Sin notificaciones de este tipo'}
+                  {notifications.length === 0
+                    ? 'Sin notificaciones todavía'
+                    : (activeFilterObj.key === 'COMPLETED' && projectQuery.trim())
+                      ? 'Ningún proyecto coincide'
+                      : 'Sin notificaciones de este tipo'}
                 </p>
               </div>
             ) : (

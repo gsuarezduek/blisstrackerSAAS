@@ -295,13 +295,15 @@ async function completeTask(req, res, next) {
       where: { projectId: task.projectId, userId: { not: userId } },
       select: { userId: true },
     })
-    // Destinatarios: miembros del proyecto + seguidores de la tarea (sin duplicar, sin el actor).
+    // Destinatarios: miembros del proyecto + seguidores + quien delegó la tarea
+    // (createdById), aunque no sea miembro del proyecto. Sin duplicar, sin el actor.
     const recipients = new Set(members.map(m => m.userId))
     const followers = await prisma.taskFollow.findMany({
       where: { taskId: task.id, userId: { not: userId } },
       select: { userId: true },
     })
     for (const f of followers) recipients.add(f.userId)
+    if (task.createdById && task.createdById !== userId) recipients.add(task.createdById)
     if (recipients.size > 0) {
       const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
       await prisma.notification.createMany({

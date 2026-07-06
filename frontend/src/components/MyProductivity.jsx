@@ -3,21 +3,66 @@ import api from '../api/client'
 
 const fmtHours = h => (h >= 1 ? `${Math.round(h * 10) / 10}h` : h > 0 ? `${Math.round(h * 60)}m` : '—')
 
-// Sparkline de horas por semana (últimas 12).
+// "d/m" a partir de un weekStart "YYYY-MM-DD".
+const weekLabel = ws => {
+  if (!ws) return ''
+  const [, m, d] = ws.split('-')
+  return `${+d}/${+m}`
+}
+
+// Gráfico de horas por semana (últimas 12), con eje Y (horas) y eje X (semanas).
 function Sparkline({ history }) {
   const data = history || []
   if (data.length === 0) return null
-  const W = 480, H = 60, padT = 6, padB = 6
+  const W = 480, H = 90, padT = 6, padB = 6
   const max = Math.max(...data.map(d => d.hours), 1)
   const n = data.length
   const x = i => (n === 1 ? W / 2 : (i * W) / (n - 1))
   const y = v => padT + (H - padT - padB) - (v / max) * (H - padT - padB)
   const points = data.map((d, i) => `${x(i).toFixed(1)},${y(d.hours).toFixed(1)}`).join(' ')
+  // Fracción horizontal de cada punto (para posicionar etiquetas del eje X).
+  const xPct = i => (n === 1 ? 50 : (i * 100) / (n - 1))
+  // Etiquetas del eje X: primera, ~cada 3, y la última — sin encimar.
+  const xTicks = data.map((_, i) => i).filter(i => i % 3 === 0 || i === n - 1)
+  const fmtY = v => (v >= 1 ? `${Math.round(v * 10) / 10}h` : `${Math.round(v * 60)}m`)
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 70 }} preserveAspectRatio="none">
-      <polyline points={points} fill="none" stroke="#F7931A" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      {data.map((d, i) => i === n - 1 && <circle key={i} cx={x(i)} cy={y(d.hours)} r="3" fill="#F7931A" />)}
-    </svg>
+    <div className="flex gap-2">
+      {/* Eje Y */}
+      <div className="flex flex-col justify-between text-[10px] text-gray-400 dark:text-gray-500 tabular-nums text-right leading-none py-[2px]" style={{ height: H }}>
+        <span>{fmtY(max)}</span>
+        <span>{fmtY(max / 2)}</span>
+        <span>0</span>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="relative" style={{ height: H }}>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
+            {/* Líneas de guía horizontales: máximo, mitad, base */}
+            {[0, 0.5, 1].map(f => (
+              <line key={f} x1="0" x2={W} y1={y(max * f)} y2={y(max * f)}
+                    stroke="currentColor" strokeWidth="1" className="text-gray-200 dark:text-gray-700" vectorEffect="non-scaling-stroke" />
+            ))}
+            <polyline points={points} fill="none" stroke="#F7931A" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            {data.map((d, i) => (
+              <circle key={i} cx={x(i)} cy={y(d.hours)} r={i === n - 1 ? 3 : 2} fill="#F7931A" />
+            ))}
+          </svg>
+        </div>
+        {/* Eje X */}
+        <div className="relative h-4 mt-1">
+          {xTicks.map(i => {
+            const edge = i === 0 ? 'translate-x-0' : i === n - 1 ? '-translate-x-full' : '-translate-x-1/2'
+            return (
+              <span key={i} className={`absolute text-[10px] text-gray-400 dark:text-gray-500 tabular-nums whitespace-nowrap ${edge}`}
+                    style={{ left: `${xPct(i)}%` }}>
+                {weekLabel(data[i].weekStart)}
+              </span>
+            )
+          })}
+        </div>
+      </div>
+    </div>
   )
 }
 
