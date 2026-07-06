@@ -157,7 +157,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
   const teamOptions  = members.filter(m => projectMemberIds.has(m.id))
   const otherOptions = members.filter(m => !projectMemberIds.has(m.id))
 
-  async function doSubmit() {
+  async function doSubmit(startNow = false) {
     setLoading(true)
     try {
       const body = { description: description.trim(), projectId }
@@ -173,7 +173,15 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
           ...(endMode === 'custom' && endDate ? { endDate } : {}),
         }
       }
-      const { data } = await api.post('/tasks', body)
+      let { data } = await api.post('/tasks', body)
+      if (startNow) {
+        // La tarea ya quedó creada; si no se pudo iniciar (p. ej. ya hay una en
+        // curso), la agregamos igual como pendiente.
+        try {
+          const res = await api.patch(`/tasks/${data.id}/start`)
+          data = res.data
+        } catch { /* se agrega sin iniciar */ }
+      }
       onAdd(data)
       onClose()
     } finally {
@@ -195,8 +203,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
     return ''
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault()
+  async function attemptSubmit(startNow) {
     if (!description.trim() || !projectId) return
     const err = validateOptions()
     if (err) { setOptErr(err); return }
@@ -205,8 +212,17 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
       setShowGtdWarning(true)
       return
     }
-    await doSubmit()
+    await doSubmit(startNow)
   }
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    attemptSubmit(false)
+  }
+
+  // "Iniciar ahora" solo aplica a tareas normales asignadas a uno mismo:
+  // no se puede iniciar una tarea futura/recurrente ni la de otra persona.
+  const canStartNow = taskMode === 'normal' && (!assigneeId || assigneeId === String(user?.id))
 
   const submitLabel = loading ? 'Guardando...'
     : showGtdWarning ? 'Guardar igual'
@@ -214,10 +230,22 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
     : taskMode === 'future' ? 'Programar tarea'
     : 'Agregar tarea'
 
+  const startLabel = loading ? 'Guardando...' : showGtdWarning ? 'Iniciar igual' : 'Iniciar ahora'
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Nueva tarea</h2>
+      <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="absolute top-4 right-4 p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 pr-8">Nueva tarea</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
@@ -294,13 +322,19 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
             </div>
           )}
           <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            >
-              Cancelar
-            </button>
+            {canStartNow && (
+              <button
+                type="button"
+                onClick={() => attemptSubmit(true)}
+                disabled={loading || !projectId}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60 bg-green-600 hover:bg-green-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                </svg>
+                {startLabel}
+              </button>
+            )}
             <button
               type="submit"
               disabled={loading || !projectId}
