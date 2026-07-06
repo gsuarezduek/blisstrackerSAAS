@@ -1,6 +1,6 @@
 const router = require('express').Router()
 const {
-  adjustVacationDays, getAdjustmentHistory, listRequests, reviewRequest,
+  adjustVacationDays, getAdjustmentHistory, listRequests, reviewRequest, editRequest,
   getMyVacation, createRequest,
 } = require('../controllers/vacation.controller')
 const { auth } = require('../middleware/auth')
@@ -18,5 +18,6 @@ router.patch('/admin/adjust/:userId',    workspaceAdminOnly, adjustVacationDays)
 router.get('/admin/adjustments/:userId', workspaceAdminOnly, getAdjustmentHistory)
 router.get('/admin/requests',            workspaceAdminOnly, listRequests)
 router.patch('/admin/requests/:id',      workspaceAdminOnly, reviewRequest)
+router.patch('/admin/requests/:id/edit', workspaceAdminOnly, editRequest)
 
 module.exports = router

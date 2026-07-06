@@ -149,6 +149,100 @@ async function reviewRequest(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * PATCH /api/vacation/admin/requests/:id/edit
+ * Body: { startDate?, endDate?, type?, status?, reviewNote? }
+ * Edita una solicitud ya existente (incluso ya revisada): permite corregir
+ * fechas/tipo y cambiar el estado entre approved/rejected/pending.
+ * → notificación VACATION_REVIEWED al usuario informando el cambio.
+ */
+async function editRequest(req, res, next) {
+  try {
+    const id          = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const adminId     = req.user.userId
+    const { startDate, endDate, type, status, reviewNote } = req.body
+
+    const VALID_TYPES = ['vacaciones','estudio','maternidad','paternidad','enfermedad','duelo','mudanza','otro']
+
+    const request = await prisma.vacationRequest.findFirst({
+      where: { id, workspaceId },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    })
+    if (!request) return res.status(404).json({ error: 'Solicitud no encontrada' })
+
+    const data = {}
+
+    // Fechas — se validan contra el valor final (nuevo o el ya guardado)
+    const finalStart = startDate !== undefined ? startDate : request.startDate
+    const finalEnd   = endDate   !== undefined ? endDate   : request.endDate
+    if (startDate !== undefined || endDate !== undefined) {
+      if (!finalStart || !finalEnd) {
+        return res.status(400).json({ error: 'Las fechas de inicio y fin son requeridas' })
+      }
+      if (finalStart > finalEnd) {
+        return res.status(400).json({ error: 'La fecha de inicio debe ser anterior a la de fin' })
+      }
+      data.startDate = finalStart
+      data.endDate   = finalEnd
+    }
+
+    if (type !== undefined) {
+      if (!VALID_TYPES.includes(type)) {
+        return res.status(400).json({ error: 'Tipo de licencia inválido' })
+      }
+      data.type = type
+    }
+
+    if (status !== undefined) {
+      if (!['approved', 'rejected', 'pending'].includes(status)) {
+        return res.status(400).json({ error: 'status debe ser "approved", "rejected" o "pending"' })
+      }
+      data.status = status
+      if (status === 'pending') {
+        data.reviewedById = null
+        data.reviewedAt   = null
+      } else {
+        data.reviewedById = adminId
+        data.reviewedAt   = new Date()
+      }
+    }
+
+    if (reviewNote !== undefined) {
+      data.reviewNote = reviewNote?.trim() || null
+    }
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'No hay cambios para aplicar' })
+    }
+
+    const updated = await prisma.vacationRequest.update({
+      where: { id },
+      data,
+      include: {
+        user:       { select: { id: true, name: true, avatar: true } },
+        reviewedBy: { select: { id: true, name: true } },
+      },
+    })
+
+    // Notificación in-app al usuario avisando que su solicitud fue modificada
+    const finalStatus = data.status ?? request.status
+    const dateRange = `${updated.startDate}${updated.startDate !== updated.endDate ? ' → ' + updated.endDate : ''}`
+    const statusWord = finalStatus === 'approved' ? 'aprobada' : finalStatus === 'rejected' ? 'rechazada' : 'marcada como pendiente'
+    prisma.notification.create({
+      data: {
+        workspaceId,
+        userId:  request.user.id,
+        actorId: adminId,
+        type:    'VACATION_REVIEWED',
+        message: `Tu solicitud de licencia fue modificada (${dateRange}) y quedó ${statusWord}.${updated.reviewNote ? ' Nota: ' + updated.reviewNote : ''}`,
+      },
+    }).catch(err => console.error('[Vacation] Error al crear notificación de edición:', err.message))
+
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
 // ─── USER ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -257,4 +351,4 @@ async function createRequest(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { adjustVacationDays, getAdjustmentHistory, listRequests, reviewRequest, getMyVacation, createRequest }
+module.exports = { adjustVacationDays, getAdjustmentHistory, listRequests, reviewRequest, editRequest, getMyVacation, createRequest }
