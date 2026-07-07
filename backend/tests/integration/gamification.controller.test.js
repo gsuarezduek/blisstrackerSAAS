@@ -144,6 +144,36 @@ describe('GET /api/gamification/active — votación en curso', () => {
     expect(g.leaderboard.subjects[0]).not.toHaveProperty('score')
     expect(g.leaderboard.subjects.map((s) => s.label)).toEqual(['Ana', 'Beto']) // orden por nombre
   })
+
+  it('un finalizado reciente (con finishedAt) se sigue mostrando', async () => {
+    mockWorkspace('member')
+    prisma.game.findMany.mockResolvedValue([voteGame({
+      status: 'finished', winnerSubject: { subjectId: '2', label: 'Ana', score: 3 },
+      finishedAt: new Date(), // recién finalizado
+    })])
+    prisma.gameVote.findMany.mockResolvedValue([])
+    prisma.workspaceMember.findMany.mockResolvedValue([{ userId: 2, active: true, user: { id: 2, name: 'Ana', avatar: null } }])
+
+    const res = await request(app)
+      .get('/api/gamification/active')
+      .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
+    expect(res.body.games).toHaveLength(1)
+    expect(res.body.games[0].finished).toBe(true)
+  })
+
+  it('un finalizado sin finishedAt (o reordenado) NO se muestra', async () => {
+    mockWorkspace('member')
+    prisma.game.findMany.mockResolvedValue([voteGame({
+      status: 'finished', winnerSubject: { subjectId: '2', label: 'Ana', score: 3 },
+      finishedAt: null, updatedAt: new Date(), // updatedAt reciente no debe revivirlo
+    })])
+    prisma.gameVote.findMany.mockResolvedValue([])
+
+    const res = await request(app)
+      .get('/api/gamification/active')
+      .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
+    expect(res.body.games).toHaveLength(0)
+  })
 })
 
 describe('GET /api/gamification/games/:id/leaderboard — finalizado revela', () => {

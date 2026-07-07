@@ -20,7 +20,7 @@ function tzOf(req) { return req.workspace.timezone || 'America/Argentina/Buenos_
 const GAME_FIELDS = {
   id: true, workspaceId: true, type: true, title: true, description: true, prize: true,
   subjectType: true, scoring: true, config: true, visibilityRule: true,
-  startDate: true, endDate: true, status: true, sortOrder: true, winnerSubject: true,
+  startDate: true, endDate: true, status: true, sortOrder: true, finishedAt: true, winnerSubject: true,
   imageMimeType: true, createdById: true, createdAt: true, updatedAt: true,
 }
 const GAME_SELECT = GAME_FIELDS
@@ -49,6 +49,7 @@ function shapeGame(g, { teams } = {}) {
     endDate: g.endDate,
     status: g.status,
     sortOrder: g.sortOrder ?? 0,
+    finishedAt: g.finishedAt || null,
     winnerSubject: g.winnerSubject || null,
     hasImage: !!g.imageMimeType,
     createdAt: g.createdAt,
@@ -343,7 +344,7 @@ async function finishGame(req, res, next) {
     const winner = await resolveWinner(game)
     const updated = await prisma.game.update({
       where: { id: game.id },
-      data: { status: 'finished', winnerSubject: winner },
+      data: { status: 'finished', winnerSubject: winner, finishedAt: new Date() },
       select: GAME_SELECT_TEAMS,
     })
     // Notificar al equipo por email (fire-and-forget: nunca bloquea ni rompe el finish).
@@ -457,8 +458,10 @@ async function getActive(req, res, next) {
     })
     const shown = games.filter((g) => {
       if (g.status === 'active') return isGameVisible(g, now, tz)
-      // Finalizado: se sigue mostrando un tiempo para celebrar al ganador.
-      return g.winnerSubject && (now - new Date(g.updatedAt)) <= RECENT_MS
+      // Finalizado: se sigue mostrando un tiempo para celebrar al ganador. La ventana se
+      // mide desde finishedAt (no updatedAt), así editar/reordenar un finalizado no lo revive.
+      // Los finalizados sin finishedAt (legacy) ya no se muestran.
+      return g.winnerSubject && g.finishedAt && (now - new Date(g.finishedAt)) <= RECENT_MS
     })
 
     // Votos del usuario actual en estos juegos.
