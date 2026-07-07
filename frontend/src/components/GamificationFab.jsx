@@ -313,9 +313,12 @@ function gameImageUrl(game) {
   return `${API_URL}/api/gamification/games/${game.id}/image?v=${encodeURIComponent(game.updatedAt || '')}`
 }
 
+// startDate/endDate se guardan como fecha-solo (medianoche UTC representando un día
+// calendario). Se formatea en UTC para mostrar ese mismo día — sin timeZone: 'UTC' el
+// navegador lo convierte a su huso local (ART, UTC-3) y muestra el día anterior.
 function fmtDate(d) {
   if (!d) return ''
-  try { return new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) } catch { return '' }
+  try { return new Date(d).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', timeZone: 'UTC' }) } catch { return '' }
 }
 
 // Cuenta regresiva hasta el cierre. endDate es fecha (medianoche UTC) y se considera
