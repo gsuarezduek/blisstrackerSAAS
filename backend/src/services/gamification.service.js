@@ -259,6 +259,11 @@ async function marketingMetricValue(metric, project, game, months, tz) {
 }
 
 // Delta de seguidores en el período (logs diarios, exacto por rango de fechas).
+// El baseline es el ÚLTIMO log estrictamente anterior a `fromStr` (el cierre del período
+// previo), igual que la lista general cross-proyecto (marketingSummary.newFollowersByProject):
+// así "seguidores nuevos" cuenta también el salto entre el cierre del mes anterior y el primer
+// log del período, y no se pierde crecimiento si falta el log del primer día. Fallback: si no
+// hay ningún log antes del período, se usa el primer log dentro del rango.
 async function followerDelta(network, projectId, game, tz) {
   const model = prisma[FOLLOWER_LOG[network]]
   if (!model) return { value: null, detail: {} }
@@ -268,8 +273,24 @@ async function followerDelta(network, projectId, game, tz) {
     where: { projectId, ...(fromStr || toStr ? { date: { ...(fromStr ? { gte: fromStr } : {}), ...(toStr ? { lte: toStr } : {}) } } : {}) },
     orderBy: { date: 'asc' },
   })
-  if (logs.length < 2) return { value: null, detail: { insufficientData: true, endFollowers: logs[0]?.followersCount ?? null } }
-  const start = logs[0].followersCount, end = logs[logs.length - 1].followersCount
+  if (!logs.length) return { value: null, detail: { insufficientData: true, endFollowers: null } }
+  const end = logs[logs.length - 1].followersCount
+
+  // Baseline = cierre del período previo (último log antes del inicio).
+  let start = null
+  if (fromStr) {
+    const prev = await model.findFirst({
+      where: { projectId, date: { lt: fromStr } },
+      orderBy: { date: 'desc' },
+      select: { followersCount: true },
+    })
+    if (prev) start = prev.followersCount
+  }
+  // Fallback: sin log previo, se ancla en el primer log dentro del rango.
+  if (start == null) {
+    if (logs.length < 2) return { value: null, detail: { insufficientData: true, endFollowers: end } }
+    start = logs[0].followersCount
+  }
   return { value: end - start, detail: { startFollowers: start, endFollowers: end } }
 }
 

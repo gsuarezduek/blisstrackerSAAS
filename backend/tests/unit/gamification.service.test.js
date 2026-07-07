@@ -7,10 +7,10 @@ jest.mock('../../src/lib/prisma', () => ({
   gameVote:             { findMany: jest.fn() },
   gameScore:            { findMany: jest.fn() },
   gameQuizSubmission:   { findMany: jest.fn() },
-  instagramFollowerLog: { findMany: jest.fn() },
-  tikTokFollowerLog:    { findMany: jest.fn() },
-  linkedinFollowerLog:  { findMany: jest.fn() },
-  facebookFollowerLog:  { findMany: jest.fn() },
+  instagramFollowerLog: { findMany: jest.fn(), findFirst: jest.fn() },
+  tikTokFollowerLog:    { findMany: jest.fn(), findFirst: jest.fn() },
+  linkedinFollowerLog:  { findMany: jest.fn(), findFirst: jest.fn() },
+  facebookFollowerLog:  { findMany: jest.fn(), findFirst: jest.fn() },
   instagramSnapshot:    { findMany: jest.fn() },
   tikTokSnapshot:       { findMany: jest.fn() },
   linkedinSnapshot:     { findMany: jest.fn() },
@@ -146,27 +146,42 @@ describe('computeLeaderboard — competencia de marketing (followers_instagram)'
     config: { metric: 'followers_instagram' }, startDate: '2026-06-01T00:00:00Z', endDate: '2026-06-30T00:00:00Z',
   }
 
-  test('calcula el delta de seguidores por proyecto y ordena; incluye meta', async () => {
+  test('calcula el delta de seguidores por proyecto (baseline = cierre del período previo) y ordena; incluye meta', async () => {
     prisma.project.findMany.mockResolvedValue([
       { id: 10, name: 'Proyecto X' },
       { id: 11, name: 'Proyecto Y' },
     ])
+    // Logs dentro del período (junio): el último es el "end".
     prisma.instagramFollowerLog.findMany.mockImplementation(({ where }) => {
       if (where.projectId === 10) return Promise.resolve([
-        { followersCount: 1000, date: '2026-06-01' }, { followersCount: 1150, date: '2026-06-30' },
+        { followersCount: 1020, date: '2026-06-01' }, { followersCount: 1150, date: '2026-06-30' },
       ])
       return Promise.resolve([
-        { followersCount: 500, date: '2026-06-01' }, { followersCount: 540, date: '2026-06-29' },
+        { followersCount: 505, date: '2026-06-01' }, { followersCount: 540, date: '2026-06-29' },
       ])
     })
+    // Baseline: cierre del período previo (último log anterior al 1 de junio).
+    prisma.instagramFollowerLog.findFirst.mockImplementation(({ where }) =>
+      Promise.resolve(where.projectId === 10 ? { followersCount: 1000 } : { followersCount: 500 }))
     const lb = await computeLeaderboard(game)
     expect(lb.subjects.map((s) => [s.label, s.score])).toEqual([['Proyecto X', 150], ['Proyecto Y', 40]])
     expect(lb.metric).toMatchObject({ key: 'followers_instagram', growth: true })
   })
 
+  test('sin log previo al período, ancla en el primer log del rango (fallback)', async () => {
+    prisma.project.findMany.mockResolvedValue([{ id: 10, name: 'Proyecto X' }])
+    prisma.instagramFollowerLog.findMany.mockResolvedValue([
+      { followersCount: 1000, date: '2026-06-01' }, { followersCount: 1150, date: '2026-06-30' },
+    ])
+    prisma.instagramFollowerLog.findFirst.mockResolvedValue(null)
+    const lb = await computeLeaderboard(game)
+    expect(lb.subjects[0].score).toBe(150)
+  })
+
   test('proyecto sin datos suficientes queda en 0 con warning', async () => {
     prisma.project.findMany.mockResolvedValue([{ id: 12, name: 'Proyecto Z' }])
     prisma.instagramFollowerLog.findMany.mockResolvedValue([{ followersCount: 800, date: '2026-06-10' }])
+    prisma.instagramFollowerLog.findFirst.mockResolvedValue(null)
     const lb = await computeLeaderboard(game)
     expect(lb.subjects[0].score).toBe(0)
     expect(lb.warnings.length).toBeGreaterThan(0)
