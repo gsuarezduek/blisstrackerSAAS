@@ -2269,6 +2269,7 @@ model Game {
   startDate      DateTime?
   endDate        DateTime?
   status         String    @default("draft") // "draft" | "active" | "finished" | "archived"
+  sortOrder      Int       @default(0) // orden manual (asc); a igualdad, createdAt desc. Gestionado desde el panel admin.
   winnerSubject  Json? // ganador resuelto al finalizar: { subjectId, label, score }
   imageData      Bytes? // imagen/banner opcional del juego (se omite en los listados)
   imageMimeType  String?

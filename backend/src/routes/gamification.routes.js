@@ -23,6 +23,7 @@ router.post('/games/:id/quiz/submit', ctrl.submitQuiz)
 // ─── Solo admin/owner ─────────────────────────────────────────────────────────
 router.get('/games', workspaceAdminOnly, ctrl.listGames)
 router.post('/games', workspaceAdminOnly, ctrl.createGame)
+router.put('/games/reorder', workspaceAdminOnly, ctrl.reorderGames)
 router.get('/games/:id', workspaceAdminOnly, ctrl.getGame)
 router.patch('/games/:id', workspaceAdminOnly, ctrl.updateGame)
 router.delete('/games/:id', workspaceAdminOnly, ctrl.deleteGame)

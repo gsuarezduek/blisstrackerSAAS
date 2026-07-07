@@ -1,7 +1,7 @@
 jest.mock('../../src/lib/prisma', () => ({
   workspace:            { findUnique: jest.fn() },
   workspaceMember:      { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
-  game:                 { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
+  game:                 { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), aggregate: jest.fn() },
   gameVote:             { findMany: jest.fn(), upsert: jest.fn(), count: jest.fn() },
   gameScore:            { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn() },
   gameQuestion:         { findMany: jest.fn(), deleteMany: jest.fn(), createMany: jest.fn(), groupBy: jest.fn() },
@@ -41,7 +41,10 @@ function voteGame(overrides = {}) {
   }
 }
 
-beforeEach(() => { jest.clearAllMocks() })
+beforeEach(() => {
+  jest.clearAllMocks()
+  prisma.game.aggregate.mockResolvedValue({ _max: { sortOrder: 0 } })
+})
 
 // ─── Crear ────────────────────────────────────────────────────────────────────
 
@@ -77,6 +80,43 @@ describe('POST /api/gamification/games', () => {
       .post('/api/gamification/games')
       .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
       .send({ type: 'employee_of_month_vote', title: 'X' })
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('PUT /api/gamification/games/reorder', () => {
+  it('asigna sortOrder según el orden recibido, solo a juegos del workspace', async () => {
+    mockWorkspace('admin')
+    // El juego 99 es de otro workspace: no está en owned → se ignora.
+    prisma.game.findMany.mockResolvedValue([{ id: 3 }, { id: 1 }])
+
+    const res = await request(app)
+      .put('/api/gamification/games/reorder')
+      .set('Authorization', authHeader(1, 'admin')).set('X-Workspace', SLUG)
+      .send({ orderedIds: [3, 1, 99] })
+
+    expect(res.status).toBe(200)
+    // Se actualiza 3 → sortOrder 0 y 1 → sortOrder 1 (99 se descarta).
+    expect(prisma.game.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { sortOrder: 0 } })
+    expect(prisma.game.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { sortOrder: 1 } })
+    expect(prisma.game.update).toHaveBeenCalledTimes(2)
+  })
+
+  it('rechaza body sin orderedIds', async () => {
+    mockWorkspace('admin')
+    const res = await request(app)
+      .put('/api/gamification/games/reorder')
+      .set('Authorization', authHeader(1, 'admin')).set('X-Workspace', SLUG)
+      .send({})
+    expect(res.status).toBe(400)
+  })
+
+  it('un miembro no-admin no puede reordenar', async () => {
+    mockWorkspace('member')
+    const res = await request(app)
+      .put('/api/gamification/games/reorder')
+      .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
+      .send({ orderedIds: [1, 2] })
     expect(res.status).toBe(403)
   })
 })

@@ -1,10 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
+import DOMPurify from 'dompurify'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { avatarUrl } from '../utils/avatarUrl'
+import './situation-editor.css'
 
 const MEDAL = ['🥇', '🥈', '🥉']
+
+// La descripción del juego puede ser HTML (RichTextEditor) o texto plano (legacy).
+const looksLikeHtml = (s) => /<[a-z][\s\S]*>/i.test(s || '')
 
 /**
  * Botón flotante de Gamification (🏆). Solo aparece si el feature flag está
@@ -126,7 +131,11 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h4 className="font-semibold text-gray-900 dark:text-white leading-snug">{game.title}</h4>
-          {game.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{game.description}</p>}
+          {game.description && (
+            looksLikeHtml(game.description)
+              ? <div className="situation-content text-xs text-gray-500 dark:text-gray-400 mt-0.5" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(game.description) }} />
+              : <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 whitespace-pre-line">{game.description}</p>
+          )}
           {game.prize && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">🎁 {game.prize}</p>}
           {game.endDate && !game.finished && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">

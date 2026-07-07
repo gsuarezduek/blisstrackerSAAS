@@ -20,7 +20,7 @@ function tzOf(req) { return req.workspace.timezone || 'America/Argentina/Buenos_
 const GAME_FIELDS = {
   id: true, workspaceId: true, type: true, title: true, description: true, prize: true,
   subjectType: true, scoring: true, config: true, visibilityRule: true,
-  startDate: true, endDate: true, status: true, winnerSubject: true,
+  startDate: true, endDate: true, status: true, sortOrder: true, winnerSubject: true,
   imageMimeType: true, createdById: true, createdAt: true, updatedAt: true,
 }
 const GAME_SELECT = GAME_FIELDS
@@ -48,6 +48,7 @@ function shapeGame(g, { teams } = {}) {
     startDate: g.startDate,
     endDate: g.endDate,
     status: g.status,
+    sortOrder: g.sortOrder ?? 0,
     winnerSubject: g.winnerSubject || null,
     hasImage: !!g.imageMimeType,
     createdAt: g.createdAt,
@@ -107,7 +108,7 @@ async function listGames(req, res, next) {
     const games = await prisma.game.findMany({
       where: { workspaceId: req.workspace.id },
       select: GAME_SELECT_TEAMS,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     })
     const now = new Date(), tz = tzOf(req)
     res.json({
@@ -136,6 +137,10 @@ async function createGame(req, res, next) {
     const metricError = validateMarketingConfig(def, req.body)
     if (metricError) return res.status(400).json({ error: metricError })
 
+    // Los nuevos van al final del orden manual (no desplazan el orden ya definido).
+    const last = await prisma.game.aggregate({ where: { workspaceId: req.workspace.id }, _max: { sortOrder: true } })
+    const sortOrder = (last._max.sortOrder ?? -1) + 1
+
     const game = await prisma.game.create({
       data: {
         workspaceId: req.workspace.id,
@@ -150,6 +155,7 @@ async function createGame(req, res, next) {
         startDate: parseDate(req.body.startDate),
         endDate: parseDate(req.body.endDate),
         status: req.body.status === 'active' ? 'active' : 'draft',
+        sortOrder,
         createdById: req.user.userId,
       },
       select: GAME_SELECT_TEAMS,
@@ -293,6 +299,33 @@ async function updateGame(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * PUT /api/gamification/games/reorder (admin)
+ * Body: { orderedIds: number[] } — ids del workspace en el orden deseado.
+ * Asigna sortOrder = índice a cada juego (los no listados quedan al final por createdAt).
+ */
+async function reorderGames(req, res, next) {
+  try {
+    const raw = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds : null
+    if (!raw) return res.status(400).json({ error: 'orderedIds debe ser un array' })
+    const ids = [...new Set(raw.map(Number).filter(Number.isInteger))]
+
+    // Solo se reordenan juegos del propio workspace (evita tocar ajenos).
+    const owned = await prisma.game.findMany({
+      where: { id: { in: ids }, workspaceId: req.workspace.id },
+      select: { id: true },
+    })
+    const ownedIds = new Set(owned.map((g) => g.id))
+    const finalOrder = ids.filter((id) => ownedIds.has(id))
+
+    await prisma.$transaction(
+      finalOrder.map((id, i) =>
+        prisma.game.update({ where: { id }, data: { sortOrder: i } })),
+    )
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
 /** DELETE /api/gamification/games/:id (admin) */
 async function deleteGame(req, res, next) {
   try {
@@ -420,7 +453,7 @@ async function getActive(req, res, next) {
     const games = await prisma.game.findMany({
       where: { workspaceId: req.workspace.id, status: { in: ['active', 'finished'] } },
       select: GAME_SELECT_TEAMS,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     })
     const shown = games.filter((g) => {
       if (g.status === 'active') return isGameVisible(g, now, tz)
@@ -646,7 +679,7 @@ async function serveImage(req, res, next) {
 
 module.exports = {
   getCatalog,
-  listGames, createGame, getGame, updateGame, deleteGame, finishGame,
+  listGames, createGame, getGame, updateGame, reorderGames, deleteGame, finishGame,
   createTeam, updateTeam, deleteTeam,
   setScores,
   putQuestions, getQuiz, submitQuiz,

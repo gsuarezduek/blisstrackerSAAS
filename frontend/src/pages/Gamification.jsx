@@ -1,7 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
+import DOMPurify from 'dompurify'
 import api from '../api/client'
 import Navbar from '../components/Navbar'
+import RichTextEditor from '../components/RichTextEditor'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import '../components/situation-editor.css'
+
+// La descripción puede ser HTML (RichTextEditor) o texto plano (desafíos legacy).
+// Se detecta HTML por la presencia de un tag; el texto plano se renderiza respetando
+// los saltos de línea con `whitespace-pre-line`.
+const looksLikeHtml = (s) => /<[a-z][\s\S]*>/i.test(s || '')
+// El editor devuelve "<p></p>" cuando está vacío: se trata como sin descripción.
+const htmlIsEmpty = (s) => !(s || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
 
 const WEEKDAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
@@ -76,6 +86,18 @@ export default function Gamification() {
     await api.delete(`/gamification/games/${game.id}`)
     load()
   }
+  // Sube (dir=-1) o baja (dir=+1) un juego en el orden global y lo persiste.
+  async function move(game, dir) {
+    const idx = games.findIndex((g) => g.id === game.id)
+    const swap = idx + dir
+    if (idx < 0 || swap < 0 || swap >= games.length) return
+    const next = [...games]
+    ;[next[idx], next[swap]] = [next[swap], next[idx]]
+    setGames(next) // optimista
+    try {
+      await api.put('/gamification/games/reorder', { orderedIds: next.map((g) => g.id) })
+    } catch { load() } // revertir si falla
+  }
 
   if (flagLoading) return null
   if (!enabled) {
@@ -143,10 +165,22 @@ export default function Gamification() {
           </div>
         ) : (
           <div className="space-y-3">
-            {games.filter((g) => filter === 'all' || g.status === filter).map((g) => (
+            {games.length > 1 && (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                {filter === 'all'
+                  ? 'Usá ▲▼ para ordenar los juegos. El orden se respeta también en el botón flotante 🏆 que ve el equipo.'
+                  : 'Para reordenar los juegos, cambiá el filtro a «Todos».'}
+              </p>
+            )}
+            {games.filter((g) => filter === 'all' || g.status === filter).map((g, i, arr) => (
               <GameCard
                 key={g.id}
                 game={g}
+                reorderable={filter === 'all'}
+                canMoveUp={filter === 'all' && i > 0}
+                canMoveDown={filter === 'all' && i < arr.length - 1}
+                onMoveUp={() => move(g, -1)}
+                onMoveDown={() => move(g, +1)}
                 onEdit={() => setEditing(g)}
                 onScores={() => setScoresFor(g)}
                 onDetail={() => setDetailFor(g)}
@@ -190,10 +224,18 @@ export default function Gamification() {
 
 // ─── Card de un juego ─────────────────────────────────────────────────────────
 
-function GameCard({ game, onEdit, onScores, onDetail, onActivate, onPause, onFinish, onRemove }) {
+function GameCard({ game, reorderable, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onEdit, onScores, onDetail, onActivate, onPause, onFinish, onRemove }) {
   const pill = STATUS_PILL[game.status] || STATUS_PILL.draft
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+      <div className="flex items-start gap-3">
+        {reorderable && (
+          <div className="flex flex-col gap-1 shrink-0 pt-0.5">
+            <ReorderBtn title="Subir" disabled={!canMoveUp} onClick={onMoveUp}>▲</ReorderBtn>
+            <ReorderBtn title="Bajar" disabled={!canMoveDown} onClick={onMoveDown}>▼</ReorderBtn>
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -206,7 +248,11 @@ function GameCard({ game, onEdit, onScores, onDetail, onActivate, onPause, onFin
             <span className="text-[11px] text-gray-400">{game.typeName}</span>
           </div>
           <h3 className="font-semibold text-gray-900 dark:text-white truncate">{game.title}</h3>
-          {game.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{game.description}</p>}
+          {game.description && (
+            looksLikeHtml(game.description)
+              ? <div className="situation-content text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(game.description) }} />
+              : <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2 whitespace-pre-line">{game.description}</p>
+          )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
             <span>👥 {SUBJECT_LABEL[game.subjectType]}</span>
             <span>👁 {visibilitySummary(game.visibilityRule)}</span>
@@ -225,7 +271,28 @@ function GameCard({ game, onEdit, onScores, onDetail, onActivate, onPause, onFin
         {game.status !== 'finished' && <Btn onClick={onFinish}>🏁 Finalizar</Btn>}
         <Btn onClick={onRemove} kind="danger">🗑 Eliminar</Btn>
       </div>
+        </div>
+      </div>
     </div>
+  )
+}
+
+// Flecha de reordenamiento (▲/▼). Deshabilitada en los extremos de la lista.
+function ReorderBtn({ children, onClick, disabled, title }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`w-6 h-6 flex items-center justify-center text-xs rounded-md border transition-colors ${
+        disabled
+          ? 'text-gray-300 dark:text-gray-600 border-gray-100 dark:border-gray-700 cursor-not-allowed'
+          : 'text-gray-500 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -314,7 +381,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
 
     const payload = {
       title: title.trim(),
-      description: description.trim() || null,
+      description: htmlIsEmpty(description) ? null : description,
       prize: prize.trim() || null,
       config,
       visibilityRule: vis,
@@ -384,7 +451,13 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: ¿Qué proyecto suma más seguidores en junio?" className={inputCls} />
           </Field>
           <Field label="Descripción (opcional)">
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={inputCls} />
+            <RichTextEditor
+              defaultContent={description}
+              onChange={setDescription}
+              minHeight={100}
+              autoFocus={false}
+            />
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">Podés usar negrita, listas y saltos de línea para que se lea mejor.</p>
           </Field>
           <Field label="Imagen (opcional)">
             <p className="text-xs text-gray-400 mb-1.5">Recomendado: <strong>1200 × 400 px</strong> (relación 3:1, apaisada). PNG, JPG o WebP, hasta 5 MB.</p>
