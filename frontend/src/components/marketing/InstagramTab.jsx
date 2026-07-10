@@ -853,9 +853,10 @@ function StoriesSection({ stories, isCurrentMonth, onCapture, capturing }) {
         </div>
       ) : (
         <div className="p-5 space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <StoryKpi label="Publicadas" value={fmtNum(stories.count)} />
             {stories.avgReach      != null && <StoryKpi label="Alcance prom." value={fmtK(stories.avgReach)} />}
+            {stories.totalReach    != null && <StoryKpi label="Alcance total" value={fmtK(stories.totalReach)} />}
             {stories.avgViews      != null && <StoryKpi label="Vistas prom."  value={fmtK(stories.avgViews)} />}
             {stories.totalReplies  != null && <StoryKpi label="Respuestas"    value={fmtNum(stories.totalReplies)} />}
             {stories.retentionRate != null && <StoryKpi label="Retención"     value={`${stories.retentionRate}%`} />}
