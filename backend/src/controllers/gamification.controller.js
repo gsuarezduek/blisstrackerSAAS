@@ -235,11 +235,21 @@ async function adminGameDetail(game) {
     ])
     const names = await memberNameMap(game.workspaceId)
     const maxScore = questions.reduce((s, q) => s + (q.points || 0), 0)
+    const openIds = new Set(questions.filter((q) => (q.kind || 'multiple_choice') === 'open').map((q) => String(q.id)))
     return {
       questions: questions.map(shapeQuestion),
       participation: { submitted: subs.length, eligible },
       maxScore,
-      submissions: subs.map((s) => ({ userId: s.userId, userName: names.get(s.userId) || `Usuario ${s.userId}`, score: s.score, submittedAt: s.submittedAt })),
+      submissions: subs.map((s) => ({
+        userId: s.userId,
+        userName: names.get(s.userId) || `Usuario ${s.userId}`,
+        score: s.score,
+        submittedAt: s.submittedAt,
+        // Respuestas de texto libre (solo de las preguntas abiertas), para que el admin las lea.
+        openAnswers: (Array.isArray(s.answers) ? s.answers : [])
+          .filter((a) => a && openIds.has(String(a.questionId)) && a.text)
+          .map((a) => ({ questionId: String(a.questionId), text: String(a.text) })),
+      })),
     }
   }
   return {}
@@ -255,7 +265,7 @@ async function memberNameMap(workspaceId) {
 
 // Pregunta para el admin (incluye la respuesta correcta).
 function shapeQuestion(q) {
-  return { id: q.id, order: q.order, text: q.text, options: Array.isArray(q.options) ? q.options : [], correctOptionId: q.correctOptionId, points: q.points }
+  return { id: q.id, order: q.order, kind: q.kind || 'multiple_choice', text: q.text, options: Array.isArray(q.options) ? q.options : [], correctOptionId: q.correctOptionId, points: q.points }
 }
 
 /** PATCH /api/gamification/games/:id (admin) */
@@ -555,13 +565,18 @@ async function putQuestions(req, res, next) {
       const q = incoming[i] || {}
       const text = String(q.text || '').trim()
       if (!text) return res.status(400).json({ error: `La pregunta ${i + 1} no tiene enunciado` })
+      // Pregunta abierta: respuesta de texto libre, informativa (no puntúa, sin opciones).
+      if (q.kind === 'open') {
+        rows.push({ gameId: game.id, order: i, kind: 'open', text, options: [], correctOptionId: null, points: 0 })
+        continue
+      }
       const options = (Array.isArray(q.options) ? q.options : [])
         .map((o, idx) => ({ id: String(o?.id || `o${idx + 1}`), text: String(o?.text || '').trim() }))
         .filter((o) => o.text)
       if (options.length < 2) return res.status(400).json({ error: `La pregunta ${i + 1} necesita al menos 2 opciones` })
       if (!options.some((o) => o.id === q.correctOptionId)) return res.status(400).json({ error: `Marcá la opción correcta de la pregunta ${i + 1}` })
       const points = Number(q.points) > 0 ? Number(q.points) : 1
-      rows.push({ gameId: game.id, order: i, text, options, correctOptionId: q.correctOptionId, points })
+      rows.push({ gameId: game.id, order: i, kind: 'multiple_choice', text, options, correctOptionId: q.correctOptionId, points })
     }
 
     await prisma.$transaction([
@@ -574,8 +589,13 @@ async function putQuestions(req, res, next) {
 
 // Pregunta para el usuario (oculta la respuesta correcta salvo que `reveal`).
 function publicQuestion(q, reveal) {
+  const kind = q.kind || 'multiple_choice'
+  if (kind === 'open') {
+    // Abierta: sin opciones ni respuesta correcta, no puntúa.
+    return { id: q.id, order: q.order, kind, text: q.text, points: 0, options: [] }
+  }
   return {
-    id: q.id, order: q.order, text: q.text, points: q.points,
+    id: q.id, order: q.order, kind, text: q.text, points: q.points,
     options: (Array.isArray(q.options) ? q.options : []).map((o) => ({ id: o.id, text: o.text })),
     ...(reveal ? { correctOptionId: q.correctOptionId } : {}),
   }
@@ -619,17 +639,37 @@ async function submitQuiz(req, res, next) {
     if (!questions.length) return res.status(400).json({ error: 'El cuestionario no tiene preguntas' })
 
     const answers = Array.isArray(req.body.answers) ? req.body.answers : []
-    const ansMap = new Map(answers.map((a) => [String(a.questionId), String(a.optionId)]))
+    const qById = new Map(questions.map((q) => [String(q.id), q]))
+    // Índice de respuestas entrantes por pregunta (opción elegida o texto libre).
+    const optMap = new Map()  // questionId → optionId (opción múltiple)
+    const textMap = new Map() // questionId → text (pregunta abierta)
+    for (const a of answers) {
+      const qid = String(a.questionId)
+      const q = qById.get(qid)
+      if (!q) continue
+      if ((q.kind || 'multiple_choice') === 'open') textMap.set(qid, String(a.text || '').trim().slice(0, 2000))
+      else if (a.optionId != null) optMap.set(qid, String(a.optionId))
+    }
+
     let score = 0
+    const savedAnswers = []
     const results = questions.map((q) => {
-      const chosen = ansMap.get(String(q.id)) || null
+      const qid = String(q.id)
+      if ((q.kind || 'multiple_choice') === 'open') {
+        // Abierta: se guarda el texto, no puntúa.
+        const text = textMap.get(qid) || ''
+        savedAnswers.push({ questionId: qid, text })
+        return { questionId: q.id, kind: 'open', text, points: 0 }
+      }
+      const chosen = optMap.get(qid) || null
+      if (chosen != null) savedAnswers.push({ questionId: qid, optionId: chosen })
       const correct = chosen != null && chosen === q.correctOptionId
       if (correct) score += q.points || 0
-      return { questionId: q.id, chosenOptionId: chosen, correctOptionId: q.correctOptionId, correct, points: q.points }
+      return { questionId: q.id, kind: 'multiple_choice', chosenOptionId: chosen, correctOptionId: q.correctOptionId, correct, points: q.points }
     })
 
     await prisma.gameQuizSubmission.create({
-      data: { gameId: game.id, userId: req.user.userId, answers: answers.map((a) => ({ questionId: String(a.questionId), optionId: String(a.optionId) })), score },
+      data: { gameId: game.id, userId: req.user.userId, answers: savedAnswers, score },
     })
     res.json({ ok: true, score, maxScore: questions.reduce((s, q) => s + (q.points || 0), 0), results })
   } catch (err) { next(err) }

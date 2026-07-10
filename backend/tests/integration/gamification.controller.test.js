@@ -313,6 +313,22 @@ describe('PUT /api/gamification/games/:id/questions (admin)', () => {
     expect(res.body.count).toBe(1)
     expect(prisma.$transaction).toHaveBeenCalled()
   })
+
+  it('guarda una pregunta abierta (sin opciones, no puntúa)', async () => {
+    mockWorkspace('admin')
+    prisma.game.findFirst.mockResolvedValue(quizGame())
+    prisma.gameQuestion.deleteMany.mockResolvedValue({ count: 0 })
+    prisma.gameQuestion.createMany.mockResolvedValue({ count: 1 })
+    const res = await request(app)
+      .put('/api/gamification/games/7/questions')
+      .set('Authorization', authHeader(1, 'admin')).set('X-Workspace', SLUG)
+      .send({ questions: [{ kind: 'open', text: '¿Qué opinás del equipo?' }] })
+    expect(res.status).toBe(200)
+    expect(res.body.count).toBe(1)
+    // La fila persistida es abierta, sin opciones/correcta y con 0 puntos.
+    const created = prisma.gameQuestion.createMany.mock.calls[0][0].data[0]
+    expect(created).toMatchObject({ kind: 'open', options: [], correctOptionId: null, points: 0 })
+  })
 })
 
 describe('POST /api/gamification/games/:id/quiz/submit', () => {
@@ -349,6 +365,30 @@ describe('POST /api/gamification/games/:id/quiz/submit', () => {
       .send({ answers: [] })
     expect(res.status).toBe(400)
     expect(res.body.error).toMatch(/ya respondiste/i)
+  })
+
+  it('guarda el texto de una pregunta abierta sin sumar puntos', async () => {
+    mockWorkspace('member')
+    prisma.game.findFirst.mockResolvedValue(quizGame())
+    prisma.gameQuizSubmission.findUnique.mockResolvedValue(null)
+    prisma.gameQuestion.findMany.mockResolvedValue([
+      { id: 'q1', kind: 'multiple_choice', correctOptionId: 'a', points: 2 },
+      { id: 'q2', kind: 'open', correctOptionId: null, points: 0 },
+    ])
+    prisma.gameQuizSubmission.create.mockResolvedValue({})
+
+    const res = await request(app)
+      .post('/api/gamification/games/7/quiz/submit')
+      .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
+      .send({ answers: [{ questionId: 'q1', optionId: 'a' }, { questionId: 'q2', text: 'Me gusta mucho' }] })
+
+    expect(res.status).toBe(200)
+    expect(res.body.score).toBe(2)   // solo la de opción múltiple puntúa
+    expect(res.body.maxScore).toBe(2)
+    // El texto abierto se persiste; la abierta figura en results como kind 'open'.
+    const savedAnswers = prisma.gameQuizSubmission.create.mock.calls[0][0].data.answers
+    expect(savedAnswers).toContainEqual({ questionId: 'q2', text: 'Me gusta mucho' })
+    expect(res.body.results.find((r) => r.questionId === 'q2')).toMatchObject({ kind: 'open', text: 'Me gusta mucho', points: 0 })
   })
 })
 

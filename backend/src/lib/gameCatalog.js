@@ -42,7 +42,7 @@ const GAME_TYPES = {
   },
   quiz_challenge: {
     name: 'Cuestionario (preguntas y respuestas)',
-    description: 'Un cuestionario con preguntas de opción múltiple (una correcta por pregunta y un puntaje por cada una). Cada persona responde una vez y suma puntos por las respuestas correctas. Gana quien más puntos hace.',
+    description: 'Un cuestionario con preguntas de opción múltiple (una correcta por pregunta, suman puntos) y/o preguntas abiertas de texto libre (informativas, no puntúan). Cada persona responde una vez. Gana quien más puntos hace por las respuestas correctas.',
     subjectType: 'person',
     scoring: 'quiz',
     requiresPeriod: false,

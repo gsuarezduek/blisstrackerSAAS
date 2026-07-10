@@ -330,7 +330,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
   useEffect(() => {
     if (game?.id && game.scoring === 'quiz') {
       api.get(`/gamification/games/${game.id}`)
-        .then(({ data }) => setQuestions((data.questions || []).map((q) => ({ text: q.text, options: q.options || [], correctOptionId: q.correctOptionId, points: q.points }))))
+        .then(({ data }) => setQuestions((data.questions || []).map((q) => ({ kind: q.kind || 'multiple_choice', text: q.text, options: q.options || [], correctOptionId: q.correctOptionId, points: q.points }))))
         .catch(() => {})
     }
   }, [game?.id, game?.scoring])
@@ -366,6 +366,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
       if (activate && questions.length === 0) return setError('Agregá al menos una pregunta para activar el cuestionario')
       for (let i = 0; i < questions.length; i++) {
         if (!questions[i].text.trim()) return setError(`La pregunta ${i + 1} no tiene enunciado`)
+        if (questions[i].kind === 'open') continue // abierta: solo requiere enunciado
         const opts = questions[i].options.filter((o) => o.text.trim())
         if (opts.length < 2) return setError(`La pregunta ${i + 1} necesita al menos 2 opciones`)
         if (!opts.some((o) => o.id === questions[i].correctOptionId)) return setError(`Marcá la opción correcta de la pregunta ${i + 1}`)
@@ -774,7 +775,8 @@ const oid = () => `o${Math.random().toString(36).slice(2, 8)}`
 
 function QuizEditor({ questions, setQuestions }) {
   function updateQ(i, patch) { setQuestions((qs) => qs.map((q, idx) => idx === i ? { ...q, ...patch } : q)) }
-  function addQ() { setQuestions((qs) => { const a = oid(), b = oid(); return [...qs, { text: '', options: [{ id: a, text: '' }, { id: b, text: '' }], correctOptionId: a, points: 1 }] }) }
+  function addChoice() { setQuestions((qs) => { const a = oid(), b = oid(); return [...qs, { kind: 'multiple_choice', text: '', options: [{ id: a, text: '' }, { id: b, text: '' }], correctOptionId: a, points: 1 }] }) }
+  function addOpen() { setQuestions((qs) => [...qs, { kind: 'open', text: '', options: [], correctOptionId: null, points: 0 }]) }
   function removeQ(i) { setQuestions((qs) => qs.filter((_, idx) => idx !== i)) }
   function updateOpt(i, oi, text) { updateQ(i, { options: questions[i].options.map((o, idx) => idx === oi ? { ...o, text } : o) }) }
   function addOpt(i) { updateQ(i, { options: [...questions[i].options, { id: oid(), text: '' }] }) }
@@ -793,27 +795,42 @@ function QuizEditor({ questions, setQuestions }) {
         <div key={i} className="border border-gray-200 dark:border-gray-600 rounded-xl p-3 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 shrink-0">P{i + 1}</span>
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${q.kind === 'open' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
+              {q.kind === 'open' ? 'Abierta' : 'Opción múltiple'}
+            </span>
             <input value={q.text} onChange={(e) => updateQ(i, { text: e.target.value })} placeholder="Enunciado de la pregunta" className={`${inputCls} flex-1`} />
             <button type="button" onClick={() => removeQ(i)} className="text-gray-400 hover:text-red-500 px-1">🗑</button>
           </div>
-          <p className="text-[11px] text-gray-400">Marcá la opción correcta con el círculo.</p>
-          {q.options.map((o, oi) => (
-            <div key={o.id} className="flex items-center gap-2 pl-5">
-              <input type="radio" name={`correct-${i}`} checked={q.correctOptionId === o.id} onChange={() => updateQ(i, { correctOptionId: o.id })} title="Correcta" />
-              <input value={o.text} onChange={(e) => updateOpt(i, oi, e.target.value)} placeholder={`Opción ${oi + 1}`} className={`${inputCls} flex-1`} />
-              {q.options.length > 2 && <button type="button" onClick={() => removeOpt(i, oi)} className="text-gray-400 hover:text-red-500 px-1">✕</button>}
+          {q.kind === 'open' ? (
+            <div className="pl-5">
+              <input disabled placeholder="El usuario escribe una respuesta libre" className={`${inputCls} w-full bg-gray-50 dark:bg-gray-700/40 text-gray-400 cursor-not-allowed`} />
+              <p className="text-[11px] text-gray-400 mt-1">Respuesta de texto libre. No suma puntos; queda para que la leas en el detalle del juego.</p>
             </div>
-          ))}
-          <div className="flex items-center justify-between pl-5">
-            <button type="button" onClick={() => addOpt(i)} className="text-xs text-primary-600 dark:text-primary-400 font-medium">+ Opción</button>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-              Puntos:
-              <input type="number" min={1} value={q.points} onChange={(e) => updateQ(i, { points: Number(e.target.value) })} className="w-16 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" />
-            </label>
-          </div>
+          ) : (
+            <>
+              <p className="text-[11px] text-gray-400">Marcá la opción correcta con el círculo.</p>
+              {q.options.map((o, oi) => (
+                <div key={o.id} className="flex items-center gap-2 pl-5">
+                  <input type="radio" name={`correct-${i}`} checked={q.correctOptionId === o.id} onChange={() => updateQ(i, { correctOptionId: o.id })} title="Correcta" />
+                  <input value={o.text} onChange={(e) => updateOpt(i, oi, e.target.value)} placeholder={`Opción ${oi + 1}`} className={`${inputCls} flex-1`} />
+                  {q.options.length > 2 && <button type="button" onClick={() => removeOpt(i, oi)} className="text-gray-400 hover:text-red-500 px-1">✕</button>}
+                </div>
+              ))}
+              <div className="flex items-center justify-between pl-5">
+                <button type="button" onClick={() => addOpt(i)} className="text-xs text-primary-600 dark:text-primary-400 font-medium">+ Opción</button>
+                <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  Puntos:
+                  <input type="number" min={1} value={q.points} onChange={(e) => updateQ(i, { points: Number(e.target.value) })} className="w-16 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" />
+                </label>
+              </div>
+            </>
+          )}
         </div>
       ))}
-      <button type="button" onClick={addQ} className="text-sm text-primary-600 dark:text-primary-400 font-medium">+ Agregar pregunta</button>
+      <div className="flex flex-wrap gap-3">
+        <button type="button" onClick={addChoice} className="text-sm text-primary-600 dark:text-primary-400 font-medium">+ Opción múltiple</button>
+        <button type="button" onClick={addOpen} className="text-sm text-primary-600 dark:text-primary-400 font-medium">+ Pregunta abierta</button>
+      </div>
     </div>
   )
 }
@@ -828,6 +845,9 @@ function GameDetailModal({ game, onClose }) {
   // En votaciones mostramos solo a quienes tienen al menos un voto.
   const subjects = game.scoring === 'vote' ? allSubjects.filter((s) => s.score > 0) : allSubjects
   const part = data?.participation
+  // Preguntas abiertas + respuestas de texto libre (solo quiz).
+  const openQuestions = (data?.questions || []).filter((q) => q.kind === 'open')
+  const submissions = data?.submissions || []
 
   return (
     <Modal title={`Detalle · ${game.title}`} onClose={onClose}>
@@ -851,6 +871,36 @@ function GameDetailModal({ game, onClose }) {
               </li>
             ))}
           </ol>
+
+          {openQuestions.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Respuestas abiertas</h4>
+              <div className="space-y-3">
+                {openQuestions.map((q) => {
+                  const replies = submissions
+                    .map((s) => ({ userName: s.userName, text: (s.openAnswers || []).find((a) => a.questionId === q.id)?.text }))
+                    .filter((r) => r.text)
+                  return (
+                    <div key={q.id}>
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{q.text}</p>
+                      {replies.length === 0 ? (
+                        <p className="text-xs text-gray-400 mt-0.5">Sin respuestas todavía.</p>
+                      ) : (
+                        <ul className="mt-1 space-y-1">
+                          {replies.map((r, ri) => (
+                            <li key={ri} className="px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
+                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{r.userName}: </span>
+                              <span className="text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words">{r.text}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
     </Modal>

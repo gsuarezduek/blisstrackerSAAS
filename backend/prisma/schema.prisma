@@ -2288,14 +2288,17 @@ model Game {
   @@index([workspaceId, status])
 }
 
-// Pregunta de un juego de tipo cuestionario (scoring = "quiz"). Una opción es la correcta.
+// Pregunta de un juego de tipo cuestionario (scoring = "quiz").
+// kind = "multiple_choice" (una opción correcta, suma puntos) | "open" (respuesta
+// de texto libre, informativa: se guarda para que la lea el admin, no puntúa).
 model GameQuestion {
   id              String   @id @default(uuid())
   gameId          Int
   order           Int      @default(0)
+  kind            String   @default("multiple_choice") // "multiple_choice" | "open"
   text            String   @db.Text
-  options         Json     @default("[]") // [{ id, text }]
-  correctOptionId String // id de la opción correcta dentro de `options`
+  options         Json     @default("[]") // [{ id, text }] — vacío en preguntas abiertas
+  correctOptionId String? // id de la opción correcta dentro de `options` — null en preguntas abiertas
   points          Float    @default(1)
   createdAt       DateTime @default(now())
 
