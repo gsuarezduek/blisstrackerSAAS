@@ -937,14 +937,18 @@ function CheckList({ items, selected, onChange }) {
 
 function Modal({ title, children, onClose }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg my-8 p-5 z-10">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900 dark:text-white">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+    // El contenedor raíz scrollea; un click fuera del panel cierra (stopPropagation en el panel).
+    <div className="fixed inset-0 z-50 overflow-y-auto" onClick={onClose}>
+      {/* Backdrop fijo: cubre siempre el viewport, aunque el modal sea más alto y haya scroll. */}
+      <div className="fixed inset-0 bg-black/30" />
+      <div className="relative min-h-full flex items-start justify-center p-4">
+        <div onClick={(e) => e.stopPropagation()} className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg my-8 p-5 z-10">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-900 dark:text-white">{title}</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">✕</button>
+          </div>
+          {children}
         </div>
-        {children}
       </div>
     </div>
   )
