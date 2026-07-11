@@ -9,7 +9,19 @@ const { computeObjectives } = require('../services/marketingObjectives.service')
 const { saveMonthSnapshot } = require('../services/analyticsSnapshot.service')
 const { todayString } = require('../utils/dates')
 const { tzOffsetStr } = require('../lib/timeMetrics')
-const { monthBounds, monthLabel } = require('../lib/monthUtils')
+const { monthBounds, monthLabel, prevMonthStr, rangeLabel } = require('../lib/monthUtils')
+
+/** Etiqueta del informe por su período de datos (espejo de monthlyReport.controller). */
+function reportLabel(report) {
+  let start, end
+  if (report.periodStart && report.periodEnd) {
+    start = new Date(report.periodStart).toISOString().slice(0, 10)
+    end   = new Date(report.periodEnd).toISOString().slice(0, 10)
+  } else {
+    ({ startDate: start, endDate: end } = monthBounds(prevMonthStr(report.month)))
+  }
+  return rangeLabel(start, end)
+}
 
 // Filtro Prisma para informes "generados" (no placeholders vacíos), espejo del
 // de monthlyReport.controller.js.
@@ -548,6 +560,8 @@ async function getReportsSummary(req, res, next) {
           token:       true,
           createdAt:   true,
           updatedAt:   true,
+          periodStart: true,
+          periodEnd:   true,
           project:     { select: { id: true, name: true } },
           generatedBy: { select: { id: true, name: true } },
         },
@@ -555,7 +569,9 @@ async function getReportsSummary(req, res, next) {
       prisma.monthlyReport.count({ where: { workspaceId } }),
     ])
 
-    res.json({ reports, total, limit, offset })
+    const withLabel = reports.map(r => ({ ...r, periodLabel: reportLabel(r) }))
+
+    res.json({ reports: withLabel, total, limit, offset })
   } catch (err) {
     next(err)
   }

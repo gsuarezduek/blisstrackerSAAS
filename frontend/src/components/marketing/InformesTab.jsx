@@ -397,7 +397,7 @@ function AllReportsPanel({ onSelectProject }) {
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
         {reports.map(r => {
           const [y, m] = r.month.split('-').map(Number)
-          const monthLabel = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+          const monthLabel = r.periodLabel || new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
           const publicUrl  = `${window.location.origin}/report/${r.token}`
 
           return (
