@@ -79,13 +79,16 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
   return computeInstagramMetrics(profile, media, targetMonth, insights)
 }
 
-// Fusiona la media oficial con la scrapeada del grid (collabs), deduplicando por id
-// (con fallback al shortcode del permalink) y priorizando la data oficial (más rica:
-// insights, media_url estable). Reordena por timestamp descendente.
+// Fusiona la media oficial con la scrapeada del grid (collabs), deduplicando por el
+// SHORTCODE del permalink (única clave común: la API oficial trae `id` numérico y el
+// scrape trae el shortcode como `id`, así que keyear por `id` NO deduplicaría y
+// duplicaría cada post). Solo si no hay permalink cae al id. Prioriza la data oficial
+// (más rica: insights, media_url estable). Reordena por timestamp descendente.
 function shortCodeOf(m) {
+  const mt = typeof m.permalink === 'string' ? m.permalink.match(/\/(?:p|reel|tv|reels)\/([^/?#]+)/i) : null
+  if (mt) return `sc:${mt[1]}`
   if (m.id) return `id:${m.id}`
-  const mt = typeof m.permalink === 'string' ? m.permalink.match(/\/(?:p|reel|tv)\/([^/?#]+)/i) : null
-  return mt ? `sc:${mt[1]}` : null
+  return null
 }
 function mergeInstagramMedia(official = [], scraped = []) {
   const byKey = new Map()
