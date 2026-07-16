@@ -257,6 +257,14 @@ const PLATFORM_SETTINGS = [
     help:    'El actor de perfil (apify~instagram-profile-scraper) trae un `latestPosts` capado (~12) y NO ordenado por fecha, así que en cuentas activas se pierden publicaciones del mes. Con este actor de posts se hace una 2ª llamada que trae la lista completa y ordenada, y se fusiona con la del perfil (los seguidores/datos del perfil siguen saliendo de la 1ª llamada). Costo Apify ~2x por scrape de Instagram (incluye competidores). Se acepta "usuario/actor" o "usuario~actor". Vacío = usa la env APIFY_INSTAGRAM_POSTS_ACTOR; si ambos vacíos → NO se hace la 2ª llamada (comportamiento anterior). Recomendado: `apify~instagram-post-scraper`. Para desactivar explícitamente: poné "none".',
   },
   {
+    key:     'igCollabScrapeEnabled',
+    type:    'boolean',
+    default: false,
+    group:   'scraping',
+    label:   'Sumar collabs en Instagram por token (scrape del grid)',
+    help:    'En las cuentas de Instagram conectadas por API oficial/token, la Graph API NO devuelve las publicaciones en colaboración al co-autor (aparecen solo en el perfil del autor original). Con esto activado, cada lectura de métricas hace un scrape simple del grid público (requiere APIFY_API_TOKEN + cuenta pública) y fusiona los collabs que falten al conteo/promedios del mes. Se cachea 6h en memoria por integración para no scrapear en cada visita. Costo Apify: 1 scrape de perfil por integración cada 6h. Off = comportamiento anterior (solo lo que devuelve la API oficial).',
+  },
+  {
     key:     'apifyLinkedinActor',
     type:    'string',
     default: '',

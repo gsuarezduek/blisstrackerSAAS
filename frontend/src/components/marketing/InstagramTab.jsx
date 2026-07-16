@@ -926,9 +926,6 @@ export default function InstagramTab({ projectId, onSelectProject }) {
   const [stories,          setStories]          = useState(null)
   const [storiesScrapeOnly, setStoriesScrapeOnly] = useState(false)
   const [capturingStories, setCapturingStories] = useState(false)
-  const [debugData,        setDebugData]        = useState(null)
-  const [debugLoading,     setDebugLoading]     = useState(false)
-  const [debugError,       setDebugError]       = useState(null)
 
   const fetchData = useCallback(async () => {
     if (!projectId) return
@@ -1052,16 +1049,6 @@ export default function InstagramTab({ projectId, onSelectProject }) {
     } finally { setRefreshing(false) }
   }
 
-  async function handleScrapeDebug() {
-    setDebugLoading(true); setDebugError(null); setDebugData(null)
-    try {
-      const { data } = await api.get(`/marketing/projects/${projectId}/instagram/scrape-debug`)
-      setDebugData(data)
-    } catch (err) {
-      setDebugError(err.response?.data?.error || 'No se pudo correr el diagnóstico.')
-    } finally { setDebugLoading(false) }
-  }
-
   if (!projectId) {
     return <CrossProjectInstagramPanel onSelectProject={onSelectProject} />
   }
@@ -1115,37 +1102,6 @@ export default function InstagramTab({ projectId, onSelectProject }) {
       {/* Error */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">{error}</div>
-      )}
-
-      {/* Aviso + diagnóstico de scraping */}
-      {(integration?.scopes === 'scrape' || metrics?.scraped) && (
-        <div className="bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span>📊 Datos públicos vía scraping. Si el conteo de publicaciones del mes no coincide, corré el diagnóstico para ver qué trae el scraper por cada post/reel.</span>
-            <button onClick={handleScrapeDebug} disabled={debugLoading}
-              className="shrink-0 px-2.5 py-1 rounded-lg border border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 disabled:opacity-50 transition-colors font-medium">
-              {debugLoading ? 'Diagnosticando…' : '🔍 Diagnóstico'}
-            </button>
-          </div>
-
-          {debugError && <p className="mt-2 text-red-600 dark:text-red-400">{debugError}</p>}
-
-          {debugData && (
-            <div className="mt-3 space-y-2">
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-blue-800 dark:text-blue-200 font-medium">
-                <span>mes objetivo: {debugData.targetMonth ?? '—'}</span>
-                <span>perfil (1ª): {debugData.counts?.profileLatestPosts} · del mes {debugData.counts?.profileInTarget ?? '—'}</span>
-                <span>actor posts (2ª): {debugData.counts?.postsActorReturned} · del mes {debugData.counts?.postsActorInTarget ?? '—'}</span>
-                <span>fusión del mes: {debugData.counts?.mergedInTarget ?? '—'}</span>
-                <span className="text-blue-900 dark:text-blue-100">→ se muestra: {debugData.counts?.postsThisMonth}</span>
-              </div>
-              <p className="text-[11px] text-blue-600/80 dark:text-blue-300/80">
-                Actor de posts: <code>{debugData.postsActor}</code>{debugData.postsActorError ? ` — error: ${debugData.postsActorError}` : ''}. Si "actor posts (2ª)" está desactivado o en 0, configurá el actor de posts en SuperAdmin → Configuración. La "fusión del mes" es lo que debería contar la app.
-              </p>
-              <pre className="mt-1 max-h-72 overflow-auto rounded-lg bg-blue-100/50 dark:bg-blue-950/40 p-2 text-[10px] leading-tight">{JSON.stringify(debugData, null, 2)}</pre>
-            </div>
-          )}
-        </div>
       )}
 
       {/* Navegación por mes */}

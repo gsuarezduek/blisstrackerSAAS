@@ -13,7 +13,10 @@ const { cacheImagesInArray } = require('../services/socialImageCache.service')
 const PLATFORM_SCRAPERS = {
   instagram: {
     parseId: parseInstagramUsername,
-    scrape:  scrapeInstagramProfile,
+    // skipPostsActor: los competidores no corren la 2ª llamada (actor de posts) —
+    // para trackear crecimiento de seguidores alcanza con el scrape de perfil y
+    // así no duplicamos el costo de Apify.
+    scrape:  (username, opts) => scrapeInstagramProfile(username, { ...opts, skipPostsActor: true }),
     invalidMsg: 'Usuario o URL de Instagram inválido.',
   },
   linkedin: {

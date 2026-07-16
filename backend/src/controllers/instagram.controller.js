@@ -2,12 +2,50 @@ const prisma  = require('../lib/prisma')
 const { getValidMetaToken }        = require('../services/metaTokenRefresh.service')
 const { fetchInstagramMetrics }    = require('../services/instagram.service')
 const { saveInstagramSnapshot }    = require('../services/instagramSnapshot.service')
-const { scrapeInstagramProfile, parseInstagramUsername, debugScrapeInstagram } = require('../services/socialScrape.service')
+const { scrapeInstagramProfile, scrapeInstagramMediaRaw, parseInstagramUsername } = require('../services/socialScrape.service')
 const { getStoriesSummary, captureStoriesForProject }    = require('../services/instagramStories.service')
+const { getSetting }               = require('../lib/platformSettings')
 
 // Cooldown en memoria para el refresh manual de scraping (protege costo del proveedor).
 const SCRAPE_REFRESH_COOLDOWN_MS = 30 * 60 * 1000
 const scrapeCooldownMap = new Map() // integrationId → timestamp del último scrape
+
+// ── Merge de collabs (cuentas por API oficial/token) ──────────────────────────
+// La Graph API no devuelve las publicaciones en colaboración al co-autor. Cuando el
+// setting `igCollabScrapeEnabled` está activo, hacemos un scrape simple del grid
+// público y fusionamos los collabs faltantes. Se cachea 6h en memoria por integración
+// para no scrapear en cada visita (el scrape es lo caro).
+const COLLAB_CACHE_TTL_MS = 6 * 60 * 60 * 1000
+const collabMediaCache = new Map() // integrationId → { at, month, media }
+
+async function getCollabMediaCached(integration, username, month, workspaceId) {
+  const cached = collabMediaCache.get(integration.id)
+  if (cached && cached.month === month && Date.now() - cached.at < COLLAB_CACHE_TTL_MS) {
+    return cached.media
+  }
+  try {
+    const { media } = await scrapeInstagramMediaRaw(username, {
+      targetMonth: month, workspaceId, context: 'Instagram — merge de collabs (token)',
+    })
+    collabMediaCache.set(integration.id, { at: Date.now(), month, media })
+    return media
+  } catch (err) {
+    console.warn('[Instagram] Scrape de collabs no disponible:', err.message)
+    collabMediaCache.set(integration.id, { at: Date.now(), month, media: [] }) // cachea el vacío para no reintentar cada visita
+    return []
+  }
+}
+
+// Devuelve un collabScraper `(username) => Promise<Array>` si el merge está activado
+// y hay token de Apify; si no, null (comportamiento anterior).
+async function buildCollabScraper(integration, workspaceId) {
+  if (!process.env.APIFY_API_TOKEN) return null
+  let enabled = false
+  try { enabled = !!(await getSetting('igCollabScrapeEnabled')) } catch { /* DB no disponible → off */ }
+  if (!enabled) return null
+  const month = currentMonthStr()
+  return (username) => getCollabMediaCached(integration, username, month, workspaceId)
+}
 
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
@@ -120,7 +158,8 @@ async function getMetrics(req, res, next) {
     let metrics
     try {
       const useFbGraph = integration.scopes?.startsWith('fb_graph')
-      metrics = await fetchInstagramMetrics(integration.propertyId, token, null, useFbGraph)
+      const collabScraper = await buildCollabScraper(integration, workspaceId)
+      metrics = await fetchInstagramMetrics(integration.propertyId, token, null, useFbGraph, { collabScraper })
     } catch (apiErr) {
       const igErrCode = apiErr.response?.data?.error?.code
       const igErrMsg  = apiErr.response?.data?.error?.message ?? ''
@@ -368,40 +407,6 @@ async function refreshScrape(req, res, next) {
 }
 
 /**
- * GET /api/marketing/projects/:id/instagram/scrape-debug?username=<url|handle>
- * Diagnóstico del scraping: output crudo de Apify + normalizado, con desglose por
- * publicación (type/timestamp/mes) para detectar reels o posts que se pierden.
- */
-async function scrapeDebug(req, res, next) {
-  try {
-    const projectId   = Number(req.params.id)
-    const workspaceId = req.workspace.id
-
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, workspaceId }, select: { id: true },
-    })
-    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
-
-    let username = req.query.username || req.query.url
-    if (!username) {
-      const integration = await prisma.projectIntegration.findUnique({
-        where: { projectId_type: { projectId, type: 'instagram' } },
-      })
-      username = integration?.propertyId
-    }
-    if (!username) return res.status(400).json({ error: 'Indicá la cuenta (?username=) o conectá Instagram por scraping primero.' })
-
-    let result
-    try {
-      result = await debugScrapeInstagram(username, { workspaceId, targetMonth: currentMonthStr() })
-    } catch (err) {
-      return res.status(err.status || 400).json({ error: err.message, code: err.code })
-    }
-    res.json(result)
-  } catch (err) { next(err) }
-}
-
-/**
  * GET /api/marketing/projects/:id/instagram/stories?month=YYYY-MM
  * Devuelve el resumen agregado de stories del mes (cantidad, alcance, retención, top).
  * Las stories las captura el cron cada 6h; acá solo se leen de la DB.
@@ -466,4 +471,4 @@ async function captureStories(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, scrapeDebug, getStories, captureStories }
+module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, getStories, captureStories }

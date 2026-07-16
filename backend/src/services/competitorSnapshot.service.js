@@ -7,8 +7,10 @@ const {
 const { cacheImagesInArray }     = require('./socialImageCache.service')
 
 // Scraper por plataforma — keep en sync con PLATFORM_SCRAPERS de competitors.controller.js
+// Instagram con skipPostsActor: los competidores no corren la 2ª llamada (actor de
+// posts), alcanza el scrape de perfil para trackear seguidores y no duplica costo.
 const PLATFORM_SCRAPERS = {
-  instagram: scrapeInstagramProfile,
+  instagram: (username, opts) => scrapeInstagramProfile(username, { ...opts, skipPostsActor: true }),
   linkedin:  scrapeLinkedinCompany,
   facebook:  scrapeFacebookPage,
 }

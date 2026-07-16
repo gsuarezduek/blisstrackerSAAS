@@ -22,8 +22,11 @@ const TYPE_LABEL = {
  * @param {string}  accessToken  — Token desencriptado
  * @param {string}  targetMonth  — 'YYYY-MM' opcional; si null usa el mes actual ART
  * @param {boolean} useFbGraph   — true si el token es de Facebook Graph API (Business Manager)
+ * @param {object}  opts         — { collabScraper } scraper opcional que devuelve el
+ *   media crudo del grid público (`(username) => Promise<Array>`) para sumar las
+ *   publicaciones en colaboración que la Graph API NO expone en `/me/media`.
  */
-async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, useFbGraph = false) {
+async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, useFbGraph = false, opts = {}) {
   const base = useFbGraph ? BASE_FB    : BASE_IGAAM
   const meId = useFbGraph ? igUserId   : 'me'
 
@@ -44,12 +47,14 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
   ])
 
   const profile = profileRes.data
-  const media   = mediaRes.data?.data ?? []
+  let media     = mediaRes.data?.data ?? []
 
   // Insights (requiere instagram_business_manage_insights). Best-effort: si falla
   // —permiso no aprobado, cuenta chica, cambio de versión de API— las métricas
   // básicas (likes/comments/engagement) se devuelven igual y los campos de
   // alcance/guardados/compartidos quedan en null.
+  // Se piden ANTES de fusionar collabs: los insights solo aplican a los posts
+  // propios (la API oficial); los collabs scrapeados quedan sin insights (null).
   let insights = null
   try {
     insights = await fetchInstagramInsights(base, meId, accessToken, profile, media, targetMonth)
@@ -57,7 +62,41 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
     console.warn('[Instagram] Insights no disponibles:', err.response?.data?.error?.message || err.message)
   }
 
+  // Merge de collabs: el grid público incluye las publicaciones en colaboración que
+  // `/me/media` no devuelve al co-autor. Sumamos las que falten (dedup por id/permalink,
+  // prioridad a la data oficial) y reordenamos por fecha desc. Best-effort: nunca rompe.
+  if (typeof opts.collabScraper === 'function' && profile.username) {
+    try {
+      const scraped = await opts.collabScraper(profile.username)
+      if (Array.isArray(scraped) && scraped.length > 0) {
+        media = mergeInstagramMedia(media, scraped)
+      }
+    } catch (err) {
+      console.warn('[Instagram] Scrape de collabs falló, sigo con la media oficial:', err.message)
+    }
+  }
+
   return computeInstagramMetrics(profile, media, targetMonth, insights)
+}
+
+// Fusiona la media oficial con la scrapeada del grid (collabs), deduplicando por id
+// (con fallback al shortcode del permalink) y priorizando la data oficial (más rica:
+// insights, media_url estable). Reordena por timestamp descendente.
+function shortCodeOf(m) {
+  if (m.id) return `id:${m.id}`
+  const mt = typeof m.permalink === 'string' ? m.permalink.match(/\/(?:p|reel|tv)\/([^/?#]+)/i) : null
+  return mt ? `sc:${mt[1]}` : null
+}
+function mergeInstagramMedia(official = [], scraped = []) {
+  const byKey = new Map()
+  for (const m of scraped)  { const k = shortCodeOf(m); if (k) byKey.set(k, m) }
+  for (const m of official) { const k = shortCodeOf(m); if (k) byKey.set(k, m) }  // oficial pisa
+  const noKey = [...official, ...scraped].filter(m => !shortCodeOf(m))
+  return [...byKey.values(), ...noKey].sort((a, b) => {
+    const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0
+    const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0
+    return tb - ta
+  })
 }
 
 // ── Insights de Instagram ─────────────────────────────────────────────────────
