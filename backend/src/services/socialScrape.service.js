@@ -711,9 +711,78 @@ async function scrapeFacebookPage(urlOrSlug, opts = {}) {
   return { ...metrics, identifier, scraped: true, monthCoverageComplete }
 }
 
+/**
+ * Diagnóstico del scraping de Instagram: output crudo de Apify + lo normalizado,
+ * con un desglose por publicación pensado para detectar reels/posts que se pierden
+ * (type crudo, timestamp crudo, mes calculado en ART y si entra o no al mes objetivo).
+ * @param {string} usernameOrUrl
+ * @param {object} opts — { postsLimit, targetMonth, workspaceId }
+ */
+async function debugScrapeInstagram(usernameOrUrl, opts = {}) {
+  const username = parseInstagramUsername(usernameOrUrl)
+  if (!username) throw scrapeError('Usuario o URL de Instagram inválido.', 'INVALID_USERNAME', 400)
+
+  let cfgLimit = 0
+  try { cfgLimit = Number(await getSetting('apifyInstagramPostsLimit')) || 0 } catch { /* DB no disponible */ }
+  const postsLimit = opts.postsLimit ?? (cfgLimit > 0 ? cfgLimit : DEFAULT_POSTS_LIMIT)
+
+  const item = await runApifyInstagram(username, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'Instagram — diagnóstico' })
+  const { profile, media, isPrivate } = normalizeApifyProfile(item)
+  const targetMonth = opts.targetMonth ?? null
+  const metrics = computeInstagramMetrics(profile, media, targetMonth)
+
+  const monthOf = (ts) => {
+    if (!ts) return null
+    const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+    return isNaN(d.getTime()) ? null : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }
+
+  // Publicaciones tal como las trae el actor (antes de normalizar), para ver qué
+  // "type"/"timestamp" llegan realmente por reel/post.
+  const rawPosts = Array.isArray(item.latestPosts) ? item.latestPosts : []
+  const rawBreakdown = rawPosts.map(p => ({
+    id:            p.shortCode ?? p.id ?? null,
+    type:          p.type ?? null,
+    productType:   p.productType ?? p.product_type ?? null,
+    hasTimestamp:  p.timestamp != null,
+    timestamp:     p.timestamp ?? null,
+    altTimeKeys:   Object.keys(p).filter(k => /time|date|taken/i.test(k)),
+    month:         monthOf(p.timestamp),
+  }))
+
+  // Media normalizada, con el mes calculado y si entra al mes objetivo.
+  const mediaBreakdown = media.map(m => ({
+    id:         m.id,
+    media_type: m.media_type,
+    timestamp:  m.timestamp,
+    month:      monthOf(m.timestamp),
+    inTarget:   targetMonth ? monthOf(m.timestamp) === targetMonth : null,
+  }))
+
+  return {
+    username,
+    targetMonth,
+    postsLimit,
+    itemCount: 1,
+    topLevelKeys: item && typeof item === 'object' ? Object.keys(item) : null,
+    postFieldKeysFirst: rawPosts[0] && typeof rawPosts[0] === 'object' ? Object.keys(rawPosts[0]) : null,
+    counts: {
+      rawLatestPosts:      rawPosts.length,
+      rawWithTimestamp:    rawBreakdown.filter(p => p.hasTimestamp).length,
+      normalizedMedia:     media.length,
+      normalizedInTarget:  targetMonth ? mediaBreakdown.filter(m => m.inTarget).length : null,
+      postsThisMonth:      metrics.postsThisMonth,
+    },
+    rawBreakdown,
+    mediaBreakdown,
+    isPrivate,
+  }
+}
+
 module.exports = {
   parseInstagramUsername,
   scrapeInstagramProfile,
+  debugScrapeInstagram,
   parseLinkedinCompany,
   scrapeLinkedinCompany,
   debugScrapeLinkedin,
