@@ -1134,13 +1134,13 @@ export default function InstagramTab({ projectId, onSelectProject }) {
             <div className="mt-3 space-y-2">
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-blue-800 dark:text-blue-200 font-medium">
                 <span>mes objetivo: {debugData.targetMonth ?? '—'}</span>
-                <span>posts crudos: {debugData.counts?.rawLatestPosts}</span>
-                <span>con timestamp: {debugData.counts?.rawWithTimestamp}</span>
-                <span>normalizados: {debugData.counts?.normalizedMedia}</span>
-                <span>del mes: {debugData.counts?.postsThisMonth}</span>
+                <span>perfil (1ª): {debugData.counts?.profileLatestPosts} · del mes {debugData.counts?.profileInTarget ?? '—'}</span>
+                <span>actor posts (2ª): {debugData.counts?.postsActorReturned} · del mes {debugData.counts?.postsActorInTarget ?? '—'}</span>
+                <span>fusión del mes: {debugData.counts?.mergedInTarget ?? '—'}</span>
+                <span className="text-blue-900 dark:text-blue-100">→ se muestra: {debugData.counts?.postsThisMonth}</span>
               </div>
               <p className="text-[11px] text-blue-600/80 dark:text-blue-300/80">
-                Si "posts crudos" ya trae menos que los que ves en el perfil → el actor no devuelve algunos (ej. reels). Si "con timestamp" es menor que "posts crudos" → los reels llegan sin fecha y el filtro del mes los descarta. Copiá este JSON y pasámelo para ajustar el mapeo.
+                Actor de posts: <code>{debugData.postsActor}</code>{debugData.postsActorError ? ` — error: ${debugData.postsActorError}` : ''}. Si "actor posts (2ª)" está desactivado o en 0, configurá el actor de posts en SuperAdmin → Configuración. La "fusión del mes" es lo que debería contar la app.
               </p>
               <pre className="mt-1 max-h-72 overflow-auto rounded-lg bg-blue-100/50 dark:bg-blue-950/40 p-2 text-[10px] leading-tight">{JSON.stringify(debugData, null, 2)}</pre>
             </div>

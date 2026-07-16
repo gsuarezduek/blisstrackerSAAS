@@ -249,6 +249,14 @@ const PLATFORM_SETTINGS = [
     help:    'Cantidad de publicaciones recientes que trae cada scrape de Instagram (debe cubrir el mes completo). 0 = usa la variable de entorno APIFY_INSTAGRAM_POSTS_LIMIT o el default (60). Subir si una cuenta postea mucho y los meses quedan incompletos.',
   },
   {
+    key:     'apifyInstagramPostsActor',
+    type:    'string',
+    default: '',
+    group:   'scraping',
+    label:   'Actor de Apify para posts de Instagram (2ª llamada)',
+    help:    'El actor de perfil (apify~instagram-profile-scraper) trae un `latestPosts` capado (~12) y NO ordenado por fecha, así que en cuentas activas se pierden publicaciones del mes. Con este actor de posts se hace una 2ª llamada que trae la lista completa y ordenada, y se fusiona con la del perfil (los seguidores/datos del perfil siguen saliendo de la 1ª llamada). Costo Apify ~2x por scrape de Instagram (incluye competidores). Se acepta "usuario/actor" o "usuario~actor". Vacío = usa la env APIFY_INSTAGRAM_POSTS_ACTOR; si ambos vacíos → NO se hace la 2ª llamada (comportamiento anterior). Recomendado: `apify~instagram-post-scraper`. Para desactivar explícitamente: poné "none".',
+  },
+  {
     key:     'apifyLinkedinActor',
     type:    'string',
     default: '',

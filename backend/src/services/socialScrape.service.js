@@ -141,6 +141,53 @@ async function runApifyInstagram(username, opts = {}) {
   return item
 }
 
+/**
+ * Resuelve el actor de posts de Instagram (2ª llamada). PlatformSetting →
+ * env → default oficial. Devuelve '' si está explícitamente desactivado
+ * ("none"/"off") o si no hay ni setting ni env (comportamiento anterior).
+ */
+async function resolveInstagramPostsActor() {
+  let setting = ''
+  try { setting = (await getSetting('apifyInstagramPostsActor')) || '' } catch { /* DB no disponible → env */ }
+  const raw = (setting.trim() || process.env.APIFY_INSTAGRAM_POSTS_ACTOR || '').trim()
+  if (!raw) return ''                                   // sin configurar → no hay 2ª llamada
+  if (['none', 'off', 'disabled'].includes(raw.toLowerCase())) return ''  // desactivado explícito
+  return raw.replace('/', '~')
+}
+
+/**
+ * Corre el actor de posts de Instagram (2ª llamada) y devuelve el array crudo de
+ * publicaciones (mismo shape por-post que `latestPosts`). Best-effort: si el actor
+ * no está configurado devuelve null; si falla, lanza un error estructurado que el
+ * caller atrapa para caer al `latestPosts` del perfil (fallback no destructivo).
+ * @returns {Array|null}
+ */
+async function runApifyInstagramPosts(username, opts = {}) {
+  const { postsLimit = DEFAULT_POSTS_LIMIT, workspaceId = null, context = null } = opts
+  const token = process.env.APIFY_API_TOKEN
+  if (!token) return null
+
+  const actorId = await resolveInstagramPostsActor()
+  if (!actorId) return null                              // 2ª llamada desactivada
+
+  const url = `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`
+  try {
+    const { data } = await axios.post(
+      url,
+      { username: [username], resultsLimit: postsLimit },
+      { params: { token }, timeout: 180000 },
+    )
+    const items = Array.isArray(data) ? data : []
+    // El actor de posts devuelve un item por publicación. Descartamos items que no
+    // sean posts (por si algún actor mezcla un item de perfil).
+    return items.filter(i => i && (i.shortCode || i.id) && (i.timestamp || i.type))
+  } catch (err) {
+    const apifyMsg = err.response?.data?.error?.message || err.message
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: `Actor de posts IG: ${apifyMsg}`, username, workspaceId, context })
+    throw scrapeError(`El actor de posts de Instagram falló: ${apifyMsg}`, 'SCRAPE_PROVIDER_ERROR', 502)
+  }
+}
+
 // Mejor imagen de portada disponible para un post de Apify.
 // Para videos/reels el cover puede venir en displayUrl, images[] o thumbnail*.
 function bestPostImage(p) {
@@ -150,6 +197,39 @@ function bestPostImage(p) {
     if (first) return typeof first === 'string' ? first : (first.url ?? first.src ?? null)
   }
   return p.thumbnailSrc ?? p.thumbnailUrl ?? p.thumbnail ?? p.imageUrl ?? null
+}
+
+/**
+ * Normaliza un post crudo de Apify (ya sea de `latestPosts` del actor de perfil o
+ * de un item del actor de posts — comparten el mismo shape por publicación) al
+ * media interno usado por computeInstagramMetrics.
+ */
+function normalizeApifyPost(p) {
+  const cover = bestPostImage(p)
+  return {
+    id:            p.shortCode ?? p.id ?? null,
+    like_count:    p.likesCount    ?? null,
+    comments_count: p.commentsCount ?? null,
+    timestamp:     p.timestamp     ?? null,
+    media_type:    APIFY_TYPE_MAP[p.type] ?? 'IMAGE',
+    media_url:     cover,
+    thumbnail_url: cover,
+    permalink:     p.url           ?? (p.shortCode ? `https://www.instagram.com/p/${p.shortCode}/` : null),
+    caption:       p.caption       ?? null,
+  }
+}
+
+/**
+ * Fusiona dos listas de media (perfil + actor de posts) deduplicando por id.
+ * Prioriza la publicación de `primary` cuando el id se repite (más completa).
+ */
+function mergeMediaById(primary = [], secondary = []) {
+  const byId = new Map()
+  for (const m of secondary) if (m.id) byId.set(m.id, m)
+  for (const m of primary)   if (m.id) byId.set(m.id, m)
+  // Posts sin id (raro) se conservan tal cual.
+  const noId = [...primary, ...secondary].filter(m => !m.id)
+  return [...byId.values(), ...noId]
 }
 
 /**
@@ -166,20 +246,7 @@ function normalizeApifyProfile(item) {
     website:             item.externalUrl ?? null,
   }
 
-  const media = (Array.isArray(item.latestPosts) ? item.latestPosts : []).map(p => {
-    const cover = bestPostImage(p)
-    return {
-      id:            p.shortCode ?? p.id ?? null,
-      like_count:    p.likesCount    ?? null,
-      comments_count: p.commentsCount ?? null,
-      timestamp:     p.timestamp     ?? null,
-      media_type:    APIFY_TYPE_MAP[p.type] ?? 'IMAGE',
-      media_url:     cover,
-      thumbnail_url: cover,
-      permalink:     p.url           ?? (p.shortCode ? `https://www.instagram.com/p/${p.shortCode}/` : null),
-      caption:       p.caption       ?? null,
-    }
-  })
+  const media = (Array.isArray(item.latestPosts) ? item.latestPosts : []).map(normalizeApifyPost)
 
   return { profile, media, isPrivate: !!item.private }
 }
@@ -203,7 +270,30 @@ async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
     workspaceId: opts.workspaceId ?? null,
     context: opts.context ?? null,
   })
-  const { profile, media, isPrivate } = normalizeApifyProfile(item)
+  const { profile, media: profileMedia, isPrivate } = normalizeApifyProfile(item)
+
+  // 2ª llamada (si hay actor de posts configurado): el `latestPosts` del actor de
+  // perfil viene capado y desordenado, así que perdemos publicaciones del mes en
+  // cuentas activas. El actor de posts trae la lista completa y ordenada; la
+  // fusionamos con la del perfil (dedup por id). Best-effort: si falla, seguimos
+  // con la del perfil (no rompe seguidores ni el resto).
+  let media = profileMedia
+  let postsActorUsed = false
+  try {
+    const rawPosts = await runApifyInstagramPosts(username, {
+      postsLimit,
+      workspaceId: opts.workspaceId ?? null,
+      context: opts.context ?? null,
+    })
+    if (Array.isArray(rawPosts) && rawPosts.length > 0) {
+      const postsMedia = rawPosts.map(normalizeApifyPost)
+      media = mergeMediaById(postsMedia, profileMedia)
+      postsActorUsed = true
+    }
+  } catch (err) {
+    console.warn(`[Scrape] @${username}: 2ª llamada (posts) falló, uso latestPosts del perfil:`, err.message)
+  }
+
   const metrics = computeInstagramMetrics(profile, media, opts.targetMonth ?? null)
 
   // Cobertura del mes: si todas las publicaciones traídas caen dentro del mes objetivo
@@ -222,7 +312,7 @@ async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
     }
   }
 
-  return { ...metrics, isPrivate, scraped: true, monthCoverageComplete }
+  return { ...metrics, isPrivate, scraped: true, monthCoverageComplete, postsActorUsed }
 }
 
 // ─── LinkedIn (Company Pages, scraping público) ────────────────────────────────
@@ -726,32 +816,48 @@ async function debugScrapeInstagram(usernameOrUrl, opts = {}) {
   try { cfgLimit = Number(await getSetting('apifyInstagramPostsLimit')) || 0 } catch { /* DB no disponible */ }
   const postsLimit = opts.postsLimit ?? (cfgLimit > 0 ? cfgLimit : DEFAULT_POSTS_LIMIT)
 
-  const item = await runApifyInstagram(username, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'Instagram — diagnóstico' })
-  const { profile, media, isPrivate } = normalizeApifyProfile(item)
   const targetMonth = opts.targetMonth ?? null
-  const metrics = computeInstagramMetrics(profile, media, targetMonth)
-
   const monthOf = (ts) => {
     if (!ts) return null
     const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
     return isNaN(d.getTime()) ? null : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   }
 
-  // Publicaciones tal como las trae el actor (antes de normalizar), para ver qué
-  // "type"/"timestamp" llegan realmente por reel/post.
-  const rawPosts = Array.isArray(item.latestPosts) ? item.latestPosts : []
-  const rawBreakdown = rawPosts.map(p => ({
-    id:            p.shortCode ?? p.id ?? null,
-    type:          p.type ?? null,
-    productType:   p.productType ?? p.product_type ?? null,
-    hasTimestamp:  p.timestamp != null,
-    timestamp:     p.timestamp ?? null,
-    altTimeKeys:   Object.keys(p).filter(k => /time|date|taken/i.test(k)),
-    month:         monthOf(p.timestamp),
+  // 1ª llamada — actor de perfil (seguidores + latestPosts capado).
+  const item = await runApifyInstagram(username, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'Instagram — diagnóstico' })
+  const { profile, media: profileMedia, isPrivate } = normalizeApifyProfile(item)
+  const rawLatest = Array.isArray(item.latestPosts) ? item.latestPosts : []
+
+  // 2ª llamada — actor de posts (lista completa y ordenada), si está configurado.
+  const postsActor = await resolveInstagramPostsActor()
+  let rawPostsActor = []
+  let postsActorError = null
+  if (postsActor) {
+    try {
+      rawPostsActor = (await runApifyInstagramPosts(username, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'Instagram — diagnóstico' })) || []
+    } catch (err) {
+      postsActorError = err.message
+    }
+  }
+
+  // Fusión final (lo que efectivamente se contaría).
+  const mergedMedia = rawPostsActor.length > 0
+    ? mergeMediaById(rawPostsActor.map(normalizeApifyPost), profileMedia)
+    : profileMedia
+  const metrics = computeInstagramMetrics(profile, mergedMedia, targetMonth)
+
+  const rawBreakdown = (src) => src.map(p => ({
+    id:           p.shortCode ?? p.id ?? null,
+    type:         p.type ?? null,
+    productType:  p.productType ?? p.product_type ?? null,
+    hasTimestamp: p.timestamp != null,
+    timestamp:    p.timestamp ?? null,
+    altTimeKeys:  Object.keys(p).filter(k => /time|date|taken/i.test(k)),
+    month:        monthOf(p.timestamp),
+    inTarget:     targetMonth ? monthOf(p.timestamp) === targetMonth : null,
   }))
 
-  // Media normalizada, con el mes calculado y si entra al mes objetivo.
-  const mediaBreakdown = media.map(m => ({
+  const mergedBreakdown = mergedMedia.map(m => ({
     id:         m.id,
     media_type: m.media_type,
     timestamp:  m.timestamp,
@@ -759,22 +865,26 @@ async function debugScrapeInstagram(usernameOrUrl, opts = {}) {
     inTarget:   targetMonth ? monthOf(m.timestamp) === targetMonth : null,
   }))
 
+  const inTarget = (src) => targetMonth ? src.filter(p => monthOf(p.timestamp) === targetMonth).length : null
+
   return {
     username,
     targetMonth,
     postsLimit,
-    itemCount: 1,
-    topLevelKeys: item && typeof item === 'object' ? Object.keys(item) : null,
-    postFieldKeysFirst: rawPosts[0] && typeof rawPosts[0] === 'object' ? Object.keys(rawPosts[0]) : null,
+    postsActor: postsActor || '(desactivado — solo actor de perfil)',
+    postsActorError,
     counts: {
-      rawLatestPosts:      rawPosts.length,
-      rawWithTimestamp:    rawBreakdown.filter(p => p.hasTimestamp).length,
-      normalizedMedia:     media.length,
-      normalizedInTarget:  targetMonth ? mediaBreakdown.filter(m => m.inTarget).length : null,
-      postsThisMonth:      metrics.postsThisMonth,
+      profileLatestPosts:  rawLatest.length,          // 1ª llamada (capado)
+      profileInTarget:     inTarget(rawLatest),
+      postsActorReturned:  rawPostsActor.length,      // 2ª llamada (completa)
+      postsActorInTarget:  inTarget(rawPostsActor),
+      mergedMedia:         mergedMedia.length,         // fusión
+      mergedInTarget:      targetMonth ? mergedBreakdown.filter(m => m.inTarget).length : null,
+      postsThisMonth:      metrics.postsThisMonth,    // lo que se muestra en la app
     },
-    rawBreakdown,
-    mediaBreakdown,
+    profileBreakdown:   rawBreakdown(rawLatest),
+    postsActorBreakdown: rawBreakdown(rawPostsActor),
+    mergedBreakdown,
     isPrivate,
   }
 }
