@@ -926,6 +926,9 @@ export default function InstagramTab({ projectId, onSelectProject }) {
   const [stories,          setStories]          = useState(null)
   const [storiesScrapeOnly, setStoriesScrapeOnly] = useState(false)
   const [capturingStories, setCapturingStories] = useState(false)
+  const [mergeDbg,         setMergeDbg]         = useState(null)
+  const [mergeDbgLoading,  setMergeDbgLoading]  = useState(false)
+  const [mergeDbgError,    setMergeDbgError]    = useState(null)
 
   const fetchData = useCallback(async () => {
     if (!projectId) return
@@ -1049,6 +1052,16 @@ export default function InstagramTab({ projectId, onSelectProject }) {
     } finally { setRefreshing(false) }
   }
 
+  async function handleMergeDebug() {
+    setMergeDbgLoading(true); setMergeDbgError(null); setMergeDbg(null)
+    try {
+      const { data } = await api.get(`/marketing/projects/${projectId}/instagram/merge-debug`)
+      setMergeDbg(data)
+    } catch (err) {
+      setMergeDbgError(err.response?.data?.error || 'No se pudo correr el diagnóstico.')
+    } finally { setMergeDbgLoading(false) }
+  }
+
   if (!projectId) {
     return <CrossProjectInstagramPanel onSelectProject={onSelectProject} />
   }
@@ -1102,6 +1115,33 @@ export default function InstagramTab({ projectId, onSelectProject }) {
       {/* Error */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">{error}</div>
+      )}
+
+      {/* Diagnóstico del merge de collabs (solo cuentas por token/oficial) */}
+      {integration && integration.scopes !== 'scrape' && (
+        <div className="bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span>🔧 Diagnóstico del conteo de publicaciones del mes (API oficial + collabs scrapeados).</span>
+            <button onClick={handleMergeDebug} disabled={mergeDbgLoading}
+              className="shrink-0 px-2.5 py-1 rounded-lg border border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 disabled:opacity-50 transition-colors font-medium">
+              {mergeDbgLoading ? 'Diagnosticando…' : '🔍 Diagnóstico'}
+            </button>
+          </div>
+          {mergeDbgError && <p className="mt-2 text-red-600 dark:text-red-400">{mergeDbgError}</p>}
+          {mergeDbg && (
+            <div className="mt-3 space-y-2">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-blue-800 dark:text-blue-200 font-medium">
+                <span>oficial: {mergeDbg.counts?.official} · del mes {mergeDbg.counts?.officialInMonth}</span>
+                <span>scrape: {mergeDbg.counts?.scraped} · del mes {mergeDbg.counts?.scrapedInMonth}</span>
+                <span className="text-blue-900 dark:text-blue-100">fusión del mes: {mergeDbg.counts?.mergedInMonth}</span>
+              </div>
+              <p className="text-[11px] text-blue-600/80 dark:text-blue-300/80">
+                Si "fusión del mes" &gt; los que contás, mirá <code>mergedInMonth</code>: dos filas con la misma foto pero distinta <code>key</code> = un post que no dedupó. La <code>imgSrc</code> muestra qué URL usa cada uno (las de scrape vencen → rotas).{mergeDbg.scrapeError ? ` — scrapeError: ${mergeDbg.scrapeError}` : ''}
+              </p>
+              <pre className="mt-1 max-h-80 overflow-auto rounded-lg bg-blue-100/50 dark:bg-blue-950/40 p-2 text-[10px] leading-tight">{JSON.stringify(mergeDbg, null, 2)}</pre>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Navegación por mes */}

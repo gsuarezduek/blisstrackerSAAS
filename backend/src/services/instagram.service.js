@@ -26,7 +26,9 @@ const TYPE_LABEL = {
  *   media crudo del grid público (`(username) => Promise<Array>`) para sumar las
  *   publicaciones en colaboración que la Graph API NO expone en `/me/media`.
  */
-async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, useFbGraph = false, opts = {}) {
+// Trae el perfil + la media cruda de la Graph API (sin computar). Extraído para
+// reutilizarlo en el diagnóstico del merge de collabs.
+async function fetchInstagramRawMedia(igUserId, accessToken, useFbGraph = false) {
   const base = useFbGraph ? BASE_FB    : BASE_IGAAM
   const meId = useFbGraph ? igUserId   : 'me'
 
@@ -46,8 +48,12 @@ async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, 
     }),
   ])
 
-  const profile = profileRes.data
-  let media     = mediaRes.data?.data ?? []
+  return { base, meId, profile: profileRes.data, media: mediaRes.data?.data ?? [] }
+}
+
+async function fetchInstagramMetrics(igUserId, accessToken, targetMonth = null, useFbGraph = false, opts = {}) {
+  const { base, meId, profile, media: rawMedia } = await fetchInstagramRawMedia(igUserId, accessToken, useFbGraph)
+  let media = rawMedia
 
   // Insights (requiere instagram_business_manage_insights). Best-effort: si falla
   // —permiso no aprobado, cuenta chica, cambio de versión de API— las métricas
@@ -365,4 +371,4 @@ function computeInstagramMetrics(profile, media = [], targetMonth = null, insigh
   }
 }
 
-module.exports = { fetchInstagramMetrics, computeInstagramMetrics }
+module.exports = { fetchInstagramMetrics, computeInstagramMetrics, fetchInstagramRawMedia, mergeInstagramMedia, shortCodeOf }

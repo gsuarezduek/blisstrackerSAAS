@@ -1,6 +1,6 @@
 const prisma  = require('../lib/prisma')
 const { getValidMetaToken }        = require('../services/metaTokenRefresh.service')
-const { fetchInstagramMetrics }    = require('../services/instagram.service')
+const { fetchInstagramMetrics, fetchInstagramRawMedia, mergeInstagramMedia, shortCodeOf } = require('../services/instagram.service')
 const { saveInstagramSnapshot }    = require('../services/instagramSnapshot.service')
 const { scrapeInstagramProfile, scrapeInstagramMediaRaw, parseInstagramUsername } = require('../services/socialScrape.service')
 const { getStoriesSummary, captureStoriesForProject }    = require('../services/instagramStories.service')
@@ -45,6 +45,77 @@ async function buildCollabScraper(integration, workspaceId) {
   if (!enabled) return null
   const month = currentMonthStr()
   return (username) => getCollabMediaCached(integration, username, month, workspaceId)
+}
+
+/**
+ * GET /api/marketing/projects/:id/instagram/merge-debug
+ * Diagnóstico del merge oficial + collabs (cuentas por API/token): muestra la media
+ * de cada fuente, la clave de dedup, si entra al mes y la URL de imagen, para ver
+ * el conteo y por qué una imagen sale rota.
+ */
+async function mergeDebug(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const integration = await prisma.projectIntegration.findUnique({
+      where: { projectId_type: { projectId, type: 'instagram' } },
+    })
+    if (!integration) return res.status(404).json({ error: 'Sin integración de Instagram', code: 'NOT_CONNECTED' })
+    if (integration.scopes === 'scrape') return res.status(400).json({ error: 'Esta cuenta es por scraping; el diagnóstico de merge aplica a la conexión por API/token.', code: 'SCRAPE_MODE' })
+
+    let token
+    try { token = await getValidMetaToken(integration) }
+    catch (e) { return res.status(400).json({ error: e.message, code: 'TOKEN_EXPIRED' }) }
+
+    const month = currentMonthStr()
+    const monthOf = (ts) => {
+      if (!ts) return null
+      const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+      return isNaN(d.getTime()) ? null : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    }
+
+    const useFbGraph = integration.scopes?.startsWith('fb_graph')
+    const { profile, media: official } = await fetchInstagramRawMedia(integration.propertyId, token, useFbGraph)
+
+    let scraped = []
+    let scrapeError = null
+    try {
+      const raw = await scrapeInstagramMediaRaw(profile.username, { targetMonth: month, workspaceId, context: 'Instagram — diagnóstico merge' })
+      scraped = raw.media || []
+    } catch (err) { scrapeError = err.message }
+
+    const merged = mergeInstagramMedia(official, scraped)
+
+    const row = (m) => ({
+      key:       shortCodeOf(m),
+      id:        m.id ?? null,
+      permalink: m.permalink ?? null,
+      month:     monthOf(m.timestamp),
+      inTarget:  monthOf(m.timestamp) === month,
+      imgSrc:    m.thumbnail_url ?? m.media_url ?? null,
+    })
+
+    res.json({
+      username: profile.username,
+      month,
+      scrapeError,
+      counts: {
+        official:        official.length,
+        officialInMonth: official.filter(m => monthOf(m.timestamp) === month).length,
+        scraped:         scraped.length,
+        scrapedInMonth:  scraped.filter(m => monthOf(m.timestamp) === month).length,
+        merged:          merged.length,
+        mergedInMonth:   merged.filter(m => monthOf(m.timestamp) === month).length,  // = postsThisMonth
+      },
+      officialInMonth: official.filter(m => monthOf(m.timestamp) === month).map(row),
+      scrapedInMonth:  scraped.filter(m => monthOf(m.timestamp) === month).map(row),
+      mergedInMonth:   merged.filter(m => monthOf(m.timestamp) === month).map(row),
+    })
+  } catch (err) { next(err) }
 }
 
 function currentMonthStr() {
@@ -471,4 +542,4 @@ async function captureStories(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, getStories, captureStories }
+module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, mergeDebug, getStories, captureStories }
