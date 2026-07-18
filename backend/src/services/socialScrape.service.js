@@ -216,6 +216,8 @@ function normalizeApifyPost(p) {
     thumbnail_url: cover,
     permalink:     p.url           ?? (p.shortCode ? `https://www.instagram.com/p/${p.shortCode}/` : null),
     caption:       p.caption       ?? null,
+    ownerUsername: p.ownerUsername ?? null,   // autor real del post (≠ cuenta → collab/etiquetado)
+    productType:   p.productType ?? p.product_type ?? null,
   }
 }
 

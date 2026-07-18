@@ -8,7 +8,7 @@ import useLegajoFields from '../../hooks/useLegajoFields'
 import useRoles from '../../hooks/useRoles'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { isLegajoComplete } from '../../components/legajo/legajoUtils'
-import { TZ, todayBA, todayStr, fmtDateShort, minsToTime, daysUntilNextOccurrence, relativeDay, StatCard } from './shared'
+import { TZ, todayBA, todayStr, fmtDateShort, minsToTime, daysUntilNextOccurrence, relativeDay, StatCard, LEAVE_TYPE_LABELS, leaveRangeLabel } from './shared'
 
 export function healthBand(pct) {
   if (pct == null) return { text: 'text-gray-500 dark:text-gray-400',  bar: 'bg-gray-300 dark:bg-gray-600', label: 'Sin evaluar' }
@@ -177,12 +177,22 @@ export function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) 
     for (const u of activeUsers) m[u.id] = u
     return m
   }, [activeUsers])
-  // Quiénes no iniciaron sesión hoy (para la tarjeta clickeable)
-  const notLoggedInToday = useMemo(() => activeUsers.filter(u => {
+  // Licencias en curso o próximas (30 días), calculadas server-side en dashboard-stats.
+  const leaves = dashStats.leaves ?? []
+  const onLeaveToday = useMemo(() => leaves.filter(l => l.active), [leaves])
+  const onLeaveIds = useMemo(() => new Set(onLeaveToday.map(l => l.userId)), [onLeaveToday])
+  // "Esperados hoy" = activos que NO están de licencia (para no contarlos como ausentes).
+  const presentExpected = useMemo(
+    () => activeUsers.filter(u => !onLeaveIds.has(u.id)),
+    [activeUsers, onLeaveIds],
+  )
+
+  // Quiénes no iniciaron sesión hoy (para la tarjeta clickeable) — excluye a los de licencia.
+  const notLoggedInToday = useMemo(() => presentExpected.filter(u => {
     const last = lastLoginsMap[u.id]
     return !(last && new Date(last).toLocaleDateString('en-CA', { timeZone: TZ }) === todayBA_str)
-  }), [activeUsers, lastLoginsMap, todayBA_str])
-  const loggedInToday = activeUsers.length - notLoggedInToday.length
+  }), [presentExpected, lastLoginsMap, todayBA_str])
+  const loggedInToday = presentExpected.length - notLoggedInToday.length
 
   // Horas disponibles del equipo según horario cargado (workEndTime − workStartTime por persona)
   const teamHours = useMemo(() => {
@@ -248,8 +258,11 @@ export function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) 
 
   // Todas las métricas numéricas, cada una en su propia tarjeta (sin slider)
   const statCards = [
-    { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${activeUsers.length}`,
-      sub: loggedInToday === activeUsers.length ? 'Todo el equipo conectado' : `${notLoggedInToday.length} aún no ingresaron`,
+    { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${presentExpected.length}`,
+      sub: [
+        loggedInToday === presentExpected.length ? 'Todo el equipo conectado' : `${notLoggedInToday.length} aún no ingresaron`,
+        onLeaveToday.length > 0 ? `${onLeaveToday.length} de licencia (no cuentan)` : null,
+      ].filter(Boolean).join(' · '),
       onClick: notLoggedInToday.length > 0 ? () => setListModal('notLoggedIn') : undefined },
     { icon: '📅', label: 'Antigüedad promedio',       value: avgTenureYears,              sub: 'del equipo activo', onClick: () => setHistoryMetric('tenure') },
     { icon: '📁', label: 'Proyectos por persona',     value: dashStats.projectsPerPerson, sub: 'proyectos activos ÷ equipo', onClick: () => setHistoryMetric('projectsPerPerson') },
@@ -289,8 +302,8 @@ export function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) 
         <PeopleScoreCard peopleScore={peopleScore} />
       )}
 
-      {/* Fila 2: cumpleaños + aniversarios */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Fila 2: cumpleaños + aniversarios + licencias */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {/* Próximos cumpleaños */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
@@ -341,6 +354,37 @@ export function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) 
                     }`}>{relativeDay(u.days)}</span>
                   </div>
                 ))}
+              </div>
+          }
+        </div>
+
+        {/* Licencias (en curso + próximas 30 días) */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+            🏖️ Licencias
+          </p>
+          {leaves.length === 0
+            ? <p className="text-sm text-gray-400 dark:text-gray-500">Nadie de licencia en los próximos 30 días</p>
+            : <div className="space-y-2">
+                {leaves.map(l => {
+                  const days = Math.max(0, Math.round((new Date(l.startDate + 'T12:00:00') - today) / 86400000))
+                  return (
+                    <div key={l.id} className="flex items-center gap-2.5">
+                      <img src={avatarUrl(l.avatar)} alt={l.name}
+                        className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{l.name}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                          {LEAVE_TYPE_LABELS[l.type] ?? l.type} · {leaveRangeLabel(l.startDate, l.endDate)}
+                        </p>
+                      </div>
+                      {l.active
+                        ? <span className="text-xs font-medium flex-shrink-0 text-primary-600 dark:text-primary-400">en curso</span>
+                        : <span className="text-xs font-medium flex-shrink-0 text-gray-500 dark:text-gray-400">{relativeDay(days)}</span>
+                      }
+                    </div>
+                  )
+                })}
               </div>
           }
         </div>
@@ -422,7 +466,7 @@ export function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) 
       {listModal === 'notLoggedIn' && (
         <PeopleListModal
           title="🟢 Sin iniciar sesión hoy"
-          subtitle={`${notLoggedInToday.length} de ${activeUsers.length} todavía no ingresaron`}
+          subtitle={`${notLoggedInToday.length} de ${presentExpected.length} todavía no ingresaron${onLeaveToday.length > 0 ? ` · ${onLeaveToday.length} de licencia` : ''}`}
           people={notLoggedInToday.map(u => ({ id: u.id, name: u.name, avatar: u.avatar, right: lastLoginsMap[u.id] ? daysSince(lastLoginsMap[u.id]) : 'sin registros' }))}
           onClose={() => setListModal(null)}
         />

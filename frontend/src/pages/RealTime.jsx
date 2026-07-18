@@ -132,6 +132,7 @@ export default function RealTime() {
   const { labelFor } = useRoles()
   const [entries, setEntries] = useState([])
   const [notStarted, setNotStarted] = useState([])
+  const [onLeave, setOnLeave] = useState([])
   const [loading, setLoading] = useState(true)
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL)
   const [lastUpdate, setLastUpdate] = useState(null)
@@ -158,6 +159,7 @@ export default function RealTime() {
       })
       setEntries(sorted)
       setNotStarted(res.notStarted)
+      setOnLeave(res.onLeave ?? [])
       setLastUpdate(new Date())
     } finally {
       setLoading(false)
@@ -184,7 +186,11 @@ export default function RealTime() {
   const active = entries.filter(e => !e.workDay.endedAt && matchUser(e.user.name))
   const finished = entries.filter(e => e.workDay.endedAt && matchUser(e.user.name))
   const filteredNotStarted = notStarted.filter(u => matchUser(u.name))
+  const filteredOnLeave = onLeave.filter(u => matchUser(u.name))
   const workingNow = active.filter(e => e.currentTask).length
+
+  const fmtLeaveEnd = iso =>
+    new Date(iso + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -246,6 +252,12 @@ export default function RealTime() {
             <span className="w-2 h-2 bg-green-400 rounded-full" />
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{active.length} activos hoy</span>
           </div>
+          {onLeave.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-2 flex items-center gap-2">
+              <span className="text-sm">🏖️</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{onLeave.length} de licencia</span>
+            </div>
+          )}
           {finished.length > 0 && (
             <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-2 flex items-center gap-2">
               <span className="w-2 h-2 bg-gray-300 rounded-full" />
@@ -262,6 +274,24 @@ export default function RealTime() {
 
         {loading && (
           <LoadingSpinner className="py-20" />
+        )}
+
+        {/* De licencia hoy — solo si hay alguien. Vista de equipo: no se muestra el tipo. */}
+        {filteredOnLeave.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-4">🏖️ Licencias</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredOnLeave.map(u => (
+                <div key={u.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex items-center gap-3.5">
+                  <Avatar user={u} size="w-14 h-14" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 dark:text-white truncate">{u.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">De licencia · hasta {fmtLeaveEnd(u.endDate)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* Active users grid */}

@@ -371,4 +371,4 @@ function computeInstagramMetrics(profile, media = [], targetMonth = null, insigh
   }
 }
 
-module.exports = { fetchInstagramMetrics, computeInstagramMetrics, fetchInstagramRawMedia, mergeInstagramMedia, shortCodeOf }
+module.exports = { fetchInstagramMetrics, computeInstagramMetrics }

@@ -48,6 +48,32 @@ export function relativeDay(days) {
   return `en ${days} días`
 }
 
+// ─── Licencias ────────────────────────────────────────────────────────────────
+
+export const LEAVE_TYPE_LABELS = {
+  vacaciones: 'Vacaciones',
+  estudio:    'Estudio / examen',
+  maternidad: 'Maternidad',
+  paternidad: 'Paternidad',
+  enfermedad: 'Enfermedad / salud',
+  duelo:      'Duelo familiar',
+  mudanza:    'Mudanza',
+  otro:       'Otro',
+}
+
+// Cantidad de días de calendario que cubre una licencia (inclusivo de ambos extremos).
+export function leaveDayCount(start, end) {
+  const a = new Date(start + 'T12:00:00'), b = new Date(end + 'T12:00:00')
+  return Math.round((b - a) / 86400000) + 1
+}
+
+// Rango de fechas legible: "5 de mar" o "5 – 9 mar 2026".
+export function leaveRangeLabel(start, end) {
+  const fmt = (d, opts) => new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { timeZone: TZ, ...opts })
+  if (start === end) return fmt(start, { day: 'numeric', month: 'short', year: 'numeric' })
+  return `${fmt(start, { day: 'numeric', month: 'short' })} – ${fmt(end, { day: 'numeric', month: 'short', year: 'numeric' })}`
+}
+
 // ─── Mini Dashboard ───────────────────────────────────────────────────────────
 
 export function StatCard({ icon, label, value, sub, onClick }) {

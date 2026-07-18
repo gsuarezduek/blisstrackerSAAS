@@ -7,7 +7,7 @@ import useRoles from '../../hooks/useRoles'
 import RoleBadge from '../../components/RoleBadge'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { fieldValue, displayValue } from '../../components/legajo/legajoUtils'
-import { TZ, fmtDate } from './shared'
+import { TZ, fmtDate, LEAVE_TYPE_LABELS, leaveDayCount, leaveRangeLabel } from './shared'
 
 export function Field({ label, value }) {
   if (value === null || value === undefined || value === '') return null
@@ -157,11 +157,13 @@ export function TabLegajos({ users, onVacationUpdate }) {
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [vacModalOpen, setVacModalOpen] = useState(false)
   const [showLoginDays, setShowLoginDays] = useState(false)
+  const [leaveYear, setLeaveYear] = useState(new Date().getFullYear())
 
   const selected = users.find(u => String(u.id) === selectedId) ?? null
 
   useEffect(() => {
     setShowLoginDays(false)
+    setLeaveYear(new Date().getFullYear())
     if (!selectedId) { setSummary(null); return }
     setSummaryLoading(true)
     api.get(`/admin/rrhh/user-summary/${selectedId}`)
@@ -187,6 +189,11 @@ export function TabLegajos({ users, onVacationUpdate }) {
         .filter(r => r.value !== null && r.value !== undefined && r.value !== '')
     : []
   const hasPersonalData = legajoRows.length > 0
+
+  // Licencias tomadas (aprobadas) de la persona en el año seleccionado.
+  const allLeaves = summary?.leaves ?? []
+  const yearLeaves = allLeaves.filter(l => Number(l.startDate.slice(0, 4)) === leaveYear)
+  const yearLeaveDays = yearLeaves.reduce((s, l) => s + leaveDayCount(l.startDate, l.endDate), 0)
 
   return (
     <div>
@@ -311,6 +318,53 @@ export function TabLegajos({ users, onVacationUpdate }) {
                 Editar días
               </button>
             </div>
+          </div>
+
+          {/* Licencias tomadas — por año calendario, con navegación */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                🏖️ Licencias tomadas
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setLeaveYear(y => y - 1)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  title="Año anterior"
+                >◀</button>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums w-12 text-center">{leaveYear}</span>
+                <button
+                  onClick={() => setLeaveYear(y => y + 1)}
+                  disabled={leaveYear >= new Date().getFullYear()}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                  title="Año siguiente"
+                >▶</button>
+              </div>
+            </div>
+            {summaryLoading
+              ? <LoadingSpinner size="sm" className="py-4" />
+              : yearLeaves.length === 0
+                ? <p className="text-sm text-gray-400 dark:text-gray-500 py-2">Sin licencias registradas en {leaveYear}.</p>
+                : <>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      <span className="font-semibold text-gray-800 dark:text-gray-200">{yearLeaveDays}</span> día{yearLeaveDays !== 1 ? 's' : ''} en {yearLeaves.length} licencia{yearLeaves.length !== 1 ? 's' : ''}
+                    </p>
+                    <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {yearLeaves.map(l => (
+                        <div key={l.id} className="flex items-start justify-between gap-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{LEAVE_TYPE_LABELS[l.type] ?? l.type}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">{leaveRangeLabel(l.startDate, l.endDate)}</p>
+                            {l.observation && <p className="text-xs text-gray-400 dark:text-gray-500 italic mt-0.5 truncate">{l.observation}</p>}
+                          </div>
+                          <span className="text-xs font-medium text-gray-600 dark:text-gray-300 flex-shrink-0 tabular-nums">
+                            {leaveDayCount(l.startDate, l.endDate)} día{leaveDayCount(l.startDate, l.endDate) !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+            }
           </div>
 
           {/* Datos personales */}

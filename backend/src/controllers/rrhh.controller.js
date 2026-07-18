@@ -113,7 +113,7 @@ async function userSummary(req, res, next) {
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
 
-    const [logins, memberships, member] = await Promise.all([
+    const [logins, memberships, member, leaveRows] = await Promise.all([
       prisma.userLogin.findMany({
         where: { userId, workspaceId },
         select: { id: true, loginAt: true },
@@ -126,6 +126,12 @@ async function userSummary(req, res, next) {
       prisma.workspaceMember.findUnique({
         where: { workspaceId_userId: { workspaceId, userId } },
         select: { active: true, workStartTime: true, workEndTime: true },
+      }),
+      // Licencias efectivamente tomadas (aprobadas). El frontend filtra por año.
+      prisma.vacationRequest.findMany({
+        where: { workspaceId, userId, status: 'approved' },
+        select: { id: true, type: true, startDate: true, endDate: true, observation: true },
+        orderBy: { startDate: 'desc' },
       }),
     ])
 
@@ -197,6 +203,7 @@ async function userSummary(req, res, next) {
       workStartTime: member?.workStartTime ?? null,
       workEndTime: member?.workEndTime ?? null,
       punctuality,
+      leaves: leaveRows,
       attendanceTrackingEnabled,
       lateToleranceMins: tolerance,
     })
@@ -278,7 +285,12 @@ async function dashboardStats(req, res, next) {
     // Hora promedio y puntualidad se calculan sobre el MES EN CURSO (hay historial para otros meses).
     const monthStart = new Date().toLocaleDateString('en-CA', { timeZone: tz }).slice(0, 7) + '-01'
 
-    const [members, activeProjects, monthLogins] = await Promise.all([
+    // Ventana para "Licencias": aprobadas que se solapan con [hoy, hoy+30d].
+    const today30 = new Date(); today30.setDate(today30.getDate() + 30)
+    const leaveHorizon = today30.toLocaleDateString('en-CA', { timeZone: tz })
+    const todayStrTz = new Date().toLocaleDateString('en-CA', { timeZone: tz })
+
+    const [members, activeProjects, monthLogins, leaveRows] = await Promise.all([
       prisma.workspaceMember.findMany({
         where: { workspaceId, active: true },
         select: { userId: true, workStartTime: true },
@@ -293,7 +305,31 @@ async function dashboardStats(req, res, next) {
         select: { userId: true, loginAt: true },
         orderBy: { loginAt: 'asc' },
       }),
+      prisma.vacationRequest.findMany({
+        where: {
+          workspaceId,
+          status: 'approved',
+          startDate: { lte: leaveHorizon },  // empieza dentro del horizonte
+          endDate:   { gte: todayStrTz },     // y todavía no terminó
+        },
+        select: {
+          id: true, type: true, startDate: true, endDate: true,
+          user: { select: { id: true, name: true, avatar: true } },
+        },
+        orderBy: { startDate: 'asc' },
+      }),
     ])
+    // Licencias en curso o próximas (30 días). Cada fila marca si está activa hoy.
+    const leaves = leaveRows.map(l => ({
+      id: l.id,
+      userId: l.user.id,
+      name: l.user.name,
+      avatar: l.user.avatar,
+      type: l.type,
+      startDate: l.startDate,
+      endDate: l.endDate,
+      active: l.startDate <= todayStrTz && l.endDate >= todayStrTz,
+    }))
 
     const activeMembers = members.length
     // Mapa userId → minutos del horario de inicio configurado.
@@ -373,6 +409,7 @@ async function dashboardStats(req, res, next) {
       lateCount,
       membersWithSchedule: Object.keys(scheduleMap).length,
       lateToday,
+      leaves,
       attendanceTrackingEnabled,
       lateToleranceMins: tolerance,
     })

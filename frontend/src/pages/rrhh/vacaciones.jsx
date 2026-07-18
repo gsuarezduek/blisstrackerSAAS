@@ -3,17 +3,9 @@ import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import RoleBadge from '../../components/RoleBadge'
+import { LEAVE_TYPE_LABELS } from './shared'
 
-export const LEAVE_TYPE_LABELS = {
-  vacaciones: 'Vacaciones',
-  estudio:    'Estudio / examen',
-  maternidad: 'Maternidad',
-  paternidad: 'Paternidad',
-  enfermedad: 'Enfermedad / salud',
-  duelo:      'Duelo familiar',
-  mudanza:    'Mudanza',
-  otro:       'Otro',
-}
+export { LEAVE_TYPE_LABELS }
 
 export const REQUEST_STATUS = {
   pending:  { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
@@ -198,10 +190,13 @@ export function EditModal({ request, onClose, onDone }) {
   )
 }
 
+const PAGE_SIZE = 20
+
 export function TabVacaciones() {
   const [requests, setRequests] = useState([])
   const [loading, setLoading]   = useState(true)
   const [filter, setFilter]     = useState('pending')
+  const [visible, setVisible]   = useState(PAGE_SIZE)
   const [reviewing, setReviewing] = useState(null)
   const [editing, setEditing]   = useState(null)
 
@@ -212,6 +207,9 @@ export function TabVacaciones() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Al cambiar de filtro, volver a mostrar solo las primeras 20.
+  useEffect(() => { setVisible(PAGE_SIZE) }, [filter])
+
   function handleDone(updated) {
     setRequests(prev => prev.map(r => r.id === updated.id ? updated : r))
     setReviewing(null)
@@ -221,6 +219,7 @@ export function TabVacaciones() {
   const filtered = requests.filter(r =>
     filter === 'all' ? true : r.status === filter
   )
+  const shown = filtered.slice(0, visible)
 
   const pendingCount = requests.filter(r => r.status === 'pending').length
 
@@ -262,7 +261,7 @@ export function TabVacaciones() {
             )
           : (
               <div className="space-y-3">
-                {filtered.map(req => {
+                {shown.map(req => {
                   const st = REQUEST_STATUS[req.status] ?? REQUEST_STATUS.pending
                   const typeLabel = LEAVE_TYPE_LABELS[req.type] ?? req.type
                   return (
@@ -301,6 +300,17 @@ export function TabVacaciones() {
                     </div>
                   )
                 })}
+
+                {filtered.length > visible && (
+                  <div className="pt-1 text-center">
+                    <button
+                      onClick={() => setVisible(v => v + PAGE_SIZE)}
+                      className="text-sm font-medium px-4 py-2 bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+                    >
+                      Cargar más ({filtered.length - visible} restantes)
+                    </button>
+                  </div>
+                )}
               </div>
             )
       }

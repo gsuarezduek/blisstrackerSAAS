@@ -93,7 +93,27 @@ async function snapshot(req, res, next) {
       .filter(m => !workedIds.has(m.userId))
       .map(m => ({ ...m.user, role: m.teamRole }))
 
-    res.json({ entries: result, notStarted })
+    // Personas de licencia hoy (aprobadas que se solapan con la fecha actual).
+    // Vista de todo el equipo → NO se expone el tipo de licencia (puede ser sensible),
+    // solo quién está y hasta cuándo.
+    const leaveRows = await prisma.vacationRequest.findMany({
+      where: {
+        workspaceId,
+        status: 'approved',
+        startDate: { lte: date },
+        endDate:   { gte: date },
+      },
+      select: {
+        endDate: true,
+        user: { select: { id: true, name: true, avatar: true } },
+      },
+      orderBy: { endDate: 'asc' },
+    })
+    const onLeave = leaveRows.map(l => ({
+      id: l.user.id, name: l.user.name, avatar: l.user.avatar, endDate: l.endDate,
+    }))
+
+    res.json({ entries: result, notStarted, onLeave })
   } catch (err) { next(err) }
 }
 
