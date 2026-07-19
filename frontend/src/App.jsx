@@ -69,6 +69,7 @@ const Marketing        = lazy(() => import('./pages/Marketing'))
 const Billing          = lazy(() => import('./pages/Billing'))
 const EOS              = lazy(() => import('./pages/EOS'))
 const Gamification     = lazy(() => import('./pages/Gamification'))
+const Ventas           = lazy(() => import('./pages/Ventas'))
 const LegalPage        = lazy(() => import('./pages/TermsPage'))
 const ReportPublic     = lazy(() => import('./pages/ReportPublic'))
 
@@ -91,6 +92,15 @@ function SuperAdminRoute({ children }) {
   if (loading) return <LoadingSpinner size="lg" fullPage />
   if (!user) return <Navigate to="/login" replace />
   if (!user.isSuperAdmin) return <Navigate to="/" replace />
+  return children
+}
+
+// Módulo Ventas: acceden admins/owners y el equipo comercial (user.isSales).
+function SalesRoute({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return <LoadingSpinner size="lg" fullPage />
+  if (!user) return <Navigate to="/login" replace />
+  if (!user.isAdmin && !user.isSales) return <Navigate to="/" replace />
   return children
 }
 
@@ -140,6 +150,8 @@ export default function App() {
           <Route path="/admin/rrhh"         element={<AdminRoute><RRHH        /></AdminRoute>} />
           <Route path="/admin/eos"          element={<AdminRoute><EOS         /></AdminRoute>} />
           <Route path="/admin/gamification" element={<AdminRoute><Gamification /></AdminRoute>} />
+          <Route path="/ventas"       element={<SalesRoute><Ventas /></SalesRoute>} />
+          <Route path="/admin/ventas" element={<AdminRoute><Ventas /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </React.Suspense>

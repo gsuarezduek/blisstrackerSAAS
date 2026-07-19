@@ -1,0 +1,65 @@
+// Catálogo único del módulo Ventas (CRM).
+// Fuente de verdad de estados del lead, orígenes y tipos de evento del timeline.
+// Espejo en el frontend: frontend/src/components/ventas/salesCatalog.js
+// (mantener ambos en sync — el frontend usa labels/colores para el render).
+//
+// Para agregar un estado/origen nuevo: sumarlo acá y en el espejo. Nada más
+// del sistema depende de valores hardcodeados (los controllers validan contra
+// estas listas), por eso el CRM puede crecer sin tocar el resto del código.
+
+// Estados del Lead. `order` define la posición en el pipeline (para el Kanban futuro).
+// isWon/isLost marcan los estados terminales (Ganado habilita "Crear Proyecto").
+const LEAD_STATUSES = [
+  { key: 'prospecto',  label: 'Prospecto',  color: 'gray',   order: 1 },
+  { key: 'contactado', label: 'Contactado', color: 'blue',   order: 2 },
+  { key: 'reunion',    label: 'Reunión',    color: 'indigo', order: 3 },
+  { key: 'propuesta',  label: 'Propuesta',  color: 'amber',  order: 4 },
+  { key: 'ganado',     label: 'Ganado',     color: 'green',  order: 5, isWon: true },
+  { key: 'perdido',    label: 'Perdido',    color: 'red',    order: 6, isLost: true },
+]
+
+// Orígenes del Lead (para estadísticas de canal a futuro).
+const LEAD_ORIGINS = [
+  { key: 'sitio_web',  label: 'Sitio Web' },
+  { key: 'google_ads', label: 'Google Ads' },
+  { key: 'meta_ads',   label: 'Meta Ads' },
+  { key: 'linkedin',   label: 'LinkedIn' },
+  { key: 'referido',   label: 'Referido' },
+  { key: 'cliente',    label: 'Cliente' },
+  { key: 'whatsapp',   label: 'WhatsApp' },
+  { key: 'evento',     label: 'Evento' },
+  { key: 'llamada',    label: 'Llamada' },
+  { key: 'otro',       label: 'Otro' },
+]
+
+// Tipos de evento del timeline automático (LeadActivity.kind = 'event').
+// El `message` legible lo arma el controller; acá solo se define el vocabulario.
+const LEAD_EVENTS = [
+  'lead_created',
+  'status_changed',
+  'owner_changed',
+  'note_added',
+  'next_action_set',
+  'proposal_created',
+  'research_run',
+  'converted_to_client',
+  'project_created',
+]
+
+const LEAD_STATUS_KEYS = LEAD_STATUSES.map(s => s.key)
+const LEAD_ORIGIN_KEYS = LEAD_ORIGINS.map(o => o.key)
+
+function isValidStatus(key) { return LEAD_STATUS_KEYS.includes(key) }
+function isValidOrigin(key) { return key == null || LEAD_ORIGIN_KEYS.includes(key) }
+function statusMeta(key)    { return LEAD_STATUSES.find(s => s.key === key) || null }
+
+module.exports = {
+  LEAD_STATUSES,
+  LEAD_ORIGINS,
+  LEAD_EVENTS,
+  LEAD_STATUS_KEYS,
+  LEAD_ORIGIN_KEYS,
+  isValidStatus,
+  isValidOrigin,
+  statusMeta,
+}

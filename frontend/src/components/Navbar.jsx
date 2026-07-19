@@ -138,6 +138,7 @@ export default function Navbar() {
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
   const { enabled: eosEnabled }       = useFeatureFlag('eos')
   const { enabled: gamificationEnabled } = useFeatureFlag('gamification')
+  const { enabled: ventasEnabled }    = useFeatureFlag('ventas')
 
   // ── Links de navegación principal ────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
@@ -148,6 +149,9 @@ export default function Navbar() {
     { to: '/realtime', label: 'Actividad', dot: true },
     ...(isAdmin ? [{ to: '/reports', label: 'Reportes' }] : []),
     ...(marketingEnabled ? [{ to: '/marketing', label: 'Marketing' }] : []),
+    // Ventas como link principal SOLO para el equipo comercial no-admin.
+    // Los admins (incluidos admin+ventas) lo ven bajo Administración, nunca duplicado.
+    ...(ventasEnabled && !isAdmin && user?.isSales ? [{ to: '/ventas', label: 'Ventas' }] : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────
@@ -157,6 +161,7 @@ export default function Navbar() {
     { to: '/admin/rrhh',         label: '👥 RRHH' },
     ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
     ...(gamificationEnabled ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
+    ...(ventasEnabled ? [{ to: '/admin/ventas', label: '💰 Ventas' }] : []),
     { to: '/admin',              label: '⚙️ Panel' },
   ]
 

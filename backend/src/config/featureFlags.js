@@ -26,6 +26,11 @@ const FEATURE_FLAGS = [
     name: 'Gamification',
     description: 'Juegos y desafíos para el equipo: competencias entre proyectos, personas o equipos, votaciones (ej. compañero del mes) y rankings por premios. Configurable desde Administración → Gamification.',
   },
+  {
+    key: 'ventas',
+    name: 'Sección Ventas (CRM)',
+    description: 'CRM comercial: pipeline de leads/oportunidades, empresas y contactos, timeline automático, próximas acciones, propuestas con IA e investigación de empresas. Acceden admins y el equipo comercial configurable (Admin → Equipo).',
+  },
 ]
 
 module.exports = { FEATURE_FLAGS }

@@ -4,6 +4,7 @@ const crypto = require('crypto')
 const { sendPasswordReset, sendEmailChangedNotice } = require('../services/email.service')
 const { triggerLateCheck } = require('../services/lateNotification.service')
 const { OAuth2Client } = require('google-auth-library')
+const { isSalesUser } = require('../middleware/workspace')
 const prisma = require('../lib/prisma')
 
 /**
@@ -130,6 +131,7 @@ async function me(req, res, next) {
       ...user,
       role: member?.teamRole ?? '',
       isAdmin: user.isSuperAdmin || member?.role === 'admin' || member?.role === 'owner',
+      isSales: isSalesUser(req), // módulo Ventas: admin o teamRole en Workspace.salesRoleNames
       dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
       notesBoardEnabled: member?.notesBoardEnabled ?? true,
     })

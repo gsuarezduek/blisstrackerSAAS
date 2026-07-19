@@ -105,4 +105,25 @@ function workspaceAdminOnly(req, res, next) {
   next()
 }
 
-module.exports = { resolveWorkspace, workspaceAdminOnly }
+/**
+ * Módulo Ventas (CRM): true si el usuario puede operar el CRM.
+ * Acceden admins/owners/super admins y los miembros cuyo teamRole está en
+ * Workspace.salesRoleNames (el "equipo comercial" configurable por el admin).
+ * Debe usarse después de resolveWorkspace.
+ */
+function isSalesUser(req) {
+  const m = req.workspaceMember
+  if (req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner') return true
+  if (!m?.teamRole) return false
+  const raw = req.workspace?.salesRoleNames
+  const roles = Array.isArray(raw) ? raw : (() => { try { return JSON.parse(raw || '[]') } catch { return [] } })()
+  return roles.includes(m.teamRole)
+}
+
+/** Requiere acceso al módulo de Ventas (equipo comercial o admin). */
+function salesGuard(req, res, next) {
+  if (isSalesUser(req)) return next()
+  return res.status(403).json({ error: 'No tenés acceso al módulo de Ventas' })
+}
+
+module.exports = { resolveWorkspace, workspaceAdminOnly, isSalesUser, salesGuard }

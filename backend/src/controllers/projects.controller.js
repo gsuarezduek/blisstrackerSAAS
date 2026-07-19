@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { DEFAULT_LATE_TEMPLATE } = require('../services/lateNotification.service')
+const { createProject } = require('../services/projects.service')
 
 function weekMondayStr(tz) {
   const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : 'America/Argentina/Buenos_Aires'
@@ -153,17 +154,12 @@ async function create(req, res, next) {
     const { name, serviceIds = [], memberIds = [] } = req.body
     if (!name) return res.status(400).json({ error: 'Nombre requerido' })
 
-    // Asegurar que el creador siempre quede como miembro
-    const creatorId = req.user.userId
-    const uniqueMemberIds = [...new Set([creatorId, ...memberIds.map(Number)])]
-
-    const project = await prisma.project.create({
-      data: {
-        workspaceId: req.workspace.id,
-        name,
-        services: { create: serviceIds.map(serviceId => ({ serviceId: Number(serviceId) })) },
-        members:  { create: uniqueMemberIds.map(userId => ({ userId })) },
-      },
+    const project = await createProject({
+      workspaceId: req.workspace.id,
+      name,
+      creatorId: req.user.userId, // el creador siempre queda como miembro
+      serviceIds,
+      memberIds,
       include: includeDetails,
     })
     res.status(201).json(project)

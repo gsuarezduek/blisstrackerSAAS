@@ -53,6 +53,9 @@ model Workspace {
   // Identidad de marca
   brandColors         String    @default("[]") // JSON: [{ hex, name? }]
   brandFonts          String    @default("[]") // JSON: [{ name, role }] role: heading|body|accent
+  // Módulo Ventas (CRM): teamRoles (UserRole.name) que cuentan como "equipo comercial".
+  // Un miembro es "de ventas" si su teamRole está en esta lista. Los admins/owners siempre acceden.
+  salesRoleNames      Json      @default("[]")
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -129,6 +132,12 @@ model Workspace {
   projectAccessLogs      ProjectAccessLog[]
   games                  Game[]
   taskFollows            TaskFollow[]
+  companies              Company[]
+  contacts               Contact[]
+  leads                  Lead[]
+  leadActivities         LeadActivity[]
+  proposals              Proposal[]
+  leadResearches         LeadResearch[]
 
   @@index([slug])
 }
@@ -261,6 +270,12 @@ model User {
   generatedReports          MonthlyReport[]            @relation("ReportGeneratedBy")
   platformSettingChanges    PlatformSettingLog[]       @relation("SettingChangedBy")
   accessRevealLogs          ProjectAccessLog[]
+  ownedLeads                Lead[]                     @relation("LeadOwner")
+  createdLeads              Lead[]                     @relation("LeadCreatedBy")
+  nextActionLeads           Lead[]                     @relation("LeadNextActionOwner")
+  leadActivities            LeadActivity[]             @relation("LeadActivityUser")
+  proposalsCreated          Proposal[]                 @relation("ProposalCreatedBy")
+  researchesCreated         LeadResearch[]             @relation("ResearchCreatedBy")
 }
 
 model UserLogin {
@@ -413,6 +428,7 @@ model Project {
   accessLogs             ProjectAccessLog[]
   meetings               ProjectMeeting[]
   eosMeetingConfigs      EOSData[]               @relation("EOSMeetingProject")
+  sourceLead             Lead?                   @relation("LeadConvertedProject")
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -681,6 +697,7 @@ enum NotificationType {
   TASK_MENTION
   VACATION_REQUEST
   VACATION_REVIEWED
+  LEAD_ASSIGNED
 }
 
 model Notification {
@@ -2366,4 +2383,158 @@ model GameScore {
 
   @@unique([gameId, subjectId])
   @@index([gameId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Módulo Ventas (CRM)
+// Estados/orígenes/tipos de evento se centralizan en backend/src/lib/salesCatalog.js
+// (espejo en frontend/src/components/ventas/salesCatalog.js). El CRM separa Empresa /
+// Contacto / Lead para poder crecer hacia un CRM completo (ver pipeline/forecast futuros).
+// ─────────────────────────────────────────────────────────────
+
+// Empresa: una cuenta comercial. Puede tener múltiples contactos y múltiples leads.
+model Company {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  website     String? // sitio web
+  industry    String? // rubro (opcional)
+  notes       String? // observaciones
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  contacts Contact[]
+  leads    Lead[]
+
+  @@index([workspaceId])
+}
+
+// Contacto: una persona dentro de una empresa. N contactos por empresa.
+model Contact {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  companyId   Int
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  title       String? // cargo
+  email       String?
+  phone       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  primaryForLeads Lead[] @relation("LeadPrimaryContact")
+
+  @@index([workspaceId])
+  @@index([companyId])
+}
+
+// Lead / Oportunidad comercial. Asociado a una empresa + contacto principal + responsable.
+model Lead {
+  id               Int       @id @default(autoincrement())
+  workspaceId      Int
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  companyId        Int
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  primaryContactId Int?
+  primaryContact   Contact?  @relation("LeadPrimaryContact", fields: [primaryContactId], references: [id], onDelete: SetNull)
+  ownerId          Int? // responsable comercial (User)
+  owner            User?     @relation("LeadOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  title          String? // título de la oportunidad (opcional; si falta se muestra el nombre de la empresa)
+  status         String    @default("prospecto") // catálogo salesCatalog LEAD_STATUSES
+  origin         String? // catálogo salesCatalog LEAD_ORIGINS
+  estimatedValue Float? // valor estimado
+  currency       String    @default("USD")
+  nextContactAt  DateTime? // próximo contacto (seguimiento)
+
+  // Próxima acción: una única pendiente por lead (promovible a tabla de actividades a futuro)
+  nextActionTitle   String?
+  nextActionDueAt   DateTime?
+  nextActionOwnerId Int?
+  nextActionOwner   User?     @relation("LeadNextActionOwner", fields: [nextActionOwnerId], references: [id], onDelete: SetNull)
+
+  // Conversión a cliente (estado Ganado → Crear Proyecto)
+  convertedProjectId Int?     @unique
+  convertedProject   Project? @relation("LeadConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
+  wonAt              DateTime?
+  lostAt             DateTime?
+  lostReason         String?
+
+  createdById Int?
+  createdBy   User?    @relation("LeadCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  activities LeadActivity[]
+  proposals  Proposal[]
+  researches LeadResearch[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([companyId])
+  @@index([ownerId])
+}
+
+// Timeline unificado del lead: notas manuales (kind=note) + eventos automáticos (kind=event).
+// "Historial / Notas" = filtrar kind=note; "Timeline" = todo el stream cronológico.
+model LeadActivity {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId      Int
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId      Int? // autor de la nota / actor del evento
+  user        User?     @relation("LeadActivityUser", fields: [userId], references: [id], onDelete: SetNull)
+  kind        String // "note" | "event"
+  type        String? // subtipo de evento (catálogo salesCatalog LEAD_EVENTS); null para notas
+  content     String? // texto de la nota o mensaje legible del evento
+  meta        Json      @default("{}") // datos estructurados del evento (ej { from, to })
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+  @@index([leadId, createdAt])
+}
+
+// Propuesta comercial generada para un lead. Soporta múltiples versiones por lead.
+model Proposal {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId      Int
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  version     Int       @default(1)
+  title       String?
+  services    Json      @default("[]") // servicios elegidos
+  objectives  String? // objetivos del cliente (input del usuario)
+  content     String? // propuesta generada por IA (HTML editable)
+  status      String    @default("draft") // draft | confirmed
+  createdById Int?
+  createdBy   User?     @relation("ProposalCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([leadId])
+}
+
+// Investigación IA de la empresa del lead. Patrón async (setImmediate + progreso en errorMsg + polling).
+model LeadResearch {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId      Int
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  status      String    @default("pending") // pending | running | completed | failed
+  result      Json? // resultado estructurado de la IA
+  errorMsg    String? // progreso mientras running / mensaje de error si failed
+  tokensUsed  Int?
+  createdById Int?
+  createdBy   User?     @relation("ResearchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId])
+  @@index([leadId])
 }
