@@ -698,6 +698,8 @@ export default function Preferences() {
                     const MODULE_META = {
                       marketing: { icon: '📊', detail: 'Incluye análisis GEO/SEO, métricas de redes sociales, informes mensuales para clientes, Google Analytics, Google Ads, Meta Ads y más.' },
                       eos:       { icon: '🏢', detail: 'Sistema Operativo Empresarial basado en Traction (Gino Wickman). Incluye Visión, Personas, Datos, Scorecard, Asuntos, Procesos, Tracción y Evaluación.' },
+                      gamification: { icon: '🏆', detail: 'Juegos y desafíos para el equipo: competencias entre proyectos, personas o equipos, votaciones y rankings por premios.' },
+                      ventas:    { icon: '💰', detail: 'CRM comercial: pipeline de leads y oportunidades, empresas y contactos, timeline automático, próximas acciones, investigación de empresas con IA y generador de propuestas.' },
                     }
                     const meta = MODULE_META[feat.key] ?? { icon: '🔧', detail: feat.description }
                     const isLast = idx === wsFeatures.length - 1

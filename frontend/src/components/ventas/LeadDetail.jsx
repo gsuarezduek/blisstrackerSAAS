@@ -5,6 +5,8 @@ import LoadingSpinner from '../LoadingSpinner'
 import StatusBadge, { fmtMoney } from './StatusBadge'
 import LeadModal from './LeadModal'
 import ConvertToProjectModal from './ConvertToProjectModal'
+import ResearchPanel from './ResearchPanel'
+import ProposalsPanel from './ProposalsPanel'
 import { LEAD_STATUSES, originLabel } from './salesCatalog'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -112,8 +114,6 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
 
       {/* Acciones comerciales */}
       <div className="flex flex-wrap gap-2">
-        <IaActionButton icon="🔎" label="Investigar empresa" />
-        <IaActionButton icon="📄" label="Crear propuesta" />
         {!lead.convertedProjectId
           ? <button onClick={() => setShowConvert(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-4 py-2 text-sm font-semibold">🚀 Crear proyecto</button>
           : <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-xl px-4 py-2 font-medium">✓ Proyecto: {lead.convertedProject?.name}</span>}
@@ -231,6 +231,12 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
         </div>
       </div>
 
+      {/* IA comercial: investigación de la empresa + generador de propuestas */}
+      <div className="grid lg:grid-cols-2 gap-5">
+        <ResearchPanel leadId={leadId} onChanged={load} />
+        <ProposalsPanel leadId={leadId} onChanged={load} />
+      </div>
+
       {showEdit && <LeadModal lead={lead} companies={companies} team={team} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load(); onChanged?.() }} />}
       {showConvert && <ConvertToProjectModal lead={lead} onClose={() => setShowConvert(false)} onConverted={() => { setShowConvert(false); load(); onChanged?.() }} />}
     </div>
@@ -242,24 +248,6 @@ function Row({ label, children }) {
     <div className="flex items-start justify-between gap-4">
       <dt className="text-gray-500 dark:text-gray-400 shrink-0">{label}</dt>
       <dd className="text-gray-900 dark:text-gray-100 text-right min-w-0">{children}</dd>
-    </div>
-  )
-}
-
-// Acción de IA (Investigar / Propuesta). La lógica IA se implementa en la Fase 2;
-// el botón deja el punto de integración visible y explica el estado.
-function IaActionButton({ icon, label }) {
-  const [hint, setHint] = useState(false)
-  return (
-    <div className="relative">
-      <button onClick={() => setHint(h => !h)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-4 py-2 text-sm font-medium">
-        {icon} {label}
-      </button>
-      {hint && (
-        <div className="absolute z-10 mt-1 w-56 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg">
-          Disponible próximamente — la generación con IA (Claude) se activa en la Fase 2.
-        </div>
-      )}
     </div>
   )
 }

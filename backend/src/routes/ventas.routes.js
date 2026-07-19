@@ -6,6 +6,8 @@ const dashboard = require('../controllers/ventas/salesDashboard.controller')
 const companies = require('../controllers/ventas/companies.controller')
 const contacts  = require('../controllers/ventas/contacts.controller')
 const leads     = require('../controllers/ventas/leads.controller')
+const research  = require('../controllers/ventas/leadResearch.controller')
+const proposals = require('../controllers/ventas/proposals.controller')
 
 // Todo el módulo Ventas requiere: autenticación + workspace + pertenecer al equipo
 // comercial (o ser admin/owner). El feature flag `ventas` se chequea en el frontend
@@ -43,5 +45,13 @@ router.put('/leads/:id/next-action',    leads.setNextAction)
 router.post('/leads/:id/notes',         leads.addNote)
 router.delete('/leads/:id/notes/:noteId', leads.deleteNote)
 router.post('/leads/:id/convert',       leads.convertToProject)
+
+// IA (Fase 2): investigación de la empresa + generador de propuestas
+router.post('/leads/:id/research',      research.startResearch)
+router.get('/leads/:id/research',       research.getLatestResearch)
+router.get('/leads/:id/proposals',      proposals.listProposals)
+router.post('/leads/:id/proposals',     proposals.createProposal)
+router.patch('/leads/:id/proposals/:pid',  proposals.updateProposal)
+router.delete('/leads/:id/proposals/:pid', proposals.deleteProposal)
 
 module.exports = router
