@@ -1,0 +1,87 @@
+import { useState, useEffect, useCallback } from 'react'
+import api from '../../api/client'
+import LoadingSpinner from '../LoadingSpinner'
+import { fmtMoney } from './StatusBadge'
+import { LEAD_STATUSES, STATUS_BADGE, statusMeta } from './salesCatalog'
+
+// Pipeline Kanban: una columna por estado, arrastrar una card cambia el estado del lead
+// (PATCH /ventas/leads/:id/status). Drag & drop nativo (sin dependencias).
+export default function PipelineTab({ onOpenLead }) {
+  const [leads, setLeads] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [dragId, setDragId] = useState(null)
+  const [overCol, setOverCol] = useState(null)
+
+  const load = useCallback(async () => {
+    const { data } = await api.get('/ventas/leads')
+    setLeads(data)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function moveTo(status) {
+    const id = dragId
+    setDragId(null); setOverCol(null)
+    if (!id) return
+    const lead = leads.find(l => l.id === id)
+    if (!lead || lead.status === status) return
+    // Optimista: mover la card ya.
+    setLeads(ls => ls.map(l => (l.id === id ? { ...l, status } : l)))
+    try {
+      await api.patch(`/ventas/leads/${id}/status`, { status })
+    } catch {
+      load() // revertir ante error
+    }
+  }
+
+  if (loading) return <LoadingSpinner />
+
+  return (
+    <div className="overflow-x-auto pb-2">
+      <div className="flex gap-3 min-w-max">
+        {LEAD_STATUSES.map(col => {
+          const items = leads.filter(l => l.status === col.key)
+          const total = items.reduce((s, l) => s + (l.estimatedValue ? Number(l.estimatedValue) : 0), 0)
+          return (
+            <div
+              key={col.key}
+              onDragOver={e => { e.preventDefault(); setOverCol(col.key) }}
+              onDragLeave={() => setOverCol(c => (c === col.key ? null : c))}
+              onDrop={() => moveTo(col.key)}
+              className={`w-64 shrink-0 rounded-2xl border p-2 transition-colors ${overCol === col.key ? 'border-primary-400 bg-primary-50/50 dark:bg-primary-900/10' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'}`}
+            >
+              <div className="flex items-center justify-between px-2 py-1.5">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[col.color]}`}>{col.label}</span>
+                <span className="text-xs text-gray-400">{items.length}</span>
+              </div>
+              <div className="px-2 pb-1 text-[11px] text-gray-400">{fmtMoney(total, items[0]?.currency || 'USD')}</div>
+
+              <div className="space-y-2 min-h-[40px]">
+                {items.map(l => (
+                  <div
+                    key={l.id}
+                    draggable
+                    onDragStart={() => setDragId(l.id)}
+                    onDragEnd={() => { setDragId(null); setOverCol(null) }}
+                    onClick={() => onOpenLead(l.id)}
+                    className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 cursor-pointer hover:shadow-sm transition-shadow ${dragId === l.id ? 'opacity-50' : ''}`}
+                  >
+                    <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{l.company?.name || '—'}</div>
+                    {l.title && <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{l.title}</div>}
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{l.estimatedValue ? fmtMoney(l.estimatedValue, l.currency) : ''}</span>
+                      {l.owner && <span className="text-[11px] text-gray-400 truncate max-w-[90px]" title={l.owner.name}>{l.owner.name}</span>}
+                    </div>
+                  </div>
+                ))}
+                {items.length === 0 && <div className="text-center text-xs text-gray-300 dark:text-gray-600 py-4">—</div>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-xs text-gray-400 mt-3 px-1">Arrastrá una tarjeta a otra columna para cambiar su estado. {statusMeta('ganado').label} habilita crear el proyecto desde el lead.</p>
+    </div>
+  )
+}

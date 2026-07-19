@@ -242,12 +242,11 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
               </div>
             )}
           </div>
-
-          {/* Propuestas — compacto, en la columna de datos (suelen ser pocas) */}
-          <ProposalsPanel leadId={leadId} companyName={c?.name} onChanged={load} />
         </div>
 
-        {/* Columna derecha: timeline + notas */}
+        {/* Columna derecha: Propuestas + timeline/notas */}
+        <div className="space-y-5">
+        <ProposalsPanel leadId={leadId} companyName={c?.name} onChanged={load} />
         <div className={card}>
           <h3 className={sectionTitle}>Historial y notas</h3>
           <div className="flex gap-2 mb-4">
@@ -275,6 +274,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
               </li>
             ))}
           </ol>
+        </div>
         </div>
       </div>
 

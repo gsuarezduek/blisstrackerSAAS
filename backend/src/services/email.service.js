@@ -690,6 +690,50 @@ async function sendProductivityDigestEmail(emails, workspaceName, digest, appUrl
   }
 }
 
+// Recordatorio diario de Ventas: próximas acciones para hoy + vencidas del responsable.
+async function sendSalesReminderEmail(email, { name, workspaceName, today = [], overdue = [], appUrl }, workspaceId) {
+  const from = await getEmailFrom(workspaceId)
+  const nT = today.length, nO = overdue.length
+  const subject = nO > 0
+    ? `🔔 Ventas: ${nO} acción${nO === 1 ? '' : 'es'} vencida${nO === 1 ? '' : 's'}${nT ? ` · ${nT} para hoy` : ''}`
+    : `🔔 Ventas: ${nT} acción${nT === 1 ? '' : 'es'} para hoy`
+
+  const item = (l, overdueRow) => `
+    <tr>
+      <td style="padding:9px 0;border-top:1px solid #f1f5f9;">
+        <a href="${appUrl}?lead=${l.id}" style="color:#1e293b;font-size:14px;font-weight:600;text-decoration:none;">${l.company}</a>
+        <br><span style="color:#64748b;font-size:13px;">${l.actionTitle || 'Próxima acción'}</span>
+      </td>
+      <td style="padding:9px 0;border-top:1px solid #f1f5f9;text-align:right;white-space:nowrap;vertical-align:top;">
+        <span style="color:${overdueRow ? '#dc2626' : '#64748b'};font-size:12px;">${l.due}</span>
+      </td>
+    </tr>`
+
+  const section = (title, rows, color) => rows.length ? `
+    <p style="color:${color};font-size:13px;font-weight:600;margin:18px 0 4px;">${title}</p>
+    <table style="width:100%;border-collapse:collapse;">${rows.join('')}</table>` : ''
+
+  const inner = `
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+      <h2 style="color:#1e293b;margin:0 0 6px;font-size:20px;">🔔 Tus seguimientos de hoy</h2>
+      <p style="color:#475569;margin:0 0 8px;font-size:14px;">Hola ${name || ''}, esto es lo que tenés pendiente en <strong>${workspaceName}</strong>.</p>
+      ${section('⚠️ Vencidas', overdue.map(l => item(l, true)), '#dc2626')}
+      ${section('📅 Para hoy', today.map(l => item(l, false)), '#0f766e')}
+      <div style="text-align:center;margin-top:24px;">
+        <a href="${appUrl}" style="display:inline-block;background:#F7931A;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 22px;border-radius:8px;">Ver mis leads</a>
+      </div>
+    </div>`
+
+  try {
+    const { error } = await resend.emails.send({ from, to: email, subject, html: emailShell(inner) })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: email, subject, type: 'salesReminder', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: email, subject, type: 'salesReminder', status: 'failed', errorMsg: err.message })
+    throw err
+  }
+}
+
 // Aviso de "juego de Gamification finalizado" a todo el equipo (con el ganador).
 async function sendGameFinishedEmail(emails, workspaceName, game, winner, appUrl, workspaceId) {
   const from = await getEmailFrom(workspaceId)
@@ -821,6 +865,7 @@ module.exports = {
   sendWelcomeEmail,
   sendLateNotificationEmail,
   sendProductivityDigestEmail,
+  sendSalesReminderEmail,
   sendWeeklySummaryEmail,
   sendTestSettingsEmail,
   sendInvitationEmail,

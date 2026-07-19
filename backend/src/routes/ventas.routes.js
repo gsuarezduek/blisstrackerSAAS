@@ -8,6 +8,7 @@ const contacts  = require('../controllers/ventas/contacts.controller')
 const leads     = require('../controllers/ventas/leads.controller')
 const research  = require('../controllers/ventas/leadResearch.controller')
 const proposals = require('../controllers/ventas/proposals.controller')
+const metrics   = require('../controllers/ventas/salesMetrics.controller')
 
 // Todo el módulo Ventas requiere: autenticación + workspace + pertenecer al equipo
 // comercial (o ser admin/owner). El feature flag `ventas` se chequea en el frontend
@@ -16,8 +17,9 @@ router.use(auth)
 router.use(resolveWorkspace)
 router.use(salesGuard)
 
-// Dashboard + equipo comercial
+// Dashboard + métricas + equipo comercial
 router.get('/dashboard', dashboard.getDashboard)
+router.get('/metrics',   metrics.getMetrics)
 router.get('/team',      dashboard.getTeam)
 
 // Empresas

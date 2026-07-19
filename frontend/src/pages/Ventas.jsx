@@ -6,12 +6,16 @@ import { useAuth } from '../context/AuthContext'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import api from '../api/client'
 import DashboardTab from '../components/ventas/DashboardTab'
+import PipelineTab from '../components/ventas/PipelineTab'
+import MetricsTab from '../components/ventas/MetricsTab'
 import CompaniesTab from '../components/ventas/CompaniesTab'
 import LeadDetail from '../components/ventas/LeadDetail'
 import SalesTeamModal from '../components/ventas/SalesTeamModal'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
+  { id: 'pipeline',  label: 'Pipeline' },
+  { id: 'metricas',  label: 'Métricas' },
   { id: 'empresas',  label: 'Empresas' },
 ]
 const VALID = new Set(TABS.map(t => t.id))
@@ -94,6 +98,8 @@ export default function Ventas() {
             </div>
 
             {tab === 'dashboard' && <DashboardTab team={team} companies={companies} onOpenLead={openLead} onDataChange={loadShared} />}
+            {tab === 'pipeline'  && <PipelineTab onOpenLead={openLead} />}
+            {tab === 'metricas'  && <MetricsTab />}
             {tab === 'empresas'  && <CompaniesTab onDataChange={loadShared} />}
           </>
         )}

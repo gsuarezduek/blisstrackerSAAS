@@ -271,6 +271,13 @@ cron.schedule('0 8 * * 1', () => runCron('productivityDigest', 30 * 60 * 1000, a
   catch (err) { console.error('[ProductivityDigest] Error en cron semanal:', err.message) }
 }), { timezone: 'America/Argentina/Buenos_Aires' })
 
+// Cron: recordatorios de Ventas (próximas acciones para hoy / vencidas) — diario 08:00 ART
+cron.schedule('0 8 * * *', () => runCron('salesReminders', 30 * 60 * 1000, async () => {
+  const { sendAllSalesReminders } = require('./services/salesReminders.service')
+  try { await sendAllSalesReminders() }
+  catch (err) { console.error('[SalesReminders] Error en cron diario:', err.message) }
+}), { timezone: 'America/Argentina/Buenos_Aires' })
+
 // Cron: eliminar workspaces vencidos — cada 15 minutos
 cron.schedule('*/15 * * * *', () => runCron('workspaceDeletion', 10 * 60 * 1000, async () => {
   const prisma = require('./lib/prisma')

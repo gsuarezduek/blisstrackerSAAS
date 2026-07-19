@@ -20,7 +20,10 @@ async function findLead(id, workspaceId, include) {
 
 function parseDate(v) {
   if (v == null || v === '') return null
-  const d = new Date(v)
+  // Fechas "solo día" (YYYY-MM-DD) → mediodía UTC, para que no se corran de día al
+  // mostrarlas/bucketearlas en la timezone del workspace (ART = UTC-3 las llevaría al día previo).
+  const s = String(v)
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T12:00:00Z`) : new Date(s)
   return isNaN(d.getTime()) ? undefined : d // undefined = inválido
 }
 
@@ -144,6 +147,10 @@ async function createLead(req, res, next) {
         if (!ct) throw Object.assign(new Error('El contacto no pertenece a la empresa'), { status: 400 })
       }
 
+      // Si el lead se crea ya en un estado terminal, sellamos wonAt/lostAt para que
+      // las métricas (win rate, ganados del mes) sean consistentes con changeStatus/convert.
+      const initStatus = status || 'prospecto'
+      const initMeta = statusMeta(initStatus)
       return tx.lead.create({
         data: {
           workspaceId,
@@ -151,11 +158,13 @@ async function createLead(req, res, next) {
           primaryContactId: resolvedContactId,
           ownerId: ownerId != null ? Number(ownerId) : null,
           title: title?.trim() || null,
-          status: status || 'prospecto',
+          status: initStatus,
           origin: origin || null,
           estimatedValue: estimatedValue != null && estimatedValue !== '' ? Number(estimatedValue) : null,
           currency: currency || 'USD',
           nextContactAt: nextContact,
+          wonAt:  initMeta?.isWon  ? new Date() : null,
+          lostAt: initMeta?.isLost ? new Date() : null,
           createdById: userId,
         },
         include: LEAD_LIST_INCLUDE,

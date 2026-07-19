@@ -79,7 +79,7 @@ async function getCurrent(req, res, next) {
  */
 async function updateCurrent(req, res, next) {
   try {
-    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesRoleNames, salesProposalGuidelines } = req.body
+    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesRoleNames, salesProposalGuidelines, salesSignature } = req.body
     const data = {}
     if (name) data.name = name
     if (timezone) data.timezone = timezone
@@ -92,6 +92,19 @@ async function updateCurrent(req, res, next) {
     // Ventas (CRM): teamRoles del equipo comercial (Json). Guardamos array de strings.
     if (salesRoleNames     !== undefined) data.salesRoleNames     = Array.isArray(salesRoleNames) ? salesRoleNames.filter(r => typeof r === 'string') : []
     if (salesProposalGuidelines !== undefined) data.salesProposalGuidelines = salesProposalGuidelines?.trim() || null
+    // Firma del PDF de la propuesta: solo persistimos las claves conocidas (strings + showLogo bool).
+    if (salesSignature !== undefined && salesSignature && typeof salesSignature === 'object') {
+      const s = salesSignature
+      data.salesSignature = {
+        closing: typeof s.closing === 'string' ? s.closing.trim() : '',
+        name:    typeof s.name    === 'string' ? s.name.trim()    : '',
+        role:    typeof s.role    === 'string' ? s.role.trim()    : '',
+        email:   typeof s.email   === 'string' ? s.email.trim()   : '',
+        phone:   typeof s.phone   === 'string' ? s.phone.trim()   : '',
+        note:    typeof s.note    === 'string' ? s.note.trim()    : '',
+        showLogo: !!s.showLogo,
+      }
+    }
 
     const workspace = await prisma.workspace.update({
       where: { id: req.workspace.id },

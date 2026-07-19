@@ -7,15 +7,16 @@
 // del sistema depende de valores hardcodeados (los controllers validan contra
 // estas listas), por eso el CRM puede crecer sin tocar el resto del código.
 
-// Estados del Lead. `order` define la posición en el pipeline (para el Kanban futuro).
+// Estados del Lead. `order` define la posición en el pipeline (Kanban).
 // isWon/isLost marcan los estados terminales (Ganado habilita "Crear Proyecto").
+// `prob` = probabilidad de cierre (%) usada para el forecast ponderado del pipeline.
 const LEAD_STATUSES = [
-  { key: 'prospecto',  label: 'Prospecto',  color: 'gray',   order: 1 },
-  { key: 'contactado', label: 'Contactado', color: 'blue',   order: 2 },
-  { key: 'reunion',    label: 'Reunión',    color: 'indigo', order: 3 },
-  { key: 'propuesta',  label: 'Propuesta',  color: 'amber',  order: 4 },
-  { key: 'ganado',     label: 'Ganado',     color: 'green',  order: 5, isWon: true },
-  { key: 'perdido',    label: 'Perdido',    color: 'red',    order: 6, isLost: true },
+  { key: 'prospecto',  label: 'Prospecto',  color: 'gray',   order: 1, prob: 10 },
+  { key: 'contactado', label: 'Contactado', color: 'blue',   order: 2, prob: 25 },
+  { key: 'reunion',    label: 'Reunión',    color: 'indigo', order: 3, prob: 45 },
+  { key: 'propuesta',  label: 'Propuesta',  color: 'amber',  order: 4, prob: 65 },
+  { key: 'ganado',     label: 'Ganado',     color: 'green',  order: 5, prob: 100, isWon: true },
+  { key: 'perdido',    label: 'Perdido',    color: 'red',    order: 6, prob: 0,   isLost: true },
 ]
 
 // Orígenes del Lead (para estadísticas de canal a futuro).
