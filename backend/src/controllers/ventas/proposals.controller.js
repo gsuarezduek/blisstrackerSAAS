@@ -28,7 +28,7 @@ async function createProposal(req, res, next) {
     const workspaceId = req.workspace.id
     const userId = req.user.userId
     const leadId = Number(req.params.id)
-    const { serviceIds = [], serviceNames = [], objectives, title } = req.body
+    const { serviceIds = [], serviceNames = [], objectives, title, instructions } = req.body
 
     const lead = await findLeadWithCompany(leadId, workspaceId)
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
@@ -44,7 +44,7 @@ async function createProposal(req, res, next) {
       names = [...new Set([...names, ...rows.map(r => r.name)])]
     }
 
-    const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { companyName: true, name: true } })
+    const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { companyName: true, name: true, salesProposalGuidelines: true } })
 
     const { html, usage } = await generateProposalHtml({
       agencyName: ws?.companyName || ws?.name,
@@ -55,6 +55,8 @@ async function createProposal(req, res, next) {
       objectives: objectives?.trim() || '',
       estimatedValue: lead.estimatedValue,
       currency: lead.currency,
+      guidelines: ws?.salesProposalGuidelines || '',
+      instructions: instructions?.trim() || '',
     }, { workspaceId, userId })
 
     const last = await prisma.proposal.findFirst({ where: { workspaceId, leadId }, orderBy: { version: 'desc' }, select: { version: true } })

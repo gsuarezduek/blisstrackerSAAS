@@ -8,7 +8,7 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export default function ProposalsPanel({ leadId, onChanged }) {
+export default function ProposalsPanel({ leadId, companyName, onChanged }) {
   const [proposals, setProposals] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null) // { } nueva | { proposal } editar | null
@@ -62,7 +62,7 @@ export default function ProposalsPanel({ leadId, onChanged }) {
         </ul>
       )}
 
-      {modal && <ProposalModal leadId={leadId} proposal={modal.proposal} onClose={() => setModal(null)} onSaved={afterSaved} />}
+      {modal && <ProposalModal leadId={leadId} companyName={companyName} proposal={modal.proposal} onClose={() => setModal(null)} onSaved={afterSaved} />}
     </div>
   )
 }

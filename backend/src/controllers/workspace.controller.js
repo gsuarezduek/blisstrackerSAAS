@@ -79,7 +79,7 @@ async function getCurrent(req, res, next) {
  */
 async function updateCurrent(req, res, next) {
   try {
-    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesRoleNames } = req.body
+    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesRoleNames, salesProposalGuidelines } = req.body
     const data = {}
     if (name) data.name = name
     if (timezone) data.timezone = timezone
@@ -91,6 +91,7 @@ async function updateCurrent(req, res, next) {
     if (brandFonts         !== undefined) data.brandFonts         = JSON.stringify(brandFonts)
     // Ventas (CRM): teamRoles del equipo comercial (Json). Guardamos array de strings.
     if (salesRoleNames     !== undefined) data.salesRoleNames     = Array.isArray(salesRoleNames) ? salesRoleNames.filter(r => typeof r === 'string') : []
+    if (salesProposalGuidelines !== undefined) data.salesProposalGuidelines = salesProposalGuidelines?.trim() || null
 
     const workspace = await prisma.workspace.update({
       where: { id: req.workspace.id },

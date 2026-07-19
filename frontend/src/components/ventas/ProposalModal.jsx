@@ -1,19 +1,21 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import RichTextEditor from '../RichTextEditor'
+import { exportProposalPdf } from './proposalPdf'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
 
 // Modal de propuesta. Dos pasos: (1) elegir servicios + objetivos → generar con IA;
 // (2) editar el HTML generado y guardar/confirmar. Si recibe `proposal`, entra directo a editar.
-export default function ProposalModal({ leadId, proposal: initial, onClose, onSaved }) {
+export default function ProposalModal({ leadId, companyName, proposal: initial, onClose, onSaved }) {
   const [step, setStep] = useState(initial ? 'edit' : 'form')
   const [proposal, setProposal] = useState(initial || null)
 
   const [services, setServices] = useState([])
   const [serviceIds, setServiceIds] = useState([])
   const [objectives, setObjectives] = useState('')
+  const [instructions, setInstructions] = useState('')
   const [generating, setGenerating] = useState(false)
 
   const [title, setTitle] = useState(initial?.title || '')
@@ -30,7 +32,7 @@ export default function ProposalModal({ leadId, proposal: initial, onClose, onSa
   async function generate() {
     setGenerating(true); setError('')
     try {
-      const { data } = await api.post(`/ventas/leads/${leadId}/proposals`, { serviceIds, objectives })
+      const { data } = await api.post(`/ventas/leads/${leadId}/proposals`, { serviceIds, objectives, instructions })
       setProposal(data)
       setTitle(data.title || '')
       setContent(data.content || '')
@@ -91,7 +93,12 @@ export default function ProposalModal({ leadId, proposal: initial, onClose, onSa
             </div>
             <div>
               <label className={label}>Objetivos del cliente</label>
-              <textarea className={input} rows={4} placeholder="Ej. Aumentar leads calificados, mejorar presencia en redes, posicionar la marca…" value={objectives} onChange={e => setObjectives(e.target.value)} />
+              <textarea className={input} rows={3} placeholder="Ej. Aumentar leads calificados, mejorar presencia en redes, posicionar la marca…" value={objectives} onChange={e => setObjectives(e.target.value)} />
+            </div>
+            <div>
+              <label className={label}>Instrucciones específicas para esta propuesta (opcional)</label>
+              <textarea className={input} rows={2} placeholder="Ej. Enfatizar resultados a 90 días, incluir un plan por etapas, tono cercano…" value={instructions} onChange={e => setInstructions(e.target.value)} />
+              <p className="text-[11px] text-gray-400 mt-1">Se suman a las indicaciones generales de la agencia (Configuración de Ventas).</p>
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 text-sm">Cancelar</button>
@@ -111,8 +118,9 @@ export default function ProposalModal({ leadId, proposal: initial, onClose, onSa
               <label className={label}>Contenido (editable)</label>
               <RichTextEditor defaultContent={content} onChange={setContent} minHeight={280} autoFocus={false} resizable />
             </div>
-            <div className="flex gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-1">
               <button onClick={onClose} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">Cerrar</button>
+              <button onClick={() => exportProposalPdf({ ...proposal, title, content }, { companyName })} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">🖨️ PDF</button>
               <button onClick={() => save(false)} disabled={saving} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 text-sm">{saving ? 'Guardando…' : 'Guardar'}</button>
               <button onClick={() => save(true)} disabled={saving} className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 px-4 text-sm">Confirmar</button>
             </div>

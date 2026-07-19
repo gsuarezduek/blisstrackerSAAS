@@ -5,7 +5,7 @@ const MODEL = 'claude-haiku-4-5-20251001'
 
 const SYSTEM_PROMPT = `Sos un ejecutivo comercial de una agencia de marketing que redacta propuestas para clientes. Escribís en español, con tono profesional, claro y persuasivo, orientado a resultados. Devolvés SOLO HTML de contenido (sin <html>, <head> ni <body>): usá <h2>, <h3>, <p>, <ul>, <li>, <strong>. No incluyas estilos inline ni markdown. La propuesta debe ser específica al cliente y a los servicios elegidos, no genérica.`
 
-function buildPrompt({ agencyName, companyName, industry, leadTitle, serviceNames, objectives, estimatedValue, currency }) {
+function buildPrompt({ agencyName, companyName, industry, leadTitle, serviceNames, objectives, estimatedValue, currency, guidelines, instructions }) {
   return `Redactá una propuesta comercial en HTML para el siguiente caso.
 
 Agencia: ${agencyName || 'nuestra agencia'}
@@ -14,6 +14,8 @@ ${leadTitle ? `Oportunidad: ${leadTitle}` : ''}
 Servicios a proponer: ${serviceNames.length ? serviceNames.join(', ') : '(a definir según objetivos)'}
 Objetivos del cliente: ${objectives || '(no especificados; inferí objetivos razonables del rubro)'}
 ${estimatedValue ? `Presupuesto de referencia: ${currency || 'USD'} ${estimatedValue}` : ''}
+${guidelines ? `\nIndicaciones de la agencia (respetalas SIEMPRE):\n${guidelines}` : ''}
+${instructions ? `\nInstrucciones específicas para esta propuesta:\n${instructions}` : ''}
 
 Estructurá la propuesta con estas secciones (usá <h2> para cada una):
 1. Introducción — entendimiento del cliente y su contexto.

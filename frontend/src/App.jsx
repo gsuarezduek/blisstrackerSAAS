@@ -43,35 +43,57 @@ import OAuthResult from './pages/OAuthResult'
 // ahora cada visitante baja sólo la ruta que abre. Suspense muestra el spinner mientras
 // el chunk carga.
 const { lazy } = React
-const Landing          = lazy(() => import('./pages/Landing'))
-const Pricing          = lazy(() => import('./pages/Pricing'))
-const Login2           = lazy(() => import('./pages/Login2'))
-const Register         = lazy(() => import('./pages/Register'))
-const Dashboard        = lazy(() => import('./pages/Dashboard'))
-const Admin            = lazy(() => import('./pages/Admin'))
-const Productivity     = lazy(() => import('./pages/Productivity'))
-const RRHH             = lazy(() => import('./pages/RRHH'))
-const RealTime         = lazy(() => import('./pages/RealTime'))
-const Reports          = lazy(() => import('./pages/Reports'))
-const MyReports        = lazy(() => import('./pages/MyReports'))
-const MyProjects       = lazy(() => import('./pages/MyProjects'))
-const ProjectDetail    = lazy(() => import('./pages/ProjectDetail'))
-const ForgotPassword   = lazy(() => import('./pages/ForgotPassword'))
-const ResetPassword    = lazy(() => import('./pages/ResetPassword'))
-const VerifyEmailChange = lazy(() => import('./pages/VerifyEmailChange'))
-const MyProfile        = lazy(() => import('./pages/MyProfile'))
-const UserProfile      = lazy(() => import('./pages/UserProfile'))
-const Preferences      = lazy(() => import('./pages/Preferences'))
-const Docs             = lazy(() => import('./pages/Docs'))
-const SuperAdmin       = lazy(() => import('./pages/SuperAdmin'))
-const JoinWorkspace    = lazy(() => import('./pages/JoinWorkspace'))
-const Marketing        = lazy(() => import('./pages/Marketing'))
-const Billing          = lazy(() => import('./pages/Billing'))
-const EOS              = lazy(() => import('./pages/EOS'))
-const Gamification     = lazy(() => import('./pages/Gamification'))
-const Ventas           = lazy(() => import('./pages/Ventas'))
-const LegalPage        = lazy(() => import('./pages/TermsPage'))
-const ReportPublic     = lazy(() => import('./pages/ReportPublic'))
+
+// Envuelve un import dinámico de ruta: si falla bajar el chunk (típicamente porque
+// hubo un deploy nuevo mientras la pestaña estaba abierta con el bundle viejo → el
+// archivo con el hash anterior ya no existe → "Failed to fetch dynamically imported
+// module"), recarga la página UNA vez para tomar el index.html/chunks nuevos. El guard
+// por timestamp en sessionStorage evita un loop si el chunk faltara de verdad.
+function lazyWithReload(importer) {
+  return lazy(() =>
+    importer().catch((err) => {
+      const KEY  = 'chunkReloadAt'
+      const last = Number(sessionStorage.getItem(KEY) || 0)
+      const now  = Date.now()
+      if (now - last > 10000) {
+        sessionStorage.setItem(KEY, String(now))
+        window.location.reload()
+        return new Promise(() => {})   // no resolver: la página se está recargando
+      }
+      throw err   // ya recargamos recién y sigue fallando → error real, que lo tome el ErrorBoundary
+    })
+  )
+}
+
+const Landing          = lazyWithReload(() => import('./pages/Landing'))
+const Pricing          = lazyWithReload(() => import('./pages/Pricing'))
+const Login2           = lazyWithReload(() => import('./pages/Login2'))
+const Register         = lazyWithReload(() => import('./pages/Register'))
+const Dashboard        = lazyWithReload(() => import('./pages/Dashboard'))
+const Admin            = lazyWithReload(() => import('./pages/Admin'))
+const Productivity     = lazyWithReload(() => import('./pages/Productivity'))
+const RRHH             = lazyWithReload(() => import('./pages/RRHH'))
+const RealTime         = lazyWithReload(() => import('./pages/RealTime'))
+const Reports          = lazyWithReload(() => import('./pages/Reports'))
+const MyReports        = lazyWithReload(() => import('./pages/MyReports'))
+const MyProjects       = lazyWithReload(() => import('./pages/MyProjects'))
+const ProjectDetail    = lazyWithReload(() => import('./pages/ProjectDetail'))
+const ForgotPassword   = lazyWithReload(() => import('./pages/ForgotPassword'))
+const ResetPassword    = lazyWithReload(() => import('./pages/ResetPassword'))
+const VerifyEmailChange = lazyWithReload(() => import('./pages/VerifyEmailChange'))
+const MyProfile        = lazyWithReload(() => import('./pages/MyProfile'))
+const UserProfile      = lazyWithReload(() => import('./pages/UserProfile'))
+const Preferences      = lazyWithReload(() => import('./pages/Preferences'))
+const Docs             = lazyWithReload(() => import('./pages/Docs'))
+const SuperAdmin       = lazyWithReload(() => import('./pages/SuperAdmin'))
+const JoinWorkspace    = lazyWithReload(() => import('./pages/JoinWorkspace'))
+const Marketing        = lazyWithReload(() => import('./pages/Marketing'))
+const Billing          = lazyWithReload(() => import('./pages/Billing'))
+const EOS              = lazyWithReload(() => import('./pages/EOS'))
+const Gamification     = lazyWithReload(() => import('./pages/Gamification'))
+const Ventas           = lazyWithReload(() => import('./pages/Ventas'))
+const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
+const ReportPublic     = lazyWithReload(() => import('./pages/ReportPublic'))
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()

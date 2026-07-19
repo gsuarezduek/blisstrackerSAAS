@@ -56,6 +56,8 @@ model Workspace {
   // Módulo Ventas (CRM): teamRoles (UserRole.name) que cuentan como "equipo comercial".
   // Un miembro es "de ventas" si su teamRole está en esta lista. Los admins/owners siempre acceden.
   salesRoleNames      Json      @default("[]")
+  // Indicaciones persistentes que la IA tiene en cuenta al generar propuestas (tono, estructura, qué incluir/evitar).
+  salesProposalGuidelines String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

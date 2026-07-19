@@ -38,6 +38,9 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
   const [showConvert, setShowConvert] = useState(false)
   const [naOpen, setNaOpen] = useState(false)
   const [na, setNa] = useState({ title: '', dueAt: '', ownerId: '' })
+  const [contactEdit, setContactEdit] = useState(false)
+  const [ncMode, setNcMode] = useState(false) // sub-form "nuevo contacto"
+  const [nc, setNc] = useState({ name: '', title: '', email: '', phone: '' })
 
   const load = useCallback(async () => {
     const { data } = await api.get(`/ventas/leads/${leadId}`)
@@ -81,6 +84,22 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
     onChanged?.()
   }
 
+  // Asigna un contacto existente de la empresa como contacto principal del lead (o lo quita).
+  async function setPrimaryContact(contactId) {
+    await api.patch(`/ventas/leads/${leadId}`, { primaryContactId: contactId ? Number(contactId) : null })
+    setContactEdit(false); setNcMode(false)
+    await load(); onChanged?.()
+  }
+
+  // Crea un contacto nuevo en la empresa y lo deja como contacto principal.
+  async function createAndAssignContact() {
+    if (!nc.name.trim()) return
+    const { data } = await api.post('/ventas/contacts', { companyId: lead.companyId, ...nc })
+    await api.patch(`/ventas/leads/${leadId}`, { primaryContactId: data.id })
+    setNc({ name: '', title: '', email: '', phone: '' }); setNcMode(false); setContactEdit(false)
+    await load(); onChanged?.()
+  }
+
   async function handleDelete() {
     if (!window.confirm('¿Eliminar este lead? Esta acción no se puede deshacer.')) return
     await api.delete(`/ventas/leads/${leadId}`)
@@ -106,17 +125,13 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
           </div>
           {lead.title && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{lead.title}</p>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          {!lead.convertedProjectId
+            ? <button onClick={() => setShowConvert(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-4 py-2 text-sm font-semibold">🚀 Crear proyecto</button>
+            : <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-xl px-3 py-2 font-medium">✓ Proyecto: {lead.convertedProject?.name}</span>}
           <button onClick={() => setShowEdit(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-3 py-2 text-sm font-medium">Editar</button>
           <button onClick={handleDelete} className="border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl px-3 py-2 text-sm font-medium">Eliminar</button>
         </div>
-      </div>
-
-      {/* Acciones comerciales */}
-      <div className="flex flex-wrap gap-2">
-        {!lead.convertedProjectId
-          ? <button onClick={() => setShowConvert(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-4 py-2 text-sm font-semibold">🚀 Crear proyecto</button>
-          : <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-xl px-4 py-2 font-medium">✓ Proyecto: {lead.convertedProject?.name}</span>}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
@@ -157,15 +172,44 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
 
           {/* Contacto */}
           <div className={card}>
-            <h3 className={sectionTitle}>Contacto principal</h3>
-            {ct ? (
-              <dl className="space-y-2 text-sm">
-                <Row label="Nombre">{ct.name}</Row>
-                <Row label="Cargo">{ct.title || '—'}</Row>
-                <Row label="Email">{ct.email ? <a href={`mailto:${ct.email}`} className="text-primary-600 hover:underline">{ct.email}</a> : '—'}</Row>
-                <Row label="Teléfono">{ct.phone || '—'}</Row>
-              </dl>
-            ) : <p className="text-sm text-gray-400">Sin contacto principal.</p>}
+            <div className="flex items-center justify-between mb-3">
+              <h3 className={`${sectionTitle} mb-0`}>Contacto principal</h3>
+              <button onClick={() => { setContactEdit(e => !e); setNcMode(false) }} className="text-xs text-primary-600 hover:underline">
+                {contactEdit ? 'Cerrar' : (ct ? 'Cambiar' : 'Asignar')}
+              </button>
+            </div>
+
+            {!contactEdit ? (
+              ct ? (
+                <dl className="space-y-2 text-sm">
+                  <Row label="Nombre">{ct.name}</Row>
+                  <Row label="Cargo">{ct.title || '—'}</Row>
+                  <Row label="Email">{ct.email ? <a href={`mailto:${ct.email}`} className="text-primary-600 hover:underline">{ct.email}</a> : '—'}</Row>
+                  <Row label="Teléfono">{ct.phone || '—'}</Row>
+                </dl>
+              ) : <p className="text-sm text-gray-400">Sin contacto principal.</p>
+            ) : ncMode ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input className={input} placeholder="Nombre *" value={nc.name} onChange={e => setNc({ ...nc, name: e.target.value })} />
+                  <input className={input} placeholder="Cargo" value={nc.title} onChange={e => setNc({ ...nc, title: e.target.value })} />
+                  <input className={input} placeholder="Email" value={nc.email} onChange={e => setNc({ ...nc, email: e.target.value })} />
+                  <input className={input} placeholder="Teléfono" value={nc.phone} onChange={e => setNc({ ...nc, phone: e.target.value })} />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setNcMode(false)} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg py-2 text-sm">Volver</button>
+                  <button onClick={createAndAssignContact} disabled={!nc.name.trim()} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white rounded-lg py-2 text-sm font-semibold">Crear y asignar</button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <select className={input} value={lead.primaryContactId || ''} onChange={e => setPrimaryContact(e.target.value)}>
+                  <option value="">Sin contacto principal</option>
+                  {(c?.contacts || []).map(x => <option key={x.id} value={x.id}>{x.name}{x.title ? ` — ${x.title}` : ''}</option>)}
+                </select>
+                <button onClick={() => setNcMode(true)} className="text-xs text-primary-600 hover:underline">＋ Nuevo contacto</button>
+              </div>
+            )}
           </div>
 
           {/* Próxima acción */}
@@ -198,6 +242,9 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
               </div>
             )}
           </div>
+
+          {/* Propuestas — compacto, en la columna de datos (suelen ser pocas) */}
+          <ProposalsPanel leadId={leadId} companyName={c?.name} onChanged={load} />
         </div>
 
         {/* Columna derecha: timeline + notas */}
@@ -231,11 +278,8 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
         </div>
       </div>
 
-      {/* IA comercial: investigación de la empresa + generador de propuestas */}
-      <div className="grid lg:grid-cols-2 gap-5">
-        <ResearchPanel leadId={leadId} onChanged={load} />
-        <ProposalsPanel leadId={leadId} onChanged={load} />
-      </div>
+      {/* Investigación de la empresa (IA) — ancho completo */}
+      <ResearchPanel leadId={leadId} onChanged={load} />
 
       {showEdit && <LeadModal lead={lead} companies={companies} team={team} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load(); onChanged?.() }} />}
       {showConvert && <ConvertToProjectModal lead={lead} onClose={() => setShowConvert(false)} onConverted={() => { setShowConvert(false); load(); onChanged?.() }} />}
