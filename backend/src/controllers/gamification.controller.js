@@ -138,9 +138,10 @@ async function createGame(req, res, next) {
     const metricError = validateMarketingConfig(def, req.body)
     if (metricError) return res.status(400).json({ error: metricError })
 
-    // Los nuevos van al final del orden manual (no desplazan el orden ya definido).
-    const last = await prisma.game.aggregate({ where: { workspaceId: req.workspace.id }, _max: { sortOrder: true } })
-    const sortOrder = (last._max.sortOrder ?? -1) + 1
+    // Por defecto el más nuevo va primero (arriba); un reordenamiento manual desde
+    // Activos (▲▼) puede moverlo, pero el próximo juego que se cree vuelve a ir arriba.
+    const first = await prisma.game.aggregate({ where: { workspaceId: req.workspace.id }, _min: { sortOrder: true } })
+    const sortOrder = (first._min.sortOrder ?? 1) - 1
 
     const game = await prisma.game.create({
       data: {
@@ -178,7 +179,20 @@ function sanitizeConfig(cfg) {
   if (cfg.hideLiveResults === false) out.hideLiveResults = false
   // Cuestionario con/sin puntaje: por defecto suma puntos (withPoints ausente = true).
   if (typeof cfg.withPoints === 'boolean') out.withPoints = cfg.withPoints
+  // Puntos extra por participar (independiente de acertar): se suman al puntaje de
+  // cada entrega. Útil sobre todo en cuestionarios sin puntaje por acierto (encuestas
+  // de preferencia) para igual poder premiar la participación.
+  const pp = Number(cfg.participationPoints)
+  if (Number.isFinite(pp) && pp > 0) out.participationPoints = pp
   return out
+}
+
+// Helper compartido: ¿este juego de tipo quiz exige marcar una respuesta correcta?
+// No, si el admin optó explícitamente por "sin puntos" (encuestas de preferencia).
+function quizRequiresCorrectAnswer(game) { return game.config?.withPoints !== false }
+function quizParticipationPoints(game) {
+  const pp = Number(game.config?.participationPoints)
+  return Number.isFinite(pp) && pp > 0 ? pp : 0
 }
 
 // Valida la métrica de una competencia de marketing. Devuelve string de error o null.
@@ -236,7 +250,7 @@ async function adminGameDetail(game) {
       prisma.gameQuizSubmission.findMany({ where: { gameId: game.id }, orderBy: { submittedAt: 'asc' } }),
     ])
     const names = await memberNameMap(game.workspaceId)
-    const maxScore = questions.reduce((s, q) => s + (q.points || 0), 0)
+    const maxScore = questions.reduce((s, q) => s + (q.points || 0), 0) + quizParticipationPoints(game)
     return {
       questions: questions.map(shapeQuestion),
       participation: { submitted: subs.length, eligible },
@@ -564,6 +578,9 @@ async function putQuestions(req, res, next) {
     const game = await findGame(req)
     if (!game) return res.status(404).json({ error: 'Juego no encontrado' })
     if (game.scoring !== 'quiz') return res.status(400).json({ error: 'Este juego no es un cuestionario' })
+    // Cuestionario "sin puntos" (encuesta de preferencia): no hace falta marcar una
+    // respuesta correcta, ni las opciones puntúan.
+    const requireCorrect = quizRequiresCorrectAnswer(game)
 
     const incoming = Array.isArray(req.body.questions) ? req.body.questions : []
     const rows = []
@@ -580,9 +597,9 @@ async function putQuestions(req, res, next) {
         .map((o, idx) => ({ id: String(o?.id || `o${idx + 1}`), text: String(o?.text || '').trim() }))
         .filter((o) => o.text)
       if (options.length < 2) return res.status(400).json({ error: `La pregunta ${i + 1} necesita al menos 2 opciones` })
-      if (!options.some((o) => o.id === q.correctOptionId)) return res.status(400).json({ error: `Marcá la opción correcta de la pregunta ${i + 1}` })
-      const points = Number(q.points) > 0 ? Number(q.points) : 1
-      rows.push({ gameId: game.id, order: i, kind: 'multiple_choice', text, options, correctOptionId: q.correctOptionId, points })
+      if (requireCorrect && !options.some((o) => o.id === q.correctOptionId)) return res.status(400).json({ error: `Marcá la opción correcta de la pregunta ${i + 1}` })
+      const points = requireCorrect ? (Number(q.points) > 0 ? Number(q.points) : 1) : 0
+      rows.push({ gameId: game.id, order: i, kind: 'multiple_choice', text, options, correctOptionId: requireCorrect ? (q.correctOptionId || null) : null, points })
     }
 
     await prisma.$transaction([
@@ -624,7 +641,7 @@ async function getQuiz(req, res, next) {
       open: isGameVisible(game, new Date(), tzOf(req)) && game.status === 'active' && !mine,
       submitted: !!mine,
       mySubmission: mine ? { score: mine.score, answers: mine.answers, submittedAt: mine.submittedAt } : null,
-      maxScore: questions.reduce((s, q) => s + (q.points || 0), 0),
+      maxScore: questions.reduce((s, q) => s + (q.points || 0), 0) + quizParticipationPoints(game),
       questions: questions.map((q) => publicQuestion(q, reveal)),
     })
   } catch (err) { next(err) }
@@ -674,10 +691,14 @@ async function submitQuiz(req, res, next) {
       return { questionId: q.id, kind: 'multiple_choice', chosenOptionId: chosen, correctOptionId: q.correctOptionId, correct, points: q.points }
     })
 
+    // Puntos extra por participar (independiente de acertar), configurables por el admin.
+    const participationPoints = quizParticipationPoints(game)
+    score += participationPoints
+
     await prisma.gameQuizSubmission.create({
       data: { gameId: game.id, userId: req.user.userId, answers: savedAnswers, score },
     })
-    res.json({ ok: true, score, maxScore: questions.reduce((s, q) => s + (q.points || 0), 0), results })
+    res.json({ ok: true, score, maxScore: questions.reduce((s, q) => s + (q.points || 0), 0) + participationPoints, results })
   } catch (err) { next(err) }
 }
 

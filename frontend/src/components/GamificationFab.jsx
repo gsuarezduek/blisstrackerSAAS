@@ -120,6 +120,9 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
   const isVote = game.scoring === 'vote'
   const isQuiz = game.scoring === 'quiz'
   const quizWithPoints = isQuiz ? game.config?.withPoints !== false : true
+  const quizParticipationPoints = isQuiz ? Number(game.config?.participationPoints) || 0 : 0
+  // Hay puntaje que mostrar si el quiz puntúa por acierto, o si igual reparte puntos por participar.
+  const quizHasScore = quizWithPoints || quizParticipationPoints > 0
   const metricMeta = game.leaderboard?.metric || null
   // En competencias de marketing solo listamos proyectos con puntaje > 0.
   const rankSubjects = metricMeta ? subjects.filter((s) => s.score > 0) : subjects
@@ -190,9 +193,9 @@ function GamePanel({ game, userId, voting, onVote, onRefresh }) {
       ) : isQuiz && !game.finished ? (
         <div className="mt-2">
           {game.mySubmission
-            ? <p className="text-sm text-green-600 dark:text-green-400 mb-2">✓ Ya respondiste{quizWithPoints ? <> · tu puntaje: <strong>{game.mySubmission.score}</strong></> : '.'}</p>
-            : <QuizTaker gameId={game.id} questionCount={game.questionCount} onDone={onRefresh} withPoints={quizWithPoints} />}
-          {quizWithPoints && (game.mySubmission || subjects.length > 0) && <QuizRanking subjects={subjects} />}
+            ? <p className="text-sm text-green-600 dark:text-green-400 mb-2">✓ Ya respondiste{quizHasScore ? <> · tu puntaje: <strong>{game.mySubmission.score}</strong></> : '.'}</p>
+            : <QuizTaker gameId={game.id} questionCount={game.questionCount} onDone={onRefresh} withPoints={quizWithPoints} hasScore={quizHasScore} />}
+          {quizHasScore && (game.mySubmission || subjects.length > 0) && <QuizRanking subjects={subjects} />}
         </div>
       ) : (
         /* Ranking (competencias, manual, o votación/quiz finalizado) */
@@ -251,7 +254,7 @@ function QuizRanking({ subjects }) {
 }
 
 // Cuestionario: el usuario abre, responde y envía. Una sola entrega.
-function QuizTaker({ gameId, questionCount, onDone, withPoints }) {
+function QuizTaker({ gameId, questionCount, onDone, withPoints, hasScore }) {
   const [quiz, setQuiz] = useState(null)
   const [answers, setAnswers] = useState({})
   const [result, setResult] = useState(null)
@@ -285,10 +288,10 @@ function QuizTaker({ gameId, questionCount, onDone, withPoints }) {
     const graded = result.results.filter((r) => r.kind !== 'open') // solo las de opción múltiple puntúan
     return (
       <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900/40 px-3 py-2 text-sm">
-        {withPoints ? (
+        {hasScore ? (
           <>
             <p className="font-semibold text-green-700 dark:text-green-300">¡Listo! Tu puntaje: {result.score} / {result.maxScore}</p>
-            {graded.length > 0 && (
+            {withPoints && graded.length > 0 && (
               <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">
                 {graded.filter((r) => r.correct).length} de {graded.length} correctas.
               </p>

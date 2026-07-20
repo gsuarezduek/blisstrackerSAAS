@@ -90,13 +90,18 @@ export default function Gamification() {
   // de gracia post-finalización). Reactivar lo vuelve a dejar como "finalizado".
   async function archive(game) { await setStatus(game, 'archived') }
   async function unarchive(game) { await setStatus(game, 'finished') }
-  // Sube (dir=-1) o baja (dir=+1) un juego en el orden global y lo persiste.
+  // Sube (dir=-1) o baja (dir=+1) un juego DENTRO del subconjunto de activos y persiste
+  // el orden completo. Los juegos que no están activos mantienen su posición relativa.
   async function move(game, dir) {
-    const idx = games.findIndex((g) => g.id === game.id)
+    const byId = new Map(games.map((g) => [g.id, g]))
+    const activeIds = games.filter((g) => g.status === 'active').map((g) => g.id)
+    const idx = activeIds.indexOf(game.id)
     const swap = idx + dir
-    if (idx < 0 || swap < 0 || swap >= games.length) return
-    const next = [...games]
-    ;[next[idx], next[swap]] = [next[swap], next[idx]]
+    if (idx < 0 || swap < 0 || swap >= activeIds.length) return
+    ;[activeIds[idx], activeIds[swap]] = [activeIds[swap], activeIds[idx]]
+
+    let ai = 0
+    const next = games.map((g) => (g.status === 'active' ? byId.get(activeIds[ai++]) : g))
     setGames(next) // optimista
     try {
       await api.put('/gamification/games/reorder', { orderedIds: next.map((g) => g.id) })
@@ -172,18 +177,18 @@ export default function Gamification() {
           <div className="space-y-3">
             {games.length > 1 && (
               <p className="text-xs text-gray-400 dark:text-gray-500">
-                {filter === 'all'
-                  ? 'Usá ▲▼ para ordenar los juegos. El orden se respeta también en el botón flotante 🏆 que ve el equipo.'
-                  : 'Para reordenar los juegos, cambiá el filtro a «Todos».'}
+                {filter === 'active'
+                  ? 'Usá ▲▼ para ordenar los juegos activos. Por defecto el más nuevo va primero (arriba); el orden se respeta también en el botón flotante 🏆 que ve el equipo.'
+                  : 'Para reordenar los juegos, cambiá el filtro a «Activos».'}
               </p>
             )}
             {games.filter((g) => filter === 'all' || g.status === filter).map((g, i, arr) => (
               <GameCard
                 key={g.id}
                 game={g}
-                reorderable={filter === 'all'}
-                canMoveUp={filter === 'all' && i > 0}
-                canMoveDown={filter === 'all' && i < arr.length - 1}
+                reorderable={filter === 'active'}
+                canMoveUp={filter === 'active' && i > 0}
+                canMoveDown={filter === 'active' && i < arr.length - 1}
                 onMoveUp={() => move(g, -1)}
                 onMoveDown={() => move(g, +1)}
                 onEdit={() => setEditing(g)}
@@ -354,6 +359,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
   const [vis, setVis] = useState(game?.visibilityRule || { mode: 'always' })
   const [hideLiveResults, setHideLiveResults] = useState(game?.config?.hideLiveResults !== false)
   const [withPoints, setWithPoints] = useState(game?.config?.withPoints !== false)
+  const [participationPoints, setParticipationPoints] = useState(game?.config?.participationPoints || 0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -385,7 +391,8 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
         if (questions[i].kind === 'open') continue // abierta: solo requiere enunciado
         const opts = questions[i].options.filter((o) => o.text.trim())
         if (opts.length < 2) return setError(`La pregunta ${i + 1} necesita al menos 2 opciones`)
-        if (!opts.some((o) => o.id === questions[i].correctOptionId)) return setError(`Marcá la opción correcta de la pregunta ${i + 1}`)
+        // Sin puntos (encuesta de preferencia) no hace falta marcar una respuesta correcta.
+        if (withPoints && !opts.some((o) => o.id === questions[i].correctOptionId)) return setError(`Marcá la opción correcta de la pregunta ${i + 1}`)
       }
     }
 
@@ -395,7 +402,11 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
       if (def?.metricRequired) { config.metric = metric; if (metricDef?.needsPlatform) config.adsPlatform = adsPlatform }
     }
     if (scoring === 'vote') { config.candidateIds = candidateIds; config.hideLiveResults = hideLiveResults }
-    if (scoring === 'quiz') { config.withPoints = withPoints }
+    if (scoring === 'quiz') {
+      config.withPoints = withPoints
+      // Puntos por participar: solo aplica en el modo "sin respuesta correcta" (exclusivo con withPoints).
+      if (!withPoints && Number(participationPoints) > 0) config.participationPoints = Number(participationPoints)
+    }
 
     const payload = {
       title: title.trim(),
@@ -469,12 +480,31 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: ¿Qué proyecto suma más seguidores en junio?" className={inputCls} />
           </Field>
           {scoring === 'quiz' && (
-            <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200 mb-3 cursor-pointer">
-              <input type="checkbox" checked={withPoints} onChange={(e) => setWithPoints(e.target.checked)} className="rounded mt-0.5" />
-              <span>Este cuestionario suma puntos
-                <span className="block text-xs text-gray-400">Si lo apagás, es solo informativo: no arma ranking ni muestra puntaje a nadie, y en "Ver resultados" vas a ver qué respondió cada uno.</span>
-              </span>
-            </label>
+            <Field label="¿Cómo suma puntos este cuestionario?">
+              <div className="space-y-2">
+                <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
+                  <input type="radio" name="quiz-scoring-mode" checked={withPoints} onChange={() => setWithPoints(true)} className="mt-0.5" />
+                  <span>Suma puntos por respuestas
+                    <span className="block text-xs text-gray-400">Cada pregunta de opción múltiple tiene una respuesta correcta y otorga sus puntos a quien acierte.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
+                  <input type="radio" name="quiz-scoring-mode" checked={!withPoints} onChange={() => setWithPoints(false)} className="mt-0.5" />
+                  <span>Suma puntos por participar
+                    <span className="block text-xs text-gray-400">No hay respuesta correcta — ideal para preguntas de gustos/preferencias con las que el equipo toma una decisión. Todos suman los mismos puntos por responder y completar el cuestionario, y en "Ver resultados" vas a ver qué respondió cada uno.</span>
+                  </span>
+                </label>
+              </div>
+              {!withPoints && (
+                <div className="mt-2 pl-6">
+                  <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                    Puntos por participar:
+                    <input type="number" min={0} value={participationPoints} onChange={(e) => setParticipationPoints(Number(e.target.value) || 0)} className="w-20 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" />
+                  </label>
+                  <p className="text-[11px] text-gray-400 mt-1">Dejalo en 0 si es solo informativo (sin ranking ni puntaje).</p>
+                </div>
+              )}
+            </Field>
           )}
           <Field label="Descripción (opcional)">
             <RichTextEditor
@@ -833,10 +863,10 @@ function QuizEditor({ questions, setQuestions, withPoints }) {
             </div>
           ) : (
             <>
-              <p className="text-[11px] text-gray-400">Marcá la opción correcta con el círculo.</p>
+              <p className="text-[11px] text-gray-400">{withPoints ? 'Marcá la opción correcta con el círculo.' : 'Opciones para elegir (encuesta de preferencia, sin respuesta correcta).'}</p>
               {q.options.map((o, oi) => (
                 <div key={o.id} className="flex items-center gap-2 pl-5">
-                  <input type="radio" name={`correct-${i}`} checked={q.correctOptionId === o.id} onChange={() => updateQ(i, { correctOptionId: o.id })} title="Correcta" />
+                  {withPoints && <input type="radio" name={`correct-${i}`} checked={q.correctOptionId === o.id} onChange={() => updateQ(i, { correctOptionId: o.id })} title="Correcta" />}
                   <input value={o.text} onChange={(e) => updateOpt(i, oi, e.target.value)} placeholder={`Opción ${oi + 1}`} className={`${inputCls} flex-1`} />
                   {q.options.length > 2 && <button type="button" onClick={() => removeOpt(i, oi)} className="text-gray-400 hover:text-red-500 px-1">✕</button>}
                 </div>
@@ -862,6 +892,56 @@ function QuizEditor({ questions, setQuestions, withPoints }) {
   )
 }
 
+// Recorre las entregas del cuestionario de a una, con navegación ‹ › — para leer
+// todas las respuestas de una persona junto y pasar a la siguiente sin scrollear.
+function SubmissionsPager({ submissions, questions, withPoints }) {
+  const [idx, setIdx] = useState(0)
+  const safeIdx = Math.min(idx, Math.max(0, submissions.length - 1))
+  const sub = submissions[safeIdx]
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Qué respondió cada uno</h4>
+        {submissions.length > 0 && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 shrink-0">
+            <button type="button" disabled={safeIdx === 0} onClick={() => setIdx((i) => Math.max(0, i - 1))} className="w-6 h-6 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-gray-700">‹</button>
+            <span>{safeIdx + 1} / {submissions.length}</span>
+            <button type="button" disabled={safeIdx === submissions.length - 1} onClick={() => setIdx((i) => Math.min(submissions.length - 1, i + 1))} className="w-6 h-6 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 disabled:opacity-30 hover:bg-gray-50 dark:hover:bg-gray-700">›</button>
+          </div>
+        )}
+      </div>
+
+      {!sub ? (
+        <p className="text-xs text-gray-400">Todavía nadie respondió.</p>
+      ) : (
+        <div className="border border-gray-200 dark:border-gray-600 rounded-xl p-3">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{sub.userName}</span>
+            {withPoints && <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">{sub.score} pts</span>}
+          </div>
+          <div className="space-y-2.5">
+            {questions.map((q) => {
+              const a = (sub.answers || []).find((x) => x.questionId === String(q.id))
+              const text = !a ? null : q.kind === 'open' ? a.text : (q.options || []).find((o) => o.id === a.optionId)?.text
+              const correct = withPoints && q.kind !== 'open' && !!a && a.optionId === q.correctOptionId
+              return (
+                <div key={q.id}>
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{q.text}</p>
+                  <p className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words">
+                    {text || <span className="text-gray-400 italic">Sin respuesta</span>}
+                    {withPoints && q.kind !== 'open' && a && <span className={`ml-1.5 text-xs ${correct ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{correct ? '✓' : '✗'}</span>}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Detalle (admin): votación o resultados del quiz ──────────────────────────
 
 function GameDetailModal({ game, onClose }) {
@@ -870,7 +950,9 @@ function GameDetailModal({ game, onClose }) {
 
   const isQuiz = game.scoring === 'quiz'
   const quizWithPoints = isQuiz ? game.config?.withPoints !== false : true
-  const showRanking = !isQuiz || quizWithPoints
+  const participationPoints = isQuiz ? Number(game.config?.participationPoints) || 0 : 0
+  // Hay ranking si el quiz puntúa por acierto, o si igual reparte puntos por participar.
+  const showRanking = !isQuiz || quizWithPoints || participationPoints > 0
 
   const allSubjects = data?.leaderboard?.subjects || []
   // En votaciones mostramos solo a quienes tienen al menos un voto.
@@ -888,7 +970,7 @@ function GameDetailModal({ game, onClose }) {
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
               {game.scoring === 'vote'
                 ? <>Votaron <strong>{part.voted}</strong> de <strong>{part.eligible}</strong> personas.</>
-                : <>Respondieron <strong>{part.submitted}</strong> de <strong>{part.eligible}</strong>{quizWithPoints && data.maxScore ? <> · puntaje máximo <strong>{data.maxScore}</strong></> : null}.</>}
+                : <>Respondieron <strong>{part.submitted}</strong> de <strong>{part.eligible}</strong>{showRanking && data.maxScore ? <> · puntaje máximo <strong>{data.maxScore}</strong></> : null}.</>}
             </p>
           )}
 
@@ -907,41 +989,9 @@ function GameDetailModal({ game, onClose }) {
             </>
           )}
 
-          {questions.length > 0 && (
+          {isQuiz && questions.length > 0 && (
             <div className={showRanking ? 'mt-4' : ''}>
-              <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Qué respondió cada uno</h4>
-              <div className="space-y-3">
-                {questions.map((q) => {
-                  const replies = submissions
-                    .map((s) => {
-                      const a = (s.answers || []).find((x) => x.questionId === String(q.id))
-                      if (!a) return null
-                      const text = q.kind === 'open' ? a.text : (q.options || []).find((o) => o.id === a.optionId)?.text
-                      if (!text) return null
-                      const correct = quizWithPoints && q.kind !== 'open' && a.optionId === q.correctOptionId
-                      return { userName: s.userName, text, correct, showMark: quizWithPoints && q.kind !== 'open' }
-                    })
-                    .filter(Boolean)
-                  return (
-                    <div key={q.id}>
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{q.text}</p>
-                      {replies.length === 0 ? (
-                        <p className="text-xs text-gray-400 mt-0.5">Sin respuestas todavía.</p>
-                      ) : (
-                        <ul className="mt-1 space-y-1">
-                          {replies.map((r, ri) => (
-                            <li key={ri} className="px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
-                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{r.userName}: </span>
-                              <span className="text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words">{r.text}</span>
-                              {r.showMark && <span className={`ml-1.5 text-xs ${r.correct ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{r.correct ? '✓' : '✗'}</span>}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+              <SubmissionsPager submissions={submissions} questions={questions} withPoints={quizWithPoints} />
             </div>
           )}
         </>
