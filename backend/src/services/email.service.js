@@ -186,6 +186,35 @@ async function sendPasswordReset(email, name, resetUrl, workspaceId) {
   }
 }
 
+// Código OTP para desbloquear "Datos en vivo" en el portal de cliente (sin auth, sin contraseña).
+async function sendClientLoginCodeEmail(email, projectName, code, workspaceId) {
+  const from = await getEmailFrom(workspaceId)
+  const subject = `Tu código de acceso — ${projectName}`
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: email,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">Tu código de acceso</h2>
+          <p style="color:#475569;margin:0 0 20px;">Usá este código para ver los datos en vivo de <strong>${projectName}</strong>:</p>
+          <div style="font-size:32px;font-weight:700;letter-spacing:6px;color:#E67A1F;text-align:center;
+                      background:#fff7ed;border-radius:8px;padding:16px;margin-bottom:20px;">
+            ${code}
+          </div>
+          <p style="color:#94a3b8;font-size:14px;margin:0;">Expira en 10 minutos. Si no lo pediste vos, podés ignorar este correo.</p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: email, subject, type: 'clientPortalLoginCode', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: email, subject, type: 'clientPortalLoginCode', status: 'failed', errorMsg: err.message })
+    throw err
+  }
+}
+
 // Verificación de cambio de email primario. Se envía al NUEVO correo; el cambio
 // solo se aplica cuando el usuario abre el link.
 async function sendEmailChangeVerification(newEmail, name, verifyUrl, workspaceId) {
@@ -859,6 +888,7 @@ module.exports = {
   sendSeoAlertEmail,
   sendGameFinishedEmail,
   sendReportFeedbackEmail,
+  sendClientLoginCodeEmail,
   sendPasswordReset,
   sendEmailChangeVerification,
   sendEmailChangedNotice,

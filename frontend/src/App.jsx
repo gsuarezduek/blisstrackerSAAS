@@ -93,7 +93,7 @@ const EOS              = lazyWithReload(() => import('./pages/EOS'))
 const Gamification     = lazyWithReload(() => import('./pages/Gamification'))
 const Ventas           = lazyWithReload(() => import('./pages/Ventas'))
 const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
-const ReportPublic     = lazyWithReload(() => import('./pages/ReportPublic'))
+const ReportOrClientPortal = lazyWithReload(() => import('./pages/ReportOrClientPortal'))
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -147,7 +147,7 @@ export default function App() {
           <Route path="/oauth"        element={<OAuthPopup    />} />
           <Route path="/auth"         element={<AuthCallback  />} />
           <Route path="/oauth-result" element={<OAuthResult   />} />
-          <Route path="/report/:token" element={<ReportPublic />} />
+          <Route path="/report/:token" element={<ReportOrClientPortal />} />
           <Route path="/condiciones"  element={<LegalPage docKey="terms_of_service" />} />
           <Route path="/privacidad"   element={<LegalPage docKey="privacy_policy"   />} />
           <Route path="/join"     element={<JoinWorkspace />} />

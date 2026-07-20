@@ -12,6 +12,7 @@ import ProjectSituation from '../components/ProjectSituation'
 import ProjectInfoTab from '../components/ProjectInfoTab'
 import ProjectBriefs from '../components/briefs/ProjectBriefs'
 import ProjectMeetings from '../components/meetings/ProjectMeetings'
+import ClientPortalConfig from '../components/ClientPortalConfig'
 import ProjectAccesos from '../components/ProjectAccesos'
 import { useAuth } from '../context/AuthContext'
 import { avatarUrl } from '../utils/avatarUrl'
@@ -565,6 +566,12 @@ export default function ProjectDetail() {
                       )}
                     </div>
                   )}
+
+                  {/* Cliente — portal externo (informes + briefs + datos en vivo) */}
+                  <ClientPortalConfig
+                    projectId={data.project.id}
+                    canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
+                  />
 
                   {/* Equipo */}
                   <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">

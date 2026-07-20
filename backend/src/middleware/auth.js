@@ -7,7 +7,12 @@ function auth(req, res, next) {
   }
   try {
     const token = header.slice(7)
-    req.user = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
+    // Los tokens de propósito acotado (ej. portal de cliente) nunca deben servir para rutas de staff.
+    if (decoded.purpose === 'client-portal-live') {
+      return res.status(401).json({ error: 'Invalid token' })
+    }
+    req.user = decoded
     // req.user contiene: { userId, workspaceId, role, isSuperAdmin, iat, exp }
     next()
   } catch {
