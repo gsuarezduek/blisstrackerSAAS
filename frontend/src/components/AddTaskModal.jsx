@@ -5,7 +5,7 @@ import useRoles from '../hooks/useRoles'
 
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
-function ProjectCombobox({ projects, value, onChange }) {
+function ProjectCombobox({ projects, value, onChange, userId }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
@@ -16,6 +16,21 @@ function ProjectCombobox({ projects, value, onChange }) {
   const filtered = query.trim() === ''
     ? projects
     : projects.filter(p => p.name.toLowerCase().includes(query.toLowerCase()))
+
+  // Agrupar en Favoritos → Mis proyectos (soy del equipo) → Otros, respetando el filtro.
+  const groups = useMemo(() => {
+    const fav = [], mine = [], others = []
+    for (const p of filtered) {
+      if (p.starred) fav.push(p)
+      else if (p.members?.some(pm => pm.user?.id === userId)) mine.push(p)
+      else others.push(p)
+    }
+    return [
+      { label: '⭐ Favoritos',      items: fav },
+      { label: 'Mis proyectos',     items: mine },
+      { label: 'Otros proyectos',   items: others },
+    ].filter(g => g.items.length > 0)
+  }, [filtered, userId])
 
   // Cerrar al hacer click fuera
   useEffect(() => {
@@ -69,20 +84,29 @@ function ProjectCombobox({ projects, value, onChange }) {
 
       {open && (
         <ul className="absolute z-10 mt-1 w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-52 overflow-y-auto">
-          {filtered.length === 0 && (
+          {groups.length === 0 && (
             <li className="px-3 py-2 text-sm text-gray-400 dark:text-gray-500">Sin resultados</li>
           )}
-          {filtered.map(p => (
-            <li
-              key={p.id}
-              onMouseDown={() => handleSelect(p)}
-              className={`px-3 py-2 text-sm cursor-pointer transition-colors ${
-                String(p.id) === value
-                  ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 font-medium'
-                  : 'text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
-              }`}
-            >
-              {p.name}
+          {groups.map(g => (
+            <li key={g.label}>
+              <p className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                {g.label}
+              </p>
+              <ul>
+                {g.items.map(p => (
+                  <li
+                    key={p.id}
+                    onMouseDown={() => handleSelect(p)}
+                    className={`px-3 py-2 text-sm cursor-pointer transition-colors ${
+                      String(p.id) === value
+                        ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 font-medium'
+                        : 'text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {p.name}
+                  </li>
+                ))}
+              </ul>
             </li>
           ))}
         </ul>
@@ -128,10 +152,9 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
 
   useEffect(() => {
     if (lockedProject) return
-    api.get('/projects').then(r => {
-      setProjects(r.data)
-      if (r.data.length > 0) setProjectId(String(r.data[0].id))
-    })
+    // No autoseleccionamos ningún proyecto: el selector arranca vacío y el usuario
+    // elige (favoritos → los suyos → el resto, o filtrando por texto).
+    api.get('/projects').then(r => setProjects(r.data))
   }, [lockedProject])
 
   // Todos los integrantes activos del workspace: cualquiera puede ser asignado,
@@ -288,7 +311,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
                 {lockedProject.name}
               </div>
             ) : (
-              <ProjectCombobox projects={projects} value={projectId} onChange={setProjectId} />
+              <ProjectCombobox projects={projects} value={projectId} onChange={setProjectId} userId={user?.id} />
             )}
           </div>
 
