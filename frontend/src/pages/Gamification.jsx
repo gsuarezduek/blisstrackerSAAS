@@ -86,6 +86,10 @@ export default function Gamification() {
     await api.delete(`/gamification/games/${game.id}`)
     load()
   }
+  // Archivar oculta el juego del botón flotante 🏆 al instante (sin esperar los 7 días
+  // de gracia post-finalización). Reactivar lo vuelve a dejar como "finalizado".
+  async function archive(game) { await setStatus(game, 'archived') }
+  async function unarchive(game) { await setStatus(game, 'finished') }
   // Sube (dir=-1) o baja (dir=+1) un juego en el orden global y lo persiste.
   async function move(game, dir) {
     const idx = games.findIndex((g) => g.id === game.id)
@@ -139,6 +143,7 @@ export default function Gamification() {
               { k: 'active', label: 'Activos' },
               { k: 'draft', label: 'Borradores' },
               { k: 'finished', label: 'Finalizados' },
+              { k: 'archived', label: 'Archivados' },
             ].map((f) => {
               const n = f.k === 'all' ? games.length : games.filter((g) => g.status === f.k).length
               return (
@@ -187,6 +192,8 @@ export default function Gamification() {
                 onActivate={() => setStatus(g, 'active')}
                 onPause={() => setStatus(g, 'draft')}
                 onFinish={() => finish(g)}
+                onArchive={() => archive(g)}
+                onUnarchive={() => unarchive(g)}
                 onRemove={() => remove(g)}
               />
             ))}
@@ -224,7 +231,7 @@ export default function Gamification() {
 
 // ─── Card de un juego ─────────────────────────────────────────────────────────
 
-function GameCard({ game, reorderable, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onEdit, onScores, onDetail, onActivate, onPause, onFinish, onRemove }) {
+function GameCard({ game, reorderable, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onEdit, onScores, onDetail, onActivate, onPause, onFinish, onArchive, onUnarchive, onRemove }) {
   const pill = STATUS_PILL[game.status] || STATUS_PILL.draft
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
@@ -255,7 +262,13 @@ function GameCard({ game, reorderable, canMoveUp, canMoveDown, onMoveUp, onMoveD
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
             <span>👥 {SUBJECT_LABEL[game.subjectType]}</span>
-            <span>👁 {visibilitySummary(game.visibilityRule)}</span>
+            <span>
+              👁 {game.status === 'finished'
+                ? 'Visible en 🏆 unos días más (podés ocultarlo ya con "Ocultar del 🏆")'
+                : game.status === 'archived'
+                  ? 'Oculto del 🏆 del equipo'
+                  : visibilitySummary(game.visibilityRule)}
+            </span>
             {game.prize && <span>🎁 {game.prize}</span>}
             {game.winnerSubject && <span className="text-blue-600 dark:text-blue-300">🏆 {game.winnerSubject.label} ({game.winnerSubject.score})</span>}
           </div>
@@ -268,7 +281,9 @@ function GameCard({ game, reorderable, canMoveUp, canMoveDown, onMoveUp, onMoveD
         {game.scoring === 'manual' && game.status !== 'finished' && <Btn onClick={onScores}>🔢 Cargar puntos</Btn>}
         {(game.scoring === 'vote' || game.scoring === 'quiz') && <Btn onClick={onDetail}>{game.scoring === 'vote' ? '👁 Ver votación' : '👁 Ver resultados'}</Btn>}
         <Btn onClick={onEdit}>✏️ Editar</Btn>
-        {game.status !== 'finished' && <Btn onClick={onFinish}>🏁 Finalizar</Btn>}
+        {['draft', 'active'].includes(game.status) && <Btn onClick={onFinish}>🏁 Finalizar</Btn>}
+        {game.status === 'finished' && <Btn onClick={onArchive}>🗄 Ocultar del 🏆</Btn>}
+        {game.status === 'archived' && <Btn onClick={onUnarchive}>↩ Reactivar</Btn>}
         <Btn onClick={onRemove} kind="danger">🗑 Eliminar</Btn>
       </div>
         </div>
@@ -338,6 +353,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
   const [endDate, setEndDate] = useState(game?.endDate ? game.endDate.slice(0, 10) : '')
   const [vis, setVis] = useState(game?.visibilityRule || { mode: 'always' })
   const [hideLiveResults, setHideLiveResults] = useState(game?.config?.hideLiveResults !== false)
+  const [withPoints, setWithPoints] = useState(game?.config?.withPoints !== false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -379,6 +395,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
       if (def?.metricRequired) { config.metric = metric; if (metricDef?.needsPlatform) config.adsPlatform = adsPlatform }
     }
     if (scoring === 'vote') { config.candidateIds = candidateIds; config.hideLiveResults = hideLiveResults }
+    if (scoring === 'quiz') { config.withPoints = withPoints }
 
     const payload = {
       title: title.trim(),
@@ -451,6 +468,14 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
           <Field label="Enunciado del desafío">
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej: ¿Qué proyecto suma más seguidores en junio?" className={inputCls} />
           </Field>
+          {scoring === 'quiz' && (
+            <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200 mb-3 cursor-pointer">
+              <input type="checkbox" checked={withPoints} onChange={(e) => setWithPoints(e.target.checked)} className="rounded mt-0.5" />
+              <span>Este cuestionario suma puntos
+                <span className="block text-xs text-gray-400">Si lo apagás, es solo informativo: no arma ranking ni muestra puntaje a nadie, y en "Ver resultados" vas a ver qué respondió cada uno.</span>
+              </span>
+            </label>
+          )}
           <Field label="Descripción (opcional)">
             <RichTextEditor
               defaultContent={description}
@@ -541,7 +566,7 @@ function GameEditor({ game, catalog, metrics, metricCategories, members, project
           )}
           {scoring === 'quiz' && (
             <Field label="Preguntas">
-              <QuizEditor questions={questions} setQuestions={setQuestions} />
+              <QuizEditor questions={questions} setQuestions={setQuestions} withPoints={withPoints} />
             </Field>
           )}
           {effSubjectType === 'team' && (
@@ -773,7 +798,7 @@ function ManualScores({ game, members, projects, onClose, onSaved }) {
 
 const oid = () => `o${Math.random().toString(36).slice(2, 8)}`
 
-function QuizEditor({ questions, setQuestions }) {
+function QuizEditor({ questions, setQuestions, withPoints }) {
   function updateQ(i, patch) { setQuestions((qs) => qs.map((q, idx) => idx === i ? { ...q, ...patch } : q)) }
   function addChoice() { setQuestions((qs) => { const a = oid(), b = oid(); return [...qs, { kind: 'multiple_choice', text: '', options: [{ id: a, text: '' }, { id: b, text: '' }], correctOptionId: a, points: 1 }] }) }
   function addOpen() { setQuestions((qs) => [...qs, { kind: 'open', text: '', options: [], correctOptionId: null, points: 0 }]) }
@@ -818,10 +843,12 @@ function QuizEditor({ questions, setQuestions }) {
               ))}
               <div className="flex items-center justify-between pl-5">
                 <button type="button" onClick={() => addOpt(i)} className="text-xs text-primary-600 dark:text-primary-400 font-medium">+ Opción</button>
-                <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                  Puntos:
-                  <input type="number" min={1} value={q.points} onChange={(e) => updateQ(i, { points: Number(e.target.value) })} className="w-16 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" />
-                </label>
+                {withPoints && (
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    Puntos:
+                    <input type="number" min={1} value={q.points} onChange={(e) => updateQ(i, { points: Number(e.target.value) })} className="w-16 px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" />
+                  </label>
+                )}
               </div>
             </>
           )}
@@ -841,12 +868,16 @@ function GameDetailModal({ game, onClose }) {
   const [data, setData] = useState(null)
   useEffect(() => { api.get(`/gamification/games/${game.id}`).then((r) => setData(r.data)).catch(() => setData({ error: true })) }, [game.id])
 
+  const isQuiz = game.scoring === 'quiz'
+  const quizWithPoints = isQuiz ? game.config?.withPoints !== false : true
+  const showRanking = !isQuiz || quizWithPoints
+
   const allSubjects = data?.leaderboard?.subjects || []
   // En votaciones mostramos solo a quienes tienen al menos un voto.
   const subjects = game.scoring === 'vote' ? allSubjects.filter((s) => s.score > 0) : allSubjects
   const part = data?.participation
-  // Preguntas abiertas + respuestas de texto libre (solo quiz).
-  const openQuestions = (data?.questions || []).filter((q) => q.kind === 'open')
+  // Todas las preguntas del cuestionario (opción múltiple + abiertas), para mostrar qué respondió cada uno.
+  const questions = data?.questions || []
   const submissions = data?.submissions || []
 
   return (
@@ -857,29 +888,40 @@ function GameDetailModal({ game, onClose }) {
             <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
               {game.scoring === 'vote'
                 ? <>Votaron <strong>{part.voted}</strong> de <strong>{part.eligible}</strong> personas.</>
-                : <>Respondieron <strong>{part.submitted}</strong> de <strong>{part.eligible}</strong>{data.maxScore ? <> · puntaje máximo <strong>{data.maxScore}</strong></> : null}.</>}
+                : <>Respondieron <strong>{part.submitted}</strong> de <strong>{part.eligible}</strong>{quizWithPoints && data.maxScore ? <> · puntaje máximo <strong>{data.maxScore}</strong></> : null}.</>}
             </p>
           )}
 
-          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Ranking</h4>
-          <ol className="space-y-1">
-            {subjects.length === 0 && <li className="text-xs text-gray-400">{game.scoring === 'vote' ? 'Todavía nadie recibió votos.' : 'Sin datos todavía.'}</li>}
-            {subjects.map((s, i) => (
-              <li key={s.subjectId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
-                <span className="truncate text-gray-800 dark:text-gray-100">{['🥇', '🥈', '🥉'][i] || `${i + 1}.`} {s.label}</span>
-                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{s.score} {game.scoring === 'vote' ? (s.score === 1 ? 'voto' : 'votos') : 'pts'}</span>
-              </li>
-            ))}
-          </ol>
+          {showRanking && (
+            <>
+              <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Ranking</h4>
+              <ol className="space-y-1">
+                {subjects.length === 0 && <li className="text-xs text-gray-400">{game.scoring === 'vote' ? 'Todavía nadie recibió votos.' : 'Sin datos todavía.'}</li>}
+                {subjects.map((s, i) => (
+                  <li key={s.subjectId} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
+                    <span className="truncate text-gray-800 dark:text-gray-100">{['🥇', '🥈', '🥉'][i] || `${i + 1}.`} {s.label}</span>
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{s.score} {game.scoring === 'vote' ? (s.score === 1 ? 'voto' : 'votos') : 'pts'}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
 
-          {openQuestions.length > 0 && (
-            <div className="mt-4">
-              <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Respuestas abiertas</h4>
+          {questions.length > 0 && (
+            <div className={showRanking ? 'mt-4' : ''}>
+              <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Qué respondió cada uno</h4>
               <div className="space-y-3">
-                {openQuestions.map((q) => {
+                {questions.map((q) => {
                   const replies = submissions
-                    .map((s) => ({ userName: s.userName, text: (s.openAnswers || []).find((a) => a.questionId === q.id)?.text }))
-                    .filter((r) => r.text)
+                    .map((s) => {
+                      const a = (s.answers || []).find((x) => x.questionId === String(q.id))
+                      if (!a) return null
+                      const text = q.kind === 'open' ? a.text : (q.options || []).find((o) => o.id === a.optionId)?.text
+                      if (!text) return null
+                      const correct = quizWithPoints && q.kind !== 'open' && a.optionId === q.correctOptionId
+                      return { userName: s.userName, text, correct, showMark: quizWithPoints && q.kind !== 'open' }
+                    })
+                    .filter(Boolean)
                   return (
                     <div key={q.id}>
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{q.text}</p>
@@ -891,6 +933,7 @@ function GameDetailModal({ game, onClose }) {
                             <li key={ri} className="px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
                               <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{r.userName}: </span>
                               <span className="text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words">{r.text}</span>
+                              {r.showMark && <span className={`ml-1.5 text-xs ${r.correct ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{r.correct ? '✓' : '✗'}</span>}
                             </li>
                           ))}
                         </ul>

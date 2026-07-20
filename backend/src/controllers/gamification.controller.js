@@ -176,6 +176,8 @@ function sanitizeConfig(cfg) {
   // Votación a ciegas: por defecto los votos quedan ocultos hasta el cierre.
   // Solo guardamos el override explícito a `false` (mostrar en vivo).
   if (cfg.hideLiveResults === false) out.hideLiveResults = false
+  // Cuestionario con/sin puntaje: por defecto suma puntos (withPoints ausente = true).
+  if (typeof cfg.withPoints === 'boolean') out.withPoints = cfg.withPoints
   return out
 }
 
@@ -235,7 +237,6 @@ async function adminGameDetail(game) {
     ])
     const names = await memberNameMap(game.workspaceId)
     const maxScore = questions.reduce((s, q) => s + (q.points || 0), 0)
-    const openIds = new Set(questions.filter((q) => (q.kind || 'multiple_choice') === 'open').map((q) => String(q.id)))
     return {
       questions: questions.map(shapeQuestion),
       participation: { submitted: subs.length, eligible },
@@ -245,10 +246,15 @@ async function adminGameDetail(game) {
         userName: names.get(s.userId) || `Usuario ${s.userId}`,
         score: s.score,
         submittedAt: s.submittedAt,
-        // Respuestas de texto libre (solo de las preguntas abiertas), para que el admin las lea.
-        openAnswers: (Array.isArray(s.answers) ? s.answers : [])
-          .filter((a) => a && openIds.has(String(a.questionId)) && a.text)
-          .map((a) => ({ questionId: String(a.questionId), text: String(a.text) })),
+        // Respuesta de cada persona a cada pregunta (opción elegida o texto libre), para
+        // que el admin vea "quién respondió qué" — clave en cuestionarios sin puntaje.
+        answers: (Array.isArray(s.answers) ? s.answers : [])
+          .filter(Boolean)
+          .map((a) => ({
+            questionId: String(a.questionId),
+            optionId: a.optionId != null ? String(a.optionId) : null,
+            text: a.text != null ? String(a.text) : null,
+          })),
       })),
     }
   }

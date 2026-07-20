@@ -395,6 +395,8 @@ async function resolveSubjectLabels(game, subjectIds) {
  * Devuelve { subjectId, label, score } o null si no hay puntaje > 0.
  */
 async function resolveWinner(game) {
+  // Cuestionario marcado como "sin puntos": es informativo, no compite por un ganador.
+  if (game.scoring === 'quiz' && game.config?.withPoints === false) return null
   const { subjects } = await computeLeaderboard(game)
   const top = subjects[0]
   if (!top || top.score <= 0) return null
