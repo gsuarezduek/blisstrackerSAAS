@@ -687,35 +687,36 @@ async function getAdsSummaryLive(req, res, next) {
 
 /**
  * GET /api/marketing/summary/reports
- * Informes del workspace de un mes puntual (por defecto, el mes en curso — el slot
- * que se ve al navegar mes a mes en la vista de un proyecto), del más nuevo al más
- * viejo. Cada informe incluye su % de cumplimiento de objetivos (ok / evaluables,
- * mismo criterio que el auto-metric "objetivos_cumplidos" del Scorecard EOS) y el
- * detalle de sus objetivos, para el desplegable de la lista.
- * Query: ?limit=20&offset=0&month=YYYY-MM&search=texto (busca por nombre de proyecto)
+ * TODOS los informes del workspace de un mes puntual (por defecto, el mes en curso —
+ * el slot que se ve al navegar mes a mes en la vista de un proyecto), sin paginar.
+ * Cada informe incluye su % de cumplimiento de objetivos (ok / evaluables, mismo
+ * criterio que el auto-metric "objetivos_cumplidos" del Scorecard EOS) y el detalle
+ * de sus objetivos, para el desplegable de la lista. `generators` = quiénes generaron
+ * algún informe de ese mes (para el filtro por persona) — siempre sobre el mes
+ * completo, sin importar los filtros de búsqueda/persona aplicados a `reports`.
+ * Query: ?month=YYYY-MM&search=texto&generatedById=N&sort=date_desc|pct_desc|pct_asc
  */
 async function getReportsSummary(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const tz     = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
-    const limit  = Math.min(parseInt(req.query.limit  ?? '20'), 50)
-    const offset = parseInt(req.query.offset ?? '0')
     const month  = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : todayString(tz).slice(0, 7)
     const search = (req.query.search || '').trim()
+    const generatedById = /^\d+$/.test(req.query.generatedById || '') ? parseInt(req.query.generatedById) : null
+    const sort   = ['pct_desc', 'pct_asc'].includes(req.query.sort) ? req.query.sort : 'date_desc'
 
+    const baseWhere = { workspaceId, month, ...GENERATED_REPORT_WHERE }
     const where = {
-      workspaceId,
-      month,
-      ...GENERATED_REPORT_WHERE,
-      ...(search ? { project: { name: { contains: search, mode: 'insensitive' } } } : {}),
+      ...baseWhere,
+      ...(search        ? { project: { name: { contains: search, mode: 'insensitive' } } } : {}),
+      ...(generatedById  ? { generatedById } : {}),
     }
 
-    const [reports, total] = await Promise.all([
+    const [reports, generatorRows] = await Promise.all([
       prisma.monthlyReport.findMany({
         where,
         orderBy: [{ month: 'desc' }, { createdAt: 'desc' }],
-        skip:    offset,
-        take:    limit,
+        take:    300, // límite de seguridad — no hay paginación, se listan todos los del mes
         select: {
           id:          true,
           month:       true,
@@ -728,8 +729,15 @@ async function getReportsSummary(req, res, next) {
           generatedBy: { select: { id: true, name: true } },
         },
       }),
-      prisma.monthlyReport.count({ where }),
+      prisma.monthlyReport.findMany({
+        where:  baseWhere,
+        select: { generatedBy: { select: { id: true, name: true } } },
+      }),
     ])
+
+    const genMap = new Map()
+    for (const r of generatorRows) if (r.generatedBy) genMap.set(r.generatedBy.id, r.generatedBy.name)
+    const generators = [...genMap.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
 
     const withExtras = await Promise.all(reports.map(async (r) => {
       let objectives = []
@@ -745,7 +753,17 @@ async function getReportsSummary(req, res, next) {
       return { ...r, periodLabel: reportLabel(r), objectivesPct, objectives }
     }))
 
-    res.json({ reports: withExtras, total, limit, offset, month })
+    // Orden por % de cumplimiento: los sin objetivos/sin datos quedan siempre al
+    // final (no hay un valor real que ordenar). "date_desc" conserva el orden de la DB.
+    if (sort === 'pct_desc' || sort === 'pct_asc') {
+      const withPct    = withExtras.filter(r => r.objectivesPct != null)
+      const withoutPct = withExtras.filter(r => r.objectivesPct == null)
+      withPct.sort((a, b) => sort === 'pct_desc' ? b.objectivesPct - a.objectivesPct : a.objectivesPct - b.objectivesPct)
+      withExtras.length = 0
+      withExtras.push(...withPct, ...withoutPct)
+    }
+
+    res.json({ reports: withExtras, total: withExtras.length, month, generators })
   } catch (err) {
     next(err)
   }

@@ -520,7 +520,11 @@ function ReportRow({ r, onSelectProject }) {
           </button>
         ) : hasObjectives ? (
           <span className="flex-shrink-0 text-[11px] text-gray-400 px-2 text-center">Sin datos<br />de objetivos</span>
-        ) : null}
+        ) : (
+          <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 whitespace-nowrap">
+            SIN OBJETIVOS
+          </span>
+        )}
 
         <a
           href={publicUrl}
@@ -541,17 +545,24 @@ function ReportRow({ r, onSelectProject }) {
   )
 }
 
+const SORT_OPTIONS = [
+  { key: 'date_desc', label: 'Más reciente' },
+  { key: 'pct_desc',  label: 'Mayor cumplimiento' },
+  { key: 'pct_asc',   label: 'Menor cumplimiento' },
+]
+
 function AllReportsPanel({ onSelectProject, projects }) {
   const [reports, setReports]     = useState([])
   const [total,   setTotal]       = useState(0)
   const [month,   setMonth]       = useState(null)
+  const [generators, setGenerators] = useState([])
   const [stats,   setStats]       = useState(null)
   const [loading, setLoading]     = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
   const [search,   setSearch]   = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const PAGE = 20
+  const [generatedById, setGeneratedById] = useState('')
+  const [sort, setSort] = useState('date_desc')
 
   // Debounce del buscador (300ms) para no pegarle al backend en cada tecla.
   useEffect(() => {
@@ -559,34 +570,23 @@ function AllReportsPanel({ onSelectProject, projects }) {
     return () => clearTimeout(t)
   }, [search])
 
-  // Stats de "este mes" — independientes del buscador, se cargan una sola vez.
+  // Stats de "este mes" — independientes de los filtros, se cargan una sola vez.
   useEffect(() => {
     api.get('/marketing/summary/reports-stats').then(r => setStats(r.data)).catch(() => {})
   }, [])
 
-  // Lista de informes — por defecto solo el mes en curso; el buscador filtra
-  // dentro de ese mismo mes (no busca en el historial completo).
+  // Lista de informes — todos los del mes en curso (sin paginar). El buscador y el
+  // filtro por persona acotan dentro de ese mismo mes (no buscan en el historial).
   useEffect(() => {
     setLoading(true)
-    const params = new URLSearchParams({ limit: PAGE, offset: 0 })
+    const params = new URLSearchParams({ sort })
     if (debouncedSearch) params.set('search', debouncedSearch)
+    if (generatedById)   params.set('generatedById', generatedById)
     api.get(`/marketing/summary/reports?${params}`)
-      .then(r => { setReports(r.data.reports); setTotal(r.data.total); setMonth(r.data.month) })
+      .then(r => { setReports(r.data.reports); setTotal(r.data.total); setMonth(r.data.month); setGenerators(r.data.generators) })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [debouncedSearch])
-
-  async function handleLoadMore() {
-    setLoadingMore(true)
-    try {
-      const params = new URLSearchParams({ limit: PAGE, offset: reports.length })
-      if (debouncedSearch) params.set('search', debouncedSearch)
-      const r = await api.get(`/marketing/summary/reports?${params}`)
-      setReports(prev => [...prev, ...r.data.reports])
-      setTotal(r.data.total)
-    } catch {}
-    finally { setLoadingMore(false) }
-  }
+  }, [debouncedSearch, generatedById, sort])
 
   const configBtn = (
     <button
@@ -599,6 +599,7 @@ function AllReportsPanel({ onSelectProject, projects }) {
   )
 
   const heading = month ? monthLabel(month) : ''
+  const selectCls = 'text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500'
 
   return (
     <div className="space-y-4">
@@ -608,14 +609,23 @@ function AllReportsPanel({ onSelectProject, projects }) {
         <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 capitalize">
           Informes de {heading} <span className="font-normal text-gray-400 lowercase">({total} en total)</span>
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar proyecto…"
-            className="w-48 text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-44 text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
+          {generators.length > 0 && (
+            <select value={generatedById} onChange={e => setGeneratedById(e.target.value)} className={selectCls}>
+              <option value="">Todas las personas</option>
+              {generators.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          )}
+          <select value={sort} onChange={e => setSort(e.target.value)} className={selectCls}>
+            {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
           {configBtn}
         </div>
       </div>
@@ -628,32 +638,15 @@ function AllReportsPanel({ onSelectProject, projects }) {
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
           <p className="text-4xl mb-3">📊</p>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
-            {debouncedSearch
-              ? <>No se encontraron informes de {heading} para "{debouncedSearch}".</>
+            {debouncedSearch || generatedById
+              ? <>No se encontraron informes de {heading} con esos filtros.</>
               : <>Todavía no hay informes generados este mes. Seleccioná un proyecto para crear el primero.</>}
           </p>
         </div>
       ) : (
-        <>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
-            {reports.map(r => <ReportRow key={r.id} r={r} onSelectProject={onSelectProject} />)}
-          </div>
-
-          {reports.length < total && (
-            <div className="flex justify-center pt-2">
-              <button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-              >
-                {loadingMore
-                  ? <><span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Cargando…</>
-                  : `Cargar más (${total - reports.length} restantes)`
-                }
-              </button>
-            </div>
-          )}
-        </>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
+          {reports.map(r => <ReportRow key={r.id} r={r} onSelectProject={onSelectProject} />)}
+        </div>
       )}
 
       {showConfig && (
