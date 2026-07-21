@@ -195,6 +195,38 @@ function quizParticipationPoints(game) {
   return Number.isFinite(pp) && pp > 0 ? pp : 0
 }
 
+// Cada vez que se guardan las preguntas de un cuestionario (putQuestions) las filas de
+// GameQuestion se recrean con id nuevo — así que las entregas anteriores a ese guardado
+// quedan con answers[].questionId apuntando a filas que ya no existen ("huérfanas").
+// Reconciliamos automáticamente en dos pasos, sin migrar nada en la base:
+//   1) Opción múltiple: el id de la OPCIÓN elegida sí es estable entre recreaciones (se
+//      preserva al reeditar), así que buscamos a qué pregunta actual pertenece esa opción.
+//   2) Preguntas abiertas (sin optionId, sin ancla estable): si al menos una respuesta de
+//      la MISMA entrega se resolvió por (1) y su posición dentro del array coincide con la
+//      posición de esa pregunta en el cuestionario actual, asumimos que el array completo
+//      respeta ese mismo orden y completamos el resto por posición. Si no hay ninguna
+//      respuesta anclada, no se adivina nada: queda como "sin respuesta".
+function reconcileOrphanAnswers(rawAnswers, questionsSorted, questionIds, optionToQuestionId) {
+  const resolved = rawAnswers.map((a) => {
+    const qid = String(a.questionId)
+    if (questionIds.has(qid)) return { a, questionId: qid, anchored: false }
+    if (a.optionId != null && optionToQuestionId.has(String(a.optionId))) {
+      return { a, questionId: optionToQuestionId.get(String(a.optionId)), anchored: true }
+    }
+    return { a, questionId: qid, anchored: false }
+  })
+
+  const anchors = resolved.filter((r) => r.anchored).length
+  const positionsMatch = anchors > 0 && resolved.length === questionsSorted.length &&
+    resolved.every((r, i) => !r.anchored || questionsSorted[i].id === r.questionId)
+
+  return resolved.map((r, i) => ({
+    questionId: questionIds.has(r.questionId) ? r.questionId : (positionsMatch ? String(questionsSorted[i].id) : r.questionId),
+    optionId: r.a.optionId != null ? String(r.a.optionId) : null,
+    text: r.a.text != null ? String(r.a.text) : null,
+  }))
+}
+
 // Valida la métrica de una competencia de marketing. Devuelve string de error o null.
 function validateMarketingConfig(def, body) {
   if (!def?.metricRequired) return null
@@ -251,6 +283,11 @@ async function adminGameDetail(game) {
     ])
     const names = await memberNameMap(game.workspaceId)
     const maxScore = questions.reduce((s, q) => s + (q.points || 0), 0) + quizParticipationPoints(game)
+    const questionIds = new Set(questions.map((q) => String(q.id)))
+    const optionToQuestionId = new Map()
+    for (const q of questions) {
+      for (const o of (Array.isArray(q.options) ? q.options : [])) optionToQuestionId.set(String(o.id), String(q.id))
+    }
     return {
       questions: questions.map(shapeQuestion),
       participation: { submitted: subs.length, eligible },
@@ -262,13 +299,11 @@ async function adminGameDetail(game) {
         submittedAt: s.submittedAt,
         // Respuesta de cada persona a cada pregunta (opción elegida o texto libre), para
         // que el admin vea "quién respondió qué" — clave en cuestionarios sin puntaje.
-        answers: (Array.isArray(s.answers) ? s.answers : [])
-          .filter(Boolean)
-          .map((a) => ({
-            questionId: String(a.questionId),
-            optionId: a.optionId != null ? String(a.optionId) : null,
-            text: a.text != null ? String(a.text) : null,
-          })),
+        // reconcileOrphanAnswers repara entregas de una versión anterior del cuestionario.
+        answers: reconcileOrphanAnswers(
+          (Array.isArray(s.answers) ? s.answers : []).filter(Boolean),
+          questions, questionIds, optionToQuestionId,
+        ),
       })),
     }
   }
