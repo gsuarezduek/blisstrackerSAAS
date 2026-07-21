@@ -7,20 +7,39 @@
 const prisma = require('../lib/prisma')
 const { computeObjectives } = require('../services/marketingObjectives.service')
 const { saveMonthSnapshot } = require('../services/analyticsSnapshot.service')
+const { refreshScrapeForIntegration: refreshInstagramScrape } = require('./instagram.controller')
+const { refreshScrapeForIntegration: refreshLinkedinScrape }  = require('./linkedin.controller')
+const { refreshScrapeForIntegration: refreshFacebookScrape }  = require('./facebook.controller')
+const { getValidFbToken, fetchMetaAdsData } = require('../services/metaAds.service')
+const { fetchGoogleAdsData }                = require('../services/googleAds.service')
 const { todayString } = require('../utils/dates')
 const { tzOffsetStr } = require('../lib/timeMetrics')
-const { monthBounds, monthLabel, prevMonthStr, rangeLabel } = require('../lib/monthUtils')
+const { monthBounds, monthLabel, prevMonthStr, rangeLabel, monthsInRange } = require('../lib/monthUtils')
 
-/** Etiqueta del informe por su período de datos (espejo de monthlyReport.controller). */
-function reportLabel(report) {
-  let start, end
+// Rango de fechas real del período de datos del informe (espejo de monthlyReport.controller).
+function reportPeriodDates(report) {
   if (report.periodStart && report.periodEnd) {
-    start = new Date(report.periodStart).toISOString().slice(0, 10)
-    end   = new Date(report.periodEnd).toISOString().slice(0, 10)
-  } else {
-    ({ startDate: start, endDate: end } = monthBounds(prevMonthStr(report.month)))
+    return {
+      start: new Date(report.periodStart).toISOString().slice(0, 10),
+      end:   new Date(report.periodEnd).toISOString().slice(0, 10),
+    }
   }
+  const { startDate, endDate } = monthBounds(prevMonthStr(report.month))
+  return { start: startDate, end: endDate }
+}
+
+/** Etiqueta del informe por su período de datos. */
+function reportLabel(report) {
+  const { start, end } = reportPeriodDates(report)
   return rangeLabel(start, end)
+}
+
+// Mes ancla del informe (el más reciente cubierto por el período) — mismo criterio
+// que usa aggregateReportData para computar objetivos.
+function reportDataMonth(report) {
+  const { start, end } = reportPeriodDates(report)
+  const months = monthsInRange(start, end)
+  return months[months.length - 1]
 }
 
 // Filtro Prisma para informes "generados" (no placeholders vacíos), espejo del
@@ -215,6 +234,60 @@ async function refreshAnalyticsSummary(req, res, next) {
 
     res.json({
       month,
+      refreshed: results.filter(r => r.status === 'ok').length,
+      total:     results.length,
+      results,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// Plataformas de RRSS conectables por scraping — cada una expone su propio
+// refreshScrapeForIntegration (mismo shape: cooldown 30min, ver *.controller.js).
+const RRSS_SCRAPE_PLATFORMS = {
+  instagram: refreshInstagramScrape,
+  linkedin:  refreshLinkedinScrape,
+  facebook:  refreshFacebookScrape,
+}
+
+/**
+ * POST /api/marketing/summary/rrss/:platform/refresh
+ * Refresca (scrape fresco) todos los proyectos del workspace conectados por
+ * scraping para la plataforma dada. Respeta el cooldown de 30min de cada
+ * integración (las que están en cooldown se reportan como tal, no se fuerzan) —
+ * cada scrape es una llamada paga a Apify. Secuencial para no disparar todo junto.
+ * Devuelve { refreshed, total, results: [{ projectId, projectName, status: 'ok'|'cooldown'|'error', waitMins?, error? }] }
+ */
+async function refreshRrssSummary(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const platform = req.params.platform
+    const refresh = RRSS_SCRAPE_PLATFORMS[platform]
+    if (!refresh) {
+      return res.status(400).json({ error: 'Plataforma inválida. Usá instagram, linkedin o facebook.' })
+    }
+
+    const integrations = await prisma.projectIntegration.findMany({
+      where:  { workspaceId, type: platform, scopes: 'scrape' },
+      select: { id: true, projectId: true, propertyId: true, project: { select: { name: true } } },
+    })
+
+    const results = []
+    for (const ig of integrations) {
+      const base = { projectId: ig.projectId, projectName: ig.project.name }
+      try {
+        const r = await refresh(ig, ig.projectId, workspaceId)
+        if (r.status === 'ok')            results.push({ ...base, status: 'ok' })
+        else if (r.status === 'cooldown') results.push({ ...base, status: 'cooldown', waitMins: r.waitMins })
+        else                              results.push({ ...base, status: 'error', error: r.message })
+      } catch (err) {
+        console.error(`[RRSSSummary] refresh ${platform} proyecto ${ig.projectId}:`, err.message)
+        results.push({ ...base, status: 'error', error: err.message })
+      }
+    }
+
+    res.json({
       refreshed: results.filter(r => r.status === 'ok').length,
       total:     results.length,
       results,
@@ -538,19 +611,108 @@ async function getAdsSummary(req, res, next) {
 }
 
 /**
+ * GET /api/marketing/summary/ads-live
+ * Gasto del mes EN CURSO por proyecto, en vivo (sin snapshot cacheado). A diferencia
+ * de /summary/ads (que muestra el último snapshot cerrado, guardado por el cron del
+ * día 1° — típicamente el mes anterior), este endpoint pega en vivo a la API de
+ * Meta/Google Ads en cada carga, igual que ya hace la pestaña de un proyecto
+ * individual. Secuencial para no saturar la cuota. No persiste nada (el mes en
+ * curso cambia día a día; guardarlo como AdsSnapshot mezclaría datos parciales
+ * con el snapshot final que arma el cron al cierre del mes).
+ * Query: ?type=meta_ads|google_ads
+ * Devuelve { month, results: [{ projectId, projectName, status: 'ok'|'disconnected'|'error', ... }] }
+ */
+async function getAdsSummaryLive(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const { type }     = req.query
+    const tz           = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
+
+    if (!['meta_ads', 'google_ads'].includes(type)) {
+      return res.status(400).json({ error: 'Parámetro type requerido: meta_ads | google_ads' })
+    }
+
+    // Sin `select`: getValidFbToken/fetchGoogleAdsData necesitan el registro completo
+    // (accessToken, refreshToken, expiresAt, id) para refrescar el token si hace falta.
+    const integrations = await prisma.projectIntegration.findMany({
+      where:   { workspaceId, type },
+      include: { project: { select: { name: true } } },
+    })
+
+    const results = []
+    for (const ig of integrations) {
+      const base = { projectId: ig.projectId, projectName: ig.project.name }
+      const connected = type === 'meta_ads'
+        ? (ig.status === 'active' && !!ig.propertyId)
+        : (ig.status === 'active' && !!ig.customerId)
+      if (!connected) {
+        results.push({ ...base, status: 'disconnected' })
+        continue
+      }
+
+      try {
+        let row
+        if (type === 'meta_ads') {
+          const token = await getValidFbToken(ig)
+          const data  = await fetchMetaAdsData(ig.propertyId, token, 'this_month')
+          row = {
+            spend: data.spend, impressions: data.impressions, clicks: data.clicks, ctr: data.ctr,
+            reach: data.reach ?? null, cpm: data.cpm ?? null, cpc: data.cpc ?? null,
+            conversions: null, avgCpc: null, campaignsCount: (data.campaigns ?? []).length,
+          }
+        } else {
+          if (!process.env.GOOGLE_ADS_DEVELOPER_TOKEN) throw new Error('GOOGLE_ADS_DEVELOPER_TOKEN no configurado')
+          const data = await fetchGoogleAdsData(ig, 'this_month')
+          row = {
+            spend: data.cost, impressions: data.impressions, clicks: data.clicks, ctr: data.ctr,
+            reach: null, cpm: null, cpc: data.avgCpc ?? null,
+            conversions: data.conversions ?? null, avgCpc: data.avgCpc ?? null, campaignsCount: (data.campaigns ?? []).length,
+          }
+        }
+        results.push({ ...base, status: 'ok', ...row })
+      } catch (err) {
+        console.error(`[AdsSummaryLive] ${type} proyecto ${ig.projectId}:`, err.message)
+        results.push({ ...base, status: 'error', error: err.message })
+      }
+    }
+
+    const ok   = results.filter(r => r.status === 'ok').sort((a, b) => b.spend - a.spend)
+    const rest = results.filter(r => r.status !== 'ok')
+
+    res.json({ month: todayString(tz).slice(0, 7), results: [...ok, ...rest] })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * GET /api/marketing/summary/reports
- * Todos los informes del workspace, del más nuevo al más viejo.
- * Query: ?limit=20&offset=0
+ * Informes del workspace de un mes puntual (por defecto, el mes en curso — el slot
+ * que se ve al navegar mes a mes en la vista de un proyecto), del más nuevo al más
+ * viejo. Cada informe incluye su % de cumplimiento de objetivos (ok / evaluables,
+ * mismo criterio que el auto-metric "objetivos_cumplidos" del Scorecard EOS) y el
+ * detalle de sus objetivos, para el desplegable de la lista.
+ * Query: ?limit=20&offset=0&month=YYYY-MM&search=texto (busca por nombre de proyecto)
  */
 async function getReportsSummary(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const tz     = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
     const limit  = Math.min(parseInt(req.query.limit  ?? '20'), 50)
     const offset = parseInt(req.query.offset ?? '0')
+    const month  = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : todayString(tz).slice(0, 7)
+    const search = (req.query.search || '').trim()
+
+    const where = {
+      workspaceId,
+      month,
+      ...GENERATED_REPORT_WHERE,
+      ...(search ? { project: { name: { contains: search, mode: 'insensitive' } } } : {}),
+    }
 
     const [reports, total] = await Promise.all([
       prisma.monthlyReport.findMany({
-        where:   { workspaceId },
+        where,
         orderBy: [{ month: 'desc' }, { createdAt: 'desc' }],
         skip:    offset,
         take:    limit,
@@ -566,12 +728,24 @@ async function getReportsSummary(req, res, next) {
           generatedBy: { select: { id: true, name: true } },
         },
       }),
-      prisma.monthlyReport.count({ where: { workspaceId } }),
+      prisma.monthlyReport.count({ where }),
     ])
 
-    const withLabel = reports.map(r => ({ ...r, periodLabel: reportLabel(r) }))
+    const withExtras = await Promise.all(reports.map(async (r) => {
+      let objectives = []
+      try {
+        objectives = await computeObjectives({ projectId: r.project.id, workspaceId, dataMonth: reportDataMonth(r) })
+      } catch (err) {
+        console.error(`[ReportsSummary] objetivos informe ${r.id}:`, err.message)
+      }
+      const evaluable = objectives.filter(o => ['ok', 'partial', 'fail'].includes(o.status))
+      const objectivesPct = evaluable.length
+        ? Math.round(evaluable.filter(o => o.status === 'ok').length / evaluable.length * 100)
+        : null
+      return { ...r, periodLabel: reportLabel(r), objectivesPct, objectives }
+    }))
 
-    res.json({ reports: withLabel, total, limit, offset })
+    res.json({ reports: withExtras, total, limit, offset, month })
   } catch (err) {
     next(err)
   }
@@ -719,6 +893,7 @@ async function getFacebookSummary(req, res, next) {
 module.exports = {
   getAnalyticsSummary,
   refreshAnalyticsSummary,
+  refreshRrssSummary,
   getPerformanceSummary,
   getInstagramSummary,
   getTikTokSummary,
@@ -726,6 +901,7 @@ module.exports = {
   getLinkedinSummary,
   getFacebookSummary,
   getAdsSummary,
+  getAdsSummaryLive,
   getReportsSummary,
   getReportsStats,
   getSeoSummary,

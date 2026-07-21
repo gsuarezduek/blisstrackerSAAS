@@ -48,13 +48,24 @@ const PLATFORM_SCRAPERS = {
   },
 }
 
-// Cooldown en memoria para el refresh manual (protege costo del proveedor de scraping).
-const REFRESH_COOLDOWN_MS = 30 * 60 * 1000
-const cooldownMap = new Map() // competitorId → timestamp del último scrape
-
 function currentMonthStr() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+// Límite de scraping: 1 llamada al proveedor (Apify) por competidor por mes calendario
+// (ART), sea el scrape de alta, un refresh manual o el del cron mensual — todos escriben
+// `CompetitorAccount.lastScrapedAt`, así el gate es persistente (sobrevive redeploys y
+// no depende de que el pedido caiga en la misma instancia del backend).
+function monthStrOfDate(date) {
+  const d = new Date(date.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function nextMonthLabel() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  return next.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 }
 
 function todayStr() {
@@ -159,6 +170,7 @@ async function listCompetitors(req, res, next) {
         monthlyGain,
         lastUpdated:    snap?.createdAt ?? null,
         month:          snap?.month ?? null,
+        lastScrapedAt:  c.lastScrapedAt,
       }
     }))
 
@@ -168,7 +180,8 @@ async function listCompetitors(req, res, next) {
 
 /**
  * POST /api/marketing/projects/:id/competitors
- * Body: { url | username, platform? }. Agrega un competidor y hace el primer scrape.
+ * Body: { url | username, platform? }. Agrega un competidor y hace el primer scrape
+ * (ese scrape consume el cupo mensual del competidor, ver `refreshCompetitor`).
  */
 async function addCompetitor(req, res, next) {
   try {
@@ -204,6 +217,8 @@ async function addCompetitor(req, res, next) {
         projectId, workspaceId: req.workspace.id, platform, username,
         displayName:   metrics.name ?? null,
         profilePicUrl: metrics.profilePicUrl ?? null,
+        // El scrape de alta cuenta como el scrape del mes — no habilita otro refresh hasta el mes siguiente.
+        lastScrapedAt: new Date(),
       },
     })
 
@@ -219,7 +234,7 @@ async function addCompetitor(req, res, next) {
 
 /**
  * POST /api/marketing/projects/:id/competitors/:cid/refresh
- * Re-scrapea un competidor (cooldown 30 min).
+ * Re-scrapea un competidor — máximo 1 vez por mes calendario (ver `lastScrapedAt`).
  */
 async function refreshCompetitor(req, res, next) {
   try {
@@ -232,10 +247,11 @@ async function refreshCompetitor(req, res, next) {
     })
     if (!competitor) return res.status(404).json({ error: 'Competidor no encontrado' })
 
-    const last = cooldownMap.get(competitorId)
-    if (last && Date.now() - last < REFRESH_COOLDOWN_MS) {
-      const waitMins = Math.ceil((REFRESH_COOLDOWN_MS - (Date.now() - last)) / 60000)
-      return res.status(429).json({ error: `Esperá ${waitMins} min para actualizar de nuevo.`, code: 'COOLDOWN', waitMins })
+    if (competitor.lastScrapedAt && monthStrOfDate(competitor.lastScrapedAt) === currentMonthStr()) {
+      return res.status(429).json({
+        error: `Ya se actualizó este mes. Próxima actualización disponible en ${nextMonthLabel()}.`,
+        code: 'MONTHLY_LIMIT',
+      })
     }
 
     const driver = PLATFORM_SCRAPERS[competitor.platform]
@@ -250,11 +266,13 @@ async function refreshCompetitor(req, res, next) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }
 
-    cooldownMap.set(competitorId, Date.now())
-
     await prisma.competitorAccount.update({
       where: { id: competitorId },
-      data:  { displayName: metrics.name ?? competitor.displayName, profilePicUrl: metrics.profilePicUrl ?? competitor.profilePicUrl },
+      data:  {
+        displayName: metrics.name ?? competitor.displayName,
+        profilePicUrl: metrics.profilePicUrl ?? competitor.profilePicUrl,
+        lastScrapedAt: new Date(),
+      },
     })
     await persistCompetitorData(competitorId, req.workspace.id, metrics)
 

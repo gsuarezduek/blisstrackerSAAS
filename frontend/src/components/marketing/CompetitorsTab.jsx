@@ -115,6 +115,14 @@ function Metric({ label, value, valueClass = '' }) {
   )
 }
 
+// El scraping de competidores está limitado a 1 vez por mes calendario (protege costo de Apify).
+function refreshedThisMonth(lastScrapedAt) {
+  if (!lastScrapedAt) return false
+  const last = new Date(lastScrapedAt)
+  const now = new Date()
+  return last.getFullYear() === now.getFullYear() && last.getMonth() === now.getMonth()
+}
+
 function CompetitorCard({ projectId, c, onChanged }) {
   const cfg = PLATFORMS[c.platform] ?? PLATFORMS.instagram
   const [refreshing, setRefreshing] = useState(false)
@@ -123,6 +131,7 @@ function CompetitorCard({ projectId, c, onChanged }) {
   const [history,    setHistory]    = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [err,        setErr]        = useState(null)
+  const monthlyLimitReached = refreshedThisMonth(c.lastScrapedAt)
 
   async function handleRefresh() {
     setRefreshing(true); setErr(null)
@@ -181,7 +190,12 @@ function CompetitorCard({ projectId, c, onChanged }) {
               {c.displayName && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.displayName}</p>}
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <button onClick={handleRefresh} disabled={refreshing} className={`text-xs ${cfg.accentText} disabled:opacity-50 transition-colors`}>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing || monthlyLimitReached}
+                title={monthlyLimitReached ? 'Ya se actualizó este mes. El scraping de competidores está limitado a 1 vez por mes.' : undefined}
+                className={`text-xs ${cfg.accentText} disabled:opacity-50 transition-colors`}
+              >
                 {refreshing ? 'Actualizando…' : '↻'}
               </button>
               <button onClick={handleDelete} disabled={deleting} className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors">
@@ -240,7 +254,10 @@ function CompetitorCard({ projectId, c, onChanged }) {
                     </div>
                   )}
                   {c.lastUpdated && (
-                    <p className="text-[10px] text-gray-400 mt-2">Última actualización: {new Date(c.lastUpdated).toLocaleString('es-AR')}</p>
+                    <p className="text-[10px] text-gray-400 mt-2">
+                      Última actualización: {new Date(c.lastUpdated).toLocaleString('es-AR')}
+                      {monthlyLimitReached && ' · Ya se usó el scrapeo de este mes, próxima actualización disponible el mes que viene.'}
+                    </p>
                   )}
                 </>
               )}

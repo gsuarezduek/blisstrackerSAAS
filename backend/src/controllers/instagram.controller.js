@@ -378,6 +378,32 @@ async function connectScrape(req, res, next) {
 }
 
 /**
+ * Refresca el scrape de una integración puntual de Instagram (cooldown 30 min).
+ * Reutilizado por el refresh individual (HTTP) y el refresh batch cross-proyecto
+ * (marketingSummary.controller.js). No responde HTTP — devuelve un resultado tipado.
+ * @returns {Promise<{status:'ok', metrics:object} | {status:'cooldown', waitMins:number} | {status:'error', message:string, code?:string, httpStatus:number}>}
+ */
+async function refreshScrapeForIntegration(integration, projectId, workspaceId) {
+  const last = scrapeCooldownMap.get(integration.id)
+  if (last && Date.now() - last < SCRAPE_REFRESH_COOLDOWN_MS) {
+    const waitMins = Math.ceil((SCRAPE_REFRESH_COOLDOWN_MS - (Date.now() - last)) / 60000)
+    return { status: 'cooldown', waitMins }
+  }
+
+  let metrics
+  try {
+    metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, context: 'Instagram — refresh manual' })
+  } catch (err) {
+    return { status: 'error', message: err.message, code: err.code, httpStatus: err.status || 400 }
+  }
+
+  scrapeCooldownMap.set(integration.id, Date.now())
+  await persistScrapeData(projectId, workspaceId, metrics)
+
+  return { status: 'ok', metrics }
+}
+
+/**
  * POST /api/marketing/projects/:id/instagram/scrape/refresh
  * Fuerza un scrape fresco (cooldown 30 min) y actualiza snapshot + log.
  */
@@ -398,23 +424,15 @@ async function refreshScrape(req, res, next) {
       return res.status(400).json({ error: 'Este proyecto no está conectado por scraping.', code: 'NOT_SCRAPE' })
     }
 
-    const last = scrapeCooldownMap.get(integration.id)
-    if (last && Date.now() - last < SCRAPE_REFRESH_COOLDOWN_MS) {
-      const waitMins = Math.ceil((SCRAPE_REFRESH_COOLDOWN_MS - (Date.now() - last)) / 60000)
-      return res.status(429).json({ error: `Esperá ${waitMins} min para actualizar de nuevo.`, code: 'COOLDOWN', waitMins })
+    const result = await refreshScrapeForIntegration(integration, projectId, workspaceId)
+    if (result.status === 'cooldown') {
+      return res.status(429).json({ error: `Esperá ${result.waitMins} min para actualizar de nuevo.`, code: 'COOLDOWN', waitMins: result.waitMins })
+    }
+    if (result.status === 'error') {
+      return res.status(result.httpStatus).json({ error: result.message, code: result.code })
     }
 
-    let metrics
-    try {
-      metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, context: 'Instagram — refresh manual' })
-    } catch (err) {
-      return res.status(err.status || 400).json({ error: err.message, code: err.code })
-    }
-
-    scrapeCooldownMap.set(integration.id, Date.now())
-    await persistScrapeData(projectId, workspaceId, metrics)
-
-    res.json({ ...metrics, username: integration.propertyId, lastScrapedAt: new Date() })
+    res.json({ ...result.metrics, username: integration.propertyId, lastScrapedAt: new Date() })
   } catch (err) { next(err) }
 }
 
@@ -483,4 +501,4 @@ async function captureStories(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, getStories, captureStories }
+module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, refreshScrapeForIntegration, getStories, captureStories }

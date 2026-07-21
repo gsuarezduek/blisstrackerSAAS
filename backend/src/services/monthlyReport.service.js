@@ -1361,7 +1361,7 @@ async function getAvailableSections(projectId, workspaceId) {
     keyword, igSnap, tkSnap, ytSnap, liSnap, fbSnap, metaAdsSnap, googleAdsSnap, competitor, objective,
   ] = await Promise.all([
     prisma.projectIntegration.findMany({ where: { projectId }, select: { type: true, status: true } }),
-    prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true } }),
+    prisma.project.findUnique({ where: { id: projectId }, select: { websiteUrl: true, reportSections: true } }),
     prisma.analyticsSnapshot.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.pageSpeedResult.findFirst({ where: { projectId, workspaceId }, select: { id: true } }),
     prisma.geoAudit.findFirst({ where: { projectId, workspaceId, status: 'completed' }, select: { id: true } }),
@@ -1389,7 +1389,7 @@ async function getAvailableSections(projectId, workspaceId) {
   }
 
   const has = (type) => intgByType.has(type)
-  return {
+  const sections = {
     analytics:       build(has('google_analytics')      || !!analyticsSnap, 'google_analytics'),
     performance:     build(!!project?.websiteUrl        || !!pageSpeed,     null),
     geo:             build(!!project?.websiteUrl        || !!geoAudit,      null),
@@ -1406,6 +1406,22 @@ async function getAvailableSections(projectId, workspaceId) {
     objectives:      build(!!objective, null),
     tasks:           build(true, null),
   }
+
+  // Config manual por proyecto (rueda "⚙️" en Informes): una sección desmarcada ahí
+  // deja de ofrecerse en el modal de generar informe, aunque tenga datos/integración.
+  // null = sin restricción (no configurado todavía) → no se toca nada.
+  if (project?.reportSections) {
+    let enabledKeys = null
+    try { enabledKeys = JSON.parse(project.reportSections) } catch { enabledKeys = null }
+    if (Array.isArray(enabledKeys)) {
+      const enabledSet = new Set(enabledKeys)
+      for (const key of Object.keys(sections)) {
+        if (!enabledSet.has(key)) sections[key] = { available: false, integration: null }
+      }
+    }
+  }
+
+  return sections
 }
 
 module.exports = { aggregateReportData, getAvailableSections }

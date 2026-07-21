@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import api from '../../api/client'
 import ReportViewer from './ReportViewer'
 import ObjectivesManager from './ObjectivesManager'
+import ProjectSearchSelect from './ProjectSearchSelect'
+import { ObjectiveCard } from './ReportViewerParts'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -270,6 +272,141 @@ function GenerateModal({ projectId, month, availableSections: initialAvailable, 
   )
 }
 
+// ─── Modal de configuración de secciones (rueda "⚙️", por proyecto) ────────────
+// Define qué secciones de Marketing están habilitadas para ofrecer al generar el
+// informe de este proyecto (ej: un proyecto sin web no ofrece "Performance web"/"GEO").
+// Si se abre sin proyecto seleccionado, primero pide elegir uno.
+function SectionsConfigModal({ projects, initialProjectId, onClose }) {
+  const [pid,     setPid]     = useState(initialProjectId || '')
+  const [loading, setLoading] = useState(false)
+  const [saving,  setSaving]  = useState(false)
+  const [error,   setError]   = useState(null)
+  const [config,   setConfig]   = useState(null) // { projectName, services, sections }
+  const [selected, setSelected] = useState(new Set())
+
+  useEffect(() => {
+    if (!pid) { setConfig(null); return }
+    setLoading(true)
+    setError(null)
+    api.get(`/marketing/projects/${pid}/report-sections-config`)
+      .then(r => {
+        setConfig(r.data)
+        setSelected(new Set(r.data.sections))
+      })
+      .catch(() => setError('No se pudo cargar la configuración de este proyecto.'))
+      .finally(() => setLoading(false))
+  }, [pid])
+
+  function toggle(key) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
+  const allChecked = SECTION_CATALOG.every(s => selected.has(s.key))
+  function toggleAll() {
+    setSelected(allChecked ? new Set() : new Set(SECTION_CATALOG.map(s => s.key)))
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setError(null)
+    try {
+      await api.patch(`/marketing/projects/${pid}/report-sections-config`, { sections: [...selected] })
+      onClose()
+    } catch {
+      setError('No se pudo guardar la configuración.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">⚙️ Secciones del informe</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
+        </div>
+
+        {!pid ? (
+          <>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              Elegí el proyecto que querés configurar.
+            </p>
+            <ProjectSearchSelect projects={projects} value={pid} onChange={setPid} placeholder="Buscar proyecto…" />
+          </>
+        ) : loading ? (
+          <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+        ) : error && !config ? (
+          <p className="text-sm text-red-500 dark:text-red-400 py-6 text-center">{error}</p>
+        ) : config ? (
+          <>
+            <div className="mb-3">
+              {!initialProjectId && (
+                <button onClick={() => setPid('')} className="text-xs text-primary-600 dark:text-primary-400 hover:underline mb-2">
+                  ← Cambiar proyecto
+                </button>
+              )}
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">{config.projectName}</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {config.services.length
+                  ? `Servicios: ${config.services.map(s => s.name).join(', ')}`
+                  : 'Sin servicios asociados'}
+              </p>
+            </div>
+
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              Elegí qué secciones de Marketing están disponibles para este proyecto. Las que desmarques no se van a poder incluir al generar el informe.
+            </p>
+
+            <div className="flex items-center justify-between mb-2">
+              <button onClick={toggleAll} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">
+                {allChecked ? 'Desmarcar todas' : 'Marcar todas'}
+              </button>
+            </div>
+
+            {error && <p className="text-xs text-red-500 dark:text-red-400 mb-2">{error}</p>}
+
+            <div className="space-y-1 overflow-y-auto pr-1">
+              {SECTION_CATALOG.map(s => (
+                <label
+                  key={s.key}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(s.key)}
+                    onChange={() => toggle(s.key)}
+                    className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-base leading-none">{s.icon}</span>
+                  <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0">{s.label}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button onClick={onClose} className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 // ─── Vista global de informes (sin proyecto seleccionado) ─────────────────────
 
 function StatCard({ icon, label, value, sub, accent = 'text-gray-900 dark:text-white' }) {
@@ -334,116 +471,193 @@ function ReportsStatsCards({ stats }) {
   )
 }
 
-function AllReportsPanel({ onSelectProject }) {
+// Banda de color del % de cumplimiento de objetivos (mismo criterio de 3 bandas
+// usado en otros lados de Marketing: ≥80 bien, ≥50 parcial, <50 mal).
+function objPctBand(pct) {
+  if (pct == null) return 'text-gray-300 dark:text-gray-600'
+  if (pct >= 80) return 'text-emerald-600 dark:text-emerald-400'
+  if (pct >= 50) return 'text-amber-600 dark:text-amber-400'
+  return 'text-red-600 dark:text-red-400'
+}
+
+// Una fila de la lista de informes — nombre, fecha, % de cumplimiento de objetivos
+// (número principal, desplegable con el detalle) y link al informe.
+function ReportRow({ r, onSelectProject }) {
+  const [open, setOpen] = useState(false)
+  const [y, m] = r.month.split('-').map(Number)
+  const monthLabel = r.periodLabel || new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+  const publicUrl = `${window.location.origin}/report/${r.token}`
+  const hasObjectives = r.objectives?.length > 0
+
+  return (
+    <div>
+      <div className="flex items-center gap-4 px-5 py-3.5">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => onSelectProject?.(String(r.project.id))}
+              className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+            >
+              {r.project.name}
+            </button>
+            <span className="text-gray-300 dark:text-gray-600">·</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">{monthLabel}</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Generado: {new Date(r.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+            {r.generatedBy?.name && <>, por <span className="text-gray-500 dark:text-gray-300">{r.generatedBy.name}</span></>}
+          </p>
+        </div>
+
+        {r.objectivesPct != null ? (
+          <button
+            onClick={() => setOpen(o => !o)}
+            title="Ver detalle de objetivos"
+            className="flex-shrink-0 flex flex-col items-center px-2 hover:opacity-80 transition-opacity"
+          >
+            <span className={`text-xl font-bold tabular-nums ${objPctBand(r.objectivesPct)}`}>{r.objectivesPct}%</span>
+            <span className="text-[10px] text-gray-400 flex items-center gap-0.5">objetivos {open ? '▲' : '▼'}</span>
+          </button>
+        ) : hasObjectives ? (
+          <span className="flex-shrink-0 text-[11px] text-gray-400 px-2 text-center">Sin datos<br />de objetivos</span>
+        ) : null}
+
+        <a
+          href={publicUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+        >
+          Ver informe →
+        </a>
+      </div>
+
+      {open && hasObjectives && (
+        <div className="px-5 pb-4 grid sm:grid-cols-2 gap-3 bg-gray-50/60 dark:bg-gray-900/20">
+          {r.objectives.map(o => <ObjectiveCard key={o.id} obj={o} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AllReportsPanel({ onSelectProject, projects }) {
   const [reports, setReports]     = useState([])
   const [total,   setTotal]       = useState(0)
+  const [month,   setMonth]       = useState(null)
   const [stats,   setStats]       = useState(null)
   const [loading, setLoading]     = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [showConfig, setShowConfig] = useState(false)
+  const [search,   setSearch]   = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const PAGE = 20
 
+  // Debounce del buscador (300ms) para no pegarle al backend en cada tecla.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Stats de "este mes" — independientes del buscador, se cargan una sola vez.
+  useEffect(() => {
+    api.get('/marketing/summary/reports-stats').then(r => setStats(r.data)).catch(() => {})
+  }, [])
+
+  // Lista de informes — por defecto solo el mes en curso; el buscador filtra
+  // dentro de ese mismo mes (no busca en el historial completo).
   useEffect(() => {
     setLoading(true)
-    Promise.all([
-      api.get(`/marketing/summary/reports?limit=${PAGE}&offset=0`),
-      api.get('/marketing/summary/reports-stats'),
-    ])
-      .then(([rep, st]) => {
-        setReports(rep.data.reports); setTotal(rep.data.total)
-        setStats(st.data)
-      })
+    const params = new URLSearchParams({ limit: PAGE, offset: 0 })
+    if (debouncedSearch) params.set('search', debouncedSearch)
+    api.get(`/marketing/summary/reports?${params}`)
+      .then(r => { setReports(r.data.reports); setTotal(r.data.total); setMonth(r.data.month) })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [debouncedSearch])
 
   async function handleLoadMore() {
     setLoadingMore(true)
     try {
-      const r = await api.get(`/marketing/summary/reports?limit=${PAGE}&offset=${reports.length}`)
+      const params = new URLSearchParams({ limit: PAGE, offset: reports.length })
+      if (debouncedSearch) params.set('search', debouncedSearch)
+      const r = await api.get(`/marketing/summary/reports?${params}`)
       setReports(prev => [...prev, ...r.data.reports])
       setTotal(r.data.total)
     } catch {}
     finally { setLoadingMore(false) }
   }
 
-  if (loading) return (
-    <div className="flex justify-center py-12">
-      <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-    </div>
+  const configBtn = (
+    <button
+      onClick={() => setShowConfig(true)}
+      title="Configurar qué secciones de Marketing están disponibles por proyecto"
+      className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+    >
+      ⚙️
+    </button>
   )
 
-  if (!reports.length) return (
-    <div className="space-y-4">
-      <ReportsStatsCards stats={stats} />
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-        <p className="text-4xl mb-3">📊</p>
-        <p className="text-gray-500 dark:text-gray-400 text-sm">
-          Todavía no hay informes generados. Seleccioná un proyecto para crear el primer informe.
-        </p>
-      </div>
-    </div>
-  )
+  const heading = month ? monthLabel(month) : ''
 
   return (
     <div className="space-y-4">
       <ReportsStatsCards stats={stats} />
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          Todos los informes <span className="font-normal text-gray-400">({total} en total)</span>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 capitalize">
+          Informes de {heading} <span className="font-normal text-gray-400 lowercase">({total} en total)</span>
         </p>
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
-        {reports.map(r => {
-          const [y, m] = r.month.split('-').map(Number)
-          const monthLabel = r.periodLabel || new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-          const publicUrl  = `${window.location.origin}/report/${r.token}`
-
-          return (
-            <div key={r.id} className="flex items-center gap-4 px-5 py-3.5">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => onSelectProject?.(String(r.project.id))}
-                    className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                  >
-                    {r.project.name}
-                  </button>
-                  <span className="text-gray-300 dark:text-gray-600">·</span>
-                  <span className="text-sm text-gray-500 dark:text-gray-400 capitalize">{monthLabel}</span>
-                </div>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Generado: {new Date(r.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  {r.generatedBy?.name && <>, por <span className="text-gray-500 dark:text-gray-300">{r.generatedBy.name}</span></>}
-                </p>
-              </div>
-              <a
-                href={publicUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-              >
-                Ver informe →
-              </a>
-            </div>
-          )
-        })}
-      </div>
-
-      {reports.length < total && (
-        <div className="flex justify-center pt-2">
-          <button
-            onClick={handleLoadMore}
-            disabled={loadingMore}
-            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
-          >
-            {loadingMore
-              ? <><span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Cargando…</>
-              : `Cargar más (${total - reports.length} restantes)`
-            }
-          </button>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar proyecto…"
+            className="w-48 text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          {configBtn}
         </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : !reports.length ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+          <p className="text-4xl mb-3">📊</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            {debouncedSearch
+              ? <>No se encontraron informes de {heading} para "{debouncedSearch}".</>
+              : <>Todavía no hay informes generados este mes. Seleccioná un proyecto para crear el primero.</>}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
+            {reports.map(r => <ReportRow key={r.id} r={r} onSelectProject={onSelectProject} />)}
+          </div>
+
+          {reports.length < total && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                {loadingMore
+                  ? <><span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Cargando…</>
+                  : `Cargar más (${total - reports.length} restantes)`
+                }
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {showConfig && (
+        <SectionsConfigModal projects={projects} initialProjectId={null} onClose={() => setShowConfig(false)} />
       )}
     </div>
   )
@@ -502,7 +716,7 @@ function ClientFeedbackPanel({ feedback }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function InformesTab({ projectId, onSelectProject }) {
+export default function InformesTab({ projectId, onSelectProject, projects = [] }) {
   // Default: informe del mes actual (que contiene datos del mes anterior)
   // Ej: "Informe de Mayo 2026" → muestra datos de Abril 2026
   const [month,       setMonth]       = useState(currentMonthStr())
@@ -517,6 +731,7 @@ export default function InformesTab({ projectId, onSelectProject }) {
   const [availableSections, setAvailableSections] = useState(null)
   const [showGenModal, setShowGenModal] = useState(false)
   const [generating,   setGenerating]   = useState(false)
+  const [showSectionsConfig, setShowSectionsConfig] = useState(false)
 
   const isGenerated = !!reportMeta?.isGenerated
 
@@ -622,7 +837,7 @@ export default function InformesTab({ projectId, onSelectProject }) {
   const canGoNext = month < today
 
   if (!projectId) {
-    return <AllReportsPanel onSelectProject={onSelectProject} />
+    return <AllReportsPanel onSelectProject={onSelectProject} projects={projects} />
   }
 
   return (
@@ -674,6 +889,13 @@ export default function InformesTab({ projectId, onSelectProject }) {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
             🎯 Objetivos
+          </button>
+          <button
+            onClick={() => setShowSectionsConfig(true)}
+            title="Elegí qué secciones de Marketing están disponibles para este proyecto"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            ⚙️
           </button>
           {isGenerated && (
             <button
@@ -793,6 +1015,15 @@ export default function InformesTab({ projectId, onSelectProject }) {
           onGenerate={handleGenerate}
           onClose={() => setShowGenModal(false)}
           generating={generating}
+        />
+      )}
+
+      {/* ── Config de secciones habilitadas para este proyecto (rueda "⚙️") ── */}
+      {showSectionsConfig && (
+        <SectionsConfigModal
+          projects={projects}
+          initialProjectId={projectId}
+          onClose={() => setShowSectionsConfig(false)}
         />
       )}
     </div>

@@ -87,6 +87,11 @@ async function saveAllMonthlyCompetitorSnapshots() {
           update: { followersCount: metrics.followersCount },
           create: { competitorId: c.id, workspaceId: c.workspaceId, date, followersCount: metrics.followersCount },
         }),
+        // Marca el cupo mensual como usado — el refresh manual queda bloqueado hasta el mes que viene.
+        prisma.competitorAccount.update({
+          where: { id: c.id },
+          data:  { lastScrapedAt: new Date() },
+        }),
       ])
       await new Promise(r => setTimeout(r, 3000))
     } catch (err) {

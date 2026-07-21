@@ -375,62 +375,88 @@ function ConnectPrompt({ projectId, onConnected }) {
 // ── Panel cross-proyecto ──────────────────────────────────────────────────────
 
 function CrossProjectGoogleAdsPanel({ onSelectProject }) {
+  const [period,  setPeriod]  = useState('live') // 'live' = este mes (en vivo) | 'closed' = mes anterior (snapshot)
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/marketing/summary/ads?type=google_ads')
-      .then(r => setData(r.data))
-      .catch(() => setData([]))
-      .finally(() => setLoading(false))
-  }, [])
+    setLoading(true)
+    const req = period === 'live'
+      ? api.get('/marketing/summary/ads-live?type=google_ads').then(r => r.data.results)
+      : api.get('/marketing/summary/ads?type=google_ads').then(r => r.data)
+    req.then(rows => setData(rows)).catch(() => setData([])).finally(() => setLoading(false))
+  }, [period])
 
-  if (loading) return (
-    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>
-  )
-  if (!data?.length) return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-      <div className="text-4xl mb-3">🔍</div>
-      <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay snapshots de Google Ads. Los snapshots se guardan el primer día de cada mes, o podés guardar uno manualmente desde dentro del proyecto.</p>
-    </div>
-  )
-
-  const maxSpend = Math.max(...data.map(p => p.spend), 1)
+  const rows = (data || []).filter(p => p.status !== 'disconnected' && p.status !== 'error')
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-        Google Ads por proyecto ({data.length}) <span className="font-normal text-gray-400">· último snapshot disponible</span>
-      </h3>
-      <div className="space-y-3">
-        {data.map(p => (
-          <div key={p.projectId} className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <button
-                  onClick={() => onSelectProject?.(String(p.projectId))}
-                  className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
-                >
-                  {p.projectName}
-                </button>
-                <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-                  <span className="text-xs text-gray-400">{p.month}</span>
-                  <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtUSD(p.spend)}</span>
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          Google Ads por proyecto {data && `(${rows.length})`} <span className="font-normal text-gray-400">· {period === 'live' ? 'este mes, en vivo' : 'último snapshot cerrado'}</span>
+        </h3>
+        <div className="flex text-xs rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden flex-shrink-0">
+          {[{ key: 'live', label: 'Este mes' }, { key: 'closed', label: 'Mes anterior' }].map(o => (
+            <button
+              key={o.key}
+              onClick={() => setPeriod(o.key)}
+              className={`px-3 py-1.5 font-medium transition-colors ${
+                period === o.key
+                  ? 'bg-yellow-500 text-white'
+                  : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>
+      ) : !rows.length ? (
+        <div className="text-center py-10">
+          <div className="text-4xl mb-3">🔍</div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {period === 'live'
+              ? 'Todavía no hay proyectos con Google Ads conectado.'
+              : 'Todavía no hay snapshots de Google Ads. Los snapshots se guardan el primer día de cada mes, o podés guardar uno manualmente desde dentro del proyecto.'}
+          </p>
+        </div>
+      ) : (() => {
+        const maxSpend = Math.max(...rows.map(p => p.spend), 1)
+        return (
+          <div className="space-y-3">
+            {rows.map(p => (
+              <div key={p.projectId} className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <button
+                      onClick={() => onSelectProject?.(String(p.projectId))}
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                    >
+                      {p.projectName}
+                    </button>
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                      {p.month && <span className="text-xs text-gray-400">{p.month}</span>}
+                      <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtUSD(p.spend)}</span>
+                    </div>
+                  </div>
+                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                    <div className="h-1.5 rounded-full bg-yellow-400" style={{ width: `${Math.round((p.spend / maxSpend) * 100)}%` }} />
+                  </div>
+                  <div className="flex gap-3 mt-1 text-xs text-gray-400">
+                    {p.impressions > 0 && <span>{fmtK(p.impressions)} imp.</span>}
+                    {p.clicks > 0 && <span>{fmtK(p.clicks)} clics</span>}
+                    {p.conversions > 0 && <span>{p.conversions.toFixed(1)} conv.</span>}
+                    {p.ctr > 0 && <span>{fmtPct(p.ctr)} CTR</span>}
+                  </div>
                 </div>
               </div>
-              <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
-                <div className="h-1.5 rounded-full bg-yellow-400" style={{ width: `${Math.round((p.spend / maxSpend) * 100)}%` }} />
-              </div>
-              <div className="flex gap-3 mt-1 text-xs text-gray-400">
-                {p.impressions > 0 && <span>{fmtK(p.impressions)} imp.</span>}
-                {p.clicks > 0 && <span>{fmtK(p.clicks)} clics</span>}
-                {p.conversions > 0 && <span>{p.conversions.toFixed(1)} conv.</span>}
-                {p.ctr > 0 && <span>{fmtPct(p.ctr)} CTR</span>}
-              </div>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
+        )
+      })()}
     </div>
   )
 }

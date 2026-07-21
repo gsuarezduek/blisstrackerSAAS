@@ -75,7 +75,7 @@ const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 // Claves de sección válidas para `enabledSections` (deben coincidir con las del servicio/ReportViewer)
 const SECTION_KEYS = [
   'objectives', 'analytics', 'performance', 'geo', 'seo', 'keywords',
-  'instagram', 'tiktok', 'linkedin', 'facebook', 'metaAds', 'googleAds', 'competitors', 'tasks',
+  'instagram', 'tiktok', 'youtube', 'linkedin', 'facebook', 'metaAds', 'googleAds', 'competitors', 'tasks',
 ]
 
 // Normaliza un array de claves de sección recibido del cliente (filtra inválidas)
@@ -260,6 +260,66 @@ async function getSectionsStatus(req, res, next) {
 
     const availableSections = await getAvailableSections(projectId, workspaceId)
     res.json({ availableSections })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * GET /api/marketing/projects/:id/report-sections-config
+ * Config de secciones de Marketing habilitadas para el informe de este proyecto
+ * (ej: un proyecto sin web puede no ofrecer "Performance web"/"GEO"). Sin
+ * configurar (reportSections null) → todas las claves del catálogo (sin restricción,
+ * comportamiento legacy). Incluye los servicios del proyecto como contexto para elegir.
+ */
+async function getReportSectionsConfig(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where:   { id: projectId, workspaceId },
+      select:  {
+        name: true, reportSections: true,
+        services: { include: { service: true }, orderBy: { service: { name: 'asc' } } },
+      },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const stored = project.reportSections ? safeParseArr(project.reportSections) : null
+
+    res.json({
+      projectName: project.name,
+      services:    project.services.map(ps => ({ id: ps.service.id, name: ps.service.name })),
+      sections:    stored ?? [...SECTION_KEYS],
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * PATCH /api/marketing/projects/:id/report-sections-config
+ * Guarda la config de secciones habilitadas para el informe de este proyecto.
+ * Body: { sections: string[] }
+ */
+async function updateReportSectionsConfig(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const sections = sanitizeSections(req.body?.sections)
+    if (!sections) return res.status(400).json({ error: 'sections debe ser un array de claves válidas.' })
+
+    await prisma.project.update({
+      where: { id: projectId },
+      data:  { reportSections: JSON.stringify(sections) },
+    })
+
+    res.json({ sections })
   } catch (err) {
     next(err)
   }
@@ -753,4 +813,4 @@ async function notifyReportFeedback(report, feedback) {
   }, workspaceId)
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, uploadReportBanner, deleteReportBanner, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE }
+module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, uploadReportBanner, deleteReportBanner, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE }

@@ -54,8 +54,10 @@ function pctBarColor(v) {
  * @param {function} [renderRowAction]  (p) => JSX con una acción por fila (ej. borrar snapshot)
  * @param {string}   title        encabezado del panel
  * @param {function} onSelectProject
+ * @param {ReactNode} [headerAction]  botón opcional junto al selector de orden (ej. "Actualizar todo")
+ * @param {ReactNode} [banner]        franja opcional debajo del header (ej. resultado del refresh)
  */
-export default function CrossProjectRRSSPanel({ data, gradient, renderSecondary, renderRowAction, title, onSelectProject }) {
+export default function CrossProjectRRSSPanel({ data, gradient, renderSecondary, renderRowAction, title, onSelectProject, headerAction, banner }) {
   const [sortKey, setSortKey] = useState('newFollowers')
   const sort = SORTS.find(s => s.key === sortKey) || SORTS[0]
 
@@ -69,17 +71,22 @@ export default function CrossProjectRRSSPanel({ data, gradient, renderSecondary,
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
           {title} ({data.length})
         </h3>
-        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-          Ordenar por
-          <select
-            value={sortKey}
-            onChange={e => setSortKey(e.target.value)}
-            className="px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-        </label>
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            Ordenar por
+            <select
+              value={sortKey}
+              onChange={e => setSortKey(e.target.value)}
+              className="px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </label>
+          {headerAction}
+        </div>
       </div>
+
+      {banner}
 
       <div className="space-y-3">
         {rows.map(p => {

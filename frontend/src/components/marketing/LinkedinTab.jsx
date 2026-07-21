@@ -420,16 +420,34 @@ function ConnectPrompt({ projectId, onConnected, inline = false }) {
 
 // ── Panel cross-proyecto ──────────────────────────────────────────────────────
 function CrossProjectLinkedinPanel({ onSelectProject }) {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [deleting, setDeleting] = useState(null)
+  const [data,       setData]       = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [deleting,   setDeleting]   = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [flash,      setFlash]      = useState(null) // { ok, cooldown, error }
 
-  useEffect(() => {
+  const load = () =>
     api.get('/marketing/summary/linkedin')
       .then(r => setData(r.data))
       .catch(() => setData([]))
-      .finally(() => setLoading(false))
-  }, [])
+
+  useEffect(() => { load().finally(() => setLoading(false)) }, [])
+
+  const refreshAll = async () => {
+    setRefreshing(true)
+    setFlash(null)
+    try {
+      const { data: res } = await api.post('/marketing/summary/rrss/linkedin/refresh')
+      const cooldown = res.results.filter(r => r.status === 'cooldown').length
+      const error    = res.results.filter(r => r.status === 'error').length
+      setFlash({ ok: res.refreshed, cooldown, error })
+      await load()
+    } catch {
+      setFlash({ ok: 0, cooldown: 0, error: -1 })
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   async function handleDelete(p) {
     if (!window.confirm(`¿Borrar el último snapshot de LinkedIn de "${p.projectName}" (${p.month})? También se eliminarán los registros diarios de seguidores de ese mes. No se puede deshacer.`)) return
@@ -457,9 +475,37 @@ function CrossProjectLinkedinPanel({ onSelectProject }) {
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-        LinkedIn por proyecto ({data.length}) <span className="font-normal text-gray-400">· último snapshot disponible</span>
-      </h3>
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          LinkedIn por proyecto ({data.length}) <span className="font-normal text-gray-400">· último snapshot disponible</span>
+        </h3>
+        <button
+          onClick={refreshAll}
+          disabled={refreshing}
+          className="flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+        >
+          {refreshing
+            ? <><span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Actualizando…</>
+            : <>🔄 Actualizar todo</>}
+        </button>
+      </div>
+
+      {flash && (
+        <div className={`mb-4 text-xs rounded-lg px-3 py-2 border ${
+          flash.error === -1
+            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+            : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+        }`}>
+          {flash.error === -1
+            ? 'No se pudo ejecutar la actualización. Reintentá en unos segundos.'
+            : <>
+                {flash.ok} proyecto(s) actualizado(s).
+                {flash.cooldown > 0 && <span className="text-amber-600 dark:text-amber-400"> · {flash.cooldown} en cooldown (esperá unos min)</span>}
+                {flash.error > 0    && <span className="text-red-600 dark:text-red-400"> · {flash.error} con error</span>}
+              </>}
+        </div>
+      )}
+
       <div className="space-y-3">
         {data.map(p => (
           <div key={p.projectId} className="flex items-center gap-3">
