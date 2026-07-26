@@ -22,10 +22,10 @@ async function listAll(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const { name } = req.body
+    const { name, description } = req.body
     if (!name) return res.status(400).json({ error: 'Nombre requerido' })
     const service = await prisma.service.create({
-      data: { workspaceId: req.workspace.id, name },
+      data: { workspaceId: req.workspace.id, name, description: description?.trim() || null },
     })
     res.status(201).json(service)
   } catch (err) {
@@ -37,9 +37,10 @@ async function create(req, res, next) {
 async function update(req, res, next) {
   try {
     const { id } = req.params
-    const { name, active } = req.body
+    const { name, description, active } = req.body
     const data = {}
     if (name !== undefined) data.name = name
+    if (description !== undefined) data.description = description?.trim() || null
     if (active !== undefined) data.active = active
     const service = await prisma.service.update({ where: { id: Number(id) }, data })
     res.json(service)

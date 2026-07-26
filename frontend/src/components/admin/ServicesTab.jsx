@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 
+const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
+
 export default function ServicesTab() {
   const [services, setServices] = useState([])
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
 
   useEffect(() => {
     api.get('/services/all').then(r => setServices(r.data))
@@ -19,9 +23,10 @@ export default function ServicesTab() {
     setError('')
     setLoading(true)
     try {
-      const { data } = await api.post('/services', { name: name.trim() })
+      const { data } = await api.post('/services', { name: name.trim(), description: description.trim() })
       setServices(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
       setName('')
+      setDescription('')
     } catch (err) {
       setError(err.response?.data?.error || 'Error al crear servicio')
     } finally {
@@ -32,15 +37,19 @@ export default function ServicesTab() {
   function startEdit(service) {
     setEditingId(service.id)
     setEditName(service.name)
+    setEditDescription(service.description || '')
   }
 
   async function handleSaveEdit(service) {
-    if (!editName.trim() || editName.trim() === service.name) {
+    const trimmedName = editName.trim()
+    const trimmedDescription = editDescription.trim()
+    if (!trimmedName) { setEditingId(null); return }
+    if (trimmedName === service.name && trimmedDescription === (service.description || '')) {
       setEditingId(null)
       return
     }
     try {
-      const { data } = await api.put(`/services/${service.id}`, { name: editName.trim() })
+      const { data } = await api.put(`/services/${service.id}`, { name: trimmedName, description: trimmedDescription })
       setServices(prev => prev.map(s => s.id === data.id ? data : s).sort((a, b) => a.name.localeCompare(b.name)))
       setEditingId(null)
     } catch (err) {
@@ -57,17 +66,26 @@ export default function ServicesTab() {
     <div>
       <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Servicios</h2>
 
-      <form onSubmit={handleCreate} className="flex gap-3 mb-6">
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="Nombre del servicio (ej: Community Management)"
-          className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-        />
+      <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-3 mb-6 items-start">
+        <div className="flex-1 w-full space-y-2">
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Nombre del servicio (ej: Community Management)"
+            className={input}
+          />
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Qué incluye este servicio (opcional, la IA lo usa al redactar propuestas comerciales)"
+            rows={2}
+            className={input}
+          />
+        </div>
         <button
           type="submit"
           disabled={loading}
-          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
+          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 shrink-0"
         >
           {loading ? 'Guardando...' : 'Agregar'}
         </button>
@@ -76,19 +94,32 @@ export default function ServicesTab() {
 
       <div className="space-y-2">
         {services.map(s => (
-          <div key={s.id} className="flex items-center justify-between bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-3">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.active ? 'bg-green-500' : 'bg-gray-300'}`} />
+          <div key={s.id} className="flex items-start justify-between gap-3 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-4 py-3">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <span className={`w-2 h-2 mt-1.5 rounded-full flex-shrink-0 ${s.active ? 'bg-green-500' : 'bg-gray-300'}`} />
               {editingId === s.id ? (
-                <input
-                  value={editName}
-                  onChange={e => setEditName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(s); if (e.key === 'Escape') setEditingId(null) }}
-                  autoFocus
-                  className="flex-1 border border-primary-400 dark:bg-gray-700 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                <div className="flex-1 space-y-2">
+                  <input
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Escape') setEditingId(null) }}
+                    autoFocus
+                    className={input}
+                  />
+                  <textarea
+                    value={editDescription}
+                    onChange={e => setEditDescription(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Escape') setEditingId(null) }}
+                    placeholder="Qué incluye este servicio (opcional)"
+                    rows={2}
+                    className={input}
+                  />
+                </div>
               ) : (
-                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{s.name}</span>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{s.name}</span>
+                  {s.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.description}</p>}
+                </div>
               )}
             </div>
             <div className="flex items-center gap-2 ml-3 flex-shrink-0">

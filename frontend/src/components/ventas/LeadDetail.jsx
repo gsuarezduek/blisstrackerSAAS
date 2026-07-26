@@ -306,7 +306,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
 
         {/* Columna derecha: Propuestas + timeline/notas */}
         <div className="space-y-5">
-        <ProposalsPanel leadId={leadId} companyName={c?.name} onChanged={load} />
+        <ProposalsPanel leadId={leadId} companyName={c?.name} currency={lead.currency} onChanged={load} />
         <div className={card}>
           <h3 className={sectionTitle}>Historial y notas</h3>
           <div className="flex gap-2 mb-4">

@@ -456,6 +456,7 @@ model Service {
   workspaceId Int
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   name        String
+  description String?   // qué incluye/es el servicio; contexto para la IA al generar propuestas comerciales
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -2598,7 +2599,8 @@ model Proposal {
   lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   version     Int       @default(1)
   title       String?
-  services    Json      @default("[]") // servicios elegidos
+  services    Json      @default("[]") // unión de nombres de servicios de todos los planes (referencia rápida)
+  plans       Json      @default("[]") // planes de precio propuestos: [{ label, price, currency, services: [{ name, description }] }]
   objectives  String? // objetivos del cliente (input del usuario)
   content     String? // propuesta generada por IA (HTML editable)
   signatureId String? // id (dentro de Workspace.salesSignatures) de la firma elegida para esta propuesta
