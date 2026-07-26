@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { isGrantedBySuperAdmin, isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 
 /**
  * GET /api/superadmin/feature-flags
@@ -80,24 +81,20 @@ async function remove(req, res, next) {
 async function checkFlag(req, res, next) {
   try {
     const flag = await prisma.featureFlag.findUnique({ where: { key: req.params.key } })
-    if (!flag) return res.json({ enabled: false })
-
     const workspaceId = req.workspace?.id
-    const ids        = JSON.parse(flag.enabledWorkspaceIds)
-    const grantedBySuper = flag.enabledGlobally || (workspaceId ? ids.includes(workspaceId) : false)
-    if (!grantedBySuper) return res.json({ enabled: false })
 
-    // Respetar opt-out del workspace admin
-    if (workspaceId) {
-      const workspace = await prisma.workspace.findUnique({
-        where:  { id: workspaceId },
-        select: { disabledFeatureKeys: true },
-      })
-      const disabled = JSON.parse(workspace?.disabledFeatureKeys ?? '[]')
-      if (disabled.includes(flag.key)) return res.json({ enabled: false })
+    if (!flag || !workspaceId) {
+      // Sin workspace no hay enabledWorkspaceIds/opt-out que evaluar: solo cuenta el grant global.
+      return res.json({ enabled: !!flag?.enabledGlobally })
     }
 
-    res.json({ enabled: true })
+    const workspace = await prisma.workspace.findUnique({
+      where:  { id: workspaceId },
+      select: { disabledFeatureKeys: true },
+    })
+    const disabledKeys = JSON.parse(workspace?.disabledFeatureKeys ?? '[]')
+
+    res.json({ enabled: isFlagEnabledForWorkspace(flag, workspaceId, disabledKeys) })
   } catch (err) { next(err) }
 }
 
@@ -115,18 +112,17 @@ async function listWorkspaceFeatures(req, res, next) {
       prisma.workspace.findUnique({ where: { id: workspaceId }, select: { disabledFeatureKeys: true } }),
     ])
 
-    const disabled = JSON.parse(workspace?.disabledFeatureKeys ?? '[]')
+    const disabledKeys = JSON.parse(workspace?.disabledFeatureKeys ?? '[]')
 
+    // Se lista por "grant de SuperAdmin" — el campo `disabled` de cada fila es el
+    // estado actual del opt-out (lo que arma el toggle), no un filtro.
     const result = flags
-      .filter(f => {
-        const ids = JSON.parse(f.enabledWorkspaceIds)
-        return f.enabledGlobally || ids.includes(workspaceId)
-      })
+      .filter(f => isGrantedBySuperAdmin(f, workspaceId))
       .map(f => ({
         key:         f.key,
         name:        f.name,
         description: f.description,
-        disabled:    disabled.includes(f.key),
+        disabled:    disabledKeys.includes(f.key),
       }))
 
     res.json(result)
@@ -152,9 +148,9 @@ async function toggleWorkspaceFeature(req, res, next) {
     const flag = await prisma.featureFlag.findUnique({ where: { key } })
     if (!flag) return res.status(404).json({ error: 'Flag no encontrado' })
 
-    const ids = JSON.parse(flag.enabledWorkspaceIds)
-    const granted = flag.enabledGlobally || ids.includes(workspaceId)
-    if (!granted) return res.status(403).json({ error: 'Este módulo no está habilitado para el workspace' })
+    if (!isGrantedBySuperAdmin(flag, workspaceId)) {
+      return res.status(403).json({ error: 'Este módulo no está habilitado para el workspace' })
+    }
 
     const workspace = await prisma.workspace.findUnique({
       where:  { id: workspaceId },

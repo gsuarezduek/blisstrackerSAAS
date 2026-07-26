@@ -21,14 +21,14 @@ async function listProposals(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// POST /api/ventas/leads/:id/proposals  { serviceIds?, serviceNames?, objectives, title? }
+// POST /api/ventas/leads/:id/proposals  { serviceIds?, serviceNames?, objectives, title?, signatureId? }
 // Genera la propuesta con IA y la guarda como nueva versión.
 async function createProposal(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const userId = req.user.userId
     const leadId = Number(req.params.id)
-    const { serviceIds = [], serviceNames = [], objectives, title, instructions } = req.body
+    const { serviceIds = [], serviceNames = [], objectives, title, instructions, signatureId } = req.body
 
     const lead = await findLeadWithCompany(leadId, workspaceId)
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
@@ -69,6 +69,7 @@ async function createProposal(req, res, next) {
         services: names,
         objectives: objectives?.trim() || null,
         content: html,
+        signatureId: typeof signatureId === 'string' && signatureId.trim() ? signatureId.trim() : null,
         status: 'draft',
         createdById: userId,
       },
@@ -86,7 +87,7 @@ async function createProposal(req, res, next) {
   }
 }
 
-// PATCH /api/ventas/leads/:id/proposals/:pid  { content?, title?, status? }
+// PATCH /api/ventas/leads/:id/proposals/:pid  { content?, title?, status?, signatureId? }
 async function updateProposal(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -94,10 +95,11 @@ async function updateProposal(req, res, next) {
     const existing = await prisma.proposal.findFirst({ where: { id: pid, workspaceId, leadId: Number(req.params.id) }, select: { id: true } })
     if (!existing) return res.status(404).json({ error: 'Propuesta no encontrada' })
 
-    const { content, title, status } = req.body
+    const { content, title, status, signatureId } = req.body
     const data = {}
     if (content !== undefined) data.content = content
     if (title   !== undefined) data.title = title?.trim() || null
+    if (signatureId !== undefined) data.signatureId = typeof signatureId === 'string' && signatureId.trim() ? signatureId.trim() : null
     if (status  !== undefined) {
       if (!['draft', 'confirmed'].includes(status)) return res.status(400).json({ error: 'Estado de propuesta inválido' })
       data.status = status

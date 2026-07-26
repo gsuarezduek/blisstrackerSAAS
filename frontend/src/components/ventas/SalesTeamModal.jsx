@@ -5,18 +5,19 @@ import useRoles from '../../hooks/useRoles'
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
 
-const EMPTY_SIG = { closing: '', name: '', role: '', email: '', phone: '', note: '', showLogo: false }
+function newSignature() { return { id: crypto.randomUUID(), label: '', closing: '', name: '', role: '', email: '', phone: '', note: '', showLogo: false } }
 
 // Admin: configuración del módulo Ventas.
 //  1. Equipo comercial — roles (teamRole) que acceden sin ser admin (Workspace.salesRoleNames).
 //  2. Indicaciones para propuestas — guía persistente que la IA respeta (Workspace.salesProposalGuidelines).
-//  3. Firma — datos de contacto que cierran el PDF de la propuesta (Workspace.salesSignature).
+//  3. Firmas — una o más, datos de contacto que cierran el PDF de la propuesta (Workspace.salesSignatures).
+//     Se elige cuál usar al generar/editar cada propuesta (Proposal.signatureId).
 export default function SalesTeamModal({ onClose, onSaved }) {
   const { roles, labelFor } = useRoles()
   const [selected, setSelected] = useState([])
   const [adding, setAdding] = useState(false)
   const [guidelines, setGuidelines] = useState('')
-  const [sig, setSig] = useState(EMPTY_SIG)
+  const [signatures, setSignatures] = useState([])
   const [tasksProjectId, setTasksProjectId] = useState('')
   const [projects, setProjects] = useState([])
   const [saving, setSaving] = useState(false)
@@ -27,7 +28,7 @@ export default function SalesTeamModal({ onClose, onSaved }) {
       .then(({ data }) => {
         setSelected(Array.isArray(data.salesRoleNames) ? data.salesRoleNames : [])
         setGuidelines(data.salesProposalGuidelines || '')
-        setSig({ ...EMPTY_SIG, ...(data.salesSignature && typeof data.salesSignature === 'object' ? data.salesSignature : {}) })
+        setSignatures(Array.isArray(data.salesSignatures) ? data.salesSignatures : [])
         setTasksProjectId(data.salesTasksProjectId || '')
       })
       .catch(() => {})
@@ -38,13 +39,15 @@ export default function SalesTeamModal({ onClose, onSaved }) {
 
   function addRole(name) { if (name) setSelected(s => [...s, name]); setAdding(false) }
   function removeRole(name) { setSelected(s => s.filter(x => x !== name)) }
-  function setSigField(k, v) { setSig(s => ({ ...s, [k]: v })) }
+  function addSignature() { setSignatures(s => [...s, newSignature()]) }
+  function removeSignature(id) { setSignatures(s => s.filter(x => x.id !== id)) }
+  function setSigField(id, k, v) { setSignatures(s => s.map(x => x.id === id ? { ...x, [k]: v } : x)) }
 
   async function handleSave() {
     setSaving(true); setError('')
     try {
       await api.patch('/workspaces/current', {
-        salesRoleNames: selected, salesProposalGuidelines: guidelines, salesSignature: sig,
+        salesRoleNames: selected, salesProposalGuidelines: guidelines, salesSignatures: signatures,
         salesTasksProjectId: tasksProjectId ? Number(tasksProjectId) : null,
       })
       onSaved?.()
@@ -109,28 +112,38 @@ export default function SalesTeamModal({ onClose, onSaved }) {
             value={guidelines} onChange={e => setGuidelines(e.target.value)} />
         </div>
 
-        {/* 3. Firma / Contacto del PDF */}
+        {/* 3. Firmas / Contacto del PDF */}
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">Firma</h3>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">Firmas</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            Cierra la propuesta en el PDF (sección "Contacto"): quién la envía y cómo despedirse.
+            Una o más firmas para cerrar la propuesta en el PDF (sección "Contacto"). Al generar o editar cada propuesta se elige con cuál firmarla.
           </p>
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div><label className={label}>Cierre</label><input className={input} placeholder="Atte," value={sig.closing} onChange={e => setSigField('closing', e.target.value)} /></div>
-              <div><label className={label}>Nombre</label><input className={input} placeholder="Nombre y apellido" value={sig.name} onChange={e => setSigField('name', e.target.value)} /></div>
-              <div><label className={label}>Cargo</label><input className={input} placeholder="Ej. Ejecutivo comercial" value={sig.role} onChange={e => setSigField('role', e.target.value)} /></div>
-              <div><label className={label}>Email</label><input className={input} placeholder="email@agencia.com" value={sig.email} onChange={e => setSigField('email', e.target.value)} /></div>
-              <div><label className={label}>Teléfono</label><input className={input} placeholder="+54 …" value={sig.phone} onChange={e => setSigField('phone', e.target.value)} /></div>
-            </div>
-            <div>
-              <label className={label}>Texto o frase de cierre (opcional)</label>
-              <textarea className={input} rows={2} placeholder="Ej. Quedamos a disposición para coordinar una reunión." value={sig.note} onChange={e => setSigField('note', e.target.value)} />
-            </div>
-            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={sig.showLogo} onChange={e => setSigField('showLogo', e.target.checked)} className="rounded text-primary-600 focus:ring-primary-500" />
-              Incluir el logo del workspace en la firma
-            </label>
+          <div className="space-y-3">
+            {signatures.map(sig => (
+              <div key={sig.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <input className={`${input} flex-1 font-medium`} placeholder={`Nombre de la firma (ej. "Comercial", "Fundador")`} value={sig.label} onChange={e => setSigField(sig.id, 'label', e.target.value)} />
+                  <button type="button" onClick={() => removeSignature(sig.id)} className="text-gray-400 hover:text-red-500 text-lg leading-none px-1" title="Eliminar firma">×</button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className={label}>Cierre</label><input className={input} placeholder="Atte," value={sig.closing} onChange={e => setSigField(sig.id, 'closing', e.target.value)} /></div>
+                  <div><label className={label}>Nombre</label><input className={input} placeholder="Nombre y apellido" value={sig.name} onChange={e => setSigField(sig.id, 'name', e.target.value)} /></div>
+                  <div><label className={label}>Cargo</label><input className={input} placeholder="Ej. Ejecutivo comercial" value={sig.role} onChange={e => setSigField(sig.id, 'role', e.target.value)} /></div>
+                  <div><label className={label}>Email</label><input className={input} placeholder="email@agencia.com" value={sig.email} onChange={e => setSigField(sig.id, 'email', e.target.value)} /></div>
+                  <div><label className={label}>Teléfono</label><input className={input} placeholder="+54 …" value={sig.phone} onChange={e => setSigField(sig.id, 'phone', e.target.value)} /></div>
+                </div>
+                <div>
+                  <label className={label}>Texto o frase de cierre (opcional)</label>
+                  <textarea className={input} rows={2} placeholder="Ej. Quedamos a disposición para coordinar una reunión." value={sig.note} onChange={e => setSigField(sig.id, 'note', e.target.value)} />
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                  <input type="checkbox" checked={sig.showLogo} onChange={e => setSigField(sig.id, 'showLogo', e.target.checked)} className="rounded text-primary-600 focus:ring-primary-500" />
+                  Incluir el logo del workspace en la firma
+                </label>
+              </div>
+            ))}
+            {signatures.length === 0 && <p className="text-xs text-gray-400">Sin firmas configuradas.</p>}
+            <button type="button" onClick={addSignature} className="text-xs font-medium text-primary-600 hover:text-primary-700 border border-dashed border-primary-300 dark:border-primary-700 rounded-full px-3 py-1">+ Agregar firma</button>
           </div>
         </div>
 

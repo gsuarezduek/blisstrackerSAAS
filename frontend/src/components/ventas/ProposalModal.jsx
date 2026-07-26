@@ -20,10 +20,20 @@ export default function ProposalModal({ leadId, companyName, proposal: initial, 
 
   const [title, setTitle] = useState(initial?.title || '')
   const [content, setContent] = useState(initial?.content || '')
+  const [signatures, setSignatures] = useState([])
+  const [signatureId, setSignatureId] = useState(initial?.signatureId || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => { api.get('/services').then(({ data }) => setServices(data)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    api.get('/workspaces/current').then(({ data }) => {
+      const list = Array.isArray(data.salesSignatures) ? data.salesSignatures : []
+      setSignatures(list)
+      setSignatureId(id => id || (list.length === 1 ? list[0].id : ''))
+    }).catch(() => {})
+  }, [])
 
   function toggleService(id) {
     setServiceIds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
@@ -32,10 +42,11 @@ export default function ProposalModal({ leadId, companyName, proposal: initial, 
   async function generate() {
     setGenerating(true); setError('')
     try {
-      const { data } = await api.post(`/ventas/leads/${leadId}/proposals`, { serviceIds, objectives, instructions })
+      const { data } = await api.post(`/ventas/leads/${leadId}/proposals`, { serviceIds, objectives, instructions, signatureId: signatureId || null })
       setProposal(data)
       setTitle(data.title || '')
       setContent(data.content || '')
+      setSignatureId(data.signatureId || '')
       setStep('edit')
       onSaved?.() // refresca la lista con la nueva versión
     } catch (err) {
@@ -49,7 +60,7 @@ export default function ProposalModal({ leadId, companyName, proposal: initial, 
     setSaving(true); setError('')
     try {
       const { data } = await api.patch(`/ventas/leads/${leadId}/proposals/${proposal.id}`, {
-        title: title.trim() || null, content, ...(confirm ? { status: 'confirmed' } : {}),
+        title: title.trim() || null, content, signatureId: signatureId || null, ...(confirm ? { status: 'confirmed' } : {}),
       })
       setProposal(data)
       onSaved?.()
@@ -63,7 +74,7 @@ export default function ProposalModal({ leadId, companyName, proposal: initial, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 py-6 overflow-y-auto">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6 my-auto">
+      <div className={`bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full p-6 my-auto ${step === 'edit' ? 'max-w-4xl' : 'max-w-2xl'}`}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-bold text-gray-900 dark:text-white">
             {step === 'form' ? 'Nueva propuesta' : (proposal?.title || 'Propuesta')}
@@ -100,6 +111,15 @@ export default function ProposalModal({ leadId, companyName, proposal: initial, 
               <textarea className={input} rows={2} placeholder="Ej. Enfatizar resultados a 90 días, incluir un plan por etapas, tono cercano…" value={instructions} onChange={e => setInstructions(e.target.value)} />
               <p className="text-[11px] text-gray-400 mt-1">Se suman a las indicaciones generales de la agencia (Configuración de Ventas).</p>
             </div>
+            {signatures.length > 0 && (
+              <div>
+                <label className={label}>Firma</label>
+                <select className={input} value={signatureId} onChange={e => setSignatureId(e.target.value)}>
+                  <option value="">Sin firma</option>
+                  {signatures.map(s => <option key={s.id} value={s.id}>{s.label || s.name || 'Firma sin nombre'}</option>)}
+                </select>
+              </div>
+            )}
             <div className="flex gap-2 pt-1">
               <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 text-sm">Cancelar</button>
               <button onClick={generate} disabled={generating} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2">
@@ -110,17 +130,28 @@ export default function ProposalModal({ leadId, companyName, proposal: initial, 
           </div>
         ) : (
           <div className="space-y-3">
-            <div>
-              <label className={label}>Título</label>
-              <input className={input} value={title} onChange={e => setTitle(e.target.value)} />
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className={label}>Título</label>
+                <input className={input} value={title} onChange={e => setTitle(e.target.value)} />
+              </div>
+              {signatures.length > 0 && (
+                <div className="w-56 shrink-0">
+                  <label className={label}>Firma</label>
+                  <select className={input} value={signatureId} onChange={e => setSignatureId(e.target.value)}>
+                    <option value="">Sin firma</option>
+                    {signatures.map(s => <option key={s.id} value={s.id}>{s.label || s.name || 'Firma sin nombre'}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
             <div>
               <label className={label}>Contenido (editable)</label>
-              <RichTextEditor defaultContent={content} onChange={setContent} minHeight={280} autoFocus={false} resizable />
+              <RichTextEditor defaultContent={content} onChange={setContent} minHeight={480} autoFocus={false} resizable />
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
               <button onClick={onClose} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">Cerrar</button>
-              <button onClick={() => exportProposalPdf({ ...proposal, title, content }, { companyName })} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">🖨️ PDF</button>
+              <button onClick={() => exportProposalPdf({ ...proposal, title, content, signatureId }, { companyName })} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">🖨️ PDF</button>
               <button onClick={() => save(false)} disabled={saving} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 text-sm">{saving ? 'Guardando…' : 'Guardar'}</button>
               <button onClick={() => save(true)} disabled={saving} className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 px-4 text-sm">Confirmar</button>
             </div>

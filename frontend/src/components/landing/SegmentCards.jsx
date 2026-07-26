@@ -36,6 +36,7 @@ const TILES = [
       'SEO + Search Console + keyword tracking',
       'Meta Ads + Google Ads + Social + informes con URL pública',
     ],
+    to: '/soluciones/marketing',
   },
   {
     id: 'eos',
@@ -48,6 +49,7 @@ const TILES = [
       'Rocks trimestrales + reunión L10 semanal',
       'Evaluación organizacional con análisis IA',
     ],
+    to: '/soluciones/eos',
   },
   {
     id: 'ventas',
@@ -60,6 +62,7 @@ const TILES = [
       'Investigación de empresas + propuestas con IA',
       'Recordatorios automáticos de próxima acción',
     ],
+    to: '/soluciones/ventas',
   },
 ]
 
@@ -103,6 +106,11 @@ export default function SegmentCards() {
                   </li>
                 ))}
               </ul>
+              {!t.primary && t.to && (
+                <Link to={t.to} className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700">
+                  Conocé más <span>→</span>
+                </Link>
+              )}
               {t.primary && (
                 <Link to="/register"
                   className="mt-6 inline-block text-center bg-white text-primary-600 hover:bg-primary-50 px-5 py-3 rounded-xl font-semibold transition-colors">

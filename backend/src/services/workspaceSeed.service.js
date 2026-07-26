@@ -60,10 +60,13 @@ async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
     },
   })
 
-  // 5. 8 tareas variadas
+  // 5. 8 tareas variadas — mezcla genérica de agencia (no asume qué módulos va a activar
+  // el workspace: el seed corre al crear el workspace, antes de que el wizard de onboarding
+  // le pregunte qué módulos usar). Se deja 1 sabor marketing/ads como ejemplo de color, sin
+  // apoyarse en jerga de un módulo específico (GEO/Search Console/etc.) que puede no tener activado.
   const tasksData = [
     {
-      description: 'Analizar tráfico orgánico de Cliente Demo del último mes en GA4 + Search Console. Identificar 3 oportunidades de keywords con alto volumen y baja competencia.',
+      description: 'Revisar el avance del mes de Cliente Demo y preparar 3 puntos para la próxima reunión de status.',
       status:      'IN_PROGRESS',
       starred:     2,                  // amarillo — importante
       startedAt:   new Date(Date.now() - 30 * 60 * 1000), // hace 30 min
@@ -74,14 +77,14 @@ async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
       starred:     3,                  // rojo — crítica
     },
     {
-      description: 'Auditoría GEO del sitio de Cliente Demo. Correr GEO Audit desde Marketing → GEO. Revisar score y citation readiness. Crear tareas de fix.',
+      description: 'Revisar el sitio/entregable de Cliente Demo con el equipo y armar una lista de mejoras priorizadas.',
       status:      'PENDING',
       starred:     2,
     },
     {
       description: 'Optimizar campaña Meta Ads de Producto X. CPC subió 23% en la última semana. Probar 2 creativos nuevos y ajustar audiencias.',
       status:        'BLOCKED',
-      blockedReason: 'Esperando aprobación de creativos por parte del cliente.',
+      blockedReason: 'Esperando aprobación del cliente.',
     },
     {
       description:   'Coordinar entrega de copys para nueva landing. Pendiente recibir copy del equipo de contenido. Deadline viernes.',
@@ -90,14 +93,14 @@ async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
       pausedAt:      new Date(Date.now() - 45 * 60 * 1000),
     },
     {
-      description:     'Setup inicial de Search Console para Cliente Y. Conectar dominio + verificar propiedad. Subir sitemap.xml.',
+      description:     'Onboarding de Cliente Y: cargar datos de acceso, sumar al equipo del proyecto y agendar kickoff.',
       status:          'COMPLETED',
       startedAt:       daysAgo(2),
       completedAt:     daysAgo(2),
       minutesOverride: 35,
     },
     {
-      description:     'Definir naming convention de campañas Ads del Q. Documentar en Notion + comunicar al equipo en standup del lunes.',
+      description:     'Documentar el proceso de aprobación de entregables con el equipo y compartirlo en el standup del lunes.',
       status:          'COMPLETED',
       startedAt:       daysAgo(3),
       completedAt:     daysAgo(3),

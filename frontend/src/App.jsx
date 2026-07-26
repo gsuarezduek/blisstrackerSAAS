@@ -67,6 +67,9 @@ function lazyWithReload(importer) {
 
 const Landing          = lazyWithReload(() => import('./pages/Landing'))
 const Pricing          = lazyWithReload(() => import('./pages/Pricing'))
+const SolutionMarketing = lazyWithReload(() => import('./pages/SolutionMarketing'))
+const SolutionEos       = lazyWithReload(() => import('./pages/SolutionEos'))
+const SolutionVentas    = lazyWithReload(() => import('./pages/SolutionVentas'))
 const Login2           = lazyWithReload(() => import('./pages/Login2'))
 const Register         = lazyWithReload(() => import('./pages/Register'))
 const Dashboard        = lazyWithReload(() => import('./pages/Dashboard'))
@@ -144,6 +147,9 @@ export default function App() {
           <Route path="/login"    element={<Login2     />} />
           <Route path="/register" element={<Register   />} />
           <Route path="/pricing"  element={<Pricing    />} />
+          <Route path="/soluciones/marketing" element={<SolutionMarketing />} />
+          <Route path="/soluciones/eos"       element={<SolutionEos       />} />
+          <Route path="/soluciones/ventas"    element={<SolutionVentas    />} />
           <Route path="/oauth"        element={<OAuthPopup    />} />
           <Route path="/auth"         element={<AuthCallback  />} />
           <Route path="/oauth-result" element={<OAuthResult   />} />

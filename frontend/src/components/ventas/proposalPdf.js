@@ -22,8 +22,12 @@ export async function exportProposalPdf(proposal, { companyName } = {}) {
   const date = new Date(proposal.createdAt || Date.now()).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
   const title = proposal.title || `Propuesta v${proposal.version || 1}`
 
-  // Firma / sección Contacto.
-  const sig = (ws.salesSignature && typeof ws.salesSignature === 'object') ? ws.salesSignature : {}
+  // Firma / sección Contacto: la elegida en la propuesta (signatureId); si nunca se eligió una
+  // (propuestas creadas antes de soportar múltiples firmas) se usa la única/primera configurada.
+  const allSignatures = Array.isArray(ws.salesSignatures) ? ws.salesSignatures : []
+  const sig = allSignatures.find(s => s.id === proposal.signatureId)
+    || (proposal.signatureId == null ? allSignatures[0] : null)
+    || {}
   const sigHasData = !!(sig.name || sig.email || sig.phone || sig.note || sig.closing || (sig.showLogo && hasLogo))
   const signatureHtml = sigHasData ? `
     <div class="signature">

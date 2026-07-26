@@ -7,6 +7,7 @@ import AddTaskModal from '../components/AddTaskModal'
 import InactivityModal from '../components/InactivityModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import OnboardingWizard from '../components/OnboardingWizard'
+import SetupChecklist from '../components/SetupChecklist'
 import { useInactivity } from '../hooks/useInactivity'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
@@ -550,6 +551,8 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        <SetupChecklist />
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">

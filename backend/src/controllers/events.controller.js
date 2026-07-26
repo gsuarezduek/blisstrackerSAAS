@@ -35,6 +35,7 @@ const ALLOWED_EVENTS = new Set([
   'tour_step_completed',
   'tour_skipped',
   'tour_completed',
+  'onboarding_modules_selected',
 ])
 
 function tryDecodeJwt(req) {

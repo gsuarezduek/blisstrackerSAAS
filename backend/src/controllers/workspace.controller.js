@@ -8,6 +8,7 @@ const { reconcileWorkspaceTier } = require('../services/billingTier.service')
 const { getSetting } = require('../lib/platformSettings')
 const { validateImageUpload } = require('../lib/imageType')
 const { seedWorkspace, removeDemoProject } = require('../services/workspaceSeed.service')
+const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 
 const MEMBER_SELECT = {
   userId: true,
@@ -79,7 +80,7 @@ async function getCurrent(req, res, next) {
  */
 async function updateCurrent(req, res, next) {
   try {
-    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesRoleNames, salesProposalGuidelines, salesSignature, salesTasksProjectId } = req.body
+    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesRoleNames, salesProposalGuidelines, salesSignatures, salesTasksProjectId } = req.body
     const data = {}
     if (name) data.name = name
     if (timezone) data.timezone = timezone
@@ -92,18 +93,21 @@ async function updateCurrent(req, res, next) {
     // Ventas (CRM): teamRoles del equipo comercial (Json). Guardamos array de strings.
     if (salesRoleNames     !== undefined) data.salesRoleNames     = Array.isArray(salesRoleNames) ? salesRoleNames.filter(r => typeof r === 'string') : []
     if (salesProposalGuidelines !== undefined) data.salesProposalGuidelines = salesProposalGuidelines?.trim() || null
-    // Firma del PDF de la propuesta: solo persistimos las claves conocidas (strings + showLogo bool).
-    if (salesSignature !== undefined && salesSignature && typeof salesSignature === 'object') {
-      const s = salesSignature
-      data.salesSignature = {
-        closing: typeof s.closing === 'string' ? s.closing.trim() : '',
-        name:    typeof s.name    === 'string' ? s.name.trim()    : '',
-        role:    typeof s.role    === 'string' ? s.role.trim()    : '',
-        email:   typeof s.email   === 'string' ? s.email.trim()   : '',
-        phone:   typeof s.phone   === 'string' ? s.phone.trim()   : '',
-        note:    typeof s.note    === 'string' ? s.note.trim()    : '',
-        showLogo: !!s.showLogo,
-      }
+    // Firmas del PDF de la propuesta: array, solo persistimos las claves conocidas (strings + showLogo bool).
+    if (salesSignatures !== undefined) {
+      data.salesSignatures = Array.isArray(salesSignatures)
+        ? salesSignatures.filter(s => s && typeof s === 'object').map((s, i) => ({
+            id:      typeof s.id === 'string' && s.id.trim() ? s.id.trim() : `sig-${Date.now()}-${i}`,
+            label:   typeof s.label   === 'string' ? s.label.trim()   : '',
+            closing: typeof s.closing === 'string' ? s.closing.trim() : '',
+            name:    typeof s.name    === 'string' ? s.name.trim()    : '',
+            role:    typeof s.role    === 'string' ? s.role.trim()    : '',
+            email:   typeof s.email   === 'string' ? s.email.trim()   : '',
+            phone:   typeof s.phone   === 'string' ? s.phone.trim()   : '',
+            note:    typeof s.note    === 'string' ? s.note.trim()    : '',
+            showLogo: !!s.showLogo,
+          }))
+        : []
     }
     // Proyecto donde se crean las tareas futuras auto-generadas por las próximas
     // acciones de leads (ver leads.controller.js createTaskForAction).
@@ -1112,6 +1116,38 @@ async function completeOnboarding(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * GET /api/workspaces/current/onboarding/checklist
+ * Estado de "Primeros pasos" para la tarjeta persistente del Dashboard (solo admin/owner).
+ * Cada módulo aparece solo si está habilitado (grant de SuperAdmin) y no fue desactivado
+ * por el workspace. `done` se recalcula en cada request, sin caché ni persistencia.
+ */
+async function getOnboardingChecklist(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const disabledKeys = JSON.parse(req.workspace.disabledFeatureKeys || '[]')
+
+    const [flags, memberCount, integrationCount, eosData, leadCount] = await Promise.all([
+      prisma.featureFlag.findMany({ where: { key: { in: ['marketing', 'eos', 'ventas'] } } }),
+      prisma.workspaceMember.count({ where: { workspaceId, active: true } }),
+      prisma.projectIntegration.count({ where: { workspaceId } }),
+      prisma.eOSData.findUnique({ where: { workspaceId }, select: { purpose: true, niche: true } }),
+      prisma.lead.count({ where: { workspaceId } }),
+    ])
+
+    function granted(key) {
+      return isFlagEnabledForWorkspace(flags.find(f => f.key === key), workspaceId, disabledKeys)
+    }
+
+    res.json({
+      team:      { done: memberCount > 1 },
+      marketing: granted('marketing') ? { done: integrationCount > 0 } : null,
+      eos:       granted('eos') ? { done: !!(eosData?.purpose || eosData?.niche) } : null,
+      ventas:    granted('ventas') ? { done: leadCount > 0 } : null,
+    })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   getMine, getCurrent, updateCurrent, listMembers, addMember, updateMember, toggleMemberActive,
   listMemberPendingTasks,
@@ -1122,4 +1158,5 @@ module.exports = {
   getTokenBudgetStatus,
   deleteDemoProject,
   completeOnboarding,
+  getOnboardingChecklist,
 }

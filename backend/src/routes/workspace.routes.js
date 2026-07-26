@@ -63,4 +63,7 @@ router.delete('/current/demo-project', c.deleteDemoProject)
 // Onboarding: marcar completado/saltado el wizard (selector de módulos + tour)
 router.post('/current/onboarding/complete', workspaceAdminOnly, c.completeOnboarding)
 
+// Onboarding: estado de "Primeros pasos" para la tarjeta persistente del Dashboard
+router.get('/current/onboarding/checklist', workspaceAdminOnly, c.getOnboardingChecklist)
+
 module.exports = router
