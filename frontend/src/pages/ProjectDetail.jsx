@@ -105,6 +105,17 @@ export default function ProjectDetail() {
     api.get('/projects').then(r => setProjectList(r.data)).catch(() => {})
   }, [])
 
+  // Publica el proyecto actual para que el botón flotante de "Nueva tarea"
+  // (GlobalShortcuts) la asocie a este proyecto en vez de pedir elegir uno.
+  useEffect(() => {
+    if (!data?.project) return
+    window.dispatchEvent(new CustomEvent('bliss:project-context', { detail: data.project }))
+  }, [data])
+
+  useEffect(() => {
+    return () => window.dispatchEvent(new CustomEvent('bliss:project-context', { detail: null }))
+  }, [])
+
   // Abrir modal de comentarios desde ?task=:id (eg. al llegar desde una notificación)
   useEffect(() => {
     const taskId = Number(searchParams.get('task'))
