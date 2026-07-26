@@ -8,7 +8,10 @@ const { getSetting } = require('../lib/platformSettings')
 /**
  * Motor de scraping de redes sociales — abstraído por proveedor.
  *
- * Proveedor actual: Apify (https://apify.com). Requiere APIFY_API_TOKEN.
+ * Proveedor actual: Apify (https://apify.com). Requiere APIFY_API_TOKEN (+ hasta 3
+ *   tokens de respaldo opcionales APIFY_API_TOKEN2/3/4 — ver `getApifyTokens`/
+ *   `runApifyActor`: si un token falla — HTTP error o dataset con item `{error}`,
+ *   ej. sin crédito — se reintenta automáticamente con el siguiente en orden).
  * - Instagram: actor configurable con APIFY_INSTAGRAM_ACTOR (default
  *   apify~instagram-profile-scraper).
  * - LinkedIn (Company Pages): actor configurable desde SuperAdmin → Configuración
@@ -45,6 +48,71 @@ function scrapeError(message, code, status = 400) {
   return err
 }
 
+/**
+ * Tokens de Apify disponibles, en orden de prioridad: APIFY_API_TOKEN + hasta 3
+ * de respaldo (APIFY_API_TOKEN2/3/4). Permite seguir scrapeando si una cuenta se
+ * queda sin crédito o el token deja de ser válido, sin intervención manual.
+ */
+function getApifyTokens() {
+  return [
+    process.env.APIFY_API_TOKEN,
+    process.env.APIFY_API_TOKEN2,
+    process.env.APIFY_API_TOKEN3,
+    process.env.APIFY_API_TOKEN4,
+  ].filter(Boolean)
+}
+
+/**
+ * Corre un actor de Apify (run-sync-get-dataset-items) probando los `tokens` en
+ * orden: si uno falla (error HTTP — token inválido, sin crédito, etc.) prueba el
+ * siguiente antes de darse por vencido. Si se pasa `isDatasetError`, también se
+ * usa para detectar fallas "silenciosas" (HTTP 200 pero el dataset trae un item
+ * `{ error: "..." }`, como "sin crédito" en algunos actores) y reintentar con el
+ * siguiente token — salvo que sea el último, en cuyo caso se devuelven los items
+ * tal cual para que el caller decida (mismo comportamiento que antes de tener
+ * fallback, para no romper el manejo de error existente).
+ * Asume que ya se validó `tokens.length > 0`.
+ */
+async function runApifyActor(actorId, input, { tokens, timeout = 180000, isDatasetError } = {}) {
+  const url = `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`
+  let lastErr = null
+
+  for (let i = 0; i < tokens.length; i++) {
+    const isLast = i === tokens.length - 1
+    try {
+      const { data } = await axios.post(url, input, { params: { token: tokens[i] }, timeout })
+      const items = Array.isArray(data) ? data : []
+      const datasetErrMsg = isDatasetError ? isDatasetError(items) : null
+      if (datasetErrMsg && !isLast) {
+        console.warn(`[Scrape] Apify token #${i + 1}/${tokens.length} sin datos usables (${datasetErrMsg}), reintentando con el siguiente token...`)
+        lastErr = new Error(datasetErrMsg)
+        continue
+      }
+      return items
+    } catch (err) {
+      lastErr = err
+      if (!isLast) {
+        const msg = err.response?.data?.error?.message || err.message
+        console.warn(`[Scrape] Apify token #${i + 1}/${tokens.length} falló (${msg}), reintentando con el siguiente token...`)
+        continue
+      }
+    }
+  }
+  throw lastErr
+}
+
+/**
+ * Algunos actores de Apify no devuelven HTTP error: meten un item `{ error: "..." }`
+ * en el dataset (ej. "You have used up your credits"). Usado como `isDatasetError`
+ * de `runApifyActor` para que ese caso también dispare el fallback al siguiente
+ * token en vez de contarse como "0 datos".
+ */
+function detectApifyDatasetError(items) {
+  const errItem   = items.find(i => i && typeof i === 'object' && typeof i.error === 'string')
+  const hasUsable = items.some(i => i && typeof i === 'object' && !i.error)
+  return (errItem && !hasUsable) ? errItem.error : null
+}
+
 // Aviso de error de scraping al equipo BlissTracker (casilla platformAdminEmail).
 // Throttle in-memory: a lo sumo un aviso por código cada 6h, para no saturar la
 // casilla cuando el cron mensual itera muchas cuentas con el mismo problema
@@ -68,7 +136,7 @@ function alertScrapeFailure({ code, detail, username, workspaceId = null, contex
       ['Contexto', context],
       ['Mensaje', detail],
     ], '#dc2626')}
-    <p style="color:#94a3b8;font-size:13px;margin:12px 0 0;">Revisá el saldo de la cuenta de Apify y el token <code>APIFY_API_TOKEN</code>. Para no saturar, este aviso se manda como máximo una vez cada 6 horas por tipo de error.</p>
+    <p style="color:#94a3b8;font-size:13px;margin:12px 0 0;">Ya se probaron todos los tokens de Apify configurados (<code>APIFY_API_TOKEN</code> + respaldo) sin éxito — revisá el saldo de esas cuentas. Para no saturar, este aviso se manda como máximo una vez cada 6 horas por tipo de error.</p>
   `
   // Fire-and-forget: sendPlatformNotification ya es no-op si la casilla está vacía
   // o el toggle está apagado, y nunca lanza.
@@ -101,8 +169,8 @@ function parseInstagramUsername(input) {
  */
 async function runApifyInstagram(username, opts = {}) {
   const { postsLimit = DEFAULT_POSTS_LIMIT, workspaceId = null, context = null } = opts
-  const token = process.env.APIFY_API_TOKEN
-  if (!token) {
+  const tokens = getApifyTokens()
+  if (tokens.length === 0) {
     alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username, workspaceId, context })
     throw scrapeError(
       'El scraping no está configurado en el servidor (falta APIFY_API_TOKEN).',
@@ -118,16 +186,10 @@ async function runApifyInstagram(username, opts = {}) {
   actor = actor.trim() || process.env.APIFY_INSTAGRAM_ACTOR || 'apify~instagram-profile-scraper'
   // En la API de Apify el ID del actor va con "~" (no "/"). Aceptamos "usuario/actor".
   const actorId = actor.replace('/', '~')
-  const url     = `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`
 
   let items
   try {
-    const { data } = await axios.post(
-      url,
-      { usernames: [username], resultsLimit: postsLimit },
-      { params: { token }, timeout: 180000 },
-    )
-    items = Array.isArray(data) ? data : []
+    items = await runApifyActor(actorId, { usernames: [username], resultsLimit: postsLimit }, { tokens })
   } catch (err) {
     const apifyMsg = err.response?.data?.error?.message || err.message
     alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username, workspaceId, context })
@@ -164,20 +226,14 @@ async function resolveInstagramPostsActor() {
  */
 async function runApifyInstagramPosts(username, opts = {}) {
   const { postsLimit = DEFAULT_POSTS_LIMIT, workspaceId = null, context = null } = opts
-  const token = process.env.APIFY_API_TOKEN
-  if (!token) return null
+  const tokens = getApifyTokens()
+  if (tokens.length === 0) return null
 
   const actorId = await resolveInstagramPostsActor()
   if (!actorId) return null                              // 2ª llamada desactivada
 
-  const url = `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`
   try {
-    const { data } = await axios.post(
-      url,
-      { username: [username], resultsLimit: postsLimit },
-      { params: { token }, timeout: 180000 },
-    )
-    const items = Array.isArray(data) ? data : []
+    const items = await runApifyActor(actorId, { username: [username], resultsLimit: postsLimit }, { tokens })
     // El actor de posts devuelve un item por publicación. Descartamos items que no
     // sean posts (por si algún actor mezcla un item de perfil).
     return items.filter(i => i && (i.shortCode || i.id) && (i.timestamp || i.type))
@@ -464,8 +520,8 @@ function normalizeApifyCompany(items, identifier) {
  */
 async function runApifyLinkedin(identifier, opts = {}) {
   const { postsLimit = DEFAULT_LINKEDIN_POSTS_LIMIT, workspaceId = null, context = null } = opts
-  const token = process.env.APIFY_API_TOKEN
-  if (!token) {
+  const tokens = getApifyTokens()
+  if (tokens.length === 0) {
     alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username: identifier, workspaceId, context })
     throw scrapeError('El scraping no está configurado en el servidor (falta APIFY_API_TOKEN).', 'SCRAPE_NOT_CONFIGURED', 503)
   }
@@ -482,7 +538,6 @@ async function runApifyLinkedin(identifier, opts = {}) {
   // "usuario/actor" que muestra la UI de Apify y la normalizamos.
   const actorId = actor.replace('/', '~')
 
-  const url = `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`
   const companyUrl = `https://www.linkedin.com/company/${identifier}/`
   // Input tolerante: distintos actores aceptan distintas claves; la mayoría ignora
   // las que no conoce. Si tu actor usa otra clave, ajustá acá (punto único).
@@ -500,8 +555,7 @@ async function runApifyLinkedin(identifier, opts = {}) {
 
   let items
   try {
-    const { data } = await axios.post(url, input, { params: { token }, timeout: 180000 })
-    items = Array.isArray(data) ? data : []
+    items = await runApifyActor(actorId, input, { tokens, isDatasetError: detectApifyDatasetError })
   } catch (err) {
     const apifyMsg = err.response?.data?.error?.message || err.message
     alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username: identifier, workspaceId, context })
@@ -701,8 +755,8 @@ function normalizeApifyFacebook(items, identifier) {
  */
 async function runApifyFacebook(identifier, opts = {}) {
   const { postsLimit = DEFAULT_FACEBOOK_POSTS_LIMIT, workspaceId = null, context = null } = opts
-  const token = process.env.APIFY_API_TOKEN
-  if (!token) {
+  const tokens = getApifyTokens()
+  if (tokens.length === 0) {
     alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username: identifier, workspaceId, context })
     throw scrapeError('El scraping no está configurado en el servidor (falta APIFY_API_TOKEN).', 'SCRAPE_NOT_CONFIGURED', 503)
   }
@@ -715,7 +769,6 @@ async function runApifyFacebook(identifier, opts = {}) {
   }
   const actorId = actor.replace('/', '~')
 
-  const url     = `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`
   const pageUrl = /^\d+$/.test(identifier)
     ? `https://www.facebook.com/profile.php?id=${identifier}`
     : `https://www.facebook.com/${identifier}/`
@@ -736,8 +789,7 @@ async function runApifyFacebook(identifier, opts = {}) {
 
   let items
   try {
-    const { data } = await axios.post(url, input, { params: { token }, timeout: 180000 })
-    items = Array.isArray(data) ? data : []
+    items = await runApifyActor(actorId, input, { tokens, isDatasetError: detectApifyDatasetError })
   } catch (err) {
     const apifyMsg = err.response?.data?.error?.message || err.message
     alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username: identifier, workspaceId, context })
@@ -834,6 +886,7 @@ async function scrapeFacebookPage(urlOrSlug, opts = {}) {
 }
 
 module.exports = {
+  getApifyTokens,
   parseInstagramUsername,
   scrapeInstagramProfile,
   scrapeInstagramMediaRaw,

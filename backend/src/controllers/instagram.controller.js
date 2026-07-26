@@ -2,7 +2,7 @@ const prisma  = require('../lib/prisma')
 const { getValidMetaToken }        = require('../services/metaTokenRefresh.service')
 const { fetchInstagramMetrics }    = require('../services/instagram.service')
 const { saveInstagramSnapshot }    = require('../services/instagramSnapshot.service')
-const { scrapeInstagramProfile, scrapeInstagramMediaRaw, parseInstagramUsername } = require('../services/socialScrape.service')
+const { scrapeInstagramProfile, scrapeInstagramMediaRaw, parseInstagramUsername, getApifyTokens } = require('../services/socialScrape.service')
 const { getStoriesSummary, captureStoriesForProject }    = require('../services/instagramStories.service')
 const { getSetting }               = require('../lib/platformSettings')
 const { cacheSocialImage }         = require('../services/socialImageCache.service')
@@ -51,7 +51,7 @@ async function getCollabMediaCached(integration, username, month, workspaceId) {
 // Devuelve un collabScraper `(username) => Promise<Array>` si el merge está activado
 // y hay token de Apify; si no, null (comportamiento anterior).
 async function buildCollabScraper(integration, workspaceId) {
-  if (!process.env.APIFY_API_TOKEN) return null
+  if (getApifyTokens().length === 0) return null
   let enabled = false
   try { enabled = !!(await getSetting('igCollabScrapeEnabled')) } catch { /* DB no disponible → off */ }
   if (!enabled) return null
