@@ -9,6 +9,7 @@ const ff    = require('../controllers/featureFlags.controller')
 const legal = require('../controllers/legal.controller')
 const ps    = require('../controllers/platformSettings.controller')
 const st    = require('../controllers/storage.controller')
+const land  = require('../controllers/landing.controller')
 
 const AVATAR_MAX_MB = 2
 const upload = multer({
@@ -99,5 +100,16 @@ router.patch('/avatars/reorder',            av.reorder)
 router.patch('/avatars/:id',                av.update)
 router.patch('/avatars/:id/toggle',         av.toggle)
 router.delete('/avatars/:id',               av.remove)
+
+// Landing (hero/video + empresas que confían) — misma restricción de tamaño que avatares,
+// se reusa el wrapper uploadAvatar (mismo límite 2MB, mismo campo "image", mensaje genérico).
+router.get('/landing/content',                       land.getContent)
+router.put('/landing/content',                       land.updateContent)
+router.get('/landing/trusted-companies',             land.listAllTrustedCompanies)
+router.post('/landing/trusted-companies',            uploadAvatar, land.createTrustedCompany)
+router.patch('/landing/trusted-companies/reorder',   land.reorderTrustedCompanies)
+router.patch('/landing/trusted-companies/:id',       land.updateTrustedCompany)
+router.patch('/landing/trusted-companies/:id/toggle', land.toggleTrustedCompany)
+router.delete('/landing/trusted-companies/:id',      land.deleteTrustedCompany)
 
 module.exports = router

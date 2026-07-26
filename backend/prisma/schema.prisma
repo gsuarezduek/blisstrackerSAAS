@@ -1050,6 +1050,32 @@ model Avatar {
   @@index([active])
 }
 
+// ─── LANDING PÚBLICA (editable desde SuperAdmin → Landing) ───────────────────
+
+model LandingContent {
+  id              Int      @id @default(autoincrement()) // fila única, siempre se opera sobre id=1
+  heroBadge       String   @default("Hecho para agencias de marketing · Gratis hasta 3 usuarios")
+  heroTitle       String   @default("El sistema operativo") // 1ª línea del <h1>
+  heroTitleAccent String   @default("de tu agencia.")        // 2ª línea, coloreada
+  heroSubtitle    String   @default("Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.")
+  demoVideoUrl    String? // URL de EMBED de Loom/YouTube; null = se muestra el AppMockup de fallback
+  updatedAt       DateTime @updatedAt
+}
+
+model TrustedCompany {
+  id         Int      @id @default(autoincrement())
+  name       String
+  websiteUrl String?
+  imageData  Bytes
+  mimeType   String   @default("image/png")
+  order      Int      @default(0)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([order])
+  @@index([active])
+}
+
 // ─── DOCUMENTOS LEGALES ───────────────────────────────────────────────────────
 
 model LegalDocument {

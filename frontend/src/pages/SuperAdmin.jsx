@@ -13,6 +13,7 @@ import { SectionAnnouncements } from './superadmin/announcements'
 import { SectionLegales } from './superadmin/legal'
 import { SectionBrandManual } from './superadmin/brand'
 import { SectionAvatars } from './superadmin/avatars'
+import { SectionLanding } from './superadmin/landing'
 import { SectionBilling } from './superadmin/billing'
 import { SectionFeatureFlags } from './superadmin/featureFlags'
 import { SectionAiTokens } from './superadmin/aiTokens'
@@ -205,6 +206,18 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
+      {
+        id: 'landing',
+        label: 'Landing',
+        implemented: true,
+        description: 'Hero, video de demo y logos de empresas destacadas en la landing pública (blisstracker.app).',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path d="M10.75 2.75a.75.75 0 00-1.5 0V4.5h-1a.75.75 0 000 1.5h1v1.75a.75.75 0 001.5 0V6h1a.75.75 0 000-1.5h-1V2.75z" />
+            <path fillRule="evenodd" d="M2 6a2 2 0 012-2h3.5a.75.75 0 010 1.5H4a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h12a.5.5 0 00.5-.5v-3.5a.75.75 0 011.5 0V15a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+          </svg>
+        ),
+      },
     ],
   },
 ]
@@ -277,6 +290,7 @@ export default function SuperAdmin() {
     if (section === 'ai-tokens')     return <SectionAiTokens />
     if (section === 'legal')         return <SectionLegales />
     if (section === 'brand')         return <SectionBrandManual />
+    if (section === 'landing')       return <SectionLanding />
 
     // Not yet implemented
     return (

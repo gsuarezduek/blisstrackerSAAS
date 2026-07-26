@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Helmet } from 'react-helmet-async'
 import BlissLogo from '../components/BlissLogo'
+import api from '../api/client'
 import { trackEvent } from '../lib/analytics'
 import TrustedByBar from '../components/landing/TrustedByBar'
 import SegmentCards from '../components/landing/SegmentCards'
@@ -153,8 +154,25 @@ function FaqItem({ q, a, open, onClick }) {
 
 // ─── Landing Page ─────────────────────────────────────────────────────────────
 
+// Defaults hardcodeados — se usan mientras carga /landing/content o si el fetch falla,
+// así el hero nunca queda vacío. SuperAdmin → Landing puede sobreescribirlos.
+const HERO_DEFAULTS = {
+  heroBadge:       'Hecho para agencias de marketing · Gratis hasta 3 usuarios',
+  heroTitle:       'El sistema operativo',
+  heroTitleAccent: 'de tu agencia.',
+  heroSubtitle:    'Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.',
+  demoVideoUrl:    null,
+}
+
 export default function Landing() {
   const [openFaq, setOpenFaq] = useState(null)
+  const [hero, setHero] = useState(HERO_DEFAULTS)
+
+  useEffect(() => {
+    api.get('/landing/content')
+      .then(({ data }) => setHero(data))
+      .catch(() => {})
+  }, [])
 
   const features = [
     {
@@ -355,17 +373,16 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-primary-50 border border-primary-100 text-primary-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-8">
             <span className="w-1.5 h-1.5 bg-primary-500 rounded-full" />
-            Hecho para agencias de marketing · Gratis hasta 3 usuarios
+            {hero.heroBadge}
           </div>
 
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-gray-900 leading-[1.08] tracking-tight mb-6">
-            El sistema operativo<br />
-            <span className="text-primary-500">de tu agencia.</span>
+            {hero.heroTitle}<br />
+            <span className="text-primary-500">{hero.heroTitleAccent}</span>
           </h1>
 
           <p className="text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos —
-            más los módulos que tu agencia necesite: marketing, EOS, ventas.
+            {hero.heroSubtitle}
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-4">
@@ -387,19 +404,19 @@ export default function Landing() {
           <p className="text-xs text-gray-400">Sin tarjeta de crédito · Cancelás cuando quieras</p>
         </div>
 
-        {/* Video demo o mockup. Cuando Gastón suba el Loom, descomentar el iframe y dejar el AppMockup como fallback. */}
+        {/* Video demo (URL de embed configurable desde SuperAdmin → Landing) o mockup de fallback. */}
         <div id="demo" className="max-w-5xl mx-auto mt-16 px-2 sm:px-0">
-          {/*
-            TODO: cuando esté el Loom, reemplazar AppMockup por:
+          {hero.demoVideoUrl ? (
             <div className="relative aspect-video rounded-2xl overflow-hidden shadow-2xl shadow-gray-300 border border-gray-200">
               <iframe
-                src="https://www.loom.com/embed/<LOOM_ID>?autoplay=0&hideEmbedTopBar=true"
+                src={hero.demoVideoUrl}
                 allowFullScreen
                 className="absolute inset-0 w-full h-full"
               />
             </div>
-          */}
-          <AppMockup />
+          ) : (
+            <AppMockup />
+          )}
         </div>
       </section>
 
