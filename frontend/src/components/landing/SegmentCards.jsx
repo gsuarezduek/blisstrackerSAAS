@@ -1,86 +1,109 @@
 /**
- * "Para quién es BlissTracker" — 3 cards: Agencias (primaria, expandida) + EOS + Equipos técnicos.
- * Las sub-páginas /agencias /eos /equipos no existen aún en este MVP; los cards solo presentan.
+ * "Elegí los módulos de tu sistema" — la ejecución diaria (core) siempre activa,
+ * más los módulos opcionales (marketing / EOS / ventas) que se activan según lo
+ * que la agencia use. Mismo catálogo (íconos + copy) que usa el selector de
+ * módulos del onboarding y Preferencias → Módulos adicionales — para que el
+ * mensaje sea consistente antes y después de registrarse.
+ *
+ * Reemplaza al viejo "para quién es" (Agencias/EOS/Equipos), que repetía casi
+ * el mismo pitch de marketing con otro nombre y no mencionaba Ventas ni RRHH.
  */
 import { Link } from 'react-router-dom'
+import { MODULE_CATALOG } from '../../lib/moduleCatalog'
 
-const SEGMENTS = [
+const TILES = [
   {
-    id: 'agencias',
+    id: 'core',
     primary: true,
-    label: 'Agencias de marketing',
-    title: 'El sistema operativo de tu agencia',
-    desc: 'GEO audits + SEO + Ads + Social + reportes para clientes con URL pública. Un dashboard reemplaza Asana + SEMrush + 6 spreadsheets.',
+    icon: '🎯',
+    label: 'Siempre activo',
+    title: 'Ejecución diaria',
+    desc: 'La base de todo workspace, sin activar nada: tareas con foco forzado, coach de IA, visibilidad de equipo en vivo y reportes semanales.',
     bullets: [
-      'GEO Audit para AI Overviews (Perplexity, ChatGPT, Claude)',
-      'SEO + Search Console + keyword tracking + SERP snapshots',
-      'Meta Ads + Google Ads + Instagram + TikTok',
-      'Informes mensuales con URL pública para clientes',
+      'Una tarea activa a la vez por persona',
+      'Coach de IA con prioridades cada mañana',
+      'Reuniones con cronómetro que cuenta el tiempo',
+    ],
+  },
+  {
+    id: 'marketing',
+    icon: MODULE_CATALOG.marketing.icon,
+    label: 'Módulo opcional',
+    title: MODULE_CATALOG.marketing.label,
+    desc: 'Para agencias con servicios digitales.',
+    bullets: [
+      'GEO Audit para IA (ChatGPT, Perplexity, AI Overviews)',
+      'SEO + Search Console + keyword tracking',
+      'Meta Ads + Google Ads + Social + informes con URL pública',
     ],
   },
   {
     id: 'eos',
-    label: 'Empresas con EOS / Traction',
-    title: 'Tu sistema Traction, sin cambiar de app',
-    desc: 'Los 7 módulos del libro de Wickman integrados en el mismo task tracker. Issues → Rocks → Tareas, todo conectado.',
+    icon: MODULE_CATALOG.eos.icon,
+    label: 'Módulo opcional',
+    title: MODULE_CATALOG.eos.label,
+    desc: 'Para empresas con el sistema Traction ya implementado.',
     bullets: [
       'Visión + Personas (GWC) + Datos + Asuntos + Procesos',
-      'Rocks trimestrales + L10 semanal',
+      'Rocks trimestrales + reunión L10 semanal',
       'Evaluación organizacional con análisis IA',
     ],
   },
   {
-    id: 'equipos',
-    label: 'Equipos técnicos y operativos',
-    title: 'Foco forzado + IA coach contextual',
-    desc: 'Una tarea activa a la vez. Auto-pausa por inactividad. IA que aprende tu rol y tus patrones semanales.',
+    id: 'ventas',
+    icon: MODULE_CATALOG.ventas.icon,
+    label: 'Módulo opcional',
+    title: MODULE_CATALOG.ventas.label,
+    desc: 'Para equipos con su propio proceso comercial.',
     bullets: [
-      'Coach IA con memoria semanal de aprendizaje',
-      'Bloqueos con razón que notifican al equipo',
-      'Workdays automáticos + carryover de pendientes',
+      'Pipeline de leads, empresas y contactos',
+      'Investigación de empresas + propuestas con IA',
+      'Recordatorios automáticos de próxima acción',
     ],
   },
 ]
 
 export default function SegmentCards() {
   return (
-    <section id="para-quien-es" className="py-24 px-4 sm:px-6 bg-white">
+    <section id="modulos" className="py-24 px-4 sm:px-6 bg-white">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-14">
           <p className="text-primary-500 font-semibold text-xs uppercase tracking-widest mb-4">
-            Para quién es
+            Cómo se arma tu sistema
           </p>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-3">
-            Hecho para agencias. Útil para más.
+            Un sistema, los módulos que necesites
           </h2>
           <p className="text-gray-500 text-lg max-w-2xl mx-auto">
-            Nuestro foco son las agencias de marketing, pero el producto crece bien con otros equipos.
+            La ejecución diaria siempre está activa. Sumás marketing, EOS o ventas cuando tu
+            agencia los use — sin cambiar de sistema, y los podés prender o apagar cuando quieras.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {SEGMENTS.map(s => (
-            <div key={s.id}
-              className={`rounded-2xl p-7 flex flex-col ${
-                s.primary
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {TILES.map(t => (
+            <div key={t.id}
+              className={`rounded-2xl p-6 flex flex-col ${
+                t.primary
                   ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-xl shadow-primary-200'
                   : 'bg-gray-50 border border-gray-200 text-gray-900'
               }`}>
-              <span className={`text-xs font-bold uppercase tracking-wider ${s.primary ? 'text-primary-100' : 'text-gray-500'}`}>
-                {s.label}
+              <span className="text-2xl mb-2">{t.icon}</span>
+              <span className={`text-xs font-bold uppercase tracking-wider ${t.primary ? 'text-primary-100' : 'text-gray-500'}`}>
+                {t.label}
               </span>
-              <h3 className={`text-xl font-bold mt-2 ${s.primary ? '' : 'text-gray-900'}`}>{s.title}</h3>
-              <p className={`text-sm mt-2 ${s.primary ? 'text-white/90' : 'text-gray-600'} leading-relaxed`}>
-                {s.desc}
+              <h3 className={`text-lg font-bold mt-1 ${t.primary ? '' : 'text-gray-900'}`}>{t.title}</h3>
+              <p className={`text-sm mt-2 ${t.primary ? 'text-white/90' : 'text-gray-600'} leading-relaxed`}>
+                {t.desc}
               </p>
-              <ul className={`mt-4 space-y-1.5 text-sm flex-1 ${s.primary ? 'text-white/90' : 'text-gray-700'}`}>
-                {s.bullets.map((b, i) => (
-                  <li key={i}>
-                    <span className={s.primary ? 'text-primary-100' : 'text-primary-500'}>✓</span> {b}
+              <ul className={`mt-4 space-y-1.5 text-sm flex-1 ${t.primary ? 'text-white/90' : 'text-gray-700'}`}>
+                {t.bullets.map((b, i) => (
+                  <li key={i} className="leading-snug">
+                    <span className={t.primary ? 'text-primary-100' : 'text-primary-500'}>✓</span> {b}
                   </li>
                 ))}
               </ul>
-              {s.primary && (
+              {t.primary && (
                 <Link to="/register"
                   className="mt-6 inline-block text-center bg-white text-primary-600 hover:bg-primary-50 px-5 py-3 rounded-xl font-semibold transition-colors">
                   Probar 14 días gratis

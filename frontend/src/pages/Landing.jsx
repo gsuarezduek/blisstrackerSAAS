@@ -197,11 +197,16 @@ export default function Landing() {
     },
     {
       step: '02',
+      title: 'Elegís tus módulos',
+      desc: 'Marketing, EOS, ventas — activás lo que tu agencia usa. Lo cambiás cuando quieras desde Preferencias.',
+    },
+    {
+      step: '03',
       title: 'Invitás a tu equipo',
       desc: 'Mandás invitaciones por email. Cada persona acepta y empieza a trabajar. Sin onboarding eterno.',
     },
     {
-      step: '03',
+      step: '04',
       title: 'Ejecutan con foco',
       desc: 'El coach de IA guía las prioridades de cada uno. Vos ves el avance en tiempo real.',
     },
@@ -212,11 +217,17 @@ export default function Landing() {
       group: 'Producto',
       items: [
         { q: '¿Cómo se compara con Asana, Notion o SEMrush?',
-          a: 'Asana y Notion son para organizar tareas; SEMrush es para SEO suelto. BlissTracker integra ambos lados — ejecución del equipo + toolkit de marketing — más reportes con URL pública para clientes. Es un reemplazo para agencias, no un complemento.' },
+          a: 'Asana y Notion organizan tareas; SEMrush es SEO suelto. BlissTracker integra la ejecución del equipo (foco, coach IA, visibilidad) con los módulos que actives (marketing, EOS, ventas) y reportes con URL pública para clientes. Es un reemplazo para agencias, no un complemento.' },
         { q: '¿Cómo funciona el coach de IA?',
           a: 'Cada mañana, Claude Haiku analiza tus tareas pendientes, historial reciente y expectativas de rol para sugerirte prioridades. No es un chat genérico: aprende tus patrones semanales y los aplica al contexto del día.' },
-        { q: '¿Qué incluye el toolkit de marketing?',
-          a: 'GEO Audit (AI Overviews + ChatGPT + Perplexity), SEO con Google Search Console, keyword tracking + SERP snapshots, Meta Ads, Google Ads, Instagram, TikTok, PageSpeed, canibalización SEO, y reportes mensuales con URL pública.' },
+        { q: '¿Qué pasa si no hago SEO/Ads para mis clientes?',
+          a: 'Nada — ese módulo queda apagado y usás el core: tareas con foco, coach de IA, visibilidad de equipo e informes. Lo activás el día que lo necesites, sin migrar de sistema ni pagar de más.' },
+        { q: '¿Qué incluye el módulo de Marketing?',
+          a: 'GEO/SEO (Search Console, keyword tracking), Meta Ads + Google Ads, Instagram/TikTok/LinkedIn/Facebook, y reportes mensuales con URL pública para el cliente. Es opcional — no hace falta activarlo para aprovechar el resto del sistema.' },
+        { q: '¿Qué es el módulo EOS?',
+          a: 'Los 7 componentes del sistema Traction (Gino Wickman) integrados al mismo task tracker: Visión, Personas, Datos (Scorecard), Asuntos, Procesos, Tracción (Rocks + reunión L10) y Evaluación organizacional con IA.' },
+        { q: '¿Para qué sirve el módulo de Ventas (CRM)?',
+          a: 'Pipeline de leads y empresas, próximas acciones con recordatorio automático, investigación de empresas con IA y un generador de propuestas — para agencias que gestionan su propio proceso comercial.' },
         { q: '¿Puedo manejar múltiples clientes y proyectos?',
           a: 'Sí, ilimitados. Cada proyecto tiene su equipo, sus integraciones (GA4, Search Console, Ads) y sus informes. Las URL públicas de cliente son por proyecto.' },
       ],
@@ -266,7 +277,7 @@ export default function Landing() {
         name: 'BlissTracker',
         applicationCategory: 'BusinessApplication',
         operatingSystem: 'Web',
-        description: 'Sistema operativo para agencias de marketing: gestión de tareas con foco forzado + toolkit GEO/SEO/Ads/Social + reportes para clientes con URL pública, integrados con coaching de IA contextual.',
+        description: 'Sistema operativo para agencias: gestión de tareas con foco forzado + coach de IA, más los módulos que tu agencia necesite (marketing GEO/SEO/Ads, EOS/Traction, CRM de ventas) y reportes para clientes con URL pública.',
         url: 'https://blisstracker.app/',
         offers: {
           '@type': 'Offer',
@@ -302,11 +313,11 @@ export default function Landing() {
 
       <Helmet>
         <title>BlissTracker — El sistema operativo de tu agencia</title>
-        <meta name="description" content="GEO, SEO, Ads y reportes para clientes integrados con la gestión real de tu equipo. Un dashboard reemplaza Asana + SEMrush + 6 spreadsheets. 14 días gratis, sin tarjeta." />
+        <meta name="description" content="Tareas con foco real, EOS/Traction, CRM comercial y marketing (GEO/SEO/Ads) — los módulos que tu agencia necesite, en un solo sistema. 14 días gratis, sin tarjeta." />
         <link rel="canonical" href="https://blisstracker.app/" />
         <meta property="og:url" content="https://blisstracker.app/" />
         <meta property="og:title" content="BlissTracker — El sistema operativo de tu agencia" />
-        <meta property="og:description" content="GEO, SEO, Ads y reportes para clientes integrados con la gestión real de tu equipo. Un dashboard reemplaza Asana + SEMrush + 6 spreadsheets." />
+        <meta property="og:description" content="Tareas con foco real, EOS/Traction, CRM comercial y marketing (GEO/SEO/Ads) — los módulos que tu agencia necesite, en un solo sistema." />
         <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
       </Helmet>
 
@@ -353,8 +364,8 @@ export default function Landing() {
           </h1>
 
           <p className="text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-            GEO, SEO, Ads y reportes para clientes, integrados con la gestión real de tu equipo.
-            Un dashboard reemplaza Asana + SEMrush + 6 spreadsheets.
+            Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos —
+            más los módulos que tu agencia necesite: marketing, EOS, ventas.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-4">
@@ -502,7 +513,7 @@ export default function Landing() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
             {steps.map((s, i) => (
               <div key={i} className="text-center">
                 <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-50 border border-primary-100 text-primary-600 font-black text-xl mb-5">
