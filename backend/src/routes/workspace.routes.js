@@ -60,4 +60,7 @@ router.get('/current/token-budget', c.getTokenBudgetStatus)
 // Eliminar proyecto demo (admin u owner)
 router.delete('/current/demo-project', c.deleteDemoProject)
 
+// Onboarding: marcar completado/saltado el wizard (selector de módulos + tour)
+router.post('/current/onboarding/complete', workspaceAdminOnly, c.completeOnboarding)
+
 module.exports = router

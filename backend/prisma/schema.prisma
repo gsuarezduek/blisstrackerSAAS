@@ -50,6 +50,7 @@ model Workspace {
   legajoFields        Json      @default("[]") // Config del formulario de legajo (campos default + custom). [] = usa el catálogo default
   billingExempt       Boolean   @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.
   demoSeeded          Boolean   @default(false) // True si tiene proyecto "Demo — Aprendé BlissTracker"
+  onboardingCompletedAt DateTime? // null = todavía no completó/saltó el wizard de onboarding (selector de módulos + tour)
   // Identidad de marca
   brandColors         String    @default("[]") // JSON: [{ hex, name? }]
   brandFonts          String    @default("[]") // JSON: [{ name, role }] role: heading|body|accent
@@ -60,6 +61,10 @@ model Workspace {
   salesProposalGuidelines String?
   // Firma / datos de contacto que cierran la propuesta en el PDF. JSON: { closing, name, role, email, phone, note, showLogo }
   salesSignature      Json      @default("{}")
+  // Proyecto donde se crean las tareas futuras auto-generadas por las próximas acciones
+  // de leads (que todavía no tienen proyecto propio). null = no se auto-crean tareas.
+  salesTasksProjectId Int?
+  salesTasksProject   Project?  @relation("WorkspaceSalesTasksProject", fields: [salesTasksProjectId], references: [id], onDelete: SetNull)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -142,6 +147,7 @@ model Workspace {
   leadActivities         LeadActivity[]
   proposals              Proposal[]
   leadResearches         LeadResearch[]
+  leadActions            LeadAction[]
   clientPortals          ProjectClientPortal[]
 
   @@index([slug])
@@ -277,10 +283,12 @@ model User {
   accessRevealLogs          ProjectAccessLog[]
   ownedLeads                Lead[]                     @relation("LeadOwner")
   createdLeads              Lead[]                     @relation("LeadCreatedBy")
-  nextActionLeads           Lead[]                     @relation("LeadNextActionOwner")
   leadActivities            LeadActivity[]             @relation("LeadActivityUser")
   proposalsCreated          Proposal[]                 @relation("ProposalCreatedBy")
   researchesCreated         LeadResearch[]             @relation("ResearchCreatedBy")
+  ownedLeadActions          LeadAction[]               @relation("LeadActionOwner")
+  resolvedLeadActions       LeadAction[]               @relation("LeadActionDoneBy")
+  createdLeadActions        LeadAction[]               @relation("LeadActionCreatedBy")
 }
 
 model UserLogin {
@@ -436,6 +444,7 @@ model Project {
   eosMeetingConfigs      EOSData[]               @relation("EOSMeetingProject")
   sourceLead             Lead?                   @relation("LeadConvertedProject")
   clientPortal           ProjectClientPortal?
+  salesTasksWorkspaces   Workspace[]             @relation("WorkspaceSalesTasksProject")
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -612,6 +621,7 @@ model Task {
   eosMeetingParticipant EOSMeetingParticipant? // Tarea auto-creada por una reunión L10 (uno a uno); su tiempo es la participación en la reunión
   meetingTodo   ProjectMeetingTodo? // To-Do de reunión de proyecto vinculado (uno a uno); completar la tarea lo tilda
   meetingParticipant ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
+  leadAction    LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
 
   @@index([userId, status])
   @@index([projectId])
@@ -2498,12 +2508,6 @@ model Lead {
   currency       String    @default("ARS")
   nextContactAt  DateTime? // próximo contacto (seguimiento)
 
-  // Próxima acción: una única pendiente por lead (promovible a tabla de actividades a futuro)
-  nextActionTitle   String?
-  nextActionDueAt   DateTime?
-  nextActionOwnerId Int?
-  nextActionOwner   User?     @relation("LeadNextActionOwner", fields: [nextActionOwnerId], references: [id], onDelete: SetNull)
-
   // Conversión a cliente (estado Ganado → Crear Proyecto)
   convertedProjectId Int?     @unique
   convertedProject   Project? @relation("LeadConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
@@ -2519,11 +2523,49 @@ model Lead {
   activities LeadActivity[]
   proposals  Proposal[]
   researches LeadResearch[]
+  actions    LeadAction[]
 
   @@index([workspaceId])
   @@index([workspaceId, status])
   @@index([companyId])
   @@index([ownerId])
+}
+
+// Próxima(s) acción(es) de un lead: reemplaza al viejo campo único nextAction*
+// (Lead.nextActionTitle/nextActionDueAt/nextActionOwnerId) por una tabla — se
+// pueden ir agregando varias, y al resolverlas quedan como historial (status
+// 'done' + doneAt/doneBy), en vez de perderse al pisar la siguiente.
+// `taskId` vincula la tarea futura auto-creada en el dashboard del responsable
+// (uno a uno; sync en ambos sentidos: completar la tarea resuelve la acción y
+// resolver la acción completa la tarea, ver tasks.controller.js / leads.controller.js).
+model LeadAction {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId      Int
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  title   String
+  dueAt   DateTime?
+  ownerId Int?
+  owner   User?     @relation("LeadActionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  status   String    @default("pending") // pending | done
+  doneAt   DateTime?
+  doneById Int?
+  doneBy   User?     @relation("LeadActionDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+
+  taskId Int?  @unique
+  task   Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  createdById Int?
+  createdBy   User?    @relation("LeadActionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([leadId])
+  @@index([workspaceId, status, dueAt])
 }
 
 // Timeline unificado del lead: notas manuales (kind=note) + eventos automáticos (kind=event).

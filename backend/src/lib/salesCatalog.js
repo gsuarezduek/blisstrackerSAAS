@@ -40,7 +40,9 @@ const LEAD_EVENTS = [
   'status_changed',
   'owner_changed',
   'note_added',
-  'next_action_set',
+  'next_action_set', // legacy: registrado por la vieja próxima acción única (ver next_action_added/next_action_done)
+  'next_action_added',
+  'next_action_done',
   'proposal_created',
   'research_run',
   'converted_to_client',

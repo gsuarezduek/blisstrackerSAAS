@@ -16,35 +16,36 @@ async function getDashboard(req, res, next) {
     const { start, end } = currentMonthRange(tz)
     const todayStr = todayString(tz)
 
-    const [totalLeads, proposalsThisMonth, inProposal, wonThisMonth, lostThisMonth, actionLeads] = await Promise.all([
+    const [totalLeads, proposalsThisMonth, inProposal, wonThisMonth, lostThisMonth, actions] = await Promise.all([
       prisma.lead.count({ where: { workspaceId } }),
       prisma.proposal.count({ where: { workspaceId, createdAt: { gte: start, lt: end } } }),
       prisma.lead.count({ where: { workspaceId, status: 'propuesta' } }),
       prisma.lead.count({ where: { workspaceId, wonAt:  { gte: start, lt: end } } }),
       prisma.lead.count({ where: { workspaceId, lostAt: { gte: start, lt: end } } }),
-      // Leads con próxima acción pendiente, no terminales (ganado/perdido no cuentan).
-      prisma.lead.findMany({
-        where: { workspaceId, nextActionDueAt: { not: null }, status: { notIn: ['ganado', 'perdido'] } },
+      // Próximas acciones pendientes de todo el equipo (no solo las propias), de leads
+      // no terminales (ganado/perdido no cuentan).
+      prisma.leadAction.findMany({
+        where: { workspaceId, status: 'pending', dueAt: { not: null }, lead: { status: { notIn: ['ganado', 'perdido'] } } },
         select: {
-          id: true, title: true, nextActionTitle: true, nextActionDueAt: true,
-          company: { select: { name: true } },
-          nextActionOwner: { select: { id: true, name: true, avatar: true } },
+          id: true, title: true, dueAt: true,
+          lead:  { select: { id: true, title: true, company: { select: { name: true } } } },
+          owner: { select: { id: true, name: true, avatar: true } },
         },
-        orderBy: { nextActionDueAt: 'asc' },
+        orderBy: { dueAt: 'asc' },
       }),
     ])
 
     // Bucketea "hoy" vs "vencidas" comparando la fecha (en TZ del workspace) contra hoy.
     const actionsToday = []
     const actionsOverdue = []
-    for (const l of actionLeads) {
-      const d = l.nextActionDueAt.toLocaleDateString('en-CA', { timeZone: tz })
+    for (const a of actions) {
+      const d = a.dueAt.toLocaleDateString('en-CA', { timeZone: tz })
       const item = {
-        id: l.id,
-        title: l.title || l.company?.name || 'Lead',
-        actionTitle: l.nextActionTitle,
-        dueAt: l.nextActionDueAt,
-        owner: l.nextActionOwner,
+        id: a.lead.id,
+        title: a.lead.title || a.lead.company?.name || 'Lead',
+        actionTitle: a.title,
+        dueAt: a.dueAt,
+        owner: a.owner,
       }
       if (d < todayStr) actionsOverdue.push(item)
       else if (d === todayStr) actionsToday.push(item)

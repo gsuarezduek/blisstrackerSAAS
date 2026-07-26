@@ -25,33 +25,33 @@ function fmtDue(d, tz) {
   return new Date(d).toLocaleDateString('es-AR', { timeZone: tz, day: '2-digit', month: 'short' })
 }
 
-// Arma, por responsable, los leads con próxima acción para hoy / vencidas (estado no terminal).
+// Arma, por responsable, las próximas acciones para hoy / vencidas (estado no terminal).
 async function buildReminders(workspace) {
   const tz = workspace.timezone
   const todayStr = todayString(tz)
 
-  const leads = await prisma.lead.findMany({
-    where: { workspaceId: workspace.id, nextActionDueAt: { not: null }, status: { notIn: ['ganado', 'perdido'] } },
+  const actions = await prisma.leadAction.findMany({
+    where: { workspaceId: workspace.id, status: 'pending', dueAt: { not: null }, lead: { status: { notIn: ['ganado', 'perdido'] } } },
     select: {
-      id: true, title: true, nextActionTitle: true, nextActionDueAt: true, nextActionOwnerId: true, ownerId: true,
-      company: { select: { name: true } },
+      id: true, title: true, dueAt: true, ownerId: true,
+      lead: { select: { id: true, title: true, ownerId: true, company: { select: { name: true } } } },
     },
   })
 
   // Responsable efectivo = responsable de la acción, o dueño del lead.
   const byOwner = new Map() // ownerId → { today: [], overdue: [] }
-  for (const l of leads) {
-    const ownerId = l.nextActionOwnerId || l.ownerId
+  for (const a of actions) {
+    const ownerId = a.ownerId || a.lead.ownerId
     if (!ownerId) continue
-    const dueStr = l.nextActionDueAt.toLocaleDateString('en-CA', { timeZone: tz })
+    const dueStr = a.dueAt.toLocaleDateString('en-CA', { timeZone: tz })
     const bucket = dueStr < todayStr ? 'overdue' : dueStr === todayStr ? 'today' : null
     if (!bucket) continue
     if (!byOwner.has(ownerId)) byOwner.set(ownerId, { today: [], overdue: [] })
     byOwner.get(ownerId)[bucket].push({
-      id: l.id,
-      company: l.company?.name || l.title || 'Lead',
-      actionTitle: l.nextActionTitle,
-      due: fmtDue(l.nextActionDueAt, tz),
+      id: a.lead.id,
+      company: a.lead.company?.name || a.lead.title || 'Lead',
+      actionTitle: a.title,
+      due: fmtDue(a.dueAt, tz),
     })
   }
   return byOwner

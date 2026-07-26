@@ -79,7 +79,7 @@ async function getCurrent(req, res, next) {
  */
 async function updateCurrent(req, res, next) {
   try {
-    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesRoleNames, salesProposalGuidelines, salesSignature } = req.body
+    const { name, timezone, companyName, companyDescription, industry, companyWebsite, brandColors, brandFonts, salesRoleNames, salesProposalGuidelines, salesSignature, salesTasksProjectId } = req.body
     const data = {}
     if (name) data.name = name
     if (timezone) data.timezone = timezone
@@ -103,6 +103,17 @@ async function updateCurrent(req, res, next) {
         phone:   typeof s.phone   === 'string' ? s.phone.trim()   : '',
         note:    typeof s.note    === 'string' ? s.note.trim()    : '',
         showLogo: !!s.showLogo,
+      }
+    }
+    // Proyecto donde se crean las tareas futuras auto-generadas por las próximas
+    // acciones de leads (ver leads.controller.js createTaskForAction).
+    if (salesTasksProjectId !== undefined) {
+      if (salesTasksProjectId == null) {
+        data.salesTasksProjectId = null
+      } else {
+        const p = await prisma.project.findFirst({ where: { id: Number(salesTasksProjectId), workspaceId: req.workspace.id, active: true }, select: { id: true } })
+        if (!p) return res.status(400).json({ error: 'Proyecto inválido' })
+        data.salesTasksProjectId = p.id
       }
     }
 
@@ -651,7 +662,7 @@ async function getInfo(req, res, next) {
 
     const workspace = await prisma.workspace.findUnique({
       where: { slug },
-      select: { id: true, name: true, slug: true, status: true, attendanceTrackingEnabled: true, productivityEnabled: true, lateToleranceMins: true },
+      select: { id: true, name: true, slug: true, status: true, attendanceTrackingEnabled: true, productivityEnabled: true, lateToleranceMins: true, onboardingCompletedAt: true },
     })
     if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
 
@@ -1082,6 +1093,25 @@ async function deleteDemoProject(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * POST /api/workspaces/current/onboarding/complete
+ * Marca completado (o saltado) el wizard de onboarding: selector de módulos + tour.
+ * Idempotente — no pisa la fecha si ya estaba seteada.
+ */
+async function completeOnboarding(req, res, next) {
+  try {
+    let workspace = req.workspace
+    if (!workspace.onboardingCompletedAt) {
+      workspace = await prisma.workspace.update({
+        where: { id: workspace.id },
+        data:  { onboardingCompletedAt: new Date() },
+        select: { onboardingCompletedAt: true },
+      })
+    }
+    res.json({ onboardingCompletedAt: workspace.onboardingCompletedAt })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   getMine, getCurrent, updateCurrent, listMembers, addMember, updateMember, toggleMemberActive,
   listMemberPendingTasks,
@@ -1091,4 +1121,5 @@ module.exports = {
   uploadLogo, deleteLogo, uploadBanner, deleteBanner,
   getTokenBudgetStatus,
   deleteDemoProject,
+  completeOnboarding,
 }

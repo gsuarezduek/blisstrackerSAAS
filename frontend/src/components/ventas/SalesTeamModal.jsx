@@ -17,6 +17,8 @@ export default function SalesTeamModal({ onClose, onSaved }) {
   const [adding, setAdding] = useState(false)
   const [guidelines, setGuidelines] = useState('')
   const [sig, setSig] = useState(EMPTY_SIG)
+  const [tasksProjectId, setTasksProjectId] = useState('')
+  const [projects, setProjects] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -26,8 +28,10 @@ export default function SalesTeamModal({ onClose, onSaved }) {
         setSelected(Array.isArray(data.salesRoleNames) ? data.salesRoleNames : [])
         setGuidelines(data.salesProposalGuidelines || '')
         setSig({ ...EMPTY_SIG, ...(data.salesSignature && typeof data.salesSignature === 'object' ? data.salesSignature : {}) })
+        setTasksProjectId(data.salesTasksProjectId || '')
       })
       .catch(() => {})
+    api.get('/projects').then(({ data }) => setProjects(data || [])).catch(() => {})
   }, [])
 
   const remaining = roles.filter(r => !selected.includes(r.name))
@@ -39,7 +43,10 @@ export default function SalesTeamModal({ onClose, onSaved }) {
   async function handleSave() {
     setSaving(true); setError('')
     try {
-      await api.patch('/workspaces/current', { salesRoleNames: selected, salesProposalGuidelines: guidelines, salesSignature: sig })
+      await api.patch('/workspaces/current', {
+        salesRoleNames: selected, salesProposalGuidelines: guidelines, salesSignature: sig,
+        salesTasksProjectId: tasksProjectId ? Number(tasksProjectId) : null,
+      })
       onSaved?.()
       onClose()
     } catch (err) {
@@ -77,6 +84,18 @@ export default function SalesTeamModal({ onClose, onSaved }) {
               )
             )}
           </div>
+        </div>
+
+        {/* 1b. Proyecto para tareas futuras de próximas acciones */}
+        <div className="mb-5">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">Proyecto para tareas de Ventas</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            Cuando una próxima acción tiene fecha, se crea además una tarea futura en el dashboard del responsable. Si el lead ya se convirtió a cliente, se usa su propio proyecto; si no, se usa este.
+          </p>
+          <select className={input} value={tasksProjectId} onChange={e => setTasksProjectId(e.target.value)}>
+            <option value="">Sin configurar (no se crean tareas)</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
         </div>
 
         {/* 2. Indicaciones para propuestas */}

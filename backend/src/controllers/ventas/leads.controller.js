@@ -2,6 +2,7 @@ const prisma = require('../../lib/prisma')
 const { isValidStatus, isValidOrigin, statusMeta } = require('../../lib/salesCatalog')
 const { LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent } = require('./_shared')
 const { createProject } = require('../../services/projects.service')
+const { todayString } = require('../../utils/dates')
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -266,40 +267,152 @@ async function changeOwner(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// PUT /api/ventas/leads/:id/next-action  { title, dueAt?, ownerId? } | { title: null } para limpiar
-async function setNextAction(req, res, next) {
+// Crea (best-effort) la tarea futura del dashboard vinculada a una LeadAction recién
+// creada. Requiere fecha (dueAt) y responsable (ownerId) en la acción, y un proyecto
+// resuelto: el del cliente si el lead ya se convirtió, si no el configurado en
+// Workspace.salesTasksProjectId. Nunca lanza: si falta algo, la acción queda igual
+// guardada, solo sin tarea vinculada (no bloquea el alta).
+async function createTaskForAction({ workspaceId, tz, lead, action, requesterId }) {
+  if (!action.dueAt || !action.ownerId) return null
+
+  let projectId = lead.convertedProjectId
+  if (!projectId) {
+    const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { salesTasksProjectId: true } })
+    projectId = ws?.salesTasksProjectId || null
+  }
+  if (!projectId) return null
+
+  const [project, member] = await Promise.all([
+    prisma.project.findFirst({ where: { id: projectId, workspaceId, active: true }, select: { id: true } }),
+    prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: action.ownerId } },
+      select: { active: true },
+    }),
+  ])
+  if (!project || !member?.active) return null
+
+  const today = todayString(tz)
+  const dueStr = action.dueAt.toLocaleDateString('en-CA', { timeZone: tz })
+  const scheduledFor = dueStr > today ? dueStr : null // hoy/pasado = tarea normal, no futura
+
+  const wdKey = { userId_workspaceId_date: { userId: action.ownerId, workspaceId, date: today } }
+  let workDay = await prisma.workDay.findUnique({ where: wdKey })
+  if (!workDay) {
+    try {
+      workDay = await prisma.workDay.create({ data: { userId: action.ownerId, workspaceId, date: today } })
+    } catch (e) {
+      if (e.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
+      else throw e
+    }
+  }
+  if (!workDay) return null
+
+  return prisma.task.create({
+    data: {
+      description: `Ventas - ${action.title}`,
+      projectId:   project.id,
+      userId:      action.ownerId,
+      workDayId:   workDay.id,
+      createdById: action.ownerId !== requesterId ? requesterId : null,
+      scheduledFor,
+    },
+  })
+}
+
+// POST /api/ventas/leads/:id/actions  { title, dueAt?, ownerId? }
+// ownerId por defecto: quien crea la acción. Si hay dueAt, se intenta crear además
+// la tarea futura vinculada (ver createTaskForAction) — best-effort.
+async function addAction(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
     const userId = req.user.userId
     const { title, dueAt, ownerId } = req.body
+    if (!title || !String(title).trim()) return res.status(400).json({ error: 'El título de la acción es requerido' })
 
     const lead = await findLead(req.params.id, workspaceId)
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
 
-    // title vacío/null limpia la próxima acción por completo.
-    if (title == null || !String(title).trim()) {
-      const updated = await prisma.lead.update({
-        where: { id: lead.id },
-        data: { nextActionTitle: null, nextActionDueAt: null, nextActionOwnerId: null },
-        include: LEAD_DETAIL_INCLUDE,
-      })
-      return res.json(updated)
-    }
-
     const due = parseDate(dueAt)
     if (due === undefined) return res.status(400).json({ error: 'Fecha de la acción inválida' })
-    const actionOwnerId = ownerId != null ? Number(ownerId) : null
-    if (actionOwnerId != null && !(await assertActiveMember(actionOwnerId, workspaceId)))
+
+    const actionOwnerId = ownerId != null ? Number(ownerId) : userId
+    if (!(await assertActiveMember(actionOwnerId, workspaceId)))
       return res.status(400).json({ error: 'El responsable de la acción no es un miembro activo' })
 
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: { nextActionTitle: String(title).trim(), nextActionDueAt: due, nextActionOwnerId: actionOwnerId },
+    let action = await prisma.leadAction.create({
+      data: {
+        workspaceId, leadId: lead.id,
+        title: String(title).trim(), dueAt: due, ownerId: actionOwnerId,
+        createdById: userId,
+      },
     })
+
+    let task = null
+    try {
+      task = await createTaskForAction({ workspaceId, tz, lead, action, requesterId: userId })
+    } catch (err) {
+      console.error('[ventas] createTaskForAction error:', err.message)
+    }
+    if (task) {
+      action = await prisma.leadAction.update({ where: { id: action.id }, data: { taskId: task.id } })
+    }
+
     await logLeadEvent({
-      workspaceId, leadId: lead.id, userId, type: 'next_action_set',
-      content: `definió la próxima acción: "${String(title).trim()}"`,
+      workspaceId, leadId: lead.id, userId, type: 'next_action_added',
+      content: `agregó la próxima acción: "${action.title}"`,
     })
+    res.status(201).json(await findLead(lead.id, workspaceId, LEAD_DETAIL_INCLUDE))
+  } catch (err) { next(err) }
+}
+
+// PATCH /api/ventas/leads/:id/actions/:actionId/resolve
+// Marca la acción como resuelta. Si tiene tarea vinculada aún abierta, la completa
+// también (sync en ambos sentidos con la tarea del dashboard — al revés, completar
+// la tarea desde el dashboard resuelve la acción, ver tasks.controller.js).
+async function resolveAction(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const userId = req.user.userId
+    const actionId = Number(req.params.actionId)
+
+    const lead = await findLead(req.params.id, workspaceId)
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
+
+    const action = await prisma.leadAction.findFirst({ where: { id: actionId, workspaceId, leadId: lead.id } })
+    if (!action) return res.status(404).json({ error: 'Acción no encontrada' })
+
+    if (action.status !== 'done') {
+      const now = new Date()
+      await prisma.leadAction.update({ where: { id: action.id }, data: { status: 'done', doneAt: now, doneById: userId } })
+
+      if (action.taskId) {
+        await prisma.task.updateMany({ where: { id: action.taskId, status: { not: 'COMPLETED' } }, data: { status: 'COMPLETED', completedAt: now, pausedAt: null } })
+        await prisma.taskSession.updateMany({ where: { taskId: action.taskId, endedAt: null }, data: { endedAt: now } })
+      }
+
+      await logLeadEvent({
+        workspaceId, leadId: lead.id, userId, type: 'next_action_done',
+        content: `resolvió la acción: "${action.title}"`,
+      })
+    }
+    res.json(await findLead(lead.id, workspaceId, LEAD_DETAIL_INCLUDE))
+  } catch (err) { next(err) }
+}
+
+// DELETE /api/ventas/leads/:id/actions/:actionId
+async function deleteAction(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const actionId = Number(req.params.actionId)
+
+    const lead = await findLead(req.params.id, workspaceId)
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
+
+    const action = await prisma.leadAction.findFirst({ where: { id: actionId, workspaceId, leadId: lead.id } })
+    if (!action) return res.status(404).json({ error: 'Acción no encontrada' })
+
+    await prisma.leadAction.delete({ where: { id: action.id } })
     res.json(await findLead(lead.id, workspaceId, LEAD_DETAIL_INCLUDE))
   } catch (err) { next(err) }
 }
@@ -403,5 +516,5 @@ async function convertToProject(req, res, next) {
 
 module.exports = {
   listLeads, getLead, createLead, updateLead, changeStatus, changeOwner,
-  setNextAction, addNote, deleteNote, deleteLead, convertToProject,
+  addAction, resolveAction, deleteAction, addNote, deleteNote, deleteLead, convertToProject,
 }

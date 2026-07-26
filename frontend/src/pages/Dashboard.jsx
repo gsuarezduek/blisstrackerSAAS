@@ -6,7 +6,7 @@ import TaskCard from '../components/TaskCard'
 import AddTaskModal from '../components/AddTaskModal'
 import InactivityModal from '../components/InactivityModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
-import OnboardingTour from '../components/OnboardingTour'
+import OnboardingWizard from '../components/OnboardingWizard'
 import { useInactivity } from '../hooks/useInactivity'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
@@ -520,7 +520,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-      <OnboardingTour />
+      <OnboardingWizard />
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}

@@ -213,9 +213,11 @@ async function startTask(req, res, next) {
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
     ])
-    // Reabrir una tarea vinculada destilda su To-Do de L10 / de reunión de proyecto.
+    // Reabrir una tarea vinculada destilda su To-Do de L10 / de reunión de proyecto,
+    // y reabre la próxima acción de Ventas si la tarea venía de una.
     await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
+    await prisma.leadAction.updateMany({ where: { taskId }, data: { status: 'pending', doneAt: null, doneById: null } })
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -266,9 +268,11 @@ async function resumeTask(req, res, next) {
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
     ])
-    // Reanudar una tarea vinculada destilda su To-Do de L10 / de reunión de proyecto.
+    // Reanudar una tarea vinculada destilda su To-Do de L10 / de reunión de proyecto,
+    // y reabre la próxima acción de Ventas si la tarea venía de una.
     await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
+    await prisma.leadAction.updateMany({ where: { taskId }, data: { status: 'pending', doneAt: null, doneById: null } })
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -322,6 +326,25 @@ async function completeTask(req, res, next) {
     // Si la tarea está vinculada a un To-Do (L10 o reunión de proyecto), tildarlo (sync un sentido: tarea → To-Do).
     await prisma.eOSTodo.updateMany({ where: { taskId: task.id }, data: { done: true, completedAt: now } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId: task.id }, data: { done: true, completedAt: now } })
+
+    // Si viene de una próxima acción de Ventas, resolverla también (sync en ambos
+    // sentidos con el botón "Resolver" del lead — ver leads.controller.js resolveAction).
+    const linkedAction = await prisma.leadAction.findUnique({
+      where: { taskId: task.id },
+      select: { id: true, leadId: true, workspaceId: true, title: true, status: true },
+    })
+    if (linkedAction && linkedAction.status !== 'done') {
+      await prisma.leadAction.update({ where: { id: linkedAction.id }, data: { status: 'done', doneAt: now, doneById: userId } })
+      try {
+        await prisma.leadActivity.create({
+          data: {
+            workspaceId: linkedAction.workspaceId, leadId: linkedAction.leadId, userId,
+            kind: 'event', type: 'next_action_done',
+            content: `resolvió la acción: "${linkedAction.title}" (desde su tarea)`,
+          },
+        })
+      } catch (err) { console.error('[ventas] log next_action_done error:', err.message) }
+    }
 
     res.json(task)
   } catch (err) {
