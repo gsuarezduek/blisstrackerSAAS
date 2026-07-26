@@ -551,7 +551,128 @@ const SORT_OPTIONS = [
   { key: 'pct_asc',   label: 'Menor cumplimiento' },
 ]
 
-function AllReportsPanel({ onSelectProject, projects }) {
+// ─── Vista "En vivo" (objetivos del mes, sin esperar al informe mensual) ──────
+
+function LiveProjectRow({ p, onSelectProject }) {
+  const [open, setOpen] = useState(false)
+  const hasObjectives = p.objectives?.length > 0
+
+  return (
+    <div>
+      <div className="flex items-center gap-4 px-5 py-3.5">
+        <div className="flex-1 min-w-0">
+          <button
+            onClick={() => onSelectProject?.(String(p.projectId))}
+            className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+          >
+            {p.projectName}
+          </button>
+        </div>
+
+        {p.objectivesPct != null ? (
+          <button
+            onClick={() => setOpen(o => !o)}
+            title="Ver detalle de objetivos"
+            className="flex-shrink-0 flex flex-col items-center px-2 hover:opacity-80 transition-opacity"
+          >
+            <span className={`text-xl font-bold tabular-nums ${objPctBand(p.objectivesPct)}`}>{p.objectivesPct}%</span>
+            <span className="text-[10px] text-gray-400 flex items-center gap-0.5">objetivos {open ? '▲' : '▼'}</span>
+          </button>
+        ) : hasObjectives ? (
+          <span className="flex-shrink-0 text-[11px] text-gray-400 px-2 text-center">Sin datos<br />de objetivos</span>
+        ) : (
+          <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 whitespace-nowrap">
+            SIN OBJETIVOS
+          </span>
+        )}
+      </div>
+
+      {open && hasObjectives && (
+        <div className="px-5 pb-4 grid sm:grid-cols-2 gap-3 bg-gray-50/60 dark:bg-gray-900/20">
+          {p.objectives.map(o => <ObjectiveCard key={o.id} obj={o} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LiveObjectivesPanel({ onSelectProject }) {
+  const [data,    setData]    = useState(null)
+  const [month,   setMonth]   = useState(null) // null = todavía no elegido, usa el default del backend
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    const params = month ? `?month=${month}` : ''
+    api.get(`/marketing/summary/objectives-live${params}`)
+      .then(r => { setData(r.data); setMonth(r.data.month) })
+      .catch(() => setData({ month, monthLabel: '', isCurrent: true, availableMonths: [], projects: [] }))
+      .finally(() => setLoading(false))
+  }, [month])
+
+  const availableMonths = data?.availableMonths || []
+  const idx = availableMonths.findIndex(m => m.month === data?.month)
+  // La lista viene ordenada desc (más reciente primero): "anterior" = índice + 1, "siguiente" = índice - 1
+  const canGoOlder = idx >= 0 && idx < availableMonths.length - 1
+  const canGoNewer = idx > 0
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => canGoOlder && setMonth(availableMonths[idx + 1].month)}
+            disabled={!canGoOlder}
+            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ◀
+          </button>
+          <div className="text-center min-w-[160px]">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{data?.monthLabel || '…'}</p>
+            <span className={`inline-block mt-0.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
+              data?.isCurrent
+                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+            }`}>
+              {data?.isCurrent ? '● En curso' : 'Cerrado'}
+            </span>
+          </div>
+          <button
+            onClick={() => canGoNewer && setMonth(availableMonths[idx - 1].month)}
+            disabled={!canGoNewer}
+            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ▶
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 max-w-xs text-right">
+          {data?.isCurrent
+            ? 'Cumplimiento de objetivos recalculado en vivo con los datos de hoy, antes de que salga el informe mensual.'
+            : 'Recalculado en vivo con los datos actuales de la base (puede diferir levemente del informe ya generado).'}
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : !data?.projects?.length ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+          <p className="text-4xl mb-3">🎯</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            Ningún proyecto tiene objetivos configurados todavía. Entrá a un proyecto → pestaña Informes → 🎯 Objetivos para cargarlos.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
+          {data.projects.map(p => <LiveProjectRow key={p.projectId} p={p} onSelectProject={onSelectProject} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReportsHistoryPanel({ onSelectProject, projects }) {
   const [reports, setReports]     = useState([])
   const [total,   setTotal]       = useState(0)
   const [month,   setMonth]       = useState(null)
@@ -598,7 +719,10 @@ function AllReportsPanel({ onSelectProject, projects }) {
     </button>
   )
 
-  const heading = month ? monthLabel(month) : ''
+  // El título muestra el período de DATOS de los informes (por defecto, el mes
+  // calendario anterior al "slot" en el que se generaron), no el mes en el que
+  // se generaron — así coincide con el período que ya muestra cada fila.
+  const heading = month ? monthLabel(prevMonthStr(month)) : ''
   const selectCls = 'text-sm px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500'
 
   return (
@@ -652,6 +776,39 @@ function AllReportsPanel({ onSelectProject, projects }) {
       {showConfig && (
         <SectionsConfigModal projects={projects} initialProjectId={null} onClose={() => setShowConfig(false)} />
       )}
+    </div>
+  )
+}
+
+// Hub de la vista global (sin proyecto seleccionado): "En vivo" (default, objetivos
+// del mes recalculados al instante) vs "Informes" (historial ya generado).
+function AllReportsPanel({ onSelectProject, projects }) {
+  const [view, setView] = useState('live')
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5 w-fit">
+        {[
+          { k: 'live',    label: '🔴 En vivo' },
+          { k: 'history', label: '📄 Informes' },
+        ].map(t => (
+          <button
+            key={t.k}
+            onClick={() => setView(t.k)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              view === t.k
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'live'
+        ? <LiveObjectivesPanel onSelectProject={onSelectProject} />
+        : <ReportsHistoryPanel onSelectProject={onSelectProject} projects={projects} />}
     </div>
   )
 }

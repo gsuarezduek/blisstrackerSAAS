@@ -236,6 +236,7 @@ router.get('/summary/ads',         summary.getAdsSummary)
 router.get('/summary/ads-live',    summary.getAdsSummaryLive)
 router.get('/summary/reports',     summary.getReportsSummary)
 router.get('/summary/reports-stats', summary.getReportsStats)
+router.get('/summary/objectives-live', summary.getLiveObjectivesSummary)
 router.get('/summary/seo',         summary.getSeoSummary)
 
 module.exports = router

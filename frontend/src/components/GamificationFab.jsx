@@ -62,7 +62,7 @@ export default function GamificationFab() {
       <button
         onClick={() => setOpen(true)}
         title="Juegos y desafíos del equipo"
-        className="fixed bottom-24 right-6 z-40 bg-amber-500 hover:bg-amber-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110"
+        className="fixed bottom-[168px] right-6 z-40 bg-amber-500 hover:bg-amber-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110"
       >
         <span className="text-xl leading-none">🏆</span>
         <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-white dark:ring-gray-800">

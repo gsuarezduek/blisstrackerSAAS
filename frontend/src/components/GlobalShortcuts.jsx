@@ -125,12 +125,13 @@ export default function GlobalShortcuts() {
 
   return (
     <>
-      {/* Botón flotante para crear tareas desde cualquier página — al lado de
-          Feedback/Gamification. Si estamos dentro de un proyecto, queda asociada a él. */}
+      {/* Botón flotante para crear tareas desde cualquier página — primero en la pila
+          (abajo), luego Feedback y Gamification. Si estamos dentro de un proyecto, la
+          tarea queda asociada a él. */}
       <button
         onClick={() => setTaskOpen(true)}
         title={projectContext ? `Nueva tarea en ${projectContext.name}` : 'Nueva tarea'}
-        className="fixed bottom-[168px] right-6 z-40 bg-primary-600 hover:bg-primary-700 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110"
+        className="fixed bottom-6 right-6 z-40 bg-primary-600 hover:bg-primary-700 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110"
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6">
           <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />

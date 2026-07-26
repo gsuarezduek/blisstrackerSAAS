@@ -836,6 +836,77 @@ async function getReportsStats(req, res, next) {
 }
 
 /**
+ * GET /api/marketing/summary/objectives-live
+ * Vista "en vivo" de cumplimiento de objetivos, cross-proyecto. A diferencia
+ * de /summary/reports (que lista informes YA generados), este endpoint no
+ * depende de que exista un MonthlyReport: recalcula los objetivos en vivo
+ * (computeObjectives) para el mes elegido, así se puede ver el avance del mes
+ * en curso ANTES de que salga el informe mensual (que recién se genera al mes
+ * siguiente, con datos cerrados).
+ * Navegable a meses anteriores, pero solo a los que ya tienen al menos un
+ * informe generado en el workspace (para no mostrar meses sin ningún dato).
+ * Query: ?month=YYYY-MM (default: mes calendario en curso)
+ */
+async function getLiveObjectivesSummary(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
+    const currentMonth = todayString(tz).slice(0, 7)
+
+    // Meses navegables: el mes en curso (siempre) + los meses de datos de
+    // informes ya generados en el workspace (mismo criterio que reportDataMonth).
+    const reportRows = await prisma.monthlyReport.findMany({
+      where:  { workspaceId, ...GENERATED_REPORT_WHERE },
+      select: { month: true, periodStart: true, periodEnd: true },
+    })
+    const monthsSet = new Set([currentMonth])
+    for (const r of reportRows) monthsSet.add(reportDataMonth(r))
+
+    const month = /^\d{4}-\d{2}$/.test(req.query.month || '') && monthsSet.has(req.query.month)
+      ? req.query.month
+      : currentMonth
+
+    const availableMonths = [...monthsSet]
+      .sort((a, b) => b.localeCompare(a))
+      .map(m => ({ month: m, label: monthLabel(m), isCurrent: m === currentMonth }))
+
+    // Solo proyectos activos con al menos un objetivo configurado.
+    const projects = await prisma.project.findMany({
+      where:   { workspaceId, active: true, marketingObjectives: { some: {} } },
+      select:  { id: true, name: true },
+      orderBy: { name: 'asc' },
+    })
+
+    const results = await Promise.all(projects.map(async (p) => {
+      let objectives = []
+      try {
+        objectives = await computeObjectives({ projectId: p.id, workspaceId, dataMonth: month })
+      } catch (err) {
+        console.error(`[LiveObjectives] proyecto ${p.id}:`, err.message)
+      }
+      const evaluable = objectives.filter(o => ['ok', 'partial', 'fail'].includes(o.status))
+      const objectivesPct = evaluable.length
+        ? Math.round(evaluable.filter(o => o.status === 'ok').length / evaluable.length * 100)
+        : null
+      return { projectId: p.id, projectName: p.name, objectivesPct, objectives }
+    }))
+
+    // % desc; sin datos al final
+    results.sort((a, b) => (b.objectivesPct ?? -1) - (a.objectivesPct ?? -1))
+
+    res.json({
+      month,
+      monthLabel: monthLabel(month),
+      isCurrent: month === currentMonth,
+      availableMonths,
+      projects: results,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * GET /api/marketing/summary/seo
  * Todos los sitios web del workspace (proyectos con websiteUrl) ordenados por
  * Domain Rating de mayor a menor. Los que aún no tienen DR van al final.
@@ -917,5 +988,6 @@ module.exports = {
   getAdsSummaryLive,
   getReportsSummary,
   getReportsStats,
+  getLiveObjectivesSummary,
   getSeoSummary,
 }
