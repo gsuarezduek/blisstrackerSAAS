@@ -299,31 +299,26 @@ async function refreshRrssSummary(req, res, next) {
 
 /**
  * GET /api/marketing/summary/performance
- * Resultado de PageSpeed más reciente (mobile) por proyecto, ordenado por score desc.
+ * Resultado de PageSpeed más reciente por proyecto para una estrategia dada, ordenado por score desc.
+ * ?strategy=mobile|desktop (default: mobile)
  */
 async function getPerformanceSummary(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const strategy = req.query.strategy === 'desktop' ? 'desktop' : 'mobile'
 
-    // Mobile primero, luego desktop — tomamos el más reciente por proyecto
     const results = await prisma.pageSpeedResult.findMany({
-      where:   { workspaceId, status: 'done' },
+      where:   { workspaceId, status: 'done', strategy },
       orderBy: [
         { createdAt: 'desc' },
       ],
       include: { project: { select: { id: true, name: true } } },
     })
 
-    // Un registro por proyecto, preferencia: mobile > desktop
+    // Un registro por proyecto: el más reciente de la estrategia pedida
     const byProject = new Map()
     for (const r of results) {
       if (!byProject.has(r.projectId)) {
-        byProject.set(r.projectId, r)
-        continue
-      }
-      // Si ya hay uno pero el nuevo es mobile y el guardado no, reemplazamos
-      const existing = byProject.get(r.projectId)
-      if (r.strategy === 'mobile' && existing.strategy !== 'mobile') {
         byProject.set(r.projectId, r)
       }
     }

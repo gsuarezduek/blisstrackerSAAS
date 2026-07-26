@@ -821,25 +821,17 @@ function CrossProjectAnalyticsPanel({ onSelectProject }) {
 }
 
 function CrossProjectPerformancePanel({ onSelectProject }) {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [data,     setData]     = useState(null)
+  const [loading,  setLoading]  = useState(true)
+  const [strategy, setStrategy] = useState('mobile')
 
   useEffect(() => {
-    api.get('/marketing/summary/performance')
+    setLoading(true)
+    api.get(`/marketing/summary/performance?strategy=${strategy}`)
       .then(r => setData(r.data))
       .catch(() => setData([]))
       .finally(() => setLoading(false))
-  }, [])
-
-  if (loading) return (
-    <div className="flex justify-center py-12"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
-  )
-  if (!data?.length) return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-      <div className="text-4xl mb-3">⚡</div>
-      <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay análisis de Performance. Seleccioná un proyecto para empezar.</p>
-    </div>
-  )
+  }, [strategy])
 
   function scoreLabel(s) {
     if (s >= 90) return { text: 'Excelente', cls: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' }
@@ -847,11 +839,54 @@ function CrossProjectPerformancePanel({ onSelectProject }) {
     return              { text: 'Crítico',    cls: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20' }
   }
 
+  const strategyToggle = (
+    <div className="flex gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-0.5">
+      {['mobile', 'desktop'].map(s => (
+        <button
+          key={s}
+          onClick={() => setStrategy(s)}
+          className={`px-2.5 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
+            strategy === s
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-500 dark:text-gray-400'
+          }`}
+        >
+          {s === 'mobile' ? '📱' : '🖥️'} {s}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (loading) return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Performance por proyecto</h3>
+        {strategyToggle}
+      </div>
+      <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+    </div>
+  )
+  if (!data?.length) return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Performance por proyecto</h3>
+        {strategyToggle}
+      </div>
+      <div className="text-center py-6">
+        <div className="text-4xl mb-3">⚡</div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Todavía no hay análisis de Performance ({strategy}). Seleccioná un proyecto para empezar.</p>
+      </div>
+    </div>
+  )
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
-        Performance por proyecto ({data.length}) <span className="font-normal text-gray-400">· último análisis mobile</span>
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          Performance por proyecto ({data.length}) <span className="font-normal text-gray-400">· último análisis {strategy}</span>
+        </h3>
+        {strategyToggle}
+      </div>
       <div className="space-y-3">
         {data.map(p => {
           const { text, cls } = scoreLabel(p.performanceScore)
