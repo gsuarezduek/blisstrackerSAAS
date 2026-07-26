@@ -72,7 +72,21 @@ async function getMetrics(req, res, next) {
     }
 
     const closed = wonCount + lostCount
-    const currency = (leads.find(l => l.currency)?.currency) || 'USD'
+
+    // Moneda mostrada en el resumen: la más usada entre los leads con presupuesto
+    // cargado — no la del primer lead encontrado, que podía quedar en el default
+    // (USD) aunque la enorme mayoría de los presupuestos reales esté en otra
+    // moneda, mostrando una etiqueta que no corresponde a los montos sumados.
+    const currencyCounts = new Map()
+    for (const l of leads) {
+      if (l.estimatedValue == null) continue
+      currencyCounts.set(l.currency, (currencyCounts.get(l.currency) || 0) + 1)
+    }
+    let currency = 'ARS'
+    let bestCount = 0
+    for (const [c, n] of currencyCounts) {
+      if (n > bestCount) { currency = c; bestCount = n }
+    }
 
     res.json({
       currency,

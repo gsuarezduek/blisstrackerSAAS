@@ -161,7 +161,7 @@ async function createLead(req, res, next) {
           status: initStatus,
           origin: origin || null,
           estimatedValue: estimatedValue != null && estimatedValue !== '' ? Number(estimatedValue) : null,
-          currency: currency || 'USD',
+          currency: currency || 'ARS',
           nextContactAt: nextContact,
           wonAt:  initMeta?.isWon  ? new Date() : null,
           lostAt: initMeta?.isLost ? new Date() : null,
@@ -191,7 +191,7 @@ async function updateLead(req, res, next) {
     const data = {}
     if (title !== undefined) data.title = title?.trim() || null
     if (origin !== undefined) { if (!isValidOrigin(origin || null)) return res.status(400).json({ error: 'Origen inválido' }); data.origin = origin || null }
-    if (currency !== undefined) data.currency = currency || 'USD'
+    if (currency !== undefined) data.currency = currency || 'ARS'
     if (estimatedValue !== undefined) data.estimatedValue = estimatedValue != null && estimatedValue !== '' ? Number(estimatedValue) : null
     if (nextContactAt !== undefined) { const d = parseDate(nextContactAt); if (d === undefined) return res.status(400).json({ error: 'Fecha inválida' }); data.nextContactAt = d }
     if (companyId !== undefined) {

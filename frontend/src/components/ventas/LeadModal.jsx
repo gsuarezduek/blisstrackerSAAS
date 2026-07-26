@@ -26,7 +26,7 @@ export default function LeadModal({ lead, companies = [], team = [], onClose, on
     status: lead?.status || 'prospecto',
     origin: lead?.origin || '',
     estimatedValue: lead?.estimatedValue ?? '',
-    currency: lead?.currency || 'USD',
+    currency: lead?.currency || 'ARS',
     nextContactAt: lead?.nextContactAt ? lead.nextContactAt.slice(0, 10) : '',
   })
 
@@ -184,8 +184,8 @@ export default function LeadModal({ lead, companies = [], team = [], onClose, on
             <div>
               <label className={label}>Moneda</label>
               <select className={input} value={form.currency} onChange={e => set('currency', e.target.value)}>
-                <option value="USD">USD</option>
                 <option value="ARS">ARS</option>
+                <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
               </select>
             </div>

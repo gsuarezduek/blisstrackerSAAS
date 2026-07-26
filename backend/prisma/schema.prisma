@@ -2495,7 +2495,7 @@ model Lead {
   status         String    @default("prospecto") // catálogo salesCatalog LEAD_STATUSES
   origin         String? // catálogo salesCatalog LEAD_ORIGINS
   estimatedValue Float? // valor estimado
-  currency       String    @default("USD")
+  currency       String    @default("ARS")
   nextContactAt  DateTime? // próximo contacto (seguimiento)
 
   // Próxima acción: una única pendiente por lead (promovible a tabla de actividades a futuro)

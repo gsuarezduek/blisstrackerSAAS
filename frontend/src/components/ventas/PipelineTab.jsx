@@ -55,7 +55,7 @@ export default function PipelineTab({ onOpenLead }) {
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[col.color]}`}>{col.label}</span>
                 <span className="text-xs text-gray-400">{items.length}</span>
               </div>
-              <div className="px-2 pb-1 text-[11px] text-gray-400">{fmtMoney(total, items[0]?.currency || 'USD')}</div>
+              <div className="px-2 pb-1 text-[11px] text-gray-400">{fmtMoney(total, items[0]?.currency || 'ARS')}</div>
 
               <div className="space-y-2 min-h-[40px]">
                 {items.map(l => (

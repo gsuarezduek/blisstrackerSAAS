@@ -10,8 +10,8 @@ export default function StatusBadge({ status, className = '' }) {
   )
 }
 
-// Formatea un valor estimado con su moneda. Ej: fmtMoney(1500, 'USD') → "USD 1.500"
-export function fmtMoney(value, currency = 'USD') {
+// Formatea un valor estimado con su moneda. Ej: fmtMoney(1500, 'ARS') → "ARS 1.500"
+export function fmtMoney(value, currency = 'ARS') {
   if (value == null || value === '') return '—'
   const n = Number(value)
   if (isNaN(n)) return '—'

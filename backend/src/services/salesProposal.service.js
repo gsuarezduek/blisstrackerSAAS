@@ -13,7 +13,7 @@ Cliente: ${companyName}${industry ? ` (rubro: ${industry})` : ''}
 ${leadTitle ? `Oportunidad: ${leadTitle}` : ''}
 Servicios a proponer: ${serviceNames.length ? serviceNames.join(', ') : '(a definir según objetivos)'}
 Objetivos del cliente: ${objectives || '(no especificados; inferí objetivos razonables del rubro)'}
-${estimatedValue ? `Presupuesto de referencia: ${currency || 'USD'} ${estimatedValue}` : ''}
+${estimatedValue ? `Presupuesto de referencia: ${currency || 'ARS'} ${estimatedValue}` : ''}
 ${guidelines ? `\nIndicaciones de la agencia (respetalas SIEMPRE):\n${guidelines}` : ''}
 ${instructions ? `\nInstrucciones específicas para esta propuesta:\n${instructions}` : ''}
 

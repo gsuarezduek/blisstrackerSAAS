@@ -4,6 +4,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import StatusBadge, { fmtMoney } from './StatusBadge'
 import LeadModal from './LeadModal'
 import { LEAD_STATUSES, LEAD_ORIGINS, originLabel } from './salesCatalog'
+import { avatarUrl } from '../../utils/avatarUrl'
 
 const STAT_CARDS = [
   { key: 'totalLeads',          label: 'Total de leads',        icon: '📇', accent: 'text-gray-900 dark:text-white' },
@@ -20,6 +21,51 @@ const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray
 function fmtDate(d) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
+}
+
+// Fila de una acción pendiente (próxima acción de un lead) — muestra a quién le
+// corresponde, no solo a quien está mirando el dashboard: el equipo entero ve
+// todas las acciones de hoy/vencidas, no solo las propias.
+function ActionRow({ a, onOpenLead, overdue }) {
+  return (
+    <button
+      onClick={() => onOpenLead(a.id)}
+      className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{a.title}</p>
+        {a.actionTitle && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{a.actionTitle}</p>}
+      </div>
+      {a.owner ? (
+        <span className="flex items-center gap-1.5 flex-shrink-0">
+          <img src={avatarUrl(a.owner.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />
+          <span className="text-xs text-gray-500 dark:text-gray-400">{a.owner.name}</span>
+        </span>
+      ) : (
+        <span className="text-xs text-gray-400 flex-shrink-0">Sin asignar</span>
+      )}
+      <span className={`text-xs flex-shrink-0 ${overdue ? 'text-red-500 dark:text-red-400 font-medium' : 'text-gray-400'}`}>{fmtDate(a.dueAt)}</span>
+    </button>
+  )
+}
+
+function ActionsPanel({ title, icon, items, onOpenLead, overdue }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          {icon} {title} <span className="font-normal text-gray-400">({items.length})</span>
+        </h3>
+      </div>
+      {items.length === 0 ? (
+        <p className="px-4 py-6 text-center text-xs text-gray-400">Nada por acá.</p>
+      ) : (
+        <div className="divide-y divide-gray-100 dark:divide-gray-700/60 max-h-72 overflow-y-auto">
+          {items.map(a => <ActionRow key={a.id} a={a} onOpenLead={onOpenLead} overdue={overdue} />)}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function DashboardTab({ team, companies, onOpenLead, onDataChange }) {
@@ -72,6 +118,12 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">{c.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* Acciones del equipo — hoy y vencidas, de todos los responsables (no solo las propias) */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <ActionsPanel title="Acciones de hoy" icon="📅" items={dash?.actionsToday || []} onOpenLead={onOpenLead} />
+        <ActionsPanel title="Acciones vencidas" icon="🔴" items={dash?.actionsOverdue || []} onOpenLead={onOpenLead} overdue />
       </div>
 
       {/* Barra de filtros + acción */}
