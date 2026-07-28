@@ -374,29 +374,69 @@ function ConnectPrompt({ projectId, onConnected }) {
 
 // ── Panel cross-proyecto ──────────────────────────────────────────────────────
 
+const CROSS_PERIODS = [
+  { key: 'today',      label: 'Hoy' },
+  { key: 'this_week',  label: 'Esta semana' },
+  { key: 'this_month', label: 'Este mes' },
+  { key: 'last_month', label: 'Mes anterior' },
+]
+
+function objectiveBarCls(pct) {
+  if (pct == null) return 'bg-indigo-400'
+  return pct > 100 ? 'bg-amber-500' : 'bg-indigo-400'
+}
+
+// Badge de progreso del objetivo de inversión configurado (independiente del
+// filtro de período elegido arriba — siempre representa el mes/trimestre/año actual).
+function ObjectiveBadge({ objective }) {
+  if (!objective || objective.pct == null) return null
+  const barPct = Math.max(0, Math.min(100, objective.pct))
+  return (
+    <div
+      className="mt-1.5 flex items-center gap-2"
+      title={`Objetivo de inversión (${objective.periodLabel}): ${fmtUSD(objective.actual)} de ${fmtUSD(objective.target)}`}
+    >
+      <span className="text-[10px] text-gray-400 flex-shrink-0">🎯 objetivo</span>
+      <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-1">
+        <div className={`h-1 rounded-full ${objectiveBarCls(objective.pct)}`} style={{ width: `${barPct}%` }} />
+      </div>
+      <span className={`text-[10px] font-semibold tabular-nums flex-shrink-0 ${objective.pct > 100 ? 'text-amber-600 dark:text-amber-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+        {objective.pct}%
+      </span>
+    </div>
+  )
+}
+
 function CrossProjectGoogleAdsPanel({ onSelectProject }) {
-  const [period,  setPeriod]  = useState('live') // 'live' = este mes (en vivo) | 'closed' = mes anterior (snapshot)
+  const [period,  setPeriod]  = useState('this_month')
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
+  const isLive = period !== 'last_month'
 
   useEffect(() => {
     setLoading(true)
-    const req = period === 'live'
-      ? api.get('/marketing/summary/ads-live?type=google_ads').then(r => r.data.results)
+    const req = isLive
+      ? api.get(`/marketing/summary/ads-live?type=google_ads&period=${period}`).then(r => r.data.results)
       : api.get('/marketing/summary/ads?type=google_ads').then(r => r.data)
     req.then(rows => setData(rows)).catch(() => setData([])).finally(() => setLoading(false))
-  }, [period])
+  }, [period, isLive])
 
-  const rows = (data || []).filter(p => p.status !== 'disconnected' && p.status !== 'error')
+  // En vivo: se muestran TODOS los proyectos conectados alguna vez (incluidos los
+  // desconectados/con error), para no perderlos de vista — con aviso de reconexión
+  // en vez de gasto. Los snapshots cerrados no tienen `status` (ya son solo lo
+  // guardado, siempre "ok").
+  const rows = data || []
+  const okRows = isLive ? rows.filter(p => p.status === 'ok') : rows
+  const periodDesc = { today: 'hoy, en vivo', this_week: 'esta semana, en vivo', this_month: 'este mes, en vivo', last_month: 'último snapshot cerrado' }[period]
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5">
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          Google Ads por proyecto {data && `(${rows.length})`} <span className="font-normal text-gray-400">· {period === 'live' ? 'este mes, en vivo' : 'último snapshot cerrado'}</span>
+          Google Ads por proyecto {data && `(${rows.length})`} <span className="font-normal text-gray-400">· {periodDesc}</span>
         </h3>
         <div className="flex text-xs rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden flex-shrink-0">
-          {[{ key: 'live', label: 'Este mes' }, { key: 'closed', label: 'Mes anterior' }].map(o => (
+          {CROSS_PERIODS.map(o => (
             <button
               key={o.key}
               onClick={() => setPeriod(o.key)}
@@ -418,42 +458,56 @@ function CrossProjectGoogleAdsPanel({ onSelectProject }) {
         <div className="text-center py-10">
           <div className="text-4xl mb-3">🔍</div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {period === 'live'
+            {isLive
               ? 'Todavía no hay proyectos con Google Ads conectado.'
               : 'Todavía no hay snapshots de Google Ads. Los snapshots se guardan el primer día de cada mes, o podés guardar uno manualmente desde dentro del proyecto.'}
           </p>
         </div>
       ) : (() => {
-        const maxSpend = Math.max(...rows.map(p => p.spend), 1)
+        const maxSpend = Math.max(...okRows.map(p => p.spend), 1)
         return (
           <div className="space-y-3">
-            {rows.map(p => (
-              <div key={p.projectId} className="flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <button
-                      onClick={() => onSelectProject?.(String(p.projectId))}
-                      className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
-                    >
-                      {p.projectName}
-                    </button>
-                    <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-                      {p.month && <span className="text-xs text-gray-400">{p.month}</span>}
-                      <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtUSD(p.spend)}</span>
+            {rows.map(p => {
+              const down = isLive && p.status !== 'ok'
+              return (
+                <div key={p.projectId} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <button
+                        onClick={() => onSelectProject?.(String(p.projectId))}
+                        className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors text-left"
+                      >
+                        {p.projectName}
+                      </button>
+                      <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                        {down ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" title={p.status === 'error' ? p.error : 'La integración de Google Ads se desconectó o venció. Reconectala desde el proyecto.'}>
+                            ⚠ {p.status === 'error' ? 'Error' : 'Desconectado'}
+                          </span>
+                        ) : (
+                          <>
+                            {p.month && <span className="text-xs text-gray-400">{p.month}</span>}
+                            <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{fmtUSD(p.spend)}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
-                    <div className="h-1.5 rounded-full bg-yellow-400" style={{ width: `${Math.round((p.spend / maxSpend) * 100)}%` }} />
-                  </div>
-                  <div className="flex gap-3 mt-1 text-xs text-gray-400">
-                    {p.impressions > 0 && <span>{fmtK(p.impressions)} imp.</span>}
-                    {p.clicks > 0 && <span>{fmtK(p.clicks)} clics</span>}
-                    {p.conversions > 0 && <span>{p.conversions.toFixed(1)} conv.</span>}
-                    {p.ctr > 0 && <span>{fmtPct(p.ctr)} CTR</span>}
+                    <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                      <div className={`h-1.5 rounded-full ${down ? 'bg-red-300 dark:bg-red-800' : 'bg-yellow-400'}`} style={{ width: down ? '100%' : `${Math.round((p.spend / maxSpend) * 100)}%` }} />
+                    </div>
+                    {!down && (
+                      <div className="flex gap-3 mt-1 text-xs text-gray-400">
+                        {p.impressions > 0 && <span>{fmtK(p.impressions)} imp.</span>}
+                        {p.clicks > 0 && <span>{fmtK(p.clicks)} clics</span>}
+                        {p.conversions > 0 && <span>{p.conversions.toFixed(1)} conv.</span>}
+                        {p.ctr > 0 && <span>{fmtPct(p.ctr)} CTR</span>}
+                      </div>
+                    )}
+                    {!down && <ObjectiveBadge objective={p.objective} />}
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )
       })()}

@@ -82,6 +82,21 @@ async function byProject(req, res, next) {
       })
     }
 
+    // Proyectos con presupuesto de horas configurado que no tuvieron ninguna tarea
+    // completada en el período: sin esto quedan afuera del reporte en vez de marcar
+    // 0% de uso, y un cliente sin actividad en el mes pasa desapercibido.
+    const trackedIds = Object.keys(map).map(Number)
+    const idleBudgeted = await prisma.project.findMany({
+      where: {
+        workspaceId, active: true, hoursEnabled: true, monthlyHours: { not: null },
+        ...(trackedIds.length ? { id: { notIn: trackedIds } } : {}),
+      },
+      select: { id: true, name: true, hoursEnabled: true, monthlyHours: true },
+    })
+    for (const project of idleBudgeted) {
+      map[project.id] = { project, totalMinutes: 0, taskCount: 0, byUser: {} }
+    }
+
     const result = Object.values(map).map(({ byUser, ...rest }) => ({
       ...rest,
       byUser: Object.values(byUser),

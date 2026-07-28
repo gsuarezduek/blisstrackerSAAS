@@ -8,6 +8,7 @@ const GADS_BASE = 'https://googleads.googleapis.com/v23'
 const GAQL_DATE_CLAUSE = {
   today:      'TODAY',
   yesterday:  'YESTERDAY',
+  this_week:  'THIS_WEEK_MON_TODAY',
   last_7d:    'LAST_7_DAYS',
   last_30d:   'LAST_30_DAYS',
   this_month: 'THIS_MONTH',
