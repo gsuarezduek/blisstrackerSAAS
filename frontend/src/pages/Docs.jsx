@@ -4,6 +4,9 @@ import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
+import useMembers from '../hooks/useMembers'
+import UserLink from '../components/UserLink'
+import { avatarUrl } from '../utils/avatarUrl'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { renderMarkdown } from '../utils/processMarkdown'
 import { printProcess } from '../utils/printProcess'
@@ -108,21 +111,23 @@ const FREQ_GROUPS = {
   monthly:    { label: 'Mensual',              icon: '📊', color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' },
 }
 
-function RolesTab({ processes, onOpenProcess }) {
+function RolesTab({ processes, onOpenProcess, selectedRole, onSelectRole }) {
   const { user } = useAuth()
-  const { labelFor } = useRoles()
+  const isAdmin = user?.isAdmin === true
+  const { roles, labelFor } = useRoles()
+  const { members } = useMembers()
   const [expectations, setExpectations] = useState([])
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState(null)
 
   useEffect(() => {
-    api.get('/role-expectations/all').then(r => {
-      setExpectations(r.data)
-      const mine = r.data.find(e => e.roleName === user?.role)
-      if (mine) setExpanded(mine.roleName)
-      else if (r.data.length > 0) setExpanded(r.data[0].roleName)
-    }).finally(() => setLoading(false))
-  }, [user])
+    api.get('/role-expectations/all').then(r => setExpectations(r.data)).finally(() => setLoading(false))
+  }, [])
+
+  const expByName = useMemo(() => {
+    const map = new Map()
+    for (const e of expectations) map.set(e.roleName, e)
+    return map
+  }, [expectations])
 
   const processesByRole = useMemo(() => {
     const map = new Map()
@@ -134,219 +139,377 @@ function RolesTab({ processes, onOpenProcess }) {
     return map
   }, [processes])
 
+  const membersByRole = useMemo(() => {
+    const map = new Map()
+    for (const m of members) {
+      if (!m.role || m.active === false) continue
+      if (!map.has(m.role)) map.set(m.role, [])
+      map.get(m.role).push(m)
+    }
+    return map
+  }, [members])
+
+  // Rol activo: el de la URL si es válido, si no el propio, si no el primero del catálogo.
+  const activeRoleName = useMemo(() => {
+    if (roles.length === 0) return null
+    if (selectedRole && roles.some(r => r.name === selectedRole)) return selectedRole
+    if (user?.role && roles.some(r => r.name === user.role)) return user.role
+    return roles[0].name
+  }, [roles, selectedRole, user])
+
   if (loading) return (
     <LoadingSpinner className="py-16" />
   )
 
-  if (expectations.length === 0) return (
+  if (roles.length === 0) return (
     <div className="text-center py-16 text-gray-400 dark:text-gray-500">
       <p className="text-3xl mb-3">🎯</p>
       <p className="text-sm">No hay roles configurados todavía.</p>
     </div>
   )
 
+  const exp = expByName.get(activeRoleName)
+  const results  = Array.isArray(exp?.expectedResults) ? exp.expectedResults : []
+  const resps    = Array.isArray(exp?.operationalResponsibilities) ? exp.operationalResponsibilities : []
+  const tasks    = Array.isArray(exp?.recurrentTasks) ? exp.recurrentTasks : []
+  const training = Array.isArray(exp?.training) ? exp.training : []
+  const skills   = Array.isArray(exp?.skills) ? exp.skills : []
+  const tools    = Array.isArray(exp?.tools) ? exp.tools : []
+  const guides   = Array.isArray(exp?.guides) ? exp.guides : []
+  const hasCompetencia = !!(exp?.educationLevel || exp?.experienceRequired)
+  const roleProcesses = processesByRole.get(activeRoleName) ?? []
+  const rolePeople     = membersByRole.get(activeRoleName) ?? []
+  const hasContent = !!exp?.description || hasCompetencia || training.length > 0 || skills.length > 0
+    || results.length > 0 || resps.length > 0 || tasks.length > 0 || roleProcesses.length > 0
+    || tools.length > 0 || !!exp?.roleTestUrl || guides.length > 0
+  const isMine = activeRoleName === user?.role
+  const label  = labelFor(activeRoleName)
+
   return (
-    <div className="max-w-2xl mx-auto space-y-3">
-      {expectations.map(exp => {
-        const isOpen  = expanded === exp.roleName
-        const isMine  = exp.roleName === user?.role
-        const label   = labelFor(exp.roleName)
-        const results = Array.isArray(exp.expectedResults) ? exp.expectedResults : []
-        const resps   = Array.isArray(exp.operationalResponsibilities) ? exp.operationalResponsibilities : []
-        const tasks   = Array.isArray(exp.recurrentTasks) ? exp.recurrentTasks : []
-        const roleProcesses = processesByRole.get(exp.roleName) ?? []
-        const hasContent = exp.description || results.length > 0 || resps.length > 0 || tasks.length > 0 || roleProcesses.length > 0
-
-        return (
-          <div
-            key={exp.roleName}
-            className={`bg-white dark:bg-gray-800 border rounded-2xl overflow-hidden transition-shadow ${
-              isMine
-                ? 'border-primary-300 dark:border-primary-700 shadow-md shadow-primary-100 dark:shadow-none ring-1 ring-primary-200 dark:ring-primary-800'
-                : 'border-gray-200 dark:border-gray-700'
-            }`}
-          >
-            {/* Header */}
+    <div>
+      {/* Selector de rol */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        {roles.map(r => {
+          const active = r.name === activeRoleName
+          const mine   = r.name === user?.role
+          return (
             <button
-              onClick={() => setExpanded(isOpen ? null : exp.roleName)}
-              className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+              key={r.id}
+              onClick={() => onSelectRole(r.name)}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                active
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-primary-300 dark:hover:border-primary-700'
+              }`}
             >
-              <div className="flex items-center gap-3 min-w-0">
-                {/* Avatar de rol */}
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg font-bold ${
-                  isMine
-                    ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                }`}>
-                  {label.charAt(0)}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-base font-semibold text-gray-900 dark:text-white">{label}</p>
-                    {isMine && (
-                      <span className="text-xs bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded-full px-2.5 py-0.5 font-medium">
-                        Tu rol
-                      </span>
-                    )}
-                  </div>
-                  {exp.description && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1 pr-4">{exp.description}</p>
-                  )}
-                  {!exp.description && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Sin descripción cargada</p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-                {/* Contadores en vista cerrada */}
-                {!isOpen && hasContent && (
-                  <div className="hidden sm:flex items-center gap-1.5">
-                    {results.length > 0 && (
-                      <span className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full px-2 py-0.5">{results.length} resultados</span>
-                    )}
-                    {roleProcesses.length > 0 && (
-                      <span className="text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-full px-2 py-0.5">{roleProcesses.length} procesos</span>
-                    )}
-                    {tasks.length > 0 && (
-                      <span className="text-xs bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded-full px-2 py-0.5">{tasks.length} tareas</span>
-                    )}
-                  </div>
-                )}
-                <svg
-                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                  className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                >
-                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                </svg>
-              </div>
+              {r.label}
+              {mine && (
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${active ? 'bg-white' : 'bg-primary-500'}`} title="Tu rol" />
+              )}
             </button>
+          )
+        })}
+      </div>
 
-            {/* Contenido expandido */}
-            {isOpen && (
-              <div className="border-t border-gray-100 dark:border-gray-700">
-
-                {!hasContent && (
-                  <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">
-                    Este rol todavía no tiene información cargada.
-                  </p>
+      {/* Ficha del rol activo */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+        {/* Header */}
+        <div className="px-6 sm:px-7 pt-6 pb-5 border-b border-gray-100 dark:border-gray-700 flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 text-xl font-bold ${
+              isMine
+                ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+            }`}>
+              {label.charAt(0)}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">{label}</h2>
+                {isMine && (
+                  <span className="text-xs bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded-full px-2.5 py-0.5 font-medium">
+                    Tu rol
+                  </span>
                 )}
-
-                {/* Propósito */}
-                {exp.description && (
-                  <div className="px-5 pt-5">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic border-l-2 border-gray-200 dark:border-gray-600 pl-3">
-                      {exp.description}
-                    </p>
-                  </div>
-                )}
-
-                {/* Procesos asociados */}
-                {roleProcesses.length > 0 && (
-                  <div className="px-5 pt-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base">⚙️</span>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Procesos asociados</p>
-                    </div>
-                    <div className="space-y-2">
-                      {roleProcesses.map(p => (
-                        <button
-                          key={p.id}
-                          onClick={() => onOpenProcess(p.id)}
-                          className="w-full flex items-center justify-between gap-3 bg-emerald-50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 rounded-xl px-3 py-2.5 transition-colors text-left"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="text-emerald-500 dark:text-emerald-400 flex-shrink-0">⚙️</span>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200 truncate">{p.name}</p>
-                              <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70">{p.steps.length} paso{p.steps.length !== 1 ? 's' : ''}</p>
-                            </div>
-                          </div>
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0">
-                            <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Resultados esperados */}
-                {results.length > 0 && (
-                  <div className="px-5 pt-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base">🎯</span>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Resultados esperados</p>
-                    </div>
-                    <div className="space-y-2">
-                      {results.map((r, i) => (
-                        <div key={i} className="flex items-start gap-2.5 bg-blue-50 dark:bg-blue-900/10 rounded-xl px-3 py-2.5">
-                          <span className="text-blue-400 dark:text-blue-500 flex-shrink-0 font-bold text-xs mt-0.5">{String(i + 1).padStart(2, '0')}</span>
-                          <p className="text-sm text-blue-900 dark:text-blue-200 leading-snug">{r}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Responsabilidades operativas */}
-                {resps.length > 0 && (
-                  <div className="px-5 pt-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base">⚙️</span>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Responsabilidades operativas</p>
-                    </div>
-                    <div className="space-y-3">
-                      {resps.map((r, i) => (
-                        <div key={i} className="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3">
-                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1.5">{r.category}</p>
-                          {Array.isArray(r.items) && r.items.length > 0 && (
-                            <ul className="space-y-1">
-                              {r.items.map((item, j) => (
-                                <li key={j} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                  <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 flex-shrink-0 mt-2" />
-                                  {item}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Tareas recurrentes */}
-                {tasks.length > 0 && (
-                  <div className="px-5 pt-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base">🔁</span>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Tareas recurrentes</p>
-                    </div>
-                    <div className="space-y-2">
-                      {tasks.map((t, i) => {
-                        const freq = FREQ_GROUPS[t.frequency] || { label: t.frequency, icon: '📌', color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }
-                        return (
-                          <div key={i} className="flex items-start gap-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl px-3 py-3">
-                            <span className={`text-xs font-medium rounded-lg px-2 py-1 flex-shrink-0 whitespace-nowrap ${freq.color}`}>
-                              {freq.icon} {freq.label}
-                            </span>
-                            <div>
-                              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{t.task}</p>
-                              {t.detail && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.detail}</p>}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                <div className="h-5" />
               </div>
-            )}
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                {rolePeople.length} persona{rolePeople.length !== 1 ? 's' : ''} con este rol
+              </p>
+            </div>
           </div>
-        )
-      })}
+          {isAdmin && (
+            <a
+              href={`/admin?tab=roles&role=${encodeURIComponent(activeRoleName)}`}
+              className="inline-flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 px-2.5 py-1.5 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors flex-shrink-0"
+              title="Editar este rol en el panel de Admin"
+            >
+              Editar rol →
+            </a>
+          )}
+        </div>
+
+        {!hasContent && rolePeople.length === 0 && (
+          <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-10">
+            Este rol todavía no tiene información cargada.
+          </p>
+        )}
+
+        {/* Personas con este rol */}
+        {rolePeople.length > 0 && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">👥</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Personas con este rol</p>
+            </div>
+            <div className="flex flex-wrap gap-2.5">
+              {rolePeople.map(p => (
+                <UserLink
+                  key={p.id}
+                  userId={p.id}
+                  as="div"
+                  className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/40 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full pl-1.5 pr-3.5 py-1.5 transition-colors"
+                >
+                  <img src={avatarUrl(p.avatar)} alt={p.name} className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{p.name}</span>
+                </UserLink>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Propósito */}
+        {exp?.description && (
+          <div className="px-6 sm:px-7 pt-5">
+            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic border-l-2 border-gray-200 dark:border-gray-600 pl-3">
+              {exp.description}
+            </p>
+          </div>
+        )}
+
+        {/* Competencia mínima del puesto */}
+        {hasCompetencia && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">🎓</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Competencia mínima del puesto</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {exp.educationLevel && (
+                <div className="bg-gray-50 dark:bg-gray-700/40 rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Grado de estudio</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">{exp.educationLevel}</p>
+                </div>
+              )}
+              {exp.experienceRequired && (
+                <div className="bg-gray-50 dark:bg-gray-700/40 rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Experiencia</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300">{exp.experienceRequired}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Formación (conocimientos específicos) */}
+        {training.length > 0 && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">📚</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Formación (conocimientos específicos)</p>
+            </div>
+            <ul className="flex flex-wrap gap-1.5">
+              {training.map((t, i) => (
+                <li key={i} className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/40 rounded-lg px-3 py-1.5">{t}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Habilidades */}
+        {skills.length > 0 && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">✨</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Habilidades</p>
+            </div>
+            <ul className="flex flex-wrap gap-1.5">
+              {skills.map((s, i) => (
+                <li key={i} className="text-sm text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/15 rounded-lg px-3 py-1.5">{s}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Resultados esperados */}
+        {results.length > 0 && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">🎯</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Resultados esperados</p>
+            </div>
+            <div className="space-y-2">
+              {results.map((r, i) => (
+                <div key={i} className="flex items-start gap-2.5 bg-blue-50 dark:bg-blue-900/10 rounded-xl px-3 py-2.5">
+                  <span className="text-blue-400 dark:text-blue-500 flex-shrink-0 font-bold text-xs mt-0.5">{String(i + 1).padStart(2, '0')}</span>
+                  <p className="text-sm text-blue-900 dark:text-blue-200 leading-snug">{r}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Responsabilidades operativas */}
+        {resps.length > 0 && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">⚙️</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Responsabilidades operativas</p>
+            </div>
+            <div className="space-y-3">
+              {resps.map((r, i) => (
+                <div key={i} className="bg-gray-50 dark:bg-gray-700/40 rounded-xl p-3">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1.5">{r.category}</p>
+                  {Array.isArray(r.items) && r.items.length > 0 && (
+                    <ul className="space-y-1">
+                      {r.items.map((item, j) => (
+                        <li key={j} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                          <span className="w-1 h-1 rounded-full bg-gray-400 dark:bg-gray-500 flex-shrink-0 mt-2" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tareas recurrentes */}
+        {tasks.length > 0 && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">🔁</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Tareas recurrentes</p>
+            </div>
+            <div className="space-y-2">
+              {tasks.map((t, i) => {
+                const freq = FREQ_GROUPS[t.frequency] || { label: t.frequency, icon: '📌', color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' }
+                return (
+                  <div key={i} className="flex items-start gap-3 bg-gray-50 dark:bg-gray-700/40 rounded-xl px-3 py-3">
+                    <span className={`text-xs font-medium rounded-lg px-2 py-1 flex-shrink-0 whitespace-nowrap ${freq.color}`}>
+                      {freq.icon} {freq.label}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{t.task}</p>
+                      {t.detail && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t.detail}</p>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Procesos asociados */}
+        {roleProcesses.length > 0 && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">⚙️</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Procesos asociados</p>
+            </div>
+            <div className="space-y-2">
+              {roleProcesses.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => onOpenProcess(p.id)}
+                  className="w-full flex items-center justify-between gap-3 bg-emerald-50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 rounded-xl px-3 py-2.5 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-emerald-500 dark:text-emerald-400 flex-shrink-0">⚙️</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200 truncate">{p.name}</p>
+                      <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70">{p.steps.length} paso{p.steps.length !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0">
+                    <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Herramientas y conocimientos */}
+        {tools.length > 0 && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">🛠️</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Herramientas y conocimientos</p>
+            </div>
+            <ul className="flex flex-wrap gap-1.5">
+              {tools.map((t, i) => (
+                <li key={i} className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/40 rounded-lg px-3 py-1.5">{t}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Test del rol + Guías asociadas */}
+        {(exp?.roleTestUrl || guides.length > 0) && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">📖</span>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Guías y evaluación del rol</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {exp?.roleTestUrl && (
+                <a
+                  href={exp.roleTestUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-sm text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 border border-primary-100 dark:border-primary-800 rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 flex-shrink-0">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9zM4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+                  </svg>
+                  📝 Test del rol
+                </a>
+              )}
+              {guides.map((g, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <a
+                    href={g.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-100 dark:border-emerald-800 rounded-lg px-3 py-1.5 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 flex-shrink-0">
+                      <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z" />
+                      <path d="M11.603 7.963a.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 105.656 5.656l3-3a4 4 0 00-.225-5.865z" />
+                    </svg>
+                    {g.label}
+                  </a>
+                  {g.testUrl && (
+                    <a
+                      href={g.testUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Test de ${g.label}`}
+                      className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 border border-primary-100 dark:border-primary-800 rounded-lg px-2.5 py-1.5 transition-colors"
+                    >
+                      📝 Test
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="h-6" />
+      </div>
     </div>
   )
 }
@@ -524,6 +687,7 @@ export default function Docs() {
 
   const expandedProcessId = Number(searchParams.get('id')) || null
   const wikiArticleId = searchParams.get('article') || null
+  const selectedRole = searchParams.get('role') || null
 
   function setTab(id, extra) {
     const next = { tab: id }
@@ -539,10 +703,8 @@ export default function Docs() {
     setSearchParams({ tab: 'procesos', id: String(id) })
   }
 
-  function openRole(/* roleName */) {
-    // El estado del rol expandido vive dentro de RolesTab y se auto-abre al de la sesión actual.
-    // Simplemente saltamos al tab Roles — el usuario localiza el rol en la lista.
-    setSearchParams({ tab: 'roles' })
+  function openRole(roleName) {
+    setSearchParams({ tab: 'roles', role: roleName })
   }
 
   function setExpandedProcess(id) {
@@ -553,7 +715,7 @@ export default function Docs() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-      <div className={`${tab === 'wiki' ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 py-8`}>
+      <div className={`${tab === 'wiki' || tab === 'roles' ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 py-8`}>
 
         {/* Header */}
         <div className="mb-6">
@@ -583,7 +745,7 @@ export default function Docs() {
         {tab === 'wiki'      && <WikiTab articleId={wikiArticleId} onSelect={openWikiArticle} />}
         {tab === 'roles'     && (
           procesosLoaded
-            ? <RolesTab processes={processes} onOpenProcess={openProcess} />
+            ? <RolesTab processes={processes} onOpenProcess={openProcess} selectedRole={selectedRole} onSelectRole={r => setSearchParams({ tab: 'roles', role: r })} />
             : <LoadingSpinner className="py-16" />
         )}
         {tab === 'procesos'  && (

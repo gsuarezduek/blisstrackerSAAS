@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
-import { roleColor } from '../../utils/roleColor'
 import UserLink from '../UserLink'
+import RoleBadge from '../RoleBadge'
 
 const emptyInvite = { email: '', memberRole: 'member', teamRole: '' }
 
@@ -275,11 +275,7 @@ export default function TeamTab() {
                       Admin
                     </span>
                   )}
-                  {u.role && (
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor(u.role)}`}>
-                      {labelFor(u.role)}
-                    </span>
-                  )}
+                  <RoleBadge role={u.role} />
                   {u.workStartTime && (
                     <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                       🕒 {u.workStartTime}{u.workEndTime ? `–${u.workEndTime}` : ''}
@@ -479,11 +475,7 @@ export default function TeamTab() {
                           Admin
                         </span>
                       )}
-                      {u.role && (
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${roleColor(u.role)}`}>
-                          {labelFor(u.role)}
-                        </span>
-                      )}
+                      <RoleBadge role={u.role} />
                       <button onClick={() => toggleActive(u)} className="text-xs text-green-500 hover:text-green-700">
                         Activar
                       </button>

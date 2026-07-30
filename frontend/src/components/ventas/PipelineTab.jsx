@@ -4,16 +4,21 @@ import LoadingSpinner from '../LoadingSpinner'
 import { fmtMoney } from './StatusBadge'
 import { LEAD_STATUSES, STATUS_BADGE, statusMeta } from './salesCatalog'
 
-function ScrollArrow({ side, onClick }) {
+function ScrollArrow({ side, onClick, disabled }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={side === 'left' ? 'Ver columnas anteriores' : 'Ver columnas siguientes'}
-      className={`absolute ${side === 'left' ? 'left-1' : 'right-1'} top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-md text-gray-500 dark:text-gray-300 hover:text-primary-600 hover:border-primary-300 transition-colors`}
+      className={`w-8 h-8 flex items-center justify-center rounded-full border shadow-sm transition-colors ${
+        disabled
+          ? 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 cursor-default shadow-none'
+          : 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-primary-100 hover:text-primary-700 hover:border-primary-300 dark:hover:bg-primary-900/40 dark:hover:text-primary-300'
+      }`}
     >
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={side === 'left' ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={side === 'left' ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'} />
       </svg>
     </button>
   )
@@ -81,14 +86,19 @@ export default function PipelineTab({ onOpenLead }) {
 
   if (loading) return <LoadingSpinner />
 
+  const showArrows = canScrollLeft || canScrollRight
+
   return (
     <div>
-      <div className="relative">
-        {canScrollLeft && <ScrollArrow side="left" onClick={() => scrollByPage(-1)} />}
-        {canScrollRight && <ScrollArrow side="right" onClick={() => scrollByPage(1)} />}
-        <div ref={scrollRef} className="overflow-x-auto pb-2 scroll-smooth">
-          <div className="flex gap-3 min-w-max">
-            {LEAD_STATUSES.map(col => {
+      {showArrows && (
+        <div className="flex items-center justify-end gap-1.5 mb-2">
+          <ScrollArrow side="left" onClick={() => scrollByPage(-1)} disabled={!canScrollLeft} />
+          <ScrollArrow side="right" onClick={() => scrollByPage(1)} disabled={!canScrollRight} />
+        </div>
+      )}
+      <div ref={scrollRef} className="overflow-x-auto pb-2 scroll-smooth">
+        <div className="flex gap-3 min-w-max">
+          {LEAD_STATUSES.map(col => {
               const items = leads.filter(l => l.status === col.key)
               const total = items.reduce((s, l) => s + (l.estimatedValue ? Number(l.estimatedValue) : 0), 0)
               return (
@@ -128,7 +138,6 @@ export default function PipelineTab({ onOpenLead }) {
                 </div>
               )
             })}
-          </div>
         </div>
       </div>
       <p className="text-xs text-gray-400 mt-3 px-1">Arrastrá una tarjeta a otra columna para cambiar su estado. {statusMeta('ganado').label} habilita crear el proyecto desde el lead.</p>

@@ -903,7 +903,7 @@ export default function Preferences() {
                         El insight detecta tareas recurrentes esperadas según el rol que no fueron registradas.
                       </p>
                     </div>
-                    <Link to="/admin?tab=role-ai"
+                    <Link to="/admin?tab=roles"
                       className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200 dark:border-primary-800 transition-colors whitespace-nowrap">
                       Configurar →
                     </Link>

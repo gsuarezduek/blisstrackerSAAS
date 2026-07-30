@@ -824,10 +824,17 @@ model RoleExpectation {
   workspaceId                 Int
   workspace                   Workspace @relation(fields: [workspaceId], references: [id])
   roleName                    String
-  description                 String    @default("")
+  description                 String    @default("") // Propósito del puesto
+  educationLevel              String    @default("") // Competencia mínima del puesto → Grado de estudio
+  experienceRequired          String    @default("") // Competencia mínima del puesto → Experiencia
+  training                    Json      @default("[]") // Formación (conocimientos específicos) — listado
+  skills                      Json      @default("[]") // Habilidades — listado
   expectedResults             Json      @default("[]")
   operationalResponsibilities Json      @default("[]")
   recurrentTasks              Json      @default("[]")
+  tools                       Json      @default("[]") // Herramientas y conocimientos — listado
+  roleTestUrl                 String    @default("") // Test del Rol — link único
+  guides                      Json      @default("[]") // Guías asociadas — [{label, url, testUrl?}]
   dependencies                Json      @default("[]")
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt

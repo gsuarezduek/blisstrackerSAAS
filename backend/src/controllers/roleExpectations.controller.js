@@ -26,14 +26,25 @@ async function upsert(req, res, next) {
     const { roleName } = req.params
     const {
       description                 = '',
+      educationLevel              = '',
+      experienceRequired          = '',
+      training                    = [],
+      skills                      = [],
       expectedResults             = [],
       operationalResponsibilities = [],
       recurrentTasks              = [],
+      tools                       = [],
+      roleTestUrl                 = '',
+      guides                      = [],
       dependencies                = [],
     } = req.body
 
     const workspaceId = req.workspace.id
-    const data = { description, expectedResults, operationalResponsibilities, recurrentTasks, dependencies }
+    const data = {
+      description, educationLevel, experienceRequired, training, skills,
+      expectedResults, operationalResponsibilities, recurrentTasks,
+      tools, roleTestUrl, guides, dependencies,
+    }
     const expectation = await prisma.roleExpectation.upsert({
       where:  { workspaceId_roleName: { workspaceId, roleName } },
       create: { workspaceId, roleName, ...data },

@@ -4,9 +4,9 @@ import AvatarLightbox from '../components/AvatarLightbox'
 import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import useRoles from '../hooks/useRoles'
 import useLegajoFields from '../hooks/useLegajoFields'
 import LegajoFormFields from '../components/legajo/LegajoFormFields'
+import RoleBadge from '../components/RoleBadge'
 import { avatarUrl } from '../utils/avatarUrl'
 
 function Field({ label, children }) {
@@ -148,7 +148,6 @@ function VacationRequestModal({ onClose, onCreated }) {
 
 export default function MyProfile() {
   const { user, updateUser } = useAuth()
-  const { labelFor } = useRoles()
 
   const { fields: legajoFields } = useLegajoFields()
   const [profile, setProfile] = useState(null)
@@ -434,7 +433,7 @@ export default function MyProfile() {
                 </div>
               )}
               {nameError && <p className="text-xs text-red-500 mb-1">{nameError}</p>}
-              <p className="text-sm text-gray-500 dark:text-gray-400">{labelFor(profile.role)}</p>
+              {profile.role && <div className="mt-1"><RoleBadge role={profile.role} /></div>}
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">En Bliss desde el {joinDate}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500">{profile.email}</p>
             </div>

@@ -5,12 +5,11 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import AvatarLightbox from '../components/AvatarLightbox'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import UserLink from '../components/UserLink'
+import RoleBadge from '../components/RoleBadge'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import { linkify } from '../utils/linkify'
 import { fmtMins } from '../utils/format'
-import useRoles from '../hooks/useRoles'
-import { roleColor } from '../utils/roleColor'
 
 const STATUS_LABEL = { IN_PROGRESS: 'En curso', PENDING: 'Pendiente', PAUSED: 'Pausada', BLOCKED: 'Bloqueada' }
 const STATUS_CLASS = {
@@ -35,7 +34,6 @@ function fmtLongDate(d) {
 
 export default function UserProfile() {
   const { id } = useParams()
-  const { labelFor } = useRoles()
 
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -114,11 +112,7 @@ export default function UserProfile() {
           <div className="flex-1 min-w-0 text-center sm:text-left">
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{user.name}</h1>
-              {user.teamRole && (
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleColor(user.teamRole)}`}>
-                  {labelFor(user.teamRole)}
-                </span>
-              )}
+              <RoleBadge role={user.teamRole} />
               {!user.active && (
                 <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400">Inactivo</span>
               )}
