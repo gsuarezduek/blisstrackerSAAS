@@ -272,6 +272,42 @@ async function computeTareasCompletadasWeekly(workspaceId, tz, offset, rangeStar
   return out
 }
 
+// Propuestas comerciales generadas por semana (cada versión de Proposal cuenta), por
+// fecha de creación. La tarjeta rankea a quienes más generaron. Requiere el módulo
+// Ventas (si no hay ninguna Proposal en el workspace, simplemente no hay datos).
+async function computePropuestasEnviadasWeekly(workspaceId, tz, offset, rangeStart, rangeEnd, info) {
+  const out = {}
+  const proposals = await prisma.proposal.findMany({
+    where: {
+      workspaceId,
+      createdAt: { gte: new Date(rangeStart + 'T00:00:00' + offset), lte: new Date(rangeEnd + 'T23:59:59' + offset) },
+    },
+    select: { createdById: true, createdAt: true },
+  })
+
+  const byWeek = new Map() // period -> { total, owners: Map<uid, count> }
+  for (const p of proposals) {
+    const date = localDate(p.createdAt, tz)
+    if (date < rangeStart || date > rangeEnd) continue
+    const period = isoWeekPeriodOf(date)
+    if (!byWeek.has(period)) byWeek.set(period, { total: 0, owners: new Map() })
+    const w = byWeek.get(period)
+    w.total += 1
+    if (p.createdById != null) w.owners.set(p.createdById, (w.owners.get(p.createdById) || 0) + 1)
+  }
+
+  for (const [period, w] of byWeek) {
+    const people = []
+    for (const [uid, count] of w.owners) {
+      const pInfo = info?.get(uid)
+      people.push({ userId: uid, name: pInfo?.name || '—', avatar: pInfo?.avatar || null, count })
+    }
+    people.sort((a, b) => b.count - a.count)
+    out[period] = { value: w.total, top3: people.slice(0, 3) }
+  }
+  return out
+}
+
 // Personas con una o más faltas (strikes), acumuladas al cierre de cada semana ISO.
 // Las faltas son un "stock": una persona las acumula en el tiempo (no es un evento de la
 // semana). Por eso el valor de cada semana es la cantidad de personas distintas que, al
@@ -600,6 +636,7 @@ async function computeAutoScorecardYear(workspaceId, tz, year, autoKeys = []) {
       if (weeklyKeys.includes('tardanzas'))         out.tardanzas         = await computeTardanzasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx)
       if (weeklyKeys.includes('ocupacion'))         out.ocupacion         = await occupancyByBucket(workspaceId, tz, offset, wStart, wEnd, isoWeekPeriodOf, ctx.info)
       if (weeklyKeys.includes('tareas_completadas')) out.tareas_completadas = await computeTareasCompletadasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx.info)
+      if (weeklyKeys.includes('propuestas_enviadas')) out.propuestas_enviadas = await computePropuestasEnviadasWeekly(workspaceId, tz, offset, wStart, wEnd, ctx.info)
       if (weeklyKeys.includes('todos_completados'))  out.todos_completados  = await computeTodosCompletadosWeekly(workspaceId, year, ctx.info)
       if (weeklyKeys.includes('faltas'))             out.faltas             = await computeFaltasWeekly(workspaceId, tz, offset, wStart, wEnd)
     }

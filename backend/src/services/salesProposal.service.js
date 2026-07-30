@@ -1,7 +1,13 @@
 const { anthropic } = require('../lib/claude')
 const { logTokens } = require('../lib/logTokens')
 
-const MODEL = 'claude-haiku-4-5-20251001'
+// Sonnet (no Haiku): las propuestas son texto comercial de cara al cliente, no vale la
+// pena ahorrar tokens acá — mejor redacción/instruction-following que Haiku.
+const MODEL = 'claude-sonnet-5'
+// Con margen generoso: Sonnet 5 piensa por defecto (adaptive thinking) y max_tokens
+// es un tope sobre thinking + texto de salida combinados: si queda corto, se corta a
+// mitad de oración (el bug original con Haiku y max_tokens=3000).
+const MAX_TOKENS = 8192
 
 const SYSTEM_PROMPT = `Sos un ejecutivo comercial de una agencia de marketing que redacta propuestas para clientes. Escribís en español, con tono profesional, claro y persuasivo, orientado a resultados. Devolvés SOLO HTML de contenido (sin <html>, <head> ni <body>): usá <h2>, <h3>, <p>, <ul>, <li>, <strong>. No incluyas estilos inline ni markdown. La propuesta debe ser específica al cliente y a los servicios elegidos, no genérica.`
 
@@ -47,19 +53,21 @@ Devolvé solo el HTML del contenido.`
 }
 
 /**
- * Genera el HTML de una propuesta con Claude Haiku. Síncrono (on-demand): el caller
+ * Genera el HTML de una propuesta con Claude Sonnet. Síncrono (on-demand): el caller
  * ya validó el presupuesto (assertTokenBudget). Devuelve { html, usage }.
  */
 async function generateProposalHtml(ctx, { workspaceId, userId }) {
   const message = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 3000,
+    max_tokens: MAX_TOKENS,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: buildPrompt(ctx) }],
   })
   logTokens('salesProposal', userId, message.usage, workspaceId).catch(() => {})
 
-  const html = message.content[0].text.trim()
+  // Sonnet 5 piensa por defecto: el primer bloque puede ser "thinking", no el texto.
+  const textBlock = message.content.find(b => b.type === 'text')
+  const html = (textBlock?.text || '').trim()
     .replace(/^```(?:html)?\s*/i, '')
     .replace(/\s*```$/, '')
     .trim()

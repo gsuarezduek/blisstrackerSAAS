@@ -91,7 +91,7 @@ async function login(req, res, next) {
       }
 
       prisma.userLogin.create({
-        data: { userId: user.id, workspaceId: workspace.id, method: 'email' },
+        data: { userId: user.id, workspaceId: workspace.id, method: 'email', userAgent: req.headers['user-agent'] || null },
       })
         .then(() => triggerLateCheck(user.id, workspace.id))
         .catch(err => console.error('[Login] Error al registrar userLogin (email):', err.message))
@@ -327,7 +327,7 @@ async function googleLogin(req, res, next) {
       }
 
       prisma.userLogin.create({
-        data: { userId: user.id, workspaceId: workspace.id, method: 'google' },
+        data: { userId: user.id, workspaceId: workspace.id, method: 'google', userAgent: req.headers['user-agent'] || null },
       })
         .then(() => triggerLateCheck(user.id, workspace.id))
         .catch(err => console.error('[Login] Error al registrar userLogin (google):', err.message))
@@ -374,7 +374,7 @@ async function switchWorkspace(req, res, next) {
     }
 
     prisma.userLogin.create({
-      data: { userId: user.id, workspaceId: workspace.id, method: 'switch' },
+      data: { userId: user.id, workspaceId: workspace.id, method: 'switch', userAgent: req.headers['user-agent'] || null },
     })
       .then(() => triggerLateCheck(user.id, workspace.id))
       .catch(err => console.error('[Login] Error al registrar userLogin (switch):', err.message))
@@ -397,6 +397,7 @@ async function recordLogin(req, res, next) {
         userId:      req.user.userId,
         workspaceId: req.workspace.id,
         method:      'token',
+        userAgent:   req.headers['user-agent'] || null,
       },
     })
     triggerLateCheck(req.user.userId, req.workspace.id)

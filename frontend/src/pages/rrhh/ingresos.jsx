@@ -6,6 +6,9 @@ import RoleBadge from '../../components/RoleBadge'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { TZ, todayBA, todayStr, fmtDate, fmtTime, minutesFromMidnight, minsToTime } from './shared'
 
+const DEVICE_ICON  = { mobile: '📱', tablet: '📱', desktop: '💻' }
+const DEVICE_LABEL = { mobile: 'Celular', tablet: 'Tablet', desktop: 'Computadora' }
+
 export function dateShortcuts() {
   const t = todayBA()
   const fmt = d => d.toLocaleDateString('en-CA', { timeZone: TZ })
@@ -325,6 +328,9 @@ export function TabIngresos({ users }) {
                     ) : (
                       <>
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex-shrink-0">{fmtTime(l.loginAt)}</p>
+                        {l.deviceType && (
+                          <span title={DEVICE_LABEL[l.deviceType]} className="text-sm flex-shrink-0">{DEVICE_ICON[l.deviceType]}</span>
+                        )}
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
                           l.method === 'google'
                             ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'

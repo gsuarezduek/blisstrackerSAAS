@@ -300,6 +300,7 @@ model UserLogin {
   workspace   Workspace? @relation(fields: [workspaceId], references: [id])
   loginAt     DateTime   @default(now())
   method      String // "email" | "google"
+  userAgent   String? // header User-Agent crudo; el tipo de dispositivo se deriva en el backend (lib/deviceType.js)
 
   @@index([userId])
   @@index([workspaceId])

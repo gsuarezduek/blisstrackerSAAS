@@ -303,6 +303,7 @@ const AUTO_RANK_TITLE = {
   proyectos_nuevos:    'Cuáles',
   proyectos_perdidos:  'Cuáles',
   tareas_completadas:  'Quién completó más',
+  propuestas_enviadas: 'Quién generó más',
   todos_completados:   'Quién completó más',
   faltas:              'Quiénes',
   informes_entregados: 'Proyectos',
@@ -325,6 +326,7 @@ function autoEmptyHint(autoKey) {
     case 'proyectos_nuevos':    return 'Sin altas este mes'
     case 'proyectos_perdidos':  return 'Sin bajas 🎉'
     case 'tareas_completadas':  return 'Sin tareas completadas'
+    case 'propuestas_enviadas': return 'Sin propuestas generadas'
     case 'todos_completados':   return 'Sin to-dos completados'
     case 'faltas':              return 'Sin faltas registradas 🎉'
     case 'informes_entregados': return 'Sin informes este mes'
@@ -355,6 +357,8 @@ function autoRankRow(autoKey, p, i) {
     detail = `${p.lateDays} ${p.lateDays === 1 ? 'día' : 'días'} · +${p.lateMins} min`
   } else if (autoKey === 'tareas_completadas') {
     detail = `${p.count} ${p.count === 1 ? 'tarea' : 'tareas'}`
+  } else if (autoKey === 'propuestas_enviadas') {
+    detail = `${p.count} ${p.count === 1 ? 'propuesta' : 'propuestas'}`
   } else if (autoKey === 'todos_completados') {
     detail = `${p.done} to-do${p.done === 1 ? '' : 's'}`
   } else if (autoKey === 'faltas') {

@@ -12,6 +12,7 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Color, TextStyle } from '@tiptap/extension-text-style'
+import { TableKit } from '@tiptap/extension-table'
 import { useEffect } from 'react'
 import './situation-editor.css'
 
@@ -115,7 +116,7 @@ export function Toolbar({ editor }) {
 
 export default function RichTextEditor({ defaultContent = '', onChange, onBlur, minHeight = 140, autoFocus = true, resizable = false }) {
   const editor = useEditor({
-    extensions: [StarterKit, TextStyle, Color],
+    extensions: [StarterKit, TextStyle, Color, TableKit.configure({ table: { resizable: false } })],
     content: defaultContent,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())

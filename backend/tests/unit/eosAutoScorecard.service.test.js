@@ -4,6 +4,7 @@ jest.mock('../../src/lib/prisma', () => ({
   userLogin:          { findMany: jest.fn() },
   vacationRequest:    { findMany: jest.fn() },
   task:               { findMany: jest.fn() },
+  proposal:           { findMany: jest.fn() },
   project:            { findMany: jest.fn() },
   rrhhMetricSnapshot: { findMany: jest.fn() },
   eOSTodo:            { findMany: jest.fn() },
@@ -53,6 +54,7 @@ function resetAll() {
   prisma.userLogin.findMany.mockResolvedValue([])
   prisma.vacationRequest.findMany.mockResolvedValue([])
   prisma.task.findMany.mockResolvedValue([])
+  prisma.proposal.findMany.mockResolvedValue([])
   prisma.project.findMany.mockResolvedValue([])
   prisma.rrhhMetricSnapshot.findMany.mockResolvedValue([])
   prisma.eOSTodo.findMany.mockResolvedValue([])
@@ -319,6 +321,24 @@ describe('computeAutoScorecardYear — semanales nuevas', () => {
     const out = await computeAutoScorecardYear(1, TZ, 2026, ['tareas_completadas'])
     const wk = out.tareas_completadas['2026-W10']
     expect(wk.value).toBe(3)
+    expect(wk.top3[0]).toMatchObject({ userId: 1, count: 2 })
+    expect(wk.top3[1]).toMatchObject({ userId: 2, count: 1 })
+  })
+
+  it('propuestas_enviadas: cuenta propuestas generadas por semana y rankea por autor', async () => {
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 1, workStartTime: null, workEndTime: null, user: { name: 'Ana Lopez', avatar: 'a.png' } },
+      { userId: 2, workStartTime: null, workEndTime: null, user: { name: 'Beto Ruiz', avatar: 'b.png' } },
+    ])
+    prisma.proposal.findMany.mockResolvedValue([
+      { createdById: 1, createdAt: '2026-03-02T12:00:00-03:00' },
+      { createdById: 1, createdAt: '2026-03-03T12:00:00-03:00' },
+      { createdById: 2, createdAt: '2026-03-04T12:00:00-03:00' },
+      { createdById: null, createdAt: '2026-03-05T12:00:00-03:00' }, // sin autor → cuenta pero no va al top 3
+    ])
+    const out = await computeAutoScorecardYear(1, TZ, 2026, ['propuestas_enviadas'])
+    const wk = out.propuestas_enviadas['2026-W10']
+    expect(wk.value).toBe(4)
     expect(wk.top3[0]).toMatchObject({ userId: 1, count: 2 })
     expect(wk.top3[1]).toMatchObject({ userId: 2, count: 1 })
   })

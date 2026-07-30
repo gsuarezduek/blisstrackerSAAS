@@ -65,6 +65,9 @@ export async function exportProposalPdf(proposal, { companyName } = {}) {
   .content li { margin-bottom: 4px; }
   .content strong { color: #111827; }
   .content a { color: var(--accent); text-decoration: none; }
+  .content table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  .content th, .content td { border: 1px solid #d1d5db; padding: 8px 12px; text-align: left; vertical-align: top; }
+  .content th { font-weight: 700; background-color: #f9fafb; }
   .signature { margin-top: 32px; padding-top: 20px; border-top: 2px solid var(--accent); page-break-inside: avoid; }
   .signature h2 { font-size: 17px; font-weight: 700; color: #111827; margin: 0 0 8px; padding-left: 12px; border-left: 4px solid var(--accent); }
   .signature .closing { margin: 8px 0 8px; }

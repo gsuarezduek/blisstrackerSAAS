@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const { saveAllCurrentMonth, METRIC_KEYS } = require('../services/rrhhMetricSnapshot.service')
 const { monthLabel, prevMonthsArr } = require('../lib/monthUtils')
 const { inArrivalWindow, laborableDays } = require('../lib/attendance')
+const { deviceTypeFromUA } = require('../lib/deviceType')
 
 function defaultDateRange(tz) {
   const to   = new Date().toLocaleDateString('en-CA', { timeZone: tz })
@@ -58,6 +59,7 @@ async function loginHistory(req, res, next) {
 
     res.json(logins.map(l => ({
       ...l,
+      deviceType: deviceTypeFromUA(l.userAgent),
       user: { ...l.user, role: memberMap[l.userId] ?? '' },
     })))
   } catch (err) { next(err) }

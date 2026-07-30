@@ -42,6 +42,14 @@ const EOS_AUTO_METRICS = {
     frequency:     'weekly',
     description:   'Tareas que el equipo completó en la semana (por fecha de completado). La tarjeta muestra el top 3 de quienes más completaron.',
   },
+  propuestas_enviadas: {
+    key:           'propuestas_enviadas',
+    name:          'Propuestas enviadas',
+    unit:          null,            // conteo
+    lowerIsBetter: false,           // más es mejor
+    frequency:     'weekly',
+    description:   'Propuestas comerciales generadas en Ventas durante la semana (cada versión cuenta). La tarjeta muestra el top 3 de quienes más generaron. Requiere el módulo Ventas.',
+  },
   faltas: {
     key:           'faltas',
     name:          'Personas con faltas',
