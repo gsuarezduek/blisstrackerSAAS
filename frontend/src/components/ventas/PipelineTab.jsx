@@ -1,8 +1,23 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import { fmtMoney } from './StatusBadge'
 import { LEAD_STATUSES, STATUS_BADGE, statusMeta } from './salesCatalog'
+
+function ScrollArrow({ side, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={side === 'left' ? 'Ver columnas anteriores' : 'Ver columnas siguientes'}
+      className={`absolute ${side === 'left' ? 'left-1' : 'right-1'} top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-md text-gray-500 dark:text-gray-300 hover:text-primary-600 hover:border-primary-300 transition-colors`}
+    >
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={side === 'left' ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'} />
+      </svg>
+    </button>
+  )
+}
 
 // Pipeline Kanban: una columna por estado, arrastrar una card cambia el estado del lead
 // (PATCH /ventas/leads/:id/status). Drag & drop nativo (sin dependencias).
@@ -11,6 +26,9 @@ export default function PipelineTab({ onOpenLead }) {
   const [loading, setLoading] = useState(true)
   const [dragId, setDragId] = useState(null)
   const [overCol, setOverCol] = useState(null)
+  const scrollRef = useRef(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await api.get('/ventas/leads')
@@ -19,6 +37,32 @@ export default function PipelineTab({ onOpenLead }) {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 4)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+  }, [])
+
+  // Recalcula al cargar leads (cambia el ancho total) y al resize de ventana.
+  useEffect(() => {
+    updateScrollState()
+    const el = scrollRef.current
+    if (!el) return
+    el.addEventListener('scroll', updateScrollState, { passive: true })
+    window.addEventListener('resize', updateScrollState)
+    return () => {
+      el.removeEventListener('scroll', updateScrollState)
+      window.removeEventListener('resize', updateScrollState)
+    }
+  }, [updateScrollState, leads])
+
+  function scrollByPage(dir) {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' })
+  }
 
   async function moveTo(status) {
     const id = dragId
@@ -38,48 +82,54 @@ export default function PipelineTab({ onOpenLead }) {
   if (loading) return <LoadingSpinner />
 
   return (
-    <div className="overflow-x-auto pb-2">
-      <div className="flex gap-3 min-w-max">
-        {LEAD_STATUSES.map(col => {
-          const items = leads.filter(l => l.status === col.key)
-          const total = items.reduce((s, l) => s + (l.estimatedValue ? Number(l.estimatedValue) : 0), 0)
-          return (
-            <div
-              key={col.key}
-              onDragOver={e => { e.preventDefault(); setOverCol(col.key) }}
-              onDragLeave={() => setOverCol(c => (c === col.key ? null : c))}
-              onDrop={() => moveTo(col.key)}
-              className={`w-64 shrink-0 rounded-2xl border p-2 transition-colors ${overCol === col.key ? 'border-primary-400 bg-primary-50/50 dark:bg-primary-900/10' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'}`}
-            >
-              <div className="flex items-center justify-between px-2 py-1.5">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[col.color]}`}>{col.label}</span>
-                <span className="text-xs text-gray-400">{items.length}</span>
-              </div>
-              <div className="px-2 pb-1 text-[11px] text-gray-400">{fmtMoney(total, items[0]?.currency || 'ARS')}</div>
-
-              <div className="space-y-2 min-h-[40px]">
-                {items.map(l => (
-                  <div
-                    key={l.id}
-                    draggable
-                    onDragStart={() => setDragId(l.id)}
-                    onDragEnd={() => { setDragId(null); setOverCol(null) }}
-                    onClick={() => onOpenLead(l.id)}
-                    className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 cursor-pointer hover:shadow-sm transition-shadow ${dragId === l.id ? 'opacity-50' : ''}`}
-                  >
-                    <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{l.company?.name || '—'}</div>
-                    {l.title && <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{l.title}</div>}
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{l.estimatedValue ? fmtMoney(l.estimatedValue, l.currency) : ''}</span>
-                      {l.owner && <span className="text-[11px] text-gray-400 truncate max-w-[90px]" title={l.owner.name}>{l.owner.name}</span>}
-                    </div>
+    <div>
+      <div className="relative">
+        {canScrollLeft && <ScrollArrow side="left" onClick={() => scrollByPage(-1)} />}
+        {canScrollRight && <ScrollArrow side="right" onClick={() => scrollByPage(1)} />}
+        <div ref={scrollRef} className="overflow-x-auto pb-2 scroll-smooth">
+          <div className="flex gap-3 min-w-max">
+            {LEAD_STATUSES.map(col => {
+              const items = leads.filter(l => l.status === col.key)
+              const total = items.reduce((s, l) => s + (l.estimatedValue ? Number(l.estimatedValue) : 0), 0)
+              return (
+                <div
+                  key={col.key}
+                  onDragOver={e => { e.preventDefault(); setOverCol(col.key) }}
+                  onDragLeave={() => setOverCol(c => (c === col.key ? null : c))}
+                  onDrop={() => moveTo(col.key)}
+                  className={`w-64 shrink-0 rounded-2xl border p-2 transition-colors ${overCol === col.key ? 'border-primary-400 bg-primary-50/50 dark:bg-primary-900/10' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30'}`}
+                >
+                  <div className="flex items-center justify-between px-2 py-1.5">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[col.color]}`}>{col.label}</span>
+                    <span className="text-xs text-gray-400">{items.length}</span>
                   </div>
-                ))}
-                {items.length === 0 && <div className="text-center text-xs text-gray-300 dark:text-gray-600 py-4">—</div>}
-              </div>
-            </div>
-          )
-        })}
+                  <div className="px-2 pb-1 text-[11px] text-gray-400">{fmtMoney(total, items[0]?.currency || 'ARS')}</div>
+
+                  <div className="space-y-2 min-h-[40px]">
+                    {items.map(l => (
+                      <div
+                        key={l.id}
+                        draggable
+                        onDragStart={() => setDragId(l.id)}
+                        onDragEnd={() => { setDragId(null); setOverCol(null) }}
+                        onClick={() => onOpenLead(l.id)}
+                        className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 cursor-pointer hover:shadow-sm transition-shadow ${dragId === l.id ? 'opacity-50' : ''}`}
+                      >
+                        <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{l.company?.name || '—'}</div>
+                        {l.title && <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{l.title}</div>}
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{l.estimatedValue ? fmtMoney(l.estimatedValue, l.currency) : ''}</span>
+                          {l.owner && <span className="text-[11px] text-gray-400 truncate max-w-[90px]" title={l.owner.name}>{l.owner.name}</span>}
+                        </div>
+                      </div>
+                    ))}
+                    {items.length === 0 && <div className="text-center text-xs text-gray-300 dark:text-gray-600 py-4">—</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
       <p className="text-xs text-gray-400 mt-3 px-1">Arrastrá una tarjeta a otra columna para cambiar su estado. {statusMeta('ganado').label} habilita crear el proyecto desde el lead.</p>
     </div>
