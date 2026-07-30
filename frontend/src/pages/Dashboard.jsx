@@ -12,6 +12,7 @@ import { useInactivity } from '../hooks/useInactivity'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import UserLink from '../components/UserLink'
+import RoleBadge from '../components/RoleBadge'
 import { useAuth } from '../context/AuthContext'
 import { completedMinutes, fmtMins, completedDuration } from '../utils/format'
 
@@ -536,6 +537,11 @@ export default function Dashboard() {
             )}
             {workDay?.endedAt && (
               <p className="text-sm text-green-600 font-medium">Jornada finalizada ✓</p>
+            )}
+            {user?.role && (
+              <div className="mt-1.5 flex justify-end">
+                <RoleBadge role={user.role} />
+              </div>
             )}
           </div>
         </div>
