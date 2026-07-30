@@ -7,6 +7,7 @@ import LeadModal from './LeadModal'
 import ConvertToProjectModal from './ConvertToProjectModal'
 import ResearchPanel from './ResearchPanel'
 import ProposalsPanel from './ProposalsPanel'
+import LeadNotes from './LeadNotes'
 import { LEAD_STATUSES, originLabel } from './salesCatalog'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -158,8 +159,11 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
         </div>
       </div>
 
+      {/* Notas de reunión — WYSIWYG, ancho completo, arriba de todo */}
+      <LeadNotes leadId={leadId} initialContent={lead.notes} onSaved={load} />
+
       <div className="grid lg:grid-cols-2 gap-5">
-        {/* Columna izquierda: datos */}
+        {/* Columna izquierda: Información, Empresa, Contacto */}
         <div className="space-y-5">
           {/* Información principal */}
           <div className={card}>
@@ -236,79 +240,80 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
             )}
           </div>
 
-          {/* Próximas acciones */}
-          <div className={card}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className={`${sectionTitle} mb-0`}>Próximas acciones</h3>
-              <button onClick={toggleAddAction} className="text-xs text-primary-600 hover:underline">{naOpen ? 'Cerrar' : '+ Agregar'}</button>
-            </div>
-
-            {naOpen && (
-              <div className="space-y-2 mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
-                <input className={input} placeholder="Ej. Llamar, Enviar propuesta…" value={na.title} onChange={e => setNa({ ...na, title: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') addAction() }} />
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="date" className={input} value={na.dueAt} onChange={e => setNa({ ...na, dueAt: e.target.value })} />
-                  <select className={input} value={na.ownerId} onChange={e => setNa({ ...na, ownerId: e.target.value })}>
-                    <option value="">Responsable…</option>
-                    {team.map(m => <option key={m.id} value={m.id}>{m.name}{String(m.id) === String(user?.id) ? ' (vos)' : ''}</option>)}
-                  </select>
-                </div>
-                {na.dueAt && (
-                  <p className="text-[11px] text-gray-400">📌 Además se crea una tarea futura para el responsable, con fecha {fmtDate(na.dueAt)}.</p>
-                )}
-                <button onClick={addAction} disabled={!na.title.trim() || savingAction} className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg py-2 text-sm font-semibold">
-                  {savingAction ? 'Agregando...' : 'Agregar acción'}
-                </button>
-              </div>
-            )}
-
-            {lead.actions.filter(a => a.status === 'pending').length === 0 ? (
-              <p className="text-sm text-gray-400">Sin próximas acciones pendientes.</p>
-            ) : (
-              <ul className="space-y-2">
-                {lead.actions.filter(a => a.status === 'pending').map(a => (
-                  <li key={a.id} className="flex items-start justify-between gap-2 text-sm">
-                    <div className="min-w-0">
-                      <div className="font-medium text-gray-900 dark:text-white">{a.title}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        {a.dueAt ? `📅 ${fmtDate(a.dueAt)}` : 'Sin fecha'}
-                        {a.owner ? ` · ${a.owner.name}` : ''}
-                        {a.taskId ? ' · 🔗 tarea creada' : ''}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button onClick={() => resolveAction(a.id)} className="text-xs font-medium text-green-600 hover:underline">✓ Resolver</button>
-                      <button onClick={() => deleteAction(a.id)} className="text-xs text-gray-400 hover:text-red-500">✕</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {lead.actions.filter(a => a.status === 'done').length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                <button onClick={() => setHistOpen(o => !o)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">
-                  {histOpen ? 'Ocultar' : 'Ver'} historial ({lead.actions.filter(a => a.status === 'done').length})
-                </button>
-                {histOpen && (
-                  <ul className="mt-2 space-y-1.5">
-                    {lead.actions.filter(a => a.status === 'done').map(a => (
-                      <li key={a.id} className="text-xs text-gray-400">
-                        <span className="line-through">{a.title}</span> — resuelta {fmtDate(a.doneAt)}{a.doneBy ? ` por ${a.doneBy.name}` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Columna derecha: Propuestas + timeline/notas */}
+        {/* Columna derecha: Próximas acciones + Propuestas + Historial */}
         <div className="space-y-5">
+        {/* Próximas acciones */}
+        <div className={card}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={`${sectionTitle} mb-0`}>Próximas acciones</h3>
+            <button onClick={toggleAddAction} className="text-xs text-primary-600 hover:underline">{naOpen ? 'Cerrar' : '+ Agregar'}</button>
+          </div>
+
+          {naOpen && (
+            <div className="space-y-2 mb-3 pb-3 border-b border-gray-100 dark:border-gray-700">
+              <input className={input} placeholder="Ej. Llamar, Enviar propuesta…" value={na.title} onChange={e => setNa({ ...na, title: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') addAction() }} />
+              <div className="grid grid-cols-2 gap-2">
+                <input type="date" className={input} value={na.dueAt} onChange={e => setNa({ ...na, dueAt: e.target.value })} />
+                <select className={input} value={na.ownerId} onChange={e => setNa({ ...na, ownerId: e.target.value })}>
+                  <option value="">Responsable…</option>
+                  {team.map(m => <option key={m.id} value={m.id}>{m.name}{String(m.id) === String(user?.id) ? ' (vos)' : ''}</option>)}
+                </select>
+              </div>
+              {na.dueAt && (
+                <p className="text-[11px] text-gray-400">📌 Además se crea una tarea futura para el responsable, con fecha {fmtDate(na.dueAt)}.</p>
+              )}
+              <button onClick={addAction} disabled={!na.title.trim() || savingAction} className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg py-2 text-sm font-semibold">
+                {savingAction ? 'Agregando...' : 'Agregar acción'}
+              </button>
+            </div>
+          )}
+
+          {lead.actions.filter(a => a.status === 'pending').length === 0 ? (
+            <p className="text-sm text-gray-400">Sin próximas acciones pendientes.</p>
+          ) : (
+            <ul className="space-y-2">
+              {lead.actions.filter(a => a.status === 'pending').map(a => (
+                <li key={a.id} className="flex items-start justify-between gap-2 text-sm">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 dark:text-white">{a.title}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {a.dueAt ? `📅 ${fmtDate(a.dueAt)}` : 'Sin fecha'}
+                      {a.owner ? ` · ${a.owner.name}` : ''}
+                      {a.taskId ? ' · 🔗 tarea creada' : ''}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => resolveAction(a.id)} className="text-xs font-medium text-green-600 hover:underline">✓ Resolver</button>
+                    <button onClick={() => deleteAction(a.id)} className="text-xs text-gray-400 hover:text-red-500">✕</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {lead.actions.filter(a => a.status === 'done').length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+              <button onClick={() => setHistOpen(o => !o)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">
+                {histOpen ? 'Ocultar' : 'Ver'} historial ({lead.actions.filter(a => a.status === 'done').length})
+              </button>
+              {histOpen && (
+                <ul className="mt-2 space-y-1.5">
+                  {lead.actions.filter(a => a.status === 'done').map(a => (
+                    <li key={a.id} className="text-xs text-gray-400">
+                      <span className="line-through">{a.title}</span> — resuelta {fmtDate(a.doneAt)}{a.doneBy ? ` por ${a.doneBy.name}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
         <ProposalsPanel leadId={leadId} companyName={c?.name} currency={lead.currency} onChanged={load} />
         <div className={card}>
-          <h3 className={sectionTitle}>Historial y notas</h3>
+          <h3 className={sectionTitle}>Historial</h3>
           <div className="flex gap-2 mb-4">
             <input className={input} placeholder="Agregar una nota (reunión, llamada, comentario…)" value={note} onChange={e => setNote(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addNote() }} />
             <button onClick={addNote} disabled={!note.trim()} className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg px-4 text-sm font-semibold shrink-0">Agregar</button>

@@ -188,13 +188,14 @@ async function updateLead(req, res, next) {
     const lead = await findLead(req.params.id, workspaceId)
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
 
-    const { title, origin, estimatedValue, currency, nextContactAt, primaryContactId, companyId } = req.body
+    const { title, origin, estimatedValue, currency, nextContactAt, notes, primaryContactId, companyId } = req.body
     const data = {}
     if (title !== undefined) data.title = title?.trim() || null
     if (origin !== undefined) { if (!isValidOrigin(origin || null)) return res.status(400).json({ error: 'Origen inválido' }); data.origin = origin || null }
     if (currency !== undefined) data.currency = currency || 'ARS'
     if (estimatedValue !== undefined) data.estimatedValue = estimatedValue != null && estimatedValue !== '' ? Number(estimatedValue) : null
     if (nextContactAt !== undefined) { const d = parseDate(nextContactAt); if (d === undefined) return res.status(400).json({ error: 'Fecha inválida' }); data.nextContactAt = d }
+    if (notes !== undefined) { if (typeof notes !== 'string') return res.status(400).json({ error: 'notes debe ser un string' }); data.notes = notes.trim() || null }
     if (companyId !== undefined) {
       const c = await prisma.company.findFirst({ where: { id: Number(companyId), workspaceId }, select: { id: true } })
       if (!c) return res.status(404).json({ error: 'Empresa no encontrada' })

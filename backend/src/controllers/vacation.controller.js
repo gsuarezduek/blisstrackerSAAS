@@ -61,14 +61,15 @@ async function getAdjustmentHistory(req, res, next) {
 
 /**
  * GET /api/vacation/admin/requests
- * Query: ?status=pending|approved|rejected
+ * Query: ?status=pending|approved|rejected&userId=
  */
 async function listRequests(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { status }  = req.query
+    const { status, userId } = req.query
     const where = { workspaceId }
     if (status) where.status = status
+    if (userId) where.userId = Number(userId)
 
     const requests = await prisma.vacationRequest.findMany({
       where,

@@ -8,7 +8,7 @@ import RoleBadge from '../RoleBadge'
 import UserLink from '../UserLink'
 
 // Selector de modo de período (aplica a ambas vistas).
-function ModeToggle({ mode, onChange }) {
+export function ModeToggle({ mode, onChange }) {
   const opts = [['current', 'Mes en curso'], ['closed', 'Mes cerrado']]
   return (
     <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50 dark:bg-gray-800">
@@ -308,6 +308,85 @@ function TeamCompare({ stats, benchmark }) {
   )
 }
 
+// Contenido de la fila expandida de una persona: gráfico de horas, tiempo por proyecto,
+// asistencia, comparación con el equipo y análisis IA. Exportado para reuso fuera de la
+// tabla (ver el panel de administración del perfil de usuario, que muestra esto para una
+// sola persona sin la tabla completa alrededor).
+export function PersonProductivityDetail({ m, benchmark, mode, onRefresh, refreshing }) {
+  const s = m.stats
+  return (
+    <div className="space-y-6">
+      {/* Gráfico de horas — últimas 12 semanas (a todo el ancho, contexto de tendencia) */}
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">
+          Horas registradas por semana <span className="normal-case font-normal text-gray-400 dark:text-gray-500">· últimas 12 semanas (contexto, no depende del período)</span>
+        </p>
+        <HoursLineChart history={s.hoursHistory} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Col 1: Tiempo por proyecto (expandible a tareas) */}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Tiempo por proyecto</p>
+          <ProjectBars porProyecto={s.porProyecto} userId={m.id} mode={mode} />
+        </div>
+
+        {/* Col 2: Horas y Asistencia */}
+        <div className="space-y-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Horas y Asistencia</p>
+            <HoursAttendanceBlock att={s.attendance} />
+          </div>
+          {s.stuckTasks > 0 && (
+            <p className="text-xs"><span className="font-bold text-amber-600 dark:text-amber-400">{s.stuckTasks}</span> <span className="text-gray-500 dark:text-gray-400">tarea{s.stuckTasks !== 1 ? 's' : ''} atascada{s.stuckTasks !== 1 ? 's' : ''} &gt;7d</span></p>
+          )}
+        </div>
+
+        {/* Col 3: Comparación con el equipo */}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Comparación con el equipo</p>
+          <TeamCompare stats={s} benchmark={benchmark} />
+        </div>
+      </div>
+
+      {/* Análisis IA — a todo el ancho, igual que el gráfico de horas */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Análisis IA</p>
+          <div className="flex items-center gap-3">
+            {m.insight?.updatedAt && (
+              <span className="text-[11px] text-gray-300 dark:text-gray-600">actualizado {timeAgo(m.insight.updatedAt)}</span>
+            )}
+            <button
+              onClick={e => { e.stopPropagation(); onRefresh(m.id) }}
+              disabled={refreshing}
+              className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-40 transition-colors flex items-center gap-1"
+            >
+              <span className={refreshing ? 'animate-spin inline-block' : ''}>↺</span>
+              {refreshing ? 'Generando análisis...' : 'Regenerar análisis IA'}
+            </button>
+          </div>
+        </div>
+        {m.insight ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-2">
+            {m.insight.tendencias && (
+              <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug"><span className="text-gray-400 dark:text-gray-500">Cambio:</span> {m.insight.tendencias}</p>
+            )}
+            {m.insight.fortalezas && (
+              <p className="text-sm text-green-700 dark:text-green-400 leading-snug"><span className="opacity-60">Fortaleza:</span> {m.insight.fortalezas}</p>
+            )}
+            {m.insight.areasDeAtencion && (
+              <p className="text-sm text-red-700 dark:text-red-400 leading-snug"><span className="opacity-60">Riesgo:</span> {m.insight.areasDeAtencion}</p>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin señales destacables — dentro del promedio.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mode }) {
   const st = STATUS[m.status] || STATUS.ok
   const s = m.stats
@@ -349,75 +428,7 @@ function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mo
       {expanded && (
         <tr className="bg-gray-50 dark:bg-gray-800/60">
           <td colSpan={7} className="px-4 py-5">
-            <div className="space-y-6">
-              {/* Gráfico de horas — últimas 12 semanas (a todo el ancho, contexto de tendencia) */}
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">
-                  Horas registradas por semana <span className="normal-case font-normal text-gray-400 dark:text-gray-500">· últimas 12 semanas (contexto, no depende del período)</span>
-                </p>
-                <HoursLineChart history={s.hoursHistory} />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Col 1: Tiempo por proyecto (expandible a tareas) */}
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Tiempo por proyecto</p>
-                  <ProjectBars porProyecto={s.porProyecto} userId={m.id} mode={mode} />
-                </div>
-
-                {/* Col 2: Horas y Asistencia */}
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Horas y Asistencia</p>
-                    <HoursAttendanceBlock att={s.attendance} />
-                  </div>
-                  {s.stuckTasks > 0 && (
-                    <p className="text-xs"><span className="font-bold text-amber-600 dark:text-amber-400">{s.stuckTasks}</span> <span className="text-gray-500 dark:text-gray-400">tarea{s.stuckTasks !== 1 ? 's' : ''} atascada{s.stuckTasks !== 1 ? 's' : ''} &gt;7d</span></p>
-                  )}
-                </div>
-
-                {/* Col 3: Comparación con el equipo */}
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Comparación con el equipo</p>
-                  <TeamCompare stats={s} benchmark={benchmark} />
-                </div>
-              </div>
-
-              {/* Análisis IA — a todo el ancho, igual que el gráfico de horas */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Análisis IA</p>
-                  <div className="flex items-center gap-3">
-                    {m.insight?.updatedAt && (
-                      <span className="text-[11px] text-gray-300 dark:text-gray-600">actualizado {timeAgo(m.insight.updatedAt)}</span>
-                    )}
-                    <button
-                      onClick={e => { e.stopPropagation(); onRefresh(m.id) }}
-                      disabled={refreshing}
-                      className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-40 transition-colors flex items-center gap-1"
-                    >
-                      <span className={refreshing ? 'animate-spin inline-block' : ''}>↺</span>
-                      {refreshing ? 'Generando análisis...' : 'Regenerar análisis IA'}
-                    </button>
-                  </div>
-                </div>
-                {m.insight ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-2">
-                    {m.insight.tendencias && (
-                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug"><span className="text-gray-400 dark:text-gray-500">Cambio:</span> {m.insight.tendencias}</p>
-                    )}
-                    {m.insight.fortalezas && (
-                      <p className="text-sm text-green-700 dark:text-green-400 leading-snug"><span className="opacity-60">Fortaleza:</span> {m.insight.fortalezas}</p>
-                    )}
-                    {m.insight.areasDeAtencion && (
-                      <p className="text-sm text-red-700 dark:text-red-400 leading-snug"><span className="opacity-60">Riesgo:</span> {m.insight.areasDeAtencion}</p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin señales destacables — dentro del promedio.</p>
-                )}
-              </div>
-            </div>
+            <PersonProductivityDetail m={m} benchmark={benchmark} mode={mode} onRefresh={onRefresh} refreshing={refreshing} />
           </td>
         </tr>
       )}

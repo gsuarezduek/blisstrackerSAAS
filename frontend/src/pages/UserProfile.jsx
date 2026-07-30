@@ -6,10 +6,12 @@ import AvatarLightbox from '../components/AvatarLightbox'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import UserLink from '../components/UserLink'
 import RoleBadge from '../components/RoleBadge'
+import AdminUserPanel from '../components/profile/AdminUserPanel'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
 import { linkify } from '../utils/linkify'
 import { fmtMins } from '../utils/format'
+import { useAuth } from '../context/AuthContext'
 
 const STATUS_LABEL = { IN_PROGRESS: 'En curso', PENDING: 'Pendiente', PAUSED: 'Pausada', BLOCKED: 'Bloqueada' }
 const STATUS_CLASS = {
@@ -34,6 +36,7 @@ function fmtLongDate(d) {
 
 export default function UserProfile() {
   const { id } = useParams()
+  const { user: viewer } = useAuth()
 
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -269,6 +272,8 @@ export default function UserProfile() {
             </div>
           )}
         </div>
+
+        {viewer?.isAdmin && <AdminUserPanel userId={user.id} userName={user.name} />}
       </div>
 
       {lightbox && (

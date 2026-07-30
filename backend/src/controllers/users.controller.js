@@ -27,6 +27,32 @@ function shiftDay(dateStr, n) {
   return dt.toISOString().slice(0, 10)
 }
 
+const memberUserSelect = {
+  id: true, name: true, email: true, avatar: true, createdAt: true,
+  phone: true, birthday: true, address: true, dni: true, cuit: true, alias: true, bankName: true,
+  maritalStatus: true, children: true, educationLevel: true, educationTitle: true,
+  bloodType: true, medicalConditions: true, healthInsurance: true, emergencyContact: true,
+}
+
+// Aplana WorkspaceMember + User en un solo objeto (compatibilidad con el frontend).
+function flattenMember(m) {
+  return {
+    ...m.user,
+    role: m.teamRole,
+    workspaceJoinedAt: m.joinedAt,
+    isAdmin: m.role === 'admin' || m.role === 'owner',
+    active: m.active,
+    vacationDays: m.vacationDays,
+    workStartTime: m.workStartTime,
+    workEndTime: m.workEndTime,
+    legajoData: m.legajoData ?? {},
+    weeklyEmailEnabled: m.weeklyEmailEnabled,
+    dailyInsightEnabled: m.dailyInsightEnabled,
+    insightMemoryEnabled: m.insightMemoryEnabled,
+    taskQualityEnabled: m.taskQualityEnabled,
+  }
+}
+
 /**
  * GET /api/users
  * Lista todos los miembros del workspace actual (activos e inactivos).
@@ -38,37 +64,32 @@ async function list(req, res, next) {
 
     const members = await prisma.workspaceMember.findMany({
       where: { workspaceId },
-      include: {
-        user: {
-          select: {
-            id: true, name: true, email: true, avatar: true, createdAt: true,
-            phone: true, birthday: true, address: true, dni: true, cuit: true, alias: true, bankName: true,
-            maritalStatus: true, children: true, educationLevel: true, educationTitle: true,
-            bloodType: true, medicalConditions: true, healthInsurance: true, emergencyContact: true,
-          },
-        },
-      },
+      include: { user: { select: memberUserSelect } },
       orderBy: { user: { name: 'asc' } },
     })
 
-    // Aplanar para mantener compatibilidad con el frontend
-    const result = members.map(m => ({
-      ...m.user,
-      role: m.teamRole,
-      workspaceJoinedAt: m.joinedAt,
-      isAdmin: m.role === 'admin' || m.role === 'owner',
-      active: m.active,
-      vacationDays: m.vacationDays,
-      workStartTime: m.workStartTime,
-      workEndTime: m.workEndTime,
-      legajoData: m.legajoData ?? {},
-      weeklyEmailEnabled: m.weeklyEmailEnabled,
-      dailyInsightEnabled: m.dailyInsightEnabled,
-      insightMemoryEnabled: m.insightMemoryEnabled,
-      taskQualityEnabled: m.taskQualityEnabled,
-    }))
+    res.json(members.map(flattenMember))
+  } catch (err) { next(err) }
+}
 
-    res.json(result)
+/**
+ * GET /api/users/:id/admin-detail
+ * Datos personales + legajo + saldo de vacaciones + preferencias de IA de UN usuario
+ * (admin-only). Mismo shape que un item de GET /api/users, pero sin traer al resto del
+ * workspace — se usa en el panel de administración del perfil público de un usuario.
+ */
+async function getAdminUserDetail(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const targetId = Number(req.params.id)
+
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: targetId } },
+      include: { user: { select: memberUserSelect } },
+    })
+    if (!member) return res.status(404).json({ error: 'Usuario no encontrado en este workspace' })
+
+    res.json(flattenMember(member))
   } catch (err) { next(err) }
 }
 
@@ -314,4 +335,4 @@ async function getUserCompleted(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, getUserTasks, getUserProfile, getUserCompleted }
+module.exports = { list, getAdminUserDetail, getUserTasks, getUserProfile, getUserCompleted }
