@@ -10,13 +10,13 @@ import { TabVacaciones } from './rrhh/vacaciones'
 
 // ─── Shell del panel RRHH. Los tabs/modales viven en ./rrhh/*.jsx ───
 const TABS = [
+  { id: 'ingresos',   label: '🕐 Ingresos'              },
   { id: 'legajos',    label: '📋 Legajos'              },
   { id: 'vacaciones', label: '🏖️ Vacaciones y Licencias' },
-  { id: 'ingresos',   label: '🕐 Ingresos'              },
 ]
 
 export default function RRHH() {
-  const [tab, setTab]           = useState('legajos')
+  const [tab, setTab]           = useState('ingresos')
   const [users, setUsers]       = useState([])
   const [lastLoginsMap, setLastLoginsMap] = useState({})
   const [dashStats, setDashStats] = useState({ projectsPerPerson: 0 })

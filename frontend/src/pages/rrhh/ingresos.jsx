@@ -43,6 +43,7 @@ export function TabIngresos({ users }) {
   const [expanded, setExpanded] = useState({})   // { [userId]: true }
   const [activeShortcut, setActiveShortcut] = useState('Hoy')
   const [sortOrder, setSortOrder] = useState('asc')  // 'asc' | 'desc'
+  const [personSearch, setPersonSearch] = useState('')
   const [editingId, setEditingId] = useState(null)   // id del ingreso en edición
   const [editTime, setEditTime]   = useState('')
   const [busyId, setBusyId]       = useState(null)   // id del ingreso con acción en curso
@@ -165,6 +166,12 @@ export function TabIngresos({ users }) {
     })
   }, [logins, sortOrder, startMinsMap, tolerance])
 
+  const visibleByUser = useMemo(() => {
+    const q = personSearch.trim().toLowerCase()
+    if (!q) return byUser
+    return byUser.filter(({ user }) => user.name.toLowerCase().includes(q))
+  }, [byUser, personSearch])
+
   return (
     <div>
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
@@ -218,30 +225,51 @@ export function TabIngresos({ users }) {
         )}
       </div>
 
-      {/* Ordenar — solo visible cuando hay resultados */}
-      {!loading && byUser.length > 1 && (
-        <div className="flex justify-end mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 dark:text-gray-500">Ordenar por horario</span>
-            <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden text-xs">
+      {/* Buscador de persona + orden — solo visible cuando hay resultados */}
+      {!loading && byUser.length > 0 && (
+        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <div className="relative w-full sm:w-64">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+            <input
+              type="text"
+              value={personSearch}
+              onChange={e => setPersonSearch(e.target.value)}
+              placeholder="Buscar persona..."
+              className="w-full text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg pl-8 pr-8 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            {personSearch && (
               <button
-                onClick={() => setSortOrder('asc')}
-                className={`px-3 py-1.5 font-medium transition-colors ${
-                  sortOrder === 'asc'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
-                }`}
-              >↑ Más temprano</button>
-              <button
-                onClick={() => setSortOrder('desc')}
-                className={`px-3 py-1.5 font-medium transition-colors border-l border-gray-300 dark:border-gray-600 ${
-                  sortOrder === 'desc'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
-                }`}
-              >↓ Más tarde</button>
-            </div>
+                onClick={() => setPersonSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm"
+                aria-label="Limpiar búsqueda"
+              >
+                ✕
+              </button>
+            )}
           </div>
+          {byUser.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400 dark:text-gray-500">Ordenar por horario</span>
+              <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden text-xs">
+                <button
+                  onClick={() => setSortOrder('asc')}
+                  className={`px-3 py-1.5 font-medium transition-colors ${
+                    sortOrder === 'asc'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  }`}
+                >↑ Más temprano</button>
+                <button
+                  onClick={() => setSortOrder('desc')}
+                  className={`px-3 py-1.5 font-medium transition-colors border-l border-gray-300 dark:border-gray-600 ${
+                    sortOrder === 'desc'
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+                  }`}
+                >↓ Más tarde</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -254,7 +282,14 @@ export function TabIngresos({ users }) {
         </div>
       )}
 
-      {!loading && byUser.map(({ user, logins: ul, avgTime, schedule, firstIds, daysCount, lateDays }) => (
+      {!loading && logins.length > 0 && visibleByUser.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <p className="text-3xl mb-3">🔍</p>
+          <p className="font-medium">Ninguna persona coincide con la búsqueda</p>
+        </div>
+      )}
+
+      {!loading && visibleByUser.map(({ user, logins: ul, avgTime, schedule, firstIds, daysCount, lateDays }) => (
         <div key={user.id} className="mb-3">
           {/* Header colapsable */}
           <button

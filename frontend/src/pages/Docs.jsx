@@ -60,7 +60,7 @@ function FilosofiaTab() {
   ]
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="space-y-6">
 
       {/* Hero */}
       <div className="bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl p-7 text-white">
@@ -524,7 +524,7 @@ function ProcesosTab({ processes, roles, expandedId, onExpand, onOpenRole }) {
   const roleOf = roleName => roles.find(r => r.name === roleName)?.label ?? roleName
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 mb-4">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-base">⚙️</span>
@@ -715,7 +715,7 @@ export default function Docs() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-      <div className={`${tab === 'wiki' || tab === 'roles' ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 py-8`}>
+      <div className="max-w-6xl mx-auto px-4 py-8">
 
         {/* Header */}
         <div className="mb-6">

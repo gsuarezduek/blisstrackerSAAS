@@ -747,9 +747,11 @@ async function getAdsSummaryLive(req, res, next) {
  * GET /api/marketing/summary/reports
  * TODOS los informes del workspace de un mes puntual (por defecto, el mes en curso —
  * el slot que se ve al navegar mes a mes en la vista de un proyecto), sin paginar.
- * Cada informe incluye su % de cumplimiento de objetivos (ok / evaluables, mismo
- * criterio que el auto-metric "objetivos_cumplidos" del Scorecard EOS) y el detalle
- * de sus objetivos, para el desplegable de la lista. `generators` = quiénes generaron
+ * Cada informe incluye su % de cumplimiento de objetivos (promedio del avance de
+ * cada objetivo evaluable, no ratio de "cumplidos" — mismo criterio que la vista
+ * "En vivo", ver getLiveObjectivesSummary; distinto del auto-metric "objetivos_cumplidos"
+ * del Scorecard EOS, que sí es un ratio) y el detalle de sus objetivos, para el
+ * desplegable de la lista. `generators` = quiénes generaron
  * algún informe de ese mes (para el filtro por persona) — siempre sobre el mes
  * completo, sin importar los filtros de búsqueda/persona aplicados a `reports`.
  * Query: ?month=YYYY-MM&search=texto&generatedById=N&sort=date_desc|pct_desc|pct_asc
@@ -804,9 +806,12 @@ async function getReportsSummary(req, res, next) {
       } catch (err) {
         console.error(`[ReportsSummary] objetivos informe ${r.id}:`, err.message)
       }
+      // Promedio del % de avance de cada objetivo evaluable (no ratio de "cumplidos"),
+      // mismo criterio que la vista "En vivo" — ver getLiveObjectivesSummary. Cada pct
+      // se acota a [0,100] para que un objetivo sobre-cumplido no infle el promedio.
       const evaluable = objectives.filter(o => ['ok', 'partial', 'fail'].includes(o.status))
       const objectivesPct = evaluable.length
-        ? Math.round(evaluable.filter(o => o.status === 'ok').length / evaluable.length * 100)
+        ? Math.round(evaluable.reduce((s, o) => s + Math.min(100, Math.max(0, o.pct)), 0) / evaluable.length)
         : null
       return { ...r, periodLabel: reportLabel(r), objectivesPct, objectives }
     }))
@@ -947,9 +952,14 @@ async function getLiveObjectivesSummary(req, res, next) {
       } catch (err) {
         console.error(`[LiveObjectives] proyecto ${p.id}:`, err.message)
       }
+      // Promedio del % de avance de cada objetivo evaluable (no ratio de "cumplidos"):
+      // 4 objetivos al 20/40/60/80% dan 50%, no 0% — mide qué tan cerca se está de
+      // cumplir en conjunto, no cuántos ya llegaron al 100%. Cada pct se acota a
+      // [0,100] para que un objetivo sobre-cumplido no infle el promedio por encima
+      // de "completo".
       const evaluable = objectives.filter(o => ['ok', 'partial', 'fail'].includes(o.status))
       const objectivesPct = evaluable.length
-        ? Math.round(evaluable.filter(o => o.status === 'ok').length / evaluable.length * 100)
+        ? Math.round(evaluable.reduce((s, o) => s + Math.min(100, Math.max(0, o.pct)), 0) / evaluable.length)
         : null
       return { projectId: p.id, projectName: p.name, objectivesPct, objectives }
     }))

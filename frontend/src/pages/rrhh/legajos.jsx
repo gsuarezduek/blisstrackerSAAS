@@ -197,19 +197,28 @@ export function TabLegajos({ users, onVacationUpdate }) {
 
   return (
     <div>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-6">
-        <label className="text-xs text-gray-500 dark:text-gray-400 font-medium block mb-1.5">Seleccionar persona</label>
-        <select value={selectedId} onChange={e => setSelectedId(e.target.value)}
-          className="w-full sm:w-72 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-          <option value="">— Elegir persona —</option>
-          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-      </div>
-
       {!selected && (
-        <div className="text-center py-16 text-gray-400">
-          <p className="text-3xl mb-3">👤</p>
-          <p className="font-medium">Seleccioná una persona para ver su legajo</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {users.map(u => (
+            <button
+              key={u.id}
+              onClick={() => setSelectedId(String(u.id))}
+              className="group relative aspect-square rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-primary-400 dark:hover:ring-primary-500 transition-all focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <img
+                src={avatarUrl(u.avatar)}
+                alt={u.name}
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-3 text-left">
+                <p className="text-white font-semibold text-sm leading-tight truncate drop-shadow">{u.name}</p>
+                <div className="mt-1">
+                  <RoleBadge role={u.role} userId={u.id} />
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       )}
 
@@ -217,6 +226,13 @@ export function TabLegajos({ users, onVacationUpdate }) {
         <div className="space-y-4">
           {/* Header */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-6 py-5 flex items-center gap-4">
+            <button
+              onClick={() => setSelectedId('')}
+              title="Volver a todos los legajos"
+              className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex-shrink-0"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            </button>
             <img src={avatarUrl(selected.avatar)} alt={selected.name}
               className="w-14 h-14 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 flex-shrink-0" />
             <div>
