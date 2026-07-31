@@ -603,7 +603,7 @@ export default function MyProfile() {
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={8}
                   value={pwForm.newPassword}
                   onChange={e => setPwForm(p => ({ ...p, newPassword: e.target.value }))}
                   placeholder="••••••••"

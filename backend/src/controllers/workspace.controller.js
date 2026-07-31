@@ -9,6 +9,7 @@ const { getSetting } = require('../lib/platformSettings')
 const { validateImageUpload } = require('../lib/imageType')
 const { seedWorkspace, removeDemoProject } = require('../services/workspaceSeed.service')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
+const { validatePassword } = require('../lib/passwordPolicy')
 
 const MEMBER_SELECT = {
   userId: true,
@@ -22,6 +23,22 @@ const MEMBER_SELECT = {
   user: {
     select: { id: true, name: true, email: true, avatar: true },
   },
+}
+
+const VALID_MEMBER_ROLES = ['owner', 'admin', 'member']
+
+// Valida que `role` sea un rol de workspace válido y que, si se está asignando
+// 'owner', quien hace el pedido sea owner (o super admin) — evita que un admin
+// se auto-promueva o promueva a otro a owner. `role === undefined` (sin cambios) no valida nada.
+function assertValidMemberRoleAssignment(req, role) {
+  if (role === undefined) return null
+  if (!VALID_MEMBER_ROLES.includes(role)) {
+    return { status: 400, error: 'Rol de workspace inválido' }
+  }
+  if (role === 'owner' && req.workspaceMember?.role !== 'owner' && !req.user?.isSuperAdmin) {
+    return { status: 403, error: 'Solo un owner puede asignar el rol de owner' }
+  }
+  return null
 }
 
 // Valida un horario "HH:MM" (24h). Acepta null/'' (sin horario). Devuelve el valor normalizado o lanza si es inválido.
@@ -247,6 +264,10 @@ async function addMember(req, res, next) {
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Nombre, email y contraseña son requeridos' })
     }
+    const pwErr = validatePassword(password)
+    if (pwErr) return res.status(400).json({ error: pwErr })
+    const roleErr = assertValidMemberRoleAssignment(req, memberRole)
+    if (roleErr) return res.status(roleErr.status).json({ error: roleErr.error })
 
     const workspaceId = req.workspace.id
     const hashed = await bcrypt.hash(password, 10)
@@ -312,10 +333,15 @@ async function updateMember(req, res, next) {
     })
     if (!target) return res.status(404).json({ error: 'Miembro no encontrado' })
 
+    const roleErr = assertValidMemberRoleAssignment(req, memberRole)
+    if (roleErr) return res.status(roleErr.status).json({ error: roleErr.error })
+
     const userUpdates = {}
     if (name) userUpdates.name = name
     if (email) userUpdates.email = email
     if (password) {
+      const pwErr = validatePassword(password)
+      if (pwErr) return res.status(400).json({ error: pwErr })
       const bcrypt = require('bcryptjs')
       userUpdates.password = await bcrypt.hash(password, 10)
     }
@@ -530,13 +556,17 @@ async function createWorkspace(req, res, next) {
     const trialEndsAt = new Date()
     trialEndsAt.setDate(trialEndsAt.getDate() + trialDays)
 
-    // Si el email ya tiene cuenta, verificar que la contraseña sea correcta
+    // Si el email ya tiene cuenta, verificar que la contraseña sea correcta (autenticación,
+    // no alta — no se le aplica la política de largo mínimo de una contraseña nueva).
     const existingOwner = await prisma.user.findUnique({ where: { email: ownerEmail } })
     if (existingOwner) {
       const valid = await bcrypt.compare(ownerPassword, existingOwner.password)
       if (!valid) {
         return res.status(401).json({ error: 'Ya existe una cuenta con ese email. La contraseña ingresada es incorrecta.' })
       }
+    } else {
+      const pwErr = validatePassword(ownerPassword)
+      if (pwErr) return res.status(400).json({ error: pwErr })
     }
 
     const hashed = await bcrypt.hash(ownerPassword, 10)
@@ -645,13 +675,15 @@ async function createWorkspace(req, res, next) {
  * GET /api/workspaces/check-slug?slug=mi-empresa
  * Verifica en tiempo real si un slug está disponible.
  */
-async function checkSlug(req, res) {
-  const { slug } = req.query
-  if (!slug || !/^[a-z0-9-]{2,30}$/.test(slug)) {
-    return res.json({ available: false, reason: 'format' })
-  }
-  const existing = await prisma.workspace.findUnique({ where: { slug }, select: { id: true } })
-  res.json({ available: !existing })
+async function checkSlug(req, res, next) {
+  try {
+    const { slug } = req.query
+    if (!slug || !/^[a-z0-9-]{2,30}$/.test(slug)) {
+      return res.json({ available: false, reason: 'format' })
+    }
+    const existing = await prisma.workspace.findUnique({ where: { slug }, select: { id: true } })
+    res.json({ available: !existing })
+  } catch (err) { next(err) }
 }
 
 /**
@@ -683,6 +715,8 @@ async function inviteMember(req, res, next) {
   try {
     const { email, memberRole = 'member', teamRole = '' } = req.body
     if (!email) return res.status(400).json({ error: 'Email requerido' })
+    const roleErr = assertValidMemberRoleAssignment(req, memberRole)
+    if (roleErr) return res.status(roleErr.status).json({ error: roleErr.error })
 
     const workspaceId = req.workspace.id
     const workspace   = req.workspace
@@ -795,9 +829,8 @@ async function joinWorkspace(req, res, next) {
       if (!name || !password) {
         return res.status(400).json({ error: 'Nombre y contraseña requeridos para crear la cuenta' })
       }
-      if (password.length < 8) {
-        return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' })
-      }
+      const pwErr = validatePassword(password)
+      if (pwErr) return res.status(400).json({ error: pwErr })
       const hashed = await bcrypt.hash(password, 10)
       user = await prisma.user.create({
         data: { name, email: inv.email, password: hashed },
@@ -1033,6 +1066,10 @@ async function executeWorkspaceDeletion(workspaceId) {
     // Notificaciones y feedbacks
     prisma.notification.deleteMany({ where: { workspaceId } }),
     prisma.feedback.deleteMany({ where: { workspaceId } }),
+    // Licencias y pizarra de notas (FK RESTRICT hacia Workspace sin esto)
+    prisma.vacationRequest.deleteMany({ where: { workspaceId } }),
+    prisma.vacationAdjustment.deleteMany({ where: { workspaceId } }),
+    prisma.notesBoardNote.deleteMany({ where: { workspaceId } }),
     // AI logs
     prisma.aiTokenLog.deleteMany({ where: { workspaceId } }),
     prisma.dailyInsight.deleteMany({ where: { workspaceId } }),

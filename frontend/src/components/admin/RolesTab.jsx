@@ -132,6 +132,8 @@ export default function RolesTab() {
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
   const [deleteError, setDeleteError] = useState('')
+  const [roleToDelete, setRoleToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { formRef.current = form }, [form])
 
@@ -185,12 +187,16 @@ export default function RolesTab() {
 
   async function handleDeleteRole(role) {
     setDeleteError('')
+    setDeleting(true)
     try {
       await api.delete(`/roles/${role.id}`)
       setRoles(prev => prev.filter(r => r.id !== role.id))
       if (editingRole === role.name) cancelEdit()
+      setRoleToDelete(null)
     } catch (err) {
       setDeleteError(err.response?.data?.error || 'Error al eliminar rol')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -673,7 +679,7 @@ export default function RolesTab() {
                         Editar
                       </button>
                       <button
-                        onClick={() => handleDeleteRole(role)}
+                        onClick={() => setRoleToDelete(role)}
                         className="text-xs px-3 py-1.5 rounded-lg font-medium text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                       >
                         Eliminar
@@ -687,6 +693,36 @@ export default function RolesTab() {
           )
         })}
       </div>
+
+      {roleToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => !deleting && setRoleToDelete(null)}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl w-full max-w-md p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">¿Eliminar el rol "{roleToDelete.name}"?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+              Esta acción no se puede deshacer. Los miembros con este rol quedarán sin rol asignado.
+            </p>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                onClick={() => setRoleToDelete(null)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleDeleteRole(roleToDelete)}
+                disabled={deleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                {deleting ? 'Eliminando…' : 'Eliminar rol'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@ const multer  = require('multer')
 const router  = express.Router()
 const { auth }             = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
+const { requireFeatureFlag } = require('../lib/featureFlags')
 
 const uploadBanner = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 const geo               = require('../controllers/geo.controller')
@@ -44,6 +45,7 @@ router.get('/integrations/facebook/callback',  metaIntegrations.handleFacebookCa
 
 // ─── CON AUTH — todo lo demás requiere usuario autenticado y workspace ─────────
 router.use(auth, resolveWorkspace)
+router.use(requireFeatureFlag('marketing'))
 
 // GEO
 router.post('/geo/audit',                    geo.runAudit)

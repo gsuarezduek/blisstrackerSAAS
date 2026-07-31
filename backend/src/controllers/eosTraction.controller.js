@@ -568,32 +568,45 @@ async function startMeeting(req, res, next) {
     const now   = new Date()
     const today = todayString(tz)
 
+    // Workdays por participante (idempotente — no es sensible dejarla creada
+    // aunque la transacción de abajo falle).
+    const workDays = {}
     for (const p of meeting.participants) {
-      const workDay = await ensureWorkDay(p.userId, workspaceId, today)
-      if (!workDay) continue
-      try {
-        const task = await prisma.task.create({
-          data: {
-            description: typeLabel(meeting.type),
-            projectId:   meetingProjectId,
-            userId:      p.userId,
-            workDayId:   workDay.id,
-            status:      'IN_PROGRESS',
-            startedAt:   now,
-            createdById: p.userId !== requesterId ? requesterId : null,
-          },
-        })
-        await prisma.taskSession.create({ data: { taskId: task.id, startedAt: now } })
-        await prisma.eOSMeetingParticipant.update({ where: { id: p.id }, data: { taskId: task.id } })
-      } catch (e) {
-        if (e.code === 'P2002') {
-          return res.status(409).json({ error: `${p.user?.name || 'Un participante'} acaba de iniciar otra tarea. Reintentá.` })
-        }
-        throw e
-      }
+      const wd = await ensureWorkDay(p.userId, workspaceId, today)
+      if (wd) workDays[p.userId] = wd
     }
 
-    await prisma.eOSMeeting.update({ where: { id: meeting.id }, data: { startedAt: now, endedAt: null, durationMins: null } })
+    // Todo o nada: si algún participante ya tiene una tarea en curso (condición de
+    // carrera con el busy-check de arriba), se revierte todo lo creado en este loop
+    // en vez de dejar tareas "fantasma" para los participantes anteriores.
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const p of meeting.participants) {
+          const workDay = workDays[p.userId]
+          if (!workDay) continue
+          const task = await tx.task.create({
+            data: {
+              description: typeLabel(meeting.type),
+              projectId:   meetingProjectId,
+              userId:      p.userId,
+              workDayId:   workDay.id,
+              status:      'IN_PROGRESS',
+              startedAt:   now,
+              createdById: p.userId !== requesterId ? requesterId : null,
+            },
+          })
+          await tx.taskSession.create({ data: { taskId: task.id, startedAt: now } })
+          await tx.eOSMeetingParticipant.update({ where: { id: p.id }, data: { taskId: task.id } })
+        }
+        await tx.eOSMeeting.update({ where: { id: meeting.id }, data: { startedAt: now, endedAt: null, durationMins: null } })
+      })
+    } catch (e) {
+      if (e.code === 'P2002') {
+        return res.status(409).json({ error: 'Uno de los participantes acaba de iniciar otra tarea. Reintentá.' })
+      }
+      throw e
+    }
+
     const fresh = await loadMeetingByWeek(week, workspaceId)
     res.json(formatMeeting(fresh))
   } catch (err) { next(err) }

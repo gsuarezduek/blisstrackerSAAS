@@ -360,6 +360,10 @@ async function getDailyInsight(req, res, next) {
     const tz = workspace.timezone
     const date = todayString(tz)
 
+    if (member?.dailyInsightEnabled === false) {
+      return res.status(403).json({ error: 'El insight diario está deshabilitado', code: 'DAILY_INSIGHT_DISABLED' })
+    }
+
     const existing = await prisma.dailyInsight.findUnique({
       where: { userId_workspaceId_date: { userId, workspaceId: workspace.id, date } },
     })
@@ -400,6 +404,10 @@ async function refreshDailyInsight(req, res, next) {
     const member   = req.workspaceMember
     const tz = workspace.timezone
     const date = todayString(tz)
+
+    if (member?.dailyInsightEnabled === false) {
+      return res.status(403).json({ error: 'El insight diario está deshabilitado', code: 'DAILY_INSIGHT_DISABLED' })
+    }
 
     const existing = await prisma.dailyInsight.findUnique({
       where: { userId_workspaceId_date: { userId, workspaceId: workspace.id, date } },

@@ -8,12 +8,20 @@ const {
   currentMonthStr,
   GENERATED_WHERE,
 } = require('./monthlyReport.controller')
+const { isAdmin, canWrite } = require('../lib/projectAccess')
 
 const SLUG_RE = /^[a-z0-9-]{3,40}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OTP_TTL_MS = 10 * 60 * 1000
 const OTP_RATE_LIMIT = 5
 const OTP_RATE_WINDOW_MS = 60 * 60 * 1000
+
+// Límite de intentos fallidos de verificación por (portalId, email), en memoria
+// (best-effort, mismo patrón que los cooldowns de scraping) — evita fuerza bruta
+// sobre el código de 6 dígitos dentro de su ventana de validez.
+const verifyAttemptsMap = new Map() // `${portalId}:${email}` → { count, windowStart }
+const VERIFY_MAX_ATTEMPTS = 8
+const VERIFY_WINDOW_MS = OTP_TTL_MS
 const LIVE_REFRESH_COOLDOWN_MS = 15 * 60 * 1000
 
 // ─── Helpers compartidos (mismo criterio que briefs.controller.js) ────────────
@@ -28,18 +36,6 @@ async function resolveProjectId(param, workspaceId) {
   return p?.id ?? null
 }
 
-function isAdmin(req) {
-  const m = req.workspaceMember
-  return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
-}
-
-async function canWrite(req, projectId) {
-  if (isAdmin(req)) return true
-  const member = await prisma.projectMember.findUnique({
-    where: { projectId_userId: { projectId, userId: req.user.userId } },
-  })
-  return !!member
-}
 
 function shapePortal(portal, workspaceSlug) {
   return {
@@ -231,11 +227,26 @@ async function verifyLoginCode(req, res, next) {
     const code = String(req.body?.code || '').trim()
     if (!email || !code) return res.status(400).json({ error: 'Email y código son requeridos.' })
 
+    const attemptKey = `${portal.id}:${email}`
+    const now = Date.now()
+    let attempts = verifyAttemptsMap.get(attemptKey)
+    if (!attempts || now - attempts.windowStart >= VERIFY_WINDOW_MS) {
+      attempts = { count: 0, windowStart: now }
+    }
+    if (attempts.count >= VERIFY_MAX_ATTEMPTS) {
+      return res.status(429).json({ error: 'Demasiados intentos. Pedí un código nuevo en unos minutos.' })
+    }
+
     const login = await prisma.clientPortalLoginCode.findFirst({
       where: { portalId: portal.id, email, code, used: false, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: 'desc' },
     })
-    if (!login) return res.status(401).json({ error: 'Código inválido o vencido.' })
+    if (!login) {
+      attempts.count += 1
+      verifyAttemptsMap.set(attemptKey, attempts)
+      return res.status(401).json({ error: 'Código inválido o vencido.' })
+    }
+    verifyAttemptsMap.delete(attemptKey)
 
     await prisma.clientPortalLoginCode.update({ where: { id: login.id }, data: { used: true } })
 

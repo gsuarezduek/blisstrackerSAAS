@@ -41,9 +41,12 @@ async function saveAllMonthlyCompetitorSnapshots() {
   const month = prevMonthStr(currentMonthStr())
   const date  = todayStr()
 
+  const { enabledWorkspaceIds } = require('../lib/featureFlags')
+  const enabled = await enabledWorkspaceIds('marketing')
+
   // Procesamos todas las plataformas soportadas (Instagram + LinkedIn)
-  const competitors = await prisma.competitorAccount.findMany({
-    where:  { platform: { in: Object.keys(PLATFORM_SCRAPERS) } },
+  const competitors = enabled.size === 0 ? [] : await prisma.competitorAccount.findMany({
+    where:  { platform: { in: Object.keys(PLATFORM_SCRAPERS) }, workspaceId: { in: [...enabled] } },
     select: { id: true, username: true, workspaceId: true, platform: true },
   })
 

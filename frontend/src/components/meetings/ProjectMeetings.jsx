@@ -289,6 +289,7 @@ function QuickAddTodo({ onAdd }) {
 
 function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
   const [, force] = useState(0)
+  const [busy, setBusy] = useState(false)
 
   // Tick cada segundo mientras la reunión está en curso (cronómetro vivo).
   useEffect(() => {
@@ -296,6 +297,15 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
     const id = setInterval(() => force(n => n + 1), 1000)
     return () => clearInterval(id)
   }, [meeting.running])
+
+  async function handleStartClick() {
+    setBusy(true)
+    try { await onStart() } finally { setBusy(false) }
+  }
+  async function handleFinishClick() {
+    setBusy(true)
+    try { await onFinish() } finally { setBusy(false) }
+  }
 
   if (meeting.running) {
     const secs = Math.max(0, Math.floor((Date.now() - new Date(meeting.startedAt).getTime()) / 1000))
@@ -307,10 +317,11 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
         </span>
         {canEdit && (
           <button
-            onClick={onFinish}
-            className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+            onClick={handleFinishClick}
+            disabled={busy}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50"
           >
-            ■ Finalizar
+            {busy ? 'Finalizando…' : '■ Finalizar'}
           </button>
         )}
       </div>
@@ -327,10 +338,11 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
 
   return canEdit ? (
     <button
-      onClick={onStart}
-      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
+      onClick={handleStartClick}
+      disabled={busy}
+      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50"
     >
-      ▶ Iniciar reunión
+      {busy ? 'Iniciando…' : '▶ Iniciar reunión'}
     </button>
   ) : (
     <span className="text-xs text-gray-400 dark:text-gray-500">Sin iniciar</span>

@@ -52,10 +52,12 @@ async function list(req, res, next) {
 
 async function markRead(req, res, next) {
   try {
-    const feedback = await prisma.feedback.update({
-      where: { id: Number(req.params.id) },
+    const result = await prisma.feedback.updateMany({
+      where: { id: Number(req.params.id), workspaceId: req.workspace.id },
       data: { read: true },
     })
+    if (result.count === 0) return res.status(404).json({ error: 'No encontrado' })
+    const feedback = await prisma.feedback.findUnique({ where: { id: Number(req.params.id) } })
     res.json(feedback)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'No encontrado' })

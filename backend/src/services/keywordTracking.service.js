@@ -255,8 +255,10 @@ async function saveAllKeywordRankings() {
   )
 
   // Proyectos con keywords trackeadas + GSC activo
-  const projects = await prisma.trackedKeyword.findMany({
-    where:   {},
+  const { enabledWorkspaceIds } = require('../lib/featureFlags')
+  const enabled = await enabledWorkspaceIds('marketing')
+  const projects = enabled.size === 0 ? [] : await prisma.trackedKeyword.findMany({
+    where:   { workspaceId: { in: [...enabled] } },
     select:  { projectId: true, workspaceId: true },
     distinct: ['projectId'],
   })

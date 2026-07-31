@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { DEFAULT_LATE_TEMPLATE } = require('../services/lateNotification.service')
 const { createProject } = require('../services/projects.service')
+const { canWrite } = require('../lib/projectAccess')
 
 function weekMondayStr(tz) {
   const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : 'America/Argentina/Buenos_Aires'
@@ -17,14 +18,12 @@ function weekMondayStr(tz) {
 
 async function resolveProjectId(param, workspaceId) {
   const num = Number(param)
-  if (Number.isInteger(num) && num > 0) return num
+  if (Number.isInteger(num) && num > 0) {
+    const p = await prisma.project.findFirst({ where: { id: num, workspaceId }, select: { id: true } })
+    return p?.id ?? null
+  }
   const project = await prisma.project.findFirst({ where: { name: param, workspaceId } })
   return project?.id ?? null
-}
-
-function isAdmin(req) {
-  const m = req.workspaceMember
-  return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
 }
 
 const includeDetails = {
@@ -172,14 +171,15 @@ async function create(req, res, next) {
 async function update(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { id } = req.params
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
     const { name, active, serviceIds, memberIds, websiteUrl, connections, monthlyHours } = req.body
     const data = {}
     if (name        !== undefined) data.name       = name
     if (active      !== undefined) {
       data.active = active
       // Marca/limpia la fecha de baja solo en la transición (no pisa la original si se re-guarda inactivo).
-      const cur = await prisma.project.findFirst({ where: { id: Number(id), workspaceId }, select: { active: true } })
+      const cur = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { active: true } })
       if (cur) {
         if (cur.active && active === false)      data.lostAt = new Date()
         else if (!cur.active && active === true) data.lostAt = null
@@ -198,24 +198,24 @@ async function update(req, res, next) {
     }
 
     if (serviceIds !== undefined) {
-      await prisma.projectService.deleteMany({ where: { projectId: Number(id) } })
+      await prisma.projectService.deleteMany({ where: { projectId } })
       data.services = { create: serviceIds.map(serviceId => ({ serviceId: Number(serviceId) })) }
     }
     let newMemberIds = []
     if (memberIds !== undefined) {
       const existing = await prisma.projectMember.findMany({
-        where: { projectId: Number(id) },
+        where: { projectId },
         select: { userId: true },
       })
       const existingIds = new Set(existing.map(m => m.userId))
       newMemberIds = memberIds.map(Number).filter(uid => !existingIds.has(uid))
 
-      await prisma.projectMember.deleteMany({ where: { projectId: Number(id) } })
+      await prisma.projectMember.deleteMany({ where: { projectId } })
       data.members = { create: memberIds.map(userId => ({ userId: Number(userId) })) }
     }
 
     const project = await prisma.project.update({
-      where: { id: Number(id) },
+      where: { id: projectId },
       data,
       include: includeDetails,
     })
@@ -226,7 +226,7 @@ async function update(req, res, next) {
           userId:      uid,
           actorId:     req.user.userId,
           workspaceId,
-          projectId:   Number(id),
+          projectId,
           type:        'ADDED_TO_PROJECT',
           message:     `te agregó al proyecto "${project.name}"`,
         })),
@@ -358,14 +358,8 @@ async function saveLinks(req, res, next) {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const userId = req.user.userId
 
-    if (!isAdmin(req)) {
-      const member = await prisma.projectMember.findUnique({
-        where: { projectId_userId: { projectId, userId } },
-      })
-      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
-    }
+    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
     const { links } = req.body
     if (!Array.isArray(links)) return res.status(400).json({ error: 'links debe ser un array' })
@@ -591,14 +585,8 @@ async function saveSituation(req, res, next) {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    const userId = req.user.userId
 
-    if (!isAdmin(req)) {
-      const member = await prisma.projectMember.findUnique({
-        where: { projectId_userId: { projectId, userId } },
-      })
-      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
-    }
+    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
     const { situation } = req.body
     if (typeof situation !== 'string') {
@@ -625,12 +613,7 @@ async function saveInfo(req, res, next) {
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
     // Cualquier miembro del proyecto puede editar (no solo admin)
-    if (!isAdmin(req)) {
-      const member = await prisma.projectMember.findUnique({
-        where: { projectId_userId: { projectId, userId: req.user.userId } },
-      })
-      if (!member) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
-    }
+    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
     const { websiteUrl, connections } = req.body
     const data = {}
@@ -659,12 +642,7 @@ async function resolveAccessGuard(req) {
   const workspaceId = req.workspace.id
   const projectId = await resolveProjectId(req.params.id, workspaceId)
   if (!projectId) return { error: 'Proyecto no encontrado', status: 404 }
-  if (!isAdmin(req)) {
-    const member = await prisma.projectMember.findUnique({
-      where: { projectId_userId: { projectId, userId: req.user.userId } },
-    })
-    if (!member) return { error: 'No tenés acceso a las credenciales de este proyecto', status: 403 }
-  }
+  if (!(await canWrite(req, projectId))) return { error: 'No tenés acceso a las credenciales de este proyecto', status: 403 }
   return { projectId }
 }
 

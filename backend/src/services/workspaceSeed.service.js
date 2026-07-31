@@ -155,7 +155,15 @@ async function removeDemoProject(workspaceId) {
   })
   if (!project) return { removed: 0 }
 
+  // Notification no tiene cascade sobre Task — borrarlas antes para evitar el FK
+  // constraint (mismo patrón que tasks.controller.js remove()).
+  await prisma.notification.deleteMany({ where: { task: { projectId: project.id } } })
   await prisma.task.deleteMany({ where: { projectId: project.id } })
+  // ProjectMember/ProjectService tienen FK RESTRICT hacia Project — sin esto,
+  // project.delete() falla siempre porque el seed siempre crea al menos una fila
+  // de cada uno.
+  await prisma.projectMember.deleteMany({ where: { projectId: project.id } })
+  await prisma.projectService.deleteMany({ where: { projectId: project.id } })
   await prisma.project.delete({ where: { id: project.id } })
 
   return { removed: 1, projectId: project.id }

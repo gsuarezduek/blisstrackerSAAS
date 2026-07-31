@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../api/client'
 import Navbar from '../components/Navbar'
+import LoadingSpinner from '../components/LoadingSpinner'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import VisionTab from '../components/eos/VisionTab'
 import PersonasTab from '../components/eos/PersonasTab'
 import DatosTab from '../components/eos/DatosTab'
@@ -60,6 +62,7 @@ const IMPLEMENTED = new Set(['vision', 'personas', 'datos', 'procesos', 'asuntos
 const VALID_TABS = new Set(TABS.map(t => t.id))
 
 export default function EOS() {
+  const { enabled, loading: flagLoading } = useFeatureFlag('eos')
   const [searchParams, setSearchParams] = useSearchParams()
   const initialTab = VALID_TABS.has(searchParams.get('tab')) ? searchParams.get('tab') : 'vision'
   const [tab,     setTab]     = useState(initialTab)
@@ -72,6 +75,7 @@ export default function EOS() {
   // AsuntosTab la mantiene en vivo vía onWeeklyOpenChange; este fetch sólo la
   // precarga para que el puntito aparezca sin entrar a la pestaña.
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
     api.get('/eos/issues')
       .then(({ data }) => {
@@ -81,11 +85,30 @@ export default function EOS() {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [enabled])
 
   function handleTabChange(id) {
     setTab(id)
     setSearchParams({ tab: id }, { replace: true })
+  }
+
+  if (flagLoading) {
+    return <div className="min-h-screen bg-gray-50 dark:bg-gray-900"><Navbar /><div className="py-20"><LoadingSpinner /></div></div>
+  }
+
+  if (!enabled) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <Navbar />
+        <main className="max-w-6xl mx-auto px-4 py-8">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center">
+            <p className="text-5xl mb-4">🔒</p>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Sección no disponible</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">El módulo EOS no está habilitado para este workspace.</p>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   return (

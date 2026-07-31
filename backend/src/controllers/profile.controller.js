@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken')
 const prisma = require('../lib/prisma')
 const { resolveLegajoFields, coerceCustomValue } = require('../lib/legajoCatalog')
 const { sendEmailChangeVerification } = require('../services/email.service')
+const { validatePassword } = require('../lib/passwordPolicy')
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -145,9 +146,8 @@ async function changePassword(req, res, next) {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: 'Datos incompletos' })
     }
-    if (newPassword.length < 12) {
-      return res.status(400).json({ error: 'La contraseña debe tener al menos 12 caracteres' })
-    }
+    const pwErr = validatePassword(newPassword)
+    if (pwErr) return res.status(400).json({ error: pwErr })
 
     const user = await prisma.user.findUnique({ where: { id: req.user.userId } })
     const valid = await bcrypt.compare(currentPassword, user.password)

@@ -179,9 +179,12 @@ async function saveAllAdsSnapshots() {
   const month = prevMonthStr()
   console.log(`[AdsSnapshot] Guardando snapshots del mes ${month}...`)
 
+  const { enabledWorkspaceIds } = require('../lib/featureFlags')
+  const enabled = await enabledWorkspaceIds('marketing')
+
   // Proyectos con integración Meta Ads activa
-  const metaIntegrations = await prisma.projectIntegration.findMany({
-    where: { type: 'meta_ads', status: 'active' },
+  const metaIntegrations = enabled.size === 0 ? [] : await prisma.projectIntegration.findMany({
+    where: { type: 'meta_ads', status: 'active', workspaceId: { in: [...enabled] } },
     include: { project: { select: { id: true, workspaceId: true, name: true } } },
   })
 
@@ -199,8 +202,8 @@ async function saveAllAdsSnapshots() {
   }
 
   // Proyectos con integración Google Ads activa
-  const gadsIntegrations = await prisma.projectIntegration.findMany({
-    where: { type: 'google_ads', status: 'active', customerId: { not: null } },
+  const gadsIntegrations = enabled.size === 0 ? [] : await prisma.projectIntegration.findMany({
+    where: { type: 'google_ads', status: 'active', customerId: { not: null }, workspaceId: { in: [...enabled] } },
     include: { project: { select: { id: true, workspaceId: true, name: true } } },
   })
 

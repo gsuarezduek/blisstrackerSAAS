@@ -119,18 +119,29 @@ function buildRecurrenceParams({ frequency, weekdays, startDate, dayOfMonth, mon
 
 // Crea una instancia Task de una recurrencia para la fecha `scheduledFor`.
 async function spawnInstance(client, rec, scheduledFor, workDayId) {
-  const task = await client.task.create({
-    data: {
-      workDayId,
-      userId:       rec.userId,
-      createdById:  rec.createdById ?? null,
-      projectId:    rec.projectId,
-      description:  rec.description,
-      status:       'PENDING',
-      scheduledFor,
-      recurrenceId: rec.id,
-    },
-  })
+  let task
+  try {
+    task = await client.task.create({
+      data: {
+        workDayId,
+        userId:       rec.userId,
+        createdById:  rec.createdById ?? null,
+        projectId:    rec.projectId,
+        description:  rec.description,
+        status:       'PENDING',
+        scheduledFor,
+        recurrenceId: rec.id,
+      },
+    })
+  } catch (err) {
+    // Condición de carrera (dos requests concurrentes materializan la misma ocurrencia):
+    // el @@unique([recurrenceId, scheduledFor]) la rechaza — devolvemos la que ya existe.
+    if (err.code === 'P2002') {
+      task = await client.task.findFirst({ where: { recurrenceId: rec.id, scheduledFor } })
+      if (task) return task
+    }
+    throw err
+  }
   await client.taskRecurrence.update({
     where: { id: rec.id },
     data:  { lastSpawnedDate: maxYMD(rec.lastSpawnedDate, scheduledFor) },

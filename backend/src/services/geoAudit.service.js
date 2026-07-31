@@ -2,6 +2,7 @@ const axios     = require('axios')
 const cheerio   = require('cheerio')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
+const { assertPublicUrl } = require('../lib/safeUrl')
 
 const { anthropic } = require('../lib/claude')
 
@@ -403,6 +404,7 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
     }
 
     // 2. Fetch todo en paralelo
+    await assertPublicUrl(url)
     const origin = new URL(url).origin
     const [html, robotsTxt, llmsData, aiDiscovery] = await Promise.all([
       fetchPage(url),
@@ -488,8 +490,10 @@ async function runGeoAnalysis(auditId, workspaceId, projectId, url, userId) {
  * que tienen websiteUrl configurada.
  */
 async function runAllMonthlyGeoAudits() {
-  const projects = await prisma.project.findMany({
-    where:  { websiteUrl: { not: null } },
+  const { enabledWorkspaceIds } = require('../lib/featureFlags')
+  const enabled = await enabledWorkspaceIds('marketing')
+  const projects = enabled.size === 0 ? [] : await prisma.project.findMany({
+    where:  { websiteUrl: { not: null }, workspaceId: { in: [...enabled] } },
     select: { id: true, workspaceId: true, websiteUrl: true },
   })
 

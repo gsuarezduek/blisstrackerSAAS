@@ -6,6 +6,7 @@ const { triggerLateCheck } = require('../services/lateNotification.service')
 const { OAuth2Client } = require('google-auth-library')
 const { isSalesUser } = require('../middleware/workspace')
 const prisma = require('../lib/prisma')
+const { validatePassword } = require('../lib/passwordPolicy')
 
 /**
  * Genera un JWT con el contexto workspace.
@@ -184,7 +185,8 @@ async function resetPassword(req, res, next) {
   try {
     const { token, password } = req.body
     if (!token || !password) return res.status(400).json({ error: 'Datos incompletos' })
-    if (password.length < 12) return res.status(400).json({ error: 'La contraseña debe tener al menos 12 caracteres' })
+    const pwErr = validatePassword(password)
+    if (pwErr) return res.status(400).json({ error: pwErr })
 
     const resetToken = await prisma.passwordResetToken.findUnique({ where: { token } })
 

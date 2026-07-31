@@ -1,9 +1,5 @@
 const prisma = require('../lib/prisma')
-
-function isAdmin(req) {
-  const m = req.workspaceMember
-  return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
-}
+const { isAdmin } = require('../lib/projectAccess')
 
 async function getTaskWithAccess(taskId, userId, admin, workspaceId) {
   // Scopear por workspace: evita que un admin lea/comente tareas de otros workspaces vía ID.

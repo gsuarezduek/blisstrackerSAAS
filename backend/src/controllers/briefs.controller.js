@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { isValidBriefType } = require('../lib/briefCatalog')
+const { isAdmin, canWrite } = require('../lib/projectAccess')
 
 // Resuelve :id (numérico o name) a un projectId del workspace actual.
 async function resolveProjectId(param, workspaceId) {
@@ -10,20 +11,6 @@ async function resolveProjectId(param, workspaceId) {
   }
   const p = await prisma.project.findFirst({ where: { name: param, workspaceId }, select: { id: true } })
   return p?.id ?? null
-}
-
-function isAdmin(req) {
-  const m = req.workspaceMember
-  return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
-}
-
-// Escritura: admin/owner o miembro del proyecto (mismo criterio que saveInfo/saveSituation).
-async function canWrite(req, projectId) {
-  if (isAdmin(req)) return true
-  const member = await prisma.projectMember.findUnique({
-    where: { projectId_userId: { projectId, userId: req.user.userId } },
-  })
-  return !!member
 }
 
 function shape(b) {

@@ -152,7 +152,9 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           {!lead.convertedProjectId
-            ? <button onClick={() => setShowConvert(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-4 py-2 text-sm font-semibold">🚀 Crear proyecto</button>
+            ? ['propuesta', 'ganado'].includes(lead.status)
+              ? <button onClick={() => setShowConvert(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-xl px-4 py-2 text-sm font-semibold">🚀 Crear proyecto</button>
+              : <span title="El lead debe estar en Propuesta o Ganado para convertirlo en proyecto" className="text-xs text-gray-400 dark:text-gray-500 px-3 py-2">🚀 Crear proyecto (requiere Propuesta o Ganado)</span>
             : <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-xl px-3 py-2 font-medium">✓ Proyecto: {lead.convertedProject?.name}</span>}
           <button onClick={() => setShowEdit(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-3 py-2 text-sm font-medium">Editar</button>
           <button onClick={handleDelete} className="border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl px-3 py-2 text-sm font-medium">Eliminar</button>

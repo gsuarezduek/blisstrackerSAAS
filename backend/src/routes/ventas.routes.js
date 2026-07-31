@@ -11,8 +11,8 @@ const proposals = require('../controllers/ventas/proposals.controller')
 const metrics   = require('../controllers/ventas/salesMetrics.controller')
 
 // Todo el módulo Ventas requiere: autenticación + workspace + pertenecer al equipo
-// comercial (o ser admin/owner). El feature flag `ventas` se chequea en el frontend
-// (Navbar + página), igual que marketing/eos.
+// comercial (o ser admin/owner) + que el feature flag `ventas` esté habilitado
+// para el workspace (validado dentro de salesGuard).
 router.use(auth)
 router.use(resolveWorkspace)
 router.use(salesGuard)

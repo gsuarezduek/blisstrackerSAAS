@@ -1,13 +1,8 @@
 const prisma = require('../lib/prisma')
-const { getProductivityPeriod } = require('../lib/timeMetrics')
+const { getProductivityPeriod, taskMins } = require('../lib/timeMetrics')
 const {
   getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median,
 } = require('../services/productivityStats.service')
-
-function calcMins(t) {
-  if (t.minutesOverride !== null && t.minutesOverride !== undefined) return t.minutesOverride
-  return Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
-}
 
 function defaultDateRange(tz = 'America/Argentina/Buenos_Aires') {
   const to = new Date().toLocaleDateString('en-CA', { timeZone: tz })
@@ -66,7 +61,7 @@ async function byProject(req, res, next) {
 
     const map = {}
     for (const t of tasks) {
-      const mins = calcMins(t)
+      const mins = taskMins(t)
       const key  = t.project.id
       if (!map[key]) map[key] = { project: t.project, totalMinutes: 0, taskCount: 0, byUser: {} }
       map[key].totalMinutes += mins
@@ -166,7 +161,7 @@ async function mine(req, res, next) {
     let totalMinutes = 0
     const byProject = {}
     for (const t of tasks) {
-      const mins = calcMins(t)
+      const mins = taskMins(t)
       totalMinutes += mins
       const pid = t.project.id
       if (!byProject[pid]) byProject[pid] = { project: t.project, minutes: 0, taskList: [] }

@@ -26,9 +26,11 @@ const {
 } = require('../controllers/orgAssessment.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
+const { requireFeatureFlag } = require('../lib/featureFlags')
 
 router.use(auth)
 router.use(resolveWorkspace)
+router.use(requireFeatureFlag('eos'))
 router.use(workspaceAdminOnly)
 
 // Visión

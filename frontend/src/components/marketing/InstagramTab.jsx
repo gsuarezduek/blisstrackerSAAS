@@ -971,21 +971,21 @@ export default function InstagramTab({ projectId, onSelectProject }) {
   const [storiesScrapeOnly, setStoriesScrapeOnly] = useState(false)
   const [capturingStories, setCapturingStories] = useState(false)
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal) => {
     if (!projectId) return
     setLoading(true)
     setError(null)
     try {
-      const intgsRes = await api.get(`/marketing/projects/${projectId}/integrations`)
+      const intgsRes = await api.get(`/marketing/projects/${projectId}/integrations`, { signal })
       const ig = intgsRes.data.find(i => i.type === 'instagram')
       setIntegration(ig ?? null)
       if (!ig) { setLoading(false); return }
 
       const [metricsRes, snapshotsRes, logsRes, objsRes] = await Promise.allSettled([
-        api.get(`/marketing/projects/${projectId}/instagram`),
-        api.get(`/marketing/projects/${projectId}/instagram/snapshots`),
-        api.get(`/marketing/projects/${projectId}/instagram/followers`, { params: { to: todayAR() } }),
-        api.get(`/marketing/projects/${projectId}/objectives/progress`),
+        api.get(`/marketing/projects/${projectId}/instagram`, { signal }),
+        api.get(`/marketing/projects/${projectId}/instagram/snapshots`, { signal }),
+        api.get(`/marketing/projects/${projectId}/instagram/followers`, { params: { to: todayAR() }, signal }),
+        api.get(`/marketing/projects/${projectId}/objectives/progress`, { signal }),
       ])
 
       if (metricsRes.status   === 'fulfilled') setMetrics(metricsRes.value.data)
@@ -1010,11 +1010,14 @@ export default function InstagramTab({ projectId, onSelectProject }) {
           : (logs.find(l => l.date >= monthStart && l.date < today)?.followersCount ?? null)
         setMonthStartFollowers(baseline)
       }
-      if (metricsRes.status   === 'rejected')  setError(metricsRes.reason?.response?.data?.error || 'No se pudieron cargar las métricas.')
+      if (metricsRes.status === 'rejected' && metricsRes.reason?.code !== 'ERR_CANCELED') {
+        setError(metricsRes.reason?.response?.data?.error || 'No se pudieron cargar las métricas.')
+      }
     } catch (err) {
+      if (err.code === 'ERR_CANCELED' || err.name === 'CanceledError') return
       setError(err.response?.data?.error || 'Error al cargar datos de Instagram.')
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) setLoading(false)
     }
   }, [projectId])
 
@@ -1033,7 +1036,11 @@ export default function InstagramTab({ projectId, onSelectProject }) {
     finally { setFollowerLoading(false) }
   }, [projectId])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchData(controller.signal)
+    return () => controller.abort()
+  }, [fetchData])
 
   // Stories del mes seleccionado (se leen de la DB; el cron las captura cada 6h).
   useEffect(() => {
@@ -1106,6 +1113,18 @@ export default function InstagramTab({ projectId, onSelectProject }) {
   }
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={fetchData} />
+  if (integration.status === 'expired') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl p-6 text-center">
+          <div className="text-3xl mb-2">⚠️</div>
+          <p className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">La conexión con Instagram expiró</p>
+          <p className="text-xs text-red-500 dark:text-red-400">Reconectá la cuenta para seguir viendo las métricas.</p>
+        </div>
+        <ConnectPrompt projectId={projectId} onConnected={fetchData} />
+      </div>
+    )
+  }
 
   // Meses disponibles: mes actual + meses con snapshot (ordenados más reciente primero)
   const availableMonths = [...new Set([currentMonth, ...snapshots.map(s => s.month)])]

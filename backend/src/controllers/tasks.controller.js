@@ -3,6 +3,7 @@ const { todayString } = require('../utils/dates')
 const {
   buildRecurrenceParams, firstScheduledDate, spawnInstance,
 } = require('../services/recurrence.service')
+const { isAdmin } = require('../lib/projectAccess')
 
 const taskInclude = {
   project: true,
@@ -38,11 +39,6 @@ function handleActiveTaskConflict(err) {
   return err
 }
 
-function isAdmin(req) {
-  const m = req.workspaceMember
-  return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
-}
-
 async function create(req, res, next) {
   try {
     const requesterId = req.user.userId
@@ -52,6 +48,9 @@ async function create(req, res, next) {
     if (!description || !projectId) {
       return res.status(400).json({ error: 'Descripción y proyecto requeridos' })
     }
+
+    const project = await prisma.project.findFirst({ where: { id: Number(projectId), workspaceId, active: true } })
+    if (!project) return res.status(400).json({ error: 'Proyecto inválido' })
 
     const userId = targetUserId ? Number(targetUserId) : requesterId
     const today = todayString(tz)
@@ -202,6 +201,7 @@ async function startTask(req, res, next) {
     const existing = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
     if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
     if (existing.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para iniciarla.' })
+    if (existing.status !== 'PENDING') return res.status(400).json({ error: 'Solo se puede iniciar una tarea pendiente.' })
 
     const now = new Date()
     const taskId = Number(req.params.id)
@@ -227,8 +227,13 @@ async function startTask(req, res, next) {
 
 async function pauseTask(req, res, next) {
   try {
-    const now = new Date()
+    const userId = req.user.userId
     const taskId = Number(req.params.id)
+    const existing = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
+    if (existing.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Solo se puede pausar una tarea en curso.' })
+
+    const now = new Date()
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId, userId: req.user.userId },
@@ -254,6 +259,7 @@ async function resumeTask(req, res, next) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
     if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para reanudarla.' })
+    if (current.status !== 'PAUSED') return res.status(400).json({ error: 'Solo se puede reanudar una tarea pausada.' })
 
     const now       = new Date()
     const pausedMs  = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0
@@ -284,8 +290,12 @@ async function completeTask(req, res, next) {
   try {
     const userId = req.user.userId
     const workspaceId = req.workspace.id
-    const now    = new Date()
     const taskId = Number(req.params.id)
+    const existing = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
+    if (existing.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Solo se puede completar una tarea en curso.' })
+
+    const now    = new Date()
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where:   { id: taskId, userId },
@@ -359,8 +369,12 @@ async function blockTask(req, res, next) {
     const workspaceId = req.workspace.id
     const { reason } = req.body
     if (!reason?.trim()) return res.status(400).json({ error: 'La razón del bloqueo es requerida' })
-    const now    = new Date()
     const taskId = Number(req.params.id)
+    const existing = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!existing || existing.userId !== userId) return res.status(404).json({ error: 'Tarea no encontrada' })
+    if (existing.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Solo se puede bloquear una tarea en curso.' })
+
+    const now    = new Date()
     const [task] = await prisma.$transaction([
       prisma.task.update({
         where: { id: taskId, userId },
@@ -406,6 +420,7 @@ async function unblockTask(req, res, next) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
     if (current.isBacklog) return res.status(400).json({ error: 'Agregá la tarea al día primero para desbloquearla.' })
+    if (current.status !== 'BLOCKED') return res.status(400).json({ error: 'Solo se puede desbloquear una tarea bloqueada.' })
 
     const now       = new Date()
     const blockedMs = current.pausedAt ? now.getTime() - new Date(current.pausedAt).getTime() : 0

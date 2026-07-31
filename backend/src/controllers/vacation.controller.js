@@ -1,6 +1,20 @@
 const prisma = require('../lib/prisma')
 const { sendVacationRequestEmail, sendVacationReviewEmail } = require('../services/email.service')
 
+// Cuenta días hábiles (lun-vie, sin feriados) entre dos fechas "YYYY-MM-DD" inclusive.
+function countBusinessDays(startDate, endDate) {
+  const [sy, sm, sd] = startDate.split('-').map(Number)
+  const [ey, em, ed] = endDate.split('-').map(Number)
+  const start = new Date(sy, sm - 1, sd)
+  const end   = new Date(ey, em - 1, ed)
+  let count = 0
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay()
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return count
+}
+
 // ─── ADMIN ────────────────────────────────────────────────────────────────────
 
 /**
@@ -110,19 +124,60 @@ async function reviewRequest(req, res, next) {
 
     const workspace = req.workspace
 
-    const updated = await prisma.vacationRequest.update({
-      where: { id },
-      data: {
-        status,
-        reviewedById: adminId,
-        reviewedAt:   new Date(),
-        reviewNote:   reviewNote?.trim() || null,
-      },
-      include: {
-        user:       { select: { id: true, name: true, avatar: true } },
-        reviewedBy: { select: { id: true, name: true } },
-      },
-    })
+    let updated
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        // updateMany con status:'pending' en el where: si otra revisión concurrente
+        // ya la resolvió entre el findFirst de arriba y acá, count===0 y abortamos
+        // con conflicto explícito en vez de pisarla silenciosamente.
+        const result = await tx.vacationRequest.updateMany({
+          where: { id, workspaceId, status: 'pending' },
+          data: {
+            status,
+            reviewedById: adminId,
+            reviewedAt:   new Date(),
+            reviewNote:   reviewNote?.trim() || null,
+          },
+        })
+        if (result.count === 0) {
+          throw Object.assign(new Error('La solicitud ya fue revisada'), { conflict: true })
+        }
+
+        // Descuento de saldo al aprobar una licencia de tipo "vacaciones" (días hábiles).
+        if (status === 'approved' && request.type === 'vacaciones') {
+          const member = await tx.workspaceMember.findUnique({
+            where: { workspaceId_userId: { workspaceId, userId: request.userId } },
+            select: { vacationDays: true },
+          })
+          if (member) {
+            const days = countBusinessDays(request.startDate, request.endDate)
+            const newDays = member.vacationDays - days
+            await tx.workspaceMember.update({
+              where: { workspaceId_userId: { workspaceId, userId: request.userId } },
+              data:  { vacationDays: newDays },
+            })
+            await tx.vacationAdjustment.create({
+              data: {
+                workspaceId, userId: request.userId, adminId,
+                prevDays: member.vacationDays, newDays,
+                description: `Descuento automático por licencia aprobada (${request.startDate}${request.startDate !== request.endDate ? ' → ' + request.endDate : ''})`,
+              },
+            })
+          }
+        }
+
+        return tx.vacationRequest.findUnique({
+          where: { id },
+          include: {
+            user:       { select: { id: true, name: true, avatar: true } },
+            reviewedBy: { select: { id: true, name: true } },
+          },
+        })
+      })
+    } catch (e) {
+      if (e.conflict) return res.status(409).json({ error: e.message })
+      throw e
+    }
 
     // Notificación in-app al usuario
     prisma.notification.create({

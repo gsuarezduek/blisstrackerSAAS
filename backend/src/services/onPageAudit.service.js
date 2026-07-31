@@ -2,6 +2,7 @@ const axios     = require('axios')
 const cheerio   = require('cheerio')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
+const { assertPublicUrl } = require('../lib/safeUrl')
 
 const { anthropic } = require('../lib/claude')
 
@@ -186,6 +187,7 @@ async function runOnPageAnalysis(auditId, workspaceId, projectId, seedUrl, userI
   try {
     await prisma.onPageAudit.update({ where: { id: auditId }, data: { status: 'running', errorMsg: 'Rastreando páginas…' } })
 
+    await assertPublicUrl(seedUrl)
     const origin = new URL(seedUrl).origin
 
     // URLs prioritarias del brief SEO/SEM (si están) como semillas adicionales

@@ -1,11 +1,19 @@
-jest.mock('../../src/lib/prisma', () => ({
-  workspace: { findUnique: jest.fn() },
-  workspaceMember: { findUnique: jest.fn(), findMany: jest.fn() },
-  vacationRequest: { create: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
-  vacationAdjustment: { findMany: jest.fn() },
-  user: { findUnique: jest.fn() },
-  notification: { create: jest.fn(), createMany: jest.fn() },
-}))
+jest.mock('../../src/lib/prisma', () => {
+  const prisma = {
+    workspace: { findUnique: jest.fn() },
+    workspaceMember: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
+    vacationRequest: { create: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
+    vacationAdjustment: { findMany: jest.fn(), create: jest.fn() },
+    user: { findUnique: jest.fn() },
+    notification: { create: jest.fn(), createMany: jest.fn() },
+  }
+  // Soporta tanto $transaction([...]) como $transaction(async tx => ...): en el
+  // caso de callback, le pasa el propio mock (todos los métodos ya están mockeados ahí).
+  prisma.$transaction = jest.fn((arg) => (
+    typeof arg === 'function' ? arg(prisma) : Promise.all(arg)
+  ))
+  return prisma
+})
 
 jest.mock('../../src/services/email.service', () => ({
   sendVacationRequestEmail: jest.fn().mockResolvedValue(undefined),
@@ -150,7 +158,8 @@ describe('PATCH /api/vacation/admin/requests/:id', () => {
     const approved = { ...pending, status: 'approved', reviewedBy: { id: 1, name: 'Admin' } }
 
     prisma.vacationRequest.findFirst.mockResolvedValue(pending)
-    prisma.vacationRequest.update.mockResolvedValue(approved)
+    prisma.vacationRequest.updateMany.mockResolvedValue({ count: 1 })
+    prisma.vacationRequest.findUnique.mockResolvedValue(approved)
     prisma.notification.create.mockResolvedValue({})
 
     const res = await request(app)
@@ -172,7 +181,8 @@ describe('PATCH /api/vacation/admin/requests/:id', () => {
     const rejected = { ...pending, status: 'rejected', reviewNote: 'Período de alta demanda', reviewedBy: { id: 1, name: 'Admin' } }
 
     prisma.vacationRequest.findFirst.mockResolvedValue(pending)
-    prisma.vacationRequest.update.mockResolvedValue(rejected)
+    prisma.vacationRequest.updateMany.mockResolvedValue({ count: 1 })
+    prisma.vacationRequest.findUnique.mockResolvedValue(rejected)
     prisma.notification.create.mockResolvedValue({})
 
     const res = await request(app)

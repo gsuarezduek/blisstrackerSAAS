@@ -33,4 +33,50 @@ function isFlagEnabledForWorkspace(flag, workspaceId, disabledKeys) {
   return isGrantedBySuperAdmin(flag, workspaceId) && !disabledKeys.includes(flag.key)
 }
 
-module.exports = { isGrantedBySuperAdmin, isFlagEnabledForWorkspace }
+/**
+ * Middleware: bloquea el acceso a un router completo si el workspace actual no
+ * tiene el feature flag `key` habilitado (grant de SuperAdmin + sin opt-out).
+ * Debe montarse después de `resolveWorkspace`. Super admins siempre pasan.
+ */
+function requireFeatureFlag(key) {
+  return async (req, res, next) => {
+    try {
+      if (req.user?.isSuperAdmin) return next()
+      const prisma = require('./prisma')
+      const flag = await prisma.featureFlag.findUnique({ where: { key } })
+      const disabledKeys = JSON.parse(req.workspace?.disabledFeatureKeys ?? '[]')
+      if (!isFlagEnabledForWorkspace(flag, req.workspace?.id, disabledKeys)) {
+        return res.status(403).json({ error: 'Este módulo no está habilitado para el workspace', code: 'FEATURE_NOT_ENABLED' })
+      }
+      next()
+    } catch (err) { next(err) }
+  }
+}
+
+/**
+ * Set de workspaceIds (activos o en trial) que tienen el flag `key` habilitado
+ * ahora mismo (grant de SuperAdmin + sin opt-out). Para usar en crons que iteran
+ * todos los workspaces con datos de un módulo — sin esto, un workspace sin el
+ * flag (o que hizo opt-out) sigue generando trabajo/costo real cada mes.
+ * Mismo patrón que `ventasEnabledWorkspaceIds` en salesReminders.service.js.
+ * @param {string} key
+ * @returns {Promise<Set<number>>}
+ */
+async function enabledWorkspaceIds(key) {
+  const prisma = require('./prisma')
+  const flag = await prisma.featureFlag.findUnique({ where: { key } })
+  if (!flag) return new Set()
+  const ids = JSON.parse(flag.enabledWorkspaceIds || '[]')
+  const all = await prisma.workspace.findMany({
+    where: { status: { in: ['active', 'trialing'] } },
+    select: { id: true, disabledFeatureKeys: true },
+  })
+  const enabled = new Set()
+  for (const w of all) {
+    const disabled = JSON.parse(w.disabledFeatureKeys || '[]')
+    if ((flag.enabledGlobally || ids.includes(w.id)) && !disabled.includes(key)) enabled.add(w.id)
+  }
+  return enabled
+}
+
+module.exports = { isGrantedBySuperAdmin, isFlagEnabledForWorkspace, requireFeatureFlag, enabledWorkspaceIds }

@@ -3,7 +3,7 @@ jest.mock('../../src/lib/prisma', () => ({
   workspaceMember: { findUnique: jest.fn() },
   projectMember:   { findUnique: jest.fn() },
   projectLink:     { deleteMany: jest.fn(), createMany: jest.fn() },
-  project:         { findUnique: jest.fn() },
+  project:         { findUnique: jest.fn(), findFirst: jest.fn() },
   $transaction:    jest.fn(),
 }))
 
@@ -40,6 +40,7 @@ describe('PUT /api/projects/:id/links', () => {
 
   it('permite a un miembro del proyecto guardar links', async () => {
     mockWorkspace('member')
+    prisma.project.findFirst.mockResolvedValue({ id: 1 })
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 1, userId: 1 })
     prisma.$transaction.mockResolvedValue([])
     prisma.project.findUnique.mockResolvedValue(mockProject)
@@ -56,6 +57,7 @@ describe('PUT /api/projects/:id/links', () => {
 
   it('devuelve 403 si el usuario no es miembro del proyecto', async () => {
     mockWorkspace('member')
+    prisma.project.findFirst.mockResolvedValue({ id: 1 })
     prisma.projectMember.findUnique.mockResolvedValue(null)
 
     const res = await request(app)
@@ -69,6 +71,7 @@ describe('PUT /api/projects/:id/links', () => {
 
   it('permite a un admin de workspace guardar links sin ser miembro del proyecto', async () => {
     mockWorkspace('admin')
+    prisma.project.findFirst.mockResolvedValue({ id: 1 })
     prisma.$transaction.mockResolvedValue([])
     prisma.project.findUnique.mockResolvedValue(mockProject)
 
@@ -84,6 +87,7 @@ describe('PUT /api/projects/:id/links', () => {
 
   it('devuelve 400 si un link no tiene label', async () => {
     mockWorkspace('member')
+    prisma.project.findFirst.mockResolvedValue({ id: 1 })
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 1, userId: 1 })
 
     const res = await request(app)
@@ -97,6 +101,7 @@ describe('PUT /api/projects/:id/links', () => {
 
   it('devuelve 400 si links no es un array', async () => {
     mockWorkspace('member')
+    prisma.project.findFirst.mockResolvedValue({ id: 1 })
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 1, userId: 1 })
 
     const res = await request(app)

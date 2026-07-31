@@ -4,6 +4,7 @@ const prisma  = require('../lib/prisma')
 const { anthropic } = require('../lib/claude')
 const { logTokens } = require('../lib/logTokens')
 const { hasTokenBudget } = require('../lib/tokenBudget')
+const { assertPublicUrl } = require('../lib/safeUrl')
 
 const MODEL = 'claude-haiku-4-5-20251001'
 
@@ -13,6 +14,7 @@ async function fetchSiteText(website) {
   if (!website) return ''
   const url = website.startsWith('http') ? website : `https://${website}`
   try {
+    await assertPublicUrl(url)
     const res = await axios.get(url, {
       timeout: 15000,
       maxRedirects: 5,

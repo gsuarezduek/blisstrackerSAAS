@@ -52,7 +52,12 @@ async function resolveWorkspace(req, res, next) {
         })
 
     if (workspace.status === 'suspended' || workspace.status === 'cancelled') {
-      return res.status(402).json({ error: 'Workspace suspendido. Verificá el estado de tu suscripción.' })
+      if (!PAST_DUE_WRITE_EXEMPT.has(req.baseUrl) && !req.user?.isSuperAdmin) {
+        return res.status(402).json({
+          error: 'Workspace suspendido. Verificá el estado de tu suscripción.',
+          code:  'WORKSPACE_SUSPENDED',
+        })
+      }
     }
 
     // Pago vencido (past_due): se permite leer y pagar, pero se bloquea toda
@@ -120,10 +125,24 @@ function isSalesUser(req) {
   return roles.includes(m.teamRole)
 }
 
-/** Requiere acceso al módulo de Ventas (equipo comercial o admin). */
-function salesGuard(req, res, next) {
-  if (isSalesUser(req)) return next()
-  return res.status(403).json({ error: 'No tenés acceso al módulo de Ventas' })
+/**
+ * Requiere acceso al módulo de Ventas (equipo comercial o admin) Y que el feature
+ * flag 'ventas' esté habilitado para el workspace (grant de SuperAdmin, sin opt-out).
+ */
+async function salesGuard(req, res, next) {
+  try {
+    if (!isSalesUser(req)) {
+      return res.status(403).json({ error: 'No tenés acceso al módulo de Ventas' })
+    }
+    if (req.user?.isSuperAdmin) return next()
+    const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
+    const flag = await prisma.featureFlag.findUnique({ where: { key: 'ventas' } })
+    const disabledKeys = JSON.parse(req.workspace?.disabledFeatureKeys ?? '[]')
+    if (!isFlagEnabledForWorkspace(flag, req.workspace?.id, disabledKeys)) {
+      return res.status(403).json({ error: 'Este módulo no está habilitado para el workspace', code: 'FEATURE_NOT_ENABLED' })
+    }
+    next()
+  } catch (err) { next(err) }
 }
 
 module.exports = { resolveWorkspace, workspaceAdminOnly, isSalesUser, salesGuard }

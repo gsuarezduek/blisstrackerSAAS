@@ -1,5 +1,6 @@
 jest.mock('../../src/lib/prisma', () => ({
   workspace:            { findUnique: jest.fn() },
+  featureFlag:          { findUnique: jest.fn() },
   workspaceMember:      { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
   game:                 { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn(), aggregate: jest.fn() },
   gameVote:             { findMany: jest.fn(), upsert: jest.fn(), count: jest.fn() },
@@ -29,6 +30,7 @@ function authHeader(userId = 1, role = 'member') {
 function mockWorkspace(role = 'member') {
   prisma.workspace.findUnique.mockResolvedValue({ id: WS, slug: SLUG, status: 'active', name: 'Bliss', timezone: 'America/Argentina/Buenos_Aires' })
   prisma.workspaceMember.findUnique.mockResolvedValue({ workspaceId: WS, userId: 1, role, active: true })
+  prisma.featureFlag.findUnique.mockResolvedValue({ key: 'gamification', enabledGlobally: true, enabledWorkspaceIds: '[]' })
 }
 
 function voteGame(overrides = {}) {

@@ -478,6 +478,9 @@ async function convertToProject(req, res, next) {
     const lead = await findLead(req.params.id, workspaceId, LEAD_DETAIL_INCLUDE)
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
     if (lead.convertedProjectId) return res.status(409).json({ error: 'Este lead ya fue convertido en proyecto' })
+    if (!['propuesta', 'ganado'].includes(lead.status)) {
+      return res.status(409).json({ error: 'El lead debe estar en Propuesta o Ganado para convertirlo en proyecto' })
+    }
 
     const projectName = (name?.trim()) || lead.company?.name || leadTitleOf(lead)
 

@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
+const { isAdmin, canWrite } = require('../lib/projectAccess')
 
 const VALID_TYPE = ['internal', 'client']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -15,20 +16,6 @@ async function resolveProjectId(param, workspaceId) {
   }
   const p = await prisma.project.findFirst({ where: { name: param, workspaceId }, select: { id: true } })
   return p?.id ?? null
-}
-
-function isAdmin(req) {
-  const m = req.workspaceMember
-  return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
-}
-
-// Escritura: admin/owner o miembro del proyecto (mismo criterio que saveSituation/briefs).
-async function canWrite(req, projectId) {
-  if (isAdmin(req)) return true
-  const member = await prisma.projectMember.findUnique({
-    where: { projectId_userId: { projectId, userId: req.user.userId } },
-  })
-  return !!member
 }
 
 // Devuelve los miembros activos del workspace marcando quiénes son del equipo
@@ -265,37 +252,49 @@ async function startMeeting(req, res, next) {
     const now   = new Date()
     const today = todayString(tz)
 
-    // Una Task IN_PROGRESS + TaskSession por participante, vinculada al participante.
+    // Workdays por participante (idempotente — no es sensible dejarla creada
+    // aunque la transacción de abajo falle).
+    const workDays = {}
     for (const p of participants) {
-      const workDay = await ensureWorkDay(p.userId, workspaceId, today)
-      if (!workDay) continue
-      try {
-        const task = await prisma.task.create({
-          data: {
-            description: typeLabel(existing.type),
-            projectId,
-            userId:      p.userId,
-            workDayId:   workDay.id,
-            status:      'IN_PROGRESS',
-            startedAt:   now,
-            createdById: p.userId !== requesterId ? requesterId : null,
-          },
-        })
-        await prisma.taskSession.create({ data: { taskId: task.id, startedAt: now } })
-        await prisma.projectMeetingParticipant.update({ where: { id: p.id }, data: { taskId: task.id } })
-      } catch (e) {
-        // Si justo arrancó una tarea (race con el constraint one_active_task), abortamos claro.
-        if (e.code === 'P2002') {
-          return res.status(409).json({ error: `${p.user?.name || 'Un participante'} acaba de iniciar otra tarea. Reintentá.` })
-        }
-        throw e
-      }
+      const wd = await ensureWorkDay(p.userId, workspaceId, today)
+      if (wd) workDays[p.userId] = wd
     }
 
-    await prisma.projectMeeting.update({
-      where: { id: existing.id },
-      data:  { startedAt: now, endedAt: null, durationMins: null },
-    })
+    // Todo o nada: si algún participante ya tiene una tarea en curso (condición de
+    // carrera con el busy-check de arriba, ej. dos reuniones iniciándose casi
+    // simultáneamente con un participante en común), se revierte todo lo creado en
+    // este loop en vez de dejar tareas "fantasma" para los participantes anteriores.
+    try {
+      await prisma.$transaction(async (tx) => {
+        for (const p of participants) {
+          const workDay = workDays[p.userId]
+          if (!workDay) continue
+          const task = await tx.task.create({
+            data: {
+              description: typeLabel(existing.type),
+              projectId,
+              userId:      p.userId,
+              workDayId:   workDay.id,
+              status:      'IN_PROGRESS',
+              startedAt:   now,
+              createdById: p.userId !== requesterId ? requesterId : null,
+            },
+          })
+          await tx.taskSession.create({ data: { taskId: task.id, startedAt: now } })
+          await tx.projectMeetingParticipant.update({ where: { id: p.id }, data: { taskId: task.id } })
+        }
+        await tx.projectMeeting.update({
+          where: { id: existing.id },
+          data:  { startedAt: now, endedAt: null, durationMins: null },
+        })
+      })
+    } catch (e) {
+      if (e.code === 'P2002') {
+        return res.status(409).json({ error: 'Uno de los participantes acaba de iniciar otra tarea. Reintentá.' })
+      }
+      throw e
+    }
+
     const fresh = await loadMeeting(existing.id, projectId, workspaceId)
     res.json(formatMeeting(fresh))
   } catch (err) { next(err) }

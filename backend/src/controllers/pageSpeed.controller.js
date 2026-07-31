@@ -15,29 +15,32 @@ async function verifyProject(projectId, workspaceId) {
  * Body: { strategy: 'mobile' | 'desktop' }
  * Inicia el análisis async. Devuelve { resultId } inmediatamente.
  */
-async function runAnalysis(req, res) {
-  const projectId = Number(req.params.id)
-  const strategy  = VALID_STRATEGIES.has(req.body?.strategy) ? req.body.strategy : 'mobile'
+async function runAnalysis(req, res, next) {
+  let record
+  try {
+    const projectId = Number(req.params.id)
+    const strategy  = VALID_STRATEGIES.has(req.body?.strategy) ? req.body.strategy : 'mobile'
 
-  const project = await verifyProject(projectId, req.workspace.id)
-  if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
-  if (!project.websiteUrl) return res.status(400).json({ error: 'El proyecto no tiene URL configurada. Agregala en la tab Info.' })
+    const project = await verifyProject(projectId, req.workspace.id)
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!project.websiteUrl) return res.status(400).json({ error: 'El proyecto no tiene URL configurada. Agregala en la tab Info.' })
 
-  // PageSpeed requiere URL con protocolo
-  const url = /^https?:\/\//i.test(project.websiteUrl)
-    ? project.websiteUrl
-    : `https://${project.websiteUrl}`
+    // PageSpeed requiere URL con protocolo
+    const url = /^https?:\/\//i.test(project.websiteUrl)
+      ? project.websiteUrl
+      : `https://${project.websiteUrl}`
 
-  const record = await prisma.pageSpeedResult.create({
-    data: { workspaceId: req.workspace.id, projectId, url, strategy, status: 'running' },
-  })
+    record = await prisma.pageSpeedResult.create({
+      data: { workspaceId: req.workspace.id, projectId, url, strategy, status: 'running' },
+    })
 
-  res.json({ resultId: record.id })
+    res.json({ resultId: record.id })
+  } catch (err) { return next(err) }
 
   // Análisis async — no bloquea la respuesta
   setImmediate(async () => {
     try {
-      const result = await runPageSpeedAnalysis(url, strategy)
+      const result = await runPageSpeedAnalysis(record.url, record.strategy)
       await prisma.pageSpeedResult.update({
         where: { id: record.id },
         data: {
@@ -62,41 +65,45 @@ async function runAnalysis(req, res) {
  * GET /api/marketing/projects/:id/pagespeed/:resultId
  * Devuelve el estado y resultado de un análisis.
  */
-async function getResult(req, res) {
-  const projectId = Number(req.params.id)
-  const resultId  = Number(req.params.resultId)
+async function getResult(req, res, next) {
+  try {
+    const projectId = Number(req.params.id)
+    const resultId  = Number(req.params.resultId)
 
-  const project = await verifyProject(projectId, req.workspace.id)
-  if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    const project = await verifyProject(projectId, req.workspace.id)
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-  const result = await prisma.pageSpeedResult.findFirst({
-    where: { id: resultId, projectId },
-  })
-  if (!result) return res.status(404).json({ error: 'Resultado no encontrado' })
+    const result = await prisma.pageSpeedResult.findFirst({
+      where: { id: resultId, projectId },
+    })
+    if (!result) return res.status(404).json({ error: 'Resultado no encontrado' })
 
-  res.json(parseResult(result))
+    res.json(parseResult(result))
+  } catch (err) { next(err) }
 }
 
 /**
  * GET /api/marketing/projects/:id/pagespeed?strategy=mobile&limit=5
  * Lista los últimos análisis de un proyecto (para historial de scores).
  */
-async function listResults(req, res) {
-  const projectId = Number(req.params.id)
-  const strategy  = VALID_STRATEGIES.has(req.query.strategy) ? req.query.strategy : 'mobile'
-  const limit     = Math.min(Number(req.query.limit) || 10, 20)
+async function listResults(req, res, next) {
+  try {
+    const projectId = Number(req.params.id)
+    const strategy  = VALID_STRATEGIES.has(req.query.strategy) ? req.query.strategy : 'mobile'
+    const limit     = Math.min(Number(req.query.limit) || 10, 20)
 
-  const project = await verifyProject(projectId, req.workspace.id)
-  if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    const project = await verifyProject(projectId, req.workspace.id)
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-  const results = await prisma.pageSpeedResult.findMany({
-    where:   { projectId, strategy, status: 'done' },
-    orderBy: { createdAt: 'desc' },
-    take:    limit,
-    select:  { id: true, performanceScore: true, strategy: true, createdAt: true, url: true },
-  })
+    const results = await prisma.pageSpeedResult.findMany({
+      where:   { projectId, strategy, status: 'done' },
+      orderBy: { createdAt: 'desc' },
+      take:    limit,
+      select:  { id: true, performanceScore: true, strategy: true, createdAt: true, url: true },
+    })
 
-  res.json(results)
+    res.json(results)
+  } catch (err) { next(err) }
 }
 
 // ─── Helper: parsear campos JSON del registro ─────────────────────────────────

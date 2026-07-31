@@ -3,6 +3,7 @@ const multer = require('multer')
 const ctrl = require('../controllers/gamification.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
+const { requireFeatureFlag } = require('../lib/featureFlags')
 
 const uploadImage = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
@@ -11,6 +12,7 @@ router.get('/games/:id/image', ctrl.serveImage)
 
 router.use(auth)
 router.use(resolveWorkspace)
+router.use(requireFeatureFlag('gamification'))
 
 // ─── Cualquier miembro del workspace ──────────────────────────────────────────
 router.get('/catalog', ctrl.getCatalog)

@@ -3,6 +3,7 @@ const cheerio   = require('cheerio')
 const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
 const { gscCountryToSerp, extractDomain, fetchSerpData, parseSerpResponse } = require('./serpApi.service')
+const { assertPublicUrl } = require('../lib/safeUrl')
 
 const { anthropic } = require('../lib/claude')
 
@@ -10,7 +11,9 @@ const MAX_COMPETITORS = 4
 const UA = 'BlissTrackerBot/1.0 (+https://blisstracker.app)'
 
 // Extrae la estructura de contenido (título + encabezados + longitud) de una página.
+// Valida la URL (propia o de un competidor del SERP) antes de pegarle, para evitar SSRF.
 async function extractStructure(url) {
+  await assertPublicUrl(url)
   const res = await axios.get(url, { timeout: 15000, maxRedirects: 5, headers: { 'User-Agent': UA }, validateStatus: s => s < 400 })
   const $ = cheerio.load(res.data)
   const title = $('title').first().text().trim()

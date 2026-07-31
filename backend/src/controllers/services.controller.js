@@ -42,7 +42,9 @@ async function update(req, res, next) {
     if (name !== undefined) data.name = name
     if (description !== undefined) data.description = description?.trim() || null
     if (active !== undefined) data.active = active
-    const service = await prisma.service.update({ where: { id: Number(id) }, data })
+    const result = await prisma.service.updateMany({ where: { id: Number(id), workspaceId: req.workspace.id }, data })
+    if (result.count === 0) return res.status(404).json({ error: 'Servicio no encontrado' })
+    const service = await prisma.service.findUnique({ where: { id: Number(id) } })
     res.json(service)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Servicio no encontrado' })

@@ -124,12 +124,22 @@ export function AddParticipant({ members, existingIds, onAdd }) {
 
 export function MeetingTimer({ meeting, onStart, onFinish }) {
   const [, force] = useState(0)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!meeting?.running) return
     const id = setInterval(() => force(n => n + 1), 1000)
     return () => clearInterval(id)
   }, [meeting?.running])
+
+  async function handleStartClick() {
+    setBusy(true)
+    try { await onStart() } finally { setBusy(false) }
+  }
+  async function handleFinishClick() {
+    setBusy(true)
+    try { await onFinish() } finally { setBusy(false) }
+  }
 
   if (meeting?.running) {
     const secs = Math.max(0, Math.floor((Date.now() - new Date(meeting.startedAt).getTime()) / 1000))
@@ -140,10 +150,11 @@ export function MeetingTimer({ meeting, onStart, onFinish }) {
           {fmtElapsed(secs)}
         </span>
         <button
-          onClick={onFinish}
-          className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+          onClick={handleFinishClick}
+          disabled={busy}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50"
         >
-          ■ Finalizar
+          {busy ? 'Finalizando…' : '■ Finalizar'}
         </button>
       </div>
     )
@@ -155,10 +166,11 @@ export function MeetingTimer({ meeting, onStart, onFinish }) {
 
   return (
     <button
-      onClick={onStart}
-      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
+      onClick={handleStartClick}
+      disabled={busy}
+      className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50"
     >
-      ▶ Iniciar reunión
+      {busy ? 'Iniciando…' : '▶ Iniciar reunión'}
     </button>
   )
 }

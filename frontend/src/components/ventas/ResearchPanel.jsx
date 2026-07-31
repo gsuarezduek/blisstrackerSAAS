@@ -32,15 +32,22 @@ export default function ResearchPanel({ leadId, onChanged }) {
 
   // Polling mientras la investigación corre.
   useEffect(() => {
-    fetchLatest().then(r => { if (r && (r.status === 'pending' || r.status === 'running')) startPolling() })
+    fetchLatest()
+      .then(r => { if (r && (r.status === 'pending' || r.status === 'running')) startPolling() })
+      .catch(err => { setLoading(false); setError(err.response?.data?.error || 'No se pudo cargar la investigación.') })
     return () => clearInterval(pollRef.current)
   }, [fetchLatest])
 
   function startPolling() {
     clearInterval(pollRef.current)
     pollRef.current = setInterval(async () => {
-      const r = await fetchLatest()
-      if (!r || (r.status !== 'pending' && r.status !== 'running')) { clearInterval(pollRef.current); onChanged?.() }
+      try {
+        const r = await fetchLatest()
+        if (!r || (r.status !== 'pending' && r.status !== 'running')) { clearInterval(pollRef.current); onChanged?.() }
+      } catch (err) {
+        clearInterval(pollRef.current)
+        setError(err.response?.data?.error || 'Se perdió la conexión mientras se investigaba. Reintentá.')
+      }
     }, 3000)
   }
 
