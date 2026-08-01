@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken')
-const { auth, adminOnly } = require('../../src/middleware/auth')
+const { auth } = require('../../src/middleware/auth')
 
 const SECRET = process.env.JWT_SECRET
 
@@ -73,61 +73,5 @@ describe('auth middleware', () => {
 
     expect(res.status).toHaveBeenCalledWith(401)
     expect(next).not.toHaveBeenCalled()
-  })
-})
-
-// ── adminOnly ─────────────────────────────────────────────────────────────────
-
-describe('adminOnly middleware', () => {
-  it('llama next() si workspaceMember.role es "admin"', () => {
-    const req  = { user: { isSuperAdmin: false }, workspaceMember: { role: 'admin' } }
-    const res  = makeRes()
-    const next = jest.fn()
-
-    adminOnly(req, res, next)
-
-    expect(next).toHaveBeenCalledTimes(1)
-  })
-
-  it('llama next() si workspaceMember.role es "owner"', () => {
-    const req  = { user: { isSuperAdmin: false }, workspaceMember: { role: 'owner' } }
-    const res  = makeRes()
-    const next = jest.fn()
-
-    adminOnly(req, res, next)
-
-    expect(next).toHaveBeenCalledTimes(1)
-  })
-
-  it('retorna 403 si workspaceMember.role es "member"', () => {
-    const req  = { user: { isSuperAdmin: false }, workspaceMember: { role: 'member' } }
-    const res  = makeRes()
-    const next = jest.fn()
-
-    adminOnly(req, res, next)
-
-    expect(res.status).toHaveBeenCalledWith(403)
-    expect(next).not.toHaveBeenCalled()
-  })
-
-  it('retorna 403 si no hay workspaceMember', () => {
-    const req  = { user: { isSuperAdmin: false } }
-    const res  = makeRes()
-    const next = jest.fn()
-
-    adminOnly(req, res, next)
-
-    expect(res.status).toHaveBeenCalledWith(403)
-    expect(next).not.toHaveBeenCalled()
-  })
-
-  it('bypassa la verificación si user.isSuperAdmin es true', () => {
-    const req  = { user: { isSuperAdmin: true } }
-    const res  = makeRes()
-    const next = jest.fn()
-
-    adminOnly(req, res, next)
-
-    expect(next).toHaveBeenCalledTimes(1)
   })
 })

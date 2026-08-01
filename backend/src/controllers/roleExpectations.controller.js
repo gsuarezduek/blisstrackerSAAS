@@ -54,15 +54,4 @@ async function upsert(req, res, next) {
   } catch (err) { next(err) }
 }
 
-async function getMyRoleExpectation(req, res, next) {
-  try {
-    const teamRole = req.workspaceMember?.teamRole
-    if (!teamRole) return res.json(null)
-    const expectation = await prisma.roleExpectation.findUnique({
-      where: { workspaceId_roleName: { workspaceId: req.workspace.id, roleName: teamRole } },
-    })
-    res.json(expectation)
-  } catch (err) { next(err) }
-}
-
-module.exports = { list, getByRole, upsert, getMyRoleExpectation }
+module.exports = { list, getByRole, upsert }

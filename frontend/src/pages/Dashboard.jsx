@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -87,6 +87,111 @@ function TrackedTaskRow({ task: t, onClick }) {
   )
 }
 
+// Fila de una tarea completada (sección "Completadas": hoy + historial). Edición de
+// duración con estado local propio — así tipear en el input no re-renderiza todo el Dashboard.
+const CompletedTaskRow = memo(function CompletedTaskRow({ task: t, variant, onOpenComments, onSaveDuration }) {
+  const [editingDur, setEditingDur] = useState(false)
+  const [durInput, setDurInput] = useState('')
+  const cancelRef = useRef(false)
+  const inputRef = useRef(null)
+
+  const mins = completedMinutes(t)
+  const isHistory = variant === 'history'
+  const dateStr = isHistory && t.completedAt
+    ? new Date(t.completedAt).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
+    : null
+
+  function startEdit() {
+    cancelRef.current = false
+    setDurInput(String(mins ?? 0))
+    setEditingDur(true)
+    setTimeout(() => { inputRef.current?.select() }, 0)
+  }
+
+  async function saveEdit() {
+    if (cancelRef.current) return
+    const parsed = parseInt(durInput, 10)
+    setEditingDur(false)
+    if (isNaN(parsed) || parsed < 0) return
+    await onSaveDuration(t.id, parsed)
+  }
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 group">
+      <span className={`flex-shrink-0 text-sm ${isHistory ? 'text-gray-300 dark:text-gray-600' : 'text-green-500'}`}>✓</span>
+      <div className="flex-1 min-w-0">
+        <p
+          onClick={() => onOpenComments(t)}
+          title="Abrir tarea"
+          className={`text-sm leading-snug truncate cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors ${isHistory ? 'text-gray-500 dark:text-gray-400' : 'text-gray-600 dark:text-gray-300'}`}
+        >
+          {t.description}
+        </p>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
+          <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+          {dateStr && (
+            <>
+              <span className="text-xs text-gray-400 dark:text-gray-500 capitalize">{dateStr}</span>
+              <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+            </>
+          )}
+          <button
+            onClick={() => onOpenComments(t)}
+            title="Ver comentarios"
+            className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+          >
+            💬{(t._count?.comments ?? 0) > 0 ? ` ${t._count.comments}` : ''}
+          </button>
+          {editingDur ? (
+            <>
+              <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+              <span className="flex items-center gap-1">
+                <input
+                  ref={inputRef}
+                  type="number"
+                  min="0"
+                  value={durInput}
+                  onChange={e => setDurInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter')  { e.preventDefault(); saveEdit() }
+                    if (e.key === 'Escape') { cancelRef.current = true; setEditingDur(false) }
+                  }}
+                  onBlur={saveEdit}
+                  className="w-14 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                />
+                <span className="text-xs text-gray-400">min</span>
+                <button
+                  onMouseDown={() => { cancelRef.current = true; setEditingDur(false) }}
+                  className="text-xs text-gray-400 hover:text-gray-600 leading-none"
+                >✕</button>
+              </span>
+            </>
+          ) : (
+            <button
+              onClick={startEdit}
+              title="Editar duración"
+              className="group/dur flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+            >
+              {mins != null && mins > 0 && (
+                <>
+                  <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
+                  <span>{fmtMins(mins)}</span>
+                </>
+              )}
+              {!isHistory && (mins == null || mins === 0) && <span className="opacity-0 group-hover:opacity-60">+ tiempo</span>}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
+                className="w-2.5 h-2.5 opacity-0 group-hover/dur:opacity-50 transition-opacity">
+                <path d="M8.54.47a1.6 1.6 0 0 1 2.26 2.26L9.5 4.03 7.97 2.5 8.54.47ZM7.03 3.44 1.5 9a.5.5 0 0 0-.13.24L1 11.17a.25.25 0 0 0 .3.3l1.93-.37A.5.5 0 0 0 3.47 11l5.56-5.53L7.03 3.44Z"/>
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+})
+
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -113,10 +218,6 @@ export default function Dashboard() {
   const [completedLoading,  setCompletedLoading]  = useState(false)
   const [autoPausedTask, setAutoPausedTask] = useState(null)
   const [commentTask, setCommentTask] = useState(null)
-  const [editingDurationId,   setEditingDurationId]   = useState(null)
-  const [durationEditInput,   setDurationEditInput]   = useState('')
-  const cancelDurationEdit = useRef(false)
-  const durationEditRef    = useRef(null)
 
   // AI Insight
   const [insight, setInsight] = useState(null)
@@ -451,18 +552,7 @@ export default function Dashboard() {
 
   const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 
-  function startEditRowDuration(task) {
-    cancelDurationEdit.current = false
-    setDurationEditInput(String(completedMinutes(task) ?? 0))
-    setEditingDurationId(task.id)
-    setTimeout(() => { durationEditRef.current?.select() }, 0)
-  }
-
-  async function handleSaveRowDuration(taskId) {
-    if (cancelDurationEdit.current) return
-    const mins = parseInt(durationEditInput, 10)
-    setEditingDurationId(null)
-    if (isNaN(mins) || mins < 0) return
+  async function saveCompletedDuration(taskId, mins) {
     try {
       const { data } = await api.patch(`/tasks/${taskId}/duration`, { minutes: mins })
       handleUpdateTask(data)
@@ -971,156 +1061,14 @@ export default function Dashboard() {
               {completed.length === 0 && completedHistory.length === 0 && !completedLoading && (
                 <p className="text-sm text-gray-400 text-center py-6">No hay tareas completadas aún</p>
               )}
-              {completed.map(t => {
-                const mins = completedMinutes(t)
-                const isEditingDur = editingDurationId === t.id
-                return (
-                  <div key={t.id} className="flex items-center gap-3 px-4 py-3 group">
-                    <span className="text-green-500 flex-shrink-0 text-sm">✓</span>
-                    <div className="flex-1 min-w-0">
-                      <p
-                        onClick={() => setCommentTask(t)}
-                        title="Abrir tarea"
-                        className="text-sm text-gray-600 dark:text-gray-300 leading-snug truncate cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                      >
-                        {t.description}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
-                        <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                        <button
-                          onClick={() => setCommentTask(t)}
-                          title="Ver comentarios"
-                          className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                        >
-                          💬{(t._count?.comments ?? 0) > 0 ? ` ${t._count.comments}` : ''}
-                        </button>
-                        {isEditingDur ? (
-                          <>
-                            <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                            <span className="flex items-center gap-1">
-                              <input
-                                ref={durationEditRef}
-                                type="number"
-                                min="0"
-                                value={durationEditInput}
-                                onChange={e => setDurationEditInput(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter')  { e.preventDefault(); handleSaveRowDuration(t.id) }
-                                  if (e.key === 'Escape') { cancelDurationEdit.current = true; setEditingDurationId(null) }
-                                }}
-                                onBlur={() => handleSaveRowDuration(t.id)}
-                                className="w-14 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                              />
-                              <span className="text-xs text-gray-400">min</span>
-                              <button
-                                onMouseDown={() => { cancelDurationEdit.current = true; setEditingDurationId(null) }}
-                                className="text-xs text-gray-400 hover:text-gray-600 leading-none"
-                              >✕</button>
-                            </span>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => startEditRowDuration(t)}
-                            title="Editar duración"
-                            className="group/dur flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
-                          >
-                            {mins != null && mins > 0 && (
-                              <>
-                                <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                                <span>{fmtMins(mins)}</span>
-                              </>
-                            )}
-                            {(mins == null || mins === 0) && <span className="opacity-0 group-hover:opacity-60">+ tiempo</span>}
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
-                              className="w-2.5 h-2.5 opacity-0 group-hover/dur:opacity-50 transition-opacity">
-                              <path d="M8.54.47a1.6 1.6 0 0 1 2.26 2.26L9.5 4.03 7.97 2.5 8.54.47ZM7.03 3.44 1.5 9a.5.5 0 0 0-.13.24L1 11.17a.25.25 0 0 0 .3.3l1.93-.37A.5.5 0 0 0 3.47 11l5.56-5.53L7.03 3.44Z"/>
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
+              {completed.map(t => (
+                <CompletedTaskRow key={t.id} task={t} variant="today" onOpenComments={setCommentTask} onSaveDuration={saveCompletedDuration} />
+              ))}
 
               {/* Historial de días anteriores */}
-              {completedHistory.map(t => {
-                const mins = completedMinutes(t)
-                const dateStr = new Date(t.completedAt).toLocaleDateString('es-AR', {
-                  weekday: 'short', day: 'numeric', month: 'short',
-                })
-                const isEditingDur = editingDurationId === t.id
-                return (
-                  <div key={t.id} className="flex items-center gap-3 px-4 py-3 group">
-                    <span className="text-gray-300 dark:text-gray-600 flex-shrink-0 text-sm">✓</span>
-                    <div className="flex-1 min-w-0">
-                      <p
-                        onClick={() => setCommentTask(t)}
-                        title="Abrir tarea"
-                        className="text-sm text-gray-500 dark:text-gray-400 leading-snug truncate cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                      >
-                        {t.description}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-xs text-gray-400 dark:text-gray-500">{t.project.name}</span>
-                        <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                        <span className="text-xs text-gray-400 dark:text-gray-500 capitalize">{dateStr}</span>
-                        <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                        <button
-                          onClick={() => setCommentTask(t)}
-                          title="Ver comentarios"
-                          className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                        >
-                          💬{(t._count?.comments ?? 0) > 0 ? ` ${t._count.comments}` : ''}
-                        </button>
-                        {isEditingDur ? (
-                          <>
-                            <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                            <span className="flex items-center gap-1">
-                              <input
-                                ref={durationEditRef}
-                                type="number"
-                                min="0"
-                                value={durationEditInput}
-                                onChange={e => setDurationEditInput(e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter')  { e.preventDefault(); handleSaveRowDuration(t.id) }
-                                  if (e.key === 'Escape') { cancelDurationEdit.current = true; setEditingDurationId(null) }
-                                }}
-                                onBlur={() => handleSaveRowDuration(t.id)}
-                                className="w-14 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                              />
-                              <span className="text-xs text-gray-400">min</span>
-                              <button
-                                onMouseDown={() => { cancelDurationEdit.current = true; setEditingDurationId(null) }}
-                                className="text-xs text-gray-400 hover:text-gray-600 leading-none"
-                              >✕</button>
-                            </span>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => startEditRowDuration(t)}
-                            title="Editar duración"
-                            className="group/dur flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
-                          >
-                            {mins != null && mins > 0 && (
-                              <>
-                                <span className="text-xs text-gray-300 dark:text-gray-600">·</span>
-                                <span>{fmtMins(mins)}</span>
-                              </>
-                            )}
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
-                              className="w-2.5 h-2.5 opacity-0 group-hover/dur:opacity-50 transition-opacity">
-                              <path d="M8.54.47a1.6 1.6 0 0 1 2.26 2.26L9.5 4.03 7.97 2.5 8.54.47ZM7.03 3.44 1.5 9a.5.5 0 0 0-.13.24L1 11.17a.25.25 0 0 0 .3.3l1.93-.37A.5.5 0 0 0 3.47 11l5.56-5.53L7.03 3.44Z"/>
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
+              {completedHistory.map(t => (
+                <CompletedTaskRow key={t.id} task={t} variant="history" onOpenComments={setCommentTask} onSaveDuration={saveCompletedDuration} />
+              ))}
 
               {completedLoading && (
                 <LoadingSpinner size="sm" className="py-4" />

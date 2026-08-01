@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../../api/client'
+import EmptyState from '../EmptyState'
 
 const FREQ_OPTIONS = [
   { value: 'monday',     label: 'Lunes (inicio de semana)' },
@@ -315,7 +316,7 @@ export default function RolesTab() {
       {deleteError && <p className="mb-4 text-sm text-red-500">{deleteError}</p>}
 
       {roles.length === 0 && (
-        <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No hay roles creados todavía</p>
+        <EmptyState icon="🏷️" message="No hay roles creados todavía" />
       )}
 
       <div className="space-y-3">

@@ -243,7 +243,7 @@ function TodoItem({ todo, members, canEdit, onUpdate, onDelete, onSendToDashboar
 
       {canEdit && (
         <button
-          onClick={() => onDelete(todo.id)}
+          onClick={() => { if (confirm('¿Eliminar esta tarea de la reunión?')) onDelete(todo.id) }}
           className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-sm transition-all px-1"
         >
           ✕

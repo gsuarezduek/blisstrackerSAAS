@@ -9,6 +9,7 @@
 const prisma = require('../lib/prisma')
 const { monthBounds } = require('../lib/monthUtils')
 const { inArrivalWindow, laborableDays } = require('../lib/attendance')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // Mes actual "YYYY-MM" en la timezone del workspace.
 function currentMonth(tz) {
@@ -210,7 +211,7 @@ async function saveAllPreviousMonthSnapshots() {
   let saved = 0
   for (const ws of workspaces) {
     try {
-      const tz = ws.timezone || 'America/Argentina/Buenos_Aires'
+      const tz = ws.timezone || DEFAULT_TZ
       const now = new Date()
       const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
       const month = prev.toLocaleDateString('en-CA', { timeZone: tz }).slice(0, 7)

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import ConfirmModal from '../../components/ConfirmModal'
 import { timeAgo } from './shared'
 
 export const SETTINGS_GROUP_LABELS = {
@@ -147,6 +148,8 @@ export function SectionSettings() {
   const [logsOpen, setLogsOpen] = useState(false)
   const [cleanupPreview, setCleanupPreview] = useState(null)
   const [cleanupRunning, setCleanupRunning] = useState(false)
+  const [confirmCleanup, setConfirmCleanup] = useState(false)
+  const [confirmSensitive, setConfirmSensitive] = useState(null) // resumen (string) | null
   const [activeGroup, setActiveGroup] = useState('commercial')
 
   async function load() {
@@ -182,8 +185,6 @@ export function SectionSettings() {
   async function runCleanup() {
     if (!cleanupPreview) return
     const tables = Object.keys(cleanupPreview)
-    const totalRows = Object.values(cleanupPreview).reduce((a, b) => a + b, 0)
-    if (!window.confirm(`Eliminar ${totalRows} fila(s) ahora? Esta acción no se puede deshacer.`)) return
     setCleanupRunning(true)
     try {
       const { data } = await api.post('/superadmin/settings/cleanup-now', { tables })
@@ -194,19 +195,23 @@ export function SectionSettings() {
       window.alert(`Error: ${err.response?.data?.error || err.message}`)
     } finally {
       setCleanupRunning(false)
+      setConfirmCleanup(false)
     }
   }
 
-  async function save() {
+  function handleSaveClick() {
     if (!hasChanges) return
-
     // Confirmación adicional para campos sensibles
     const sensitive = dirty.filter(s => SENSITIVE_KEYS.has(s.key))
     if (sensitive.length > 0) {
       const summary = sensitive.map(s => `• ${s.label}\n   ${fmtSettingValue(s, s.value)} → ${fmtSettingValue(s, drafts[s.key])}`).join('\n\n')
-      if (!window.confirm(`Estás por modificar settings sensibles:\n\n${summary}\n\n¿Continuar?`)) return
+      setConfirmSensitive(summary)
+      return
     }
+    save()
+  }
 
+  async function save() {
     setSaving(true)
     try {
       const changes = Object.fromEntries(dirty.map(s => [s.key, drafts[s.key]]))
@@ -219,6 +224,7 @@ export function SectionSettings() {
       window.alert(`Error al guardar:\n${msg}`)
     } finally {
       setSaving(false)
+      setConfirmSensitive(null)
     }
   }
 
@@ -343,7 +349,7 @@ export function SectionSettings() {
             className="text-sm px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 font-medium disabled:opacity-50">
             Descartar
           </button>
-          <button onClick={save} disabled={saving}
+          <button onClick={handleSaveClick} disabled={saving}
             className="text-sm px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium disabled:opacity-50">
             {saving ? 'Guardando…' : 'Guardar cambios'}
           </button>
@@ -363,7 +369,7 @@ export function SectionSettings() {
             ))}
           </ul>
           <div className="flex gap-2">
-            <button onClick={runCleanup} disabled={cleanupRunning}
+            <button onClick={() => setConfirmCleanup(true)} disabled={cleanupRunning}
               className="text-sm px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium disabled:opacity-50">
               {cleanupRunning ? 'Ejecutando…' : 'Aplicar limpieza ahora'}
             </button>
@@ -407,6 +413,27 @@ export function SectionSettings() {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmCleanup}
+        title="Aplicar limpieza ahora"
+        message={cleanupPreview ? `Eliminar ${Object.values(cleanupPreview).reduce((a, b) => a + b, 0).toLocaleString()} fila(s) ahora. Esta acción no se puede deshacer.` : ''}
+        confirmLabel="Eliminar"
+        loading={cleanupRunning}
+        onConfirm={runCleanup}
+        onCancel={() => setConfirmCleanup(false)}
+      />
+
+      <ConfirmModal
+        open={!!confirmSensitive}
+        title="Estás por modificar settings sensibles"
+        message={confirmSensitive || ''}
+        confirmLabel="Continuar"
+        danger={false}
+        loading={saving}
+        onConfirm={save}
+        onCancel={() => setConfirmSensitive(null)}
+      />
     </div>
   )
 }

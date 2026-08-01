@@ -305,6 +305,7 @@ model UserLogin {
   @@index([userId])
   @@index([workspaceId])
   @@index([loginAt])
+  @@index([workspaceId, loginAt])
 }
 
 // Snapshot mensual de métricas del MiniDashboard de RRHH (evolución histórica).
@@ -631,6 +632,7 @@ model Task {
   @@index([workDayId])
   @@index([userId, scheduledFor])
   @@index([recurrenceId])
+  @@index([status, completedAt])
   @@unique([recurrenceId, scheduledFor])
 }
 

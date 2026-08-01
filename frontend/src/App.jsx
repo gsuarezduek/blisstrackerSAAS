@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import { WorkspaceProvider } from './context/WorkspaceContext'
 import React from 'react'
 import LoadingSpinner from './components/LoadingSpinner'
+import WorkspaceSuspendedScreen from './components/WorkspaceSuspendedScreen'
 
 class ErrorBoundary extends React.Component {
   state = { error: null }
@@ -99,22 +100,25 @@ const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
 const ReportOrClientPortal = lazyWithReload(() => import('./pages/ReportOrClientPortal'))
 
 function PrivateRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, workspaceSuspended } = useAuth()
   if (loading) return <LoadingSpinner size="lg" fullPage />
+  if (workspaceSuspended) return <WorkspaceSuspendedScreen />
   return user ? children : <Navigate to="/login" replace />
 }
 
 function AdminRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, workspaceSuspended } = useAuth()
   if (loading) return <LoadingSpinner size="lg" fullPage />
+  if (workspaceSuspended) return <WorkspaceSuspendedScreen />
   if (!user) return <Navigate to="/login" replace />
   if (!user.isAdmin) return <Navigate to="/" replace />
   return children
 }
 
 function SuperAdminRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, workspaceSuspended } = useAuth()
   if (loading) return <LoadingSpinner size="lg" fullPage />
+  if (workspaceSuspended) return <WorkspaceSuspendedScreen />
   if (!user) return <Navigate to="/login" replace />
   if (!user.isSuperAdmin) return <Navigate to="/" replace />
   return children
@@ -122,8 +126,9 @@ function SuperAdminRoute({ children }) {
 
 // Módulo Ventas: acceden admins/owners y el equipo comercial (user.isSales).
 function SalesRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, workspaceSuspended } = useAuth()
   if (loading) return <LoadingSpinner size="lg" fullPage />
+  if (workspaceSuspended) return <WorkspaceSuspendedScreen />
   if (!user) return <Navigate to="/login" replace />
   if (!user.isAdmin && !user.isSales) return <Navigate to="/" replace />
   return children

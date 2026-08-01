@@ -9,4 +9,4 @@ function todayString(tz) {
   return new Date().toLocaleDateString('en-CA', { timeZone: safeZone })
 }
 
-module.exports = { todayString }
+module.exports = { todayString, DEFAULT_TZ }

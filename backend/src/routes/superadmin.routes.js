@@ -2,6 +2,7 @@ const express = require('express')
 const multer  = require('multer')
 const router  = express.Router()
 const { auth } = require('../middleware/auth')
+const prisma = require('../lib/prisma')
 const c     = require('../controllers/superadmin.controller')
 const ann   = require('../controllers/announcements.controller')
 const av    = require('../controllers/avatars.controller')
@@ -34,11 +35,20 @@ function uploadAvatar(req, res, next) {
   })
 }
 
-function superAdminOnly(req, res, next) {
+// Re-valida isSuperAdmin contra la DB (no confía ciegamente en el JWT, que puede
+// vivir hasta 12h): si a alguien se le revoca el flag, pierde acceso de inmediato
+// en vez de recién cuando expire su token.
+async function superAdminOnly(req, res, next) {
   if (!req.user?.isSuperAdmin) {
     return res.status(403).json({ error: 'Acceso restringido a super administradores' })
   }
-  next()
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId }, select: { isSuperAdmin: true } })
+    if (!user?.isSuperAdmin) {
+      return res.status(403).json({ error: 'Acceso restringido a super administradores' })
+    }
+    next()
+  } catch (err) { next(err) }
 }
 
 router.use(auth)

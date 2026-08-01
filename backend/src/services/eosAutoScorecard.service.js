@@ -523,24 +523,33 @@ async function computeObjetivosCumplidosMonthly(workspaceId, closedMonths) {
   })
   const nameById = new Map(projects.map(p => [p.id, p.name]))
 
-  for (const month of closedMonths) {
+  // Meses y proyectos son independientes entre sí — se calculan todos en paralelo
+  // en vez de encadenar hasta meses×proyectos llamadas secuenciales a computeObjectives.
+  async function computeForMonth(month) {
     let ok = 0, total = 0
     const unmet = []
-    for (const pid of projectIds) {
-      let results = []
+    const perProject = await Promise.all(projectIds.map(async (pid) => {
       try {
-        results = await computeObjectives({ projectId: pid, workspaceId, dataMonth: month })
+        return await computeObjectives({ projectId: pid, workspaceId, dataMonth: month })
       } catch (err) {
         console.error(`[EOSAutoScorecard] objetivos pid=${pid} ${month}:`, err.message)
+        return []
       }
-      for (const r of results) {
+    }))
+    projectIds.forEach((pid, i) => {
+      for (const r of perProject[i]) {
         if (r.status !== 'ok' && r.status !== 'partial' && r.status !== 'fail') continue
         total += 1
         if (r.status === 'ok') ok += 1
         else unmet.push({ name: `${nameById.get(pid) || '—'} · ${r.label}` })
       }
-    }
-    if (total > 0) out[month] = { value: Math.round(ok / total * 100), top3: unmet.slice(0, 5) }
+    })
+    return total > 0 ? { month, value: Math.round(ok / total * 100), top3: unmet.slice(0, 5) } : null
+  }
+
+  const monthResults = await Promise.all(closedMonths.map(computeForMonth))
+  for (const r of monthResults) {
+    if (r) out[r.month] = { value: r.value, top3: r.top3 }
   }
   return out
 }

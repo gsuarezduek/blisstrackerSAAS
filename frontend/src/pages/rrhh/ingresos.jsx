@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import ConfirmModal from '../../components/ConfirmModal'
 import RoleBadge from '../../components/RoleBadge'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import { TZ, todayBA, todayStr, fmtDate, fmtTime, minutesFromMidnight, minsToTime } from './shared'
@@ -47,6 +48,7 @@ export function TabIngresos({ users }) {
   const [editingId, setEditingId] = useState(null)   // id del ingreso en edición
   const [editTime, setEditTime]   = useState('')
   const [busyId, setBusyId]       = useState(null)   // id del ingreso con acción en curso
+  const [loginToDelete, setLoginToDelete] = useState(null)   // login | null
 
   const shortcuts = useMemo(() => dateShortcuts(), [])
 
@@ -80,14 +82,14 @@ export function TabIngresos({ users }) {
     finally { setBusyId(null) }
   }
 
-  async function removeLogin(l) {
-    if (!window.confirm('¿Eliminar este ingreso? No se puede deshacer.')) return
-    setBusyId(l.id)
+  async function removeLogin() {
+    if (!loginToDelete) return
+    setBusyId(loginToDelete.id)
     try {
-      await api.delete(`/admin/rrhh/logins/${l.id}`)
+      await api.delete(`/admin/rrhh/logins/${loginToDelete.id}`)
       await fetchLogins()
     } catch { alert('No se pudo eliminar el ingreso') }
-    finally { setBusyId(null) }
+    finally { setBusyId(null); setLoginToDelete(null) }
   }
 
   function applyShortcut(s) {
@@ -373,7 +375,7 @@ export function TabIngresos({ users }) {
                         }`}>{l.method === 'google' ? 'Google' : 'Email'}</span>
                         <button onClick={() => startEdit(l)} disabled={isBusy} title="Editar hora"
                           className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 flex-shrink-0 disabled:opacity-50">✏️</button>
-                        <button onClick={() => removeLogin(l)} disabled={isBusy} title="Eliminar ingreso"
+                        <button onClick={() => setLoginToDelete(l)} disabled={isBusy} title="Eliminar ingreso"
                           className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 flex-shrink-0 disabled:opacity-50">🗑️</button>
                       </>
                     )}
@@ -384,6 +386,15 @@ export function TabIngresos({ users }) {
           )}
         </div>
       ))}
+
+      <ConfirmModal
+        open={!!loginToDelete}
+        title="Eliminar ingreso"
+        message="No se puede deshacer."
+        loading={busyId === loginToDelete?.id}
+        onConfirm={removeLogin}
+        onCancel={() => setLoginToDelete(null)}
+      />
     </div>
   )
 }

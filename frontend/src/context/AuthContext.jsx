@@ -11,13 +11,23 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   // Un admin puede previsualizar la app "como un miembro normal" sin perder su rol real.
   const [viewAsMember, setViewAsMember] = useState(false)
+  // Workspace suspendido/cancelado: /auth/me devuelve 402 WORKSPACE_SUSPENDED para
+  // cualquier miembro (no sólo escrituras). No es un token inválido — no lo borramos.
+  const [workspaceSuspended, setWorkspaceSuspended] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (token) {
       api.get('/auth/me')
         .then(r => setUser(r.data))
-        .catch(() => localStorage.removeItem('token'))
+        .catch(err => {
+          if (err.response?.data?.code === 'WORKSPACE_SUSPENDED') {
+            setWorkspaceSuspended(true)
+          } else if (err.response?.status === 401) {
+            localStorage.removeItem('token')
+          }
+          // Otros errores (red, 5xx transitorio): dejamos el token — no es una sesión inválida.
+        })
         .finally(() => setLoading(false))
     } else {
       setLoading(false)
@@ -32,6 +42,31 @@ export function AuthProvider({ children }) {
       setViewAsMember(false)
     }
   }, [user?.id])
+
+  // Sincroniza sesión entre pestañas: el evento `storage` sólo dispara en las pestañas
+  // que NO hicieron el cambio, así que esto refleja acá un logout/login hecho en otra.
+  useEffect(() => {
+    function handleStorage(e) {
+      if (e.key !== 'token') return
+      if (!e.newValue) {
+        setUser(null)
+        return
+      }
+      if (e.newValue !== e.oldValue) {
+        api.get('/auth/me').then(r => setUser(r.data)).catch(() => setUser(null))
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
+
+  // Suspensión detectada en una llamada posterior al chequeo inicial (ej. la pestaña
+  // ya estaba abierta cuando el workspace pasó a suspendido/cancelado).
+  useEffect(() => {
+    function onWorkspaceSuspended() { setWorkspaceSuspended(true) }
+    window.addEventListener('bliss:workspace-suspended', onWorkspaceSuspended)
+    return () => window.removeEventListener('bliss:workspace-suspended', onWorkspaceSuspended)
+  }, [])
 
   async function login(email, password) {
     const { data } = await api.post('/auth/login', { email, password })
@@ -98,6 +133,7 @@ export function AuthProvider({ children }) {
       user: effectiveUser, loading, login, loginWithGoogle, loginWithToken,
       switchWorkspace, logout, updateUser,
       realIsAdmin, viewAsMember, toggleViewAsMember,
+      workspaceSuspended,
     }}>
       {children}
     </AuthContext.Provider>

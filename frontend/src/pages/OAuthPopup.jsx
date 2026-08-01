@@ -1,13 +1,9 @@
 /**
- * Página intermediaria para Google OAuth en contexto multi-tenant.
- * Siempre se sirve desde el dominio raíz (blisstracker.app), que es
- * el único origen registrado en Google Cloud Console.
- *
- * Dos modos:
- *  - Login (legacy): devuelve el ID token al opener por postMessage.
- *  - Vincular cuenta (?link=<token>): hace la llamada al backend directamente
- *    (POST /auth/connect-google con { linkToken, credential }). No depende de
- *    window.opener — que COOP puede cortar entre subdominios distintos.
+ * Página intermediaria para vincular una cuenta de Google (?link=<token>) desde
+ * MyProfile.jsx. Siempre se sirve desde el dominio raíz (blisstracker.app), que
+ * es el único origen registrado en Google Cloud Console. Hace la llamada al
+ * backend directamente (POST /auth/connect-google con { linkToken, credential }) —
+ * no depende de window.opener, que COOP puede cortar entre subdominios distintos.
  */
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -21,30 +17,19 @@ export default function OAuthPopup() {
   const [errMsg, setErrMsg] = useState('')
 
   async function handleSuccess({ credential }) {
-    if (linkToken) {
-      try {
-        await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/connect-google`, { linkToken, credential })
-        setStatus('ok')
-        setTimeout(() => window.close(), 1200)
-      } catch (err) {
-        setStatus('err')
-        setErrMsg(err.response?.data?.error || 'No se pudo conectar la cuenta de Google.')
-      }
-      return
+    try {
+      await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/connect-google`, { linkToken, credential })
+      setStatus('ok')
+      setTimeout(() => window.close(), 1200)
+    } catch (err) {
+      setStatus('err')
+      setErrMsg(err.response?.data?.error || 'No se pudo conectar la cuenta de Google.')
     }
-    // Modo login: devolver el credential al opener (es quien tiene el X-Workspace correcto)
-    window.opener?.postMessage({ type: 'GOOGLE_CREDENTIAL', credential }, '*')
-    window.close()
   }
 
   function handleError() {
-    if (linkToken) {
-      setStatus('err')
-      setErrMsg('No se pudo iniciar sesión con Google.')
-      return
-    }
-    window.opener?.postMessage({ type: 'GOOGLE_AUTH_ERROR', error: 'No se pudo iniciar sesión con Google' }, '*')
-    window.close()
+    setStatus('err')
+    setErrMsg('No se pudo iniciar sesión con Google.')
   }
 
   return (
@@ -55,11 +40,11 @@ export default function OAuthPopup() {
         <p className="text-sm text-green-600 dark:text-green-400 font-medium">
           ✅ Cuenta de Google conectada. Podés cerrar esta ventana.
         </p>
+      ) : !linkToken ? (
+        <p className="text-sm text-red-600 dark:text-red-400 max-w-xs">Link inválido o incompleto.</p>
       ) : (
         <>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {linkToken ? 'Elegí la cuenta de Google a conectar' : 'Iniciando sesión con Google…'}
-          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Elegí la cuenta de Google a conectar</p>
           <GoogleLogin
             onSuccess={handleSuccess}
             onError={handleError}

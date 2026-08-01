@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { isWorkspaceSubdomain } from '../utils/domain'
 import AddTaskModal from './AddTaskModal'
 
@@ -28,14 +29,15 @@ const SHORTCUT_GROUPS = [
   ]},
 ]
 
-// Destino de navegación para "Shift + X". Reportes depende del rol.
-// Las teclas de tarea (C/P/B/I) no están acá: las maneja el Dashboard.
-function navDest(key, isAdmin) {
+// Destino de navegación para "Shift + X". Reportes depende del rol; Marketing
+// depende del feature flag (igual que el link del Navbar, que no aparece si está
+// deshabilitado — el atajo no debería mandar a una página bloqueada).
+function navDest(key, isAdmin, marketingEnabled) {
   switch (key) {
     case 'd': return '/'
     case 'y': return '/my-projects'
     case 'a': return '/realtime'
-    case 'm': return '/marketing'
+    case 'm': return marketingEnabled ? '/marketing' : null
     case 'r': return isAdmin ? '/reports' : '/my-reports'
     default:  return null
   }
@@ -68,6 +70,7 @@ export default function GlobalShortcuts() {
 
   // Solo activo para usuarios autenticados dentro de un workspace (no en landing/login).
   const enabled = !!user && isWorkspaceSubdomain()
+  const { enabled: marketingEnabled } = useFeatureFlag('marketing')
 
   useEffect(() => {
     if (!enabled) return
@@ -100,7 +103,7 @@ export default function GlobalShortcuts() {
       // Navegación con Shift + tecla. Las teclas de tarea (C/P/B/I) no están en el
       // mapa de navegación, así que acá se ignoran y las maneja el Dashboard.
       if (e.shiftKey) {
-        const dest = navDest(lower, !!user?.isAdmin)
+        const dest = navDest(lower, !!user?.isAdmin, marketingEnabled)
         if (dest) { e.preventDefault(); navigate(dest) }
         return
       }
@@ -112,7 +115,7 @@ export default function GlobalShortcuts() {
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [enabled, navigate, taskOpen, helpOpen, user])
+  }, [enabled, navigate, taskOpen, helpOpen, user, marketingEnabled])
 
   function handleAdd(task) {
     // Avisamos a la página activa (ej. Dashboard) para que refresque su lista.

@@ -3,6 +3,7 @@ const { saveAllCurrentMonth, METRIC_KEYS } = require('../services/rrhhMetricSnap
 const { monthLabel, prevMonthsArr } = require('../lib/monthUtils')
 const { inArrivalWindow, laborableDays } = require('../lib/attendance')
 const { deviceTypeFromUA } = require('../lib/deviceType')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 function defaultDateRange(tz) {
   const to   = new Date().toLocaleDateString('en-CA', { timeZone: tz })
@@ -69,7 +70,7 @@ async function loginHistory(req, res, next) {
 function tzSuffix(tz) {
   // Solo funciona correctamente con las timezones de LatAm comunes
   const offsets = {
-    'America/Argentina/Buenos_Aires': '-03:00',
+    DEFAULT_TZ: '-03:00',
     'America/Santiago':               '-04:00',
     'America/Bogota':                 '-05:00',
     'America/Mexico_City':            '-06:00',
@@ -213,30 +214,6 @@ async function userSummary(req, res, next) {
 }
 
 // PATCH /api/admin/rrhh/vacation-days/:id
-async function updateVacationDays(req, res, next) {
-  try {
-    const userId = Number(req.params.id)
-    const workspaceId = req.workspace.id
-    const { delta } = req.body
-    if (delta !== 1 && delta !== -1) {
-      return res.status(400).json({ error: 'delta debe ser 1 o -1' })
-    }
-
-    const member = await prisma.workspaceMember.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-    })
-    if (!member) return res.status(404).json({ error: 'Usuario no encontrado' })
-
-    const newVal = Math.max(0, member.vacationDays + delta)
-    const updated = await prisma.workspaceMember.update({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      data: { vacationDays: newVal },
-      select: { userId: true, vacationDays: true },
-    })
-    res.json({ id: updated.userId, vacationDays: updated.vacationDays })
-  } catch (err) { next(err) }
-}
-
 // PATCH /api/admin/rrhh/logins/:loginId
 // Edita la hora (y opcionalmente la fecha) de un ingreso registrado.
 // Útil para corregir un ingreso de la tarde (fin de semana/feriado) que distorsiona el promedio.
@@ -463,4 +440,4 @@ async function metricHistory(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { loginHistory, lastLogins, userSummary, updateVacationDays, dashboardStats, updateLogin, deleteLogin, metricHistory }
+module.exports = { loginHistory, lastLogins, userSummary, dashboardStats, updateLogin, deleteLogin, metricHistory }

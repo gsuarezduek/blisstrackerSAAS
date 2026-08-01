@@ -33,22 +33,6 @@ const LEAD_ORIGINS = [
   { key: 'otro',       label: 'Otro' },
 ]
 
-// Tipos de evento del timeline automático (LeadActivity.kind = 'event').
-// El `message` legible lo arma el controller; acá solo se define el vocabulario.
-const LEAD_EVENTS = [
-  'lead_created',
-  'status_changed',
-  'owner_changed',
-  'note_added',
-  'next_action_set', // legacy: registrado por la vieja próxima acción única (ver next_action_added/next_action_done)
-  'next_action_added',
-  'next_action_done',
-  'proposal_created',
-  'research_run',
-  'converted_to_client',
-  'project_created',
-]
-
 const LEAD_STATUS_KEYS = LEAD_STATUSES.map(s => s.key)
 const LEAD_ORIGIN_KEYS = LEAD_ORIGINS.map(o => o.key)
 
@@ -59,7 +43,6 @@ function statusMeta(key)    { return LEAD_STATUSES.find(s => s.key === key) || n
 module.exports = {
   LEAD_STATUSES,
   LEAD_ORIGINS,
-  LEAD_EVENTS,
   LEAD_STATUS_KEYS,
   LEAD_ORIGIN_KEYS,
   isValidStatus,

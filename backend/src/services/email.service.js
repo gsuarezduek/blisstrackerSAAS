@@ -1,6 +1,7 @@
 const { Resend } = require('resend')
 const prisma = require('../lib/prisma')
 const { getSetting } = require('../lib/platformSettings')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -9,6 +10,13 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 const APP_DOMAIN  = process.env.APP_DOMAIN  || 'blisstracker.app'
 const LOGO_URL    = `https://bliss.${APP_DOMAIN}/blisstracker_logo.svg`
 const LOCKUP_URL  = `https://bliss.${APP_DOMAIN}/logo-lockup.svg`
+
+// Escapa HTML de texto libre de usuario antes de insertarlo en un email — evita
+// HTML injection en emails que llegan a bandejas de mayor privilegio (admins,
+// equipo interno) vía campos como feedback.message, observation, reviewNote.
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 // Header y footer compartidos por todos los emails transaccionales.
 // El lockup SVG incluye ícono + wordmark, ideal para el encabezado.
@@ -322,33 +330,6 @@ async function sendWeeklySummaryEmail(email, name, html, weekLabel, workspaceId,
   }
 }
 
-async function sendTestSettingsEmail(email, name, fromOverride, workspaceId) {
-  const from = fromOverride || await getEmailFrom(workspaceId)
-  const subject = 'Email de prueba — BlissTracker'
-  try {
-    const { error } = await resend.emails.send({
-      from,
-      to: email,
-      subject,
-      html: emailShell(`
-        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
-          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">✅ Configuración de email correcta</h2>
-          <p style="color:#475569;margin:0 0 16px;">Hola <strong>${name}</strong>, este es un email de prueba para verificar que la configuración del remitente funciona correctamente.</p>
-          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
-            <p style="margin:0;color:#166534;font-size:14px;"><strong>Remitente configurado:</strong> ${from}</p>
-          </div>
-          <p style="color:#94a3b8;font-size:14px;margin:0;">Si recibiste este email, la configuración DNS y el remitente están funcionando correctamente.</p>
-        </div>
-      `),
-    })
-    if (error) throw new Error(error.message)
-    await logEmail({ workspaceId, to: email, subject, type: 'testSettings', status: 'sent' })
-  } catch (err) {
-    await logEmail({ workspaceId, to: email, subject, type: 'testSettings', status: 'failed', errorMsg: err.message })
-    throw err
-  }
-}
-
 async function sendInvitationEmail(email, inviterName, workspaceName, joinUrl, workspaceId) {
   const from = await getEmailFrom(workspaceId)
   const subject = `${inviterName} te invitó a ${workspaceName} en BlissTracker`
@@ -383,7 +364,7 @@ async function sendInvitationEmail(email, inviterName, workspaceName, joinUrl, w
 async function sendWorkspaceDeletionWarning(emails, workspaceName, requestedByName, cancelUrl, scheduledAt, workspaceId) {
   const from = await getEmailFrom(workspaceId)
   const date = new Date(scheduledAt).toLocaleString('es-AR', {
-    timeZone: 'America/Argentina/Buenos_Aires',
+    timeZone: DEFAULT_TZ,
     day: 'numeric', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
@@ -466,12 +447,12 @@ async function sendVacationRequestEmail(adminEmails, userName, workspaceName, re
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
           <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">📋 Nueva solicitud de licencia</h2>
           <p style="color:#475569;margin:0 0 20px;">
-            <strong>${userName}</strong> solicitó días en <strong>${workspaceName}</strong>.
+            <strong>${escHtml(userName)}</strong> solicitó días en <strong>${escHtml(workspaceName)}</strong>.
           </p>
           <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
             <tr><td style="padding:8px 0;color:#64748b;font-size:14px;width:120px;">Tipo</td><td style="padding:8px 0;color:#1e293b;font-size:14px;font-weight:600;">${typeLabel}</td></tr>
             <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Fechas</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${dateRange}</td></tr>
-            ${request.observation ? `<tr><td style="padding:8px 0;color:#64748b;font-size:14px;vertical-align:top;">Observación</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${request.observation}</td></tr>` : ''}
+            ${request.observation ? `<tr><td style="padding:8px 0;color:#64748b;font-size:14px;vertical-align:top;">Observación</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${escHtml(request.observation)}</td></tr>` : ''}
           </table>
           <p style="color:#94a3b8;font-size:13px;margin:0;">Revisá la solicitud en BlissTracker → Administración → RRHH → Vacaciones.</p>
         </div>
@@ -514,11 +495,11 @@ async function sendVacationReviewEmail(userEmail, userName, workspaceName, reque
               ${approved ? '✅ Solicitud aprobada' : '❌ Solicitud rechazada'}
             </h2>
           </div>
-          <p style="color:#475569;margin:0 0 16px;">Hola <strong>${userName}</strong>, tu solicitud de licencia en <strong>${workspaceName}</strong> fue revisada.</p>
+          <p style="color:#475569;margin:0 0 16px;">Hola <strong>${escHtml(userName)}</strong>, tu solicitud de licencia en <strong>${escHtml(workspaceName)}</strong> fue revisada.</p>
           <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
             <tr><td style="padding:8px 0;color:#64748b;font-size:14px;width:120px;">Tipo</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${typeLabel}</td></tr>
             <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Fechas</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${dateRange}</td></tr>
-            ${request.reviewNote ? `<tr><td style="padding:8px 0;color:#64748b;font-size:14px;vertical-align:top;">Nota</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${request.reviewNote}</td></tr>` : ''}
+            ${request.reviewNote ? `<tr><td style="padding:8px 0;color:#64748b;font-size:14px;vertical-align:top;">Nota</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${escHtml(request.reviewNote)}</td></tr>` : ''}
           </table>
           <p style="color:#94a3b8;font-size:13px;margin:0;">Podés ver el historial de tus solicitudes en BlissTracker → Tu perfil.</p>
         </div>
@@ -608,9 +589,8 @@ async function sendPaymentFailedEmail(emails, workspaceName, workspaceId) {
 
 // Convierte texto plano (con saltos de línea) a HTML: párrafos por línea en blanco, <br> por salto simple.
 function textToHtmlParagraphs(text) {
-  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return String(text).trim().split(/\n{2,}/).map(block =>
-    `<p style="color:#475569;margin:0 0 16px;line-height:1.6;">${esc(block).replace(/\n/g, '<br>')}</p>`
+    `<p style="color:#475569;margin:0 0 16px;line-height:1.6;">${escHtml(block).replace(/\n/g, '<br>')}</p>`
   ).join('')
 }
 
@@ -818,7 +798,6 @@ async function sendReportFeedbackEmail(emails, payload, workspaceId) {
   const stars = '★'.repeat(r) + '☆'.repeat(5 - r)
   const clientName = (name && name.trim()) ? name.trim() : 'Un cliente'
   const subject = `⭐ ${r}/5 — Feedback del informe de ${projectName}`
-  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   try {
     const { error } = await resend.emails.send({
       from,
@@ -828,11 +807,11 @@ async function sendReportFeedbackEmail(emails, payload, workspaceId) {
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
           <h2 style="color:#1e293b;margin:0 0 6px;font-size:20px;">Nuevo feedback de un cliente</h2>
           <p style="color:#475569;margin:0 0 18px;">
-            <strong>${esc(clientName)}</strong> calificó el informe <strong>${esc(projectName)}</strong>${periodLabel ? ` · ${esc(periodLabel)}` : ''}.
+            <strong>${escHtml(clientName)}</strong> calificó el informe <strong>${escHtml(projectName)}</strong>${periodLabel ? ` · ${escHtml(periodLabel)}` : ''}.
           </p>
           <div style="font-size:26px;letter-spacing:3px;color:#f59e0b;margin:0 0 6px;">${stars}</div>
           <p style="color:#64748b;font-size:14px;margin:0 0 18px;">${r} de 5 estrellas</p>
-          ${comment ? `<div style="background:#f8fafc;border-left:3px solid #cbd5e1;border-radius:6px;padding:12px 16px;color:#334155;font-size:14px;line-height:1.6;margin:0 0 20px;">"${esc(comment)}"</div>` : '<p style="color:#94a3b8;font-size:13px;margin:0 0 20px;">Sin comentario.</p>'}
+          ${comment ? `<div style="background:#f8fafc;border-left:3px solid #cbd5e1;border-radius:6px;padding:12px 16px;color:#334155;font-size:14px;line-height:1.6;margin:0 0 20px;">"${escHtml(comment)}"</div>` : '<p style="color:#94a3b8;font-size:13px;margin:0 0 20px;">Sin comentario.</p>'}
           ${reportUrl ? `<a href="${reportUrl}" style="display:inline-block;background:#E67A1F;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;">Ver el informe</a>` : ''}
         </div>
       `),
@@ -897,7 +876,6 @@ module.exports = {
   sendProductivityDigestEmail,
   sendSalesReminderEmail,
   sendWeeklySummaryEmail,
-  sendTestSettingsEmail,
   sendInvitationEmail,
   sendWorkspaceDeletionWarning,
   sendVacationRequestEmail,
@@ -907,4 +885,5 @@ module.exports = {
   sendPlatformNotification,
   platformCard,
   emailShell,
+  escHtml,
 }

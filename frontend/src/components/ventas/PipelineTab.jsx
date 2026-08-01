@@ -75,10 +75,17 @@ export default function PipelineTab({ onOpenLead }) {
     if (!id) return
     const lead = leads.find(l => l.id === id)
     if (!lead || lead.status === status) return
+
+    let lostReason
+    if (statusMeta(status)?.isLost) {
+      lostReason = window.prompt('Motivo de la pérdida (requerido):')
+      if (!lostReason?.trim()) return // cancelado o vacío: no se mueve
+    }
+
     // Optimista: mover la card ya.
     setLeads(ls => ls.map(l => (l.id === id ? { ...l, status } : l)))
     try {
-      await api.patch(`/ventas/leads/${id}/status`, { status })
+      await api.patch(`/ventas/leads/${id}/status`, { status, ...(lostReason ? { lostReason } : {}) })
     } catch {
       load() // revertir ante error
     }

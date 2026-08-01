@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, memo } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { linkify } from '../utils/linkify'
 import { fmtMins, activeMinutes, completedDuration, completedMinutes } from '../utils/format'
 import UserLink from './UserLink'
 
-export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments }) {
+function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments }) {
   const [loading, setLoading] = useState(false)
   const [showBlockForm, setShowBlockForm] = useState(false)
   const [blockReason, setBlockReason] = useState('')
@@ -504,3 +504,5 @@ export default function TaskCard({ task, onUpdate, onDelete, hasActiveTask, back
     </div>
   )
 }
+
+export default memo(TaskCard)

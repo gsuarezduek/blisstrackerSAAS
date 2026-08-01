@@ -13,7 +13,6 @@
 //   - defaultVisibility    : visibilityRule sugerida al crear
 
 const SUBJECT_TYPES   = ['project', 'person', 'team']
-const SCORING_MODES   = ['auto_metric', 'vote', 'manual', 'quiz']
 const VISIBILITY_MODES = ['always', 'date_range', 'recurring']
 // Tipos de ventana recurrente soportados por el motor de visibilidad.
 const RECURRING_KINDS = ['last_n_days_of_month', 'first_n_days_of_month', 'day_range_of_month', 'weekdays']
@@ -101,7 +100,7 @@ function marketingMetricDef(key)        { return MARKETING_METRICS[key] || null 
 function isValidMarketingMetric(key)    { return Object.prototype.hasOwnProperty.call(MARKETING_METRICS, key) }
 
 module.exports = {
-  GAME_TYPES, SUBJECT_TYPES, SCORING_MODES, VISIBILITY_MODES, RECURRING_KINDS,
+  GAME_TYPES, SUBJECT_TYPES, VISIBILITY_MODES, RECURRING_KINDS,
   MARKETING_METRICS, MARKETING_CATEGORIES,
   gameTypeDef, isValidGameType, marketingMetricDef, isValidMarketingMetric,
 }

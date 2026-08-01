@@ -46,6 +46,12 @@ api.interceptors.response.use(
         window.location.href = '/billing'
       }
     }
+    // Workspace suspendido/cancelado: no es una sesión inválida (no tocar el token).
+    // Avisamos a AuthContext, que ya está montado y puede no haberlo detectado si
+    // la suspensión ocurrió después del chequeo inicial de /auth/me.
+    if (err.response?.status === 402 && err.response?.data?.code === 'WORKSPACE_SUSPENDED') {
+      window.dispatchEvent(new CustomEvent('bliss:workspace-suspended'))
+    }
     return Promise.reject(err)
   }
 )

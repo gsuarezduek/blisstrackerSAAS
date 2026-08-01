@@ -42,8 +42,6 @@ const PERIODICITIES = ['monthly', 'quarterly', 'annual']
 const AD_PLATFORMS = ['meta_ads', 'google_ads']
 const RRSS_PLATFORMS = ['instagram', 'tiktok', 'linkedin']
 
-function isValidMetric(metric)            { return Object.prototype.hasOwnProperty.call(METRICS, metric) }
 function metricDef(metric)                { return METRICS[metric] || null }
-function metricsForCategory(category)     { return Object.entries(METRICS).filter(([, d]) => d.category === category).map(([k]) => k) }
 
-module.exports = { METRICS, CATEGORIES, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, isValidMetric, metricDef, metricsForCategory }
+module.exports = { METRICS, CATEGORIES, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, metricDef }

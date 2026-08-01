@@ -5,6 +5,7 @@ const {
   scrapeFacebookPage,     parseFacebookPage,
 } = require('../services/socialScrape.service')
 const { cacheImagesInArray } = require('../services/socialImageCache.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // Adaptadores por plataforma — todos retornan métricas con shape común
 // (followersCount, name, profilePicUrl, postsThisMonth, avgLikes, avgComments,
@@ -49,7 +50,7 @@ const PLATFORM_SCRAPERS = {
 }
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
@@ -58,18 +59,18 @@ function currentMonthStr() {
 // `CompetitorAccount.lastScrapedAt`, así el gate es persistente (sobrevive redeploys y
 // no depende de que el pedido caiga en la misma instancia del backend).
 function monthStrOfDate(date) {
-  const d = new Date(date.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const d = new Date(date.toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function nextMonthLabel() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   const next = new Date(now.getFullYear(), now.getMonth() + 1, 1)
   return next.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 }
 
 function todayStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 

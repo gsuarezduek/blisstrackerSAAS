@@ -1,4 +1,5 @@
 const axios = require('axios')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 const TIKTOK_BASE = 'https://open.tiktokapis.com/v2'
 
@@ -61,14 +62,14 @@ async function fetchTikTokMetrics(accessToken, targetMonth = null) {
   // ── Mes a filtrar (ART) ───────────────────────────────────────────────────
   // Si se pasa targetMonth ("YYYY-MM"), filtramos ese mes. Si no, usamos el mes actual.
 
-  const artNow      = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const artNow      = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   const filterMonth = targetMonth ||
     `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}`
 
   // Videos del mes objetivo (create_time es Unix timestamp en segundos)
   const monthVideos = videos.filter(v => {
     if (!v.create_time) return false
-    const artDate   = new Date(new Date(v.create_time * 1000).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+    const artDate   = new Date(new Date(v.create_time * 1000).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
     const postMonth = `${artDate.getFullYear()}-${String(artDate.getMonth() + 1).padStart(2, '0')}`
     return postMonth === filterMonth
   })

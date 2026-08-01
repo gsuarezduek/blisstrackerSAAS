@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { sendVacationRequestEmail, sendVacationReviewEmail } = require('../services/email.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // Cuenta días hábiles (lun-vie, sin feriados) entre dos fechas "YYYY-MM-DD" inclusive.
 function countBusinessDays(startDate, endDate) {
@@ -358,9 +359,11 @@ async function createRequest(req, res, next) {
       return res.status(400).json({ error: 'La fecha de inicio debe ser anterior a la de fin' })
     }
 
-    // Mínimo 48hs de anticipación
+    // Mínimo 48hs de anticipación — calculado en la timezone del workspace (no la del
+    // servidor), igual que el resto de las fechas de la app (ver todayString en utils/dates).
+    const tz = req.workspace.timezone || DEFAULT_TZ
     const minDate = new Date(Date.now() + 48 * 60 * 60 * 1000)
-    const minDateStr = minDate.toLocaleDateString('en-CA') // YYYY-MM-DD
+    const minDateStr = minDate.toLocaleDateString('en-CA', { timeZone: tz }) // YYYY-MM-DD
     if (startDate < minDateStr) {
       return res.status(400).json({ error: 'La fecha de inicio debe ser con al menos 48 horas de anticipación' })
     }

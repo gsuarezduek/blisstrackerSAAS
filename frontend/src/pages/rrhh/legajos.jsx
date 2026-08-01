@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import ConfirmModal from '../../components/ConfirmModal'
 import useLegajoFields from '../../hooks/useLegajoFields'
 import useRoles from '../../hooks/useRoles'
 import RoleBadge from '../../components/RoleBadge'
@@ -426,6 +427,7 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
   const [editingId, setEditingId] = useState(null)
   const [editTime, setEditTime]   = useState('')
   const [busyId, setBusyId]       = useState(null)
+  const [loginToDelete, setLoginToDelete] = useState(null)   // día | null
 
   function startEdit(d) { setEditingId(d.id); setEditTime(d.time) }
   function cancelEdit()  { setEditingId(null); setEditTime('') }
@@ -441,14 +443,14 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
     finally { setBusyId(null) }
   }
 
-  async function removeLogin(d) {
-    if (!window.confirm(`¿Eliminar el ingreso del ${fmtDate(d.date)}? No se puede deshacer.`)) return
-    setBusyId(d.id)
+  async function removeLogin() {
+    if (!loginToDelete) return
+    setBusyId(loginToDelete.id)
     try {
-      await api.delete(`/admin/rrhh/logins/${d.id}`)
+      await api.delete(`/admin/rrhh/logins/${loginToDelete.id}`)
       await onChanged?.()
     } catch { alert('No se pudo eliminar el ingreso') }
-    finally { setBusyId(null) }
+    finally { setBusyId(null); setLoginToDelete(null) }
   }
 
   return (
@@ -500,7 +502,7 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
                       )}
                       <button onClick={() => startEdit(d)} disabled={isBusy} title="Editar hora"
                         className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-50">✏️</button>
-                      <button onClick={() => removeLogin(d)} disabled={isBusy} title="Eliminar ingreso"
+                      <button onClick={() => setLoginToDelete(d)} disabled={isBusy} title="Eliminar ingreso"
                         className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50">🗑️</button>
                     </span>
                   )}
@@ -514,6 +516,15 @@ export function LoginDaysModal({ user, summary, onChanged, onClose }) {
           {days.length} día{days.length !== 1 ? 's' : ''} con registro · se muestra solo el primer ingreso de cada día
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!loginToDelete}
+        title="Eliminar ingreso"
+        message={loginToDelete ? `El ingreso del ${fmtDate(loginToDelete.date)} no se puede deshacer.` : ''}
+        loading={busyId === loginToDelete?.id}
+        onConfirm={removeLogin}
+        onCancel={() => setLoginToDelete(null)}
+      />
     </div>
   )
 }

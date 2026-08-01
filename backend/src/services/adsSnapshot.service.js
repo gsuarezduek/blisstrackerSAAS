@@ -2,9 +2,10 @@ const prisma                         = require('../lib/prisma')
 const { getValidFbToken, fetchMetaAdsData }  = require('./metaAds.service')
 const { fetchGoogleAdsData }         = require('./googleAds.service')
 const { cacheImagesInArray }         = require('./socialImageCache.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 function prevMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   const m = now.getMonth() // 0-indexed, so this is the previous month (we want last month)
   const y = now.getFullYear()
   const pm = m === 0 ? 12 : m

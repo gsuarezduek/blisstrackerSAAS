@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import ConfirmModal from '../../components/ConfirmModal'
 import { fmtBytes, StatCard } from './shared'
 
 export function SectionStorage() {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
+  const [confirmCleanup, setConfirmCleanup] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -19,14 +21,6 @@ export function SectionStorage() {
   useEffect(() => { load() }, [])
 
   async function cleanup() {
-    const orphan = data?.socialImages?.orphan
-    if (!orphan?.count) return
-    if (!window.confirm(
-      `Eliminar ${orphan.count} imagen(es) huérfana(s) (${fmtBytes(orphan.bytes)})?\n\n` +
-      `Solo se borran imágenes que ya no referencia ningún informe ni snapshot. ` +
-      `Luego se corre VACUUM para devolver el espacio al disco (la tabla queda ` +
-      `bloqueada unos segundos). Esta acción no se puede deshacer.`
-    )) return
     setRunning(true)
     try {
       const { data: res } = await api.post('/superadmin/storage/cleanup-orphan-images', { olderThanDays: 1 })
@@ -40,6 +34,7 @@ export function SectionStorage() {
       window.alert(`Error: ${err.response?.data?.error || err.message}`)
     } finally {
       setRunning(false)
+      setConfirmCleanup(false)
     }
   }
 
@@ -104,7 +99,7 @@ export function SectionStorage() {
             </p>
           </div>
           <button
-            onClick={cleanup}
+            onClick={() => setConfirmCleanup(true)}
             disabled={running || socialImages.orphan.count === 0}
             className="shrink-0 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -142,6 +137,16 @@ export function SectionStorage() {
           ))}
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmCleanup}
+        title="Limpiar imágenes huérfanas"
+        message={`Eliminar ${socialImages.orphan.count} imagen(es) huérfana(s) (${fmtBytes(socialImages.orphan.bytes)}). Solo se borran imágenes que ya no referencia ningún informe ni snapshot. Luego se corre VACUUM para devolver el espacio al disco (la tabla queda bloqueada unos segundos). Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        loading={running}
+        onConfirm={cleanup}
+        onCancel={() => setConfirmCleanup(false)}
+      />
     </div>
   )
 }

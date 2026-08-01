@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify'
 import api from '../api/client'
 import Navbar from '../components/Navbar'
 import RichTextEditor from '../components/RichTextEditor'
+import ConfirmModal from '../components/ConfirmModal'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import '../components/situation-editor.css'
 
@@ -50,6 +51,8 @@ export default function Gamification() {
   const [editing, setEditing] = useState(null)   // game o {} para nuevo
   const [scoresFor, setScoresFor] = useState(null) // game manual para cargar puntos
   const [detailFor, setDetailFor] = useState(null) // game para ver detalle (votación/quiz)
+  const [gameToDelete, setGameToDelete] = useState(null)
+  const [deletingGame, setDeletingGame] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -81,10 +84,16 @@ export default function Gamification() {
     if (data.winner) window.alert(`🏆 Ganador: ${data.winner.label} (${data.winner.score} pts)`)
     else window.alert('El juego se finalizó, pero todavía nadie tiene puntaje.')
   }
-  async function remove(game) {
-    if (!window.confirm(`¿Eliminar el juego "${game.title}"? Esta acción no se puede deshacer.`)) return
-    await api.delete(`/gamification/games/${game.id}`)
-    load()
+  async function remove() {
+    if (!gameToDelete) return
+    setDeletingGame(true)
+    try {
+      await api.delete(`/gamification/games/${gameToDelete.id}`)
+      load()
+    } finally {
+      setDeletingGame(false)
+      setGameToDelete(null)
+    }
   }
   // Archivar oculta el juego del botón flotante 🏆 al instante (sin esperar los 7 días
   // de gracia post-finalización). Reactivar lo vuelve a dejar como "finalizado".
@@ -199,7 +208,7 @@ export default function Gamification() {
                 onFinish={() => finish(g)}
                 onArchive={() => archive(g)}
                 onUnarchive={() => unarchive(g)}
-                onRemove={() => remove(g)}
+                onRemove={() => setGameToDelete(g)}
               />
             ))}
           </div>
@@ -230,6 +239,15 @@ export default function Gamification() {
       )}
 
       {detailFor && <GameDetailModal game={detailFor} onClose={() => setDetailFor(null)} />}
+
+      <ConfirmModal
+        open={!!gameToDelete}
+        title="Eliminar juego"
+        message={gameToDelete ? `"${gameToDelete.title}" — esta acción no se puede deshacer.` : ''}
+        loading={deletingGame}
+        onConfirm={remove}
+        onCancel={() => setGameToDelete(null)}
+      />
     </div>
   )
 }

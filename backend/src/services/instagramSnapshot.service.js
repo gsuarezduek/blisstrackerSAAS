@@ -3,9 +3,10 @@ const { getValidMetaToken }       = require('./metaTokenRefresh.service')
 const { fetchInstagramMetrics }   = require('./instagram.service')
 const { scrapeInstagramProfile }  = require('./socialScrape.service')
 const { cacheImagesInArray }      = require('./socialImageCache.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
@@ -17,7 +18,8 @@ function prevMonthStr(month) {
 }
 
 // Último día de un mes "YYYY-MM" → "YYYY-MM-DD" (Date.UTC con día 0 del mes siguiente).
-function lastDayOfMonth(month) {
+// Nombre distinto de lib/monthUtils.js#lastDayOfMonth (esa devuelve un número de día, no una fecha).
+function monthEndDateStr(month) {
   const [y, m] = month.split('-').map(Number)
   const d = new Date(Date.UTC(y, m, 0)).getUTCDate()   // m es 1-based; índice m = mes siguiente, día 0 = último del mes m
   return `${month}-${String(d).padStart(2, '0')}`
@@ -110,7 +112,7 @@ async function saveAllMonthlyInstagramSnapshots() {
 
   console.log(`[InstagramSnapshot] Procesando ${integrations.length} proyectos (mes: ${month})`)
 
-  const anchorDate = lastDayOfMonth(month)   // cierre del mes que se snapshotea → baseline del mes en curso
+  const anchorDate = monthEndDateStr(month)   // cierre del mes que se snapshotea → baseline del mes en curso
 
   for (const intg of integrations) {
     try {

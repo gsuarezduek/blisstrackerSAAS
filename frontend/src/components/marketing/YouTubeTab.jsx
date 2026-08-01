@@ -488,19 +488,6 @@ export default function YouTubeTab({ projectId, onSelectProject }) {
   )
 
   if (!integration) return <ConnectPrompt projectId={projectId} onConnected={fetchData} />
-  if (integration.status === 'expired') {
-    return (
-      <div className="space-y-4">
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl p-6 text-center">
-          <div className="text-3xl mb-2">⚠️</div>
-          <p className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">La conexión con YouTube expiró</p>
-          <p className="text-xs text-red-500 dark:text-red-400">Reconectá la cuenta para seguir viendo las métricas.</p>
-        </div>
-        <ConnectPrompt projectId={projectId} onConnected={fetchData} />
-      </div>
-    )
-  }
-
   if (integration.status === 'expired') return (
     <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
       <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl text-white" style={{ background: RED }}>🔒</div>

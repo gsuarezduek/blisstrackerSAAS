@@ -1,4 +1,5 @@
 const axios = require('axios')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 /**
  * LinkedIn Marketing API service.
@@ -418,7 +419,7 @@ async function fetchOrgInfo(orgId, accessToken) {
  * Si no se pasa targetMonth, usa el mes actual (ART).
  */
 async function fetchLinkedinMetrics(orgId, accessToken, targetMonth = null) {
-  const artNow      = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const artNow      = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   const filterMonth = targetMonth ||
     `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}`
   const { startMs, endMs } = monthBounds(filterMonth)
@@ -455,7 +456,7 @@ async function fetchLinkedinMetrics(orgId, accessToken, targetMonth = null) {
  */
 function monthOfTimestamp(ts) {
   if (ts == null) return null
-  const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   if (isNaN(d.getTime())) return null
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }

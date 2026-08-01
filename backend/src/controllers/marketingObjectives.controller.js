@@ -109,6 +109,22 @@ async function createObjective(req, res, next) {
     const { error, data } = await validatePayload(req.body, projectId, req.workspace.id)
     if (error) return res.status(400).json({ error })
 
+    // Evita duplicados exactos (misma métrica+periodicidad+param) que generarían
+    // dos tarjetas del mismo objetivo con targets distintos y confusos en el informe.
+    const dup = await prisma.marketingObjective.findFirst({
+      where: {
+        projectId,
+        category:         data.category,
+        metric:           data.metric,
+        periodicity:      data.periodicity,
+        platform:         data.platform,
+        trackedKeywordId: data.trackedKeywordId,
+        competitorId:     data.competitorId,
+      },
+      select: { id: true },
+    })
+    if (dup) return res.status(409).json({ error: 'Ya existe un objetivo idéntico para este proyecto' })
+
     const created = await prisma.marketingObjective.create({
       data: { ...data, projectId, workspaceId: req.workspace.id },
       include: INCLUDE,

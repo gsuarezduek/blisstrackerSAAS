@@ -3,6 +3,10 @@ import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import SetupHintCard from '../SetupHintCard'
 
+// Techo del polling de auditorías async: si el job no terminó en este tiempo, se
+// asume colgado y se deja de pollear en vez de reintentar indefinidamente.
+const MAX_POLL_MS = 5 * 60 * 1000
+
 // ─── AI Traffic ───────────────────────────────────────────────────────────────
 
 const AI_META = {
@@ -575,6 +579,7 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
   const [deleteModal, setDeleteModal] = useState(null) // { id } | null
   const [deleting, setDeleting]     = useState(false)
   const pollRef = useRef(null)
+  const pollStartRef = useRef(null)
 
   const selectedProject = projects.find(p => String(p.id) === projectId)
 
@@ -596,7 +601,7 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
         if (latest?.status === 'running') {
           setActive(latest)
           setRunning(true)
-          startPolling(latest.id)
+          startPolling(latest.id, latest.createdAt)
         } else if (latest?.status === 'completed') {
           loadAuditDetail(latest.id)
         }
@@ -614,9 +619,16 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
     return stopPolling
   }, [projectId]) // eslint-disable-line
 
-  function startPolling(auditId) {
+  function startPolling(auditId, startedAt) {
     stopPolling()
+    pollStartRef.current = startedAt ? new Date(startedAt).getTime() : Date.now()
     pollRef.current = setInterval(async () => {
+      if (Date.now() - pollStartRef.current > MAX_POLL_MS) {
+        stopPolling()
+        setRunning(false)
+        setError('El análisis está tardando más de lo esperado. Volvé a intentar en unos minutos.')
+        return
+      }
       try {
         const r = await api.get(`/marketing/geo/audits/${auditId}`)
         if (r.data.status !== 'running') {

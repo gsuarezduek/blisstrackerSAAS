@@ -3,6 +3,7 @@ const jwt                  = require('jsonwebtoken')
 const prisma               = require('../lib/prisma')
 const { encrypt, decrypt } = require('../lib/encryption')
 const { saveCurrentMonthSnapshotSafe } = require('../services/analyticsSnapshot.service')
+const { clearCache: clearGscCache } = require('../services/googleSearchConsole.service')
 
 // GA4 y Search Console comparten el mismo scope set — una sola auth sirve para ambos
 const GOOGLE_COMBINED_SCOPES = [
@@ -460,6 +461,8 @@ async function disconnect(req, res, next) {
     await prisma.projectIntegration.delete({
       where: { projectId_type: { projectId, type } },
     })
+
+    if (type === 'google_search_console' && integration) clearGscCache(integration.id)
 
     res.json({ ok: true })
   } catch (err) {

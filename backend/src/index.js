@@ -19,6 +19,7 @@ const app = require('./app')
 const prisma = require('./lib/prisma')
 const { FEATURE_FLAGS } = require('./config/featureFlags')
 const { PLATFORM_SETTINGS } = require('./config/platformSettings')
+const { DEFAULT_TZ } = require('./utils/dates')
 
 const PORT = process.env.PORT || 3001
 const server = app.listen(PORT, async () => {
@@ -99,13 +100,13 @@ const { sendAllProductivityDigests } = require('./services/productivityDigest.se
 cron.schedule('1 0 * * 5', () => runCron('weeklyReport', 2 * 60 * 60 * 1000, async () => {
   console.log('[WeeklyReport] Iniciando envío automático (viernes 00:01 ART)...')
   await sendAllWeeklyReports()
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: actualizar memoria de insights — sábados 00:00 hora Buenos Aires
 cron.schedule('0 0 * * 6', () => runCron('insightMemory', 2 * 60 * 60 * 1000, async () => {
   console.log('[InsightMemory] Iniciando actualización semanal (sábado 00:00 ART)...')
   await updateAllMemories()
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // (Los jobs mensuales del día 1° — GEO, GA4, GSC, PageSpeed, keywords, RRSS, Ads, competidores,
 // RRHH — corren en una única cadena secuencial `MONTHLY_CHAIN`, definida más abajo, en vez de
@@ -116,7 +117,7 @@ cron.schedule('0 6 * * 1', () => runCron('keywordWeekly', 60 * 60 * 1000, async 
   console.log('[KeywordTracking] Iniciando actualización semanal de rankings del mes actual...')
   try { await saveCurrentMonthKeywordRankings() }
   catch (err) { console.error('[KeywordTracking] Error en cron semanal:', err.message) }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: refrescar snapshots GA4 del mes en curso — lunes 06:15 ART (semanal, upsert).
 // Mantiene la lista cross-proyecto (Marketing → Web) al día durante el mes en curso y
@@ -125,14 +126,14 @@ cron.schedule('15 6 * * 1', () => runCron('analyticsWeekly', 60 * 60 * 1000, asy
   console.log('[AnalyticsSnapshot] Iniciando refresco semanal de snapshots del mes en curso...')
   try { await refreshAllCurrentMonthSnapshots() }
   catch (err) { console.error('[AnalyticsSnapshot] Error en cron semanal:', err.message) }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: capturar SERP snapshots — lunes 06:30 ART (después del cron de keywords GSC)
 cron.schedule('30 6 * * 1', () => runCron('serpSnapshot', 60 * 60 * 1000, async () => {
   console.log('[SerpAPI] Iniciando captura semanal de SERP snapshots...')
   try { await captureAllSerpSnapshots() }
   catch (err) { console.error('[SerpAPI] Error en cron semanal:', err.message) }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: limpieza semanal de tablas de crecimiento ilimitado — domingos 03:00 hora Buenos Aires
 const { runWeeklyCleanup } = require('./services/cleanup.service')
@@ -149,7 +150,7 @@ cron.schedule('0 3 * * 0', () => runCron('weeklyCleanup', 30 * 60 * 1000, async 
   } catch (err) {
     console.error('[WeeklyCleanup] Error en limpieza semanal:', err.message)
   }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: email lifecycle del trial — diario a 09:00 ART (días 3, 7, 12, 13)
 const { runTrialLifecycle } = require('./services/trialLifecycle.service')
@@ -160,7 +161,7 @@ cron.schedule('0 9 * * *', () => runCron('trialLifecycle', 30 * 60 * 1000, async
   } catch (err) {
     console.error('[TrialLifecycle] Error:', err.message)
   }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: auto-pausar tareas EN CURSO al final del día — medianoche hora Buenos Aires
 cron.schedule('0 0 * * *', () => runCron('autoPause', 10 * 60 * 1000, async () => {
@@ -185,7 +186,7 @@ cron.schedule('0 0 * * *', () => runCron('autoPause', 10 * 60 * 1000, async () =
   } catch (err) {
     console.error('[AutoPause] Error al pausar tareas:', err.message)
   }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: reconciliar tier de billing (free tier ⇄ past_due) — diariamente 03:00 ART.
 // Aplica la regla "hasta N usuarios gratis": trials vencidos con ≤ límite pasan a
@@ -215,7 +216,7 @@ cron.schedule('0 3 * * *', () => runCron('billingTier', 30 * 60 * 1000, async ()
   } catch (err) {
     console.error('[BillingTier] Error en cron de reconciliación de tiers:', err.message)
   }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: capturar stories de Instagram — cada 6 horas.
 // Las stories viven 24h y no tienen histórico en la API, así que hay que leerlas
@@ -225,7 +226,7 @@ cron.schedule('0 3 * * *', () => runCron('billingTier', 30 * 60 * 1000, async ()
 cron.schedule('0 */6 * * *', () => runCron('storiesCapture', 30 * 60 * 1000, async () => {
   try { await captureAllStories() }
   catch (err) { console.error('[InstagramStories] Error en cron:', err.message) }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // ── Cadena mensual de snapshots — 1° del mes 01:00 ART ─────────────────────────
 // Corre TODOS los jobs pesados del día 1° de forma SECUENCIAL (uno arranca al terminar el
@@ -262,21 +263,21 @@ cron.schedule('0 1 1 * *', () => runCron('monthlyChain', 6 * 60 * 60 * 1000, asy
     }
   }
   console.log('[MonthlyChain] Cadena mensual completada.')
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: aviso semanal de Productividad a admins/owners — lunes 08:00 ART
 cron.schedule('0 8 * * 1', () => runCron('productivityDigest', 30 * 60 * 1000, async () => {
   console.log('[ProductivityDigest] Iniciando aviso semanal...')
   try { await sendAllProductivityDigests() }
   catch (err) { console.error('[ProductivityDigest] Error en cron semanal:', err.message) }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: recordatorios de Ventas (próximas acciones para hoy / vencidas) — diario 08:00 ART
 cron.schedule('0 8 * * *', () => runCron('salesReminders', 30 * 60 * 1000, async () => {
   const { sendAllSalesReminders } = require('./services/salesReminders.service')
   try { await sendAllSalesReminders() }
   catch (err) { console.error('[SalesReminders] Error en cron diario:', err.message) }
-}), { timezone: 'America/Argentina/Buenos_Aires' })
+}), { timezone: DEFAULT_TZ })
 
 // Cron: eliminar workspaces vencidos — cada 15 minutos
 cron.schedule('*/15 * * * *', () => runCron('workspaceDeletion', 10 * 60 * 1000, async () => {

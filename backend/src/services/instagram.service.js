@@ -1,4 +1,5 @@
 const axios = require('axios')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 const BASE_IGAAM = 'https://graph.instagram.com/v21.0'
 const BASE_FB    = 'https://graph.facebook.com/v21.0'
@@ -116,7 +117,7 @@ function mergeInstagramMedia(official = [], scraped = []) {
 function monthRangeEpoch(filterMonth) {
   const [y, m] = filterMonth.split('-').map(Number)
   const start = Math.floor(Date.UTC(y, m - 1, 1, 3, 0, 0) / 1000)            // 1° del mes 00:00 ART (UTC-3)
-  const artNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const artNow = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   const isCurrent = `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}` === filterMonth
   // Fin: ahora si es el mes en curso; si no, 1° del mes siguiente. La API limita el
   // rango de reach a 30 días, así que para meses largos lo recortamos a 30.
@@ -128,13 +129,13 @@ function monthRangeEpoch(filterMonth) {
 }
 
 async function fetchInstagramInsights(base, meId, accessToken, profile, media, targetMonth) {
-  const artNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const artNow = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   const filterMonth = targetMonth || `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}`
 
   // Publicaciones del mes objetivo (mismo criterio que computeInstagramMetrics).
   const monthPosts = media.filter(m => {
     if (!m.timestamp) return false
-    const d = new Date(new Date(m.timestamp).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+    const d = new Date(new Date(m.timestamp).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === filterMonth
   })
 
@@ -205,14 +206,14 @@ function computeInstagramMetrics(profile, media = [], targetMonth = null, insigh
   // ── Mes a filtrar (ART) ───────────────────────────────────────────────────
   // Si se pasa targetMonth ("YYYY-MM"), filtramos ese mes. Si no, usamos el mes actual.
 
-  const artNow     = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const artNow     = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   const filterMonth = targetMonth ||
     `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}`
 
   // Publicaciones del mes objetivo
   const monthPosts        = media.filter(m => {
     if (!m.timestamp) return false
-    const artDate  = new Date(new Date(m.timestamp).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+    const artDate  = new Date(new Date(m.timestamp).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
     const postMonth = `${artDate.getFullYear()}-${String(artDate.getMonth() + 1).padStart(2, '0')}`
     return postMonth === filterMonth
   })
@@ -321,7 +322,7 @@ function computeInstagramMetrics(profile, media = [], targetMonth = null, insigh
   const hourBuckets = {}
   for (const m of allWithLikes) {
     if (!m.timestamp) continue
-    const local = new Date(new Date(m.timestamp).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+    const local = new Date(new Date(m.timestamp).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
     const bucket = Math.floor(local.getHours() / 3) * 3  // 0, 3, 6, 9, 12, 15, 18, 21
     if (!hourBuckets[bucket]) hourBuckets[bucket] = { likes: 0, count: 0 }
     hourBuckets[bucket].likes += m.like_count

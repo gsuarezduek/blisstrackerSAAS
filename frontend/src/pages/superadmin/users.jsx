@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import ConfirmModal from '../../components/ConfirmModal'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { timeAgo } from './shared'
 
@@ -16,6 +17,7 @@ export function SectionUsers() {
   const [search,   setSearch]   = useState('')
   const [filter,   setFilter]   = useState('all')
   const [busyId,   setBusyId]   = useState(null)
+  const [userToToggle, setUserToToggle] = useState(null) // user | null
   const PAGE = 50
 
   async function load(reset = true) {
@@ -62,13 +64,11 @@ export function SectionUsers() {
     }
   }
 
-  async function handleToggleActive(user) {
+  async function handleToggleActive() {
+    if (!userToToggle) return
+    const user = userToToggle
     const desired = user.activeMemberships === 0
     const verb = desired ? 'reactivar' : 'desactivar'
-    const msg = desired
-      ? `Reactivar a ${user.email} en todos sus workspaces (${user.totalMemberships})?`
-      : `Desactivar a ${user.email} en TODOS sus workspaces? No podrá ingresar a ninguno hasta reactivarlo.`
-    if (!window.confirm(msg)) return
 
     setBusyId(user.id)
     try {
@@ -88,6 +88,7 @@ export function SectionUsers() {
       window.alert(`Error al ${verb}: ${err.response?.data?.error || err.message}`)
     } finally {
       setBusyId(null)
+      setUserToToggle(null)
     }
   }
 
@@ -232,7 +233,7 @@ export function SectionUsers() {
                         {busyId === `di-${u.id}` ? '…' : u.dailyInsightStatus === 'on' ? 'IA: Desactivar' : 'IA: Activar'}
                       </button>
                       <button
-                        onClick={() => handleToggleActive(u)}
+                        onClick={() => setUserToToggle(u)}
                         disabled={busyId === u.id}
                         className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 ${
                           isDisabled
@@ -257,6 +258,19 @@ export function SectionUsers() {
           )}
         </>
       )}
+
+      <ConfirmModal
+        open={!!userToToggle}
+        title={userToToggle?.activeMemberships === 0 ? 'Reactivar usuario' : 'Desactivar usuario'}
+        message={userToToggle?.activeMemberships === 0
+          ? `Reactivar a ${userToToggle?.email} en todos sus workspaces (${userToToggle?.totalMemberships}).`
+          : `Desactivar a ${userToToggle?.email} en TODOS sus workspaces. No podrá ingresar a ninguno hasta reactivarlo.`}
+        confirmLabel={userToToggle?.activeMemberships === 0 ? 'Reactivar' : 'Desactivar'}
+        danger={userToToggle?.activeMemberships !== 0}
+        loading={busyId === userToToggle?.id}
+        onConfirm={handleToggleActive}
+        onCancel={() => setUserToToggle(null)}
+      />
     </div>
   )
 }

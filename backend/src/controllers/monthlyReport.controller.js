@@ -2,7 +2,8 @@ const { randomUUID }           = require('crypto')
 const prisma                   = require('../lib/prisma')
 const { aggregateReportData, getAvailableSections }  = require('../services/monthlyReport.service')
 const { sendReportFeedbackEmail } = require('../services/email.service')
-const { monthLabel, prevMonthStr, monthBounds, rangeLabel, isWholeSingleMonth } = require('../lib/monthUtils')
+const { monthLabel, prevMonthStr, monthBounds, rangeLabel } = require('../lib/monthUtils')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // Filtro Prisma para informes "generados" (no placeholders vacíos)
 const GENERATED_WHERE = {
@@ -92,7 +93,7 @@ function safeParseArr(str) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
@@ -113,12 +114,12 @@ async function listReports(req, res, next) {
     const reports = await prisma.monthlyReport.findMany({
       where:   { projectId, workspaceId },
       orderBy: { month: 'desc' },
-      select:  { id: true, month: true, token: true, objectives: true, notes: true, createdAt: true, status: true, periodStart: true, periodEnd: true },
+      select:  { id: true, month: true, token: true, notes: true, createdAt: true, status: true, periodStart: true, periodEnd: true },
     })
 
     res.json({ reports: reports.map(r => ({
       ...r,
-      objectives:  safeParseObj(r.objectives),
+      objectives:  {},
       periodLabel: reportLabel(r),
     })) })
   } catch (err) {
@@ -154,7 +155,7 @@ async function getReport(req, res, next) {
       })
       report = await prisma.monthlyReport.create({
         data: {
-          projectId, workspaceId, month, token: randomUUID(), objectives: '{}',
+          projectId, workspaceId, month, token: randomUUID(),
           generatedById: req.user?.userId ?? null,
           ...(prevReport?.bannerData ? { bannerData: prevReport.bannerData, bannerMimeType: prevReport.bannerMimeType } : {}),
         },
@@ -182,7 +183,7 @@ async function getReport(req, res, next) {
       // Pasar cachés si ya existen (evita queries + llamadas a APIs externas en cada carga)
       const cachedAnalysis = report.analysis   ? safeParseObj(report.analysis)   : null
       const cachedData     = report.dataCache  ? safeParseObj(report.dataCache)  : null
-      const objectives     = safeParseObj(report.objectives)
+      const objectives     = {}
       const briefs         = await loadBriefs(projectId)
 
       data = await aggregateReportData(projectId, workspaceId, month, cachedAnalysis, objectives, cachedData, enabledSections, {
@@ -214,7 +215,7 @@ async function getReport(req, res, next) {
         id:              report.id,
         month:           report.month,
         token:           report.token,
-        objectives:      safeParseObj(report.objectives),
+        objectives:      {},
         notes:           report.notes,
         hasBanner:       !!report.bannerData,
         createdAt:       report.createdAt,
@@ -334,7 +335,7 @@ async function updateReport(req, res, next) {
     const projectId   = Number(req.params.id)
     const workspaceId = req.workspace.id
     const { month }   = req.params
-    const { objectives, notes, analysis } = req.body
+    const { notes, analysis } = req.body
 
     if (!/^\d{4}-\d{2}$/.test(month)) {
       return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
@@ -344,14 +345,13 @@ async function updateReport(req, res, next) {
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
     const updateData = {}
-    if (objectives !== undefined) updateData.objectives = JSON.stringify(objectives)
     if (notes      !== undefined) updateData.notes      = notes
     if (analysis   !== undefined) updateData.analysis   = JSON.stringify(analysis)
 
     const report = await prisma.monthlyReport.upsert({
       where:  { projectId_month: { projectId, month } },
       update: updateData,
-      create: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}', ...updateData },
+      create: { projectId, workspaceId, month, token: randomUUID(), ...updateData },
     })
 
     res.json({
@@ -359,7 +359,7 @@ async function updateReport(req, res, next) {
         id:         report.id,
         month:      report.month,
         token:      report.token,
-        objectives: safeParseObj(report.objectives),
+        objectives: {},
         notes:      report.notes,
       },
     })
@@ -392,7 +392,7 @@ async function getPublicReport(req, res, next) {
       }),
     ])
 
-    const objectives      = safeParseObj(report.objectives)
+    const objectives      = {}
     const enabledSections = report.enabledSections ? safeParseArr(report.enabledSections) : null
     const cachedData      = report.dataCache ? safeParseObj(report.dataCache) : null
     const briefs          = await loadBriefs(report.projectId)
@@ -422,7 +422,7 @@ async function getPublicReport(req, res, next) {
       report: {
         month:       report.month,
         token:       report.token,
-        objectives:  safeParseObj(report.objectives),
+        objectives:  {},
         notes:       report.notes,
         hasBanner:   !!report.bannerData,
         periodLabel: reportLabel(report),
@@ -508,7 +508,7 @@ async function uploadReportBanner(req, res, next) {
     const report = await prisma.monthlyReport.upsert({
       where:  { projectId_month: { projectId, month } },
       update: { bannerData: req.file.buffer, bannerMimeType: mimeType },
-      create: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}', bannerData: req.file.buffer, bannerMimeType: mimeType },
+      create: { projectId, workspaceId, month, token: randomUUID(), bannerData: req.file.buffer, bannerMimeType: mimeType },
     })
 
     res.json({ hasBanner: true, token: report.token })
@@ -597,12 +597,12 @@ async function regenerateReport(req, res, next) {
       report = await prisma.monthlyReport.findUnique({ where: { id: report.id } })
     } else {
       report = await prisma.monthlyReport.create({
-        data: { projectId, workspaceId, month, token: randomUUID(), objectives: '{}', generatedById: userId, enabledSections: sectionsJson, ...periodData },
+        data: { projectId, workspaceId, month, token: randomUUID(), generatedById: userId, enabledSections: sectionsJson, ...periodData },
       })
     }
 
     // Re-agregar los datos de las secciones elegidas sin caché de análisis (fuerza regeneración con Claude)
-    const objectives = report ? safeParseObj(report.objectives) : {}
+    const objectives = {}
     const briefs     = await loadBriefs(projectId)
     const data = await aggregateReportData(projectId, workspaceId, month, null, objectives, null, sectionsToUse, {
       periodStart: report.periodStart, periodEnd: report.periodEnd, briefs,
@@ -632,7 +632,7 @@ async function regenerateReport(req, res, next) {
         id:              updatedReport.id,
         month:           updatedReport.month,
         token:           updatedReport.token,
-        objectives:      safeParseObj(updatedReport.objectives),
+        objectives:      {},
         notes:           updatedReport.notes,
         hasBanner:       !!updatedReport.bannerData,
         createdAt:       updatedReport.createdAt,

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
+import ConfirmModal from '../ConfirmModal'
+import EmptyState from '../EmptyState'
 import CompanyModal from './CompanyModal'
 import ContactModal from './ContactModal'
 
@@ -14,6 +16,8 @@ export default function CompaniesTab({ onDataChange }) {
   const [contacts, setContacts] = useState([])
   const [companyModal, setCompanyModal] = useState(null) // { } nueva | { company } editar | null
   const [contactModal, setContactModal] = useState(null) // { companyId } | { contact, companyId } | null
+  const [companyToDelete, setCompanyToDelete] = useState(null) // { id, name } | null
+  const [deletingCompany, setDeletingCompany] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await api.get(`/ventas/companies${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''}`)
@@ -30,10 +34,16 @@ export default function CompaniesTab({ onDataChange }) {
     setExpanded(companyId)
   }
 
-  async function deleteCompany(id) {
-    if (!window.confirm('¿Eliminar la empresa? Se eliminarán sus contactos y leads.')) return
-    await api.delete(`/ventas/companies/${id}`)
-    load(); onDataChange?.()
+  async function deleteCompany() {
+    if (!companyToDelete) return
+    setDeletingCompany(true)
+    try {
+      await api.delete(`/ventas/companies/${companyToDelete.id}`)
+      load(); onDataChange?.()
+    } finally {
+      setDeletingCompany(false)
+      setCompanyToDelete(null)
+    }
   }
   async function deleteContact(id) {
     if (!window.confirm('¿Eliminar el contacto?')) return
@@ -54,7 +64,9 @@ export default function CompaniesTab({ onDataChange }) {
       </div>
 
       {companies.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center text-sm text-gray-500 dark:text-gray-400">No hay empresas cargadas.</div>
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl">
+          <EmptyState icon="🏢" message="No hay empresas cargadas." />
+        </div>
       ) : (
         <div className="space-y-3">
           {companies.map(c => (
@@ -68,7 +80,7 @@ export default function CompaniesTab({ onDataChange }) {
                 </button>
                 <div className="flex gap-2 shrink-0 text-sm">
                   <button onClick={() => setCompanyModal({ company: c })} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">Editar</button>
-                  <button onClick={() => deleteCompany(c.id)} className="text-red-400 hover:text-red-600">Eliminar</button>
+                  <button onClick={() => setCompanyToDelete({ id: c.id, name: c.name })} className="text-red-400 hover:text-red-600">Eliminar</button>
                 </div>
               </div>
 
@@ -106,6 +118,15 @@ export default function CompaniesTab({ onDataChange }) {
 
       {companyModal && <CompanyModal company={companyModal.company} onClose={() => setCompanyModal(null)} onSaved={afterCompany} />}
       {contactModal && <ContactModal contact={contactModal.contact} companyId={contactModal.companyId} onClose={() => setContactModal(null)} onSaved={afterContact} />}
+
+      <ConfirmModal
+        open={!!companyToDelete}
+        title="Eliminar empresa"
+        message={`Se eliminarán sus contactos y leads${companyToDelete?.name ? ` de "${companyToDelete.name}"` : ''}.`}
+        loading={deletingCompany}
+        onConfirm={deleteCompany}
+        onCancel={() => setCompanyToDelete(null)}
+      />
     </div>
   )
 }

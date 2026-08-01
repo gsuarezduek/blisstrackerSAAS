@@ -20,17 +20,4 @@ function auth(req, res, next) {
   }
 }
 
-/**
- * @deprecated Usar workspaceAdminOnly del middleware workspace.js.
- * Mantenido por compatibilidad mientras se migran las rutas.
- */
-function adminOnly(req, res, next) {
-  const member = req.workspaceMember
-  if (req.user?.isSuperAdmin) return next()
-  if (!member || (member.role !== 'admin' && member.role !== 'owner')) {
-    return res.status(403).json({ error: 'Admin access required' })
-  }
-  next()
-}
-
-module.exports = { auth, adminOnly }
+module.exports = { auth }

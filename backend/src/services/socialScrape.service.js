@@ -4,6 +4,7 @@ const { computeLinkedinScrapeMetrics } = require('./linkedin.service')
 const { computeFacebookScrapeMetrics } = require('./facebook.service')
 const { sendPlatformNotification, platformCard } = require('./email.service')
 const { getSetting } = require('../lib/platformSettings')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 /**
  * Motor de scraping de redes sociales — abstraído por proveedor.
@@ -145,21 +146,32 @@ function alertScrapeFailure({ code, detail, username, workspaceId = null, contex
 }
 
 /**
+ * Extrae y valida un handle/slug de una URL o input crudo: matchea urlRegex contra
+ * el input (si matchea, usa el grupo capturado), quita "@" y query/hash residual,
+ * valida el resultado contra charsetRegex. Devuelve null si no matchea. Compartido
+ * por los 3 parsers de red social (Instagram/LinkedIn/Facebook), que solo difieren
+ * en su regex de URL y el charset válido de su handle/slug.
+ */
+function parseSocialHandle(input, { urlRegex, charsetRegex }) {
+  if (!input) return null
+  let s = String(input).trim()
+  if (!s) return null
+  const urlMatch = s.match(urlRegex)
+  if (urlMatch) s = urlMatch[1]
+  s = s.replace(/^@/, '').replace(/[/?#].*$/, '').trim()
+  if (!charsetRegex.test(s)) return null
+  return s.toLowerCase()
+}
+
+/**
  * Extrae el username de Instagram de una URL o handle.
  * Acepta: "miusuario", "@miusuario", "https://instagram.com/miusuario/", etc.
  */
 function parseInstagramUsername(input) {
-  if (!input) return null
-  let s = String(input).trim()
-  if (!s) return null
-  // URL completa
-  const urlMatch = s.match(/instagram\.com\/([^/?#]+)/i)
-  if (urlMatch) s = urlMatch[1]
-  // quitar @ y query/hash residual
-  s = s.replace(/^@/, '').replace(/[/?#].*$/, '').trim()
-  // username válido de IG: letras, números, punto y guion bajo
-  if (!/^[A-Za-z0-9._]{1,30}$/.test(s)) return null
-  return s.toLowerCase()
+  return parseSocialHandle(input, {
+    urlRegex:     /instagram\.com\/([^/?#]+)/i,
+    charsetRegex: /^[A-Za-z0-9._]{1,30}$/, // username válido de IG: letras, números, punto y guion bajo
+  })
 }
 
 /**
@@ -364,7 +376,7 @@ async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
   let monthCoverageComplete = true
   if (opts.targetMonth && media.length > 0) {
     const monthOf = (ts) => {
-      const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+      const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     }
     const reachedBeforeMonth = media.some(m => m.timestamp && monthOf(m.timestamp) < opts.targetMonth)
@@ -376,6 +388,58 @@ async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
   }
 
   return { ...metrics, isPrivate, scraped: true, monthCoverageComplete, postsActorUsed }
+}
+
+/**
+ * Diagnóstico: corre las 2 llamadas de Instagram (actor de perfil + actor de posts)
+ * por separado y muestra, por fuente, cuántos posts trae cada una y cuántos caen en
+ * el mes objetivo, más el resultado de la fusión — para confirmar que la fusión
+ * captura todas las publicaciones del mes. Mismo patrón que debugScrapeLinkedin/Facebook.
+ */
+async function debugScrapeInstagram(usernameOrUrl, opts = {}) {
+  const username = parseInstagramUsername(usernameOrUrl)
+  if (!username) throw scrapeError('Usuario o URL de Instagram inválido.', 'INVALID_USERNAME', 400)
+
+  let cfgLimit = 0
+  try { cfgLimit = Number(await getSetting('apifyInstagramPostsLimit')) || 0 } catch { /* DB no disponible */ }
+  const postsLimit = opts.postsLimit ?? (cfgLimit > 0 ? cfgLimit : DEFAULT_POSTS_LIMIT)
+  const targetMonth = opts.targetMonth ?? null
+
+  const monthOf = (ts) => {
+    if (!ts) return null
+    const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
+    return isNaN(d.getTime()) ? null : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }
+  const describe = (media) => ({
+    count: media.length,
+    inTarget: targetMonth ? media.filter(m => monthOf(m.timestamp) === targetMonth).length : null,
+    posts: media.map(m => ({ id: m.id, type: m.media_type, timestamp: m.timestamp, month: monthOf(m.timestamp), inTarget: targetMonth ? monthOf(m.timestamp) === targetMonth : null })),
+  })
+
+  const item = await runApifyInstagram(username, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'Instagram — diagnóstico' })
+  const { profile, media: profileMedia, isPrivate } = normalizeApifyProfile(item)
+
+  let postsMedia = []
+  let postsActorError = null
+  try {
+    const rawPosts = await runApifyInstagramPosts(username, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'Instagram — diagnóstico' })
+    postsMedia = Array.isArray(rawPosts) ? rawPosts.map(normalizeApifyPost) : []
+  } catch (err) {
+    postsActorError = err.message
+  }
+
+  const merged = mergeMediaById(postsMedia, profileMedia)
+
+  return {
+    username,
+    isPrivate,
+    followersCount: profile.followers_count,
+    postsActorConfigured: (await resolveInstagramPostsActor()) !== '',
+    postsActorError,
+    perfil:  describe(profileMedia),
+    posts:   describe(postsMedia),
+    fusion:  describe(merged),
+  }
 }
 
 /**
@@ -441,29 +505,41 @@ function toCount(v) {
  * Acepta: "miempresa", "https://www.linkedin.com/company/miempresa/", "/company/miempresa/".
  */
 function parseLinkedinCompany(input) {
-  if (!input) return null
-  let s = String(input).trim()
-  if (!s) return null
-  const urlMatch = s.match(/linkedin\.com\/(?:company|showcase|school)\/([^/?#]+)/i)
-  if (urlMatch) s = urlMatch[1]
-  s = s.replace(/^@/, '').replace(/[/?#].*$/, '').trim()
-  // Slug de company: letras, números, guiones, puntos (más permisivo que IG)
-  if (!/^[A-Za-z0-9\-._%]{1,120}$/.test(s)) return null
-  return s.toLowerCase()
+  return parseSocialHandle(input, {
+    urlRegex:     /linkedin\.com\/(?:company|showcase|school)\/([^/?#]+)/i,
+    charsetRegex: /^[A-Za-z0-9\-._%]{1,120}$/, // slug de company: más permisivo que IG
+  })
+}
+
+/**
+ * Normaliza un post crudo de un actor de Apify a un shape fijo de campos, resolviendo
+ * cada campo contra una lista de alias posibles (los actores de LinkedIn/Facebook no
+ * comparten un esquema único). `fields`: { outKey: { aliases, count?, default? } }.
+ * `count: true` pasa el valor por toCount(); si no hay match, usa `default` (o null).
+ */
+function normalizeGenericPost(p, fields) {
+  const out = {}
+  for (const [key, cfg] of Object.entries(fields)) {
+    const raw = pick(p, cfg.aliases)
+    out[key] = cfg.count ? toCount(raw) : (raw ?? (cfg.default !== undefined ? cfg.default : null))
+  }
+  return out
+}
+
+const LINKEDIN_POST_FIELDS = {
+  id:        { aliases: ['urn', 'activityUrn', 'shareUrn', 'postUrn', 'id', 'url', 'postUrl', 'link'] },
+  urn:       { aliases: ['urn', 'activityUrn', 'shareUrn', 'postUrn'] },
+  text:      { aliases: ['text', 'commentary', 'content', 'caption', 'postText', 'description'], default: '' },
+  likes:     { aliases: ['likes', 'numLikes', 'likesCount', 'reactionsCount', 'reactions', 'totalReactionCount', 'numReactions', 'likeCount'], count: true },
+  comments:  { aliases: ['comments', 'numComments', 'commentsCount', 'commentCount'], count: true },
+  shares:    { aliases: ['shares', 'numShares', 'sharesCount', 'reposts', 'repostsCount', 'shareCount'], count: true },
+  timestamp: { aliases: ['timestamp', 'postedAtTimestamp', 'postedAt', 'publishedAt', 'date', 'postedAtISO', 'time', 'createdAt'] },
+  url:       { aliases: ['url', 'postUrl', 'link', 'postLink'] },
+  imgSrc:    { aliases: ['image', 'imageUrl', 'thumbnail', 'imgSrc', 'mediaUrl'] },
 }
 
 function normalizeLinkedinPost(p) {
-  return {
-    id:        pick(p, ['urn', 'activityUrn', 'shareUrn', 'postUrn', 'id']) ?? pick(p, ['url', 'postUrl', 'link']),
-    urn:       pick(p, ['urn', 'activityUrn', 'shareUrn', 'postUrn']),
-    text:      pick(p, ['text', 'commentary', 'content', 'caption', 'postText', 'description']) ?? '',
-    likes:     toCount(pick(p, ['likes', 'numLikes', 'likesCount', 'reactionsCount', 'reactions', 'totalReactionCount', 'numReactions', 'likeCount'])),
-    comments:  toCount(pick(p, ['comments', 'numComments', 'commentsCount', 'commentCount'])),
-    shares:    toCount(pick(p, ['shares', 'numShares', 'sharesCount', 'reposts', 'repostsCount', 'shareCount'])),
-    timestamp: pick(p, ['timestamp', 'postedAtTimestamp', 'postedAt', 'publishedAt', 'date', 'postedAtISO', 'time', 'createdAt']),
-    url:       pick(p, ['url', 'postUrl', 'link', 'postLink']),
-    imgSrc:    pick(p, ['image', 'imageUrl', 'thumbnail', 'imgSrc', 'mediaUrl']),
-  }
+  return normalizeGenericPost(p, LINKEDIN_POST_FIELDS)
 }
 
 function linkedinProfileFrom(o, identifier) {
@@ -644,7 +720,7 @@ async function scrapeLinkedinCompany(urlOrSlug, opts = {}) {
   let monthCoverageComplete = true
   if (opts.targetMonth && posts.length > 0) {
     const monthOf = (ts) => {
-      const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+      const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
       return isNaN(d.getTime()) ? null : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     }
     const reachedBeforeMonth = posts.some(p => p.timestamp && monthOf(p.timestamp) && monthOf(p.timestamp) < opts.targetMonth)
@@ -673,32 +749,35 @@ const DEFAULT_FACEBOOK_POSTS_LIMIT = Number(process.env.APIFY_FACEBOOK_POSTS_LIM
  */
 function parseFacebookPage(input) {
   if (!input) return null
-  let s = String(input).trim()
-  if (!s) return null
-  // facebook.com/profile.php?id=NNN → devolvemos el id numérico
-  const idMatch = s.match(/facebook\.com\/profile\.php\?id=(\d+)/i)
+  const s0 = String(input).trim()
+  if (!s0) return null
+  // facebook.com/profile.php?id=NNN → devolvemos el id numérico (caso especial,
+  // no pasa por parseSocialHandle porque no es un slug sino un id de query string)
+  const idMatch = s0.match(/facebook\.com\/profile\.php\?id=(\d+)/i)
   if (idMatch) return idMatch[1]
-  const urlMatch = s.match(/(?:facebook|fb)\.com\/(?:pg\/)?([^/?#]+)/i)
-  if (urlMatch) s = urlMatch[1]
-  s = s.replace(/^@/, '').replace(/[/?#].*$/, '').trim()
-  // Slug de página: letras, números, puntos, guiones (o id numérico)
-  if (!/^[A-Za-z0-9\-._%]{1,120}$/.test(s)) return null
+
+  const slug = parseSocialHandle(input, {
+    urlRegex:     /(?:facebook|fb)\.com\/(?:pg\/)?([^/?#]+)/i,
+    charsetRegex: /^[A-Za-z0-9\-._%]{1,120}$/, // slug de página (o id numérico)
+  })
   // No tratar "profile.php" residual como slug
-  if (s.toLowerCase() === 'profile.php') return null
-  return s.toLowerCase()
+  if (slug === 'profile.php') return null
+  return slug
+}
+
+const FACEBOOK_POST_FIELDS = {
+  id:        { aliases: ['postId', 'id', 'url', 'postUrl', 'link', 'permalink'] },
+  text:      { aliases: ['text', 'message', 'content', 'caption', 'postText', 'description'], default: '' },
+  likes:     { aliases: ['likes', 'likesCount', 'numLikes', 'reactionsCount', 'reactions', 'reactionsCount', 'totalReactionCount', 'likeCount'], count: true },
+  comments:  { aliases: ['comments', 'commentsCount', 'numComments', 'commentCount'], count: true },
+  shares:    { aliases: ['shares', 'sharesCount', 'numShares', 'shareCount', 'reshareCount'], count: true },
+  timestamp: { aliases: ['timestamp', 'time', 'date', 'publishedAt', 'postedAt', 'createdAt', 'postedAtISO', 'publishTime'] },
+  url:       { aliases: ['url', 'postUrl', 'link', 'permalink', 'postLink'] },
+  imgSrc:    { aliases: ['image', 'imageUrl', 'thumbnail', 'imgSrc', 'mediaUrl', 'photo', 'fullPicture'] },
 }
 
 function normalizeFacebookPost(p) {
-  return {
-    id:        pick(p, ['postId', 'id', 'url', 'postUrl', 'link', 'permalink']),
-    text:      pick(p, ['text', 'message', 'content', 'caption', 'postText', 'description']) ?? '',
-    likes:     toCount(pick(p, ['likes', 'likesCount', 'numLikes', 'reactionsCount', 'reactions', 'reactionsCount', 'totalReactionCount', 'likeCount'])),
-    comments:  toCount(pick(p, ['comments', 'commentsCount', 'numComments', 'commentCount'])),
-    shares:    toCount(pick(p, ['shares', 'sharesCount', 'numShares', 'shareCount', 'reshareCount'])),
-    timestamp: pick(p, ['timestamp', 'time', 'date', 'publishedAt', 'postedAt', 'createdAt', 'postedAtISO', 'publishTime']),
-    url:       pick(p, ['url', 'postUrl', 'link', 'permalink', 'postLink']),
-    imgSrc:    pick(p, ['image', 'imageUrl', 'thumbnail', 'imgSrc', 'mediaUrl', 'photo', 'fullPicture']),
-  }
+  return normalizeGenericPost(p, FACEBOOK_POST_FIELDS)
 }
 
 function facebookProfileFrom(o, identifier) {
@@ -871,7 +950,7 @@ async function scrapeFacebookPage(urlOrSlug, opts = {}) {
   let monthCoverageComplete = true
   if (opts.targetMonth && posts.length > 0) {
     const monthOf = (ts) => {
-      const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+      const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
       return isNaN(d.getTime()) ? null : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     }
     const reachedBeforeMonth = posts.some(p => p.timestamp && monthOf(p.timestamp) && monthOf(p.timestamp) < opts.targetMonth)
@@ -890,6 +969,7 @@ module.exports = {
   parseInstagramUsername,
   scrapeInstagramProfile,
   scrapeInstagramMediaRaw,
+  debugScrapeInstagram,
   mergeMediaById,
   parseLinkedinCompany,
   scrapeLinkedinCompany,

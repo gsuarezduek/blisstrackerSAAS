@@ -2,14 +2,15 @@ const prisma = require('../lib/prisma')
 const { getValidTikTokToken }  = require('../services/tiktokTokenRefresh.service')
 const { fetchTikTokMetrics }   = require('../services/tiktok.service')
 const { saveTikTokSnapshot }   = require('../services/tiktokSnapshot.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 function todayStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
@@ -238,13 +238,13 @@ function RolesTab({ processes, onOpenProcess, selectedRole, onSelectRole }) {
             </div>
           </div>
           {isAdmin && (
-            <a
-              href={`/admin?tab=roles&role=${encodeURIComponent(activeRoleName)}`}
+            <Link
+              to={`/admin?tab=roles&role=${encodeURIComponent(activeRoleName)}`}
               className="inline-flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 px-2.5 py-1.5 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors flex-shrink-0"
               title="Editar este rol en el panel de Admin"
             >
               Editar rol →
-            </a>
+            </Link>
           )}
         </div>
 
@@ -600,13 +600,13 @@ function ProcesosTab({ processes, roles, expandedId, onExpand, onOpenRole }) {
                         Imprimir
                       </button>
                       {isAdmin && (
-                        <a
-                          href="/admin/eos?tab=procesos"
+                        <Link
+                          to="/admin/eos?tab=procesos"
                           className="inline-flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 px-2.5 py-1 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                           title="Editar este proceso en el módulo EOS"
                         >
                           Editar en EOS →
-                        </a>
+                        </Link>
                       )}
                     </div>
                   </div>

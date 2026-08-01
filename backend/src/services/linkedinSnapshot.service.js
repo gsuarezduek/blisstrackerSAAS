@@ -3,9 +3,10 @@ const { getValidLinkedinToken } = require('./linkedinTokenRefresh.service')
 const { fetchLinkedinMetrics }  = require('./linkedin.service')
 const { scrapeLinkedinCompany } = require('./socialScrape.service')
 const { cacheImagesInArray }    = require('./socialImageCache.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 

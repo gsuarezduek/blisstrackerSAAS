@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma')
-const { sendPlatformNotification, platformCard } = require('../services/email.service')
+const { sendPlatformNotification, platformCard, escHtml } = require('../services/email.service')
 
 async function create(req, res, next) {
   try {
@@ -27,10 +27,10 @@ async function create(req, res, next) {
       workspaceId: req.workspace?.id ?? null,
       subject: `${typeLabel} de ${feedback.user.name} — ${req.workspace?.name ?? 'Sin workspace'}`,
       bodyHtml: platformCard(typeLabel, [
-        ['Usuario',   `${feedback.user.name} (${feedback.user.email})`],
-        ['Workspace', req.workspace?.name ?? '—'],
+        ['Usuario',   `${escHtml(feedback.user.name)} (${escHtml(feedback.user.email)})`],
+        ['Workspace', escHtml(req.workspace?.name) || '—'],
         ['Tipo',      isBug ? 'Bug' : 'Sugerencia'],
-        ['Mensaje',   feedback.message.replace(/\n/g, '<br>')],
+        ['Mensaje',   escHtml(feedback.message).replace(/\n/g, '<br>')],
       ], isBug ? '#dc2626' : '#E67A1F'),
     })
 

@@ -2,6 +2,7 @@ const axios = require('axios')
 const prisma = require('../lib/prisma')
 const { getValidMetaToken }  = require('./metaTokenRefresh.service')
 const { cacheSocialImage }   = require('./socialImageCache.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 const BASE_IGAAM = 'https://graph.instagram.com/v21.0'
 const BASE_FB    = 'https://graph.facebook.com/v21.0'
@@ -16,7 +17,7 @@ const STORY_METRIC_SETS = [
 ]
 
 function monthFromTimestampART(ts) {
-  const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 

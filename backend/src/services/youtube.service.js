@@ -1,4 +1,5 @@
 const axios = require('axios')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 const YT_BASE = 'https://www.googleapis.com/youtube/v3'
 
@@ -27,7 +28,7 @@ function ytGet(path, accessToken, params) {
 }
 
 function artMonthOf(date) {
-  const art = new Date(date.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const art = new Date(date.toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${art.getFullYear()}-${String(art.getMonth() + 1).padStart(2, '0')}`
 }
 

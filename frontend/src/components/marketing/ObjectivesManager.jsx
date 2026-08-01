@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import EmptyState from '../EmptyState'
 import {
   CATEGORIES, METRICS, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, PLATFORM_LABEL,
   metricsForCategory, fmtObjectiveValue, PERIODICITY_LABEL, CATEGORY_LABEL,
@@ -266,10 +267,17 @@ export default function ObjectivesManager({ projectId, onClose }) {
           ) : (
             <>
               {objectives.length === 0 && !showForm && (
-                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-6">Todavía no hay objetivos. Agregá el primero.</p>
+                <EmptyState icon="🎯" message="Todavía no hay objetivos. Agregá el primero." />
               )}
 
-              {objectives.map(o => (
+              {objectives.map(o => {
+                const param = METRICS[o.metric]?.param
+                // Huérfano: el metric requiere una keyword/competidor, pero la referencia
+                // se borró (onDelete: SetNull) — el objetivo quedó sin dato para evaluar.
+                const isOrphaned = param === 'trackedKeywordId' ? !o.trackedKeywordId
+                                 : param === 'competitorId'     ? !o.competitorId
+                                 : false
+                return (
                 <div key={o.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-100 dark:border-gray-700">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-800 dark:text-gray-200 truncate">
@@ -277,6 +285,11 @@ export default function ObjectivesManager({ projectId, onClose }) {
                       {o.keyword && <span className="text-gray-400"> · {o.keyword}</span>}
                       {o.competitor && <span className="text-gray-400"> · {o.competitor}</span>}
                       {o.platform && <span className="text-gray-400"> · {PLATFORM_LABEL[o.platform] || o.platform}</span>}
+                      {isOrphaned && (
+                        <span className="ml-1.5 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded-full px-1.5 py-0.5" title="La keyword o el competidor de este objetivo fue eliminado — editalo para elegir uno nuevo, o eliminalo.">
+                          ⚠️ Huérfano
+                        </span>
+                      )}
                     </p>
                     <p className="text-[11px] text-gray-400">
                       <span className="uppercase">{CATEGORY_LABEL[o.category]}</span> · {PERIODICITY_LABEL[o.periodicity]}
@@ -286,7 +299,8 @@ export default function ObjectivesManager({ projectId, onClose }) {
                   <button onClick={() => startEdit(o)} className="text-xs text-gray-400 hover:text-primary-600" title="Editar">✏️</button>
                   <button onClick={() => handleDelete(o.id)} className="text-xs text-gray-400 hover:text-red-500" title="Eliminar">🗑️</button>
                 </div>
-              ))}
+                )
+              })}
 
               {showForm ? (
                 <ObjectiveForm

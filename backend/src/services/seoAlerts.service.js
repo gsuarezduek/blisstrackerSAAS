@@ -5,6 +5,7 @@
 const prisma = require('../lib/prisma')
 const { prevMonthStr, monthLabel } = require('../lib/monthUtils')
 const { sendSeoAlertEmail } = require('./email.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // Umbrales
 const CLICKS_DROP_PCT   = 0.30  // caída de clicks ≥30%
@@ -15,7 +16,7 @@ const DR_DROP           = 5     // Domain Rating bajó ≥5
 const KW_DROP_MIN       = 2     // ≥2 keywords salieron del top 10
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 

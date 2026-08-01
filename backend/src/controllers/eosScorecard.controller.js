@@ -1,7 +1,8 @@
 const prisma = require('../lib/prisma')
 const { EOS_AUTO_METRICS, EOS_AUTO_KEYS, isAutoKey, autoCatalogList } = require('../lib/eosAutoMetricCatalog')
 const { computeAutoScorecardYear, computeCurrentMonthStatus } = require('../services/eosAutoScorecard.service')
-const { todayString } = require('../utils/dates')
+const { assertActiveMember } = require('../lib/assertActiveMember')
+const { todayString, DEFAULT_TZ} = require('../utils/dates')
 
 // ─── Helpers de períodos ──────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ async function getScorecard(req, res, next) {
 async function getAutoScorecard(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const tz = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
+    const tz = req.workspace.timezone || DEFAULT_TZ
     const year = Number(req.query.year)
     if (!Number.isInteger(year) || year < 2000 || year > 3000) {
       return res.status(400).json({ error: 'year inválido' })
@@ -161,6 +162,8 @@ async function createMetric(req, res, next) {
     if (!['weekly', 'monthly'].includes(frequency)) {
       return res.status(400).json({ error: 'frequency debe ser weekly o monthly' })
     }
+    if (ownerId != null && !(await assertActiveMember(ownerId, workspaceId)))
+      return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
 
     const metric = await prisma.scorecardMetric.create({
       data: {
@@ -194,6 +197,8 @@ async function updateMetric(req, res, next) {
     if (frequency && !['weekly', 'monthly'].includes(frequency)) {
       return res.status(400).json({ error: 'frequency debe ser weekly o monthly' })
     }
+    if (existing.autoKey == null && ownerId !== undefined && ownerId != null && !(await assertActiveMember(ownerId, workspaceId)))
+      return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
 
     const isAuto = existing.autoKey != null
     const data = {}

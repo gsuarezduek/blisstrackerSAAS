@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const { querySearchConsole } = require('../services/googleSearchConsole.service')
 const { getValidAccessToken } = require('../services/tokenRefresh.service')
 const { normalizeSiteUrl } = require('../utils/seo')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // ─── Helpers de fechas ────────────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ function clusterQueries(items) {
 }
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 

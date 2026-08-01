@@ -1,19 +1,11 @@
 const prisma = require('../../lib/prisma')
 const { isValidStatus, isValidOrigin, statusMeta } = require('../../lib/salesCatalog')
+const { assertActiveMember } = require('../../lib/assertActiveMember')
 const { LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent } = require('./_shared')
 const { createProject } = require('../../services/projects.service')
 const { todayString } = require('../../utils/dates')
 
 // ── Helpers ──────────────────────────────────────────────────
-
-async function assertActiveMember(userId, workspaceId) {
-  if (userId == null) return true
-  const m = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId: Number(userId) } },
-    select: { active: true },
-  })
-  return !!m?.active
-}
 
 async function findLead(id, workspaceId, include) {
   return prisma.lead.findFirst({ where: { id: Number(id), workspaceId }, ...(include ? { include } : {}) })
@@ -229,10 +221,13 @@ async function changeStatus(req, res, next) {
     if (lead.status === status) return res.json(await findLead(lead.id, workspaceId, LEAD_DETAIL_INCLUDE))
 
     const meta = statusMeta(status)
+    if (meta?.isLost && !lostReason?.trim()) {
+      return res.status(400).json({ error: 'Indicá el motivo de la pérdida' })
+    }
     const data = { status }
     data.wonAt  = meta?.isWon  ? new Date() : null
     data.lostAt = meta?.isLost ? new Date() : null
-    data.lostReason = meta?.isLost ? (lostReason?.trim() || null) : null
+    data.lostReason = meta?.isLost ? lostReason.trim() : null
 
     await prisma.lead.update({ where: { id: lead.id }, data })
     await logLeadEvent({
@@ -462,6 +457,10 @@ async function deleteLead(req, res, next) {
     const workspaceId = req.workspace.id
     const lead = await findLead(req.params.id, workspaceId)
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
+    const confirmedCount = await prisma.proposal.count({ where: { leadId: lead.id, status: 'confirmed' } })
+    if (confirmedCount > 0) {
+      return res.status(409).json({ error: 'Este lead tiene propuestas confirmadas — no se puede eliminar' })
+    }
     await prisma.lead.delete({ where: { id: lead.id } })
     res.json({ ok: true })
   } catch (err) { next(err) }

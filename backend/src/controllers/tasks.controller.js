@@ -458,6 +458,15 @@ async function editTask(req, res, next) {
       return res.status(403).json({ error: 'No tenés permiso para editar esta tarea' })
     }
 
+    // Reasignar proyecto/responsable de una tarea ya completada reescribe en silencio
+    // las horas históricas de Productividad/Reportes (se leen por userId+projectId).
+    // Solo se permite corregir la descripción.
+    if (task.status === 'COMPLETED') {
+      if ((projectId != null && Number(projectId) !== task.projectId) || (targetUserId != null && Number(targetUserId) !== task.userId)) {
+        return res.status(409).json({ error: 'No se puede cambiar el proyecto o el responsable de una tarea completada' })
+      }
+    }
+
     const desc = description.trim()
     const data = { description: desc }
 

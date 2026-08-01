@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import LoadingSpinner from '../LoadingSpinner'
+import ConfirmModal from '../ConfirmModal'
 import StatusBadge, { fmtMoney } from './StatusBadge'
 import LeadModal from './LeadModal'
 import ConvertToProjectModal from './ConvertToProjectModal'
 import ResearchPanel from './ResearchPanel'
 import ProposalsPanel from './ProposalsPanel'
 import LeadNotes from './LeadNotes'
-import { LEAD_STATUSES, originLabel } from './salesCatalog'
+import { LEAD_STATUSES, originLabel, statusMeta } from './salesCatalog'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const card = 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5'
@@ -45,6 +46,8 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
   const [contactEdit, setContactEdit] = useState(false)
   const [ncMode, setNcMode] = useState(false) // sub-form "nuevo contacto"
   const [nc, setNc] = useState({ name: '', title: '', email: '', phone: '' })
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await api.get(`/ventas/leads/${leadId}`)
@@ -58,6 +61,16 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
     await api.patch(url, body)
     await load()
     onChanged?.()
+  }
+
+  function handleStatusChange(status) {
+    if (status === lead.status) return
+    let lostReason
+    if (statusMeta(status)?.isLost) {
+      lostReason = window.prompt('Motivo de la pérdida (requerido):')
+      if (!lostReason?.trim()) return // cancelado o vacío: no se cambia
+    }
+    patch(`/ventas/leads/${leadId}/status`, { status, ...(lostReason ? { lostReason } : {}) })
   }
 
   async function addNote() {
@@ -126,10 +139,15 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
   }
 
   async function handleDelete() {
-    if (!window.confirm('¿Eliminar este lead? Esta acción no se puede deshacer.')) return
-    await api.delete(`/ventas/leads/${leadId}`)
-    onChanged?.()
-    onBack()
+    setDeleting(true)
+    try {
+      await api.delete(`/ventas/leads/${leadId}`)
+      onChanged?.()
+      onBack()
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
   }
 
   if (loading || !lead) return <LoadingSpinner />
@@ -157,9 +175,18 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
               : <span title="El lead debe estar en Propuesta o Ganado para convertirlo en proyecto" className="text-xs text-gray-400 dark:text-gray-500 px-3 py-2">🚀 Crear proyecto (requiere Propuesta o Ganado)</span>
             : <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-xl px-3 py-2 font-medium">✓ Proyecto: {lead.convertedProject?.name}</span>}
           <button onClick={() => setShowEdit(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-3 py-2 text-sm font-medium">Editar</button>
-          <button onClick={handleDelete} className="border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl px-3 py-2 text-sm font-medium">Eliminar</button>
+          <button onClick={() => setConfirmDelete(true)} className="border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl px-3 py-2 text-sm font-medium">Eliminar</button>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmDelete}
+        title="Eliminar lead"
+        message="Esta acción no se puede deshacer."
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
 
       {/* Notas de reunión — WYSIWYG, ancho completo, arriba de todo */}
       <LeadNotes leadId={leadId} initialContent={lead.notes} onSaved={load} />
@@ -172,7 +199,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
             <h3 className={sectionTitle}>Información principal</h3>
             <dl className="space-y-3 text-sm">
               <Row label="Estado">
-                <select value={lead.status} onChange={e => patch(`/ventas/leads/${leadId}/status`, { status: e.target.value })} className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1 text-sm">
+                <select value={lead.status} onChange={e => handleStatusChange(e.target.value)} className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1 text-sm">
                   {LEAD_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
                 </select>
               </Row>

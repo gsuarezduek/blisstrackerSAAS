@@ -10,6 +10,10 @@ const PRIO = {
 }
 const shortUrl = (u) => { try { const x = new URL(u); return x.pathname === '/' ? x.hostname : x.pathname } catch { return u } }
 
+// Techo del polling de análisis async: si el job no terminó en este tiempo, se
+// asume colgado y se deja de pollear en vez de reintentar indefinidamente.
+const MAX_POLL_MS = 5 * 60 * 1000
+
 // ─── Crear tarea (prefijo "Contenido -") ───────────────────────────────────────
 function CreateTaskModal({ title, projectId, projectName, onClose }) {
   const { user } = useAuth()
@@ -133,13 +137,20 @@ export default function ContentGapTab({ projectId, projects }) {
   const [err, setErr]             = useState('')
   const [taskModal, setTaskModal] = useState(null)
   const pollRef = useRef(null)
+  const pollStartRef = useRef(null)
 
   const selectedProject = projects.find(p => String(p.id) === projectId)
 
   const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
-  function startPolling(gapId) {
+  function startPolling(gapId, startedAt) {
     stopPolling()
+    pollStartRef.current = startedAt ? new Date(startedAt).getTime() : Date.now()
     pollRef.current = setInterval(async () => {
+      if (Date.now() - pollStartRef.current > MAX_POLL_MS) {
+        stopPolling(); setRunning(false)
+        setErr('El análisis está tardando más de lo esperado. Volvé a intentar en unos minutos.')
+        return
+      }
       try {
         const r = await api.get(`/marketing/projects/${projectId}/content-gaps/${gapId}`)
         setActive(r.data)
@@ -161,7 +172,7 @@ export default function ContentGapTab({ projectId, projects }) {
       setList(gaps)
       setTrackedKw(Array.isArray(kws) ? kws : (kws?.keywords ?? []))
       const latest = gaps[0]
-      if (latest?.status === 'running' || latest?.status === 'pending') { setRunning(true); startPolling(latest.id) }
+      if (latest?.status === 'running' || latest?.status === 'pending') { setRunning(true); startPolling(latest.id, latest.createdAt) }
     })
   }, []) // eslint-disable-line
 

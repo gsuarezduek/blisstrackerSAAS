@@ -3,9 +3,10 @@ const { getValidFacebookToken } = require('./metaTokenRefresh.service')
 const { fetchFacebookMetrics }  = require('./facebook.service')
 const { scrapeFacebookPage }    = require('./socialScrape.service')
 const { cacheImagesInArray }    = require('./socialImageCache.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 

@@ -4,6 +4,7 @@ import AvatarLightbox from '../components/AvatarLightbox'
 import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import useLegajoFields from '../hooks/useLegajoFields'
 import LegajoFormFields from '../components/legajo/LegajoFormFields'
 import RoleBadge from '../components/RoleBadge'
@@ -36,18 +37,22 @@ const STATUS_COLORS = {
   rejected: 'bg-red-100    text-red-700    dark:bg-red-900/30    dark:text-red-400',
 }
 
-// Fecha mínima: 48 horas desde ahora (en formato YYYY-MM-DD local)
-function minStartDate() {
+// Fecha mínima: 48 horas desde ahora (en formato YYYY-MM-DD), en la timezone del
+// workspace — igual que el backend, así el mínimo que se muestra acá coincide
+// exactamente con el que valida createRequest (evita mismatches cerca del límite
+// cuando el navegador del usuario está en otra timezone que la del workspace).
+function minStartDate(tz) {
   const d = new Date(Date.now() + 48 * 60 * 60 * 1000)
-  return d.toLocaleDateString('en-CA') // 'en-CA' produce YYYY-MM-DD
+  return d.toLocaleDateString('en-CA', tz ? { timeZone: tz } : undefined) // 'en-CA' produce YYYY-MM-DD
 }
 
 function VacationRequestModal({ onClose, onCreated }) {
+  const { workspace } = useWorkspace()
   const [form, setForm] = useState({ startDate: '', endDate: '', type: '', observation: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
-  const minDate = minStartDate()
+  const minDate = minStartDate(workspace?.timezone)
 
   async function handleSubmit(e) {
     e.preventDefault()

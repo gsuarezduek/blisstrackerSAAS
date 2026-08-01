@@ -12,7 +12,7 @@ const { refreshScrapeForIntegration: refreshLinkedinScrape }  = require('./linke
 const { refreshScrapeForIntegration: refreshFacebookScrape }  = require('./facebook.controller')
 const { getValidFbToken, fetchMetaAdsData } = require('../services/metaAds.service')
 const { fetchGoogleAdsData }                = require('../services/googleAds.service')
-const { todayString } = require('../utils/dates')
+const { todayString, DEFAULT_TZ} = require('../utils/dates')
 const { tzOffsetStr } = require('../lib/timeMetrics')
 const { monthBounds, monthLabel, prevMonthStr, rangeLabel, monthsInRange } = require('../lib/monthUtils')
 
@@ -667,7 +667,7 @@ async function getAdsSummaryLive(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const { type }     = req.query
-    const tz           = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
+    const tz           = req.workspace.timezone || DEFAULT_TZ
     const period       = ADS_LIVE_PERIODS[req.query.period] ? req.query.period : 'this_month'
     const currentMonth = todayString(tz).slice(0, 7)
 
@@ -759,7 +759,7 @@ async function getAdsSummaryLive(req, res, next) {
 async function getReportsSummary(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const tz     = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
+    const tz     = req.workspace.timezone || DEFAULT_TZ
     const month  = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : todayString(tz).slice(0, 7)
     const search = (req.query.search || '').trim()
     const generatedById = /^\d+$/.test(req.query.generatedById || '') ? parseInt(req.query.generatedById) : null
@@ -845,7 +845,7 @@ async function getReportsSummary(req, res, next) {
 async function getReportsStats(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const tz     = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
+    const tz     = req.workspace.timezone || DEFAULT_TZ
     const month  = todayString(tz).slice(0, 7)
     const { startDate, endDate } = monthBounds(month)
     const offset = tzOffsetStr(tz)
@@ -918,7 +918,7 @@ async function getReportsStats(req, res, next) {
 async function getLiveObjectivesSummary(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const tz = req.workspace.timezone || 'America/Argentina/Buenos_Aires'
+    const tz = req.workspace.timezone || DEFAULT_TZ
     const currentMonth = todayString(tz).slice(0, 7)
 
     // Meses navegables: el mes en curso (siempre) + los meses de datos de

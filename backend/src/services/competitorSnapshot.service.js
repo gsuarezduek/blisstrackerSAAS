@@ -5,6 +5,7 @@ const {
   scrapeFacebookPage,
 } = require('./socialScrape.service')
 const { cacheImagesInArray }     = require('./socialImageCache.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // Scraper por plataforma — keep en sync con PLATFORM_SCRAPERS de competitors.controller.js
 // Instagram con skipPostsActor: los competidores no corren la 2ª llamada (actor de
@@ -16,7 +17,7 @@ const PLATFORM_SCRAPERS = {
 }
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
@@ -28,7 +29,7 @@ function prevMonthStr(month) {
 }
 
 function todayStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 

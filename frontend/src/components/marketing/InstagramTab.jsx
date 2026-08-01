@@ -1086,6 +1086,19 @@ export default function InstagramTab({ projectId, onSelectProject }) {
   }
 
   const [refreshing, setRefreshing] = useState(false)
+  const [debugLoading, setDebugLoading] = useState(false)
+  const [debugData, setDebugData] = useState(null)
+  const [debugError, setDebugError] = useState(null)
+  async function handleScrapeDebug() {
+    setDebugLoading(true); setDebugError(null); setDebugData(null)
+    try {
+      const { data } = await api.get(`/marketing/projects/${projectId}/instagram/scrape-debug`)
+      setDebugData(data)
+    } catch (err) {
+      setDebugError(err.response?.data?.error || 'No se pudo correr el diagnóstico.')
+    } finally { setDebugLoading(false) }
+  }
+
   async function handleRefreshScrape() {
     setRefreshing(true)
     setError(null)
@@ -1165,6 +1178,46 @@ export default function InstagramTab({ projectId, onSelectProject }) {
       {/* Error */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-700 dark:text-red-300">{error}</div>
+      )}
+
+      {integration?.scopes === 'scrape' && (
+        <div className="bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-3 text-xs text-blue-700 dark:text-blue-300">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span>📊 Datos públicos vía scraping: seguidores, posts y engagement.</span>
+            <button onClick={handleScrapeDebug} disabled={debugLoading}
+              className="shrink-0 px-2.5 py-1 rounded-lg border border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 disabled:opacity-50 transition-colors font-medium">
+              {debugLoading ? 'Diagnosticando…' : '🔍 Diagnóstico'}
+            </button>
+          </div>
+
+          {debugError && <p className="mt-2 text-red-600 dark:text-red-400">{debugError}</p>}
+
+          {debugData && (
+            <div className="mt-3 space-y-2">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-blue-800 dark:text-blue-200 font-medium">
+                <span>perfil: {debugData.perfil?.count} posts ({debugData.perfil?.inTarget ?? '—'} del mes)</span>
+                <span>posts (2ª llamada): {debugData.posts?.count} ({debugData.posts?.inTarget ?? '—'} del mes)</span>
+                <span>fusión: {debugData.fusion?.count} ({debugData.fusion?.inTarget ?? '—'} del mes)</span>
+                <span>seguidores: {debugData.followersCount ?? '—'}</span>
+              </div>
+              <p className="text-[11px] text-blue-600/80 dark:text-blue-300/80">
+                {debugData.postsActorConfigured
+                  ? 'Actor de posts configurado. Si "posts (2ª llamada)" trae menos del mes que "perfil", revisá el actor en SuperAdmin → Configuración.'
+                  : 'No hay actor de posts configurado (2ª llamada) — solo se usa el latestPosts del actor de perfil, que puede venir incompleto en cuentas activas.'}
+                {debugData.postsActorError && ` Error de la 2ª llamada: ${debugData.postsActorError}`}
+              </p>
+              <pre className="max-h-80 overflow-auto bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-[11px] leading-relaxed text-gray-700 dark:text-gray-300 select-all whitespace-pre-wrap break-all">
+{JSON.stringify(debugData, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isCurrentMonth && metrics?.monthCoverageComplete === false && (
+        <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 text-xs text-amber-700 dark:text-amber-300">
+          ⚠️ Esta cuenta puede postear más de lo que se pudo traer este mes — el engagement/posts del mes podrían estar subestimados. Corré el diagnóstico o subí el tope de posts en SuperAdmin → Configuración.
+        </div>
       )}
 
       {/* Navegación por mes */}

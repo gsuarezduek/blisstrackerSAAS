@@ -10,6 +10,7 @@
 
 const prisma = require('../lib/prisma')
 const { marketingMetricDef } = require('../lib/gameCatalog')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // ─── Helpers de fecha en la timezone del workspace ────────────────────────────
 
@@ -48,7 +49,7 @@ function ymdString(date, tz) {
  *   - date_range  : entre startDate y endDate (inclusive)
  *   - recurring   : ventana recurrente del mes/semana (ver isInRecurringWindow)
  */
-function isGameVisible(game, now = new Date(), tz = 'America/Argentina/Buenos_Aires') {
+function isGameVisible(game, now = new Date(), tz = DEFAULT_TZ) {
   if (!game || game.status !== 'active') return false
   const rule = game.visibilityRule || {}
   const mode = rule.mode || 'always'
@@ -83,7 +84,7 @@ function endOfDay(date) {
  *   - day_range_of_month    : entre `fromDay` y `toDay` (inclusive)
  *   - weekdays              : ciertos días de la semana (`weekdays`: [0-6], 0=Dom)
  */
-function isInRecurringWindow(rule, now = new Date(), tz = 'America/Argentina/Buenos_Aires') {
+function isInRecurringWindow(rule, now = new Date(), tz = DEFAULT_TZ) {
   const { y, m, d, weekday } = localParts(now, tz)
   const dim = daysInMonth(y, m)
 
@@ -368,7 +369,7 @@ function monthsBetween(startDate, endDate, tz) {
 
 async function workspaceTz(workspaceId) {
   const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { timezone: true } })
-  return ws?.timezone || 'America/Argentina/Buenos_Aires'
+  return ws?.timezone || DEFAULT_TZ
 }
 
 /** Resuelve etiquetas (nombres) para una lista de subjectId según el subjectType del juego. */

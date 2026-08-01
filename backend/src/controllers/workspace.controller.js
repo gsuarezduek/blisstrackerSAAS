@@ -10,6 +10,7 @@ const { validateImageUpload } = require('../lib/imageType')
 const { seedWorkspace, removeDemoProject } = require('../services/workspaceSeed.service')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 const { validatePassword } = require('../lib/passwordPolicy')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 const MEMBER_SELECT = {
   userId: true,
@@ -698,7 +699,7 @@ async function getInfo(req, res, next) {
 
     const workspace = await prisma.workspace.findUnique({
       where: { slug },
-      select: { id: true, name: true, slug: true, status: true, attendanceTrackingEnabled: true, productivityEnabled: true, lateToleranceMins: true, onboardingCompletedAt: true },
+      select: { id: true, name: true, slug: true, status: true, timezone: true, attendanceTrackingEnabled: true, productivityEnabled: true, lateToleranceMins: true, onboardingCompletedAt: true },
     })
     if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
 
@@ -1006,7 +1007,7 @@ async function scheduleDeletion(req, res, next) {
         ['Workspace',  workspace.name],
         ['Slug',       `${workspace.slug}.${domain}`],
         ['Solicitó',   requesterName],
-        ['Se elimina', new Date(scheduledAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })],
+        ['Se elimina', new Date(scheduledAt).toLocaleString('es-AR', { timeZone: DEFAULT_TZ, day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })],
       ], '#dc2626'),
     })
 

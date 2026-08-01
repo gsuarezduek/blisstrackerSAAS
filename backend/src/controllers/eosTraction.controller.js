@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
+const { assertActiveMember } = require('../lib/assertActiveMember')
 
 const VALID_ROCK_STATUS = ['not_started', 'on_track', 'off_track', 'complete']
 const VALID_MEETING_TYPE = ['weekly', 'quarterly', 'annual']
@@ -163,6 +164,8 @@ async function createRock(req, res, next) {
 
     if (!title?.trim())               return res.status(400).json({ error: 'title es requerido' })
     if (!quarter || !QUARTER_RE.test(quarter)) return res.status(400).json({ error: 'quarter inválido' })
+    if (ownerId != null && !(await assertActiveMember(ownerId, workspaceId)))
+      return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
 
     const count = await prisma.eOSRock.count({ where: { workspaceId, quarter } })
 
@@ -194,6 +197,8 @@ async function updateRock(req, res, next) {
     if (status !== undefined && !VALID_ROCK_STATUS.includes(status)) {
       return res.status(400).json({ error: 'status inválido' })
     }
+    if (ownerId !== undefined && ownerId != null && !(await assertActiveMember(ownerId, workspaceId)))
+      return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
 
     const data = {}
     if (title       !== undefined) data.title       = title.trim().slice(0, 300)
@@ -265,6 +270,8 @@ async function createTodo(req, res, next) {
 
     if (!title?.trim())           return res.status(400).json({ error: 'title es requerido' })
     if (!week || !WEEK_RE.test(week)) return res.status(400).json({ error: 'week inválida' })
+    if (ownerId != null && !(await assertActiveMember(ownerId, workspaceId)))
+      return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
 
     const count = await prisma.eOSTodo.count({ where: { workspaceId, week } })
 
@@ -292,6 +299,8 @@ async function updateTodo(req, res, next) {
 
     const existing = await prisma.eOSTodo.findFirst({ where: { id, workspaceId } })
     if (!existing) return res.status(404).json({ error: 'To-Do no encontrado' })
+    if (ownerId !== undefined && ownerId != null && !(await assertActiveMember(ownerId, workspaceId)))
+      return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
 
     const data = {}
     if (title   !== undefined) data.title   = title.trim().slice(0, 300)

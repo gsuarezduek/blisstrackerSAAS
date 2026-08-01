@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
+import ConfirmModal from './ConfirmModal'
 
 const EMPTY_FORM = { account: '', username: '', password: '', twofa: '', extra: '' }
 
@@ -17,6 +18,8 @@ export default function ProjectAccesos({ projectId }) {
   const [revealed, setRevealed]     = useState({}) // { [`${id}:${field}`]: plaintext }
   const [revealingKey, setRevealingKey] = useState(null)
   const [copied, setCopied]         = useState(null) // `${id}:${field}`
+  const [accessToDelete, setAccessToDelete] = useState(null) // id | null
+  const [deleting, setDeleting]     = useState(false)
 
   useEffect(() => {
     let active = true
@@ -73,13 +76,17 @@ export default function ProjectAccesos({ projectId }) {
     }
   }
 
-  async function handleDelete(id) {
-    if (!window.confirm('¿Eliminar este acceso? No se puede deshacer.')) return
+  async function handleDelete() {
+    if (!accessToDelete) return
+    setDeleting(true)
     try {
-      await api.delete(`/projects/${projectId}/accesos/${id}`)
-      setAccesses(prev => prev.filter(a => a.id !== id))
+      await api.delete(`/projects/${projectId}/accesos/${accessToDelete}`)
+      setAccesses(prev => prev.filter(a => a.id !== accessToDelete))
     } catch (err) {
       console.error('Error al eliminar acceso', err)
+    } finally {
+      setDeleting(false)
+      setAccessToDelete(null)
     }
   }
 
@@ -169,7 +176,7 @@ export default function ProjectAccesos({ projectId }) {
               </div>
 
               <button
-                onClick={() => handleDelete(a.id)}
+                onClick={() => setAccessToDelete(a.id)}
                 className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-all rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
                 title="Eliminar acceso"
               >
@@ -260,6 +267,15 @@ export default function ProjectAccesos({ projectId }) {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={!!accessToDelete}
+        title="Eliminar acceso"
+        message="No se puede deshacer."
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setAccessToDelete(null)}
+      />
     </div>
   )
 }

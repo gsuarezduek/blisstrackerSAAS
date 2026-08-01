@@ -87,10 +87,6 @@ function invalidateCache() {
   cache.clear()
 }
 
-function invalidateCacheKey(key) {
-  cache.delete(key)
-}
-
 /**
  * Devuelve un snapshot completo de todos los settings (para la UI SuperAdmin).
  * No usa caché — siempre lee fresco para mostrar valores recién guardados.
@@ -118,6 +114,5 @@ module.exports = {
   getSettings,
   getAllSettings,
   invalidateCache,
-  invalidateCacheKey,
   clampToBounds, // exportado para usar en validación del controller
 }

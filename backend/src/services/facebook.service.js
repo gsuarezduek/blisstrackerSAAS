@@ -1,4 +1,5 @@
 const axios = require('axios')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 /**
  * Facebook Pages service.
@@ -25,7 +26,7 @@ const GRAPH_BASE = 'https://graph.facebook.com/v21.0'
  */
 function monthOfTimestamp(ts) {
   if (ts == null) return null
-  const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const d = new Date(new Date(ts).toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   if (isNaN(d.getTime())) return null
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
@@ -335,7 +336,7 @@ async function debugPageInsights(pageId, pageToken) {
  * @param {string|null} targetMonth — 'YYYY-MM'; null = mes actual ART
  */
 async function fetchFacebookMetrics(pageId, pageToken, targetMonth = null) {
-  const artNow      = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const artNow      = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   const filterMonth = targetMonth ||
     `${artNow.getFullYear()}-${String(artNow.getMonth() + 1).padStart(2, '0')}`
 

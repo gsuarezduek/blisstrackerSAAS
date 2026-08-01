@@ -1,11 +1,11 @@
 const prisma = require('../lib/prisma')
-const { todayString } = require('../utils/dates')
+const { todayString, DEFAULT_TZ} = require('../utils/dates')
 const { DEFAULT_LATE_TEMPLATE } = require('../services/lateNotification.service')
 const { createProject } = require('../services/projects.service')
 const { canWrite } = require('../lib/projectAccess')
 
 function weekMondayStr(tz) {
-  const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : 'America/Argentina/Buenos_Aires'
+  const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : DEFAULT_TZ
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: safeZone })
   const [y, m, d] = todayStr.split('-').map(Number)
   const today = new Date(y, m - 1, d)
@@ -14,6 +14,15 @@ function weekMondayStr(tz) {
   const monday = new Date(today)
   monday.setDate(today.getDate() - daysToMonday)
   return monday.toISOString().slice(0, 10)
+}
+
+async function assertToggleEnabled(projectId, field, label) {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { [field]: true } })
+  if (project?.[field] === false) {
+    const err = new Error(`La sección de ${label} está deshabilitada para este workspace`)
+    err.status = 403
+    throw err
+  }
 }
 
 async function resolveProjectId(param, workspaceId) {
@@ -358,6 +367,7 @@ async function saveLinks(req, res, next) {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    await assertToggleEnabled(projectId, 'linksEnabled', 'Links')
 
     if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
@@ -546,23 +556,6 @@ async function saveGlobalSettings(req, res, next) {
   } catch (err) { next(err) }
 }
 
-async function sendTestEmail(req, res, next) {
-  try {
-    const { sendTestSettingsEmail } = require('../services/email.service')
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: { name: true, email: true },
-    })
-    const settings = await prisma.project.findFirst({
-      where: { workspaceId: req.workspace.id },
-      select: { emailFrom: true },
-      orderBy: { id: 'asc' },
-    })
-    await sendTestSettingsEmail(user.email, user.name, settings?.emailFrom || null, req.workspace.id)
-    res.json({ ok: true, sentTo: user.email })
-  } catch (err) { next(err) }
-}
-
 // Envía el email de tardanza al usuario actual (vista previa). Usa el template del body
 // si viene (para previsualizar ediciones sin guardar), si no el guardado / default.
 async function testLateNotification(req, res, next) {
@@ -585,6 +578,7 @@ async function saveSituation(req, res, next) {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    await assertToggleEnabled(projectId, 'situationEnabled', 'Situación')
 
     if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
@@ -739,4 +733,4 @@ async function deleteAccess(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, sendTestEmail, testLateNotification, getAiUsage, getMembers, toggleStar, listAccesses, addAccess, revealAccess, deleteAccess }
+module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, testLateNotification, getAiUsage, getMembers, toggleStar, listAccesses, addAccess, revealAccess, deleteAccess }

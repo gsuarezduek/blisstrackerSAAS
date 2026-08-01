@@ -11,6 +11,10 @@ const SEV = {
 }
 const SEV_ORDER = { high: 0, medium: 1, low: 2 }
 
+// Techo del polling de auditorías async: si el job no terminó en este tiempo, se
+// asume colgado y se deja de pollear en vez de reintentar indefinidamente.
+const MAX_POLL_MS = 5 * 60 * 1000
+
 function scoreBand(s) {
   if (s >= 86) return { label: 'Excelente', color: 'text-green-600 dark:text-green-400', ring: 'stroke-green-500' }
   if (s >= 68) return { label: 'Bueno',     color: 'text-primary-600 dark:text-primary-400', ring: 'stroke-primary-500' }
@@ -116,16 +120,24 @@ export default function OnPageTab({ projectId, projects }) {
   const [audits, setAudits]   = useState([])
   const [active, setActive]   = useState(null)
   const [running, setRunning] = useState(false)
+  const [timedOut, setTimedOut] = useState(false)
   const [taskModal, setTaskModal] = useState(null)
   const pollRef = useRef(null)
+  const pollStartRef = useRef(null)
 
   const selectedProject = projects.find(p => String(p.id) === projectId)
   const noUrl = selectedProject && !selectedProject.websiteUrl
 
   const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
-  function startPolling(auditId) {
+  function startPolling(auditId, startedAt) {
     stopPolling()
+    setTimedOut(false)
+    pollStartRef.current = startedAt ? new Date(startedAt).getTime() : Date.now()
     pollRef.current = setInterval(async () => {
+      if (Date.now() - pollStartRef.current > MAX_POLL_MS) {
+        stopPolling(); setRunning(false); setTimedOut(true)
+        return
+      }
       try {
         const r = await api.get(`/marketing/projects/${projectId}/onpage/audits/${auditId}`)
         setActive(r.data)
@@ -146,19 +158,19 @@ export default function OnPageTab({ projectId, projects }) {
     api.get(`/marketing/projects/${pid}/onpage/audits`).then(r => {
       setAudits(r.data)
       const latest = r.data[0]
-      if (latest?.status === 'running' || latest?.status === 'pending') { setRunning(true); startPolling(latest.id) }
+      if (latest?.status === 'running' || latest?.status === 'pending') { setRunning(true); startPolling(latest.id, latest.createdAt) }
       else if (latest?.status === 'completed' || latest?.status === 'failed') loadDetail(pid, latest.id)
     }).catch(() => {})
   }, []) // eslint-disable-line
 
   useEffect(() => {
-    stopPolling(); setActive(null); setAudits([]); setRunning(false)
+    stopPolling(); setActive(null); setAudits([]); setRunning(false); setTimedOut(false)
     loadAudits(projectId)
     return stopPolling
   }, [projectId, loadAudits])
 
   async function runAudit() {
-    setRunning(true); setActive(null)
+    setRunning(true); setActive(null); setTimedOut(false)
     try {
       const r = await api.post(`/marketing/projects/${projectId}/onpage/audit`)
       setActive({ ...r.data, status: 'running' })
@@ -221,6 +233,12 @@ export default function OnPageTab({ projectId, projects }) {
       {failed && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-5 text-sm text-red-700 dark:text-red-300">
           La auditoría falló: {active.errorMsg}
+        </div>
+      )}
+
+      {timedOut && !isRunning && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl p-5 text-sm text-red-700 dark:text-red-300">
+          La auditoría está tardando más de lo esperado. Volvé a intentar en unos minutos.
         </div>
       )}
 

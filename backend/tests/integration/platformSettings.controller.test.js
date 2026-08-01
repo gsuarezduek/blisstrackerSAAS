@@ -19,6 +19,8 @@ jest.mock('../../src/lib/prisma', () => {
     userLogin:    { count: jest.fn(), deleteMany: jest.fn() },
     dailyInsight: { count: jest.fn(), deleteMany: jest.fn() },
     emailLog:     { count: jest.fn(), deleteMany: jest.fn() },
+    // superAdminOnly re-valida isSuperAdmin contra la DB
+    user: { findUnique: jest.fn() },
   }
 })
 
@@ -47,6 +49,7 @@ function regularUserToken() {
 beforeEach(() => {
   jest.clearAllMocks()
   invalidateCache()
+  prisma.user.findUnique.mockResolvedValue({ isSuperAdmin: true })
 })
 
 describe('GET /api/superadmin/settings', () => {

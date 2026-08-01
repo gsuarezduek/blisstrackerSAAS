@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma')
 const jwt = require('jsonwebtoken')
 const stripe = require('../lib/stripe')
 const { getSettings } = require('../lib/platformSettings')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 /**
  * GET /api/superadmin/workspaces
@@ -146,6 +147,16 @@ async function updateWorkspaceStatus(req, res, next) {
     const VALID = ['trialing', 'active', 'past_due', 'suspended', 'cancelled']
     if (!VALID.includes(status)) {
       return res.status(400).json({ error: `Status inválido. Valores permitidos: ${VALID.join(', ')}` })
+    }
+
+    // Volver a "trialing" un workspace con una suscripción de Stripe viva es peligroso:
+    // el cron diario de trials vencidos lo pasaría a past_due (trialEndsAt ya quedó
+    // en el pasado desde que se convirtió a pago), cortando el acceso a un cliente pagando.
+    if (status === 'trialing') {
+      const sub = await prisma.subscription.findUnique({ where: { workspaceId: id }, select: { stripeSubId: true } })
+      if (sub?.stripeSubId) {
+        return res.status(409).json({ error: 'Este workspace tiene una suscripción de Stripe activa — no se puede volver a "trialing".' })
+      }
     }
 
     const workspace = await prisma.workspace.update({
@@ -818,7 +829,7 @@ async function getConversionFunnel(req, res, next) {
  * tareas, signups, tokens IA), KPIs (WAU/MAU/stickiness) y retención por
  * cohortes semanales. Todo agrupado por día calendario en ART (UTC-3).
  */
-const METRICS_TZ = 'America/Argentina/Buenos_Aires'
+const METRICS_TZ = DEFAULT_TZ
 const num = v => Number(v ?? 0)
 
 async function getMetrics(req, res, next) {
@@ -843,23 +854,23 @@ async function getMetrics(req, res, next) {
       mauRow, wauRow, cohortRows,
     ] = await Promise.all([
       prisma.$queryRaw`
-        SELECT (("loginAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day,
+        SELECT (("loginAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day,
                COUNT(DISTINCT "userId") AS users, COUNT(DISTINCT "workspaceId") AS workspaces
         FROM "UserLogin" WHERE "loginAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day, COUNT(*) AS n
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day, COUNT(*) AS n
         FROM "Task" WHERE "createdAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("completedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day, COUNT(*) AS n
+        SELECT (("completedAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day, COUNT(*) AS n
         FROM "Task" WHERE "completedAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day, COUNT(*) AS n
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day, COUNT(*) AS n
         FROM "Workspace" WHERE "createdAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day, COUNT(*) AS n
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day, COUNT(*) AS n
         FROM "User" WHERE "createdAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date)::text AS day,
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day,
                COALESCE(SUM("inputTokens" + "outputTokens"), 0) AS n
         FROM "AiTokenLog" WHERE "createdAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`SELECT COUNT(DISTINCT "userId") AS n FROM "UserLogin" WHERE "loginAt" >= now() - interval '30 days'`,
@@ -867,7 +878,7 @@ async function getMetrics(req, res, next) {
       // Cohortes semanales: workspaces por semana de alta + cuántos siguen activos (login en últimos 14d)
       prisma.$queryRaw`
         WITH cohort AS (
-          SELECT id, to_char(("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires'), 'IYYY-"W"IW') AS week
+          SELECT id, to_char(("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ), 'IYYY-"W"IW') AS week
           FROM "Workspace" WHERE "createdAt" >= ${cohortSince}
         ),
         act AS (

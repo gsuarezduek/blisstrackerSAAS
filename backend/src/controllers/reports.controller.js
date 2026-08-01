@@ -1,10 +1,11 @@
 const prisma = require('../lib/prisma')
 const { getProductivityPeriod, taskMins } = require('../lib/timeMetrics')
+const { DEFAULT_TZ } = require('../utils/dates')
 const {
   getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median,
 } = require('../services/productivityStats.service')
 
-function defaultDateRange(tz = 'America/Argentina/Buenos_Aires') {
+function defaultDateRange(tz = DEFAULT_TZ) {
   const to = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const d = new Date()
   d.setDate(d.getDate() - 90)
@@ -13,7 +14,7 @@ function defaultDateRange(tz = 'America/Argentina/Buenos_Aires') {
 }
 
 // Filtra por completedAt usando el timezone del workspace
-function buildCompletedAtWhere(from, to, tz = 'America/Argentina/Buenos_Aires') {
+function buildCompletedAtWhere(from, to, tz = DEFAULT_TZ) {
   // Obtener el offset UTC para la timezone dada (aproximación para ART y similares)
   const testDate = new Date(`${from}T12:00:00Z`)
   const localStr = testDate.toLocaleDateString('en-CA', { timeZone: tz })
@@ -186,6 +187,9 @@ async function mine(req, res, next) {
 // anónima contra la mediana del equipo. NO incluye asistencia/tardanzas ni el semáforo crudo.
 async function mineProductivity(req, res, next) {
   try {
+    if (req.workspace?.productivityEnabled === false) {
+      return res.status(403).json({ error: 'La sección de Productividad está deshabilitada para este workspace' })
+    }
     const userId = req.user.userId
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone

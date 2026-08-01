@@ -102,7 +102,7 @@ export default function Navbar() {
   const profileRef = useRef(null)
   const adminRef   = useRef(null)
 
-  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification')
+  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification') || !!useMatch('/admin/ventas')
 
   useEffect(() => {
     function handleClickOutside(e) {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
+import ConfirmModal from './ConfirmModal'
 
 // Mismas claves que SECTION_KEYS en backend/src/controllers/monthlyReport.controller.js
 // (labels/iconos espejo de SECTION_CATALOG en marketing/InformesTab.jsx).
@@ -30,6 +31,8 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
   const [copied,  setCopied]  = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     api.get(`/projects/${projectId}/client-portal`)
@@ -73,9 +76,14 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
   }
 
   async function handleDelete() {
-    if (!window.confirm('¿Eliminar el portal de cliente? El cliente pierde el acceso de inmediato.')) return
-    await api.delete(`/projects/${projectId}/client-portal`)
-    setPortal(null); setEditing(false)
+    setDeleting(true)
+    try {
+      await api.delete(`/projects/${projectId}/client-portal`)
+      setPortal(null); setEditing(false)
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
   }
 
   function copyLink() {
@@ -194,13 +202,22 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
               Cancelar
             </button>
             {portal && (
-              <button onClick={handleDelete} className="text-sm px-3 py-1.5 text-red-600 hover:text-red-700 ml-auto">
+              <button onClick={() => setConfirmDelete(true)} className="text-sm px-3 py-1.5 text-red-600 hover:text-red-700 ml-auto">
                 Eliminar portal
               </button>
             )}
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmDelete}
+        title="Eliminar portal de cliente"
+        message="El cliente pierde el acceso de inmediato."
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   )
 }

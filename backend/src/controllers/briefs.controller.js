@@ -13,6 +13,11 @@ async function resolveProjectId(param, workspaceId) {
   return p?.id ?? null
 }
 
+async function assertBriefsEnabled(projectId) {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { briefsEnabled: true } })
+  return project?.briefsEnabled !== false
+}
+
 function shape(b) {
   return {
     type: b.type,
@@ -30,6 +35,9 @@ async function listBriefs(req, res, next) {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await assertBriefsEnabled(projectId))) {
+      return res.status(403).json({ error: 'La sección de Briefs está deshabilitada para este workspace' })
+    }
 
     const briefs = await prisma.projectBrief.findMany({
       where: { projectId, workspaceId },
@@ -49,6 +57,9 @@ async function saveBrief(req, res, next) {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await assertBriefsEnabled(projectId))) {
+      return res.status(403).json({ error: 'La sección de Briefs está deshabilitada para este workspace' })
+    }
 
     const { type } = req.params
     if (!isValidBriefType(type)) return res.status(400).json({ error: 'Tipo de brief inválido' })
@@ -88,6 +99,9 @@ async function deleteBrief(req, res, next) {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await assertBriefsEnabled(projectId))) {
+      return res.status(403).json({ error: 'La sección de Briefs está deshabilitada para este workspace' })
+    }
 
     const { type } = req.params
     if (!isValidBriefType(type)) return res.status(400).json({ error: 'Tipo de brief inválido' })

@@ -6,6 +6,12 @@ const { listProductivity, userOverview, userBreakdown, refreshProductivity, send
 router.use(auth)
 router.use(resolveWorkspace)
 router.use(workspaceAdminOnly)
+router.use((req, res, next) => {
+  if (req.workspace?.productivityEnabled === false) {
+    return res.status(403).json({ error: 'La sección de Productividad está deshabilitada para este workspace' })
+  }
+  next()
+})
 
 router.get('/',                          listProductivity)
 router.get('/users/:userId/overview',    userOverview)

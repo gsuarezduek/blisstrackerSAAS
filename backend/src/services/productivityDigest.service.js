@@ -5,6 +5,7 @@ const prisma = require('../lib/prisma')
 const { getWorkspaceStats, memberStatus } = require('./productivityStats.service')
 const { getProductivityPeriod } = require('../lib/timeMetrics')
 const { sendProductivityDigestEmail } = require('./email.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 const STATUS_LABEL = { inactive: 'inactivo', down: '↓ en baja', stuck: 'con atascos' }
 const ALERT_ORDER  = { inactive: 0, down: 1, stuck: 2 }
@@ -12,7 +13,7 @@ const ALERT = new Set(['inactive', 'down', 'stuck'])
 
 // Calcula las personas en alerta de un workspace (mes en curso, igual que la vista por defecto).
 async function buildWorkspaceDigest(workspace) {
-  const tz = workspace.timezone || 'America/Argentina/Buenos_Aires'
+  const tz = workspace.timezone || DEFAULT_TZ
   const period = getProductivityPeriod('current', tz)
 
   const [statsMap, members] = await Promise.all([

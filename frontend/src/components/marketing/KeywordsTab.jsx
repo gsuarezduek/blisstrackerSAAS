@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import ConfirmModal from '../ConfirmModal'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
 import OportunidadesTab from './OportunidadesTab'
@@ -1145,6 +1146,8 @@ export default function KeywordsTab({ projectId, projects }) {
   const [liveMode,          setLiveMode]          = useState(false)
   const [savingDefault,     setSavingDefault]     = useState(false)
   const [serpBatch,         setSerpBatch]         = useState({}) // { [kwId]: { position, serpFeatures, capturedAt } }
+  const [kwToRemove,        setKwToRemove]        = useState(null) // keyword | null
+  const [removingKw,        setRemovingKw]        = useState(false)
 
   const selectedProject = projects.find(p => String(p.id) === String(projectId))
 
@@ -1209,14 +1212,22 @@ export default function KeywordsTab({ projectId, projects }) {
     }
   }
 
-  async function handleRemove(kwId) {
-    if (!window.confirm('¿Dejar de rastrear esta keyword? Se borrarán todos sus datos históricos.')) return
+  function handleRemove(kwId) {
+    setKwToRemove(keywords.find(k => k.id === kwId) || { id: kwId })
+  }
+
+  async function confirmRemoveKeyword() {
+    if (!kwToRemove) return
+    setRemovingKw(true)
     try {
-      await api.delete(`/marketing/projects/${projectId}/keywords/${kwId}`)
-      setKeywords(prev => prev.filter(k => k.id !== kwId))
-      if (expanded === kwId) setExpanded(null)
+      await api.delete(`/marketing/projects/${projectId}/keywords/${kwToRemove.id}`)
+      setKeywords(prev => prev.filter(k => k.id !== kwToRemove.id))
+      if (expanded === kwToRemove.id) setExpanded(null)
     } catch (err) {
       alert(err.response?.data?.error ?? 'Error al eliminar')
+    } finally {
+      setRemovingKw(false)
+      setKwToRemove(null)
     }
   }
 
@@ -1435,6 +1446,16 @@ export default function KeywordsTab({ projectId, projects }) {
           onAdded={() => loadKeywords(country)}
         />
       )}
+
+      <ConfirmModal
+        open={!!kwToRemove}
+        title="Dejar de rastrear keyword"
+        message={kwToRemove?.query ? `Se borrarán todos los datos históricos de "${kwToRemove.query}".` : 'Se borrarán todos sus datos históricos.'}
+        confirmLabel="Dejar de rastrear"
+        loading={removingKw}
+        onConfirm={confirmRemoveKeyword}
+        onCancel={() => setKwToRemove(null)}
+      />
     </>
   )
 }

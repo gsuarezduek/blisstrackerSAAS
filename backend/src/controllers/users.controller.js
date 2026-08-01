@@ -97,68 +97,6 @@ async function getAdminUserDetail(req, res, next) {
  * GET /api/users/:id/tasks
  * Tareas activas + completadas esta semana para un usuario del workspace.
  */
-async function getUserTasks(req, res, next) {
-  try {
-    const userId = Number(req.params.id)
-    const workspaceId = req.workspace.id
-    const TZ = req.workspace.timezone
-
-    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
-    const [y, m, d] = todayStr.split('-').map(Number)
-    const today = new Date(y, m - 1, d)
-    const dow = today.getDay()
-    const daysToMonday = dow === 0 ? 6 : dow - 1
-    const monday = new Date(today)
-    monday.setDate(today.getDate() - daysToMonday)
-    const weekStart = monday.toISOString().slice(0, 10)
-    const weekEnd   = todayStr
-
-    // Offset de zona horaria para calcular rango UTC
-    const tzOffset = -3 * 60 // ART es UTC-3; en el futuro usar workspace.timezone dinámicamente
-    const fromUTC = new Date(`${weekStart}T00:00:00${tzOffset >= 0 ? '+' : '-'}${String(Math.abs(tzOffset / 60)).padStart(2, '0')}:00`)
-    const toUTC   = new Date(`${weekEnd}T23:59:59${tzOffset >= 0 ? '+' : '-'}${String(Math.abs(tzOffset / 60)).padStart(2, '0')}:00`)
-
-    const taskInclude = {
-      project: true,
-      _count: { select: { comments: true } },
-      sessions: { select: { startedAt: true, endedAt: true } },
-    }
-
-    const [activeTasks, completedTasks] = await Promise.all([
-      prisma.task.findMany({
-        where: {
-          userId,
-          status: { not: 'COMPLETED' },
-          workDay: { workspaceId },
-          // Excluir tareas futuras programadas
-          OR: [{ scheduledFor: null }, { scheduledFor: { lte: todayStr } }],
-        },
-        include: taskInclude,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.task.findMany({
-        where: {
-          userId,
-          status: 'COMPLETED',
-          completedAt: { gte: fromUTC, lte: toUTC },
-          workDay: { workspaceId },
-        },
-        include: taskInclude,
-        orderBy: { completedAt: 'desc' },
-      }),
-    ])
-
-    const map = {}
-    for (const t of activeTasks) {
-      const pid = t.project.id
-      if (!map[pid]) map[pid] = { project: t.project, tasks: [] }
-      map[pid].tasks.push(t)
-    }
-
-    res.json({ byProject: Object.values(map), completedThisWeek: completedTasks })
-  } catch (err) { next(err) }
-}
-
 // Include para tareas del perfil: proyecto, quién la creó/delegó, asignado y conteo de comentarios.
 const profileTaskInclude = {
   project: { select: { id: true, name: true } },
@@ -335,4 +273,4 @@ async function getUserCompleted(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, getAdminUserDetail, getUserTasks, getUserProfile, getUserCompleted }
+module.exports = { list, getAdminUserDetail, getUserProfile, getUserCompleted }

@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { createTtlCache } = require('../lib/ttlCache')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // El health-score agrega GEO + keywords + GA4 + PageSpeed (snapshots mensuales, muy
 // estables) y hoy se recalcula en cada request. TTL 5 min: el desfase es irrelevante
@@ -7,7 +8,7 @@ const { createTtlCache } = require('../lib/ttlCache')
 const healthCache = createTtlCache({ ttlMs: 5 * 60 * 1000, max: 300 })
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 

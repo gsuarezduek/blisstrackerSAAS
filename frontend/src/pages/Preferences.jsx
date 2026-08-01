@@ -5,6 +5,7 @@ import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import LoadingSpinner from '../components/LoadingSpinner'
+import ConfirmModal from '../components/ConfirmModal'
 import { moduleMeta } from '../lib/moduleCatalog'
 
 export default function Preferences() {
@@ -50,6 +51,7 @@ export default function Preferences() {
   const [deletionMsg,        setDeletionMsg]        = useState({ text: '', error: false })
   const [demoSeeded,         setDemoSeeded]         = useState(false)
   const [removingDemo,       setRemovingDemo]       = useState(false)
+  const [confirmRemoveDemo,  setConfirmRemoveDemo]  = useState(false)
 
 
   const TIMEZONES = [
@@ -139,7 +141,6 @@ export default function Preferences() {
   }, [user?.isAdmin, user?.role, user?.isSuperAdmin])
 
   async function handleRemoveDemo() {
-    if (!window.confirm('Eliminar el proyecto "Demo — Aprendé BlissTracker" y sus tareas? Esta acción no se puede deshacer.')) return
     setRemovingDemo(true)
     try {
       const { data } = await api.delete('/workspaces/current/demo-project')
@@ -149,6 +150,7 @@ export default function Preferences() {
       window.alert(`Error: ${err.response?.data?.error || err.message}`)
     } finally {
       setRemovingDemo(false)
+      setConfirmRemoveDemo(false)
     }
   }
 
@@ -808,7 +810,7 @@ export default function Preferences() {
                         </p>
                       </div>
                       <button
-                        onClick={handleRemoveDemo}
+                        onClick={() => setConfirmRemoveDemo(true)}
                         disabled={removingDemo}
                         className="flex-shrink-0 text-sm font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-2 transition-colors disabled:opacity-50 whitespace-nowrap"
                       >
@@ -1032,6 +1034,15 @@ export default function Preferences() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmRemoveDemo}
+        title="Eliminar proyecto demo"
+        message='Borra "Demo — Aprendé BlissTracker" y sus tareas. Esta acción no se puede deshacer.'
+        loading={removingDemo}
+        onConfirm={handleRemoveDemo}
+        onCancel={() => setConfirmRemoveDemo(false)}
+      />
     </div>
   )
 }

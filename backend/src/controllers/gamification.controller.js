@@ -7,12 +7,13 @@ const {
 const { isGameVisible, computeLeaderboard, resolveWinner } = require('../services/gamification.service')
 const { sendGameFinishedEmail } = require('../services/email.service')
 const { validateImageUpload } = require('../lib/imageType')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 const ADS_PLATFORMS = ['meta_ads', 'google_ads']
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function tzOf(req) { return req.workspace.timezone || 'America/Argentina/Buenos_Aires' }
+function tzOf(req) { return req.workspace.timezone || DEFAULT_TZ }
 
 // Campos de Game que devolvemos al cliente: TODOS menos los bytes de la imagen
 // (imageData). Se usa `select` explícito en vez de `omit` para no depender de un

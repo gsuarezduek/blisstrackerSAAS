@@ -8,6 +8,7 @@ jest.mock('../../src/lib/prisma', () => ({
   },
   workspace: { findUnique: jest.fn() },
   workspaceMember: { findUnique: jest.fn() },
+  user: { findUnique: jest.fn() },
 }))
 
 const request = require('supertest')
@@ -48,6 +49,9 @@ const ANN = {
   active: true, startsAt: null, endsAt: null,
   createdBy: { id: 99, name: 'Super' },
 }
+
+// superAdminOnly re-valida isSuperAdmin contra la DB
+beforeEach(() => { prisma.user.findUnique.mockResolvedValue({ isSuperAdmin: true }) })
 
 // ── Superadmin CRUD ───────────────────────────────────────────────────────────
 

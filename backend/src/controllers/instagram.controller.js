@@ -2,10 +2,11 @@ const prisma  = require('../lib/prisma')
 const { getValidMetaToken }        = require('../services/metaTokenRefresh.service')
 const { fetchInstagramMetrics }    = require('../services/instagram.service')
 const { saveInstagramSnapshot }    = require('../services/instagramSnapshot.service')
-const { scrapeInstagramProfile, scrapeInstagramMediaRaw, parseInstagramUsername, getApifyTokens } = require('../services/socialScrape.service')
+const { scrapeInstagramProfile, scrapeInstagramMediaRaw, parseInstagramUsername, getApifyTokens, debugScrapeInstagram } = require('../services/socialScrape.service')
 const { getStoriesSummary, captureStoriesForProject }    = require('../services/instagramStories.service')
 const { getSetting }               = require('../lib/platformSettings')
 const { cacheSocialImage }         = require('../services/socialImageCache.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // Cooldown en memoria para el refresh manual de scraping (protege costo del proveedor).
 const SCRAPE_REFRESH_COOLDOWN_MS = 30 * 60 * 1000
@@ -60,12 +61,12 @@ async function buildCollabScraper(integration, workspaceId) {
 }
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 function todayStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
@@ -501,4 +502,36 @@ async function captureStories(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, refreshScrapeForIntegration, getStories, captureStories }
+// GET /projects/:id/instagram/scrape-debug — corre las 2 llamadas de scraping por
+// separado (perfil + posts) y muestra por fuente cuántos posts trae cada una y
+// cuántos caen en el mes, para diagnosticar el caso "faltan posts del mes".
+async function scrapeDebug(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, workspaceId }, select: { id: true },
+    })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    let username = req.query.username
+    if (!username) {
+      const integration = await prisma.projectIntegration.findUnique({
+        where: { projectId_type: { projectId, type: 'instagram' } },
+      })
+      username = integration?.propertyId
+    }
+    if (!username) return res.status(400).json({ error: 'Indicá el usuario (?username=) o conectá Instagram por scraping primero.' })
+
+    let result
+    try {
+      result = await debugScrapeInstagram(username, { workspaceId, targetMonth: currentMonthStr() })
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code })
+    }
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMetrics, getSnapshots, saveSnapshot, deleteSnapshot, getFollowerLog, connectScrape, refreshScrape, refreshScrapeForIntegration, getStories, captureStories, scrapeDebug }

@@ -3,18 +3,19 @@ const { getValidLinkedinToken }     = require('../services/linkedinTokenRefresh.
 const { fetchLinkedinMetrics, listAdminOrganizations } = require('../services/linkedin.service')
 const { saveLinkedinSnapshot }      = require('../services/linkedinSnapshot.service')
 const { scrapeLinkedinCompany, parseLinkedinCompany, debugScrapeLinkedin } = require('../services/socialScrape.service')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // Cooldown en memoria para el refresh manual de scraping (protege el costo del proveedor).
 const SCRAPE_REFRESH_COOLDOWN_MS = 30 * 60 * 1000
 const scrapeCooldownMap = new Map() // integrationId → timestamp del último scrape
 
 function currentMonthStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 function todayStr() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: DEFAULT_TZ }))
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
