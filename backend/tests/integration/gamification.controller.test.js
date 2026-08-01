@@ -45,7 +45,7 @@ function voteGame(overrides = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  prisma.game.aggregate.mockResolvedValue({ _max: { sortOrder: 0 } })
+  prisma.game.aggregate.mockResolvedValue({ _min: { sortOrder: 0 } })
 })
 
 // ─── Crear ────────────────────────────────────────────────────────────────────
