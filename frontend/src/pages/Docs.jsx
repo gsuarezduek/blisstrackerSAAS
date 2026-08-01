@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import useRoles from '../hooks/useRoles'
 import useMembers from '../hooks/useMembers'
 import UserLink from '../components/UserLink'
@@ -11,6 +12,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import { renderMarkdown } from '../utils/processMarkdown'
 import { printProcess } from '../utils/printProcess'
 import WikiTab from '../components/docs/WikiTab'
+import AssociateProcessesModal from '../components/roles/AssociateProcessesModal'
 
 const BASE_TABS = [
   { id: 'filosofia', label: 'Filosofía' },
@@ -111,13 +113,15 @@ const FREQ_GROUPS = {
   monthly:    { label: 'Mensual',              icon: '📊', color: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300' },
 }
 
-function RolesTab({ processes, onOpenProcess, selectedRole, onSelectRole }) {
+function RolesTab({ processes, onOpenProcess, selectedRole, onSelectRole, onProcessesChanged }) {
   const { user } = useAuth()
   const isAdmin = user?.isAdmin === true
+  const { enabled: eosEnabled } = useFeatureFlag('eos')
   const { roles, labelFor } = useRoles()
   const { members } = useMembers()
   const [expectations, setExpectations] = useState([])
   const [loading, setLoading] = useState(true)
+  const [assocOpen, setAssocOpen] = useState(false)
 
   useEffect(() => {
     api.get('/role-expectations/all').then(r => setExpectations(r.data)).finally(() => setLoading(false))
@@ -179,8 +183,9 @@ function RolesTab({ processes, onOpenProcess, selectedRole, onSelectRole }) {
   const hasCompetencia = !!(exp?.educationLevel || exp?.experienceRequired)
   const roleProcesses = processesByRole.get(activeRoleName) ?? []
   const rolePeople     = membersByRole.get(activeRoleName) ?? []
+  const showProcessSection = eosEnabled && processes.length > 0
   const hasContent = !!exp?.description || hasCompetencia || training.length > 0 || skills.length > 0
-    || results.length > 0 || resps.length > 0 || tasks.length > 0 || roleProcesses.length > 0
+    || results.length > 0 || resps.length > 0 || tasks.length > 0 || showProcessSection
     || tools.length > 0 || !!exp?.roleTestUrl || guides.length > 0
   const isMine = activeRoleName === user?.role
   const label  = labelFor(activeRoleName)
@@ -274,6 +279,50 @@ function RolesTab({ processes, onOpenProcess, selectedRole, onSelectRole }) {
                 </UserLink>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Procesos asociados */}
+        {showProcessSection && (
+          <div className="px-6 sm:px-7 pt-5">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⚙️</span>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Procesos asociados</p>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => setAssocOpen(true)}
+                  className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline flex-shrink-0"
+                >
+                  Asociar procesos
+                </button>
+              )}
+            </div>
+            {roleProcesses.length > 0 ? (
+              <div className="space-y-2">
+                {roleProcesses.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => onOpenProcess(p.id)}
+                    className="w-full flex items-center justify-between gap-3 bg-emerald-50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 rounded-xl px-3 py-2.5 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-emerald-500 dark:text-emerald-400 flex-shrink-0">⚙️</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200 truncate">{p.name}</p>
+                        <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70">{p.steps.length} paso{p.steps.length !== 1 ? 's' : ''}</p>
+                      </div>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0">
+                      <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 dark:text-gray-500 italic">Sin procesos asociados a este rol todavía.</p>
+            )}
           </div>
         )}
 
@@ -411,36 +460,6 @@ function RolesTab({ processes, onOpenProcess, selectedRole, onSelectRole }) {
           </div>
         )}
 
-        {/* Procesos asociados */}
-        {roleProcesses.length > 0 && (
-          <div className="px-6 sm:px-7 pt-5">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-base">⚙️</span>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Procesos asociados</p>
-            </div>
-            <div className="space-y-2">
-              {roleProcesses.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => onOpenProcess(p.id)}
-                  className="w-full flex items-center justify-between gap-3 bg-emerald-50 dark:bg-emerald-900/10 hover:bg-emerald-100 dark:hover:bg-emerald-900/20 rounded-xl px-3 py-2.5 transition-colors text-left"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="text-emerald-500 dark:text-emerald-400 flex-shrink-0">⚙️</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200 truncate">{p.name}</p>
-                      <p className="text-xs text-emerald-700/70 dark:text-emerald-400/70">{p.steps.length} paso{p.steps.length !== 1 ? 's' : ''}</p>
-                    </div>
-                  </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0">
-                    <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Herramientas y conocimientos */}
         {tools.length > 0 && (
           <div className="px-6 sm:px-7 pt-5">
@@ -510,6 +529,15 @@ function RolesTab({ processes, onOpenProcess, selectedRole, onSelectRole }) {
 
         <div className="h-6" />
       </div>
+
+      {assocOpen && (
+        <AssociateProcessesModal
+          roleName={activeRoleName}
+          roleLabel={label}
+          onClose={() => setAssocOpen(false)}
+          onSaved={onProcessesChanged}
+        />
+      )}
     </div>
   )
 }
@@ -665,15 +693,17 @@ export default function Docs() {
   const [processRoles, setProcessRoles] = useState([])
   const [procesosLoaded, setProcesosLoaded] = useState(false)
 
-  useEffect(() => {
-    api.get('/processes').then(r => {
+  function loadProcesses() {
+    return api.get('/processes').then(r => {
       setProcesses(r.data.processes ?? [])
       setProcessRoles(r.data.roles ?? [])
     }).catch(() => {
       setProcesses([])
       setProcessRoles([])
     }).finally(() => setProcesosLoaded(true))
-  }, [])
+  }
+
+  useEffect(() => { loadProcesses() }, [])
 
   const tabs = useMemo(() => (
     processes.length > 0
@@ -745,7 +775,7 @@ export default function Docs() {
         {tab === 'wiki'      && <WikiTab articleId={wikiArticleId} onSelect={openWikiArticle} />}
         {tab === 'roles'     && (
           procesosLoaded
-            ? <RolesTab processes={processes} onOpenProcess={openProcess} selectedRole={selectedRole} onSelectRole={r => setSearchParams({ tab: 'roles', role: r })} />
+            ? <RolesTab processes={processes} onOpenProcess={openProcess} selectedRole={selectedRole} onSelectRole={r => setSearchParams({ tab: 'roles', role: r })} onProcessesChanged={loadProcesses} />
             : <LoadingSpinner className="py-16" />
         )}
         {tab === 'procesos'  && (

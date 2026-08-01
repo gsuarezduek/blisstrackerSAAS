@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../../api/client'
 import EmptyState from '../EmptyState'
+import { useFeatureFlag } from '../../hooks/useFeatureFlag'
+import AssociateProcessesModal from '../roles/AssociateProcessesModal'
 
 const FREQ_OPTIONS = [
   { value: 'monday',     label: 'Lunes (inicio de semana)' },
@@ -121,6 +123,7 @@ function buildFormFromExp(exp) {
 
 export default function RolesTab() {
   const [searchParams] = useSearchParams()
+  const { enabled: eosEnabled } = useFeatureFlag('eos')
   const [roles, setRoles] = useState([])
   const [expectations, setExpectations] = useState({})
   const [editingRole, setEditingRole] = useState(null)
@@ -128,6 +131,9 @@ export default function RolesTab() {
   const [saving, setSaving] = useState(false)
   const [savedRole, setSavedRole] = useState(null)
   const formRef = useRef(form)
+
+  const [eosProcesses, setEosProcesses] = useState([])
+  const [assocRole, setAssocRole] = useState(null)
 
   const [newLabel, setNewLabel] = useState('')
   const [creating, setCreating] = useState(false)
@@ -157,6 +163,24 @@ export default function RolesTab() {
     // Solo al montar — el deep link se resuelve una vez, no en cada cambio de la URL.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  function loadEosProcesses() {
+    return api.get('/eos/processes').then(r => setEosProcesses(r.data.processes ?? [])).catch(() => setEosProcesses([]))
+  }
+
+  useEffect(() => {
+    if (eosEnabled) loadEosProcesses()
+  }, [eosEnabled])
+
+  const processesByRole = useMemo(() => {
+    const map = new Map()
+    for (const p of eosProcesses) {
+      if (!p.ownerRole) continue
+      if (!map.has(p.ownerRole)) map.set(p.ownerRole, [])
+      map.get(p.ownerRole).push(p)
+    }
+    return map
+  }, [eosProcesses])
 
   function startEdit(role) {
     setSavedRole(null)
@@ -324,6 +348,7 @@ export default function RolesTab() {
           const exp = expectations[role.name]
           const isEditing = editingRole === role.name
           const wasSaved  = savedRole  === role.name
+          const roleProcesses = processesByRole.get(role.name) ?? []
 
           return (
             <div key={role.name} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-2xl overflow-hidden">
@@ -687,6 +712,34 @@ export default function RolesTab() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Procesos asociados — solo si EOS está activado y hay procesos creados */}
+                  {eosEnabled && eosProcesses.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                          ⚙️ Procesos asociados{roleProcesses.length > 0 ? ` (${roleProcesses.length})` : ''}
+                        </p>
+                        <button
+                          onClick={() => setAssocRole(role)}
+                          className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline flex-shrink-0"
+                        >
+                          Asociar procesos
+                        </button>
+                      </div>
+                      {roleProcesses.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {roleProcesses.map(p => (
+                            <span key={p.id} className="text-xs bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800 rounded-full px-2.5 py-0.5">
+                              {p.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">Sin procesos asociados todavía.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -723,6 +776,15 @@ export default function RolesTab() {
             </div>
           </div>
         </div>
+      )}
+
+      {assocRole && (
+        <AssociateProcessesModal
+          roleName={assocRole.name}
+          roleLabel={assocRole.label}
+          onClose={() => setAssocRole(null)}
+          onSaved={loadEosProcesses}
+        />
       )}
     </div>
   )
