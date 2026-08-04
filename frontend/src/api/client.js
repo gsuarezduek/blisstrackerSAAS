@@ -1,6 +1,20 @@
 import axios from 'axios'
 import { isWorkspaceSubdomain } from '../utils/domain'
 
+// Rutas que no requieren sesión (espejo de las rutas públicas de App.jsx). Un 401
+// disparado en una de estas páginas (ej: AuthContext validando un JWT viejo/vencido
+// que quedó en localStorage de una sesión anterior) no debe expulsar al visitante al
+// login — la página en sí nunca pidió autenticación.
+const PUBLIC_PATH_PREFIXES = [
+  '/report/', '/login', '/register', '/pricing', '/join', '/oauth', '/auth',
+  '/oauth-result', '/condiciones', '/privacidad', '/forgot-password',
+  '/reset-password', '/verify-email-change', '/soluciones/',
+]
+
+function isPublicPagePath(pathname = window.location.pathname) {
+  return PUBLIC_PATH_PREFIXES.some(prefix => pathname.startsWith(prefix))
+}
+
 // Extrae el slug del workspace desde el hostname.
 // En producción: 'bliss.blisstracker.app' → 'bliss'
 // En desarrollo: usa VITE_WORKSPACE_SLUG o 'bliss' como fallback
@@ -33,9 +47,11 @@ api.interceptors.response.use(
   err => {
     if (err.response?.status === 401) {
       localStorage.removeItem('token')
-      // Solo redirigir al login desde subdominios de workspace.
-      // En el dominio raíz (blisstracker.app) dejamos que la app muestre Landing.
-      if (isWorkspaceSubdomain()) {
+      // Solo redirigir al login desde subdominios de workspace, y nunca desde una
+      // página explícitamente pública (ej. el link de informe del cliente): ese 401
+      // puede venir de un JWT viejo/vencido que quedó en el navegador de una sesión
+      // anterior — no significa que la página actual requiera login.
+      if (isWorkspaceSubdomain() && !isPublicPagePath()) {
         window.location.href = '/login'
       }
     }
