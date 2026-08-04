@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -14,9 +15,12 @@ const TABS = [
   { id: 'legajos',    label: '📋 Legajos'              },
   { id: 'vacaciones', label: '🏖️ Vacaciones y Licencias' },
 ]
+const VALID_TABS = new Set(TABS.map(t => t.id))
 
 export default function RRHH() {
-  const [tab, setTab]           = useState('ingresos')
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab')
+  const [tab, setTab]           = useState(VALID_TABS.has(initialTab) ? initialTab : 'ingresos')
   const [users, setUsers]       = useState([])
   const [lastLoginsMap, setLastLoginsMap] = useState({})
   const [dashStats, setDashStats] = useState({ projectsPerPerson: 0 })

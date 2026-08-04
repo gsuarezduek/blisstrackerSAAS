@@ -39,6 +39,24 @@ function handleActiveTaskConflict(err) {
   return err
 }
 
+// Destinatarios de una notificación sobre el ciclo de vida de una tarea (completar,
+// bloquear, desbloquear): miembros del proyecto + seguidores (TaskFollow) + quien la
+// delegó (createdById), aunque no sea miembro del proyecto. Sin duplicar, sin el actor.
+async function taskLifecycleRecipients(task, actorId) {
+  const members = await prisma.projectMember.findMany({
+    where: { projectId: task.projectId, userId: { not: actorId } },
+    select: { userId: true },
+  })
+  const recipients = new Set(members.map(m => m.userId))
+  const followers = await prisma.taskFollow.findMany({
+    where: { taskId: task.id, userId: { not: actorId } },
+    select: { userId: true },
+  })
+  for (const f of followers) recipients.add(f.userId)
+  if (task.createdById && task.createdById !== actorId) recipients.add(task.createdById)
+  return recipients
+}
+
 async function create(req, res, next) {
   try {
     const requesterId = req.user.userId
@@ -305,19 +323,7 @@ async function completeTask(req, res, next) {
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
     ])
 
-    const members = await prisma.projectMember.findMany({
-      where: { projectId: task.projectId, userId: { not: userId } },
-      select: { userId: true },
-    })
-    // Destinatarios: miembros del proyecto + seguidores + quien delegó la tarea
-    // (createdById), aunque no sea miembro del proyecto. Sin duplicar, sin el actor.
-    const recipients = new Set(members.map(m => m.userId))
-    const followers = await prisma.taskFollow.findMany({
-      where: { taskId: task.id, userId: { not: userId } },
-      select: { userId: true },
-    })
-    for (const f of followers) recipients.add(f.userId)
-    if (task.createdById && task.createdById !== userId) recipients.add(task.createdById)
+    const recipients = await taskLifecycleRecipients(task, userId)
     if (recipients.size > 0) {
       const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
       await prisma.notification.createMany({
@@ -384,21 +390,20 @@ async function blockTask(req, res, next) {
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
     ])
 
-    const members = await prisma.projectMember.findMany({
-      where: { projectId: task.projectId, userId: { not: userId } },
-      select: { userId: true },
-    })
-    if (members.length > 0) {
+    // Destinatarios: miembros del proyecto + seguidores + quien delegó la tarea, igual
+    // que al completarla — así el bloqueo llega a quien más lo necesita, no solo al equipo.
+    const recipients = await taskLifecycleRecipients(task, userId)
+    if (recipients.size > 0) {
       const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
       await prisma.notification.createMany({
-        data: members.map(m => ({
-          userId:      m.userId,
+        data: Array.from(recipients).map(uid => ({
+          userId:      uid,
           actorId:     userId,
           taskId:      task.id,
           projectId:   task.projectId,
           workspaceId,
           type:        'BLOCKED',
-          message:     `bloqueó "${desc}"`,
+          message:     `bloqueó "${desc}": ${reason.trim()}`,
         })),
       })
     }
@@ -413,6 +418,7 @@ async function blockTask(req, res, next) {
 async function unblockTask(req, res, next) {
   try {
     const userId = req.user.userId
+    const workspaceId = req.workspace.id
     await assertNoActiveTask(userId, req.workspace?.id)
 
     const current = await prisma.task.findUnique({ where: { id: Number(req.params.id) } })
@@ -435,6 +441,24 @@ async function unblockTask(req, res, next) {
       }),
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
     ])
+
+    // Cierra el loop del BLOCKED: avisa a los mismos destinatarios que se desbloqueó.
+    const recipients = await taskLifecycleRecipients(task, userId)
+    if (recipients.size > 0) {
+      const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
+      await prisma.notification.createMany({
+        data: Array.from(recipients).map(uid => ({
+          userId:      uid,
+          actorId:     userId,
+          taskId:      task.id,
+          projectId:   task.projectId,
+          workspaceId,
+          type:        'UNBLOCKED',
+          message:     `desbloqueó "${desc}"`,
+        })),
+      })
+    }
+
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -946,4 +970,34 @@ async function dismissDelegated(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, editTask, setDuration, starTask, addToToday, bringToToday, moveToBacklog, completedHistory, delegated, dismissDelegated, followTask, unfollowTask, followState, followed, assertNoActiveTask }
+// Quita del dashboard una sola tarea delegada puntual (espejo individual de dismissDelegated).
+async function dismissDelegatedOne(req, res, next) {
+  try {
+    const createdById = req.user.userId
+    const taskId = Number(req.params.id)
+
+    const { count } = await prisma.task.updateMany({
+      where: { id: taskId, createdById, userId: { not: createdById } },
+      data: { dismissedByCreator: true },
+    })
+    if (count === 0) return res.status(404).json({ error: 'Tarea no encontrada' })
+    res.json({ dismissed: true })
+  } catch (err) { next(err) }
+}
+
+// Deja de seguir en bulk (espejo de dismissDelegated para la pestaña Seguidas).
+async function unfollowAll(req, res, next) {
+  try {
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const { status } = req.query  // opcional: filtra por estado
+
+    const where = { userId, workspaceId }
+    if (status) where.task = { status }
+
+    const { count } = await prisma.taskFollow.deleteMany({ where })
+    res.json({ unfollowed: count })
+  } catch (err) { next(err) }
+}
+
+module.exports = { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, editTask, setDuration, starTask, addToToday, bringToToday, moveToBacklog, completedHistory, delegated, dismissDelegated, dismissDelegatedOne, followTask, unfollowTask, unfollowAll, followState, followed, assertNoActiveTask }

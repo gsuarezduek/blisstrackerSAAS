@@ -482,7 +482,7 @@ function objPctBand(pct) {
 
 // Una fila de la lista de informes — nombre, fecha, % de cumplimiento de objetivos
 // (número principal, desplegable con el detalle) y link al informe.
-function ReportRow({ r, onSelectProject }) {
+function ReportRow({ r, starred, onSelectProject }) {
   const [open, setOpen] = useState(false)
   const [y, m] = r.month.split('-').map(Number)
   const monthLabel = r.periodLabel || new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
@@ -494,6 +494,7 @@ function ReportRow({ r, onSelectProject }) {
       <div className="flex items-center gap-4 px-5 py-3.5">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
+            {starred && <StarBadge />}
             <button
               onClick={() => onSelectProject?.(String(r.project.id))}
               className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
@@ -551,16 +552,52 @@ const SORT_OPTIONS = [
   { key: 'pct_asc',   label: 'Menor cumplimiento' },
 ]
 
+// ─── Helpers de UI compartidos: buscador con lupa + insignia de destacado ──────
+
+function SearchIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  )
+}
+
+function SearchInput({ value, onChange, placeholder = 'Buscar proyecto…', className = 'w-52' }) {
+  return (
+    <div className={`relative ${className}`}>
+      <SearchIcon className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full text-sm pl-8 pr-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+      />
+    </div>
+  )
+}
+
+// Estrella llena — mismo ícono/color que "Mis Proyectos" (favoritos), solo lectura acá.
+function StarBadge({ className = 'w-4 h-4' }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" title="Proyecto destacado" className={`${className} text-yellow-400 flex-shrink-0`}>
+      <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L10 18.354 5.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.005z" clipRule="evenodd" />
+    </svg>
+  )
+}
+
 // ─── Vista "En vivo" (objetivos del mes, sin esperar al informe mensual) ──────
 
-function LiveProjectRow({ p, onSelectProject }) {
+function LiveProjectRow({ p, starred, onSelectProject }) {
   const [open, setOpen] = useState(false)
   const hasObjectives = p.objectives?.length > 0
 
   return (
     <div>
       <div className="flex items-center gap-4 px-5 py-3.5">
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex items-center gap-1.5">
+          {starred && <StarBadge />}
           <button
             onClick={() => onSelectProject?.(String(p.projectId))}
             className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
@@ -596,10 +633,11 @@ function LiveProjectRow({ p, onSelectProject }) {
   )
 }
 
-function LiveObjectivesPanel({ onSelectProject }) {
+function LiveObjectivesPanel({ onSelectProject, projects = [] }) {
   const [data,    setData]    = useState(null)
   const [month,   setMonth]   = useState(null) // null = todavía no elegido, usa el default del backend
   const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -615,6 +653,19 @@ function LiveObjectivesPanel({ onSelectProject }) {
   // La lista viene ordenada desc (más reciente primero): "anterior" = índice + 1, "siguiente" = índice - 1
   const canGoOlder = idx >= 0 && idx < availableMonths.length - 1
   const canGoNewer = idx > 0
+
+  // Destacados (favoritos del usuario, "Mis Proyectos") primero, después el resto
+  // en el orden que ya trae el backend (% de cumplimiento desc). El buscador filtra
+  // por nombre client-side, ya que la lista completa del mes ya está cargada.
+  const starredIds = useMemo(() => new Set(projects.filter(p => p.starred).map(p => p.id)), [projects])
+  const visibleProjects = useMemo(() => {
+    const list = data?.projects ?? []
+    const q = search.trim().toLowerCase()
+    const filtered = q ? list.filter(p => p.projectName.toLowerCase().includes(q)) : list
+    const starred = filtered.filter(p => starredIds.has(p.projectId))
+    const rest    = filtered.filter(p => !starredIds.has(p.projectId))
+    return [...starred, ...rest]
+  }, [data, search, starredIds])
 
   return (
     <div className="space-y-4">
@@ -664,9 +715,23 @@ function LiveObjectivesPanel({ onSelectProject }) {
           </p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
-          {data.projects.map(p => <LiveProjectRow key={p.projectId} p={p} onSelectProject={onSelectProject} />)}
-        </div>
+        <>
+          <div className="flex justify-end">
+            <SearchInput value={search} onChange={setSearch} placeholder="Buscar proyecto…" />
+          </div>
+
+          {visibleProjects.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+              <p className="text-gray-500 dark:text-gray-400 text-sm">Sin resultados para "{search}".</p>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
+              {visibleProjects.map(p => (
+                <LiveProjectRow key={p.projectId} p={p} starred={starredIds.has(p.projectId)} onSelectProject={onSelectProject} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -719,6 +784,15 @@ function ReportsHistoryPanel({ onSelectProject, projects }) {
     </button>
   )
 
+  // Destacados (favoritos del usuario) primero, preservando el orden elegido
+  // (fecha/% de cumplimiento) dentro de cada grupo.
+  const starredIds = useMemo(() => new Set(projects.filter(p => p.starred).map(p => p.id)), [projects])
+  const sortedReports = useMemo(() => {
+    const starred = reports.filter(r => starredIds.has(r.project.id))
+    const rest    = reports.filter(r => !starredIds.has(r.project.id))
+    return [...starred, ...rest]
+  }, [reports, starredIds])
+
   // El título muestra el período de DATOS de los informes (por defecto, el mes
   // calendario anterior al "slot" en el que se generaron), no el mes en el que
   // se generaron — así coincide con el período que ya muestra cada fila.
@@ -734,13 +808,7 @@ function ReportsHistoryPanel({ onSelectProject, projects }) {
           Informes de {heading} <span className="font-normal text-gray-400 lowercase">({total} en total)</span>
         </p>
         <div className="flex items-center gap-2 flex-wrap">
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar proyecto…"
-            className="w-44 text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
+          <SearchInput value={search} onChange={setSearch} placeholder="Buscar proyecto…" className="w-44" />
           {generators.length > 0 && (
             <select value={generatedById} onChange={e => setGeneratedById(e.target.value)} className={selectCls}>
               <option value="">Todas las personas</option>
@@ -769,7 +837,7 @@ function ReportsHistoryPanel({ onSelectProject, projects }) {
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/60">
-          {reports.map(r => <ReportRow key={r.id} r={r} onSelectProject={onSelectProject} />)}
+          {sortedReports.map(r => <ReportRow key={r.id} r={r} starred={starredIds.has(r.project.id)} onSelectProject={onSelectProject} />)}
         </div>
       )}
 
@@ -807,7 +875,7 @@ function AllReportsPanel({ onSelectProject, projects }) {
       </div>
 
       {view === 'live'
-        ? <LiveObjectivesPanel onSelectProject={onSelectProject} />
+        ? <LiveObjectivesPanel onSelectProject={onSelectProject} projects={projects} />
         : <ReportsHistoryPanel onSelectProject={onSelectProject} projects={projects} />}
     </div>
   )

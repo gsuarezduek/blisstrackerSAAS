@@ -5,6 +5,7 @@ const { taskWorkedMinutes } = require('../lib/taskTime')
 async function snapshot(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const userId = req.user.userId
     const tz = req.workspace.timezone
     const date = todayString(tz)
 
@@ -51,7 +52,7 @@ async function snapshot(req, res, next) {
       }
     }
 
-    const result = workDays.map(wd => {
+    let result = workDays.map(wd => {
       const carryOver = carryOverByUser[wd.userId] ?? []
       const allTasks  = [...wd.tasks, ...carryOver]
       const inProgressTask = allTasks.find(t => t.status === 'IN_PROGRESS') ?? null
@@ -73,6 +74,21 @@ async function snapshot(req, res, next) {
         },
       }
     })
+
+    // Marca en currentTask si el usuario actual ya la sigue, para poder
+    // seguir/dejar de seguir directo desde la tarjeta sin abrir el modal.
+    const currentTaskIds = result.filter(e => e.currentTask).map(e => e.currentTask.id)
+    if (currentTaskIds.length > 0) {
+      const follows = await prisma.taskFollow.findMany({
+        where: { userId, taskId: { in: currentTaskIds } },
+        select: { taskId: true },
+      })
+      const followedIds = new Set(follows.map(f => f.taskId))
+      result = result.map(e => e.currentTask
+        ? { ...e, currentTask: { ...e.currentTask, following: followedIds.has(e.currentTask.id) } }
+        : e
+      )
+    }
 
     result.sort((a, b) => {
       const aTime = a.currentTask?.startedAt ? new Date(a.currentTask.startedAt).getTime() : null

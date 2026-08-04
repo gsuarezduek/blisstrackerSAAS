@@ -9,6 +9,7 @@ import useRoles from '../hooks/useRoles'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import { fmtMins, fmtDuration, activeSeconds } from '../utils/format'
 import { roleColor } from '../utils/roleColor'
+import { useAuth } from '../context/AuthContext'
 
 const REFRESH_INTERVAL = 30 // seconds
 
@@ -37,11 +38,51 @@ function Avatar({ user, size = 'w-10 h-10' }) {
   )
 }
 
-function UserCard({ entry, now, onOpenUser, onOpenTask }) {
+// Botón para seguir/dejar de seguir la tarea actual de otra persona sin abrir el modal.
+// Seguirla te agrega a los destinatarios de la notificación cuando se completa.
+function FollowToggle({ task }) {
+  const [following, setFollowing] = useState(!!task.following)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { setFollowing(!!task.following) }, [task.id, task.following])
+
+  async function toggle(e) {
+    e.stopPropagation()
+    if (saving) return
+    setSaving(true)
+    const next = !following
+    setFollowing(next)  // optimista
+    try {
+      if (next) await api.post(`/tasks/${task.id}/follow`)
+      else      await api.delete(`/tasks/${task.id}/follow`)
+    } catch {
+      setFollowing(!next)  // revertir
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      title={following ? 'Dejar de seguir esta tarea' : 'Seguir esta tarea: te avisamos cuando se complete'}
+      className={`flex-shrink-0 text-xs px-2 py-1.5 rounded-lg border transition-colors ${
+        following
+          ? 'bg-primary-600 border-primary-600 text-white'
+          : 'bg-white dark:bg-gray-800 border-primary-200 dark:border-primary-700 text-primary-500 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30'
+      }`}
+    >
+      {following ? '👁 Siguiendo' : '👁 Seguir'}
+    </button>
+  )
+}
+
+function UserCard({ entry, now, onOpenUser, onOpenTask, ownUserId }) {
   const { user, workDay, currentTask, stats } = entry
   const { labelFor } = useRoles()
   const isActive = !workDay.endedAt
   const hasTask = !!currentTask
+  const isOwn = user.id === ownUserId
 
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-2xl border-2 p-5 flex flex-col gap-4 transition-all ${
@@ -81,14 +122,14 @@ function UserCard({ entry, now, onOpenUser, onOpenTask }) {
         </div>
       </div>
 
-      {/* Current task — click → comentarios de la tarea */}
+      {/* Current task — click → comentarios de la tarea; + seguir si no es tu propia tarea */}
       {hasTask && (
-        <button
-          onClick={() => onOpenTask(currentTask)}
-          className="bg-primary-50 dark:bg-primary-900/20 rounded-xl px-4 py-3 text-left w-full hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
-          title="Ver comentarios de la tarea"
-        >
-          <div className="flex items-start gap-2">
+        <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl px-4 py-3 flex items-start gap-2">
+          <button
+            onClick={() => onOpenTask(currentTask)}
+            className="flex items-start gap-2 text-left flex-1 min-w-0 hover:opacity-80 transition-opacity"
+            title="Ver comentarios de la tarea"
+          >
             <span className="text-primary-400 mt-0.5">▶</span>
             <div className="min-w-0">
               <p className="text-sm font-medium text-primary-900 dark:text-primary-300 whitespace-pre-wrap break-words">{linkify(currentTask.description)}</p>
@@ -96,8 +137,9 @@ function UserCard({ entry, now, onOpenUser, onOpenTask }) {
                 {currentTask.project.name}
               </span>
             </div>
-          </div>
-        </button>
+          </button>
+          {!isOwn && <FollowToggle task={currentTask} />}
+        </div>
       )}
 
       {!hasTask && isActive && (
@@ -130,6 +172,7 @@ function UserCard({ entry, now, onOpenUser, onOpenTask }) {
 
 export default function RealTime() {
   const { labelFor } = useRoles()
+  const { user: authUser } = useAuth()
   const [entries, setEntries] = useState([])
   const [notStarted, setNotStarted] = useState([])
   const [onLeave, setOnLeave] = useState([])
@@ -306,6 +349,7 @@ export default function RealTime() {
                   now={now}
                   onOpenUser={u => navigate(`/users/${u.id}`)}
                   onOpenTask={setCommentTask}
+                  ownUserId={authUser?.id}
                 />
               ))}
             </div>
@@ -324,6 +368,7 @@ export default function RealTime() {
                   now={now}
                   onOpenUser={u => navigate(`/users/${u.id}`)}
                   onOpenTask={setCommentTask}
+                  ownUserId={authUser?.id}
                 />
               ))}
             </div>

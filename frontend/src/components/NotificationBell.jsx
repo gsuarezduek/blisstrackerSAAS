@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
+import { useAuth } from '../context/AuthContext'
 
 // Cada filtro define un predicado `match`. Un filtro `muted` no destaca: no suma al
 // badge de la campana ni muestra badge en su icono (son informativos / de fondo).
@@ -9,13 +10,17 @@ import { avatarUrl } from '../utils/avatarUrl'
 // enviada por el backend) — esas SÍ destacan; el resto de completadas quedan muteadas.
 const isFollowedCompleted = n => n.type === 'COMPLETED' && (n.relation === 'followed' || n.relation === 'delegated')
 
+// Orden por urgencia: lo bloqueado y lo que requiere una decisión tuya van primero.
+// BLOCKED agrupa también UNBLOCKED (mismo hilo: se bloqueó → se resolvió) y
+// TASK_MENTION agrupa también LEAD_ASSIGNED (misma idea: "te asignaron algo").
 const FILTERS = [
-  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones', match: n => n.type === 'TASK_MENTION' },
-  { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',              match: n => n.type === 'TASK_COMMENT' },
-  { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                 match: n => n.type === 'BLOCKED' },
-  { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',     match: isFollowedCompleted },
-  { key: 'OTHER',        label: '🔔', title: 'Otras',                    match: n => ['ADDED_TO_PROJECT', 'VACATION_REQUEST', 'VACATION_REVIEWED'].includes(n.type) },
-  { key: 'COMPLETED',    label: '✓',  title: 'Completadas',              match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
+  { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                  match: n => n.type === 'BLOCKED' || n.type === 'UNBLOCKED' },
+  { key: 'ACTION',       label: '🙋', title: 'Requieren tu acción',       match: n => n.type === 'VACATION_REQUEST' },
+  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' },
+  { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
+  { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: isFollowedCompleted },
+  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['ADDED_TO_PROJECT', 'VACATION_REVIEWED'].includes(n.type) },
+  { key: 'COMPLETED',    label: '✓',  title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
 
 // El filtro (único) al que pertenece una notificación; los predicados son disjuntos.
@@ -30,6 +35,7 @@ function timeAgo(dateStr) {
 }
 
 export default function NotificationBell() {
+  const { user } = useAuth()
   const [notifications, setNotifications] = useState([])
   const [open,          setOpen]          = useState(false)
   const [activeFilter,  setActiveFilter]  = useState(FILTERS[0].key)
@@ -215,43 +221,61 @@ export default function NotificationBell() {
               </div>
             ) : (
               filtered.map(n => {
-                const isBlocked      = n.type === 'BLOCKED'
-                const isAddedProject = n.type === 'ADDED_TO_PROJECT'
-                const isComment      = n.type === 'TASK_COMMENT'
-                const isMention      = n.type === 'TASK_MENTION'
-                const isVacation     = n.type === 'VACATION_REQUEST' || n.type === 'VACATION_REVIEWED'
-                const isCompleted    = n.type === 'COMPLETED'
+                const isBlocked        = n.type === 'BLOCKED'
+                const isUnblocked      = n.type === 'UNBLOCKED'
+                const isAddedProject   = n.type === 'ADDED_TO_PROJECT'
+                const isComment        = n.type === 'TASK_COMMENT'
+                const isMention        = n.type === 'TASK_MENTION'
+                const isLeadAssigned   = n.type === 'LEAD_ASSIGNED'
+                const isVacationAction = n.type === 'VACATION_REQUEST'
+                const isVacation       = isVacationAction || n.type === 'VACATION_REVIEWED'
+                const isCompleted      = n.type === 'COMPLETED'
+                const isAssignment     = isMention || isLeadAssigned
 
                 const bgClass = isCompleted
                   ? 'bg-gray-50 dark:bg-gray-800/60'
                   : isBlocked
                   ? (!n.read ? 'bg-red-100 dark:bg-red-900/40'      : 'bg-red-50 dark:bg-red-900/20')
-                  : isAddedProject
+                  : isUnblocked
                     ? (!n.read ? 'bg-green-100 dark:bg-green-900/40' : 'bg-green-50 dark:bg-green-900/20')
-                    : isComment
-                      ? (!n.read ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-blue-50 dark:bg-blue-900/20')
-                      : isMention
-                        ? (!n.read ? 'bg-purple-100 dark:bg-purple-900/40' : 'bg-purple-50 dark:bg-purple-900/20')
-                        : isVacation
-                          ? (!n.read ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-gray-800')
-                          : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
+                    : isAddedProject
+                      ? (!n.read ? 'bg-green-100 dark:bg-green-900/40' : 'bg-green-50 dark:bg-green-900/20')
+                      : isComment
+                        ? (!n.read ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-blue-50 dark:bg-blue-900/20')
+                        : isAssignment
+                          ? (!n.read ? 'bg-purple-100 dark:bg-purple-900/40' : 'bg-purple-50 dark:bg-purple-900/20')
+                          : isVacation
+                            ? (!n.read ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-gray-800')
+                            : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
 
-                const dotClass = isBlocked ? 'bg-red-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : isMention ? 'bg-purple-500' : isVacation ? 'bg-amber-500' : 'bg-primary-500'
+                const dotClass = isBlocked ? 'bg-red-500' : isUnblocked ? 'bg-green-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : isAssignment ? 'bg-purple-500' : isVacation ? 'bg-amber-500' : 'bg-primary-500'
                 const textClass = isCompleted
                   ? 'text-gray-500 dark:text-gray-400'
                   : isBlocked
                   ? 'text-red-800 dark:text-red-200'
-                  : isAddedProject
+                  : isUnblocked
                     ? 'text-green-800 dark:text-green-200'
-                    : isComment
-                      ? 'text-blue-800 dark:text-blue-200'
-                      : isMention
-                        ? 'text-purple-800 dark:text-purple-200'
-                        : 'text-gray-800 dark:text-gray-200'
+                    : isAddedProject
+                      ? 'text-green-800 dark:text-green-200'
+                      : isComment
+                        ? 'text-blue-800 dark:text-blue-200'
+                        : isAssignment
+                          ? 'text-purple-800 dark:text-purple-200'
+                          : 'text-gray-800 dark:text-gray-200'
 
-                const dest = n.projectId
-                  ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
-                  : null
+                // Deep-link: leads van a Ventas (ruta según rol), solicitudes de licencia a
+                // RRHH → Vacaciones (solo lo ven admins, que son quienes las reciben), y las
+                // revisiones de licencia al perfil propio (el destinatario puede no ser admin).
+                const ventasBase = user?.isAdmin ? '/admin/ventas' : '/ventas'
+                const dest = n.leadId
+                  ? `${ventasBase}?lead=${n.leadId}`
+                  : n.type === 'VACATION_REQUEST'
+                    ? '/admin/rrhh?tab=vacaciones'
+                    : n.type === 'VACATION_REVIEWED'
+                      ? '/profile'
+                      : n.projectId
+                        ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
+                        : null
 
                 return (
                   <Link
@@ -270,6 +294,9 @@ export default function NotificationBell() {
                         {isBlocked && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">⚠</span>
                         )}
+                        {isUnblocked && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">🔓</span>
+                        )}
                         {isAddedProject && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">＋</span>
                         )}
@@ -279,7 +306,13 @@ export default function NotificationBell() {
                         {isMention && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-[8px] leading-none">@</span>
                         )}
-                        {isVacation && (
+                        {isLeadAssigned && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">💼</span>
+                        )}
+                        {isVacationAction && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🙋</span>
+                        )}
+                        {n.type === 'VACATION_REVIEWED' && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🏖</span>
                         )}
                         {isCompleted && (

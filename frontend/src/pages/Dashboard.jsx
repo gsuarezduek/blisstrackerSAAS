@@ -37,16 +37,30 @@ const SEGUIMIENTO_STATUS_COLOR = {
   BLOCKED: 'text-red-600 dark:text-red-400',
   COMPLETED: 'text-green-600 dark:text-green-400',
 }
+// Orden de urgencia dentro de la sección Seguimiento: lo bloqueado necesita atención primero.
+const SEGUIMIENTO_STATUS_PRIORITY = { BLOCKED: 0, IN_PROGRESS: 1, PAUSED: 2, PENDING: 3, COMPLETED: 4 }
+
+// "Visto" por tarea (firma status+comentarios) persistido en localStorage por usuario,
+// para marcar con un punto las filas que cambiaron desde la última vez que se abrieron.
+function seguimientoSeenKey(userId) { return `bliss_seguimiento_seen_${userId}` }
+function loadSeguimientoSeen(userId) {
+  if (!userId) return {}
+  try { return JSON.parse(localStorage.getItem(seguimientoSeenKey(userId)) || '{}') } catch { return {} }
+}
+function seguimientoSignature(t) { return `${t.status}:${t._count?.comments ?? 0}` }
 
 // Fila de la sección Seguimiento (Seguidas / Delegadas). Muestra responsable, comentarios,
 // estado, y los metadatos: fecha de creación, fecha de finalización y duración.
-function TrackedTaskRow({ task: t, onClick }) {
+function TrackedTaskRow({ task: t, onClick, onRemove, removeTitle, isNew }) {
   const dur = completedDuration(t)
   return (
     <div
-      className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+      className="group flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
       onClick={onClick}
     >
+      {isNew && (
+        <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" title="Cambió desde tu última visita" />
+      )}
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium leading-snug truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
           {t.description}
@@ -83,6 +97,13 @@ function TrackedTaskRow({ task: t, onClick }) {
       <span className={`text-xs font-medium flex-shrink-0 ${SEGUIMIENTO_STATUS_COLOR[t.status]}`}>
         {SEGUIMIENTO_STATUS_LABEL[t.status]}
       </span>
+      <button
+        onClick={e => { e.stopPropagation(); onRemove(t) }}
+        title={removeTitle}
+        className="flex-shrink-0 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 -m-1"
+      >
+        ✕
+      </button>
     </div>
   )
 }
@@ -210,6 +231,7 @@ export default function Dashboard() {
   const [delegatedFilter, setDelegatedFilter] = useState('ALL')
   const [dismissConfirm, setDismissConfirm] = useState(false)
   const [dismissing, setDismissing] = useState(false)
+  const [seguimientoSeen, setSeguimientoSeen] = useState(() => loadSeguimientoSeen(user?.id))
   const [backlogOpen,       setBacklogOpen]       = useState(false)
   const [completedOpen,     setCompletedOpen]     = useState(false)
   const [completedHistory,  setCompletedHistory]  = useState([])
@@ -486,10 +508,19 @@ export default function Dashboard() {
   // Lista de la pestaña activa de Seguimiento (Seguidas / Delegadas)
   const seguimientoSource = seguimientoTab === 'SEGUIDAS' ? followedTasks : delegated
 
-  // Tareas de la pestaña activa agrupadas por proyecto
+  // Cuántas bloqueadas hay entre Seguidas + Delegadas — necesitan atención primero.
+  const seguimientoBlockedCount = useMemo(
+    () => followedTasks.filter(t => t.status === 'BLOCKED').length + delegated.filter(t => t.status === 'BLOCKED').length,
+    [followedTasks, delegated]
+  )
+
+  // Tareas de la pestaña activa, ordenadas por urgencia (bloqueadas primero) y agrupadas por proyecto
   const seguimientoByProject = useMemo(() => {
+    const sorted = [...seguimientoSource].sort((a, b) =>
+      (SEGUIMIENTO_STATUS_PRIORITY[a.status] ?? 9) - (SEGUIMIENTO_STATUS_PRIORITY[b.status] ?? 9)
+    )
     const map = {}
-    for (const t of seguimientoSource) {
+    for (const t of sorted) {
       const pid = t.project.id
       if (!map[pid]) map[pid] = { project: t.project, tasks: [] }
       map[pid].tasks.push(t)
@@ -513,22 +544,56 @@ export default function Dashboard() {
   }, [seguimientoByProject, delegatedFilter])
   const hasActiveTask = !!activeTask
 
-  async function handleDismissDelegated() {
+  // Borrar/dejar de seguir en bulk — mismo botón para ambas pestañas, apunta al endpoint
+  // correspondiente (dismiss de Delegadas o unfollow de Seguidas).
+  async function handleBulkRemoveSeguimiento() {
     setDismissing(true)
     try {
       const params = delegatedFilter !== 'ALL' ? `?status=${delegatedFilter}` : ''
-      await api.delete(`/tasks/delegated${params}`)
-      const { data } = await api.get('/tasks/delegated')
-      setDelegated(data)
+      if (seguimientoTab === 'DELEGADAS') {
+        await api.delete(`/tasks/delegated${params}`)
+        const { data } = await api.get('/tasks/delegated')
+        setDelegated(data)
+      } else {
+        await api.delete(`/tasks/followed${params}`)
+        const { data } = await api.get('/tasks/followed')
+        setFollowedTasks(data)
+      }
       setDelegatedFilter('ALL')
       setDismissConfirm(false)
     } catch (_) {}
     setDismissing(false)
   }
 
+  // Quitar una sola fila — dismiss individual en Delegadas, dejar de seguir en Seguidas.
+  async function handleRemoveOneSeguimiento(task) {
+    try {
+      if (seguimientoTab === 'DELEGADAS') {
+        await api.delete(`/tasks/${task.id}/delegated`)
+        setDelegated(prev => prev.filter(t => t.id !== task.id))
+      } else {
+        await api.delete(`/tasks/${task.id}/follow`)
+        setFollowedTasks(prev => prev.filter(t => t.id !== task.id))
+      }
+    } catch (_) {}
+  }
+
   // Tras seguir/dejar de seguir una tarea desde el modal, refrescar la lista de Seguidas.
   function handleFollowChanged() {
     api.get('/tasks/followed').then(r => setFollowedTasks(r.data)).catch(() => {})
+  }
+
+  // Marca una tarea de Seguimiento como vista (firma status+comentarios) para apagar
+  // su punto de "novedad" — se llama al abrir su modal de comentarios.
+  function markSeguimientoSeen(task) {
+    if (!user?.id) return
+    const sig = seguimientoSignature(task)
+    setSeguimientoSeen(prev => {
+      if (prev[task.id] === sig) return prev
+      const next = { ...prev, [task.id]: sig }
+      try { localStorage.setItem(seguimientoSeenKey(user.id), JSON.stringify(next)) } catch (_) {}
+      return next
+    })
   }
 
   // Inactivity detection
@@ -924,6 +989,11 @@ export default function Dashboard() {
                 <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
                   {followedTasks.length + delegated.length}
                 </span>
+                {seguimientoBlockedCount > 0 && (
+                  <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 rounded-full px-2 py-0.5 font-medium">
+                    ⚠ {seguimientoBlockedCount} bloqueada{seguimientoBlockedCount > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                 className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${delegatedOpen ? 'rotate-180' : ''}`}>
@@ -976,13 +1046,13 @@ export default function Dashboard() {
                     })}
                   </div>
 
-                  {/* Borrar del dashboard (solo Delegadas) */}
-                  {seguimientoTab === 'DELEGADAS' && filteredSeguimientoByProject.length > 0 && (
+                  {/* Borrar del dashboard: dismiss en Delegadas, dejar de seguir en Seguidas — mismo botón en ambas */}
+                  {filteredSeguimientoByProject.length > 0 && (
                     dismissConfirm ? (
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <span className="text-xs text-gray-500 dark:text-gray-400">¿Confirmar?</span>
                         <button
-                          onClick={handleDismissDelegated}
+                          onClick={handleBulkRemoveSeguimiento}
                           disabled={dismissing}
                           className="text-xs font-medium px-2.5 py-1 rounded-full bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 transition-colors"
                         >
@@ -999,16 +1069,28 @@ export default function Dashboard() {
                       <button
                         onClick={() => setDismissConfirm(true)}
                         className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0"
-                        title={delegatedFilter === 'ALL' ? 'Borrar todas del dashboard' : `Borrar ${delegatedFilter === 'COMPLETED' ? 'completadas' : 'filtradas'} del dashboard`}
+                        title={
+                          seguimientoTab === 'SEGUIDAS'
+                            ? (delegatedFilter === 'ALL' ? 'Dejar de seguir todas' : `Dejar de seguir ${delegatedFilter === 'COMPLETED' ? 'las completadas' : 'las filtradas'}`)
+                            : (delegatedFilter === 'ALL' ? 'Borrar todas del dashboard' : `Borrar ${delegatedFilter === 'COMPLETED' ? 'completadas' : 'filtradas'} del dashboard`)
+                        }
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
                           <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 3.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
                         </svg>
-                        {delegatedFilter === 'ALL' ? 'Borrar todas' : `Borrar ${filteredSeguimientoByProject.reduce((s, g) => s + g.tasks.length, 0)}`}
+                        {seguimientoTab === 'SEGUIDAS'
+                          ? (delegatedFilter === 'ALL' ? 'Dejar de seguir todas' : `Dejar de seguir ${filteredSeguimientoByProject.reduce((s, g) => s + g.tasks.length, 0)}`)
+                          : (delegatedFilter === 'ALL' ? 'Borrar todas' : `Borrar ${filteredSeguimientoByProject.reduce((s, g) => s + g.tasks.length, 0)}`)}
                       </button>
                     )
                   )}
                 </div>
+
+                {seguimientoTab === 'DELEGADAS' && filteredSeguimientoByProject.length > 0 && (
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 italic px-1 -mt-2">
+                    Las completadas hace más de 7 días se ocultan automáticamente de esta lista.
+                  </p>
+                )}
 
                 {filteredSeguimientoByProject.length === 0 ? (
                   <p className="text-xs text-gray-400 dark:text-gray-500 italic px-1">
@@ -1021,7 +1103,14 @@ export default function Dashboard() {
                     <p className="text-xs font-medium text-primary-600 dark:text-primary-400 mb-1.5 px-1">{project.name}</p>
                     <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
                       {tasks.map(t => (
-                        <TrackedTaskRow key={t.id} task={t} onClick={() => setCommentTask(t)} />
+                        <TrackedTaskRow
+                          key={t.id}
+                          task={t}
+                          onClick={() => { markSeguimientoSeen(t); setCommentTask(t) }}
+                          onRemove={handleRemoveOneSeguimiento}
+                          removeTitle={seguimientoTab === 'SEGUIDAS' ? 'Dejar de seguir' : 'Quitar del dashboard'}
+                          isNew={seguimientoSeen[t.id] !== seguimientoSignature(t)}
+                        />
                       ))}
                     </div>
                   </div>

@@ -21,7 +21,7 @@ function parseDate(v) {
 }
 
 // Notifica al nuevo responsable que se le asignó un lead.
-async function notifyOwner({ workspaceId, actorId, ownerId, leadTitle }) {
+async function notifyOwner({ workspaceId, actorId, ownerId, leadTitle, leadId }) {
   if (!ownerId || ownerId === actorId) return
   try {
     await prisma.notification.create({
@@ -29,6 +29,7 @@ async function notifyOwner({ workspaceId, actorId, ownerId, leadTitle }) {
         userId:  ownerId,
         actorId,
         workspaceId,
+        leadId,
         type:    'LEAD_ASSIGNED',
         message: `te asignó el lead "${leadTitle}"`,
       },
@@ -165,7 +166,7 @@ async function createLead(req, res, next) {
     })
 
     await logLeadEvent({ workspaceId, leadId: lead.id, userId, type: 'lead_created', content: 'creó el lead' })
-    await notifyOwner({ workspaceId, actorId: userId, ownerId: lead.ownerId, leadTitle: leadTitleOf(lead) })
+    await notifyOwner({ workspaceId, actorId: userId, ownerId: lead.ownerId, leadTitle: leadTitleOf(lead), leadId: lead.id })
     res.status(201).json(lead)
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message })
@@ -258,7 +259,7 @@ async function changeOwner(req, res, next) {
       content: newOwnerId ? 'cambió el responsable comercial' : 'quitó el responsable comercial',
       meta: { from: lead.ownerId, to: newOwnerId },
     })
-    await notifyOwner({ workspaceId, actorId: userId, ownerId: newOwnerId, leadTitle: leadTitleOf(lead) })
+    await notifyOwner({ workspaceId, actorId: userId, ownerId: newOwnerId, leadTitle: leadTitleOf(lead), leadId: lead.id })
     res.json(await findLead(lead.id, workspaceId, LEAD_DETAIL_INCLUDE))
   } catch (err) { next(err) }
 }
