@@ -189,7 +189,7 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
                       <div className="font-medium text-gray-900 dark:text-white">{l.company?.name || '—'}</div>
                       {l.title && <div className="text-xs text-gray-500 dark:text-gray-400">{l.title}</div>}
                     </td>
-                    <td className="px-4 py-3"><StatusBadge status={l.status} /></td>
+                    <td className="px-4 py-3"><StatusBadge status={l.status} title={l.status === 'perdido' ? l.lostReason : undefined} /></td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{l.owner?.name || <span className="text-gray-400">Sin asignar</span>}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{originLabel(l.origin)}</td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">{fmtMoney(l.estimatedValue, l.currency)}</td>

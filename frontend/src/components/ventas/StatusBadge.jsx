@@ -1,10 +1,12 @@
 import { statusMeta, STATUS_BADGE } from './salesCatalog'
 
 // Badge de estado del lead. El estado es el único indicador visual del pipeline.
-export default function StatusBadge({ status, className = '' }) {
+// `title`: tooltip nativo — usado para mostrar el motivo de pérdida sin agregar una
+// columna/sección extra en las vistas de lista (ver Lead.lostReason).
+export default function StatusBadge({ status, className = '', title }) {
   const meta = statusMeta(status)
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[meta.color] || STATUS_BADGE.gray} ${className}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[meta.color] || STATUS_BADGE.gray} ${className}`} title={title}>
       {meta.label}
     </span>
   )

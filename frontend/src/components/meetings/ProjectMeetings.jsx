@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
-import RichTextEditor from '../RichTextEditor'
-import DOMPurify from 'dompurify'
-import '../situation-editor.css'
+import AutosaveNotes from '../AutosaveNotes'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -351,15 +349,10 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
 
 // ─── MeetingCard ──────────────────────────────────────────────────────────────
 
-function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, onDelete, onStart, onFinish,
+function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, onSaveNotes, onDelete, onStart, onFinish,
                        onAddParticipant, onRemoveParticipant, onAddTodo, onUpdateTodo, onDeleteTodo, onSendToDashboard }) {
   const tm = typeMeta(meeting.type)
-  const notes = meeting.notes || ''
-  const notesIsEmpty = !notes || notes === '<p></p>'
 
-  const [editingNotes, setEditingNotes] = useState(false)
-  const [notesDraft, setNotesDraft]     = useState(notes)
-  const [savingNotes, setSavingNotes]   = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting]         = useState(false)
   const [titleDraft, setTitleDraft]     = useState(meeting.title || '')
@@ -373,16 +366,6 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
 
   const doneCount  = meeting.todos.filter(t => t.done).length
   const totalCount = meeting.todos.length
-
-  async function handleSaveNotes() {
-    setSavingNotes(true)
-    try {
-      await onSave(meeting.id, { notes: notesDraft })
-      setEditingNotes(false)
-    } finally {
-      setSavingNotes(false)
-    }
-  }
 
   const sortedTodos = [...meeting.todos].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1
@@ -524,47 +507,15 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
           </div>
 
           {/* Notas */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Notas / Anotaciones de la reunión</label>
-              {canEdit && !editingNotes && (
-                <button
-                  onClick={() => { setNotesDraft(notes); setEditingNotes(true) }}
-                  className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
-                >
-                  {notesIsEmpty ? '+ Agregar' : 'Editar'}
-                </button>
-              )}
-            </div>
-
-            {editingNotes ? (
-              <div>
-                <RichTextEditor defaultContent={notesDraft} onChange={setNotesDraft} minHeight={200} />
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    onClick={handleSaveNotes}
-                    disabled={savingNotes}
-                    className="text-sm px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
-                  >
-                    {savingNotes ? 'Guardando...' : 'Guardar'}
-                  </button>
-                  <button
-                    onClick={() => { setNotesDraft(notes); setEditingNotes(false) }}
-                    className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            ) : notesIsEmpty ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500 italic">Sin anotaciones todavía.</p>
-            ) : (
-              <div
-                className="situation-content text-sm text-gray-700 dark:text-gray-300"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(notes) }}
-              />
-            )}
-          </div>
+          <AutosaveNotes
+            editorKey={meeting.id}
+            content={meeting.notes || ''}
+            onSave={html => onSaveNotes(meeting.id, html)}
+            canEdit={canEdit}
+            label="Notas / Anotaciones de la reunión"
+            emptyText="Sin anotaciones todavía."
+            minHeight={200}
+          />
 
           {/* Tareas */}
           <div>
@@ -699,6 +650,13 @@ export default function ProjectMeetings({ projectId, canEdit }) {
       const { data } = await api.patch(`/projects/${projectId}/meetings/${id}`, patch)
       replaceMeeting(data)
     } catch (e) { setError(e.response?.data?.error || 'No se pudo guardar') }
+  }
+
+  // A diferencia de handleSaveMeeting, no atrapa el error acá: AutosaveNotes necesita que la
+  // promesa rechace para saber que falló, mostrar el aviso y bloquear el cierre de pestaña.
+  async function handleSaveMeetingNotes(id, notes) {
+    const { data } = await api.patch(`/projects/${projectId}/meetings/${id}`, { notes })
+    replaceMeeting(data)
   }
 
   async function handleDeleteMeeting(id) {
@@ -849,6 +807,7 @@ export default function ProjectMeetings({ projectId, canEdit }) {
               expanded={openId === meeting.id}
               onToggle={() => setOpenId(prev => prev === meeting.id ? null : meeting.id)}
               onSave={handleSaveMeeting}
+              onSaveNotes={handleSaveMeetingNotes}
               onDelete={handleDeleteMeeting}
               onStart={handleStart}
               onFinish={handleFinish}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import { fmtMoney } from './StatusBadge'
+import LostReasonModal from './LostReasonModal'
 import { LEAD_STATUSES, STATUS_BADGE, statusMeta } from './salesCatalog'
 
 function ScrollArrow({ side, onClick, disabled }) {
@@ -39,6 +40,10 @@ export default function PipelineTab({ onOpenLead }) {
   const [showArchived, setShowArchived] = useState(false)
   const [archived, setArchived] = useState([])
   const [archivedLoading, setArchivedLoading] = useState(false)
+  // Al arrastrar una card a "Perdido" se pide el motivo en un modal (no window.prompt)
+  // antes de aplicar el cambio; { id, status } de la card en espera de confirmación.
+  const [lostPending, setLostPending] = useState(null)
+  const [lostSaving, setLostSaving] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await api.get('/ventas/leads')
@@ -95,6 +100,16 @@ export default function PipelineTab({ onOpenLead }) {
     el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' })
   }
 
+  async function applyStatusChange(id, status, lostReason) {
+    // Optimista: mover la card ya.
+    setLeads(ls => ls.map(l => (l.id === id ? { ...l, status, ...(lostReason ? { lostReason } : {}) } : l)))
+    try {
+      await api.patch(`/ventas/leads/${id}/status`, { status, ...(lostReason ? { lostReason } : {}) })
+    } catch {
+      load() // revertir ante error
+    }
+  }
+
   async function moveTo(status) {
     const id = dragId
     setDragId(null); setOverCol(null)
@@ -102,18 +117,21 @@ export default function PipelineTab({ onOpenLead }) {
     const lead = leads.find(l => l.id === id)
     if (!lead || lead.status === status) return
 
-    let lostReason
     if (statusMeta(status)?.isLost) {
-      lostReason = window.prompt('Motivo de la pérdida (requerido):')
-      if (!lostReason?.trim()) return // cancelado o vacío: no se mueve
+      setLostPending({ id, status }) // pide el motivo antes de aplicar el cambio
+      return
     }
+    await applyStatusChange(id, status)
+  }
 
-    // Optimista: mover la card ya.
-    setLeads(ls => ls.map(l => (l.id === id ? { ...l, status } : l)))
+  async function confirmLost(reason) {
+    if (!lostPending) return
+    setLostSaving(true)
     try {
-      await api.patch(`/ventas/leads/${id}/status`, { status, ...(lostReason ? { lostReason } : {}) })
-    } catch {
-      load() // revertir ante error
+      await applyStatusChange(lostPending.id, lostPending.status, reason)
+      setLostPending(null)
+    } finally {
+      setLostSaving(false)
     }
   }
 
@@ -146,7 +164,7 @@ export default function PipelineTab({ onOpenLead }) {
               <div key={l.id} className="flex items-center justify-between gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
                 <div className="min-w-0 cursor-pointer" onClick={() => onOpenLead(l.id)}>
                   <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[statusMeta(l.status)?.color]}`}>{statusMeta(l.status)?.label}</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[statusMeta(l.status)?.color]}`} title={l.status === 'perdido' ? l.lostReason : undefined}>{statusMeta(l.status)?.label}</span>
                     <span className="font-medium text-sm text-gray-900 dark:text-white truncate">{l.company?.name || '—'}</span>
                   </div>
                   {l.title && <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{l.title}</div>}
@@ -192,6 +210,7 @@ export default function PipelineTab({ onOpenLead }) {
                       >
                         <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{l.company?.name || '—'}</div>
                         {l.title && <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{l.title}</div>}
+                        {col.key === 'perdido' && l.lostReason && <div className="text-xs text-red-500 dark:text-red-400 truncate mt-0.5" title={l.lostReason}>✕ {l.lostReason}</div>}
                         <div className="flex items-center justify-between mt-2">
                           <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{l.estimatedValue ? fmtMoney(l.estimatedValue, l.currency) : ''}</span>
                           {l.owner && <span className="text-[11px] text-gray-400 truncate max-w-[90px]" title={l.owner.name}>{l.owner.name}</span>}
@@ -208,6 +227,8 @@ export default function PipelineTab({ onOpenLead }) {
       <p className="text-xs text-gray-400 mt-3 px-1">Arrastrá una tarjeta a otra columna para cambiar su estado. {statusMeta('ganado').label} habilita crear el proyecto desde el lead.</p>
       </>
       )}
+
+      <LostReasonModal open={!!lostPending} loading={lostSaving} onConfirm={confirmLost} onCancel={() => setLostPending(null)} />
     </div>
   )
 }

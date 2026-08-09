@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import LoadingSpinner from '../LoadingSpinner'
 import ConfirmModal from '../ConfirmModal'
 import StatusBadge, { fmtMoney } from './StatusBadge'
+import LostReasonModal from './LostReasonModal'
 import LeadModal from './LeadModal'
 import ConvertToProjectModal from './ConvertToProjectModal'
 import ResearchPanel from './ResearchPanel'
@@ -49,6 +50,9 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
   const [nc, setNc] = useState({ name: '', title: '', email: '', phone: '' })
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // Al pasar a estado Perdido se pide el motivo en un modal (no window.prompt).
+  const [lostPendingStatus, setLostPendingStatus] = useState(null)
+  const [lostSaving, setLostSaving] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await api.get(`/ventas/leads/${leadId}`)
@@ -66,12 +70,21 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
 
   function handleStatusChange(status) {
     if (status === lead.status) return
-    let lostReason
     if (statusMeta(status)?.isLost) {
-      lostReason = window.prompt('Motivo de la pérdida (requerido):')
-      if (!lostReason?.trim()) return // cancelado o vacío: no se cambia
+      setLostPendingStatus(status) // pide el motivo antes de aplicar el cambio
+      return
     }
-    patch(`/ventas/leads/${leadId}/status`, { status, ...(lostReason ? { lostReason } : {}) })
+    patch(`/ventas/leads/${leadId}/status`, { status })
+  }
+
+  async function confirmLost(reason) {
+    setLostSaving(true)
+    try {
+      await patch(`/ventas/leads/${leadId}/status`, { status: lostPendingStatus, lostReason: reason })
+      setLostPendingStatus(null)
+    } finally {
+      setLostSaving(false)
+    }
   }
 
   async function addNote() {
@@ -169,7 +182,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
           <button onClick={onBack} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-2">← Volver al pipeline</button>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{c?.name || 'Lead'}</h1>
-            <StatusBadge status={lead.status} />
+            <StatusBadge status={lead.status} title={lead.status === 'perdido' ? lead.lostReason : undefined} />
             {lead.archived && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">🗄 Archivado</span>}
           </div>
           {lead.title && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{lead.title}</p>}
@@ -198,7 +211,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
       />
 
       {/* Notas de reunión — WYSIWYG, ancho completo, arriba de todo */}
-      <LeadNotes leadId={leadId} initialContent={lead.notes} onSaved={load} />
+      <LeadNotes leadId={leadId} initialContent={lead.notes} />
 
       <div className="grid lg:grid-cols-2 gap-5">
         {/* Columna izquierda: Información, Empresa, Contacto */}
@@ -218,6 +231,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
                   {team.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </Row>
+              {lead.status === 'perdido' && lead.lostReason && <Row label="Motivo de pérdida">{lead.lostReason}</Row>}
               <Row label="Origen">{originLabel(lead.origin)}</Row>
               <Row label="Valor estimado">{fmtMoney(lead.estimatedValue, lead.currency)}</Row>
               <Row label="Próximo contacto">{fmtDate(lead.nextContactAt)}</Row>
@@ -386,6 +400,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
 
       {showEdit && <LeadModal lead={lead} companies={companies} team={team} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load(); onChanged?.() }} />}
       {showConvert && <ConvertToProjectModal lead={lead} onClose={() => setShowConvert(false)} onConverted={() => { setShowConvert(false); load(); onChanged?.() }} />}
+      <LostReasonModal open={!!lostPendingStatus} loading={lostSaving} onConfirm={confirmLost} onCancel={() => setLostPendingStatus(null)} />
     </div>
   )
 }
