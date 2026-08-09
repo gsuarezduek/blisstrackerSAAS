@@ -75,7 +75,8 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
   const [showModal, setShowModal] = useState(false)
 
   // Estructura de filtros extensible: agregar un objeto acá suma un control + su query param.
-  const [filters, setFilters] = useState({ status: '', ownerId: '', origin: '', from: '', to: '', search: '' })
+  // `archived`: '' = solo activos (default), 'true' = solo archivados (vista excluyente, no aditiva).
+  const [filters, setFilters] = useState({ status: '', ownerId: '', origin: '', from: '', to: '', search: '', archived: '' })
 
   const loadLeads = useCallback(async () => {
     const params = new URLSearchParams()
@@ -98,6 +99,12 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
   useEffect(() => { loadLeads() }, [filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function setFilter(k, v) { setFilters(f => ({ ...f, [k]: v })) }
+
+  async function unarchive(id) {
+    await api.patch(`/ventas/leads/${id}/archive`, { archived: false })
+    await loadLeads()
+    onDataChange?.()
+  }
 
   function handleSaved() {
     setShowModal(false)
@@ -127,9 +134,12 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
       </div>
 
       {/* Barra de filtros + acción */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <input className={`${input} flex-1`} placeholder="Buscar por empresa o título…" value={filters.search} onChange={e => setFilter('search', e.target.value)} />
+          <button onClick={() => setShowModal(true)} className="shrink-0 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">+ Nuevo lead</button>
+        </div>
         <div className="flex flex-wrap items-end gap-3">
-          <input className={`${input} flex-1 min-w-[160px]`} placeholder="Buscar por empresa o título…" value={filters.search} onChange={e => setFilter('search', e.target.value)} />
           <select className={input} value={filters.status} onChange={e => setFilter('status', e.target.value)}>
             <option value="">Todos los estados</option>
             {LEAD_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -145,14 +155,19 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
           </select>
           <input type="date" className={input} value={filters.from} onChange={e => setFilter('from', e.target.value)} title="Creados desde" />
           <input type="date" className={input} value={filters.to} onChange={e => setFilter('to', e.target.value)} title="Creados hasta" />
-          <button onClick={() => setShowModal(true)} className="ml-auto bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">+ Nuevo lead</button>
+          <button
+            onClick={() => setFilter('archived', filters.archived ? '' : 'true')}
+            className={`rounded-xl px-3 py-2 text-sm font-medium border ${filters.archived ? 'bg-gray-700 text-white border-gray-700 dark:bg-gray-600 dark:border-gray-600' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+          >
+            🗄 {filters.archived ? 'Viendo archivados' : 'Ver archivados'}
+          </button>
         </div>
       </div>
 
       {/* Listado de leads */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
         {leads.length === 0 ? (
-          <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">No hay leads que coincidan con los filtros.</div>
+          <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">{filters.archived ? 'No hay leads archivados.' : 'No hay leads que coincidan con los filtros.'}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -164,6 +179,7 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
                   <th className="px-4 py-3 font-medium">Origen</th>
                   <th className="px-4 py-3 font-medium text-right">Valor</th>
                   <th className="px-4 py-3 font-medium">Próx. contacto</th>
+                  {filters.archived && <th className="px-4 py-3 font-medium"></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -178,6 +194,11 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{originLabel(l.origin)}</td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">{fmtMoney(l.estimatedValue, l.currency)}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{fmtDate(l.nextContactAt)}</td>
+                    {filters.archived && (
+                      <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => unarchive(l.id)} className="text-xs font-medium text-primary-600 hover:underline">↩️ Desarchivar</button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

@@ -1073,6 +1073,7 @@ async function executeWorkspaceDeletion(workspaceId) {
     prisma.notesBoardNote.deleteMany({ where: { workspaceId } }),
     // AI logs
     prisma.aiTokenLog.deleteMany({ where: { workspaceId } }),
+    prisma.apifyUsageLog.deleteMany({ where: { workspaceId } }),
     prisma.dailyInsight.deleteMany({ where: { workspaceId } }),
     prisma.userInsightMemory.deleteMany({ where: { workspaceId } }),
     // Login history

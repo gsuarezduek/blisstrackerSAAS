@@ -310,7 +310,7 @@ async function connectScrape(req, res, next) {
 
     let metrics
     try {
-      metrics = await scrapeFacebookPage(identifier, { targetMonth: currentMonthStr(), workspaceId, context: 'Facebook — conexión por scraping' })
+      metrics = await scrapeFacebookPage(identifier, { targetMonth: currentMonthStr(), workspaceId, projectId, action: 'connect', actionLabel: 'Facebook — conexión por scraping' })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }
@@ -350,7 +350,7 @@ async function refreshScrapeForIntegration(integration, projectId, workspaceId) 
 
   let metrics
   try {
-    metrics = await scrapeFacebookPage(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, context: 'Facebook — refresh manual' })
+    metrics = await scrapeFacebookPage(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, projectId, action: 'refresh', actionLabel: 'Facebook — refresh manual' })
   } catch (err) {
     return { status: 'error', message: err.message, code: err.code, httpStatus: err.status || 400 }
   }
@@ -419,7 +419,7 @@ async function scrapeDebug(req, res, next) {
 
     let result
     try {
-      result = await debugScrapeFacebook(page, { workspaceId, targetMonth: currentMonthStr() })
+      result = await debugScrapeFacebook(page, { workspaceId, projectId, targetMonth: currentMonthStr() })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }

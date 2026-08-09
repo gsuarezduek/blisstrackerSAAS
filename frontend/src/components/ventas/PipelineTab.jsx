@@ -34,6 +34,11 @@ export default function PipelineTab({ onOpenLead }) {
   const scrollRef = useRef(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
+  // El pipeline solo muestra leads activos (no archivados) por default; "Ver
+  // archivados" reemplaza la vista por un listado simple de los archivados.
+  const [showArchived, setShowArchived] = useState(false)
+  const [archived, setArchived] = useState([])
+  const [archivedLoading, setArchivedLoading] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await api.get('/ventas/leads')
@@ -41,7 +46,28 @@ export default function PipelineTab({ onOpenLead }) {
     setLoading(false)
   }, [])
 
+  const loadArchived = useCallback(async () => {
+    setArchivedLoading(true)
+    try {
+      const { data } = await api.get('/ventas/leads?archived=true')
+      setArchived(data)
+    } finally {
+      setArchivedLoading(false)
+    }
+  }, [])
+
   useEffect(() => { load() }, [load])
+  useEffect(() => { if (showArchived) loadArchived() }, [showArchived, loadArchived])
+
+  async function unarchive(id) {
+    setArchived(ls => ls.filter(l => l.id !== id))
+    try {
+      await api.patch(`/ventas/leads/${id}/archive`, { archived: false })
+      load()
+    } catch {
+      loadArchived() // revertir ante error
+    }
+  }
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current
@@ -93,16 +119,48 @@ export default function PipelineTab({ onOpenLead }) {
 
   if (loading) return <LoadingSpinner />
 
-  const showArrows = canScrollLeft || canScrollRight
+  const showArrows = !showArchived && (canScrollLeft || canScrollRight)
 
   return (
     <div>
-      {showArrows && (
-        <div className="flex items-center justify-end gap-1.5 mb-2">
-          <ScrollArrow side="left" onClick={() => scrollByPage(-1)} disabled={!canScrollLeft} />
-          <ScrollArrow side="right" onClick={() => scrollByPage(1)} disabled={!canScrollRight} />
-        </div>
-      )}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <button
+          onClick={() => setShowArchived(s => !s)}
+          className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+        >
+          {showArchived ? '← Volver al pipeline' : '🗄 Ver archivados'}
+        </button>
+        {showArrows && (
+          <div className="flex items-center gap-1.5">
+            <ScrollArrow side="left" onClick={() => scrollByPage(-1)} disabled={!canScrollLeft} />
+            <ScrollArrow side="right" onClick={() => scrollByPage(1)} disabled={!canScrollRight} />
+          </div>
+        )}
+      </div>
+
+      {showArchived ? (
+        archivedLoading ? <LoadingSpinner /> : (
+          <div className="space-y-2">
+            {archived.length === 0 && <p className="text-sm text-gray-400 py-6 text-center">No hay leads archivados.</p>}
+            {archived.map(l => (
+              <div key={l.id} className="flex items-center justify-between gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                <div className="min-w-0 cursor-pointer" onClick={() => onOpenLead(l.id)}>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_BADGE[statusMeta(l.status)?.color]}`}>{statusMeta(l.status)?.label}</span>
+                    <span className="font-medium text-sm text-gray-900 dark:text-white truncate">{l.company?.name || '—'}</span>
+                  </div>
+                  {l.title && <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{l.title}</div>}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{l.estimatedValue ? fmtMoney(l.estimatedValue, l.currency) : ''}</span>
+                  <button onClick={() => unarchive(l.id)} className="text-xs font-medium text-primary-600 hover:underline">↩️ Desarchivar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+      <>
       <div ref={scrollRef} className="overflow-x-auto pb-2 scroll-smooth">
         <div className="flex gap-3 min-w-max">
           {LEAD_STATUSES.map(col => {
@@ -148,6 +206,8 @@ export default function PipelineTab({ onOpenLead }) {
         </div>
       </div>
       <p className="text-xs text-gray-400 mt-3 px-1">Arrastrá una tarjeta a otra columna para cambiar su estado. {statusMeta('ganado').label} habilita crear el proyecto desde el lead.</p>
+      </>
+      )}
     </div>
   )
 }

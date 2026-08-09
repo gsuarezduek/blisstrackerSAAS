@@ -4,6 +4,8 @@ const { computeLinkedinScrapeMetrics } = require('./linkedin.service')
 const { computeFacebookScrapeMetrics } = require('./facebook.service')
 const { sendPlatformNotification, platformCard } = require('./email.service')
 const { getSetting } = require('../lib/platformSettings')
+const { getActiveApifyTokens, recordApifyTokenResult } = require('../lib/apifyTokens')
+const { logApifyUsage } = require('../lib/logApifyUsage')
 const { DEFAULT_TZ } = require('../utils/dates')
 
 /**
@@ -50,17 +52,16 @@ function scrapeError(message, code, status = 400) {
 }
 
 /**
- * Tokens de Apify disponibles, en orden de prioridad: APIFY_API_TOKEN + hasta 3
- * de respaldo (APIFY_API_TOKEN2/3/4). Permite seguir scrapeando si una cuenta se
- * queda sin crédito o el token deja de ser válido, sin intervención manual.
+ * Tokens de Apify disponibles, en orden de prioridad: los configurados desde
+ * SuperAdmin → Scraping (`ApifyToken`, cifrados en DB), o si no hay ninguno
+ * activo, fallback a las env vars legacy (APIFY_API_TOKEN + hasta 3 de respaldo
+ * APIFY_API_TOKEN2/3/4). Devuelve `[{ id, label, token }]` — `id` es `null` para
+ * los de fallback por env var. Permite seguir scrapeando si una cuenta se queda
+ * sin crédito o el token deja de ser válido, sin intervención manual.
+ * Async — todo caller debe hacer `await`.
  */
-function getApifyTokens() {
-  return [
-    process.env.APIFY_API_TOKEN,
-    process.env.APIFY_API_TOKEN2,
-    process.env.APIFY_API_TOKEN3,
-    process.env.APIFY_API_TOKEN4,
-  ].filter(Boolean)
+async function getApifyTokens() {
+  return getActiveApifyTokens()
 }
 
 /**
@@ -72,28 +73,39 @@ function getApifyTokens() {
  * siguiente token — salvo que sea el último, en cuyo caso se devuelven los items
  * tal cual para que el caller decida (mismo comportamiento que antes de tener
  * fallback, para no romper el manejo de error existente).
- * Asume que ya se validó `tokens.length > 0`.
+ * Asume que ya se validó `tokens.length > 0`. `tokens` es `[{id,label,token}]`
+ * (ver `getApifyTokens`). Tras cada intento (éxito, o fallo si es el último token)
+ * registra el consumo en ApifyUsageLog vía `attribution` — fire-and-forget, nunca
+ * bloquea ni retrasa el scrape real.
  */
-async function runApifyActor(actorId, input, { tokens, timeout = 180000, isDatasetError } = {}) {
+async function runApifyActor(actorId, input, { tokens, timeout = 180000, isDatasetError, attribution = {} } = {}) {
   const url = `${APIFY_BASE}/acts/${actorId}/run-sync-get-dataset-items`
   let lastErr = null
+
+  const logAttempt = (t, success, itemCount, errorMsg) => {
+    logApifyUsage({ ...attribution, tokenId: t.id, tokenLabel: t.label, success, itemCount, errorMsg }).catch(() => {})
+    recordApifyTokenResult(t.id, { success, errorMsg }).catch(() => {})
+  }
 
   for (let i = 0; i < tokens.length; i++) {
     const isLast = i === tokens.length - 1
     try {
-      const { data } = await axios.post(url, input, { params: { token: tokens[i] }, timeout })
+      const { data } = await axios.post(url, input, { params: { token: tokens[i].token }, timeout })
       const items = Array.isArray(data) ? data : []
       const datasetErrMsg = isDatasetError ? isDatasetError(items) : null
       if (datasetErrMsg && !isLast) {
         console.warn(`[Scrape] Apify token #${i + 1}/${tokens.length} sin datos usables (${datasetErrMsg}), reintentando con el siguiente token...`)
         lastErr = new Error(datasetErrMsg)
+        logAttempt(tokens[i], false, null, datasetErrMsg)
         continue
       }
+      logAttempt(tokens[i], !datasetErrMsg, items.length, datasetErrMsg)
       return items
     } catch (err) {
       lastErr = err
+      const msg = err.response?.data?.error?.message || err.message
+      logAttempt(tokens[i], false, null, msg)
       if (!isLast) {
-        const msg = err.response?.data?.error?.message || err.message
         console.warn(`[Scrape] Apify token #${i + 1}/${tokens.length} falló (${msg}), reintentando con el siguiente token...`)
         continue
       }
@@ -121,7 +133,7 @@ function detectApifyDatasetError(items) {
 const SCRAPE_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000
 const lastScrapeAlertAt = new Map() // code → timestamp ms
 
-function alertScrapeFailure({ code, detail, username, workspaceId = null, context = null }) {
+function alertScrapeFailure({ code, detail, username, workspaceId = null, actionLabel = null }) {
   const now  = Date.now()
   const last = lastScrapeAlertAt.get(code) || 0
   if (now - last < SCRAPE_ALERT_COOLDOWN_MS) return
@@ -134,7 +146,7 @@ function alertScrapeFailure({ code, detail, username, workspaceId = null, contex
       ['Proveedor', 'Apify'],
       ['Tipo', code],
       ['Cuenta', username ? `@${username}` : '—'],
-      ['Contexto', context],
+      ['Contexto', actionLabel],
       ['Mensaje', detail],
     ], '#dc2626')}
     <p style="color:#94a3b8;font-size:13px;margin:12px 0 0;">Ya se probaron todos los tokens de Apify configurados (<code>APIFY_API_TOKEN</code> + respaldo) sin éxito — revisá el saldo de esas cuentas. Para no saturar, este aviso se manda como máximo una vez cada 6 horas por tipo de error.</p>
@@ -177,13 +189,13 @@ function parseInstagramUsername(input) {
 /**
  * Corre el actor de Instagram en Apify (sincrónico) y devuelve el primer item.
  * @param {string} username
- * @param {object} opts — { postsLimit, workspaceId, context } (workspaceId/context solo enriquecen el aviso de error)
+ * @param {object} opts — { postsLimit, workspaceId, projectId, action, actionLabel } (workspaceId/projectId/actionLabel solo enriquecen el aviso de error; workspaceId/projectId/action además atribuyen el consumo en ApifyUsageLog)
  */
 async function runApifyInstagram(username, opts = {}) {
-  const { postsLimit = DEFAULT_POSTS_LIMIT, workspaceId = null, context = null } = opts
-  const tokens = getApifyTokens()
+  const { postsLimit = DEFAULT_POSTS_LIMIT, workspaceId = null, projectId = null, action = null, actionLabel = null } = opts
+  const tokens = await getApifyTokens()
   if (tokens.length === 0) {
-    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username, workspaceId, actionLabel })
     throw scrapeError(
       'El scraping no está configurado en el servidor (falta APIFY_API_TOKEN).',
       'SCRAPE_NOT_CONFIGURED',
@@ -199,12 +211,13 @@ async function runApifyInstagram(username, opts = {}) {
   // En la API de Apify el ID del actor va con "~" (no "/"). Aceptamos "usuario/actor".
   const actorId = actor.replace('/', '~')
 
+  const attribution = { workspaceId, projectId, platform: 'instagram', action }
   let items
   try {
-    items = await runApifyActor(actorId, { usernames: [username], resultsLimit: postsLimit }, { tokens })
+    items = await runApifyActor(actorId, { usernames: [username], resultsLimit: postsLimit }, { tokens, attribution })
   } catch (err) {
     const apifyMsg = err.response?.data?.error?.message || err.message
-    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username, workspaceId, actionLabel })
     throw scrapeError(`El proveedor de scraping falló: ${apifyMsg}`, 'SCRAPE_PROVIDER_ERROR', 502)
   }
 
@@ -237,21 +250,22 @@ async function resolveInstagramPostsActor() {
  * @returns {Array|null}
  */
 async function runApifyInstagramPosts(username, opts = {}) {
-  const { postsLimit = DEFAULT_POSTS_LIMIT, workspaceId = null, context = null } = opts
-  const tokens = getApifyTokens()
+  const { postsLimit = DEFAULT_POSTS_LIMIT, workspaceId = null, projectId = null, action = null, actionLabel = null } = opts
+  const tokens = await getApifyTokens()
   if (tokens.length === 0) return null
 
   const actorId = await resolveInstagramPostsActor()
   if (!actorId) return null                              // 2ª llamada desactivada
 
+  const attribution = { workspaceId, projectId, platform: 'instagram', action }
   try {
-    const items = await runApifyActor(actorId, { username: [username], resultsLimit: postsLimit }, { tokens })
+    const items = await runApifyActor(actorId, { username: [username], resultsLimit: postsLimit }, { tokens, attribution })
     // El actor de posts devuelve un item por publicación. Descartamos items que no
     // sean posts (por si algún actor mezcla un item de perfil).
     return items.filter(i => i && (i.shortCode || i.id) && (i.timestamp || i.type))
   } catch (err) {
     const apifyMsg = err.response?.data?.error?.message || err.message
-    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: `Actor de posts IG: ${apifyMsg}`, username, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: `Actor de posts IG: ${apifyMsg}`, username, workspaceId, actionLabel })
     throw scrapeError(`El actor de posts de Instagram falló: ${apifyMsg}`, 'SCRAPE_PROVIDER_ERROR', 502)
   }
 }
@@ -325,7 +339,7 @@ function normalizeApifyProfile(item) {
  * Scrapea un perfil público de Instagram y devuelve métricas en el shape de
  * fetchInstagramMetrics, más { isPrivate, scraped: true }.
  * @param {string} usernameOrUrl
- * @param {object} opts — { postsLimit, targetMonth, workspaceId, context }
+ * @param {object} opts — { postsLimit, targetMonth, workspaceId, projectId, action, actionLabel }
  */
 async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
   const username = parseInstagramUsername(usernameOrUrl)
@@ -338,7 +352,9 @@ async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
   const item = await runApifyInstagram(username, {
     postsLimit,
     workspaceId: opts.workspaceId ?? null,
-    context: opts.context ?? null,
+    projectId:   opts.projectId ?? null,
+    action:      opts.action ?? null,
+    actionLabel: opts.actionLabel ?? null,
   })
   const { profile, media: profileMedia, isPrivate } = normalizeApifyProfile(item)
 
@@ -357,7 +373,9 @@ async function scrapeInstagramProfile(usernameOrUrl, opts = {}) {
       const rawPosts = await runApifyInstagramPosts(username, {
         postsLimit,
         workspaceId: opts.workspaceId ?? null,
-        context: opts.context ?? null,
+        projectId:   opts.projectId ?? null,
+        action:      opts.action ?? null,
+        actionLabel: opts.actionLabel ?? null,
       })
       if (Array.isArray(rawPosts) && rawPosts.length > 0) {
         const postsMedia = rawPosts.map(normalizeApifyPost)
@@ -416,13 +434,13 @@ async function debugScrapeInstagram(usernameOrUrl, opts = {}) {
     posts: media.map(m => ({ id: m.id, type: m.media_type, timestamp: m.timestamp, month: monthOf(m.timestamp), inTarget: targetMonth ? monthOf(m.timestamp) === targetMonth : null })),
   })
 
-  const item = await runApifyInstagram(username, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'Instagram — diagnóstico' })
+  const item = await runApifyInstagram(username, { postsLimit, workspaceId: opts.workspaceId ?? null, projectId: opts.projectId ?? null, action: 'diagnostic', actionLabel: 'Instagram — diagnóstico' })
   const { profile, media: profileMedia, isPrivate } = normalizeApifyProfile(item)
 
   let postsMedia = []
   let postsActorError = null
   try {
-    const rawPosts = await runApifyInstagramPosts(username, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'Instagram — diagnóstico' })
+    const rawPosts = await runApifyInstagramPosts(username, { postsLimit, workspaceId: opts.workspaceId ?? null, projectId: opts.projectId ?? null, action: 'diagnostic', actionLabel: 'Instagram — diagnóstico' })
     postsMedia = Array.isArray(rawPosts) ? rawPosts.map(normalizeApifyPost) : []
   } catch (err) {
     postsActorError = err.message
@@ -461,7 +479,9 @@ async function scrapeInstagramMediaRaw(usernameOrUrl, opts = {}) {
   const item = await runApifyInstagram(username, {
     postsLimit,
     workspaceId: opts.workspaceId ?? null,
-    context: opts.context ?? 'Instagram — scrape de collabs',
+    projectId:   opts.projectId ?? null,
+    action:      opts.action ?? 'collab_merge',
+    actionLabel: opts.actionLabel ?? 'Instagram — scrape de collabs',
   })
   const { media, isPrivate } = normalizeApifyProfile(item)
   return { media, isPrivate, username }
@@ -595,10 +615,10 @@ function normalizeApifyCompany(items, identifier) {
  * crudos del dataset. Requiere APIFY_API_TOKEN y APIFY_LINKEDIN_ACTOR.
  */
 async function runApifyLinkedin(identifier, opts = {}) {
-  const { postsLimit = DEFAULT_LINKEDIN_POSTS_LIMIT, workspaceId = null, context = null } = opts
-  const tokens = getApifyTokens()
+  const { postsLimit = DEFAULT_LINKEDIN_POSTS_LIMIT, workspaceId = null, projectId = null, action = null, actionLabel = null } = opts
+  const tokens = await getApifyTokens()
   if (tokens.length === 0) {
-    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username: identifier, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username: identifier, workspaceId, actionLabel })
     throw scrapeError('El scraping no está configurado en el servidor (falta APIFY_API_TOKEN).', 'SCRAPE_NOT_CONFIGURED', 503)
   }
   // Actor: prioriza el PlatformSetting (editable desde SuperAdmin → Configuración,
@@ -607,7 +627,7 @@ async function runApifyLinkedin(identifier, opts = {}) {
   try { actor = (await getSetting('apifyLinkedinActor')) || '' } catch { /* DB no disponible → env */ }
   actor = actor.trim() || process.env.APIFY_LINKEDIN_ACTOR
   if (!actor) {
-    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta configurar el actor de LinkedIn (setting apifyLinkedinActor o env APIFY_LINKEDIN_ACTOR).', username: identifier, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta configurar el actor de LinkedIn (setting apifyLinkedinActor o env APIFY_LINKEDIN_ACTOR).', username: identifier, workspaceId, actionLabel })
     throw scrapeError('El scraping de LinkedIn no está configurado: falta elegir el actor de Apify (SuperAdmin → Configuración → "Actor de Apify para LinkedIn", o la variable de entorno APIFY_LINKEDIN_ACTOR).', 'SCRAPE_NOT_CONFIGURED', 503)
   }
   // En la API de Apify el ID del actor va con "~" (no "/"). Aceptamos la forma
@@ -629,12 +649,13 @@ async function runApifyLinkedin(identifier, opts = {}) {
     limit:       postsLimit,
   }
 
+  const attribution = { workspaceId, projectId, platform: 'linkedin', action }
   let items
   try {
-    items = await runApifyActor(actorId, input, { tokens, isDatasetError: detectApifyDatasetError })
+    items = await runApifyActor(actorId, input, { tokens, isDatasetError: detectApifyDatasetError, attribution })
   } catch (err) {
     const apifyMsg = err.response?.data?.error?.message || err.message
-    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username: identifier, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username: identifier, workspaceId, actionLabel })
     throw scrapeError(`El proveedor de scraping falló: ${apifyMsg}`, 'SCRAPE_PROVIDER_ERROR', 502)
   }
 
@@ -646,7 +667,7 @@ async function runApifyLinkedin(identifier, opts = {}) {
   const errItem  = items.find(i => i && typeof i === 'object' && typeof i.error === 'string')
   const hasUsable = items.some(i => i && typeof i === 'object' && !i.error)
   if (errItem && !hasUsable) {
-    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: errItem.error, username: identifier, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: errItem.error, username: identifier, workspaceId, actionLabel })
     throw scrapeError(`El proveedor de scraping devolvió un error: ${errItem.error}`, 'SCRAPE_PROVIDER_ERROR', 502)
   }
 
@@ -669,7 +690,7 @@ async function debugScrapeLinkedin(urlOrSlug, opts = {}) {
   try { cfgLimit = Number(await getSetting('apifyLinkedinPostsLimit')) || 0 } catch { /* DB no disponible */ }
   const postsLimit = opts.postsLimit ?? (cfgLimit > 0 ? cfgLimit : DEFAULT_LINKEDIN_POSTS_LIMIT)
 
-  const items = await runApifyLinkedin(identifier, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'LinkedIn — diagnóstico' })
+  const items = await runApifyLinkedin(identifier, { postsLimit, workspaceId: opts.workspaceId ?? null, projectId: opts.projectId ?? null, action: 'diagnostic', actionLabel: 'LinkedIn — diagnóstico' })
   const { profile, posts } = normalizeApifyCompany(items, identifier)
   const metrics = computeLinkedinScrapeMetrics(profile, posts, opts.targetMonth ?? null)
 
@@ -697,7 +718,7 @@ async function debugScrapeLinkedin(urlOrSlug, opts = {}) {
  * Scrapea una Company Page pública de LinkedIn y devuelve métricas en el shape de
  * fetchLinkedinMetrics, más { identifier, scraped: true, monthCoverageComplete }.
  * @param {string} urlOrSlug
- * @param {object} opts — { postsLimit, targetMonth, workspaceId, context }
+ * @param {object} opts — { postsLimit, targetMonth, workspaceId, projectId, action, actionLabel }
  */
 async function scrapeLinkedinCompany(urlOrSlug, opts = {}) {
   const identifier = parseLinkedinCompany(urlOrSlug)
@@ -710,7 +731,9 @@ async function scrapeLinkedinCompany(urlOrSlug, opts = {}) {
   const items = await runApifyLinkedin(identifier, {
     postsLimit,
     workspaceId: opts.workspaceId ?? null,
-    context: opts.context ?? null,
+    projectId:   opts.projectId ?? null,
+    action:      opts.action ?? null,
+    actionLabel: opts.actionLabel ?? null,
   })
   const { profile, posts } = normalizeApifyCompany(items, identifier)
   const metrics = computeLinkedinScrapeMetrics(profile, posts, opts.targetMonth ?? null)
@@ -833,17 +856,17 @@ function normalizeApifyFacebook(items, identifier) {
  * APIFY_FACEBOOK_ACTOR. Sin ninguno → SCRAPE_NOT_CONFIGURED.
  */
 async function runApifyFacebook(identifier, opts = {}) {
-  const { postsLimit = DEFAULT_FACEBOOK_POSTS_LIMIT, workspaceId = null, context = null } = opts
-  const tokens = getApifyTokens()
+  const { postsLimit = DEFAULT_FACEBOOK_POSTS_LIMIT, workspaceId = null, projectId = null, action = null, actionLabel = null } = opts
+  const tokens = await getApifyTokens()
   if (tokens.length === 0) {
-    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username: identifier, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta APIFY_API_TOKEN en el servidor.', username: identifier, workspaceId, actionLabel })
     throw scrapeError('El scraping no está configurado en el servidor (falta APIFY_API_TOKEN).', 'SCRAPE_NOT_CONFIGURED', 503)
   }
   let actor = ''
   try { actor = (await getSetting('apifyFacebookActor')) || '' } catch { /* DB no disponible → env */ }
   actor = actor.trim() || process.env.APIFY_FACEBOOK_ACTOR
   if (!actor) {
-    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta configurar el actor de Facebook (setting apifyFacebookActor o env APIFY_FACEBOOK_ACTOR).', username: identifier, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_NOT_CONFIGURED', detail: 'Falta configurar el actor de Facebook (setting apifyFacebookActor o env APIFY_FACEBOOK_ACTOR).', username: identifier, workspaceId, actionLabel })
     throw scrapeError('El scraping de Facebook no está configurado: falta elegir el actor de Apify (SuperAdmin → Configuración → "Actor de Apify para Facebook", o la variable de entorno APIFY_FACEBOOK_ACTOR).', 'SCRAPE_NOT_CONFIGURED', 503)
   }
   const actorId = actor.replace('/', '~')
@@ -866,12 +889,13 @@ async function runApifyFacebook(identifier, opts = {}) {
     limit:       postsLimit,
   }
 
+  const attribution = { workspaceId, projectId, platform: 'facebook', action }
   let items
   try {
-    items = await runApifyActor(actorId, input, { tokens, isDatasetError: detectApifyDatasetError })
+    items = await runApifyActor(actorId, input, { tokens, isDatasetError: detectApifyDatasetError, attribution })
   } catch (err) {
     const apifyMsg = err.response?.data?.error?.message || err.message
-    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username: identifier, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: apifyMsg, username: identifier, workspaceId, actionLabel })
     throw scrapeError(`El proveedor de scraping falló: ${apifyMsg}`, 'SCRAPE_PROVIDER_ERROR', 502)
   }
 
@@ -880,7 +904,7 @@ async function runApifyFacebook(identifier, opts = {}) {
   const errItem   = items.find(i => i && typeof i === 'object' && typeof i.error === 'string')
   const hasUsable = items.some(i => i && typeof i === 'object' && !i.error)
   if (errItem && !hasUsable) {
-    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: errItem.error, username: identifier, workspaceId, context })
+    alertScrapeFailure({ code: 'SCRAPE_PROVIDER_ERROR', detail: errItem.error, username: identifier, workspaceId, actionLabel })
     throw scrapeError(`El proveedor de scraping devolvió un error: ${errItem.error}`, 'SCRAPE_PROVIDER_ERROR', 502)
   }
 
@@ -902,7 +926,7 @@ async function debugScrapeFacebook(urlOrSlug, opts = {}) {
   try { cfgLimit = Number(await getSetting('apifyFacebookPostsLimit')) || 0 } catch { /* DB no disponible */ }
   const postsLimit = opts.postsLimit ?? (cfgLimit > 0 ? cfgLimit : DEFAULT_FACEBOOK_POSTS_LIMIT)
 
-  const items = await runApifyFacebook(identifier, { postsLimit, workspaceId: opts.workspaceId ?? null, context: 'Facebook — diagnóstico' })
+  const items = await runApifyFacebook(identifier, { postsLimit, workspaceId: opts.workspaceId ?? null, projectId: opts.projectId ?? null, action: 'diagnostic', actionLabel: 'Facebook — diagnóstico' })
   const { profile, posts } = normalizeApifyFacebook(items, identifier)
   const metrics = computeFacebookScrapeMetrics(profile, posts, opts.targetMonth ?? null)
 
@@ -930,7 +954,7 @@ async function debugScrapeFacebook(urlOrSlug, opts = {}) {
  * Scrapea una Página pública de Facebook y devuelve métricas en el shape de
  * fetchFacebookMetrics, más { identifier, scraped: true, monthCoverageComplete }.
  * @param {string} urlOrSlug
- * @param {object} opts — { postsLimit, targetMonth, workspaceId, context }
+ * @param {object} opts — { postsLimit, targetMonth, workspaceId, projectId, action, actionLabel }
  */
 async function scrapeFacebookPage(urlOrSlug, opts = {}) {
   const identifier = parseFacebookPage(urlOrSlug)
@@ -942,7 +966,9 @@ async function scrapeFacebookPage(urlOrSlug, opts = {}) {
   const items = await runApifyFacebook(identifier, {
     postsLimit,
     workspaceId: opts.workspaceId ?? null,
-    context: opts.context ?? null,
+    projectId:   opts.projectId ?? null,
+    action:      opts.action ?? null,
+    actionLabel: opts.actionLabel ?? null,
   })
   const { profile, posts } = normalizeApifyFacebook(items, identifier)
   const metrics = computeFacebookScrapeMetrics(profile, posts, opts.targetMonth ?? null)

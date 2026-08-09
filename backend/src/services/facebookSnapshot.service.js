@@ -50,7 +50,7 @@ async function saveFacebookSnapshot(projectId, workspaceId, month, preloaded = n
       throw new Error(`Proyecto ${projectId}: integración Facebook sin página seleccionada`)
     }
     if (integration.scopes === 'scrape') {
-      metrics = await scrapeFacebookPage(integration.propertyId, { targetMonth: month, workspaceId, context: 'Facebook — snapshot mensual' })
+      metrics = await scrapeFacebookPage(integration.propertyId, { targetMonth: month, workspaceId, projectId, action: 'monthly_snapshot', actionLabel: 'Facebook — snapshot mensual' })
     } else {
       const token = getValidFacebookToken(integration)
       metrics     = await fetchFacebookMetrics(integration.propertyId, token, month)

@@ -48,7 +48,7 @@ async function saveAllMonthlyCompetitorSnapshots() {
   // Procesamos todas las plataformas soportadas (Instagram + LinkedIn)
   const competitors = enabled.size === 0 ? [] : await prisma.competitorAccount.findMany({
     where:  { platform: { in: Object.keys(PLATFORM_SCRAPERS) }, workspaceId: { in: [...enabled] } },
-    select: { id: true, username: true, workspaceId: true, platform: true },
+    select: { id: true, username: true, workspaceId: true, projectId: true, platform: true },
   })
 
   console.log(`[CompetitorSnapshot] Procesando ${competitors.length} competidores (mes: ${month})`)
@@ -60,7 +60,7 @@ async function saveAllMonthlyCompetitorSnapshots() {
         console.warn(`[CompetitorSnapshot] Plataforma "${c.platform}" sin scraper, omito competidor ${c.id}`)
         continue
       }
-      const metrics = await scrape(c.username, { targetMonth: month, workspaceId: c.workspaceId, context: `Competidores — snapshot mensual (${c.platform})` })
+      const metrics = await scrape(c.username, { targetMonth: month, workspaceId: c.workspaceId, projectId: c.projectId, action: 'competitor_monthly_snapshot', actionLabel: `Competidores — snapshot mensual (${c.platform})` })
       const topPostsCached = await cacheImagesInArray(metrics.topPosts ?? [], 'imgSrc', c.workspaceId)
       const topPostsJson = JSON.stringify(topPostsCached)
       await Promise.allSettled([

@@ -11,6 +11,7 @@ const legal = require('../controllers/legal.controller')
 const ps    = require('../controllers/platformSettings.controller')
 const st    = require('../controllers/storage.controller')
 const land  = require('../controllers/landing.controller')
+const apt   = require('../controllers/apifyTokens.controller')
 
 const AVATAR_MAX_MB = 2
 const upload = multer({
@@ -110,6 +111,16 @@ router.patch('/avatars/reorder',            av.reorder)
 router.patch('/avatars/:id',                av.update)
 router.patch('/avatars/:id/toggle',         av.toggle)
 router.delete('/avatars/:id',               av.remove)
+
+// Scraping (consumo de Apify + gestión de tokens)
+router.get('/apify-tokens',              apt.listTokens)
+router.post('/apify-tokens',             apt.createToken)
+router.patch('/apify-tokens/reorder',    apt.reorderTokens)
+router.patch('/apify-tokens/:id',        apt.updateToken)
+router.patch('/apify-tokens/:id/toggle', apt.toggleToken)
+router.delete('/apify-tokens/:id',       apt.deleteToken)
+router.get('/apify-usage',               apt.getUsageStats)
+router.get('/apify-accounts-usage',      apt.getAccountsUsage)
 
 // Landing (hero/video + empresas que confían) — misma restricción de tamaño que avatares,
 // se reusa el wrapper uploadAvatar (mismo límite 2MB, mismo campo "image", mensaje genérico).

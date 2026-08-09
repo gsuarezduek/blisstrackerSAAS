@@ -20,14 +20,14 @@ const scrapeCooldownMap = new Map() // integrationId → timestamp del último s
 const COLLAB_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const collabMediaCache = new Map() // integrationId → { at, month, media }
 
-async function getCollabMediaCached(integration, username, month, workspaceId) {
+async function getCollabMediaCached(integration, username, month, workspaceId, projectId) {
   const cached = collabMediaCache.get(integration.id)
   if (cached && cached.month === month && Date.now() - cached.at < COLLAB_CACHE_TTL_MS) {
     return cached.media
   }
   try {
     const { media } = await scrapeInstagramMediaRaw(username, {
-      targetMonth: month, workspaceId, context: 'Instagram — merge de collabs (token)',
+      targetMonth: month, workspaceId, projectId, action: 'collab_merge', actionLabel: 'Instagram — merge de collabs (token)',
     })
     // Cacheamos las imágenes por nuestro backend: las URLs del scrape (CDN de IG,
     // firmadas) vencen y salen rotas en el navegador. Se hace una sola vez por ciclo
@@ -51,13 +51,13 @@ async function getCollabMediaCached(integration, username, month, workspaceId) {
 
 // Devuelve un collabScraper `(username) => Promise<Array>` si el merge está activado
 // y hay token de Apify; si no, null (comportamiento anterior).
-async function buildCollabScraper(integration, workspaceId) {
-  if (getApifyTokens().length === 0) return null
+async function buildCollabScraper(integration, workspaceId, projectId) {
+  if ((await getApifyTokens()).length === 0) return null
   let enabled = false
   try { enabled = !!(await getSetting('igCollabScrapeEnabled')) } catch { /* DB no disponible → off */ }
   if (!enabled) return null
   const month = currentMonthStr()
-  return (username) => getCollabMediaCached(integration, username, month, workspaceId)
+  return (username) => getCollabMediaCached(integration, username, month, workspaceId, projectId)
 }
 
 function currentMonthStr() {
@@ -171,7 +171,7 @@ async function getMetrics(req, res, next) {
     let metrics
     try {
       const useFbGraph = integration.scopes?.startsWith('fb_graph')
-      const collabScraper = await buildCollabScraper(integration, workspaceId)
+      const collabScraper = await buildCollabScraper(integration, workspaceId, projectId)
       metrics = await fetchInstagramMetrics(integration.propertyId, token, null, useFbGraph, { collabScraper })
     } catch (apiErr) {
       const igErrCode = apiErr.response?.data?.error?.code
@@ -353,7 +353,7 @@ async function connectScrape(req, res, next) {
 
     let metrics
     try {
-      metrics = await scrapeInstagramProfile(username, { targetMonth: currentMonthStr(), workspaceId, context: 'Instagram — conexión por scraping' })
+      metrics = await scrapeInstagramProfile(username, { targetMonth: currentMonthStr(), workspaceId, projectId, action: 'connect', actionLabel: 'Instagram — conexión por scraping' })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }
@@ -393,7 +393,7 @@ async function refreshScrapeForIntegration(integration, projectId, workspaceId) 
 
   let metrics
   try {
-    metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, context: 'Instagram — refresh manual' })
+    metrics = await scrapeInstagramProfile(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, projectId, action: 'refresh', actionLabel: 'Instagram — refresh manual' })
   } catch (err) {
     return { status: 'error', message: err.message, code: err.code, httpStatus: err.status || 400 }
   }
@@ -526,7 +526,7 @@ async function scrapeDebug(req, res, next) {
 
     let result
     try {
-      result = await debugScrapeInstagram(username, { workspaceId, targetMonth: currentMonthStr() })
+      result = await debugScrapeInstagram(username, { workspaceId, projectId, targetMonth: currentMonthStr() })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }

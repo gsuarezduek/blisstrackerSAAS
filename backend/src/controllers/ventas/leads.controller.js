@@ -43,14 +43,17 @@ function leadTitleOf(lead) {
 
 // ── Handlers ─────────────────────────────────────────────────
 
-// GET /api/ventas/leads?status=&ownerId=&origin=&from=&to=&search=
+// GET /api/ventas/leads?status=&ownerId=&origin=&from=&to=&search=&archived=
 // Filtros extensibles: cada parámetro presente agrega una cláusula al `where`.
+// `archived`: por default (parámetro ausente) solo trae leads NO archivados —
+// los archivados quedan fuera del Pipeline/lista principal para que no crezcan
+// para siempre. `archived=true` invierte la vista y trae solo los archivados.
 async function listLeads(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const { status, ownerId, origin, from, to, search } = req.query
+    const { status, ownerId, origin, from, to, search, archived } = req.query
 
-    const where = { workspaceId }
+    const where = { workspaceId, archived: archived === 'true' }
     if (status) where.status = status
     if (origin) where.origin = origin
     if (ownerId) where.ownerId = ownerId === 'none' ? null : Number(ownerId)
@@ -260,6 +263,29 @@ async function changeOwner(req, res, next) {
       meta: { from: lead.ownerId, to: newOwnerId },
     })
     await notifyOwner({ workspaceId, actorId: userId, ownerId: newOwnerId, leadTitle: leadTitleOf(lead), leadId: lead.id })
+    res.json(await findLead(lead.id, workspaceId, LEAD_DETAIL_INCLUDE))
+  } catch (err) { next(err) }
+}
+
+// PATCH /api/ventas/leads/:id/archive  { archived }
+// Saca (o devuelve) el lead del Pipeline/lista principal. No borra nada ni
+// restringe por estado — a diferencia de delete, conserva historial y métricas.
+async function archiveLead(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const userId = req.user.userId
+    const archived = !!req.body.archived
+
+    const lead = await findLead(req.params.id, workspaceId)
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
+    if (lead.archived === archived) return res.json(await findLead(lead.id, workspaceId, LEAD_DETAIL_INCLUDE))
+
+    await prisma.lead.update({ where: { id: lead.id }, data: { archived, archivedAt: archived ? new Date() : null } })
+    await logLeadEvent({
+      workspaceId, leadId: lead.id, userId,
+      type: archived ? 'archived' : 'unarchived',
+      content: archived ? 'archivó el lead' : 'desarchivó el lead',
+    })
     res.json(await findLead(lead.id, workspaceId, LEAD_DETAIL_INCLUDE))
   } catch (err) { next(err) }
 }
@@ -519,6 +545,6 @@ async function convertToProject(req, res, next) {
 }
 
 module.exports = {
-  listLeads, getLead, createLead, updateLead, changeStatus, changeOwner,
+  listLeads, getLead, createLead, updateLead, changeStatus, changeOwner, archiveLead,
   addAction, resolveAction, deleteAction, addNote, deleteNote, deleteLead, convertToProject,
 }

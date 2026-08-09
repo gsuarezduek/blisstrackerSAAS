@@ -52,7 +52,7 @@ async function saveLinkedinSnapshot(projectId, workspaceId, month, preloaded = n
       throw new Error(`Proyecto ${projectId}: integración LinkedIn sin organización/empresa seleccionada`)
     }
     if (integration.scopes === 'scrape') {
-      metrics = await scrapeLinkedinCompany(integration.propertyId, { targetMonth: month, workspaceId, context: 'LinkedIn — snapshot mensual' })
+      metrics = await scrapeLinkedinCompany(integration.propertyId, { targetMonth: month, workspaceId, projectId, action: 'monthly_snapshot', actionLabel: 'LinkedIn — snapshot mensual' })
     } else {
       const token = await getValidLinkedinToken(integration)
       metrics     = await fetchLinkedinMetrics(integration.propertyId, token, month)

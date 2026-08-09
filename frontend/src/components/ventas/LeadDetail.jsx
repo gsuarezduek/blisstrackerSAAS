@@ -19,8 +19,9 @@ const sectionTitle = 'text-xs font-semibold text-gray-400 dark:text-gray-500 upp
 const EVENT_ICON = {
   lead_created: '✨', status_changed: '🔀', owner_changed: '👤', note_added: '📝',
   next_action_set: '📌', next_action_added: '📌', next_action_done: '✅',
-  proposal_created: '📄', research_run: '🔎',
+  proposal_created: '📄', research_run: '🔎', diagnostic_report_created: '📣',
   converted_to_client: '🎉', project_created: '🚀',
+  archived: '🗄', unarchived: '↩️',
 }
 
 function fmtDateTime(d) {
@@ -138,6 +139,10 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
     await load(); onChanged?.()
   }
 
+  async function toggleArchive() {
+    await patch(`/ventas/leads/${leadId}/archive`, { archived: !lead.archived })
+  }
+
   async function handleDelete() {
     setDeleting(true)
     try {
@@ -165,6 +170,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{c?.name || 'Lead'}</h1>
             <StatusBadge status={lead.status} />
+            {lead.archived && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">🗄 Archivado</span>}
           </div>
           {lead.title && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{lead.title}</p>}
         </div>
@@ -175,6 +181,9 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
               : <span title="El lead debe estar en Propuesta o Ganado para convertirlo en proyecto" className="text-xs text-gray-400 dark:text-gray-500 px-3 py-2">🚀 Crear proyecto (requiere Propuesta o Ganado)</span>
             : <span className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 rounded-xl px-3 py-2 font-medium">✓ Proyecto: {lead.convertedProject?.name}</span>}
           <button onClick={() => setShowEdit(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-3 py-2 text-sm font-medium">Editar</button>
+          <button onClick={toggleArchive} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-3 py-2 text-sm font-medium">
+            {lead.archived ? '↩️ Desarchivar' : '🗄 Archivar'}
+          </button>
           <button onClick={() => setConfirmDelete(true)} className="border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl px-3 py-2 text-sm font-medium">Eliminar</button>
         </div>
       </div>
@@ -373,7 +382,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
       </div>
 
       {/* Investigación de la empresa (IA) — ancho completo */}
-      <ResearchPanel leadId={leadId} onChanged={load} />
+      <ResearchPanel leadId={leadId} companyName={c?.name} onChanged={load} />
 
       {showEdit && <LeadModal lead={lead} companies={companies} team={team} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load(); onChanged?.() }} />}
       {showConvert && <ConvertToProjectModal lead={lead} onClose={() => setShowConvert(false)} onConverted={() => { setShowConvert(false); load(); onChanged?.() }} />}

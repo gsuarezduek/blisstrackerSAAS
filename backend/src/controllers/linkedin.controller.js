@@ -338,7 +338,7 @@ async function connectScrape(req, res, next) {
 
     let metrics
     try {
-      metrics = await scrapeLinkedinCompany(identifier, { targetMonth: currentMonthStr(), workspaceId, context: 'LinkedIn — conexión por scraping' })
+      metrics = await scrapeLinkedinCompany(identifier, { targetMonth: currentMonthStr(), workspaceId, projectId, action: 'connect', actionLabel: 'LinkedIn — conexión por scraping' })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }
@@ -378,7 +378,7 @@ async function refreshScrapeForIntegration(integration, projectId, workspaceId) 
 
   let metrics
   try {
-    metrics = await scrapeLinkedinCompany(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, context: 'LinkedIn — refresh manual' })
+    metrics = await scrapeLinkedinCompany(integration.propertyId, { targetMonth: currentMonthStr(), workspaceId, projectId, action: 'refresh', actionLabel: 'LinkedIn — refresh manual' })
   } catch (err) {
     return { status: 'error', message: err.message, code: err.code, httpStatus: err.status || 400 }
   }
@@ -448,7 +448,7 @@ async function scrapeDebug(req, res, next) {
 
     let result
     try {
-      result = await debugScrapeLinkedin(company, { workspaceId, targetMonth: currentMonthStr() })
+      result = await debugScrapeLinkedin(company, { workspaceId, projectId, targetMonth: currentMonthStr() })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }

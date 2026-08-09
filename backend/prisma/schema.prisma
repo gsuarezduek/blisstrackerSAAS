@@ -75,6 +75,7 @@ model Workspace {
   services               Service[]
   roleExpectations       RoleExpectation[]
   aiTokenLogs            AiTokenLog[]
+  apifyUsageLogs         ApifyUsageLog[]
   dailyInsights          DailyInsight[]
   insightMemories        UserInsightMemory[]
   notesBoardNotes        NotesBoardNote[]
@@ -414,6 +415,7 @@ model Project {
   links                  ProjectLink[]
   geoAudits              GeoAudit[]
   integrations           ProjectIntegration[]
+  apifyUsageLogs         ApifyUsageLog[]
   analyticsSnapshots     AnalyticsSnapshot[]
   analyticsInsights      AnalyticsInsight[]
   pageSpeedResults       PageSpeedResult[]
@@ -1062,6 +1064,49 @@ model Avatar {
 
   @@index([order])
   @@index([active])
+}
+
+// ─── APIFY (scraping de RRSS) ─────────────────────────────────────────────────
+
+model ApifyToken {
+  id           Int       @id @default(autoincrement())
+  label        String
+  token        String    // cifrado AES-256-GCM "iv:tag:ciphertext" — mismo patrón que ProjectIntegration.accessToken (lib/encryption.js)
+  order        Int       @default(0) // prioridad de fallback: se prueban en este orden ante error/sin crédito
+  active       Boolean   @default(true)
+  lastUsedAt   DateTime?
+  lastFailedAt DateTime?
+  lastErrorMsg String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  usageLogs ApifyUsageLog[]
+
+  @@index([order])
+  @@index([active])
+}
+
+model ApifyUsageLog {
+  id          Int         @id @default(autoincrement())
+  workspaceId Int?
+  workspace   Workspace?  @relation(fields: [workspaceId], references: [id])
+  projectId   Int?
+  project     Project?    @relation(fields: [projectId], references: [id])
+  platform    String      // "instagram" | "linkedin" | "facebook"
+  action      String      // "connect" | "refresh" | "monthly_snapshot" | "diagnostic" | "collab_merge" | "competitor_add" | "competitor_refresh" | "competitor_monthly_snapshot"
+  tokenId     Int?
+  token       ApifyToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+  tokenLabel  String      // snapshot del label de la cuenta al momento del log (sobrevive al borrado del token)
+  success     Boolean
+  itemCount   Int?        // cantidad de items devueltos por Apify (null si no aplica)
+  errorMsg    String?
+  createdAt   DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([workspaceId])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, projectId])
+  @@index([tokenId])
 }
 
 // ─── LANDING PÚBLICA (editable desde SuperAdmin → Landing) ───────────────────
@@ -2558,6 +2603,11 @@ model Lead {
   lostAt             DateTime?
   lostReason         String?
 
+  // Archivado: saca al lead del Pipeline/lista principal sin borrarlo (a diferencia de
+  // delete, conserva historial/métricas). Manual, sin restricción de estado.
+  archived   Boolean   @default(false)
+  archivedAt DateTime?
+
   createdById Int?
   createdBy   User?    @relation("LeadCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
@@ -2571,6 +2621,7 @@ model Lead {
 
   @@index([workspaceId])
   @@index([workspaceId, status])
+  @@index([workspaceId, archived])
   @@index([companyId])
   @@index([ownerId])
 }
@@ -2667,6 +2718,13 @@ model LeadResearch {
   result      Json? // resultado estructurado de la IA
   errorMsg    String? // progreso mientras running / mensaje de error si failed
   tokensUsed  Int?
+
+  // Informe de diagnóstico para el cliente: HTML persuasivo generado a partir de `result`,
+  // pensado como paso previo a la propuesta para captar la atención del dueño/a del negocio.
+  // Editable a mano tras generarse; exportable a PDF branded (mismo patrón que Proposal).
+  reportTitle String?
+  reportHtml  String?
+
   createdById Int?
   createdBy   User?     @relation("ResearchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())

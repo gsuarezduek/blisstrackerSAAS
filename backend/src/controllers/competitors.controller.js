@@ -208,7 +208,7 @@ async function addCompetitor(req, res, next) {
 
     let metrics
     try {
-      metrics = await driver.scrape(username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, context: `Competidores — alta de cuenta (${platform})` })
+      metrics = await driver.scrape(username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, projectId, action: 'competitor_add', actionLabel: `Competidores — alta de cuenta (${platform})` })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }
@@ -262,7 +262,7 @@ async function refreshCompetitor(req, res, next) {
 
     let metrics
     try {
-      metrics = await driver.scrape(competitor.username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, context: `Competidores — refresh manual (${competitor.platform})` })
+      metrics = await driver.scrape(competitor.username, { targetMonth: currentMonthStr(), workspaceId: req.workspace.id, projectId, action: 'competitor_refresh', actionLabel: `Competidores — refresh manual (${competitor.platform})` })
     } catch (err) {
       return res.status(err.status || 400).json({ error: err.message, code: err.code })
     }

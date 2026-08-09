@@ -17,6 +17,7 @@ import { SectionLanding } from './superadmin/landing'
 import { SectionBilling } from './superadmin/billing'
 import { SectionFeatureFlags } from './superadmin/featureFlags'
 import { SectionAiTokens } from './superadmin/aiTokens'
+import { SectionScraping } from './superadmin/scraping'
 import { SectionMetrics } from './superadmin/metrics'
 
 // ─── Navegación + shell del panel. Las secciones viven en ./superadmin/*.jsx ───
@@ -95,6 +96,17 @@ const NAV_GROUPS = [
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path d="M15.98 1.804a1 1 0 00-1.96 0l-.24 1.192a1 1 0 01-.784.785l-1.192.238a1 1 0 000 1.962l1.192.238a1 1 0 01.785.785l.238 1.192a1 1 0 001.962 0l.238-1.192a1 1 0 01.785-.785l1.192-.238a1 1 0 000-1.962l-1.192-.238a1 1 0 01-.785-.785l-.238-1.192zM6.949 5.684a1 1 0 00-1.898 0l-.683 2.051a1 1 0 01-.633.633l-2.051.683a1 1 0 000 1.898l2.051.684a1 1 0 01.633.632l.683 2.051a1 1 0 001.898 0l.683-2.051a1 1 0 01.633-.633l2.051-.683a1 1 0 000-1.898l-2.051-.683a1 1 0 01-.633-.633L6.95 5.684z" />
+          </svg>
+        ),
+      },
+      {
+        id: 'scraping',
+        label: 'Scraping',
+        implemented: true,
+        description: 'Consumo de Apify por workspace y proyecto, gasto real en USD por cuenta, y configuración de actores/tokens de scraping.',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
           </svg>
         ),
       },
@@ -288,6 +300,7 @@ export default function SuperAdmin() {
     if (section === 'feature-flags') return <SectionFeatureFlags />
     if (section === 'billing')       return <SectionBilling />
     if (section === 'ai-tokens')     return <SectionAiTokens />
+    if (section === 'scraping')      return <SectionScraping />
     if (section === 'legal')         return <SectionLegales />
     if (section === 'brand')         return <SectionBrandManual />
     if (section === 'landing')       return <SectionLanding />
