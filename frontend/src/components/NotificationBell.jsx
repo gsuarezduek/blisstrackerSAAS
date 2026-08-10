@@ -19,7 +19,7 @@ const FILTERS = [
   { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: isFollowedCompleted },
-  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['ADDED_TO_PROJECT', 'VACATION_REVIEWED'].includes(n.type) },
+  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED'].includes(n.type) },
   { key: 'COMPLETED',    label: '✓',  title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
 
@@ -229,8 +229,10 @@ export default function NotificationBell() {
                 const isLeadAssigned   = n.type === 'LEAD_ASSIGNED'
                 const isVacationAction = n.type === 'VACATION_REQUEST'
                 const isVacation       = isVacationAction || n.type === 'VACATION_REVIEWED'
+                const isGameLaunched   = n.type === 'GAME_LAUNCHED'
                 const isCompleted      = n.type === 'COMPLETED'
                 const isAssignment     = isMention || isLeadAssigned
+                const isAmberFamily    = isVacation || isGameLaunched
 
                 const bgClass = isCompleted
                   ? 'bg-gray-50 dark:bg-gray-800/60'
@@ -244,11 +246,11 @@ export default function NotificationBell() {
                         ? (!n.read ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-blue-50 dark:bg-blue-900/20')
                         : isAssignment
                           ? (!n.read ? 'bg-purple-100 dark:bg-purple-900/40' : 'bg-purple-50 dark:bg-purple-900/20')
-                          : isVacation
+                          : isAmberFamily
                             ? (!n.read ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-gray-800')
                             : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
 
-                const dotClass = isBlocked ? 'bg-red-500' : isUnblocked ? 'bg-green-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : isAssignment ? 'bg-purple-500' : isVacation ? 'bg-amber-500' : 'bg-primary-500'
+                const dotClass = isBlocked ? 'bg-red-500' : isUnblocked ? 'bg-green-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : isAssignment ? 'bg-purple-500' : isAmberFamily ? 'bg-amber-500' : 'bg-primary-500'
                 const textClass = isCompleted
                   ? 'text-gray-500 dark:text-gray-400'
                   : isBlocked
@@ -264,8 +266,10 @@ export default function NotificationBell() {
                           : 'text-gray-800 dark:text-gray-200'
 
                 // Deep-link: leads van a Ventas (ruta según rol), solicitudes de licencia a
-                // RRHH → Vacaciones (solo lo ven admins, que son quienes las reciben), y las
-                // revisiones de licencia al perfil propio (el destinatario puede no ser admin).
+                // RRHH → Vacaciones (solo lo ven admins, que son quienes las reciben), las
+                // revisiones de licencia al perfil propio (el destinatario puede no ser admin),
+                // y los juegos no navegan a ningún lado — abren el 🏆 flotante (ya visible en
+                // cualquier página) vía un evento, ver handleRowClick.
                 const ventasBase = user?.isAdmin ? '/admin/ventas' : '/ventas'
                 const dest = n.leadId
                   ? `${ventasBase}?lead=${n.leadId}`
@@ -273,15 +277,25 @@ export default function NotificationBell() {
                     ? '/admin/rrhh?tab=vacaciones'
                     : n.type === 'VACATION_REVIEWED'
                       ? '/profile'
-                      : n.projectId
-                        ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
-                        : null
+                      : isGameLaunched
+                        ? null
+                        : n.projectId
+                          ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
+                          : null
+
+                const handleRowClick = (e) => {
+                  setOpen(false)
+                  if (isGameLaunched && n.gameId) {
+                    e.preventDefault()
+                    window.dispatchEvent(new CustomEvent('bliss:open-game', { detail: { gameId: n.gameId } }))
+                  }
+                }
 
                 return (
                   <Link
                     key={n.id}
                     to={dest ?? '#'}
-                    onClick={() => setOpen(false)}
+                    onClick={handleRowClick}
                     className={`block px-4 py-3 border-b dark:border-gray-700 last:border-b-0 transition-colors hover:brightness-95 ${bgClass}`}
                   >
                     <div className="flex items-start gap-2.5">
@@ -314,6 +328,9 @@ export default function NotificationBell() {
                         )}
                         {n.type === 'VACATION_REVIEWED' && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🏖</span>
+                        )}
+                        {isGameLaunched && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🏆</span>
                         )}
                         {isCompleted && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-gray-400 dark:bg-gray-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">✓</span>

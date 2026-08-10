@@ -163,8 +163,33 @@ async function createGame(req, res, next) {
       },
       select: GAME_SELECT_TEAMS,
     })
+    // Si nace ya activo, es un lanzamiento: avisar al equipo (fire-and-forget).
+    if (game.status === 'active') {
+      notifyGameLaunched(req.workspace, game, req.user.userId).catch((e) => console.error('[Gamification] notif lanzamiento:', e.message))
+    }
     res.status(201).json({ game: shapeGame(game, { teams: game.teams }) })
   } catch (err) { next(err) }
+}
+
+// Notifica in-app a todo el equipo activo (menos quien lo lanzó) cuando un juego pasa a
+// 'active' — al crearlo directamente activo, o al pasar un borrador a activo después.
+async function notifyGameLaunched(workspace, game, actorId) {
+  const members = await prisma.workspaceMember.findMany({
+    where: { workspaceId: workspace.id, active: true, userId: { not: actorId } },
+    select: { userId: true },
+  })
+  if (members.length === 0) return
+  const title = game.title.length > 60 ? game.title.slice(0, 57) + '...' : game.title
+  await prisma.notification.createMany({
+    data: members.map((m) => ({
+      userId:      m.userId,
+      actorId,
+      workspaceId: workspace.id,
+      gameId:      game.id,
+      type:        'GAME_LAUNCHED',
+      message:     `lanzó un nuevo juego: "${title}"`,
+    })),
+  })
 }
 
 function sanitizeConfig(cfg) {
@@ -361,7 +386,12 @@ async function updateGame(req, res, next) {
       data.status = req.body.status
     }
 
+    const isLaunch = data.status === 'active' && game.status !== 'active'
     const updated = await prisma.game.update({ where: { id: game.id }, data, select: GAME_SELECT_TEAMS })
+    // Pasó de no-activo a activo: es un lanzamiento (primera vez o relanzamiento).
+    if (isLaunch) {
+      notifyGameLaunched(req.workspace, updated, req.user.userId).catch((e) => console.error('[Gamification] notif lanzamiento:', e.message))
+    }
     res.json({ game: shapeGame(updated, { teams: updated.teams }) })
   } catch (err) { next(err) }
 }

@@ -24,6 +24,7 @@ export default function GamificationFab() {
   const [open, setOpen] = useState(false)
   const [voting, setVoting] = useState(null) // gameId en curso
   const [tab, setTab] = useState(0)          // juego seleccionado cuando hay varios
+  const [pendingGameId, setPendingGameId] = useState(null) // abierto desde una notificación
 
   const load = useCallback(() => {
     api.get('/gamification/active')
@@ -37,6 +38,29 @@ export default function GamificationFab() {
     const t = setInterval(load, 60000)
     return () => clearInterval(t)
   }, [enabled, user, load])
+
+  // Al clickear una notificación de "nuevo juego" (NotificationBell), se abre el panel
+  // directo en ese juego — sin ruta propia, el FAB es global y ya está montado en toda la app.
+  useEffect(() => {
+    function handleOpenGame(e) {
+      const gameId = e.detail?.gameId
+      if (!gameId) return
+      setPendingGameId(gameId)
+      setOpen(true)
+      load()
+    }
+    window.addEventListener('bliss:open-game', handleOpenGame)
+    return () => window.removeEventListener('bliss:open-game', handleOpenGame)
+  }, [load])
+
+  useEffect(() => {
+    if (pendingGameId == null) return
+    const idx = games.findIndex(g => g.id === pendingGameId)
+    if (idx !== -1) {
+      setTab(idx)
+      setPendingGameId(null)
+    }
+  }, [games, pendingGameId])
 
   if (!enabled || !user || games.length === 0) return null
 

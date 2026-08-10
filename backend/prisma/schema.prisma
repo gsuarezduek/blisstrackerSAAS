@@ -724,6 +724,7 @@ enum NotificationType {
   VACATION_REQUEST
   VACATION_REVIEWED
   LEAD_ASSIGNED
+  GAME_LAUNCHED
 }
 
 model Notification {
@@ -740,6 +741,8 @@ model Notification {
   project     Project?         @relation(fields: [projectId], references: [id])
   leadId      Int?
   lead        Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  gameId      Int?
+  game        Game?            @relation(fields: [gameId], references: [id], onDelete: SetNull)
   type        NotificationType @default(COMPLETED)
   message     String
   read        Boolean          @default(false)
@@ -2447,6 +2450,7 @@ model Game {
   scores          GameScore[]
   questions       GameQuestion[]
   quizSubmissions GameQuizSubmission[]
+  notifications   Notification[]
 
   @@index([workspaceId, status])
 }
