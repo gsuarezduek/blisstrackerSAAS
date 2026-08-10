@@ -3,6 +3,7 @@ import api from '../../api/client'
 import ConfirmModal from '../../components/ConfirmModal'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { timeAgo } from './shared'
+import { useAuth } from '../../context/AuthContext'
 
 export const ROLE_BADGE = {
   owner:  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
@@ -11,13 +12,15 @@ export const ROLE_BADGE = {
 }
 
 export function SectionUsers() {
+  const { user: me } = useAuth()
   const [users,    setUsers]    = useState([])
   const [total,    setTotal]    = useState(0)
   const [loading,  setLoading]  = useState(true)
   const [search,   setSearch]   = useState('')
   const [filter,   setFilter]   = useState('all')
   const [busyId,   setBusyId]   = useState(null)
-  const [userToToggle, setUserToToggle] = useState(null) // user | null
+  const [userToToggle,      setUserToToggle]      = useState(null) // user | null
+  const [userToToggleSuper, setUserToToggleSuper]  = useState(null) // user | null
   const PAGE = 50
 
   async function load(reset = true) {
@@ -89,6 +92,23 @@ export function SectionUsers() {
     } finally {
       setBusyId(null)
       setUserToToggle(null)
+    }
+  }
+
+  async function handleToggleSuperAdmin() {
+    if (!userToToggleSuper) return
+    const user = userToToggleSuper
+    const desired = !user.isSuperAdmin
+
+    setBusyId(`super-${user.id}`)
+    try {
+      await api.patch(`/superadmin/users/${user.id}/toggle-superadmin`, { isSuperAdmin: desired })
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isSuperAdmin: desired } : u))
+    } catch (err) {
+      window.alert(`Error: ${err.response?.data?.error || err.message}`)
+    } finally {
+      setBusyId(null)
+      setUserToToggleSuper(null)
     }
   }
 
@@ -219,31 +239,55 @@ export function SectionUsers() {
                     </div>
                   </div>
 
-                  {!u.isSuperAdmin && u.totalMemberships > 0 && (
-                    <div className="flex-shrink-0 flex flex-col gap-1.5 items-stretch">
+                  <div className="flex-shrink-0 flex flex-col gap-1.5 items-stretch">
+                    {!u.isSuperAdmin && u.totalMemberships > 0 && (
+                      <>
+                        <button
+                          onClick={() => handleToggleDailyInsight(u)}
+                          disabled={busyId === `di-${u.id}`}
+                          title={u.dailyInsightStatus === 'on' ? 'Desactivar insight diario' : 'Activar insight diario'}
+                          className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                            u.dailyInsightStatus === 'on'
+                              ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200'
+                              : 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-300'
+                          }`}>
+                          {busyId === `di-${u.id}` ? '…' : u.dailyInsightStatus === 'on' ? 'IA: Desactivar' : 'IA: Activar'}
+                        </button>
+                        <button
+                          onClick={() => setUserToToggle(u)}
+                          disabled={busyId === u.id}
+                          className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                            isDisabled
+                              ? 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-300'
+                              : 'bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300'
+                          }`}>
+                          {busyId === u.id ? '…' : isDisabled ? 'Reactivar' : 'Desactivar'}
+                        </button>
+                      </>
+                    )}
+                    {u.id === me?.id ? (
+                      u.isSuperAdmin && (
+                        <span
+                          title="No podés quitarte a vos mismo el acceso de Super Admin"
+                          className="text-[10px] text-gray-400 dark:text-gray-500 text-center px-2 py-1"
+                        >
+                          Super Admin (vos)
+                        </span>
+                      )
+                    ) : (
                       <button
-                        onClick={() => handleToggleDailyInsight(u)}
-                        disabled={busyId === `di-${u.id}`}
-                        title={u.dailyInsightStatus === 'on' ? 'Desactivar insight diario' : 'Activar insight diario'}
+                        onClick={() => setUserToToggleSuper(u)}
+                        disabled={busyId === `super-${u.id}`}
+                        title={u.isSuperAdmin ? 'Quitar acceso de Super Admin' : 'Otorgar acceso de Super Admin'}
                         className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                          u.dailyInsightStatus === 'on'
-                            ? 'bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200'
-                            : 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-300'
+                          u.isSuperAdmin
+                            ? 'bg-amber-100 hover:bg-amber-200 text-amber-700 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 dark:text-amber-300'
+                            : 'bg-primary-100 hover:bg-primary-200 text-primary-700 dark:bg-primary-900/30 dark:hover:bg-primary-900/50 dark:text-primary-300'
                         }`}>
-                        {busyId === `di-${u.id}` ? '…' : u.dailyInsightStatus === 'on' ? 'IA: Desactivar' : 'IA: Activar'}
+                        {busyId === `super-${u.id}` ? '…' : u.isSuperAdmin ? 'Quitar SuperAdmin' : 'Hacer SuperAdmin'}
                       </button>
-                      <button
-                        onClick={() => setUserToToggle(u)}
-                        disabled={busyId === u.id}
-                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                          isDisabled
-                            ? 'bg-green-100 hover:bg-green-200 text-green-700 dark:bg-green-900/30 dark:hover:bg-green-900/50 dark:text-green-300'
-                            : 'bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300'
-                        }`}>
-                        {busyId === u.id ? '…' : isDisabled ? 'Reactivar' : 'Desactivar'}
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )
             })}
@@ -270,6 +314,19 @@ export function SectionUsers() {
         loading={busyId === userToToggle?.id}
         onConfirm={handleToggleActive}
         onCancel={() => setUserToToggle(null)}
+      />
+
+      <ConfirmModal
+        open={!!userToToggleSuper}
+        title={userToToggleSuper?.isSuperAdmin ? 'Quitar Super Admin' : 'Otorgar Super Admin'}
+        message={userToToggleSuper?.isSuperAdmin
+          ? `${userToToggleSuper?.email} va a perder el acceso al panel /superadmin.`
+          : `${userToToggleSuper?.email} va a poder acceder al panel /superadmin con acceso completo a todos los workspaces, facturación, tokens y datos de la plataforma.`}
+        confirmLabel={userToToggleSuper?.isSuperAdmin ? 'Quitar acceso' : 'Otorgar acceso'}
+        danger
+        loading={busyId === `super-${userToToggleSuper?.id}`}
+        onConfirm={handleToggleSuperAdmin}
+        onCancel={() => setUserToToggleSuper(null)}
       />
     </div>
   )

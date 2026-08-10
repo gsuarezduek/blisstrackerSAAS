@@ -187,13 +187,30 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
+    ],
+  },
+  {
+    label: 'Marca y Contenido',
+    items: [
       {
-        id: 'legal',
-        label: 'Legales',
+        id: 'landing',
+        label: 'Landing',
+        implemented: true,
+        description: 'Hero, video de demo y logos de empresas destacadas en la landing pública (blisstracker.app).',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path d="M10.75 2.75a.75.75 0 00-1.5 0V4.5h-1a.75.75 0 000 1.5h1v1.75a.75.75 0 001.5 0V6h1a.75.75 0 000-1.5h-1V2.75z" />
+            <path fillRule="evenodd" d="M2 6a2 2 0 012-2h3.5a.75.75 0 010 1.5H4a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h12a.5.5 0 00.5-.5v-3.5a.75.75 0 011.5 0V15a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+          </svg>
+        ),
+      },
+      {
+        id: 'brand',
+        label: 'Manual de Marca',
         implemented: true,
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+            <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm3.5 4.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM5 12.5l2.5-3 2 2.5 2.5-3.5L15 13H5z" clipRule="evenodd" />
           </svg>
         ),
       },
@@ -209,24 +226,12 @@ const NAV_GROUPS = [
         ),
       },
       {
-        id: 'brand',
-        label: 'Manual de Marca',
+        id: 'legal',
+        label: 'Legales',
         implemented: true,
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm3.5 4.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM5 12.5l2.5-3 2 2.5 2.5-3.5L15 13H5z" clipRule="evenodd" />
-          </svg>
-        ),
-      },
-      {
-        id: 'landing',
-        label: 'Landing',
-        implemented: true,
-        description: 'Hero, video de demo y logos de empresas destacadas en la landing pública (blisstracker.app).',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path d="M10.75 2.75a.75.75 0 00-1.5 0V4.5h-1a.75.75 0 000 1.5h1v1.75a.75.75 0 001.5 0V6h1a.75.75 0 000-1.5h-1V2.75z" />
-            <path fillRule="evenodd" d="M2 6a2 2 0 012-2h3.5a.75.75 0 010 1.5H4a.5.5 0 00-.5.5v9a.5.5 0 00.5.5h12a.5.5 0 00.5-.5v-3.5a.75.75 0 011.5 0V15a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
           </svg>
         ),
       },

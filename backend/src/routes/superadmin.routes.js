@@ -75,6 +75,7 @@ router.get('/metrics',                  c.getMetrics)
 router.get('/users',                    c.listUsers)
 router.patch('/users/:id/toggle-active',        c.toggleUserActive)
 router.patch('/users/:id/toggle-daily-insight', c.toggleUserDailyInsight)
+router.patch('/users/:id/toggle-superadmin',    c.toggleUserSuperAdmin)
 
 // Configuración global de la plataforma
 router.get('/settings',                 ps.listSettings)

@@ -758,6 +758,35 @@ async function toggleUserDailyInsight(req, res, next) {
 }
 
 /**
+ * PATCH /api/superadmin/users/:id/toggle-superadmin
+ * Body: { isSuperAdmin: boolean }
+ * Otorga o revoca el acceso global a /superadmin. Un super admin no puede
+ * quitarse el flag a sí mismo (evita quedarse sin acceso sin que quede otro
+ * super admin activo para revertirlo).
+ */
+async function toggleUserSuperAdmin(req, res, next) {
+  try {
+    const userId       = Number(req.params.id)
+    const isSuperAdmin = Boolean(req.body.isSuperAdmin)
+
+    if (userId === req.user.userId && !isSuperAdmin) {
+      return res.status(400).json({ error: 'No podés quitarte a vos mismo el acceso de Super Admin.' })
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data:  { isSuperAdmin },
+      select: { id: true, isSuperAdmin: true },
+    })
+
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/superadmin/conversion-funnel
  * Agregados de los últimos 30 días: signups, trials activos, conversiones a paid.
  * Lee de ConversionEvent (eventos instrumentados desde frontend) + Workspace/Subscription.
@@ -927,4 +956,4 @@ async function getMetrics(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, toggleUserDailyInsight, getConversionFunnel, getMetrics }
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, toggleUserDailyInsight, toggleUserSuperAdmin, getConversionFunnel, getMetrics }
