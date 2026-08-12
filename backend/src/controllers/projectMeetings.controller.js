@@ -4,6 +4,8 @@ const { isAdmin, canWrite } = require('../lib/projectAccess')
 
 const VALID_TYPE = ['internal', 'client']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const DEFAULT_MEETINGS_PAGE_SIZE = 5
+const MAX_MEETINGS_PAGE_SIZE = 100
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -111,23 +113,30 @@ async function ensureWorkDay(userId, workspaceId, today) {
 
 // ─── MEETINGS ─────────────────────────────────────────────────────────────────
 
-// GET /api/projects/:id/meetings — lista (cualquier miembro del workspace).
+// GET /api/projects/:id/meetings — lista paginada (cualquier miembro del workspace).
+// ?skip=&take= (default take=5, tope 100) — más recientes primero.
 async function listMeetings(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const [members, meetings] = await Promise.all([
+    const skip = Math.max(parseInt(req.query.skip, 10) || 0, 0)
+    const take = Math.min(Math.max(parseInt(req.query.take, 10) || DEFAULT_MEETINGS_PAGE_SIZE, 1), MAX_MEETINGS_PAGE_SIZE)
+
+    const [members, total, meetings] = await Promise.all([
       getMembers(workspaceId, projectId),
+      prisma.projectMeeting.count({ where: { projectId, workspaceId } }),
       prisma.projectMeeting.findMany({
         where:   { projectId, workspaceId },
         orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
         include: MEETING_INCLUDE,
+        skip,
+        take,
       }),
     ])
 
-    res.json({ members, meetings: meetings.map(formatMeeting) })
+    res.json({ members, meetings: meetings.map(formatMeeting), total })
   } catch (err) { next(err) }
 }
 

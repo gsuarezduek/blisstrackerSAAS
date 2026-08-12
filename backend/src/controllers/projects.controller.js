@@ -624,19 +624,19 @@ async function saveInfo(req, res, next) {
 }
 
 // ─── ACCESOS / CREDENCIALES ─────────────────────────────────────────────────
-// Son credenciales sensibles: solo el equipo del proyecto (ProjectMember) y los
-// admins/owners pueden verlas/gestionarlas, aunque el proyecto en sí sea visible
-// para todo el workspace. La contraseña se cifra con AES-256-GCM y solo se
-// descifra en el endpoint reveal, bajo demanda.
+// Son credenciales sensibles, pero al igual que el resto de la ficha del
+// proyecto (info, links) son visibles y gestionables por cualquier miembro
+// del workspace, no solo el equipo del proyecto (ProjectMember) o admins/owners.
+// La contraseña se cifra con AES-256-GCM y solo se descifra en el endpoint
+// reveal, bajo demanda.
 const { encrypt, decrypt } = require('../lib/encryption')
 
-// Resuelve el proyecto y verifica permiso de acceso a credenciales.
-// Devuelve { projectId } si OK, o { error, status } si no.
+// Resuelve el proyecto dentro del workspace actual.
+// Devuelve { projectId } si OK, o { error, status } si no existe.
 async function resolveAccessGuard(req) {
   const workspaceId = req.workspace.id
   const projectId = await resolveProjectId(req.params.id, workspaceId)
   if (!projectId) return { error: 'Proyecto no encontrado', status: 404 }
-  if (!(await canWrite(req, projectId))) return { error: 'No tenés acceso a las credenciales de este proyecto', status: 403 }
   return { projectId }
 }
 

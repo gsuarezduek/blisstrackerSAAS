@@ -592,14 +592,20 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
 
 // ─── ProjectMeetings (root) ─────────────────────────────────────────────────────
 
+const MEETINGS_PAGE_SIZE = 5
+
 export default function ProjectMeetings({ projectId, canEdit }) {
-  const [meetings, setMeetings] = useState([])
-  const [members, setMembers]   = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState('')
-  const [openId, setOpenId]     = useState(null)
-  const [creating, setCreating] = useState(false)
-  const [query, setQuery]       = useState('')
+  const [meetings, setMeetings]       = useState([])
+  const [total, setTotal]             = useState(0)
+  const [members, setMembers]         = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError]             = useState('')
+  const [openId, setOpenId]           = useState(null)
+  const [creating, setCreating]       = useState(false)
+  const [query, setQuery]             = useState('')
+
+  const hasMore = meetings.length < total
 
   // Buscador: filtra en memoria por título y fecha (label legible + fecha cruda).
   const filtered = useMemo(() => {
@@ -614,10 +620,11 @@ export default function ProjectMeetings({ projectId, canEdit }) {
   useEffect(() => {
     let alive = true
     setLoading(true)
-    api.get(`/projects/${projectId}/meetings`)
+    api.get(`/projects/${projectId}/meetings`, { params: { take: MEETINGS_PAGE_SIZE } })
       .then(r => {
         if (!alive) return
         setMeetings(r.data.meetings || [])
+        setTotal(r.data.total ?? (r.data.meetings || []).length)
         setMembers(r.data.members || [])
         // Abrir la reunión más reciente por defecto.
         if (r.data.meetings?.length) setOpenId(r.data.meetings[0].id)
@@ -626,6 +633,29 @@ export default function ProjectMeetings({ projectId, canEdit }) {
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [projectId])
+
+  async function handleLoadMore() {
+    setLoadingMore(true)
+    try {
+      const { data } = await api.get(`/projects/${projectId}/meetings`, {
+        params: { skip: meetings.length, take: MEETINGS_PAGE_SIZE },
+      })
+      setMeetings(prev => [...prev, ...(data.meetings || [])])
+      setTotal(data.total ?? total)
+    } catch {
+      setError('No se pudieron cargar más reuniones')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  // Al buscar, traemos de una vez el resto de las reuniones (el buscador solo
+  // filtra sobre lo ya cargado) para que la búsqueda no quede acotada a la página visible.
+  useEffect(() => {
+    if (!query.trim() || meetings.length >= total || loadingMore) return
+    handleLoadMore()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query])
 
   function replaceMeeting(updated) {
     setMeetings(prev => prev.map(m => m.id === updated.id ? { ...updated, todos: updated.todos ?? m.todos } : m))
@@ -637,6 +667,7 @@ export default function ProjectMeetings({ projectId, canEdit }) {
     try {
       const { data } = await api.post(`/projects/${projectId}/meetings`, {})
       setMeetings(prev => [{ ...data, todos: data.todos || [] }, ...prev])
+      setTotal(t => t + 1)
       setOpenId(data.id)
     } catch (e) {
       setError(e.response?.data?.error || 'No se pudo crear la reunión')
@@ -661,6 +692,7 @@ export default function ProjectMeetings({ projectId, canEdit }) {
 
   async function handleDeleteMeeting(id) {
     setMeetings(prev => prev.filter(m => m.id !== id))
+    setTotal(t => Math.max(0, t - 1))
     try { await api.delete(`/projects/${projectId}/meetings/${id}`) }
     catch { setError('No se pudo eliminar') }
   }
@@ -762,7 +794,7 @@ export default function ProjectMeetings({ projectId, canEdit }) {
 
       {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
 
-      {meetings.length > 3 && (
+      {total > 3 && (
         <div className="relative mb-3">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">🔍</span>
           <input
@@ -819,6 +851,18 @@ export default function ProjectMeetings({ projectId, canEdit }) {
               onSendToDashboard={handleSendToDashboard}
             />
           ))}
+        </div>
+      )}
+
+      {!query.trim() && hasMore && (
+        <div className="flex justify-center mt-4">
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="text-sm font-medium px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors disabled:opacity-50"
+          >
+            {loadingMore ? 'Cargando…' : `Ver más reuniones (${total - meetings.length})`}
+          </button>
         </div>
       )}
     </div>
