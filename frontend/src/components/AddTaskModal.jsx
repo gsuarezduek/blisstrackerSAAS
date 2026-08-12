@@ -124,12 +124,17 @@ function getGtdWarning(desc) {
   return null
 }
 
-export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD }) {
+export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultProject, alertaGTD }) {
   const { user } = useAuth()
   const { labelFor } = useRoles()
   const [description, setDescription] = useState('')
-  const [projectId, setProjectId] = useState(lockedProject ? String(lockedProject.id) : '')
-  const [projects, setProjects] = useState([])
+  const [projectId, setProjectId] = useState(() => {
+    const initial = lockedProject || defaultProject
+    return initial ? String(initial.id) : ''
+  })
+  // Precargamos el proyecto por defecto para que el combobox lo muestre sin
+  // esperar al fetch de /projects (evita el parpadeo de "sin selección").
+  const [projects, setProjects] = useState(defaultProject ? [defaultProject] : [])
   const [members, setMembers] = useState([])
   const [assigneeId, setAssigneeId] = useState('')
   const [loading, setLoading] = useState(false)
@@ -152,8 +157,9 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, alertaGTD 
 
   useEffect(() => {
     if (lockedProject) return
-    // No autoseleccionamos ningún proyecto: el selector arranca vacío y el usuario
-    // elige (favoritos → los suyos → el resto, o filtrando por texto).
+    // Sin lockedProject el selector queda editable: si hay defaultProject arranca
+    // preseleccionado (ver estado inicial de projectId/projects), si no arranca vacío
+    // y el usuario elige (favoritos → los suyos → el resto, o filtrando por texto).
     api.get('/projects').then(r => setProjects(r.data))
   }, [lockedProject])
 

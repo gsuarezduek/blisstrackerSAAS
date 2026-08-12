@@ -142,7 +142,7 @@ export default function GlobalShortcuts() {
       </button>
 
       {taskOpen && (
-        <AddTaskModal lockedProject={projectContext} onAdd={handleAdd} onClose={() => setTaskOpen(false)} />
+        <AddTaskModal defaultProject={projectContext} onAdd={handleAdd} onClose={() => setTaskOpen(false)} />
       )}
 
       {/* Overlay de ayuda de atajos */}

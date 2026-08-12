@@ -626,8 +626,6 @@ export default function ProjectMeetings({ projectId, canEdit }) {
         setMeetings(r.data.meetings || [])
         setTotal(r.data.total ?? (r.data.meetings || []).length)
         setMembers(r.data.members || [])
-        // Abrir la reunión más reciente por defecto.
-        if (r.data.meetings?.length) setOpenId(r.data.meetings[0].id)
       })
       .catch(() => { if (alive) setError('No se pudieron cargar las reuniones') })
       .finally(() => { if (alive) setLoading(false) })
