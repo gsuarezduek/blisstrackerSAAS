@@ -1,25 +1,22 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMentionAutocomplete } from './useMentionAutocomplete'
 import GifPicker from './GifPicker'
-import FeedbackModal from '../FeedbackModal'
 import { avatarUrl } from '../../utils/avatarUrl'
 
-// Input del chat: texto + @menciones + GIF + acceso al Feedback existente (botón "+").
+// Input del chat: texto + @menciones + GIF.
 export default function MessageInput({ onSend, members }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [showGifPicker, setShowGifPicker] = useState(false)
-  const [showFeedback, setShowFeedback] = useState(false)
-  const [showPlusMenu, setShowPlusMenu] = useState(false)
   const textareaRef = useRef(null)
-  const plusRef = useRef(null)
+  const gifRef = useRef(null)
 
   const { mentionQuery, mentionMatches, mentionIdx, handleTextChange, handleMentionKeyDown, selectMention } =
     useMentionAutocomplete({ text, setText, textareaRef, members })
 
   useEffect(() => {
     function handleClickOutside(e) {
-      if (plusRef.current && !plusRef.current.contains(e.target)) setShowPlusMenu(false)
+      if (gifRef.current && !gifRef.current.contains(e.target)) setShowGifPicker(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -51,33 +48,17 @@ export default function MessageInput({ onSend, members }) {
   }
 
   return (
-    <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
+    <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
       <div className="flex items-end gap-2">
-        <div ref={plusRef} className="relative flex-shrink-0">
+        <div ref={gifRef} className="relative flex-shrink-0">
           <button
             type="button"
-            onClick={() => setShowPlusMenu(v => !v)}
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-lg font-medium"
-            title="Más opciones"
+            onClick={() => setShowGifPicker(v => !v)}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            title="Enviar GIF"
           >
-            +
+            🎬
           </button>
-          {showPlusMenu && (
-            <div className="absolute bottom-full mb-2 left-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg py-1 z-20 w-56">
-              <button
-                onClick={() => { setShowPlusMenu(false); setShowGifPicker(true) }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                🎬 GIF
-              </button>
-              <button
-                onClick={() => { setShowPlusMenu(false); setShowFeedback(true) }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                💡 Nueva sugerencia / 🐛 Reportar error
-              </button>
-            </div>
-          )}
           {showGifPicker && <GifPicker onSelect={handleSendGif} onClose={() => setShowGifPicker(false)} />}
         </div>
 
@@ -89,7 +70,7 @@ export default function MessageInput({ onSend, members }) {
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
             placeholder="Escribí un mensaje... Usá @ para mencionar"
-            className="w-full text-sm px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none max-h-32"
+            className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none max-h-28"
           />
           {mentionQuery !== null && mentionMatches.length > 0 && (
             <div className="absolute bottom-full mb-1 left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg overflow-hidden z-10">
@@ -119,8 +100,6 @@ export default function MessageInput({ onSend, members }) {
           </svg>
         </button>
       </div>
-
-      <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} />
     </div>
   )
 }

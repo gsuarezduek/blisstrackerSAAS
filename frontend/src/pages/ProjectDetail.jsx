@@ -350,7 +350,7 @@ export default function ProjectDetail() {
                     if (e.target.value === 'marketing') {
                       navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)
                     } else if (e.target.value === 'chat') {
-                      navigate(`/chat/${data.project.chatChannel.slug}`)
+                      window.dispatchEvent(new CustomEvent('bliss:open-chat', { detail: { slug: data.project.chatChannel.slug } }))
                     } else {
                       setInfoTab(e.target.value)
                     }
@@ -361,7 +361,7 @@ export default function ProjectDetail() {
                   <option value="info">Info</option>
                   {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
                   <option value="reuniones">Reuniones</option>
-                  {data.project.chatChannel?.slug && <option value="chat">Chat ↗</option>}
+                  {data.project.chatChannel?.slug && <option value="chat">💬 Chat</option>}
                   {marketingEnabled && <option value="marketing">Marketing ↗</option>}
                 </select>
                 {/* Desktop */}
@@ -415,13 +415,10 @@ export default function ProjectDetail() {
                   )}
                   {data.project.chatChannel?.slug && (
                     <button
-                      onClick={() => navigate(`/chat/${data.project.chatChannel.slug}`)}
+                      onClick={() => window.dispatchEvent(new CustomEvent('bliss:open-chat', { detail: { slug: data.project.chatChannel.slug } }))}
                       className="px-4 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1"
                     >
                       💬 Chat
-                      <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
                     </button>
                   )}
                 </div>

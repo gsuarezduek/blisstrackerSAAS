@@ -31,14 +31,16 @@ function ChannelRow({ channel, active, onSelect }) {
   )
 }
 
-export default function ChatSidebar({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel }) {
+// Dropdown compacto para elegir canal dentro del widget flotante de Chat (reemplaza
+// la vieja sidebar de la página — acá no hay espacio para una columna fija).
+export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel }) {
   return (
-    <div className="w-56 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col overflow-y-auto py-3 px-2">
+    <div className="absolute left-0 top-full mt-1.5 w-64 max-h-80 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-20 py-2 px-2">
       {GROUPS.map(group => {
         const items = channels.filter(c => c.kind === group.kind)
         if (items.length === 0) return null
         return (
-          <div key={group.kind} className="mb-4">
+          <div key={group.kind} className="mb-3 last:mb-0">
             {group.label && (
               <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
                 {group.label}
@@ -56,7 +58,7 @@ export default function ChatSidebar({ channels, activeChannelId, onSelect, isAdm
       {isAdmin && (
         <button
           onClick={onCreateChannel}
-          className="mt-1 mx-1 flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+          className="mt-1 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
         >
           <span className="text-base leading-none">+</span> Crear canal
         </button>

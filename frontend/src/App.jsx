@@ -79,7 +79,6 @@ const Admin            = lazyWithReload(() => import('./pages/Admin'))
 const Productivity     = lazyWithReload(() => import('./pages/Productivity'))
 const RRHH             = lazyWithReload(() => import('./pages/RRHH'))
 const RealTime         = lazyWithReload(() => import('./pages/RealTime'))
-const Chat              = lazyWithReload(() => import('./pages/Chat'))
 const Reports          = lazyWithReload(() => import('./pages/Reports'))
 const MyReports        = lazyWithReload(() => import('./pages/MyReports'))
 const MyProjects       = lazyWithReload(() => import('./pages/MyProjects'))
@@ -177,8 +176,6 @@ export default function App() {
           <Route path="/preferences"  element={<PrivateRoute><Preferences  /></PrivateRoute>} />
           <Route path="/docs"         element={<PrivateRoute><Docs         /></PrivateRoute>} />
           <Route path="/realtime"   element={<PrivateRoute><RealTime  /></PrivateRoute>} />
-          <Route path="/chat"       element={<PrivateRoute><Chat /></PrivateRoute>} />
-          <Route path="/chat/:slug" element={<PrivateRoute><Chat /></PrivateRoute>} />
           <Route path="/marketing"  element={<PrivateRoute><Marketing /></PrivateRoute>} />
           <Route path="/billing"    element={<PrivateRoute><Billing  /></PrivateRoute>} />
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />

@@ -269,10 +269,9 @@ export default function NotificationBell() {
 
                 // Deep-link: leads van a Ventas (ruta según rol), solicitudes de licencia a
                 // RRHH → Vacaciones (solo lo ven admins, que son quienes las reciben), las
-                // revisiones de licencia al perfil propio (el destinatario puede no ser admin),
-                // las menciones de chat al canal correspondiente, y los juegos no navegan a
-                // ningún lado — abren el 🏆 flotante (ya visible en cualquier página) vía un
-                // evento, ver handleRowClick.
+                // revisiones de licencia al perfil propio (el destinatario puede no ser admin).
+                // Los juegos y las menciones de chat no navegan a ningún lado — abren su
+                // flotante (🏆 / 💬, ya visibles en cualquier página) vía un evento, ver handleRowClick.
                 const ventasBase = user?.isAdmin ? '/admin/ventas' : '/ventas'
                 const dest = n.leadId
                   ? `${ventasBase}?lead=${n.leadId}`
@@ -280,19 +279,21 @@ export default function NotificationBell() {
                     ? '/admin/rrhh?tab=vacaciones'
                     : n.type === 'VACATION_REVIEWED'
                       ? '/profile'
-                      : isGameLaunched
+                      : (isGameLaunched || isChatMention)
                         ? null
-                        : isChatMention
-                          ? (n.channel?.slug ? `/chat/${n.channel.slug}` : '/chat')
-                          : n.projectId
-                            ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
-                            : null
+                        : n.projectId
+                          ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
+                          : null
 
                 const handleRowClick = (e) => {
                   setOpen(false)
                   if (isGameLaunched && n.gameId) {
                     e.preventDefault()
                     window.dispatchEvent(new CustomEvent('bliss:open-game', { detail: { gameId: n.gameId } }))
+                  }
+                  if (isChatMention) {
+                    e.preventDefault()
+                    window.dispatchEvent(new CustomEvent('bliss:open-chat', { detail: { slug: n.channel?.slug || null } }))
                   }
                 }
 
