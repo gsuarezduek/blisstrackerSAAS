@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useLocation, useMatch } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
+import { useChat } from '../context/ChatContext'
 import useRoles from '../hooks/useRoles'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import FeedbackButton from './FeedbackButton'
@@ -88,6 +89,7 @@ function IcoEye() {
 export default function Navbar() {
   const { user, logout, switchWorkspace, realIsAdmin, viewAsMember, toggleViewAsMember } = useAuth()
   const { slug: currentSlug, workspace } = useWorkspace()
+  const { unreadChannelsCount, mentionChannelsCount } = useChat() || {}
   const productivityEnabled = workspace?.productivityEnabled !== false
   const [otherWorkspaces, setOtherWorkspaces] = useState([])
   const [switchLoading, setSwitchLoading]     = useState(null)
@@ -147,6 +149,7 @@ export default function Navbar() {
     { to: '/my-projects', label: 'Mis Proyectos' },
     ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
     { to: '/realtime', label: 'Actividad', dot: true },
+    { to: '/chat', label: 'Chat', chatBadge: true },
     ...(isAdmin ? [{ to: '/reports', label: 'Reportes' }] : []),
     ...(marketingEnabled ? [{ to: '/marketing', label: 'Marketing' }] : []),
     // Ventas como link principal SOLO para el equipo comercial no-admin.
@@ -280,7 +283,9 @@ export default function Navbar() {
   }
 
   // ── NavLink ───────────────────────────────────────────────────────────────
-  function NavLink({ to, label, dot, onClick }) {
+  // chatBadge: distingue mensajes nuevos (punto gris) de menciones (badge rojo con
+  // contador) — mismo criterio de urgencia que la campana de notificaciones.
+  function NavLink({ to, label, dot, chatBadge, onClick }) {
     const active = location.pathname === to
     return (
       <Link
@@ -294,6 +299,14 @@ export default function Navbar() {
       >
         {dot && <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse flex-shrink-0" />}
         {label}
+        {chatBadge && mentionChannelsCount > 0 && (
+          <span className="min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+            {mentionChannelsCount > 9 ? '9+' : mentionChannelsCount}
+          </span>
+        )}
+        {chatBadge && mentionChannelsCount === 0 && unreadChannelsCount > 0 && (
+          <span className="w-1.5 h-1.5 bg-gray-400 dark:bg-gray-500 rounded-full flex-shrink-0" />
+        )}
       </Link>
     )
   }

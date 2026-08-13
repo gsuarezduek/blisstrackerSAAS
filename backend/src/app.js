@@ -54,6 +54,7 @@ const eosRoutes               = require('./routes/eos.routes')
 const processesRoutes         = require('./routes/processes.routes')
 const gamificationRoutes      = require('./routes/gamification.routes')
 const ventasRoutes            = require('./routes/ventas.routes')
+const chatRoutes              = require('./routes/chat.routes')
 const { handleWebhook }       = require('./webhooks/stripe.webhook')
 
 const app = express()
@@ -62,21 +63,13 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }, // permite cargar imágenes cross-origin (avatares)
 }))
 
-// CORS: acepta cualquier subdominio de blisstracker.app + localhost en dev
-const APP_DOMAIN = process.env.APP_DOMAIN || 'blisstracker.app'
-const SUBDOMAIN_REGEX = new RegExp(`^https://[a-z0-9-]+\\.${APP_DOMAIN.replace('.', '\\.')}$`)
+// CORS: acepta cualquier subdominio de blisstracker.app + localhost en dev.
+// Mismo chequeo lo reutiliza Socket.IO (lib/socket.js) vía lib/corsOrigins.js.
+const { isAllowedOrigin } = require('./lib/corsOrigins')
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true) // server-to-server / curl
-    if (
-      SUBDOMAIN_REGEX.test(origin) ||
-      origin === `https://${APP_DOMAIN}` ||
-      origin === 'http://localhost:5173' ||
-      origin === 'http://localhost:4173'
-    ) {
-      return callback(null, true)
-    }
+    if (isAllowedOrigin(origin)) return callback(null, true)
     callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
@@ -167,6 +160,7 @@ app.use('/api/eos',              eosRoutes)
 app.use('/api/processes',        processesRoutes)
 app.use('/api/gamification',     gamificationRoutes)
 app.use('/api/ventas',           ventasRoutes)
+app.use('/api/chat',             chatRoutes)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 

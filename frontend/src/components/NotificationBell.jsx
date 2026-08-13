@@ -12,11 +12,12 @@ const isFollowedCompleted = n => n.type === 'COMPLETED' && (n.relation === 'foll
 
 // Orden por urgencia: lo bloqueado y lo que requiere una decisión tuya van primero.
 // BLOCKED agrupa también UNBLOCKED (mismo hilo: se bloqueó → se resolvió) y
-// TASK_MENTION agrupa también LEAD_ASSIGNED (misma idea: "te asignaron algo").
+// TASK_MENTION agrupa también LEAD_ASSIGNED y CHAT_MENTION (misma idea: "te
+// mencionaron/asignaron algo" — el mismo ícono @ para cualquier mención).
 const FILTERS = [
   { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                  match: n => n.type === 'BLOCKED' || n.type === 'UNBLOCKED' },
   { key: 'ACTION',       label: '🙋', title: 'Requieren tu acción',       match: n => n.type === 'VACATION_REQUEST' },
-  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' },
+  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: isFollowedCompleted },
   { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED'].includes(n.type) },
@@ -227,11 +228,12 @@ export default function NotificationBell() {
                 const isComment        = n.type === 'TASK_COMMENT'
                 const isMention        = n.type === 'TASK_MENTION'
                 const isLeadAssigned   = n.type === 'LEAD_ASSIGNED'
+                const isChatMention    = n.type === 'CHAT_MENTION'
                 const isVacationAction = n.type === 'VACATION_REQUEST'
                 const isVacation       = isVacationAction || n.type === 'VACATION_REVIEWED'
                 const isGameLaunched   = n.type === 'GAME_LAUNCHED'
                 const isCompleted      = n.type === 'COMPLETED'
-                const isAssignment     = isMention || isLeadAssigned
+                const isAssignment     = isMention || isLeadAssigned || isChatMention
                 const isAmberFamily    = isVacation || isGameLaunched
 
                 const bgClass = isCompleted
@@ -268,8 +270,9 @@ export default function NotificationBell() {
                 // Deep-link: leads van a Ventas (ruta según rol), solicitudes de licencia a
                 // RRHH → Vacaciones (solo lo ven admins, que son quienes las reciben), las
                 // revisiones de licencia al perfil propio (el destinatario puede no ser admin),
-                // y los juegos no navegan a ningún lado — abren el 🏆 flotante (ya visible en
-                // cualquier página) vía un evento, ver handleRowClick.
+                // las menciones de chat al canal correspondiente, y los juegos no navegan a
+                // ningún lado — abren el 🏆 flotante (ya visible en cualquier página) vía un
+                // evento, ver handleRowClick.
                 const ventasBase = user?.isAdmin ? '/admin/ventas' : '/ventas'
                 const dest = n.leadId
                   ? `${ventasBase}?lead=${n.leadId}`
@@ -279,9 +282,11 @@ export default function NotificationBell() {
                       ? '/profile'
                       : isGameLaunched
                         ? null
-                        : n.projectId
-                          ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
-                          : null
+                        : isChatMention
+                          ? (n.channel?.slug ? `/chat/${n.channel.slug}` : '/chat')
+                          : n.projectId
+                            ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
+                            : null
 
                 const handleRowClick = (e) => {
                   setOpen(false)
@@ -322,6 +327,9 @@ export default function NotificationBell() {
                         )}
                         {isLeadAssigned && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">💼</span>
+                        )}
+                        {isChatMention && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">💬</span>
                         )}
                         {isVacationAction && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🙋</span>

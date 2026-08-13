@@ -20,10 +20,13 @@ const prisma = require('./lib/prisma')
 const { FEATURE_FLAGS } = require('./config/featureFlags')
 const { PLATFORM_SETTINGS } = require('./config/platformSettings')
 const { DEFAULT_TZ } = require('./utils/dates')
+const { initSocket } = require('./lib/socket')
 
 const PORT = process.env.PORT || 3001
 const server = app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`)
+  initSocket(server)
+  console.log('[Socket.IO] Inicializado — chat en tiempo real activo.')
   // Sincronizar catálogo de feature flags — upsert para que siempre existan en DB
   for (const { key, name, description } of FEATURE_FLAGS) {
     await prisma.featureFlag.upsert({

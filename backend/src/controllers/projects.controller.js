@@ -46,6 +46,7 @@ const includeDetails = {
     where:  { status: 'active' },
     select: { type: true },
   },
+  chatChannel: { select: { slug: true } },
 }
 
 async function list(req, res, next) {
@@ -263,6 +264,7 @@ async function projectTasks(req, res, next) {
         id: true, name: true, createdAt: true, situation: true,
         timezone: true, linksEnabled: true, situationEnabled: true, briefsEnabled: true,
         websiteUrl: true, connections: true,
+        chatChannel: { select: { slug: true } },
         links:    { orderBy: { createdAt: 'asc' } },
         services: { include: { service: true }, orderBy: { service: { name: 'asc' } } },
         members:  {

@@ -4,6 +4,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { WorkspaceProvider } from './context/WorkspaceContext'
+import { ChatProvider } from './context/ChatContext'
 import React from 'react'
 import LoadingSpinner from './components/LoadingSpinner'
 import WorkspaceSuspendedScreen from './components/WorkspaceSuspendedScreen'
@@ -78,6 +79,7 @@ const Admin            = lazyWithReload(() => import('./pages/Admin'))
 const Productivity     = lazyWithReload(() => import('./pages/Productivity'))
 const RRHH             = lazyWithReload(() => import('./pages/RRHH'))
 const RealTime         = lazyWithReload(() => import('./pages/RealTime'))
+const Chat              = lazyWithReload(() => import('./pages/Chat'))
 const Reports          = lazyWithReload(() => import('./pages/Reports'))
 const MyReports        = lazyWithReload(() => import('./pages/MyReports'))
 const MyProjects       = lazyWithReload(() => import('./pages/MyProjects'))
@@ -146,6 +148,7 @@ export default function App() {
     <ThemeProvider>
     <WorkspaceProvider>
     <AuthProvider>
+    <ChatProvider>
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <React.Suspense fallback={<LoadingSpinner size="lg" fullPage />}>
         <Routes>
@@ -174,6 +177,8 @@ export default function App() {
           <Route path="/preferences"  element={<PrivateRoute><Preferences  /></PrivateRoute>} />
           <Route path="/docs"         element={<PrivateRoute><Docs         /></PrivateRoute>} />
           <Route path="/realtime"   element={<PrivateRoute><RealTime  /></PrivateRoute>} />
+          <Route path="/chat"       element={<PrivateRoute><Chat /></PrivateRoute>} />
+          <Route path="/chat/:slug" element={<PrivateRoute><Chat /></PrivateRoute>} />
           <Route path="/marketing"  element={<PrivateRoute><Marketing /></PrivateRoute>} />
           <Route path="/billing"    element={<PrivateRoute><Billing  /></PrivateRoute>} />
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
@@ -190,6 +195,7 @@ export default function App() {
         </React.Suspense>
         <GlobalShortcuts />
       </BrowserRouter>
+    </ChatProvider>
     </AuthProvider>
     </WorkspaceProvider>
     </ThemeProvider>
