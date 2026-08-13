@@ -82,6 +82,12 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   const [currentDesc, setCurrentDesc] = useState(task.description)
   const editRef                       = useRef(null)
 
+  // @mención al editar la descripción (contra los miembros del workspace, no solo del
+  // proyecto — cualquiera puede ser mencionado y notificado, sea o no responsable).
+  const [editMentionQuery, setEditMentionQuery] = useState(null) // null = inactivo
+  const [editMentionStart, setEditMentionStart] = useState(-1)
+  const [editMentionIdx, setEditMentionIdx]     = useState(0)
+
   // Edición de proyecto / responsable / fecha futura
   const [projects, setProjects]       = useState([])
   const [wsMembers, setWsMembers]     = useState([])
@@ -101,6 +107,44 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
       .then(r => setWsMembers(r.data.filter(m => m.active)))
       .catch(() => {})
   }, [editing, projects.length])
+
+  const editMentionMatches = editMentionQuery !== null
+    ? wsMembers.filter(m => m.name.toLowerCase().includes(editMentionQuery.toLowerCase()))
+    : []
+
+  const selectEditMention = useCallback((member) => {
+    const cursorPos = editRef.current?.selectionStart ?? editDesc.length
+    const before = editDesc.slice(0, editMentionStart)
+    const after  = editDesc.slice(cursorPos)
+    const newText = `${before}@${member.name} ${after}`
+    setEditDesc(newText)
+    setEditMentionQuery(null)
+    setEditMentionStart(-1)
+    const newCursor = editMentionStart + member.name.length + 2
+    setTimeout(() => {
+      editRef.current?.focus()
+      editRef.current?.setSelectionRange(newCursor, newCursor)
+    }, 0)
+  }, [editDesc, editMentionStart])
+
+  function handleEditDescChange(e) {
+    const val = e.target.value
+    const pos = e.target.selectionStart
+    setEditDesc(val)
+    const before = val.slice(0, pos)
+    const atIdx  = before.lastIndexOf('@')
+    if (atIdx !== -1) {
+      const afterAt = before.slice(atIdx + 1)
+      if (!afterAt.includes(' ') && !afterAt.includes('\n')) {
+        setEditMentionQuery(afterAt)
+        setEditMentionStart(atIdx)
+        setEditMentionIdx(0)
+        return
+      }
+    }
+    setEditMentionQuery(null)
+    setEditMentionStart(-1)
+  }
 
   // Equipo del proyecto seleccionado vs resto del workspace (etiqueta, no barrera)
   const projectMemberIds = new Set(
@@ -287,6 +331,12 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   }
 
   function handleEditKeyDown(e) {
+    if (editMentionQuery !== null && editMentionMatches.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setEditMentionIdx(i => Math.min(i + 1, editMentionMatches.length - 1)); return }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setEditMentionIdx(i => Math.max(i - 1, 0)); return }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectEditMention(editMentionMatches[editMentionIdx]); return }
+      if (e.key === 'Escape') { setEditMentionQuery(null); return }
+    }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
       handleSaveEdit()
@@ -336,14 +386,36 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
           {/* Descripción editable */}
           {editing ? (
             <div className="space-y-2">
-              <textarea
-                ref={editRef}
-                rows={3}
-                value={editDesc}
-                onChange={e => setEditDesc(e.target.value)}
-                onKeyDown={handleEditKeyDown}
-                className="w-full text-sm px-3 py-2 rounded-xl border border-primary-300 dark:border-primary-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
-              />
+              <div className="relative">
+                <textarea
+                  ref={editRef}
+                  rows={3}
+                  value={editDesc}
+                  onChange={handleEditDescChange}
+                  onKeyDown={handleEditKeyDown}
+                  placeholder="Usá @ para mencionar a alguien"
+                  className="w-full text-sm px-3 py-2 rounded-xl border border-primary-300 dark:border-primary-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
+                />
+                {editMentionQuery !== null && editMentionMatches.length > 0 && (
+                  <div className="absolute z-10 mt-1 left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg overflow-hidden">
+                    {editMentionMatches.map((m, i) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onMouseDown={e => { e.preventDefault(); selectEditMention(m) }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${i === editMentionIdx ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                      >
+                        <img
+                          src={avatarUrl(m.avatar)}
+                          alt={m.name}
+                          className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
+                        />
+                        <span className="text-gray-800 dark:text-gray-200 font-medium">{m.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Proyecto — no editable en tareas completadas (reescribiría horas históricas) */}
               {task.status === 'COMPLETED' ? (

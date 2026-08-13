@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useMentionAutocomplete } from './useMentionAutocomplete'
-import GifPicker from './GifPicker'
+import EmojiGifPicker from './EmojiGifPicker'
 import { avatarUrl } from '../../utils/avatarUrl'
 
 // Entrada especial de autocompletado: notifica a todo el equipo del canal, no a una persona.
@@ -12,9 +12,9 @@ const EVERYONE_ITEM = { id: EVERYONE_ID, name: 'everyone' }
 export default function MessageInput({ onSend, members }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
-  const [showGifPicker, setShowGifPicker] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
   const textareaRef = useRef(null)
-  const gifRef = useRef(null)
+  const pickerRef = useRef(null)
 
   const mentionable = useMemo(() => [EVERYONE_ITEM, ...members], [members])
   const { mentionQuery, mentionMatches, mentionIdx, handleTextChange, handleMentionKeyDown, selectMention } =
@@ -22,7 +22,7 @@ export default function MessageInput({ onSend, members }) {
 
   useEffect(() => {
     function handleClickOutside(e) {
-      if (gifRef.current && !gifRef.current.contains(e.target)) setShowGifPicker(false)
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) setShowPicker(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -41,8 +41,23 @@ export default function MessageInput({ onSend, members }) {
   }
 
   async function handleSendGif(url) {
-    setShowGifPicker(false)
+    setShowPicker(false)
     await onSend(null, url)
+  }
+
+  // Inserta el emoji en la posición del cursor (no envía ni cierra el picker, para
+  // poder encadenar varios — mismo criterio que el emoji picker de WhatsApp).
+  function handleSelectEmoji(emoji) {
+    const el = textareaRef.current
+    const start = el?.selectionStart ?? text.length
+    const end = el?.selectionEnd ?? text.length
+    const newText = text.slice(0, start) + emoji + text.slice(end)
+    setText(newText)
+    const newCursor = start + emoji.length
+    setTimeout(() => {
+      el?.focus()
+      el?.setSelectionRange(newCursor, newCursor)
+    }, 0)
   }
 
   function handleKeyDown(e) {
@@ -56,16 +71,22 @@ export default function MessageInput({ onSend, members }) {
   return (
     <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
       <div className="flex items-end gap-2">
-        <div ref={gifRef} className="relative flex-shrink-0">
+        <div ref={pickerRef} className="relative flex-shrink-0">
           <button
             type="button"
-            onClick={() => setShowGifPicker(v => !v)}
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-            title="Enviar GIF"
+            onClick={() => setShowPicker(v => !v)}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-base"
+            title="Emoji y GIF"
           >
-            🎬
+            😊
           </button>
-          {showGifPicker && <GifPicker onSelect={handleSendGif} onClose={() => setShowGifPicker(false)} />}
+          {showPicker && (
+            <EmojiGifPicker
+              onSelectEmoji={handleSelectEmoji}
+              onSelectGif={handleSendGif}
+              onClose={() => setShowPicker(false)}
+            />
+          )}
         </div>
 
         <div className="flex-1 relative">

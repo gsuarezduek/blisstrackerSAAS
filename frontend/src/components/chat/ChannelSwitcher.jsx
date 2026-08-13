@@ -53,11 +53,11 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
     // Menciones/favoritos solo aplican al resto (canales de proyecto) — general y los
     // canales custom quedan siempre arriba, independientemente de si tienen menciones.
     const rest = filtered.filter(c => !pinnedIds.has(c.id))
-    const mentioned = rest.filter(c => c.mentionCount > 0)
+    const mentioned = rest.filter(c => c.mentionCount > 0).sort(byName)
     const mentionedIds = new Set(mentioned.map(c => c.id))
     const rest2 = rest.filter(c => !mentionedIds.has(c.id))
 
-    const favorites = rest2.filter(c => c.starred)
+    const favorites = rest2.filter(c => c.starred).sort(byName)
     const favIds = new Set(favorites.map(c => c.id))
     const projects = rest2.filter(c => !favIds.has(c.id)).sort(byName)
 

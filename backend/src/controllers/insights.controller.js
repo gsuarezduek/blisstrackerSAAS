@@ -255,13 +255,23 @@ async function generateInsight(userId, workspace, member) {
     }),
     prisma.workDay.findUnique({
       where: { userId_workspaceId_date: { userId, workspaceId, date: today } },
-      include: { tasks: { include: { project: true }, orderBy: { createdAt: 'asc' } } },
+      include: {
+        tasks: {
+          // Excluir tareas futuras (scheduledFor > hoy): quedan enganchadas al workDay del
+          // día de creación como placeholder, pero no son trabajo pendiente de hoy — son
+          // recordatorios para más adelante y no deben leerse como algo sin resolver.
+          where: { OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }] },
+          include: { project: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     }),
     prisma.task.findMany({
       where: {
         userId,
         status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         workDay: { date: { lt: today }, workspaceId },
+        OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }],
       },
       include: { project: true, workDay: { select: { date: true } } },
     }),

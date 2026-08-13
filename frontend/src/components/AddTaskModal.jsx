@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
+import { avatarUrl } from '../utils/avatarUrl'
 
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
@@ -140,6 +141,16 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
   const [loading, setLoading] = useState(false)
   const [showGtdWarning, setShowGtdWarning] = useState(false)
 
+  // @mención en la descripción: notifica a quien se mencione, sea o no la responsable
+  // de la tarea (ej. "Para mí, avisale a @Fulano").
+  const descRef = useRef(null)
+  const [mentionQuery, setMentionQuery] = useState(null) // null = inactivo
+  const [mentionStart, setMentionStart] = useState(-1)
+  const [mentionIdx, setMentionIdx] = useState(0)
+  const mentionMatches = mentionQuery !== null
+    ? members.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    : []
+
   // Opciones de tarea recurrente / futura (mutuamente excluyentes con la tarea normal)
   const [taskMode, setTaskMode] = useState('normal') // 'normal' | 'recurring' | 'future'
   const [frequency, setFrequency] = useState('weekly') // daily | weekly | monthly | annual
@@ -154,6 +165,50 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
   const toggleWeekday = (d) => setWeekdays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b))
 
   const gtdWarning = useMemo(() => getGtdWarning(description), [description])
+
+  const selectMention = useCallback((member) => {
+    const cursorPos = descRef.current?.selectionStart ?? description.length
+    const before = description.slice(0, mentionStart)
+    const after  = description.slice(cursorPos)
+    const newText = `${before}@${member.name} ${after}`
+    setDescription(newText)
+    setMentionQuery(null)
+    setMentionStart(-1)
+    const newCursor = mentionStart + member.name.length + 2
+    setTimeout(() => {
+      descRef.current?.focus()
+      descRef.current?.setSelectionRange(newCursor, newCursor)
+    }, 0)
+  }, [description, mentionStart])
+
+  function handleDescChange(e) {
+    const val = e.target.value
+    const pos = e.target.selectionStart
+    setDescription(val)
+    setShowGtdWarning(false)
+    const before = val.slice(0, pos)
+    const atIdx  = before.lastIndexOf('@')
+    if (atIdx !== -1) {
+      const afterAt = before.slice(atIdx + 1)
+      if (!afterAt.includes(' ') && !afterAt.includes('\n')) {
+        setMentionQuery(afterAt)
+        setMentionStart(atIdx)
+        setMentionIdx(0)
+        return
+      }
+    }
+    setMentionQuery(null)
+    setMentionStart(-1)
+  }
+
+  function handleDescKeyDown(e) {
+    if (mentionQuery !== null && mentionMatches.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIdx(i => Math.min(i + 1, mentionMatches.length - 1)); return }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIdx(i => Math.max(i - 1, 0)); return }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention(mentionMatches[mentionIdx]); return }
+      if (e.key === 'Escape') { setMentionQuery(null); return }
+    }
+  }
 
   useEffect(() => {
     if (lockedProject) return
@@ -278,19 +333,42 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
-            <textarea
-              autoFocus
-              required
-              rows={3}
-              value={description}
-              onChange={e => { setDescription(e.target.value); setShowGtdWarning(false) }}
-              className={`w-full border dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${
-                showGtdWarning
-                  ? 'border-amber-400 focus:ring-amber-400'
-                  : 'border-gray-300 dark:border-gray-600 focus:ring-primary-500'
-              }`}
-              placeholder="¿Qué vas a hacer?"
-            />
+            <div className="relative">
+              <textarea
+                ref={descRef}
+                autoFocus
+                required
+                rows={3}
+                value={description}
+                onChange={handleDescChange}
+                onKeyDown={handleDescKeyDown}
+                className={`w-full border dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 resize-none transition-colors ${
+                  showGtdWarning
+                    ? 'border-amber-400 focus:ring-amber-400'
+                    : 'border-gray-300 dark:border-gray-600 focus:ring-primary-500'
+                }`}
+                placeholder="¿Qué vas a hacer? Usá @ para mencionar a alguien"
+              />
+              {mentionQuery !== null && mentionMatches.length > 0 && (
+                <div className="absolute z-10 mt-1 left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg overflow-hidden">
+                  {mentionMatches.map((m, i) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onMouseDown={e => { e.preventDefault(); selectMention(m) }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${i === mentionIdx ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                    >
+                      <img
+                        src={avatarUrl(m.avatar)}
+                        alt={m.name}
+                        className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
+                      />
+                      <span className="text-gray-800 dark:text-gray-200 font-medium">{m.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {showGtdWarning && gtdWarning && (
               <div className="mt-2 flex gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 p-3">
                 <span className="text-amber-500 flex-shrink-0 mt-0.5">⚠️</span>

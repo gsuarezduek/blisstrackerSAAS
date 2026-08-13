@@ -4,6 +4,20 @@ const {
   buildRecurrenceParams, firstScheduledDate, spawnInstance,
 } = require('../services/recurrence.service')
 const { isAdmin } = require('../lib/projectAccess')
+const { resolveMentions } = require('../lib/mentions')
+
+// Resuelve @menciones de un texto contra los miembros activos del workspace (cualquiera
+// puede ser mencionado en una tarea, sea o no su responsable — la etiqueta de proyecto/
+// equipo no es una barrera, ver "Project access model" en CLAUDE.md) y devuelve el Set
+// de userIds a notificar.
+async function resolveTaskMentions(text, workspaceId, authorId) {
+  if (!text.includes('@')) return new Set()
+  const wsMembers = await prisma.workspaceMember.findMany({
+    where: { workspaceId, active: true },
+    include: { user: { select: { id: true, name: true } } },
+  })
+  return resolveMentions(text, wsMembers.map(m => m.user), authorId)
+}
 
 const taskInclude = {
   project: true,
@@ -191,20 +205,43 @@ async function create(req, res, next) {
     }
 
     // Notificar solo si la tarea ya está activa (no programada a futuro): si es futura,
-    // la notificación se vería antes de que la tarea exista para el destinatario.
-    if (userId !== requesterId && !task.scheduledFor) {
+    // la notificación (y el link a la tarea) se verían antes de que la tarea exista/sea
+    // visible para el destinatario (queda excluida de las listas hasta scheduledFor).
+    if (!task.scheduledFor) {
       const desc = description.length > 60 ? description.slice(0, 57) + '...' : description
-      await prisma.notification.create({
-        data: {
-          userId,
-          actorId:    requesterId,
-          taskId:     task.id,
-          projectId:  Number(projectId),
-          workspaceId,
-          type:       'TASK_MENTION',
-          message:    `te asignó una tarea: "${desc}"`,
-        },
-      })
+
+      if (userId !== requesterId) {
+        await prisma.notification.create({
+          data: {
+            userId,
+            actorId:    requesterId,
+            taskId:     task.id,
+            projectId:  Number(projectId),
+            workspaceId,
+            type:       'TASK_MENTION',
+            message:    `te asignó una tarea: "${desc}"`,
+          },
+        })
+      }
+
+      // @menciones en la descripción: notifican aunque la tarea sea para uno mismo
+      // (ej. "Para mí, avisale a @Fulano"). Si la mencionada es además la responsable,
+      // no se duplica el aviso — ya recibió el de arriba.
+      const mentioned = await resolveTaskMentions(description, workspaceId, requesterId)
+      mentioned.delete(userId)
+      if (mentioned.size > 0) {
+        await prisma.notification.createMany({
+          data: Array.from(mentioned).map(uid => ({
+            userId:      uid,
+            actorId:     requesterId,
+            taskId:      task.id,
+            projectId:   Number(projectId),
+            workspaceId,
+            type:        'TASK_MENTION',
+            message:     `te mencionó en una tarea: "${desc}"`,
+          })),
+        })
+      }
     }
 
     res.status(201).json(task)
@@ -552,6 +589,35 @@ async function editTask(req, res, next) {
       ])
     } else {
       await prisma.task.update({ where: { id }, data })
+    }
+
+    // @menciones nuevas en la descripción editada: solo avisa a quien se agrega de nuevo
+    // (si ya estaba mencionado en la versión anterior, no se repite el aviso). Igual que en
+    // la creación, se salta si la tarea sigue programada a futuro (no visible todavía).
+    const stillFuture = data.scheduledFor !== undefined ? data.scheduledFor : task.scheduledFor
+    if (!stillFuture && desc !== task.description && (desc.includes('@') || task.description.includes('@'))) {
+      const wsMembers = await prisma.workspaceMember.findMany({
+        where: { workspaceId, active: true },
+        include: { user: { select: { id: true, name: true } } },
+      })
+      const users = wsMembers.map(m => m.user)
+      const before = resolveMentions(task.description, users, requesterId)
+      const after  = resolveMentions(desc, users, requesterId)
+      const newlyMentioned = [...after].filter(uid => !before.has(uid))
+      if (newlyMentioned.length > 0) {
+        const shortDesc = desc.length > 60 ? desc.slice(0, 57) + '...' : desc
+        await prisma.notification.createMany({
+          data: newlyMentioned.map(uid => ({
+            userId:      uid,
+            actorId:     requesterId,
+            taskId:      id,
+            projectId:   data.projectId ?? task.projectId,
+            workspaceId,
+            type:        'TASK_MENTION',
+            message:     `te mencionó en una tarea: "${shortDesc}"`,
+          })),
+        })
+      }
     }
 
     const updated = await prisma.task.findUnique({ where: { id }, include: taskInclude })
