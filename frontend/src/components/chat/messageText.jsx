@@ -31,8 +31,14 @@ export function renderMessageText(text) {
         </a>
       )
     } else {
+      const isEveryone = match[2].toLowerCase() === '@everyone'
       parts.push(
-        <span key={match.index} className="text-primary-600 dark:text-primary-400 font-medium">
+        <span
+          key={match.index}
+          className={isEveryone
+            ? 'px-1 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold'
+            : 'text-primary-600 dark:text-primary-400 font-medium'}
+        >
           {match[2]}
         </span>
       )

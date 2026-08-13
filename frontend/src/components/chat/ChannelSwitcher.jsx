@@ -28,6 +28,7 @@ function ChannelRow({ channel, active, onSelect }) {
 }
 
 const norm = s => (s || '').toLowerCase()
+const byName = (a, b) => norm(a.name).localeCompare(norm(b.name), 'es', { sensitivity: 'base' })
 
 // Dropdown compacto para elegir canal dentro del widget flotante de Chat. Prioriza lo
 // urgente/importante arriba y NO duplica un canal en dos grupos — cada uno aparece una
@@ -55,8 +56,8 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
       { key: 'mentions',  label: 'Menciones',  items: mentioned, accent: true },
       { key: 'favorites', label: 'Destacados',  items: favorites },
       { key: 'general',   label: null,          items: rest2.filter(c => c.kind === 'general') },
-      { key: 'project',   label: 'Proyectos',   items: rest2.filter(c => c.kind === 'project') },
-      { key: 'custom',    label: 'Canales',     items: rest2.filter(c => c.kind === 'custom') },
+      { key: 'project',   label: 'Proyectos',   items: rest2.filter(c => c.kind === 'project').sort(byName) },
+      { key: 'custom',    label: 'Canales',     items: rest2.filter(c => c.kind === 'custom').sort(byName) },
     ]
   }, [filtered])
 

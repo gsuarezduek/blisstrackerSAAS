@@ -1,7 +1,12 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useMentionAutocomplete } from './useMentionAutocomplete'
 import GifPicker from './GifPicker'
 import { avatarUrl } from '../../utils/avatarUrl'
+
+// Entrada especial de autocompletado: notifica a todo el equipo del canal, no a una persona.
+// Se antepone a la lista real para que "@ev..." la matchee y quede siempre primera.
+const EVERYONE_ID = '__everyone__'
+const EVERYONE_ITEM = { id: EVERYONE_ID, name: 'everyone' }
 
 // Input del chat: texto + @menciones + GIF.
 export default function MessageInput({ onSend, members }) {
@@ -11,8 +16,9 @@ export default function MessageInput({ onSend, members }) {
   const textareaRef = useRef(null)
   const gifRef = useRef(null)
 
+  const mentionable = useMemo(() => [EVERYONE_ITEM, ...members], [members])
   const { mentionQuery, mentionMatches, mentionIdx, handleTextChange, handleMentionKeyDown, selectMention } =
-    useMentionAutocomplete({ text, setText, textareaRef, members })
+    useMentionAutocomplete({ text, setText, textareaRef, members: mentionable })
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -81,8 +87,15 @@ export default function MessageInput({ onSend, members }) {
                   onMouseDown={e => { e.preventDefault(); selectMention(m) }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${i === mentionIdx ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                 >
-                  <img src={avatarUrl(m.avatar)} alt={m.name} className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0" />
+                  {m.id === EVERYONE_ID ? (
+                    <span className="w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center justify-center flex-shrink-0 text-xs font-bold">@</span>
+                  ) : (
+                    <img src={avatarUrl(m.avatar)} alt={m.name} className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0" />
+                  )}
                   <span className="text-gray-800 dark:text-gray-200 font-medium">{m.name}</span>
+                  {m.id === EVERYONE_ID && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500">notifica a todo el equipo</span>
+                  )}
                 </button>
               ))}
             </div>

@@ -328,15 +328,35 @@ export default function ProjectDetail() {
                   )}
                 </div>
               </div>
-              <button
-                onClick={() => setShowAddTask(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors flex-shrink-0"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                  <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                </svg>
-                Agregar tarea
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {data.project.chatChannel?.slug && (
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent('bliss:open-chat', { detail: { slug: data.project.chatChannel.slug } }))}
+                    className="flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg rounded-xl transition-colors"
+                    title="Chat del proyecto"
+                  >
+                    💬
+                  </button>
+                )}
+                {marketingEnabled && (
+                  <button
+                    onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)}
+                    className="flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg rounded-xl transition-colors"
+                    title="Marketing"
+                  >
+                    🎯
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowAddTask(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors flex-shrink-0"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                  </svg>
+                  Agregar tarea
+                </button>
+              </div>
             </div>
 
             {/* Info tabs: Situación / Links / Personas / Servicios */}
@@ -346,23 +366,13 @@ export default function ProjectDetail() {
                 <select
                   className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500"
                   value={infoTab}
-                  onChange={e => {
-                    if (e.target.value === 'marketing') {
-                      navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)
-                    } else if (e.target.value === 'chat') {
-                      window.dispatchEvent(new CustomEvent('bliss:open-chat', { detail: { slug: data.project.chatChannel.slug } }))
-                    } else {
-                      setInfoTab(e.target.value)
-                    }
-                  }}
+                  onChange={e => setInfoTab(e.target.value)}
                 >
                   {data.project.situationEnabled !== false && <option value="situacion">Situación</option>}
                   {data.project.linksEnabled !== false && <option value="links">Links/Accesos</option>}
                   <option value="info">Info</option>
                   {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
                   <option value="reuniones">Reuniones</option>
-                  {data.project.chatChannel?.slug && <option value="chat">💬 Chat</option>}
-                  {marketingEnabled && <option value="marketing">Marketing ↗</option>}
                 </select>
                 {/* Desktop */}
                 <div className="hidden sm:flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
@@ -402,25 +412,6 @@ export default function ProjectDetail() {
                   >
                     Reuniones
                   </button>
-                  {marketingEnabled && (
-                    <button
-                      onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)}
-                      className="px-4 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1"
-                    >
-                      Marketing
-                      <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </button>
-                  )}
-                  {data.project.chatChannel?.slug && (
-                    <button
-                      onClick={() => window.dispatchEvent(new CustomEvent('bliss:open-chat', { detail: { slug: data.project.chatChannel.slug } }))}
-                      className="px-4 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1"
-                    >
-                      💬 Chat
-                    </button>
-                  )}
                 </div>
               </div>
 

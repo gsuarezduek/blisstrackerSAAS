@@ -181,16 +181,26 @@ async function sendMessage(req, res, next) {
     })
 
     // Menciones contra miembros activos del workspace (cualquier canal es abierto a todos).
+    // "@everyone" (con límite de palabra, insensible a mayúsculas) notifica a todo el equipo
+    // en vez de resolver nombres individuales.
     let mentionedUserIds = new Set()
+    let isEveryoneMention = false
     if (text.includes('@')) {
       const members = await prisma.workspaceMember.findMany({
         where: { workspaceId, active: true },
         select: { user: { select: { id: true, name: true } } },
       })
-      mentionedUserIds = resolveMentions(text, members.map(m => m.user), userId)
+      const allUsers = members.map(m => m.user)
+      isEveryoneMention = /@everyone\b/i.test(text)
+      mentionedUserIds = isEveryoneMention
+        ? new Set(allUsers.filter(u => u.id !== userId).map(u => u.id))
+        : resolveMentions(text, allUsers, userId)
     }
 
     if (mentionedUserIds.size > 0) {
+      const notifMessage = isEveryoneMention
+        ? `mencionó a todo el equipo en #${channelLabel(channel)}`
+        : `te mencionó en #${channelLabel(channel)}`
       await prisma.notification.createMany({
         data: Array.from(mentionedUserIds).map(uid => ({
           userId: uid,
@@ -199,7 +209,7 @@ async function sendMessage(req, res, next) {
           channelId,
           chatMessageId: message.id,
           type: 'CHAT_MENTION',
-          message: `te mencionó en #${channelLabel(channel)}`,
+          message: notifMessage,
         })),
       })
       for (const uid of mentionedUserIds) emitTo(`user:${uid}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
