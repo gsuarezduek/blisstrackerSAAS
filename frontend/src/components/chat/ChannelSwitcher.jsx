@@ -1,8 +1,4 @@
-const GROUPS = [
-  { kind: 'general', label: null },
-  { kind: 'project', label: 'Proyectos' },
-  { kind: 'custom',  label: 'Canales' },
-]
+import { useState, useMemo } from 'react'
 
 function ChannelRow({ channel, active, onSelect }) {
   const unread = channel.unreadCount > 0
@@ -31,34 +27,82 @@ function ChannelRow({ channel, active, onSelect }) {
   )
 }
 
-// Dropdown compacto para elegir canal dentro del widget flotante de Chat (reemplaza
-// la vieja sidebar de la página — acá no hay espacio para una columna fija).
+const norm = s => (s || '').toLowerCase()
+
+// Dropdown compacto para elegir canal dentro del widget flotante de Chat. Prioriza lo
+// urgente/importante arriba y NO duplica un canal en dos grupos — cada uno aparece una
+// sola vez, en el grupo de mayor prioridad al que pertenece:
+// menciones sin leer → favoritos (mismo starring de "Mis Proyectos") → general → proyectos → canales.
 export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel }) {
+  const [query, setQuery] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = norm(query).trim()
+    if (!q) return channels
+    return channels.filter(c => norm(c.name).includes(q))
+  }, [channels, query])
+
+  const groups = useMemo(() => {
+    const mentioned = filtered.filter(c => c.mentionCount > 0)
+    const mentionedIds = new Set(mentioned.map(c => c.id))
+    const rest1 = filtered.filter(c => !mentionedIds.has(c.id))
+
+    const favorites = rest1.filter(c => c.starred)
+    const favIds = new Set(favorites.map(c => c.id))
+    const rest2 = rest1.filter(c => !favIds.has(c.id))
+
+    return [
+      { key: 'mentions',  label: 'Menciones',  items: mentioned, accent: true },
+      { key: 'favorites', label: 'Destacados',  items: favorites },
+      { key: 'general',   label: null,          items: rest2.filter(c => c.kind === 'general') },
+      { key: 'project',   label: 'Proyectos',   items: rest2.filter(c => c.kind === 'project') },
+      { key: 'custom',    label: 'Canales',     items: rest2.filter(c => c.kind === 'custom') },
+    ]
+  }, [filtered])
+
+  const hasResults = groups.some(g => g.items.length > 0)
+
   return (
-    <div className="absolute left-0 top-full mt-1.5 w-64 max-h-80 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-20 py-2 px-2">
-      {GROUPS.map(group => {
-        const items = channels.filter(c => c.kind === group.kind)
-        if (items.length === 0) return null
-        return (
-          <div key={group.kind} className="mb-3 last:mb-0">
-            {group.label && (
-              <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                {group.label}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {items.map(c => (
-                <ChannelRow key={c.id} channel={c} active={c.id === activeChannelId} onSelect={onSelect} />
-              ))}
+    <div className="absolute left-0 top-full mt-1.5 w-72 max-h-96 flex flex-col bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-20 overflow-hidden">
+      <div className="p-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+        <input
+          autoFocus
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Buscar proyecto o canal..."
+          className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
+        />
+      </div>
+
+      <div className="overflow-y-auto py-2 px-2">
+        {!hasResults && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">Sin resultados</p>
+        )}
+        {groups.map(group => {
+          if (group.items.length === 0) return null
+          return (
+            <div key={group.key} className="mb-3 last:mb-0">
+              {group.label && (
+                <p className={`px-3 mb-1 text-[11px] font-semibold uppercase tracking-wide ${
+                  group.accent ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'
+                }`}>
+                  {group.label}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {group.items.map(c => (
+                  <ChannelRow key={c.id} channel={c} active={c.id === activeChannelId} onSelect={onSelect} />
+                ))}
+              </div>
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
 
       {isAdmin && (
         <button
           onClick={onCreateChannel}
-          className="mt-1 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors border-t border-gray-100 dark:border-gray-700"
         >
           <span className="text-base leading-none">+</span> Crear canal
         </button>

@@ -279,7 +279,7 @@ async function addMember(req, res, next) {
       user = await prisma.user.create({
         data: { name, email, password: hashed },
       })
-      sendWelcomeEmail(email, name, workspaceId).catch(err =>
+      sendWelcomeEmail(email, name, workspaceId, req.workspace.slug).catch(err =>
         console.error('[sendWelcomeEmail] Error:', err.message)
       )
     }
@@ -623,7 +623,7 @@ async function createWorkspace(req, res, next) {
       return { workspace, owner }
     })
 
-    sendWelcomeEmail(ownerEmail, ownerName, result.workspace.id).catch(err => console.error('[Workspace] Error enviando welcome email:', err.message))
+    sendWelcomeEmail(ownerEmail, ownerName, result.workspace.id, result.workspace.slug).catch(err => console.error('[Workspace] Error enviando welcome email:', err.message))
 
     // Aviso interno al equipo BlissTracker: nuevo workspace registrado.
     sendPlatformNotification('newWorkspace', {
@@ -651,9 +651,28 @@ async function createWorkspace(req, res, next) {
       ).catch(err => console.error('[Stripe] Error creando customer:', err.message))
     }
 
+    // Auto-login: el owner ya definió su contraseña en el formulario, así que lo logueamos
+    // directo en su workspace recién creado (el frontend navega a /auth?token=... con esto,
+    // el mismo mecanismo que usa el login normal) en vez de mandarlo a una pantalla de login.
+    const jwt = require('jsonwebtoken')
+    const token = jwt.sign(
+      {
+        userId:       result.owner.id,
+        workspaceId:  result.workspace.id,
+        role:         'owner',
+        teamRole:     '',
+        isSuperAdmin: result.owner.isSuperAdmin ?? false,
+        name:         result.owner.name,
+        email:        result.owner.email,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '12h' }
+    )
+
     res.status(201).json({
       workspace: { id: result.workspace.id, name: result.workspace.name, slug: result.workspace.slug },
       user: { id: result.owner.id, name: result.owner.name, email: result.owner.email },
+      token,
     })
   } catch (err) {
     console.error('[createWorkspace] error:', err.message, err.meta ?? '')

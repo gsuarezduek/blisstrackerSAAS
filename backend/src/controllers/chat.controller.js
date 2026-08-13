@@ -24,16 +24,22 @@ async function listChannels(req, res, next) {
     })
 
     const channelIds = channels.map(c => c.id)
-    const [reads, mentionCounts] = await Promise.all([
+    const projectIds = channels.map(c => c.projectId).filter(Boolean)
+    const [reads, mentionCounts, stars] = await Promise.all([
       prisma.chatChannelRead.findMany({ where: { userId, channelId: { in: channelIds } } }),
       prisma.notification.groupBy({
         by: ['channelId'],
         where: { userId, workspaceId, type: 'CHAT_MENTION', read: false, channelId: { in: channelIds } },
         _count: { id: true },
       }),
+      // Favoritos: reutiliza el mismo starring de "Mis Proyectos" (ProjectStar), no hay
+      // un concepto de favorito propio del chat — un canal de proyecto es favorito si su
+      // proyecto lo es.
+      prisma.projectStar.findMany({ where: { userId, projectId: { in: projectIds } }, select: { projectId: true } }),
     ])
     const readMap = new Map(reads.map(r => [r.channelId, r.lastReadMessageId]))
     const mentionMap = new Map(mentionCounts.map(m => [m.channelId, m._count.id]))
+    const starredProjectIds = new Set(stars.map(s => s.projectId))
 
     // Sin tabla de "read" por mensaje: no-leídos = mensajes con id > lastReadMessageId.
     // Se evita la query por canal cuando ya está al día (lastRead >= último mensaje).
@@ -53,6 +59,7 @@ async function listChannels(req, res, next) {
       name: channelLabel(c),
       description: c.description,
       projectId: c.projectId,
+      starred: c.projectId ? starredProjectIds.has(c.projectId) : false,
       lastMessage: c.messages[0] || null,
       unreadCount: unreadMap.get(c.id) || 0,
       mentionCount: mentionMap.get(c.id) || 0,

@@ -96,7 +96,7 @@ export default function Register() {
     setError('')
     setLoading(true)
     try {
-      await api.post('/workspaces', { workspaceName, slug, ownerName, ownerEmail, ownerPassword })
+      const { data } = await api.post('/workspaces', { workspaceName, slug, ownerName, ownerEmail, ownerPassword })
 
       // Conversión GA4 + backend (ConversionEvent)
       trackEvent('signup_completed', { method: 'email', workspace_slug: slug })
@@ -104,11 +104,15 @@ export default function Register() {
         window.gtag('event', 'sign_up', { method: 'email', workspace_slug: slug })
       }
 
+      // Auto-login: ya tiene contraseña definida (la tipeó arriba), así que entra directo
+      // a su workspace nuevo en vez de pasar por la pantalla de login (mismo mecanismo que
+      // usa el login normal: AuthCallback en /auth?token= guarda el JWT y redirige al Dashboard).
       const domain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-      if (window.location.hostname.includes(domain)) {
-        window.location.href = `https://${slug}.${domain}/login`
+      const isLocal = !window.location.hostname.match(new RegExp(`\\.${domain.replace(/\./g, '\\.')}$`))
+      if (isLocal) {
+        navigate(`/auth?token=${data.token}&ws=${slug}`)
       } else {
-        navigate('/login')
+        window.location.href = `https://${slug}.${domain}/auth?token=${data.token}`
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Error al crear el workspace')

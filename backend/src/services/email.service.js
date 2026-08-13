@@ -279,10 +279,12 @@ async function sendEmailChangedNotice(oldEmail, name, newEmail, workspaceId) {
   }
 }
 
-async function sendWelcomeEmail(email, name, workspaceId) {
+// `slug` es opcional: si se conoce, el botón lleva directo al login del workspace
+// (el usuario ya definió su contraseña al registrarse); sin slug cae al login central.
+async function sendWelcomeEmail(email, name, workspaceId, slug) {
   const from = await getEmailFrom(workspaceId)
-  const loginUrl = `${process.env.FRONTEND_URL}/login`
-  const forgotUrl = `${process.env.FRONTEND_URL}/forgot-password`
+  const domain = process.env.APP_DOMAIN || 'blisstracker.app'
+  const loginUrl = slug ? `https://${slug}.${domain}/login` : `${process.env.FRONTEND_URL}/login`
   const subject = 'Bienvenido a BlissTracker'
   try {
     const { error } = await resend.emails.send({
@@ -292,17 +294,16 @@ async function sendWelcomeEmail(email, name, workspaceId) {
       html: emailShell(`
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
           <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">¡Bienvenido, ${name}!</h2>
-          <p style="color:#475569;margin:0 0 20px;">Tu cuenta en BlissTracker fue creada. Tu email de acceso es:</p>
+          <p style="color:#475569;margin:0 0 20px;">Tu cuenta en BlissTracker ya está lista. Tu email de acceso es:</p>
           <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
             <p style="margin:0;color:#475569;font-size:14px;"><strong>Email:</strong> ${email}</p>
           </div>
-          <p style="color:#475569;margin:0 0 20px;">Para establecer tu contraseña, hacé clic en el botón de abajo:</p>
-          <a href="${forgotUrl}"
+          <a href="${loginUrl}"
              style="display:inline-block;background:#E67A1F;color:white;text-decoration:none;
                     padding:12px 24px;border-radius:8px;font-weight:600;margin-bottom:20px;">
-            Establecer mi contraseña
+            Ir a mi workspace
           </a>
-          <p style="color:#94a3b8;font-size:14px;margin:0;">Una vez que establezcas tu contraseña, podés ingresar desde <a href="${loginUrl}" style="color:#E67A1F;">acá</a>.</p>
+          <p style="color:#94a3b8;font-size:14px;margin:0;">Ingresá con la contraseña que ya definiste. Si la olvidaste, podés restablecerla desde la pantalla de inicio de sesión.</p>
         </div>
       `),
     })
