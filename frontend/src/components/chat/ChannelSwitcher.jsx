@@ -30,10 +30,12 @@ function ChannelRow({ channel, active, onSelect }) {
 const norm = s => (s || '').toLowerCase()
 const byName = (a, b) => norm(a.name).localeCompare(norm(b.name), 'es', { sensitivity: 'base' })
 
-// Dropdown compacto para elegir canal dentro del widget flotante de Chat. Prioriza lo
-// urgente/importante arriba y NO duplica un canal en dos grupos — cada uno aparece una
-// sola vez, en el grupo de mayor prioridad al que pertenece:
-// menciones sin leer → favoritos (mismo starring de "Mis Proyectos") → general → proyectos → canales.
+// Dropdown compacto para elegir canal dentro del widget flotante de Chat. NO duplica un
+// canal en dos grupos — cada uno aparece una sola vez, en el grupo de mayor prioridad al
+// que pertenece: general + canales creados aparte de proyectos (siempre arriba, fijos,
+// no se mueven por menciones/favoritos) → menciones sin leer (solo canales de proyecto)
+// → favoritos (mismo starring de "Mis Proyectos", solo canales de proyecto) → resto de
+// proyectos por orden alfabético.
 export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel }) {
   const [query, setQuery] = useState('')
 
@@ -44,20 +46,27 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
   }, [channels, query])
 
   const groups = useMemo(() => {
-    const mentioned = filtered.filter(c => c.mentionCount > 0)
-    const mentionedIds = new Set(mentioned.map(c => c.id))
-    const rest1 = filtered.filter(c => !mentionedIds.has(c.id))
+    const general = filtered.filter(c => c.kind === 'general')
+    const custom = filtered.filter(c => c.kind === 'custom').sort(byName)
+    const pinnedIds = new Set([...general, ...custom].map(c => c.id))
 
-    const favorites = rest1.filter(c => c.starred)
+    // Menciones/favoritos solo aplican al resto (canales de proyecto) — general y los
+    // canales custom quedan siempre arriba, independientemente de si tienen menciones.
+    const rest = filtered.filter(c => !pinnedIds.has(c.id))
+    const mentioned = rest.filter(c => c.mentionCount > 0)
+    const mentionedIds = new Set(mentioned.map(c => c.id))
+    const rest2 = rest.filter(c => !mentionedIds.has(c.id))
+
+    const favorites = rest2.filter(c => c.starred)
     const favIds = new Set(favorites.map(c => c.id))
-    const rest2 = rest1.filter(c => !favIds.has(c.id))
+    const projects = rest2.filter(c => !favIds.has(c.id)).sort(byName)
 
     return [
-      { key: 'mentions',  label: 'Menciones',  items: mentioned, accent: true },
+      { key: 'general',   label: null,          items: general },
+      { key: 'custom',    label: 'Canales',     items: custom },
+      { key: 'mentions',  label: 'Menciones',   items: mentioned, accent: true },
       { key: 'favorites', label: 'Destacados',  items: favorites },
-      { key: 'general',   label: null,          items: rest2.filter(c => c.kind === 'general') },
-      { key: 'project',   label: 'Proyectos',   items: rest2.filter(c => c.kind === 'project').sort(byName) },
-      { key: 'custom',    label: 'Canales',     items: rest2.filter(c => c.kind === 'custom').sort(byName) },
+      { key: 'project',   label: 'Proyectos',   items: projects },
     ]
   }, [filtered])
 
