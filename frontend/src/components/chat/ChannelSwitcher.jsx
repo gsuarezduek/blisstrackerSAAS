@@ -12,7 +12,7 @@ function ChannelRow({ channel, active, onSelect }) {
           : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
       }`}
     >
-      <span className={`text-gray-400 dark:text-gray-500 ${active ? '!text-primary-500' : ''}`}>#</span>
+      <span className={`text-gray-400 dark:text-gray-500 ${active ? '!text-primary-500' : ''}`}>{channel.isPrivate ? '🔒' : '#'}</span>
       <span className={`flex-1 truncate ${unread && !active ? 'font-semibold text-gray-900 dark:text-white' : ''}`}>
         {channel.name}
       </span>

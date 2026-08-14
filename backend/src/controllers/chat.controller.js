@@ -7,6 +7,23 @@ const { channelLabel, uniqueSlug, materializeChannels } = require('../lib/chatCh
 
 const MESSAGE_PAGE_SIZE = 50
 const AUTHOR_SELECT = { id: true, name: true, avatar: true }
+const MESSAGE_INCLUDE = { author: { select: AUTHOR_SELECT }, pinnedBy: { select: AUTHOR_SELECT } }
+
+// Canal privado (ChatChannel.isPrivate): solo lo ven/usan admin/owner del workspace —
+// mismo criterio que workspaceAdminOnly, pero evaluado por canal en vez de por ruta
+// entera (listChannels/listMessages/sendMessage/markRead siguen abiertos a cualquier
+// miembro salvo que el canal puntual sea privado).
+function isAdminMember(req) {
+  return req.workspaceMember?.role === 'admin' || req.workspaceMember?.role === 'owner'
+}
+
+function assertChannelAccess(req, res, channel) {
+  if (channel.isPrivate && !isAdminMember(req)) {
+    res.status(403).json({ error: 'Este canal es privado — solo lo ven los administradores', code: 'CHANNEL_PRIVATE' })
+    return false
+  }
+  return true
+}
 
 async function listChannels(req, res, next) {
   try {
@@ -15,7 +32,7 @@ async function listChannels(req, res, next) {
     await materializeChannels(workspaceId)
 
     const channels = await prisma.chatChannel.findMany({
-      where: { workspaceId, archived: false },
+      where: { workspaceId, archived: false, ...(isAdminMember(req) ? {} : { isPrivate: false }) },
       include: {
         project: { select: { name: true } },
         messages: { orderBy: { id: 'desc' }, take: 1, select: { id: true, content: true, gifUrl: true, createdAt: true, authorId: true } },
@@ -59,6 +76,7 @@ async function listChannels(req, res, next) {
       name: channelLabel(c),
       description: c.description,
       projectId: c.projectId,
+      isPrivate: c.isPrivate,
       starred: c.projectId ? starredProjectIds.has(c.projectId) : false,
       lastMessage: c.messages[0] || null,
       unreadCount: unreadMap.get(c.id) || 0,
@@ -109,6 +127,23 @@ async function updateChannel(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Candado de privacidad — a diferencia de updateChannel, aplica a CUALQUIER kind
+// (general/project/custom), no solo custom: un admin puede volver privado #general
+// o el canal de un proyecto sin que eso lo convierta en "editable" por lo demás.
+async function updateChannelPrivacy(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const channelId = Number(req.params.id)
+    const isPrivate = !!req.body?.isPrivate
+
+    const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
+    if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
+
+    const updated = await prisma.chatChannel.update({ where: { id: channelId }, data: { isPrivate } })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
 async function deleteChannel(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -132,10 +167,11 @@ async function listMessages(req, res, next) {
 
     const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
+    if (!assertChannelAccess(req, res, channel)) return
 
     const messages = await prisma.chatMessage.findMany({
       where: { channelId, ...(before ? { id: { lt: before } } : {}) },
-      include: { author: { select: AUTHOR_SELECT } },
+      include: MESSAGE_INCLUDE,
       orderBy: { id: 'desc' },
       take: limit,
     })
@@ -153,6 +189,26 @@ async function listMessages(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Mensajes fijados de un canal — separado de listMessages porque un mensaje fijado
+// puede quedar fuera de la ventana de paginación (fue fijado hace meses).
+async function listPinned(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const channelId = Number(req.params.id)
+
+    const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
+    if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
+    if (!assertChannelAccess(req, res, channel)) return
+
+    const messages = await prisma.chatMessage.findMany({
+      where: { channelId, pinnedAt: { not: null } },
+      include: MESSAGE_INCLUDE,
+      orderBy: { pinnedAt: 'desc' },
+    })
+    res.json(messages)
+  } catch (err) { next(err) }
+}
+
 async function sendMessage(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -167,10 +223,11 @@ async function sendMessage(req, res, next) {
       include: { project: { select: { name: true } } },
     })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
+    if (!assertChannelAccess(req, res, channel)) return
 
     const message = await prisma.chatMessage.create({
       data: { workspaceId, channelId, authorId: userId, content: text || null, gifUrl },
-      include: { author: { select: AUTHOR_SELECT } },
+      include: MESSAGE_INCLUDE,
     })
 
     // El autor no debe ver su propio mensaje como no-leído.
@@ -182,12 +239,14 @@ async function sendMessage(req, res, next) {
 
     // Menciones contra miembros activos del workspace (cualquier canal es abierto a todos).
     // "@everyone" (con límite de palabra, insensible a mayúsculas) notifica a todo el equipo
-    // en vez de resolver nombres individuales.
+    // en vez de resolver nombres individuales. En un canal privado sólo pueden verlo (y por
+    // ende ser notificados) admin/owner — mencionar a alguien sin acceso sería un callejón
+    // sin salida (notificación a un canal que no puede abrir).
     let mentionedUserIds = new Set()
     let isEveryoneMention = false
     if (text.includes('@')) {
       const members = await prisma.workspaceMember.findMany({
-        where: { workspaceId, active: true },
+        where: { workspaceId, active: true, ...(channel.isPrivate ? { role: { in: ['admin', 'owner'] } } : {}) },
         select: { user: { select: { id: true, name: true } } },
       })
       const allUsers = members.map(m => m.user)
@@ -237,7 +296,7 @@ async function editMessage(req, res, next) {
     const message = await prisma.chatMessage.update({
       where: { id: messageId },
       data: { content: text, editedAt: new Date() },
-      include: { author: { select: AUTHOR_SELECT } },
+      include: MESSAGE_INCLUDE,
     })
     emitTo(`channel:${existing.channelId}`, 'chat:message:edited', message)
     res.json(message)
@@ -271,6 +330,7 @@ async function markRead(req, res, next) {
 
     const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
+    if (!assertChannelAccess(req, res, channel)) return
 
     const last = await prisma.chatMessage.findFirst({ where: { channelId }, orderBy: { id: 'desc' }, select: { id: true } })
 
@@ -289,6 +349,32 @@ async function markRead(req, res, next) {
 
     emitTo(`workspace:${workspaceId}`, 'chat:read', { channelId, userId })
     res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+// Fijar/desfijar: abierto a cualquier miembro activo del workspace (a diferencia de
+// editar/eliminar, no está restringido a autor/moderador) — cualquiera puede marcar
+// un mensaje como importante para el canal.
+async function togglePin(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const userId = req.user.userId
+    const messageId = Number(req.params.messageId)
+    const pinned = !!req.body?.pinned
+
+    const existing = await prisma.chatMessage.findFirst({ where: { id: messageId, workspaceId } })
+    if (!existing) return res.status(404).json({ error: 'Mensaje no encontrado' })
+
+    const channel = await prisma.chatChannel.findFirst({ where: { id: existing.channelId, workspaceId } })
+    if (!channel || !assertChannelAccess(req, res, channel)) return
+
+    const message = await prisma.chatMessage.update({
+      where: { id: messageId },
+      data: pinned ? { pinnedAt: new Date(), pinnedById: userId } : { pinnedAt: null, pinnedById: null },
+      include: MESSAGE_INCLUDE,
+    })
+    emitTo(`channel:${existing.channelId}`, 'chat:message:pinned', message)
+    res.json(message)
   } catch (err) { next(err) }
 }
 
@@ -344,11 +430,14 @@ module.exports = {
   listChannels,
   createChannel,
   updateChannel,
+  updateChannelPrivacy,
   deleteChannel,
   listMessages,
+  listPinned,
   sendMessage,
   editMessage,
   deleteMessage,
+  togglePin,
   markRead,
   searchGifs,
   trendingGifs,

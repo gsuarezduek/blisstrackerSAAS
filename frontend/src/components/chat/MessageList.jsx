@@ -27,7 +27,7 @@ function sameGroup(a, b) {
 export default function MessageList({
   messages, loading, loadingMore, hasMore, onLoadMore,
   firstUnreadMessageId, currentUserId, canModerate,
-  onSaveEdit, onDelete,
+  onSaveEdit, onDelete, onTogglePin,
 }) {
   const scrollRef = useRef(null)
   const bottomRef = useRef(null)
@@ -162,6 +162,9 @@ export default function MessageList({
                       {m.author.name}
                     </UserLink>
                     <span className="text-xs text-gray-400 dark:text-gray-500">{timeLabel(m.createdAt)}</span>
+                    {m.pinnedAt && (
+                      <span title={m.pinnedBy ? `Fijado por ${m.pinnedBy.name}` : 'Fijado'} className="text-xs text-amber-500 dark:text-amber-400">📌</span>
+                    )}
                   </div>
                 )}
                 {editingId === m.id ? (
@@ -198,7 +201,7 @@ export default function MessageList({
                 )}
               </div>
 
-              {(canEdit || canDelete) && editingId !== m.id && (
+              {editingId !== m.id && (
                 <div className="relative flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => setMenuOpenId(id => id === m.id ? null : m.id)}
@@ -208,7 +211,13 @@ export default function MessageList({
                     ⋯
                   </button>
                   {menuOpenId === m.id && (
-                    <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-1 z-10 w-32">
+                    <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-1 z-10 w-36">
+                      <button
+                        onClick={() => { setMenuOpenId(null); onTogglePin(m) }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        📌 {m.pinnedAt ? 'Desfijar' : 'Fijar'}
+                      </button>
                       {canEdit && m.content != null && (
                         <button
                           onClick={() => startEdit(m)}

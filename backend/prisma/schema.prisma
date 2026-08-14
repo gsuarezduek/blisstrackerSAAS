@@ -297,6 +297,7 @@ model User {
   chatMessages              ChatMessage[]
   chatChannelsCreated       ChatChannel[]
   chatChannelReads          ChatChannelRead[]
+  chatMessagesPinned        ChatMessage[]              @relation("ChatMessagePinnedBy")
 }
 
 model UserLogin {
@@ -2770,6 +2771,10 @@ model ChatChannel {
   createdById Int?
   createdBy   User?     @relation(fields: [createdById], references: [id])
   archived    Boolean   @default(false)
+  // Canal privado: solo lo ven/usan admin/owner del workspace. Togglea cualquier admin
+  // desde un candado en el header del widget (no requiere ser kind="custom" — aplica a
+  // cualquier canal, incluido #general y los de proyecto). Ver chat.controller.js.
+  isPrivate   Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -2794,9 +2799,16 @@ model ChatMessage {
   editedAt    DateTime?
   createdAt   DateTime    @default(now())
 
+  // Mensajes fijados: cualquier miembro activo puede fijar/desfijar (sin restricción de
+  // autor/admin, a diferencia de editar/borrar). pinnedAt null = no fijado.
+  pinnedAt    DateTime?
+  pinnedById  Int?
+  pinnedBy    User?       @relation("ChatMessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
+
   notifications Notification[]
 
   @@index([channelId, createdAt])
+  @@index([channelId, pinnedAt])
   @@index([workspaceId])
 }
 

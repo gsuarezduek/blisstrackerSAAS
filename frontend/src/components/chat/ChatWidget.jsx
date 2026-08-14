@@ -8,6 +8,7 @@ import ChannelSwitcher from './ChannelSwitcher'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import ChannelFormModal from './ChannelFormModal'
+import PinnedBar from './PinnedBar'
 
 // Chat interno como ícono flotante (no una página/sección aparte): mismo botón y
 // posición que antes ocupaba FeedbackButton — Feedback queda en standby por ahora
@@ -28,6 +29,7 @@ export default function ChatWidget() {
   const [hasMore, setHasMore] = useState(false)
   const [firstUnreadMessageId, setFirstUnreadMessageId] = useState(null)
   const [channelForm, setChannelForm] = useState(null) // null | true (crear) | channel (editar)
+  const [pinnedMessages, setPinnedMessages] = useState([])
   const activeChannelIdRef = useRef(null)
   const switcherRef = useRef(null)
 
@@ -64,6 +66,10 @@ export default function ChatWidget() {
     return api.get(`/chat/channels/${channelId}/messages${qs}`).then(r => r.data)
   }, [])
 
+  const loadPinned = useCallback((channelId) => {
+    return api.get(`/chat/channels/${channelId}/pinned`).then(r => setPinnedMessages(r.data)).catch(() => setPinnedMessages([]))
+  }, [])
+
   // Cambio de canal (con el panel abierto): cargar mensajes, marcar leído, unirse a la room del socket.
   useEffect(() => {
     if (!open || !activeChannel) return
@@ -71,6 +77,7 @@ export default function ChatWidget() {
     setMsgLoading(true)
     setMessages([])
     setFirstUnreadMessageId(null)
+    setPinnedMessages([])
 
     loadMessages(activeChannel.id).then(data => {
       if (activeChannelIdRef.current !== activeChannel.id) return
@@ -80,6 +87,7 @@ export default function ChatWidget() {
       setMsgLoading(false)
       api.post(`/chat/channels/${activeChannel.id}/read`).then(loadChannels).catch(() => {})
     })
+    loadPinned(activeChannel.id)
 
     const socket = connectSocket()
     socket?.emit('join-channel', activeChannel.id)
@@ -104,15 +112,26 @@ export default function ChatWidget() {
     function onDeleted({ id, channelId }) {
       if (channelId !== activeChannelIdRef.current) return
       setMessages(prev => prev.filter(x => x.id !== id))
+      setPinnedMessages(prev => prev.filter(x => x.id !== id))
+    }
+    function onPinned(m) {
+      if (m.channelId !== activeChannelIdRef.current) return
+      setMessages(prev => prev.map(x => (x.id === m.id ? m : x)))
+      setPinnedMessages(prev => {
+        const rest = prev.filter(x => x.id !== m.id)
+        return m.pinnedAt ? [m, ...rest] : rest
+      })
     }
 
     socket.on('chat:message', onMessage)
     socket.on('chat:message:edited', onEdited)
     socket.on('chat:message:deleted', onDeleted)
+    socket.on('chat:message:pinned', onPinned)
     return () => {
       socket.off('chat:message', onMessage)
       socket.off('chat:message:edited', onEdited)
       socket.off('chat:message:deleted', onDeleted)
+      socket.off('chat:message:pinned', onPinned)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -141,6 +160,21 @@ export default function ChatWidget() {
     if (!window.confirm('¿Eliminar este mensaje?')) return
     await api.delete(`/chat/messages/${message.id}`)
     setMessages(prev => prev.filter(x => x.id !== message.id))
+  }
+
+  async function handleTogglePin(message) {
+    await api.patch(`/chat/messages/${message.id}/pin`, { pinned: !message.pinnedAt })
+  }
+
+  async function handleTogglePrivacy() {
+    if (!activeChannel) return
+    const isPrivate = !activeChannel.isPrivate
+    try {
+      await api.patch(`/chat/channels/${activeChannel.id}/privacy`, { isPrivate })
+      await loadChannels()
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo actualizar la privacidad del canal')
+    }
   }
 
   function handleSelectChannel(channel) {
@@ -195,7 +229,7 @@ export default function ChatWidget() {
                       onClick={() => setSwitcherOpen(v => !v)}
                       className="flex items-center gap-1 font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors max-w-full"
                     >
-                      <span className="truncate"># {activeChannel.name}</span>
+                      <span className="truncate">{activeChannel.isPrivate ? '🔒' : '#'} {activeChannel.name}</span>
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                         className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${switcherOpen ? 'rotate-180' : ''}`}>
                         <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
@@ -220,6 +254,15 @@ export default function ChatWidget() {
                       ⚙️
                     </button>
                   )}
+                  {user?.isAdmin && (
+                    <button
+                      onClick={handleTogglePrivacy}
+                      title={activeChannel.isPrivate ? 'Canal privado — clic para abrirlo a todo el equipo' : 'Canal abierto — clic para hacerlo privado (solo administradores)'}
+                      className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
+                    >
+                      {activeChannel.isPrivate ? '🔒' : '🔓'}
+                    </button>
+                  )}
                   <button
                     onClick={() => setOpen(false)}
                     className="text-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 leading-none flex-shrink-0"
@@ -227,6 +270,14 @@ export default function ChatWidget() {
                     ×
                   </button>
                 </div>
+
+                {activeChannel.isPrivate && (
+                  <div className="px-4 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800/40 flex-shrink-0">
+                    <p className="text-[11px] font-medium text-amber-700 dark:text-amber-300">🔒 Canal privado — solo lo ven los administradores.</p>
+                  </div>
+                )}
+
+                <PinnedBar pinned={pinnedMessages} onUnpin={handleTogglePin} />
 
                 <MessageList
                   key={activeChannel.id}
@@ -240,6 +291,7 @@ export default function ChatWidget() {
                   canModerate={!!user?.isAdmin}
                   onSaveEdit={handleSaveEdit}
                   onDelete={handleDelete}
+                  onTogglePin={handleTogglePin}
                 />
 
                 <MessageInput onSend={handleSend} members={members} />

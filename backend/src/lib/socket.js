@@ -42,8 +42,14 @@ function initSocket(httpServer) {
       const id = Number(channelId)
       if (!id) return
       try {
-        const channel = await prisma.chatChannel.findFirst({ where: { id, workspaceId }, select: { id: true } })
-        if (channel) socket.join(`channel:${id}`)
+        const channel = await prisma.chatChannel.findFirst({ where: { id, workspaceId }, select: { id: true, isPrivate: true } })
+        if (!channel) return
+        // Canal privado: solo admin/owner (mismo criterio que assertChannelAccess en
+        // chat.controller.js, evaluado acá con el role del JWT porque el socket no
+        // vuelve a consultar la membresía en cada join).
+        const isAdmin = socket.user.role === 'admin' || socket.user.role === 'owner'
+        if (channel.isPrivate && !isAdmin) return
+        socket.join(`channel:${id}`)
       } catch (err) {
         console.error('[socket] Error en join-channel:', err.message)
       }
