@@ -55,14 +55,12 @@ export default function MessageList({
     setEditValue('')
   }
 
-  // Al entrar al canal: saltar al primer mensaje no leído si hay uno, si no ir al final.
+  // Al entrar al canal: ir siempre al final (últimos mensajes), sin importar si hay no
+  // leídos — el divisor rojo "No leídos" se sigue mostrando en su lugar (más arriba en
+  // el scroll) como referencia, pero ya no salta ahí automáticamente.
   useEffect(() => {
     if (loading || didInitialScroll) return
-    const target = firstUnreadMessageId
-      ? document.getElementById(`chat-msg-${firstUnreadMessageId}`)
-      : null
-    if (target) target.scrollIntoView({ block: 'center' })
-    else bottomRef.current?.scrollIntoView()
+    bottomRef.current?.scrollIntoView()
     setDidInitialScroll(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
