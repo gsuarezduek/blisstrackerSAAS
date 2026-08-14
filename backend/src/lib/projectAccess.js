@@ -1,9 +1,9 @@
 const prisma = require('./prisma')
 
-// Admin/owner del workspace actual (o super admin).
+// Admin/owner del workspace actual (según el rol real de su membership).
 function isAdmin(req) {
   const m = req.workspaceMember
-  return req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner'
+  return m?.role === 'admin' || m?.role === 'owner'
 }
 
 // Escritura sobre un proyecto: admin/owner del workspace, o miembro del equipo

@@ -136,7 +136,7 @@ describe('resolveWorkspace', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('super admin puede acceder aunque no sea miembro', async () => {
+  it('retorna 403 si un super admin no es miembro (debe usar impersonación)', async () => {
     prisma.workspace.findUnique.mockResolvedValue(WORKSPACE)
     prisma.workspaceMember.findUnique.mockResolvedValue(null)
 
@@ -146,9 +146,22 @@ describe('resolveWorkspace', () => {
 
     await resolveWorkspace(req, res, next)
 
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('super admin que SÍ es miembro conserva su rol real (sin auto-elevar)', async () => {
+    prisma.workspace.findUnique.mockResolvedValue(WORKSPACE)
+    prisma.workspaceMember.findUnique.mockResolvedValue(MEMBER) // role: 'member'
+
+    const req  = { headers: { 'x-workspace': 'bliss' }, user: { userId: 1, isSuperAdmin: true } }
+    const res  = makeRes()
+    const next = jest.fn()
+
+    await resolveWorkspace(req, res, next)
+
     expect(next).toHaveBeenCalledTimes(1)
-    expect(req.workspace).toEqual(WORKSPACE)
-    expect(req.workspaceMember).toBeNull()
+    expect(req.workspaceMember).toEqual(MEMBER)
   })
 })
 
@@ -197,8 +210,19 @@ describe('workspaceAdminOnly', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('bypassa la verificación si user.isSuperAdmin es true', () => {
-    const req  = { user: { isSuperAdmin: true } }
+  it('retorna 403 si es super admin pero su membership real es "member" (sin auto-elevar)', () => {
+    const req  = { user: { isSuperAdmin: true }, workspaceMember: { role: 'member' } }
+    const res  = makeRes()
+    const next = jest.fn()
+
+    workspaceAdminOnly(req, res, next)
+
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('llama next() si es super admin Y su membership real es "admin"', () => {
+    const req  = { user: { isSuperAdmin: true }, workspaceMember: { role: 'admin' } }
     const res  = makeRes()
     const next = jest.fn()
 

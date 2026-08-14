@@ -75,14 +75,6 @@ async function resolveWorkspace(req, res, next) {
       })
     }
 
-    // Super admins pueden acceder a cualquier workspace. Si además son miembros,
-    // ya tenemos sus datos de miembro (para isAdmin, teamRole, etc.) sin query extra.
-    if (req.user?.isSuperAdmin) {
-      req.workspace = workspace
-      req.workspaceMember = member
-      return next()
-    }
-
     if (!member || !member.active) {
       return res.status(403).json({ error: 'No sos miembro de este workspace' })
     }
@@ -101,9 +93,6 @@ async function resolveWorkspace(req, res, next) {
  */
 function workspaceAdminOnly(req, res, next) {
   const member = req.workspaceMember
-  // Super admins siempre tienen acceso
-  if (req.user?.isSuperAdmin) return next()
-
   if (!member || (member.role !== 'admin' && member.role !== 'owner')) {
     return res.status(403).json({ error: 'Se requieren permisos de administrador' })
   }
@@ -118,7 +107,7 @@ function workspaceAdminOnly(req, res, next) {
  */
 function isSalesUser(req) {
   const m = req.workspaceMember
-  if (req.user?.isSuperAdmin || m?.role === 'admin' || m?.role === 'owner') return true
+  if (m?.role === 'admin' || m?.role === 'owner') return true
   if (!m?.teamRole) return false
   const raw = req.workspace?.salesRoleNames
   const roles = Array.isArray(raw) ? raw : (() => { try { return JSON.parse(raw || '[]') } catch { return [] } })()

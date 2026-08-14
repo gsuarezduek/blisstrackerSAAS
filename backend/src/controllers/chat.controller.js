@@ -249,7 +249,7 @@ async function deleteMessage(req, res, next) {
     const workspaceId = req.workspace.id
     const userId = req.user.userId
     const messageId = Number(req.params.messageId)
-    const isModerator = req.user.isSuperAdmin || req.workspaceMember?.role === 'admin' || req.workspaceMember?.role === 'owner'
+    const isModerator = req.workspaceMember?.role === 'admin' || req.workspaceMember?.role === 'owner'
 
     const existing = await prisma.chatMessage.findFirst({ where: { id: messageId, workspaceId } })
     if (!existing) return res.status(404).json({ error: 'Mensaje no encontrado' })

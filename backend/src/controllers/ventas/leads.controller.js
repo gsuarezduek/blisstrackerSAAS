@@ -471,7 +471,7 @@ async function deleteNote(req, res, next) {
     })
     if (!note) return res.status(404).json({ error: 'Nota no encontrada' })
     // Solo el autor o un admin puede borrar la nota.
-    const isAdmin = req.user?.isSuperAdmin || ['admin', 'owner'].includes(req.workspaceMember?.role)
+    const isAdmin = ['admin', 'owner'].includes(req.workspaceMember?.role)
     if (note.userId !== req.user.userId && !isAdmin) return res.status(403).json({ error: 'No podés borrar esta nota' })
     await prisma.leadActivity.delete({ where: { id: note.id } })
     res.json({ ok: true })

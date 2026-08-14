@@ -131,7 +131,7 @@ async function me(req, res, next) {
     res.json({
       ...user,
       role: member?.teamRole ?? '',
-      isAdmin: user.isSuperAdmin || member?.role === 'admin' || member?.role === 'owner',
+      isAdmin: member?.role === 'admin' || member?.role === 'owner',
       isSales: isSalesUser(req), // módulo Ventas: admin o teamRole en Workspace.salesRoleNames
       dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
       notesBoardEnabled: member?.notesBoardEnabled ?? true,
