@@ -1,9 +1,18 @@
 const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
 const { getSetting } = require('../lib/platformSettings')
+const { emitTo } = require('../lib/socket')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
-const { resolveCtx, loadPiece, formatAsset } = require('./content.controller')
+const { resolveCtx, loadPiece, formatPiece, formatAsset } = require('./content.controller')
+
+// El asset cambió, pero lo que muestran las vistas (Kanban/Tabla/Calendario) es
+// la PIEZA con su array de assets embebido — se recarga y emite completa, mismo
+// evento que usan las mutaciones de content.controller.js.
+async function emitPieceUpdated(workspaceId, projectId, pieceId) {
+  const fresh = await loadPiece(pieceId, projectId, workspaceId)
+  if (fresh) emitTo(`workspace:${workspaceId}`, 'content:piece:updated', { projectId, piece: formatPiece(fresh) })
+}
 
 const MAX_BYTES = {
   image: 15 * 1024 * 1024,   // 15 MB
@@ -191,6 +200,7 @@ async function confirmAsset(req, res, next) {
       },
     })
 
+    await emitPieceUpdated(ctx.workspaceId, ctx.projectId, piece.id)
     res.json(formatAsset(updated))
   } catch (err) { next(err) }
 }
@@ -239,6 +249,7 @@ async function uploadAssetFallback(req, res, next) {
       },
     })
 
+    await emitPieceUpdated(ctx.workspaceId, ctx.projectId, piece.id)
     res.status(201).json(formatAsset(asset))
   } catch (err) { next(err) }
 }
@@ -278,6 +289,7 @@ async function reorderAsset(req, res, next) {
     )
 
     const fresh = await prisma.contentAsset.findUnique({ where: { id: asset.id } })
+    await emitPieceUpdated(ctx.workspaceId, ctx.projectId, piece.id)
     res.json(formatAsset(fresh))
   } catch (err) { next(err) }
 }
@@ -303,6 +315,7 @@ async function deleteAsset(req, res, next) {
     await objectStorage.deleteObjects([asset.objectKey, asset.posterKey].filter(Boolean))
     await prisma.contentAsset.delete({ where: { id: asset.id } })
 
+    await emitPieceUpdated(ctx.workspaceId, ctx.projectId, piece.id)
     res.json({ deleted: true })
   } catch (err) { next(err) }
 }

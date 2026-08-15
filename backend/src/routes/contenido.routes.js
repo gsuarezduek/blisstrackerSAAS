@@ -22,8 +22,9 @@ router.use(auth)
 router.use(resolveWorkspace)
 router.use(requireFeatureFlag('contenido'))
 
-const content = require('../controllers/content.controller')
-const assets  = require('../controllers/contentAssets.controller')
+const content  = require('../controllers/content.controller')
+const assets   = require('../controllers/contentAssets.controller')
+const comments = require('../controllers/contentComments.controller')
 
 // Piezas. La lectura queda abierta a cualquier miembro activo; las mutaciones
 // validan canWrite() adentro del handler.
@@ -45,6 +46,11 @@ router.post  ('/projects/:id/pieces/:pid/assets',                uploadFallback.
 router.patch ('/projects/:id/pieces/:pid/assets/:aid',           assets.reorderAsset)
 router.delete('/projects/:id/pieces/:pid/assets/:aid',           assets.deleteAsset)
 
-// Comentarios se montan en F4.
+// Comentarios internos + hilo con el cliente (visibility en el body). La lectura
+// es abierta a cualquier miembro activo; postear exige canWrite; borrar exige
+// ser el autor o admin/owner.
+router.get   ('/projects/:id/pieces/:pid/comments',      comments.listComments)
+router.post  ('/projects/:id/pieces/:pid/comments',      comments.addComment)
+router.delete('/projects/:id/pieces/:pid/comments/:cid', comments.deleteComment)
 
 module.exports = router

@@ -1,12 +1,21 @@
 const prisma = require('../lib/prisma')
 const { dateStringInTz } = require('../utils/dates')
 const { canWrite } = require('../lib/projectAccess')
+const { emitTo } = require('../lib/socket')
 const {
   isValidStatus,
   isValidType,
   sanitizeNetworks,
   statusMeta,
 } = require('../lib/contentCatalog')
+
+// Todas las mutaciones de una pieza emiten a workspace:<id> con la pieza ya
+// formateada — así el Kanban/Tabla/Calendario de otra pestaña se actualiza sin
+// que el visitante tenga que refrescar. No hace falta una room por proyecto:
+// en este repo cualquier miembro activo ya puede leer cualquier proyecto.
+function emitPieceUpdated(workspaceId, projectId, piece) {
+  emitTo(`workspace:${workspaceId}`, 'content:piece:updated', { projectId, piece })
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const DEFAULT_PAGE_SIZE = 50
@@ -312,7 +321,9 @@ async function createPiece(req, res, next) {
     await logEvent({ pieceId: piece.id, workspaceId, action: 'created', toStatus: status, req })
 
     const fresh = await loadPiece(piece.id, projectId, workspaceId)
-    res.status(201).json(formatPiece(fresh))
+    const formatted = formatPiece(fresh)
+    emitTo(`workspace:${workspaceId}`, 'content:piece:created', { projectId, piece: formatted })
+    res.status(201).json(formatted)
   } catch (err) { next(err) }
 }
 
@@ -365,7 +376,9 @@ async function updatePiece(req, res, next) {
     }
 
     const fresh = await loadPiece(existing.id, projectId, workspaceId)
-    res.json(formatPiece(fresh))
+    const formatted = formatPiece(fresh)
+    emitPieceUpdated(workspaceId, projectId, formatted)
+    res.json(formatted)
   } catch (err) { next(err) }
 }
 
@@ -383,6 +396,7 @@ async function deletePiece(req, res, next) {
     if (!existing) return res.status(404).json({ error: 'Pieza no encontrada' })
 
     await prisma.contentPiece.delete({ where: { id: existing.id } })
+    emitTo(`workspace:${ctx.workspaceId}`, 'content:piece:deleted', { projectId: ctx.projectId, id: existing.id })
     res.json({ deleted: true })
   } catch (err) { next(err) }
 }
@@ -442,7 +456,9 @@ async function movePiece(req, res, next) {
     }
 
     const fresh = await loadPiece(existing.id, projectId, workspaceId)
-    res.json(formatPiece(fresh))
+    const formatted = formatPiece(fresh)
+    emitPieceUpdated(workspaceId, projectId, formatted)
+    res.json(formatted)
   } catch (err) { next(err) }
 }
 

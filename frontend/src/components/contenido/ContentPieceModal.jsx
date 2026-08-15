@@ -6,7 +6,9 @@ import ContentNetworkChips from './ContentNetworkChips'
 import ContentHistoryList from './ContentHistoryList'
 import ContentAssetGallery from './ContentAssetGallery'
 import ContentAssetUploader from './ContentAssetUploader'
-import { useContentHistory } from './useContentPieces'
+import ContentCommentThread from './ContentCommentThread'
+import { useContentHistory, useContentComments } from './useContentPieces'
+import useContentSocket from './useContentSocket'
 import { CONTENT_STATUSES, CONTENT_TYPES, CONTENT_NETWORKS } from './contentCatalog'
 import { toLocalInput } from './dateHelpers'
 
@@ -46,15 +48,26 @@ function useDebouncedCommit(value, onCommit, delay = 600) {
  * optimismo local: es la única forma de que la pieza en memoria refleje el
  * asset nuevo/borrado/reordenado sin duplicar la lógica de fetch acá.
  *
- * Sin comentarios todavía (F4): ese tab muestra un placeholder. Historial sí es real.
+ * El tab "Comentarios" es el hilo interno del equipo (visibility: 'internal').
+ * El hilo con el cliente ('client') llega en F7, cuando el portal pueda
+ * escribirlo — ContentCommentThread ya está armado para reusarse ahí.
  */
-export default function ContentPieceModal({ piece, members = [], canEdit, onUpdate, onDelete, onAssetsChanged, onClose }) {
+export default function ContentPieceModal({ piece, members = [], canEdit, currentUserId, isAdmin, onUpdate, onDelete, onAssetsChanged, onClose }) {
   const [tab, setTab] = useState('detalles')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [activeAssetId, setActiveAssetId] = useState(null)
 
   const { events, loading: historyLoading, error: historyError } = useContentHistory(piece.projectId, piece.id)
+  const { comments, addComment, removeComment, applyRemoteAdd, applyRemoteDelete } = useContentComments(piece.projectId, piece.id)
+
+  // El socket viaja por proyecto (no hay room por pieza) — acá se filtra por
+  // pieceId antes de tocar el estado del hilo, para no mezclar comentarios de
+  // otra pieza del mismo proyecto mientras este modal está abierto.
+  useContentSocket(piece.projectId, {
+    onCommentNew:     (pieceId, comment) => { if (pieceId === piece.id) applyRemoteAdd(comment) },
+    onCommentDeleted: (pieceId, id)      => { if (pieceId === piece.id) applyRemoteDelete(id) },
+  })
 
   useEffect(() => {
     if (piece.assets.length && !piece.assets.some(a => a.id === activeAssetId)) {
@@ -162,6 +175,9 @@ export default function ContentPieceModal({ piece, members = [], canEdit, onUpda
                   : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
             >
               {t.label}
+              {t.id === 'comentarios' && comments.length > 0 && (
+                <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">{comments.filter(c => c.visibility === 'internal').length}</span>
+              )}
             </button>
           ))}
         </div>
@@ -317,10 +333,17 @@ export default function ContentPieceModal({ piece, members = [], canEdit, onUpda
           )}
 
           {tab === 'comentarios' && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <span className="text-3xl mb-2">💬</span>
-              <p className="text-sm text-gray-400 dark:text-gray-500">Los comentarios internos y el feedback del cliente llegan próximamente.</p>
-            </div>
+            <ContentCommentThread
+              comments={comments}
+              visibility="internal"
+              currentUserId={currentUserId}
+              isAdmin={isAdmin}
+              members={members}
+              canPost={canEdit}
+              onSubmit={addComment}
+              onDelete={removeComment}
+              emptyLabel="Sin comentarios internos todavía."
+            />
           )}
 
           {tab === 'historial' && (

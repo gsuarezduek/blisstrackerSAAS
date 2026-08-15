@@ -10,6 +10,7 @@ async function list(req, res, next) {
         actor:   { select: { id: true, name: true, avatar: true } },
         project: { select: { id: true, name: true } },
         channel: { select: { slug: true } },
+        contentPiece: { select: { id: true, title: true, projectId: true } },
       },
       orderBy: { createdAt: 'desc' },
       // Suben a 80 para que el buscador por proyecto en "Completadas" tenga material
@@ -56,7 +57,7 @@ async function markAllRead(req, res, next) {
 // Marca como leídas notificaciones puntuales. Acepta `ids` (preferido — un filtro del
 // panel puede agrupar por relación, no solo por tipo) o `types` (compat). Se usa para el
 // modelo "marcar leído al ver ese filtro" del panel de notificaciones.
-const VALID_TYPES = ['COMPLETED', 'BLOCKED', 'UNBLOCKED', 'ADDED_TO_PROJECT', 'TASK_COMMENT', 'TASK_MENTION', 'VACATION_REQUEST', 'VACATION_REVIEWED', 'LEAD_ASSIGNED', 'GAME_LAUNCHED', 'CHAT_MENTION']
+const VALID_TYPES = ['COMPLETED', 'BLOCKED', 'UNBLOCKED', 'ADDED_TO_PROJECT', 'TASK_COMMENT', 'TASK_MENTION', 'VACATION_REQUEST', 'VACATION_REVIEWED', 'LEAD_ASSIGNED', 'GAME_LAUNCHED', 'CHAT_MENTION', 'CONTENT_MENTION']
 
 async function markRead(req, res, next) {
   try {

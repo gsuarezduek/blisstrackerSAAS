@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -9,6 +9,7 @@ import ContentKanbanView from '../components/contenido/ContentKanbanView'
 import ContentCalendarView, { currentMonthStr } from '../components/contenido/ContentCalendarView'
 import ContentPieceModal from '../components/contenido/ContentPieceModal'
 import useContentPieces from '../components/contenido/useContentPieces'
+import useContentSocket from '../components/contenido/useContentSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/client'
@@ -62,6 +63,22 @@ export default function Contenido() {
 
   const { pieces, members, total, loading, error, setError, reload, create, update, move, remove } =
     useContentPieces(projectId, effectiveFilters)
+
+  // Cualquier pieza creada/editada/movida/borrada por otra persona (u otra
+  // pestaña propia) reprograma un reload — debounced para que una racha de
+  // eventos (ej. varios assets confirmándose seguidos) no dispare N fetches.
+  const reloadTimer = useRef(null)
+  const scheduleReload = useCallback(() => {
+    clearTimeout(reloadTimer.current)
+    reloadTimer.current = setTimeout(reload, 300)
+  }, [reload])
+  useEffect(() => () => clearTimeout(reloadTimer.current), [])
+
+  useContentSocket(projectId, {
+    onPieceCreated: scheduleReload,
+    onPieceUpdated: scheduleReload,
+    onPieceDeleted: scheduleReload,
+  })
 
   const openPiece = useMemo(() => pieces.find(p => String(p.id) === String(pieceId)) ?? null, [pieces, pieceId])
 
@@ -245,6 +262,8 @@ export default function Contenido() {
           piece={openPiece}
           members={members}
           canEdit={canEdit}
+          currentUserId={user?.id}
+          isAdmin={user?.isAdmin}
           onUpdate={update}
           onDelete={handleDelete}
           onAssetsChanged={reload}

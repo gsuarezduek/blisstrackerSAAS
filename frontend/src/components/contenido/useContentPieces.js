@@ -157,4 +157,50 @@ export function useContentHistory(projectId, pieceId) {
   return { events, loading, error, reload }
 }
 
+/**
+ * Comentarios (internos + hilo con el cliente) de una pieza. Trae TODO el hilo
+ * de una — el filtrado por `visibility` para separar "Comentarios" de "Feedback
+ * del cliente" lo hace ContentCommentThread, no esta llamada. `applyRemoteAdd`/
+ * `applyRemoteDelete` reconcilian eventos de socket (otro usuario comentó o
+ * borró mientras el modal está abierto) sin pisar un envío propio en vuelo.
+ */
+export function useContentComments(projectId, pieceId) {
+  const [comments, setComments] = useState([])
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState(null)
+
+  const reload = useCallback(() => {
+    if (!projectId || !pieceId) { setComments([]); return }
+    setLoading(true)
+    setError(null)
+    api.get(`/contenido/projects/${projectId}/pieces/${pieceId}/comments`)
+      .then(r => setComments(r.data.comments ?? []))
+      .catch(err => setError(err.response?.data?.error || 'No se pudieron cargar los comentarios'))
+      .finally(() => setLoading(false))
+  }, [projectId, pieceId])
+
+  useEffect(() => { reload() }, [reload])
+
+  const addComment = useCallback(async (body, visibility = 'internal') => {
+    const { data } = await api.post(`/contenido/projects/${projectId}/pieces/${pieceId}/comments`, { body, visibility })
+    setComments(prev => (prev.some(c => c.id === data.id) ? prev : [...prev, data]))
+    return data
+  }, [projectId, pieceId])
+
+  const removeComment = useCallback(async (id) => {
+    await api.delete(`/contenido/projects/${projectId}/pieces/${pieceId}/comments/${id}`)
+    setComments(prev => prev.filter(c => c.id !== id))
+  }, [projectId, pieceId])
+
+  const applyRemoteAdd = useCallback((comment) => {
+    setComments(prev => (prev.some(c => c.id === comment.id) ? prev : [...prev, comment]))
+  }, [])
+
+  const applyRemoteDelete = useCallback((id) => {
+    setComments(prev => prev.filter(c => c.id !== id))
+  }, [])
+
+  return { comments, loading, error, reload, addComment, removeComment, applyRemoteAdd, applyRemoteDelete }
+}
+
 export default useContentPieces
