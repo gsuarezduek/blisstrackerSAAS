@@ -226,6 +226,26 @@ const PLATFORM_SETTINGS = [
     label:   'Retención de logs de accesos a credenciales (días)',
     help:    'Después de cuántos días se borran los ProjectAccessLog (auditoría de quién reveló una contraseña/2FA de un proyecto). Piso alto (90 días) por ser un registro de auditoría de seguridad.',
   },
+  {
+    key:     'contentStorageMaxMbPerWorkspace',
+    type:    'integer',
+    default: 20480,
+    min:     0,
+    max:     1_000_000,
+    group:   'operational',
+    label:   'Storage de Contenido por workspace (MB)',
+    help:    'Tope de bytes acumulados en ContentAsset (imágenes y video de piezas de contenido) por workspace. Se chequea al pedir la URL de subida (POST .../assets/presign), sumando el sizeBytes de los assets ready + pending del workspace. 0 = ilimitado. El video pesa 100–1000x más que una imagen, así que este tope es el principal freno de costo de R2 del módulo Contenido.',
+  },
+  {
+    key:     'contentAssetPendingRetentionHours',
+    type:    'integer',
+    default: 24,
+    min:     1,
+    max:     720,
+    group:   'operational',
+    label:   'Retención de assets de Contenido sin confirmar (horas)',
+    help:    'Un asset queda en estado "pending" entre pedir la URL firmada de subida y confirmarla (POST .../assets/:id/confirm). Si el usuario abandona la subida (cierra la pestaña, corta la conexión) el asset queda huérfano; la limpieza semanal lo borra —primero del bucket R2, después de la DB— pasadas estas horas. NO usa el mismo mecanismo de "días" del resto de los retention: es horas porque un upload abandonado se detecta rápido, no en semanas.',
+  },
 
   // ─── Scraping (Apify) ──────────────────────────────────────────────────────
   // Actores y topes de posts por red. El token de Apify (APIFY_API_TOKEN) sigue

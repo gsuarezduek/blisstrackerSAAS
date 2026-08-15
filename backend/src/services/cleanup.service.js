@@ -7,8 +7,9 @@
  * se baja un retention setting y se quiere aplicar de inmediato.
  */
 const prisma = require('../lib/prisma')
-const { getSettings } = require('../lib/platformSettings')
+const { getSettings, getSetting } = require('../lib/platformSettings')
 const { findOrphanImageIds, cleanupOrphanImages } = require('./storageStats.service')
+const objectStorage = require('./objectStorage.service')
 
 const RETENTION_KEYS = [
   'notificationReadRetentionDays',
@@ -38,11 +39,15 @@ function daysAgo(d) {
   return new Date(Date.now() - d * 24 * 60 * 60 * 1000)
 }
 
+function hoursAgo(h) {
+  return new Date(Date.now() - h * 60 * 60 * 1000)
+}
+
 /**
  * Cuenta cuántas filas se borrarían con los retention actuales (preview).
  * @param {string[]} tables — subset de ['notifications', 'aiTokenLog', 'userLogin',
  *   'dailyInsight', 'emailLog', 'socialImages', 'serpSnapshots', 'followerLogs',
- *   'conversionEvents', 'accessLogs']
+ *   'conversionEvents', 'accessLogs', 'contentAssetsPending']
  */
 async function previewWeeklyCleanup(tables = null) {
   const s = await getSettings(RETENTION_KEYS)
@@ -102,6 +107,14 @@ async function previewWeeklyCleanup(tables = null) {
   if ((!tables || tables.includes('accessLogs')) && s.accessLogRetentionDays > 0) {
     result.accessLogs = await prisma.projectAccessLog.count({
       where: { createdAt: { lt: daysAgo(s.accessLogRetentionDays) } },
+    })
+  }
+  if (!tables || tables.includes('contentAssetsPending')) {
+    // Retention en HORAS (no días, no entra en RETENTION_KEYS) — un upload
+    // abandonado se detecta rápido, no en semanas. Ver contentAssetPendingRetentionHours.
+    const hours = await getSetting('contentAssetPendingRetentionHours')
+    result.contentAssetsPending = await prisma.contentAsset.count({
+      where: { status: 'pending', createdAt: { lt: hoursAgo(hours) } },
     })
   }
   return result
@@ -185,6 +198,19 @@ async function runWeeklyCleanup(tables = null) {
       where: { createdAt: { lt: daysAgo(s.accessLogRetentionDays) } },
     })
     result.accessLogs = count
+  }
+  if (!tables || tables.includes('contentAssetsPending')) {
+    const hours = await getSetting('contentAssetPendingRetentionHours')
+    const stale = await prisma.contentAsset.findMany({
+      where:  { status: 'pending', createdAt: { lt: hoursAgo(hours) } },
+      select: { id: true, objectKey: true, posterKey: true },
+    })
+    // R2 primero (best-effort, DeleteObjects es idempotente si el objeto nunca
+    // llegó a subirse), recién después las filas — mismo orden que el borrado
+    // explícito de assets/piezas.
+    await objectStorage.deleteObjects(stale.flatMap(a => [a.objectKey, a.posterKey].filter(Boolean)))
+    const { count } = await prisma.contentAsset.deleteMany({ where: { id: { in: stale.map(a => a.id) } } })
+    result.contentAssetsPending = count
   }
 
   return result

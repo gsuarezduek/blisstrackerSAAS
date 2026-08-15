@@ -122,16 +122,22 @@ export default function ChatWidget() {
         return m.pinnedAt ? [m, ...rest] : rest
       })
     }
+    function onReaction(m) {
+      if (m.channelId !== activeChannelIdRef.current) return
+      setMessages(prev => prev.map(x => (x.id === m.id ? m : x)))
+    }
 
     socket.on('chat:message', onMessage)
     socket.on('chat:message:edited', onEdited)
     socket.on('chat:message:deleted', onDeleted)
     socket.on('chat:message:pinned', onPinned)
+    socket.on('chat:message:reaction', onReaction)
     return () => {
       socket.off('chat:message', onMessage)
       socket.off('chat:message:edited', onEdited)
       socket.off('chat:message:deleted', onDeleted)
       socket.off('chat:message:pinned', onPinned)
+      socket.off('chat:message:reaction', onReaction)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -164,6 +170,12 @@ export default function ChatWidget() {
 
   async function handleTogglePin(message) {
     await api.patch(`/chat/messages/${message.id}/pin`, { pinned: !message.pinnedAt })
+  }
+
+  async function handleToggleReaction(message, emoji) {
+    // No actualiza el estado local — igual que handleSaveEdit/handleTogglePin, el propio
+    // socket (que incluye al emisor, `io.to(room).emit`) es el que refresca el mensaje.
+    await api.post(`/chat/messages/${message.id}/reactions`, { emoji })
   }
 
   async function handleTogglePrivacy() {
@@ -292,6 +304,7 @@ export default function ChatWidget() {
                   onSaveEdit={handleSaveEdit}
                   onDelete={handleDelete}
                   onTogglePin={handleTogglePin}
+                  onToggleReaction={handleToggleReaction}
                 />
 
                 <MessageInput onSend={handleSend} members={members} />

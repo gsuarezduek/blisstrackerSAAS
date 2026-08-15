@@ -3,6 +3,8 @@ import { avatarUrl } from '../../utils/avatarUrl'
 import UserLink from '../UserLink'
 import LoadingSpinner from '../LoadingSpinner'
 import { renderMessageText } from './messageText'
+import MessageReactionPicker from './MessageReactionPicker'
+import { groupReactions } from './reactions'
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000
 
@@ -27,7 +29,7 @@ function sameGroup(a, b) {
 export default function MessageList({
   messages, loading, loadingMore, hasMore, onLoadMore,
   firstUnreadMessageId, currentUserId, canModerate,
-  onSaveEdit, onDelete, onTogglePin,
+  onSaveEdit, onDelete, onTogglePin, onToggleReaction,
 }) {
   const scrollRef = useRef(null)
   const contentRef = useRef(null)
@@ -35,6 +37,7 @@ export default function MessageList({
   const stickToBottomRef = useRef(true)
   const [didInitialScroll, setDidInitialScroll] = useState(false)
   const [menuOpenId, setMenuOpenId] = useState(null)
+  const [reactingId, setReactingId] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [editValue, setEditValue] = useState('')
 
@@ -231,45 +234,82 @@ export default function MessageList({
                     {m.gifUrl && (
                       <img src={m.gifUrl} alt="GIF" className="mt-1 rounded-lg max-w-[220px] max-h-[220px] object-contain" />
                     )}
+                    {groupReactions(m.reactions, currentUserId).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {groupReactions(m.reactions, currentUserId).map(g => (
+                          <button
+                            key={g.emoji}
+                            type="button"
+                            onClick={() => onToggleReaction(m, g.emoji)}
+                            title={g.names.join(', ')}
+                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
+                              g.reacted
+                                ? 'bg-primary-100 dark:bg-primary-900/40 border-primary-300 dark:border-primary-600 text-primary-700 dark:text-primary-300'
+                                : 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            }`}
+                          >
+                            <span>{g.emoji}</span>
+                            <span className="font-medium">{g.count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
 
               {editingId !== m.id && (
-                <div className="relative flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => setMenuOpenId(id => id === m.id ? null : m.id)}
-                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                    title="Opciones"
-                  >
-                    ⋯
-                  </button>
-                  {menuOpenId === m.id && (
-                    <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-1 z-10 w-36">
-                      <button
-                        onClick={() => { setMenuOpenId(null); onTogglePin(m) }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-gray-50 dark:hover:bg-gray-700"
-                      >
-                        📌 {m.pinnedAt ? 'Desfijar' : 'Fijar'}
-                      </button>
-                      {canEdit && m.content != null && (
+                <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="relative">
+                    <button
+                      onClick={() => setReactingId(id => id === m.id ? null : m.id)}
+                      className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                      title="Reaccionar"
+                    >
+                      🙂
+                    </button>
+                    {reactingId === m.id && (
+                      <MessageReactionPicker
+                        onSelect={emoji => onToggleReaction(m, emoji)}
+                        onClose={() => setReactingId(null)}
+                      />
+                    )}
+                  </div>
+                  <div className="relative">
+                    <button
+                      onClick={() => setMenuOpenId(id => id === m.id ? null : m.id)}
+                      className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                      title="Opciones"
+                    >
+                      ⋯
+                    </button>
+                    {menuOpenId === m.id && (
+                      <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg py-1 z-10 w-36">
                         <button
-                          onClick={() => startEdit(m)}
-                          className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          onClick={() => { setMenuOpenId(null); onTogglePin(m) }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-gray-50 dark:hover:bg-gray-700"
                         >
-                          ✏️ Editar
+                          📌 {m.pinnedAt ? 'Desfijar' : 'Fijar'}
                         </button>
-                      )}
-                      {canDelete && (
-                        <button
-                          onClick={() => { setMenuOpenId(null); onDelete(m) }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700"
-                        >
-                          🗑 Eliminar
-                        </button>
-                      )}
-                    </div>
-                  )}
+                        {canEdit && m.content != null && (
+                          <button
+                            onClick={() => startEdit(m)}
+                            className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          >
+                            ✏️ Editar
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => { setMenuOpenId(null); onDelete(m) }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          >
+                            🗑 Eliminar
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

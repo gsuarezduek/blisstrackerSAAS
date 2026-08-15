@@ -5,7 +5,8 @@ jest.mock('../../src/lib/prisma', () => ({
   project:            { findFirst: jest.fn() },
   featureFlag:        { findUnique: jest.fn() },
   contentPiece:       { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), groupBy: jest.fn() },
-  contentStatusEvent: { create: jest.fn() },
+  contentStatusEvent: { create: jest.fn(), findMany: jest.fn() },
+  $transaction:       jest.fn(),
 }))
 
 const request = require('supertest')
@@ -62,7 +63,13 @@ const dbPiece = (over = {}) => ({
   ...over,
 })
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.clearAllMocks()
+  // $transaction real recibe un array de promesas (los update() ya invocados
+  // síncronamente al construir el array); acá alcanza con resolverlo — lo que
+  // se verifica en los tests son los argumentos con los que se llamó a cada update.
+  prisma.$transaction.mockResolvedValue([])
+})
 
 describe('Contenido — gating del módulo', () => {
   it('403 FEATURE_NOT_ENABLED si el flag está apagado', async () => {
@@ -283,6 +290,131 @@ describe('DELETE /pieces/:pid', () => {
     const res = await req('delete', `${BASE}/10`)
     expect(res.status).toBe(403)
     expect(prisma.contentPiece.delete).not.toHaveBeenCalled()
+  })
+})
+
+describe('PATCH /pieces/:pid/position', () => {
+  it('mueve a otra columna vacía: 1 sola pieza reindexada a order 0 + evento de estado', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, status: 'idea' }))
+    prisma.contentPiece.findMany.mockResolvedValue([]) // columna destino vacía
+
+    const res = await req('patch', `${BASE}/10/position`).send({ status: 'produccion', order: 0 })
+
+    expect(res.status).toBe(200)
+    expect(prisma.contentPiece.update).toHaveBeenCalledTimes(1)
+    expect(prisma.contentPiece.update).toHaveBeenCalledWith({
+      where: { id: 10 },
+      data:  expect.objectContaining({ status: 'produccion', order: 0 }),
+    })
+    expect(prisma.contentStatusEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ action: 'status_change', fromStatus: 'idea', toStatus: 'produccion' }) })
+    )
+  })
+
+  it('reordena dentro de la misma columna sin loguear evento de estado', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, status: 'idea' }))
+    // La pieza que se mueve queda excluida de los siblings (id: { not: 10 })
+    prisma.contentPiece.findMany.mockResolvedValue([{ id: 20 }, { id: 21 }])
+
+    const res = await req('patch', `${BASE}/10/position`).send({ status: 'idea', order: 1 })
+
+    expect(res.status).toBe(200)
+    // ids = [20, 21] → splice(1, 0, 10) → [20, 10, 21]
+    expect(prisma.contentPiece.update).toHaveBeenNthCalledWith(1, { where: { id: 20 }, data: { order: 0 } })
+    expect(prisma.contentPiece.update).toHaveBeenNthCalledWith(2, { where: { id: 10 }, data: { status: 'idea', order: 1 } })
+    expect(prisma.contentPiece.update).toHaveBeenNthCalledWith(3, { where: { id: 21 }, data: { order: 2 } })
+    expect(prisma.contentStatusEvent.create).not.toHaveBeenCalled()
+  })
+
+  it('clampea un order negativo a 0 y uno excesivo al final de la columna', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, status: 'idea' }))
+    prisma.contentPiece.findMany.mockResolvedValue([{ id: 20 }])
+
+    await req('patch', `${BASE}/10/position`).send({ status: 'idea', order: -5 })
+    expect(prisma.contentPiece.update).toHaveBeenNthCalledWith(1, { where: { id: 10 }, data: { status: 'idea', order: 0 } })
+
+    jest.clearAllMocks()
+    prisma.$transaction.mockResolvedValue([])
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, status: 'idea' }))
+    prisma.contentPiece.findMany.mockResolvedValue([{ id: 20 }])
+
+    await req('patch', `${BASE}/10/position`).send({ status: 'idea', order: 999 })
+    // ids=[20] → splice(1,0,10) → [20,10] → 10 queda en index 1 (el final)
+    expect(prisma.contentPiece.update).toHaveBeenNthCalledWith(2, { where: { id: 10 }, data: { status: 'idea', order: 1 } })
+  })
+
+  it('sin order en el body, agrega al final de la columna', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, status: 'idea' }))
+    prisma.contentPiece.findMany.mockResolvedValue([{ id: 20 }, { id: 21 }])
+
+    await req('patch', `${BASE}/10/position`).send({ status: 'idea' })
+
+    expect(prisma.contentPiece.update).toHaveBeenNthCalledWith(3, { where: { id: 10 }, data: { status: 'idea', order: 2 } })
+  })
+
+  it('400 con estado inválido', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    const res = await req('patch', `${BASE}/10/position`).send({ status: 'volando', order: 0 })
+    expect(res.status).toBe(400)
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('404 si la pieza no es del proyecto', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(null)
+    const res = await req('patch', `${BASE}/999/position`).send({ status: 'idea', order: 0 })
+    expect(res.status).toBe(404)
+  })
+
+  it('403 si no puede escribir', async () => {
+    mockBase({ workspaceRole: 'member' })
+    prisma.projectMember.findUnique.mockResolvedValue(null)
+    const res = await req('patch', `${BASE}/10/position`).send({ status: 'idea', order: 0 })
+    expect(res.status).toBe(403)
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /pieces/:pid/history', () => {
+  it('devuelve el timeline de eventos, más antiguo primero', async () => {
+    mockBase()
+    prisma.contentPiece.findFirst.mockResolvedValue({ id: 10 })
+    prisma.contentStatusEvent.findMany.mockResolvedValue([
+      { id: 1, action: 'created', fromStatus: null, toStatus: 'idea', actorUserId: 1, actorContactId: null, actorName: 'Ana', comment: null, createdAt: new Date('2026-08-01') },
+      { id: 2, action: 'status_change', fromStatus: 'idea', toStatus: 'produccion', actorUserId: 1, actorContactId: null, actorName: 'Ana', comment: null, createdAt: new Date('2026-08-02') },
+    ])
+
+    const res = await req('get', `${BASE}/10/history`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.events).toHaveLength(2)
+    expect(res.body.events[0].action).toBe('created')
+    expect(res.body.events[1].toStatus).toBe('produccion')
+    expect(prisma.contentStatusEvent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { pieceId: 10 }, orderBy: { createdAt: 'asc' } })
+    )
+  })
+
+  it('404 si la pieza no es de este proyecto', async () => {
+    mockBase()
+    prisma.contentPiece.findFirst.mockResolvedValue(null)
+    const res = await req('get', `${BASE}/999/history`)
+    expect(res.status).toBe(404)
+  })
+
+  it('lectura abierta a cualquier miembro del workspace', async () => {
+    mockBase({ workspaceRole: 'member' })
+    prisma.projectMember.findUnique.mockResolvedValue(null) // no es del equipo
+    prisma.contentPiece.findFirst.mockResolvedValue({ id: 10 })
+    prisma.contentStatusEvent.findMany.mockResolvedValue([])
+
+    const res = await req('get', `${BASE}/10/history`)
+    expect(res.status).toBe(200)
   })
 })
 

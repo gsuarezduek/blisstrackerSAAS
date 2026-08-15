@@ -388,6 +388,100 @@ async function deletePiece(req, res, next) {
 }
 
 /**
+ * PATCH /api/contenido/projects/:id/pieces/:pid/position
+ * Body: { status, order } — order es el índice destino (0-based) DENTRO de esa
+ * columna, sin contar a la pieza que se mueve. Usado por el drop del Kanban
+ * (cambia status y/o reordena) y también sirve para reordenar dentro de la
+ * misma columna.
+ *
+ * Reindexa TODA la columna destino en una transacción (mismo patrón que
+ * apifyTokens/avatars/landing: $transaction(items.map(update))), así que el
+ * `order` de cada pieza queda siempre 0..N-1 sin huecos. La columna de origen
+ * (si cambió de estado) NO se renormaliza — no hace falta: la próxima vez que
+ * se mueva algo en esa columna, este mismo algoritmo la reindexa completa.
+ */
+async function movePiece(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+    const { workspaceId, projectId } = ctx
+
+    const existing = await loadPiece(req.params.pid, projectId, workspaceId)
+    if (!existing) return res.status(404).json({ error: 'Pieza no encontrada' })
+
+    const { status } = req.body || {}
+    if (!isValidStatus(status)) return res.status(400).json({ error: 'Estado inválido' })
+
+    const rawOrder = Number(req.body?.order)
+    const statusChanged = status !== existing.status
+
+    const siblings = await prisma.contentPiece.findMany({
+      where:   { projectId, workspaceId, status, id: { not: existing.id } },
+      orderBy: [{ order: 'asc' }, { updatedAt: 'asc' }],
+      select:  { id: true },
+    })
+
+    const ids = siblings.map(s => s.id)
+    const targetIndex = Number.isInteger(rawOrder) ? Math.min(Math.max(rawOrder, 0), ids.length) : ids.length
+    ids.splice(targetIndex, 0, existing.id)
+
+    const movedPatch = statusChanged ? statusSideEffects(status) : { status }
+
+    await prisma.$transaction(
+      ids.map((id, index) => prisma.contentPiece.update({
+        where: { id },
+        data:  id === existing.id ? { ...movedPatch, order: index } : { order: index },
+      }))
+    )
+
+    if (statusChanged) {
+      await logEvent({
+        pieceId: existing.id, workspaceId, action: 'status_change',
+        fromStatus: existing.status, toStatus: status, req,
+      })
+    }
+
+    const fresh = await loadPiece(existing.id, projectId, workspaceId)
+    res.json(formatPiece(fresh))
+  } catch (err) { next(err) }
+}
+
+function formatEvent(e) {
+  return {
+    id:         e.id,
+    action:     e.action,
+    fromStatus: e.fromStatus,
+    toStatus:   e.toStatus,
+    actorUserId:    e.actorUserId,
+    actorContactId: e.actorContactId,
+    actorName:  e.actorName,
+    comment:    e.comment,
+    createdAt:  e.createdAt,
+  }
+}
+
+/** GET /api/contenido/projects/:id/pieces/:pid/history — timeline append-only. */
+async function getHistory(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res)
+    if (!ctx) return
+
+    const piece = await prisma.contentPiece.findFirst({
+      where:  { id: Number(req.params.pid), projectId: ctx.projectId, workspaceId: ctx.workspaceId },
+      select: { id: true },
+    })
+    if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
+
+    const events = await prisma.contentStatusEvent.findMany({
+      where:   { pieceId: piece.id },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    res.json({ events: events.map(formatEvent) })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/contenido/projects/:id/summary
  * Conteo por estado + cuántas esperan al cliente (para badges de nav).
  */
@@ -419,6 +513,8 @@ module.exports = {
   getPiece,
   updatePiece,
   deletePiece,
+  movePiece,
+  getHistory,
   getSummary,
   // exportados para reuso en los controllers de F2–F4
   resolveProject,

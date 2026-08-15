@@ -295,6 +295,9 @@ async function archiveLead(req, res, next) {
 // resuelto: el del cliente si el lead ya se convirtió, si no el configurado en
 // Workspace.salesTasksProjectId. Nunca lanza: si falta algo, la acción queda igual
 // guardada, solo sin tarea vinculada (no bloquea el alta).
+// La descripción lleva el nombre de la empresa (`lead.company.name`): fuera de la vista
+// de Ventas (ej. el Dashboard normal, donde el proyecto suele ser el genérico de tareas
+// de Ventas y no dice a qué cliente corresponde) es la única pista de a quién se refiere.
 async function createTaskForAction({ workspaceId, tz, lead, action, requesterId }) {
   if (!action.dueAt || !action.ownerId) return null
 
@@ -330,9 +333,10 @@ async function createTaskForAction({ workspaceId, tz, lead, action, requesterId 
   }
   if (!workDay) return null
 
+  const companyName = lead.company?.name
   return prisma.task.create({
     data: {
-      description: `Ventas - ${action.title}`,
+      description: companyName ? `Ventas - ${companyName}: ${action.title}` : `Ventas - ${action.title}`,
       projectId:   project.id,
       userId:      action.ownerId,
       workDayId:   workDay.id,
@@ -353,7 +357,7 @@ async function addAction(req, res, next) {
     const { title, dueAt, ownerId } = req.body
     if (!title || !String(title).trim()) return res.status(400).json({ error: 'El título de la acción es requerido' })
 
-    const lead = await findLead(req.params.id, workspaceId)
+    const lead = await findLead(req.params.id, workspaceId, { company: { select: { name: true } } })
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
 
     const due = parseDate(dueAt)

@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import ContentFilters from '../components/contenido/ContentFilters'
 import ContentTableView from '../components/contenido/ContentTableView'
+import ContentKanbanView from '../components/contenido/ContentKanbanView'
+import ContentCalendarView, { currentMonthStr } from '../components/contenido/ContentCalendarView'
+import ContentPieceModal from '../components/contenido/ContentPieceModal'
 import useContentPieces from '../components/contenido/useContentPieces'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useAuth } from '../context/AuthContext'
@@ -20,19 +23,14 @@ const VIEWS = [
   { id: 'kanban',     label: '🗂 Kanban' },
 ]
 const VALID_VIEWS = new Set(VIEWS.map(v => v.id))
+const MONTH_RE = /^\d{4}-\d{2}$/
 
-// Vista por defecto. Pasa a 'calendario' cuando esa vista esté implementada (F2);
-// hasta entonces la tabla es la única que muestra algo útil.
-const DEFAULT_VIEW = 'tabla'
-
-function Placeholder({ label }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center text-3xl mb-4">🚧</div>
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">{label} — en construcción</h3>
-      <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs">Esta vista está en desarrollo.</p>
-    </div>
-  )
+// Rango [primer día, último día] del mes, para acotar el fetch al mes visible
+// en la vista Calendario (mismos query params from/to que ya soporta el backend).
+function monthBoundsOf(month) {
+  const [y, m] = month.split('-').map(Number)
+  const lastDay = new Date(y, m, 0).getDate()
+  return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, '0')}` }
 }
 
 export default function Contenido() {
@@ -48,10 +46,24 @@ export default function Contenido() {
   }, [])
 
   const rawView = searchParams.get('view')
-  const view = VALID_VIEWS.has(rawView) ? rawView : DEFAULT_VIEW
+  const view = VALID_VIEWS.has(rawView) ? rawView : 'tabla'
 
-  const { pieces, members, total, loading, error, setError, create, update, remove } =
-    useContentPieces(projectId, filters)
+  const rawMonth = searchParams.get('month')
+  const month = MONTH_RE.test(rawMonth || '') ? rawMonth : currentMonthStr()
+
+  const pieceId = searchParams.get('piece')
+
+  // El Calendario acota el fetch al mes visible; las otras vistas usan los
+  // filtros generales tal cual (la Tabla y el Kanban no están paginados por mes).
+  const effectiveFilters = useMemo(
+    () => (view === 'calendario' ? { ...filters, ...monthBoundsOf(month) } : filters),
+    [view, month, filters]
+  )
+
+  const { pieces, members, total, loading, error, setError, reload, create, update, move, remove } =
+    useContentPieces(projectId, effectiveFilters)
+
+  const openPiece = useMemo(() => pieces.find(p => String(p.id) === String(pieceId)) ?? null, [pieces, pieceId])
 
   // Espejo exacto de canWrite() del backend: admin/owner del workspace, o
   // miembro del equipo del proyecto.
@@ -77,8 +89,10 @@ export default function Contenido() {
     patchParams({ projectId: id })
   }
 
-  // El modal de detalle llega en F2; por ahora el click al título no hace nada.
-  const handleOpenPiece = useCallback(() => {}, [])
+  function handleDelete(id) {
+    if (String(pieceId) === String(id)) patchParams({ piece: '' })
+    return remove(id)
+  }
 
   function renderContent() {
     if (!projectId) {
@@ -95,7 +109,9 @@ export default function Contenido() {
 
     return (
       <>
-        <ContentFilters value={filters} onChange={setFilters} members={members} total={total} />
+        {view !== 'calendario' && (
+          <ContentFilters value={filters} onChange={setFilters} members={members} total={total} />
+        )}
 
         {error && (
           <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-center justify-between gap-3">
@@ -104,23 +120,36 @@ export default function Contenido() {
           </div>
         )}
 
-        {loading && pieces.length === 0
-          ? <div className="py-16"><LoadingSpinner size="lg" /></div>
-          : view === 'tabla'
-            ? (
-              <ContentTableView
-                pieces={pieces}
-                members={members}
-                loading={loading}
-                canEdit={canEdit}
-                onCreate={create}
-                onUpdate={update}
-                onDelete={remove}
-                onOpen={handleOpenPiece}
-              />
-            )
-            : <Placeholder label={VIEWS.find(v => v.id === view)?.label ?? view} />
-        }
+        {loading && pieces.length === 0 ? (
+          <div className="py-16"><LoadingSpinner size="lg" /></div>
+        ) : view === 'tabla' ? (
+          <ContentTableView
+            pieces={pieces}
+            members={members}
+            loading={loading}
+            canEdit={canEdit}
+            onCreate={create}
+            onUpdate={update}
+            onDelete={handleDelete}
+            onOpen={p => patchParams({ piece: p.id })}
+          />
+        ) : view === 'kanban' ? (
+          <ContentKanbanView
+            pieces={pieces}
+            canEdit={canEdit}
+            onMove={move}
+            onOpen={p => patchParams({ piece: p.id })}
+          />
+        ) : (
+          <ContentCalendarView
+            pieces={pieces}
+            month={month}
+            onMonthChange={m => patchParams({ month: m })}
+            canEdit={canEdit}
+            onUpdate={update}
+            onOpen={p => patchParams({ piece: p.id })}
+          />
+        )}
       </>
     )
   }
@@ -210,6 +239,18 @@ export default function Contenido() {
           </>
         )}
       </main>
+
+      {openPiece && (
+        <ContentPieceModal
+          piece={openPiece}
+          members={members}
+          canEdit={canEdit}
+          onUpdate={update}
+          onDelete={handleDelete}
+          onAssetsChanged={reload}
+          onClose={() => patchParams({ piece: '' })}
+        />
+      )}
     </div>
   )
 }

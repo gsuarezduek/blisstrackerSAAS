@@ -3,31 +3,12 @@ import ConfirmModal from '../ConfirmModal'
 import ContentStatusBadge from './ContentStatusBadge'
 import ContentNetworkChips from './ContentNetworkChips'
 import { CONTENT_STATUSES, CONTENT_TYPES, statusMeta } from './contentCatalog'
+import { toLocalInput, formatDateTime as formatDate } from './dateHelpers'
 
 const CELL   = 'px-3 py-2 text-sm align-middle'
 const HEAD   = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 select-none'
 const INPUT  = 'w-full px-2 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100'
 const INLINE = 'text-sm bg-transparent border border-transparent hover:border-gray-200 dark:hover:border-gray-600 rounded px-1.5 py-0.5 cursor-pointer text-gray-700 dark:text-gray-300'
-
-// ── Fechas ──────────────────────────────────────────────────────────────────
-// El <input type="datetime-local"> trabaja en la hora local del navegador. Para
-// un equipo que opera en la misma zona que sus proyectos (el caso normal) eso
-// coincide con lo que se espera; el backend recibe el instante en ISO y deriva
-// `scheduledDate` en la timezone del proyecto, que es lo que agrupa el calendario.
-function toLocalInput(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function formatDate(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-}
 
 // ── Celda de título editable ────────────────────────────────────────────────
 function TitleCell({ piece, canEdit, onSave, onOpen }) {

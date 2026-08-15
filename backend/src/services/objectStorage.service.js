@@ -20,7 +20,11 @@ const {
   S3Client,
   PutObjectCommand,
   DeleteObjectsCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  GetObjectCommand,
 } = require('@aws-sdk/client-s3')
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
 
 const {
   R2_ACCOUNT_ID,
@@ -58,6 +62,9 @@ const EXT_BY_MIME = {
   'image/png':  'png',
   'image/webp': 'webp',
   'image/gif':  'gif',
+  'video/mp4':       'mp4',
+  'video/quicktime': 'mov',
+  'video/webm':      'webm',
 }
 
 /** URL pública absoluta de un objeto a partir de su key. */
@@ -122,4 +129,62 @@ async function deleteObjects(keys) {
   return { deleted }
 }
 
-module.exports = { isConfigured, putObject, deleteObjects, publicUrl, isPublicUrl }
+/** Borra un solo objeto. No lanza — mismo criterio best-effort que deleteObjects. */
+async function deleteObject(key) {
+  if (!key || !isConfigured()) return
+  try {
+    await getClient().send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key }))
+  } catch (err) {
+    console.warn('[objectStorage] Error borrando objeto:', key, err.message)
+  }
+}
+
+/** Key nueva bajo un prefijo. El cliente NUNCA elige la key — evita path traversal / colisiones. */
+function buildKey(prefix, mimeType) {
+  const ext = EXT_BY_MIME[mimeType] || 'bin'
+  return `${prefix}/${randomUUID()}.${ext}`
+}
+
+/**
+ * URL firmada para que el navegador haga PUT directo al bucket (subida de
+ * imagen/video sin pasar por nuestro backend). Firma solo Content-Type, no
+ * Content-Length: firmar el length obliga a que el header que manda el browser
+ * calce exacto con lo firmado, lo cual es frágil entre proveedores S3-compatibles.
+ * El tope de tamaño se valida DESPUÉS con headObject(), sobre el objeto ya
+ * subido — R2 no cobra ingress, así que el peor caso es ancho de banda
+ * desperdiciado una vez, acotado por el expiry.
+ */
+async function presignPut(key, mimeType, { expiresIn = 600 } = {}) {
+  const cmd = new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, ContentType: mimeType })
+  return getSignedUrl(getClient(), cmd, { expiresIn })
+}
+
+/**
+ * Metadata real del objeto ya subido (tamaño y content-type que R2 registró).
+ * Devuelve null si el objeto no existe (upload nunca confirmado/abandonado).
+ */
+async function headObject(key) {
+  try {
+    const res = await getClient().send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key }))
+    return { size: res.ContentLength, contentType: res.ContentType }
+  } catch (err) {
+    if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) return null
+    throw err
+  }
+}
+
+/**
+ * Primeros `bytes` del objeto, vía ranged GET — para validar magic bytes sin
+ * bajar el archivo completo (puede pesar hasta 150MB).
+ */
+async function getObjectHead(key, bytes = 32) {
+  const res = await getClient().send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key, Range: `bytes=0-${bytes - 1}` }))
+  const chunks = []
+  for await (const chunk of res.Body) chunks.push(chunk)
+  return Buffer.concat(chunks)
+}
+
+module.exports = {
+  isConfigured, putObject, deleteObjects, deleteObject, publicUrl, isPublicUrl,
+  buildKey, presignPut, headObject, getObjectHead,
+}

@@ -7,7 +7,11 @@ const { channelLabel, uniqueSlug, materializeChannels } = require('../lib/chatCh
 
 const MESSAGE_PAGE_SIZE = 50
 const AUTHOR_SELECT = { id: true, name: true, avatar: true }
-const MESSAGE_INCLUDE = { author: { select: AUTHOR_SELECT }, pinnedBy: { select: AUTHOR_SELECT } }
+const MESSAGE_INCLUDE = {
+  author: { select: AUTHOR_SELECT },
+  pinnedBy: { select: AUTHOR_SELECT },
+  reactions: { orderBy: { createdAt: 'asc' }, select: { id: true, emoji: true, userId: true, user: { select: { name: true } } } },
+}
 
 // Canal privado (ChatChannel.isPrivate): solo lo ven/usan admin/owner del workspace —
 // mismo criterio que workspaceAdminOnly, pero evaluado por canal en vez de por ruta
@@ -378,6 +382,40 @@ async function togglePin(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Reacciones con emoji: abierto a cualquier miembro activo del workspace (mismo criterio
+// que fijar, no restringido a autor/moderador). Sin catálogo fijo — el emoji lo elige el
+// frontend (picker de emojis ya existente para componer mensajes). Toggle por
+// (mensaje, usuario, emoji): reaccionar de nuevo con el mismo emoji lo saca; varios
+// emojis distintos de la misma persona en el mismo mensaje conviven sin problema.
+async function toggleReaction(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const userId = req.user.userId
+    const messageId = Number(req.params.messageId)
+    const emoji = (req.body?.emoji || '').trim()
+    if (!emoji || emoji.length > 32) return res.status(400).json({ error: 'Emoji inválido' })
+
+    const existing = await prisma.chatMessage.findFirst({ where: { id: messageId, workspaceId } })
+    if (!existing) return res.status(404).json({ error: 'Mensaje no encontrado' })
+
+    const channel = await prisma.chatChannel.findFirst({ where: { id: existing.channelId, workspaceId } })
+    if (!channel || !assertChannelAccess(req, res, channel)) return
+
+    const existingReaction = await prisma.chatMessageReaction.findUnique({
+      where: { messageId_userId_emoji: { messageId, userId, emoji } },
+    })
+    if (existingReaction) {
+      await prisma.chatMessageReaction.delete({ where: { id: existingReaction.id } })
+    } else {
+      await prisma.chatMessageReaction.create({ data: { workspaceId, messageId, userId, emoji } })
+    }
+
+    const message = await prisma.chatMessage.findUnique({ where: { id: messageId }, include: MESSAGE_INCLUDE })
+    emitTo(`channel:${existing.channelId}`, 'chat:message:reaction', message)
+    res.json(message)
+  } catch (err) { next(err) }
+}
+
 const GIPHY_BASE = 'https://api.giphy.com/v1/gifs'
 
 function normalizeGif(g) {
@@ -438,6 +476,7 @@ module.exports = {
   editMessage,
   deleteMessage,
   togglePin,
+  toggleReaction,
   markRead,
   searchGifs,
   trendingGifs,

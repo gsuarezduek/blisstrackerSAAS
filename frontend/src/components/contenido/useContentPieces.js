@@ -89,6 +89,28 @@ export function useContentPieces(projectId, filters = {}) {
     }
   }, [projectId])
 
+  // Drag&drop de Kanban/Calendario: mueve a `status` en la posición `order`
+  // (índice dentro de esa columna, sin contar la pieza movida). El optimismo
+  // local solo aproxima el estado — el `order` real de TODA la columna lo
+  // recalcula el backend, así que tras la respuesta se recarga la lista
+  // completa para no quedar con posiciones stale en las piezas vecinas.
+  const move = useCallback(async (id, { status, order }) => {
+    setError(null)
+    let snapshot
+    setPieces(prev => {
+      snapshot = prev
+      return prev.map(p => (p.id === id ? { ...p, status } : p))
+    })
+    try {
+      await api.patch(`/contenido/projects/${projectId}/pieces/${id}/position`, { status, order })
+      reload()
+    } catch (err) {
+      if (snapshot) setPieces(snapshot)
+      setError(err.response?.data?.error || 'No se pudo mover la pieza')
+      throw err
+    }
+  }, [projectId, reload])
+
   const remove = useCallback(async (id) => {
     setError(null)
     let snapshot
@@ -107,7 +129,32 @@ export function useContentPieces(projectId, filters = {}) {
     }
   }, [projectId])
 
-  return { pieces, members, total, loading, error, setError, reload, create, update, remove }
+  return { pieces, members, total, loading, error, setError, reload, create, update, move, remove }
+}
+
+/**
+ * Historial (ContentStatusEvent) de una pieza puntual. Se carga bajo demanda
+ * cuando se abre el tab "Historial" del modal de detalle — no vale la pena
+ * traerlo junto con la lista general.
+ */
+export function useContentHistory(projectId, pieceId) {
+  const [events,  setEvents]  = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState(null)
+
+  const reload = useCallback(() => {
+    if (!projectId || !pieceId) { setEvents([]); return }
+    setLoading(true)
+    setError(null)
+    api.get(`/contenido/projects/${projectId}/pieces/${pieceId}/history`)
+      .then(r => setEvents(r.data.events ?? []))
+      .catch(err => setError(err.response?.data?.error || 'No se pudo cargar el historial'))
+      .finally(() => setLoading(false))
+  }, [projectId, pieceId])
+
+  useEffect(() => { reload() }, [reload])
+
+  return { events, loading, error, reload }
 }
 
 export default useContentPieces

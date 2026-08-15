@@ -1,7 +1,7 @@
 const router = require('express').Router()
 const {
   listChannels, createChannel, updateChannel, updateChannelPrivacy, deleteChannel,
-  listMessages, listPinned, sendMessage, editMessage, deleteMessage, togglePin,
+  listMessages, listPinned, sendMessage, editMessage, deleteMessage, togglePin, toggleReaction,
   markRead, searchGifs, trendingGifs,
 } = require('../controllers/chat.controller')
 const { auth } = require('../middleware/auth')
@@ -31,6 +31,7 @@ router.post('/channels/:id/read',     markRead)
 router.patch('/messages/:messageId',  editMessage)
 router.delete('/messages/:messageId', deleteMessage)
 router.patch('/messages/:messageId/pin', togglePin)
+router.post('/messages/:messageId/reactions', toggleReaction)
 
 router.get('/gifs/search',    searchGifs)
 router.get('/gifs/trending',  trendingGifs)

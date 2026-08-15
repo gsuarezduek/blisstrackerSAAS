@@ -36,14 +36,22 @@ const byName = (a, b) => norm(a.name).localeCompare(norm(b.name), 'es', { sensit
 // no se mueven por menciones/favoritos) → menciones sin leer (solo canales de proyecto)
 // → favoritos (mismo starring de "Mis Proyectos", solo canales de proyecto) → resto de
 // proyectos por orden alfabético.
+// Switch "Todos"/"No leídos": filtra a solo los canales con `unreadCount`/`mentionCount`
+// > 0. La búsqueda por texto SIEMPRE ignora este switch (corre sobre todos los canales) —
+// mientras hay una búsqueda activa el switch queda visualmente atenuado y sin efecto.
 export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel }) {
   const [query, setQuery] = useState('')
+  const [unreadOnly, setUnreadOnly] = useState(false)
+  const hasQuery = norm(query).trim().length > 0
+  const unreadCount = useMemo(() => channels.filter(c => c.unreadCount > 0 || c.mentionCount > 0).length, [channels])
 
+  // La búsqueda siempre corre sobre TODOS los canales, ignorando el switch — buscar algo
+  // puntual no debería depender de si ese canal está o no marcado como no-leído.
   const filtered = useMemo(() => {
     const q = norm(query).trim()
-    if (!q) return channels
-    return channels.filter(c => norm(c.name).includes(q))
-  }, [channels, query])
+    if (q) return channels.filter(c => norm(c.name).includes(q))
+    return unreadOnly ? channels.filter(c => c.unreadCount > 0 || c.mentionCount > 0) : channels
+  }, [channels, query, unreadOnly])
 
   const groups = useMemo(() => {
     const general = filtered.filter(c => c.kind === 'general')
@@ -74,7 +82,7 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
 
   return (
     <div className="absolute left-0 top-full mt-1.5 w-72 max-h-96 flex flex-col bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-20 overflow-hidden">
-      <div className="p-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+      <div className="p-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 space-y-1.5">
         <input
           autoFocus
           value={query}
@@ -82,11 +90,33 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
           placeholder="Buscar proyecto o canal..."
           className="w-full text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
         />
+        <div className={`flex gap-1 ${hasQuery ? 'opacity-40 pointer-events-none' : ''}`} title={hasQuery ? 'La búsqueda siempre muestra todos los canales' : undefined}>
+          <button
+            type="button"
+            onClick={() => setUnreadOnly(false)}
+            className={`flex-1 text-xs font-medium py-1 rounded-lg transition-colors ${
+              !unreadOnly ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            Todos
+          </button>
+          <button
+            type="button"
+            onClick={() => setUnreadOnly(true)}
+            className={`flex-1 text-xs font-medium py-1 rounded-lg transition-colors ${
+              unreadOnly ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            No leídos{unreadCount > 0 ? ` (${unreadCount})` : ''}
+          </button>
+        </div>
       </div>
 
       <div className="overflow-y-auto py-2 px-2">
         {!hasResults && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">Sin resultados</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">
+            {!hasQuery && unreadOnly ? 'No tenés canales sin leer' : 'Sin resultados'}
+          </p>
         )}
         {groups.map(group => {
           if (group.items.length === 0) return null
