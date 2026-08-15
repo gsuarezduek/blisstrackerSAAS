@@ -604,7 +604,7 @@ export default function ProjectDetail() {
                     {(data.project.members?.length ?? 0) === 0 ? (
                       <p className="text-sm text-gray-400 dark:text-gray-500">Sin personas en el equipo.</p>
                     ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {data.project.members.map(pm => (
                           <UserLink
                             key={pm.user.id}

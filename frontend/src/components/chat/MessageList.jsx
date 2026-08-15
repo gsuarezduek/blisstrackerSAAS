@@ -30,7 +30,9 @@ export default function MessageList({
   onSaveEdit, onDelete, onTogglePin,
 }) {
   const scrollRef = useRef(null)
+  const contentRef = useRef(null)
   const bottomRef = useRef(null)
+  const stickToBottomRef = useRef(true)
   const [didInitialScroll, setDidInitialScroll] = useState(false)
   const [menuOpenId, setMenuOpenId] = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -101,9 +103,32 @@ export default function MessageList({
     prependAdjustRef.current = null
   }, [messages])
 
+  // Contenido que crece DESPUÉS del scroll inicial (típicamente un GIF: el <img> no
+  // tiene ancho/alto fijo, así que recién empuja el layout cuando termina de descargar)
+  // deja la vista "a mitad de camino" en vez de al final, aunque ya habíamos scrolleado
+  // al fondo. Mientras estemos pegados al final, cualquier crecimiento del contenido nos
+  // vuelve a pegar ahí — no interfiere con la carga de mensajes viejos hacia arriba
+  // porque ahí `stickToBottomRef` ya es false (para eso hay que estar scrolleado arriba).
+  // `contentRef` solo existe en el DOM una vez que se pasó de la pantalla de carga al
+  // listado real (early-return de arriba) — por eso este efecto se re-arma cuando cambia
+  // `loading` o cuando el canal pasa de "sin mensajes" a "con mensajes" (mismo motivo:
+  // esas dos ramas usan JSX sin `contentRef`), y no depende de `[]` a secas.
+  useEffect(() => {
+    const content = contentRef.current
+    if (!content || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      if (prependAdjustRef.current || !stickToBottomRef.current) return
+      bottomRef.current?.scrollIntoView()
+    })
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [loading, messages.length === 0])
+
   function handleScroll() {
     const el = scrollRef.current
-    if (!el || loadingMore || !hasMore) return
+    if (!el) return
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+    if (loadingMore || !hasMore) return
     if (el.scrollTop < 80) {
       prependAdjustRef.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop }
       onLoadMore()
@@ -123,6 +148,7 @@ export default function MessageList({
   return (
     <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-3">
       {loadingMore && <LoadingSpinner size="sm" className="py-2" />}
+      <div ref={contentRef}>
       {messages.map((m, i) => {
         const prev = messages[i - 1]
         const isNewDay = !prev || dayLabel(prev.createdAt) !== dayLabel(m.createdAt)
@@ -251,6 +277,7 @@ export default function MessageList({
         )
       })}
       <div ref={bottomRef} />
+      </div>
     </div>
   )
 }

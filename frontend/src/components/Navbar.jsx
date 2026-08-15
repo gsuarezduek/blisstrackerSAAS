@@ -139,6 +139,7 @@ export default function Navbar() {
   const { enabled: eosEnabled }       = useFeatureFlag('eos')
   const { enabled: gamificationEnabled } = useFeatureFlag('gamification')
   const { enabled: ventasEnabled }    = useFeatureFlag('ventas')
+  const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
 
   // ── Links de navegación principal ────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
@@ -148,6 +149,7 @@ export default function Navbar() {
     ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
     { to: '/realtime', label: 'Actividad', dot: true },
     ...(isAdmin ? [{ to: '/reports', label: 'Reportes' }] : []),
+    ...(contenidoEnabled ? [{ to: '/contenido', label: 'Contenido' }] : []),
     ...(marketingEnabled ? [{ to: '/marketing', label: 'Marketing' }] : []),
     // Ventas como link principal SOLO para el equipo comercial no-admin.
     // Los admins (incluidos admin+ventas) lo ven bajo Administración, nunca duplicado.

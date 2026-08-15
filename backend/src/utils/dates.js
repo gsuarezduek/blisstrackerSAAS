@@ -5,8 +5,20 @@
 const DEFAULT_TZ = 'America/Argentina/Buenos_Aires'
 
 function todayString(tz) {
-  const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : DEFAULT_TZ
-  return new Date().toLocaleDateString('en-CA', { timeZone: safeZone })
+  return dateStringInTz(new Date(), tz)
 }
 
-module.exports = { todayString, DEFAULT_TZ }
+/**
+ * Convierte un Date (instante UTC) a "YYYY-MM-DD" en la timezone dada.
+ * Lo usa el módulo Contenido para denormalizar ContentPiece.scheduledDate y que
+ * el calendario agrupe por día sin hacer aritmética de zona horaria en el cliente.
+ * Devuelve null si la fecha no es válida.
+ */
+function dateStringInTz(date, tz) {
+  const d = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(d.getTime())) return null
+  const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : DEFAULT_TZ
+  return d.toLocaleDateString('en-CA', { timeZone: safeZone })
+}
+
+module.exports = { todayString, dateStringInTz, DEFAULT_TZ }

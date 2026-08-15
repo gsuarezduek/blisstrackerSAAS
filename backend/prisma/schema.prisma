@@ -151,9 +151,14 @@ model Workspace {
   leadResearches         LeadResearch[]
   leadActions            LeadAction[]
   clientPortals          ProjectClientPortal[]
+  clientPortalContacts   ClientPortalContact[]
   chatChannels           ChatChannel[]
   chatMessages           ChatMessage[]
   chatChannelReads       ChatChannelRead[]
+  contentPieces          ContentPiece[]
+  contentAssets          ContentAsset[]
+  contentComments        ContentComment[]
+  contentStatusEvents    ContentStatusEvent[]
 
   @@index([slug])
 }
@@ -298,6 +303,11 @@ model User {
   chatChannelsCreated       ChatChannel[]
   chatChannelReads          ChatChannelRead[]
   chatMessagesPinned        ChatMessage[]              @relation("ChatMessagePinnedBy")
+  contentPiecesOwned        ContentPiece[]             @relation("ContentPieceOwner")
+  contentPiecesCreated      ContentPiece[]             @relation("ContentPieceCreator")
+  contentAssetsUploaded     ContentAsset[]             @relation("ContentAssetUploader")
+  contentComments           ContentComment[]           @relation("ContentCommentAuthor")
+  contentStatusEvents       ContentStatusEvent[]        @relation("ContentEventActor")
 }
 
 model UserLogin {
@@ -458,6 +468,7 @@ model Project {
   clientPortal           ProjectClientPortal?
   salesTasksWorkspaces   Workspace[]             @relation("WorkspaceSalesTasksProject")
   chatChannel            ChatChannel?
+  contentPieces          ContentPiece[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -636,6 +647,7 @@ model Task {
   meetingTodo   ProjectMeetingTodo? // To-Do de reunión de proyecto vinculado (uno a uno); completar la tarea lo tilda
   meetingParticipant ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
   leadAction    LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
+  contentPiece  ContentPiece? // Pieza de Contenido vinculada (uno a uno); completar la tarea la hace avanzar de estado
 
   @@index([userId, status])
   @@index([projectId])
@@ -734,14 +746,20 @@ enum NotificationType {
   LEAD_ASSIGNED
   GAME_LAUNCHED
   CHAT_MENTION
+  CONTENT_APPROVED
+  CONTENT_CHANGES_REQUESTED
+  CONTENT_MENTION
 }
 
 model Notification {
   id          Int              @id @default(autoincrement())
   userId      Int
   user        User             @relation("NotificationRecipient", fields: [userId], references: [id])
-  actorId     Int
-  actor       User             @relation("NotificationActor", fields: [actorId], references: [id])
+  // Nullable: el actor de CONTENT_APPROVED / CONTENT_CHANGES_REQUESTED es un
+  // contacto del cliente (ClientPortalContact), no un User. En esos casos el
+  // `message` es autocontenido e incluye el nombre de quien actuó.
+  actorId     Int?
+  actor       User?            @relation("NotificationActor", fields: [actorId], references: [id])
   workspaceId Int
   workspace   Workspace        @relation(fields: [workspaceId], references: [id])
   taskId      Int?
@@ -756,6 +774,8 @@ model Notification {
   channel     ChatChannel?     @relation(fields: [channelId], references: [id], onDelete: SetNull)
   chatMessageId Int?
   chatMessage ChatMessage?     @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
+  contentPieceId Int?
+  contentPiece ContentPiece?   @relation(fields: [contentPieceId], references: [id], onDelete: SetNull)
   type        NotificationType @default(COMPLETED)
   message     String
   read        Boolean          @default(false)
@@ -1757,9 +1777,12 @@ model ProjectClientPortal {
   projectId        Int       @unique // un portal por proyecto (v1)
   project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   slug             String    @unique // vanity slug, global (mismo criterio que MonthlyReport.token)
-  clientEmail      String
+  // LEGACY: la fuente de verdad del login OTP es ClientPortalContact. Se conserva
+  // nullable un release por rollback; se dropea en una migración posterior.
+  clientEmail      String?
   clientName       String?
   active           Boolean   @default(true)
+  contentEnabled   Boolean   @default(false) // habilita el tab "Contenido" (aprobación de piezas)
   liveSections     String    @default("[]") // JSON array, subset de SECTION_KEYS habilitado para "Datos en vivo"
   liveDataCache    String? // JSON: último resultado de aggregateReportData (sections/objectives/period)
   liveDataCachedAt DateTime?
@@ -1767,7 +1790,37 @@ model ProjectClientPortal {
   updatedAt        DateTime  @updatedAt
 
   loginCodes ClientPortalLoginCode[]
+  contacts   ClientPortalContact[]
 
+  @@index([workspaceId])
+}
+
+// Contactos autorizados de un portal. Fuente de verdad del login OTP (reemplaza a
+// ProjectClientPortal.clientEmail, que quedó legacy). Un contacto NO es un User:
+// queda fuera de RRHH/Equipo/Productividad por diseño, igual que el portal.
+// Desactivarlo corta el acceso al instante, incluso con el JWT de 30 días vigente
+// (clientPortalAuth revalida el contacto en cada request).
+model ClientPortalContact {
+  id          Int                 @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  portalId    Int
+  portal      ProjectClientPortal @relation(fields: [portalId], references: [id], onDelete: Cascade)
+  email       String // siempre normalizado a lowercase
+  name        String?
+  canApprove  Boolean             @default(true)
+  active      Boolean             @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  loginCodes     ClientPortalLoginCode[]
+  approvedPieces ContentPiece[]
+  comments       ContentComment[]
+  statusEvents   ContentStatusEvent[]
+
+  @@unique([portalId, email]) // el mismo email puede ser contacto de varios proyectos
+  @@index([portalId, active])
   @@index([workspaceId])
 }
 
@@ -1776,13 +1829,17 @@ model ClientPortalLoginCode {
   id        Int      @id @default(autoincrement())
   portalId  Int
   portal    ProjectClientPortal @relation(fields: [portalId], references: [id], onDelete: Cascade)
+  contactId Int?
+  contact   ClientPortalContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
   email     String
   code      String
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  @@index([portalId, createdAt])
+  // El rate limit del OTP es por (portal, email) y no por portal: con varios
+  // contactos, un límite por portal se agotaría con un login de cada uno.
+  @@index([portalId, email, createdAt])
 }
 
 // ─── OBJETIVOS DE MARKETING ───────────────────────────────────────────────────
@@ -2828,4 +2885,144 @@ model ChatChannelRead {
   lastReadAt        DateTime    @default(now())
 
   @@unique([channelId, userId])
+}
+
+// ─── CONTENIDO ────────────────────────────────────────────────────────────────
+// Calendario de contenido por proyecto con aprobación del cliente. El workflow de
+// estados es FIJO y vive en código (lib/contentCatalog.js) — por eso `status` es
+// String y no un enum de Prisma: agregar o renombrar un estado es un cambio de
+// catálogo, no una migración de tipo (mismo criterio que Lead.status).
+
+model ContentPiece {
+  id            Int       @id @default(autoincrement())
+  workspaceId   Int
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId     Int
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  status        String    @default("idea") // clave de CONTENT_STATUSES
+  type          String    @default("post") // clave de CONTENT_TYPES
+  networks      String    @default("[]") // JSON array de claves de CONTENT_NETWORKS (una pieza puede salir a varias)
+  copy          String?
+  hashtags      String?
+  internalNotes String? // NUNCA viaja al portal del cliente
+  scheduledAt   DateTime? // fecha+hora de publicación planificada (UTC)
+  // "YYYY-MM-DD" en Project.timezone, calculado por el backend al escribir. El
+  // calendario agrupa por este string para no hacer aritmética de zona horaria en
+  // el cliente (mismo criterio que WorkDay.date y ProjectMeeting.date).
+  scheduledDate String?
+  publishedAt   DateTime?
+  publishedUrl  String?
+  ownerId       Int? // responsable interno
+  owner         User?     @relation("ContentPieceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  order         Int       @default(0) // orden dentro de la columna del Kanban
+  // Tarea del dashboard vinculada ("enviar al dashboard"). Completarla avanza la
+  // pieza según ADVANCE_ON_TASK_DONE. SetNull: borrar la tarea no borra la pieza.
+  taskId        Int?      @unique
+  task          Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  // Denormalizados para filtros y badges sin joinear el log. La verdad histórica
+  // completa (quién aprobó qué y cuándo) vive en ContentStatusEvent.
+  submittedAt         DateTime?
+  approvedAt          DateTime?
+  approvedByContactId Int?
+  approvedBy          ClientPortalContact? @relation(fields: [approvedByContactId], references: [id], onDelete: SetNull)
+  changesRequestedAt  DateTime?
+
+  createdById Int?
+  createdBy   User?    @relation("ContentPieceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assets        ContentAsset[]
+  comments      ContentComment[]
+  statusEvents  ContentStatusEvent[]
+  notifications Notification[]
+
+  @@index([workspaceId])
+  @@index([projectId, scheduledDate]) // vista Calendario (rango de mes)
+  @@index([projectId, status, order]) // vista Kanban
+  @@index([projectId, updatedAt]) // vista Tabla (orden por defecto)
+}
+
+// Asset de una pieza. Ciclo de vida en dos pasos por el flujo de presigned URL:
+// 'pending' (URL firmada emitida, bytes todavía no confirmados) → 'ready'.
+// Los 'pending' abandonados los barre la limpieza semanal (cleanup.service.js).
+model ContentAsset {
+  id          Int          @id @default(autoincrement())
+  // Id no adivinable para la URL pública: un <img src> no puede llevar
+  // Authorization, así que la no-adivinabilidad ES el control de acceso
+  // (mismo criterio que SocialImage.id). Con un Int se podría enumerar el
+  // contenido sin publicar de todos los clientes.
+  publicId    String       @unique @default(uuid())
+  workspaceId Int
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pieceId     Int
+  piece       ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  kind        String // "image" | "video"
+  status      String       @default("pending") // "pending" | "ready"
+  mimeType    String
+  objectKey   String? // key en R2, bajo el prefijo content/<workspaceId>/
+  imageData   Bytes? // fallback sin R2 (solo imagen, dev local) — patrón de SocialImage
+  posterKey   String? // thumbnail del video, generado en el browser
+  sizeBytes   Int? // autoritativo: sale del HeadObject post-upload, no del cliente
+  width       Int?
+  height      Int?
+  durationSec Int?
+  fileName    String? // solo display; NUNCA se usa para armar la key
+  order       Int      @default(0)
+  uploadedById Int?
+  uploadedBy  User?    @relation("ContentAssetUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  confirmedAt DateTime?
+
+  @@index([pieceId, order])
+  @@index([workspaceId])
+  @@index([status, createdAt]) // barrido de huérfanos 'pending'
+}
+
+// Un solo modelo para las dos audiencias, discriminado por `visibility`.
+// REGLA DURA: los internos jamás salen del backend hacia el portal — el query
+// público filtra por visibility: 'client' en el WHERE de SQL (no en JS), y el
+// formatter público es una función separada del interno.
+model ContentComment {
+  id              Int                  @id @default(autoincrement())
+  workspaceId     Int
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pieceId         Int
+  piece           ContentPiece         @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  visibility      String // "internal" (solo el equipo) | "client" (hilo con el cliente)
+  authorUserId    Int? // lo escribió el equipo
+  authorUser      User?                @relation("ContentCommentAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorContactId Int? // lo escribió el cliente
+  authorContact   ClientPortalContact? @relation(fields: [authorContactId], references: [id], onDelete: SetNull)
+  authorName      String? // snapshot del nombre: sobrevive al borrado del contacto
+  body            String
+  createdAt       DateTime             @default(now())
+
+  @@index([pieceId, visibility, createdAt])
+  @@index([workspaceId])
+}
+
+// Log append-only. Fuente de verdad de "quién aprobó qué y cuándo". Una aprobación
+// ES un evento de este log (action: 'approved'), no un modelo aparte.
+model ContentStatusEvent {
+  id             Int                  @id @default(autoincrement())
+  workspaceId    Int
+  workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pieceId        Int
+  piece          ContentPiece         @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  action         String // created | status_change | submitted | approved | changes_requested | published | task_completed
+  fromStatus     String?
+  toStatus       String?
+  actorUserId    Int?
+  actorUser      User?                @relation("ContentEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorContactId Int?
+  actorContact   ClientPortalContact? @relation(fields: [actorContactId], references: [id], onDelete: SetNull)
+  actorName      String? // snapshot: el historial sigue legible si se borra el actor
+  comment        String? // motivo del "pedir cambios"
+  createdAt      DateTime             @default(now())
+
+  @@index([pieceId, createdAt])
+  @@index([workspaceId])
 }

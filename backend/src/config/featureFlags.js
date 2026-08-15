@@ -31,6 +31,11 @@ const FEATURE_FLAGS = [
     name: 'Sección Ventas (CRM)',
     description: 'CRM comercial: pipeline de leads/oportunidades, empresas y contactos, timeline automático, próximas acciones, propuestas con IA e investigación de empresas. Acceden admins y el equipo comercial configurable (Admin → Equipo).',
   },
+  {
+    key: 'contenido',
+    name: 'Sección Contenido',
+    description: 'Calendario de contenido por proyecto: piezas de RRSS con vistas Calendario, Tabla y Kanban, assets (imagen y video), comentarios internos y aprobación del cliente desde el portal.',
+  },
 ]
 
 module.exports = { FEATURE_FLAGS }
