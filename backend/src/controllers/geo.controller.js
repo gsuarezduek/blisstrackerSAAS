@@ -59,9 +59,9 @@ async function listAudits(req, res, next) {
     const summary     = req.query.summary === 'true'
 
     if (!projectId && summary) {
-      // Benchmark: último audit completado de cada proyecto del workspace
+      // Benchmark: último audit completado de cada proyecto ACTIVO del workspace
       const projects = await prisma.project.findMany({
-        where: { workspaceId },
+        where: { workspaceId, active: true },
         select: { id: true, name: true },
       })
       const results = await Promise.all(

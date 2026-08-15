@@ -604,13 +604,25 @@ export default function ProjectDetail() {
                     {(data.project.members?.length ?? 0) === 0 ? (
                       <p className="text-sm text-gray-400 dark:text-gray-500">Sin personas en el equipo.</p>
                     ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                         {data.project.members.map(pm => (
-                          <UserLink key={pm.user.id} userId={pm.user.id} as="div" className="flex items-center gap-2 min-w-0 rounded-lg -m-1 p-1 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-                            <Avatar user={pm.user} size="sm" />
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight truncate hover:text-primary-600 dark:hover:text-primary-400 transition-colors">{pm.user.name}</p>
-                              <RoleBadge role={pm.user.role} userId={pm.user.id} className="inline-block mt-0.5" />
+                          <UserLink
+                            key={pm.user.id}
+                            userId={pm.user.id}
+                            as="div"
+                            className="group relative aspect-square rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-primary-400 dark:hover:ring-primary-500 transition-all"
+                          >
+                            <img
+                              src={avatarUrl(pm.user.avatar)}
+                              alt={pm.user.name}
+                              className="absolute inset-0 w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+                            <div className="absolute bottom-0 left-0 right-0 p-3 text-left">
+                              <p className="text-white font-semibold text-sm leading-tight truncate drop-shadow">{pm.user.name}</p>
+                              <div className="mt-1">
+                                <RoleBadge role={pm.user.role} userId={pm.user.id} />
+                              </div>
                             </div>
                           </UserLink>
                         ))}

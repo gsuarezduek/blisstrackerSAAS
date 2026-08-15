@@ -124,6 +124,8 @@ async function rrssObjectivesByProject(workspaceId, network, month, projectIds) 
 /**
  * GET /api/marketing/summary/analytics
  * Snapshot de Analytics más reciente por proyecto, ordenado por sesiones desc.
+ * Solo proyectos activos: un proyecto desactivado desaparece de esta vista aunque
+ * conserve snapshots/integraciones históricas (se filtra por la relación `project`).
  */
 async function getAnalyticsSummary(req, res, next) {
   try {
@@ -131,7 +133,7 @@ async function getAnalyticsSummary(req, res, next) {
 
     // Para cada proyecto, tomar el snapshot más reciente
     const snapshots = await prisma.analyticsSnapshot.findMany({
-      where: { workspaceId },
+      where: { workspaceId, project: { active: true } },
       orderBy: { month: 'desc' },
       include: { project: { select: { id: true, name: true } } },
     })
@@ -139,7 +141,7 @@ async function getAnalyticsSummary(req, res, next) {
     // Estado de la integración GA4 por proyecto: 'active' | 'expired' | 'missing'.
     // Permite pintar en rojo los proyectos cuya integración se desconectó (no refrescable).
     const integrations = await prisma.projectIntegration.findMany({
-      where:  { workspaceId, type: 'google_analytics' },
+      where:  { workspaceId, type: 'google_analytics', project: { active: true } },
       select: { projectId: true, status: true, propertyId: true, project: { select: { id: true, name: true } } },
     })
     const integrationStatusOf = (projectId) => {
@@ -212,7 +214,7 @@ async function refreshAnalyticsSummary(req, res, next) {
     const month = todayString(req.workspace.timezone).slice(0, 7) // "YYYY-MM" del mes en curso
 
     const integrations = await prisma.projectIntegration.findMany({
-      where:  { workspaceId, type: 'google_analytics' },
+      where:  { workspaceId, type: 'google_analytics', project: { active: true } },
       select: { projectId: true, status: true, propertyId: true, project: { select: { name: true } } },
     })
 
@@ -269,7 +271,7 @@ async function refreshRrssSummary(req, res, next) {
     }
 
     const integrations = await prisma.projectIntegration.findMany({
-      where:  { workspaceId, type: platform, scopes: 'scrape' },
+      where:  { workspaceId, type: platform, scopes: 'scrape', project: { active: true } },
       select: { id: true, projectId: true, propertyId: true, project: { select: { name: true } } },
     })
 
@@ -308,7 +310,7 @@ async function getPerformanceSummary(req, res, next) {
     const strategy = req.query.strategy === 'desktop' ? 'desktop' : 'mobile'
 
     const results = await prisma.pageSpeedResult.findMany({
-      where:   { workspaceId, status: 'done', strategy },
+      where:   { workspaceId, status: 'done', strategy, project: { active: true } },
       orderBy: [
         { createdAt: 'desc' },
       ],
@@ -357,7 +359,7 @@ async function getInstagramSummary(req, res, next) {
     const monthStart   = `${currentMonth}-01`
 
     const snapshots = await prisma.instagramSnapshot.findMany({
-      where:   { workspaceId },
+      where:   { workspaceId, project: { active: true } },
       orderBy: { month: 'desc' },
       include: { project: { select: { id: true, name: true } } },
     })
@@ -418,7 +420,7 @@ async function getTikTokSummary(req, res, next) {
     const monthStart   = `${currentMonth}-01`
 
     const snapshots = await prisma.tikTokSnapshot.findMany({
-      where:   { workspaceId },
+      where:   { workspaceId, project: { active: true } },
       orderBy: { month: 'desc' },
       include: { project: { select: { id: true, name: true } } },
     })
@@ -479,7 +481,7 @@ async function getYouTubeSummary(req, res, next) {
     const monthStart   = `${currentMonth}-01`
 
     const snapshots = await prisma.youTubeSnapshot.findMany({
-      where:   { workspaceId },
+      where:   { workspaceId, project: { active: true } },
       orderBy: { month: 'desc' },
       include: { project: { select: { id: true, name: true } } },
     })
@@ -525,7 +527,7 @@ async function getLinkedinSummary(req, res, next) {
     const workspaceId = req.workspace.id
 
     const snapshots = await prisma.linkedinSnapshot.findMany({
-      where:   { workspaceId },
+      where:   { workspaceId, project: { active: true } },
       orderBy: { month: 'desc' },
       include: { project: { select: { id: true, name: true } } },
     })
@@ -569,7 +571,7 @@ async function getAdsSummary(req, res, next) {
     }
 
     const snapshots = await prisma.adsSnapshot.findMany({
-      where:   { workspaceId, type },
+      where:   { workspaceId, type, project: { active: true } },
       orderBy: { month: 'desc' },
       include: { project: { select: { id: true, name: true } } },
     })
@@ -679,7 +681,7 @@ async function getAdsSummaryLive(req, res, next) {
     // Sin `select`: getValidFbToken/fetchGoogleAdsData necesitan el registro completo
     // (accessToken, refreshToken, expiresAt, id) para refrescar el token si hace falta.
     const integrations = await prisma.projectIntegration.findMany({
-      where:   { workspaceId, type },
+      where:   { workspaceId, type, project: { active: true } },
       include: { project: { select: { name: true } } },
     })
 
@@ -765,10 +767,10 @@ async function getReportsSummary(req, res, next) {
     const generatedById = /^\d+$/.test(req.query.generatedById || '') ? parseInt(req.query.generatedById) : null
     const sort   = ['pct_desc', 'pct_asc'].includes(req.query.sort) ? req.query.sort : 'date_desc'
 
-    const baseWhere = { workspaceId, month, ...GENERATED_REPORT_WHERE }
+    const baseWhere = { workspaceId, month, ...GENERATED_REPORT_WHERE, project: { active: true } }
     const where = {
       ...baseWhere,
-      ...(search        ? { project: { name: { contains: search, mode: 'insensitive' } } } : {}),
+      ...(search        ? { project: { active: true, name: { contains: search, mode: 'insensitive' } } } : {}),
       ...(generatedById  ? { generatedById } : {}),
     }
 
@@ -856,7 +858,7 @@ async function getReportsStats(req, res, next) {
 
     const [reports, feedbackThisMonth, ratingAgg] = await Promise.all([
       prisma.monthlyReport.findMany({
-        where:  { workspaceId, ...GENERATED_REPORT_WHERE, createdAt: { gte, lte } },
+        where:  { workspaceId, ...GENERATED_REPORT_WHERE, createdAt: { gte, lte }, project: { active: true } },
         select: { id: true, generatedBy: { select: { id: true, name: true } } },
       }),
       prisma.reportFeedback.count({ where: { workspaceId, createdAt: { gte, lte } } }),
@@ -1018,7 +1020,7 @@ async function getFacebookSummary(req, res, next) {
     const workspaceId = req.workspace.id
 
     const snapshots = await prisma.facebookSnapshot.findMany({
-      where:   { workspaceId },
+      where:   { workspaceId, project: { active: true } },
       orderBy: { month: 'desc' },
       include: { project: { select: { id: true, name: true } } },
     })
