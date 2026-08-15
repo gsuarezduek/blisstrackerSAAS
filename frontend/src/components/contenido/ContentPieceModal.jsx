@@ -44,7 +44,7 @@ function useDebouncedCommit(value, onCommit, delay = 600) {
  *
  * Los assets (imagen/video) van por sus propios endpoints (`/assets/*`, fuera
  * del PATCH general de la pieza) — por eso cualquier cambio ahí llama a
- * `onAssetsChanged` (recarga la lista completa del hook) en vez de hacer
+ * `onPieceChanged` (recarga la lista completa del hook) en vez de hacer
  * optimismo local: es la única forma de que la pieza en memoria refleje el
  * asset nuevo/borrado/reordenado sin duplicar la lógica de fetch acá.
  *
@@ -52,7 +52,7 @@ function useDebouncedCommit(value, onCommit, delay = 600) {
  * El hilo con el cliente ('client') llega en F7, cuando el portal pueda
  * escribirlo — ContentCommentThread ya está armado para reusarse ahí.
  */
-export default function ContentPieceModal({ piece, members = [], canEdit, currentUserId, isAdmin, onUpdate, onDelete, onAssetsChanged, onClose }) {
+export default function ContentPieceModal({ piece, members = [], canEdit, currentUserId, isAdmin, onUpdate, onDelete, onPieceChanged, onClose }) {
   const [tab, setTab] = useState('detalles')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -78,17 +78,32 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
 
   const activeAsset = piece.assets.find(a => a.id === activeAssetId) ?? null
 
-  const handleAssetUploaded = useCallback(() => { onAssetsChanged() }, [onAssetsChanged])
+  const handleAssetUploaded = useCallback(() => { onPieceChanged() }, [onPieceChanged])
 
   const handleReorderAsset = useCallback(async (assetId, order) => {
     await api.patch(`/contenido/projects/${piece.projectId}/pieces/${piece.id}/assets/${assetId}`, { order })
-    onAssetsChanged()
-  }, [piece.projectId, piece.id, onAssetsChanged])
+    onPieceChanged()
+  }, [piece.projectId, piece.id, onPieceChanged])
 
   const handleDeleteAsset = useCallback(async (assetId) => {
     await api.delete(`/contenido/projects/${piece.projectId}/pieces/${piece.id}/assets/${assetId}`)
-    onAssetsChanged()
-  }, [piece.projectId, piece.id, onAssetsChanged])
+    onPieceChanged()
+  }, [piece.projectId, piece.id, onPieceChanged])
+
+  const [sendingToDashboard, setSendingToDashboard] = useState(false)
+  const [dashboardError, setDashboardError] = useState(null)
+  async function handleSendToDashboard() {
+    setSendingToDashboard(true)
+    setDashboardError(null)
+    try {
+      await api.post(`/contenido/projects/${piece.projectId}/pieces/${piece.id}/send-to-dashboard`)
+      onPieceChanged()
+    } catch (err) {
+      setDashboardError(err.response?.data?.error || 'No se pudo enviar al dashboard')
+    } finally {
+      setSendingToDashboard(false)
+    }
+  }
 
   const [title, setTitle] = useDebouncedCommit(piece.title, t => {
     const clean = t.trim()
@@ -275,6 +290,29 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
                   </optgroup>
                 </select>
               </div>
+
+              {canEdit && (
+                <div className="sm:col-span-2 flex items-center gap-2 flex-wrap">
+                  {piece.taskId ? (
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                      piece.task?.status === 'COMPLETED'
+                        ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
+                      {piece.task?.status === 'COMPLETED' ? '✅ Tarea completada' : '⏳ En el dashboard de ' + (piece.owner?.name ?? '—')}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handleSendToDashboard}
+                      disabled={sendingToDashboard || !piece.owner}
+                      title={!piece.owner ? 'Asigná un responsable primero' : undefined}
+                      className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {sendingToDashboard ? 'Enviando…' : '→ Enviar al dashboard'}
+                    </button>
+                  )}
+                  {dashboardError && <span className="text-xs text-red-600 dark:text-red-400">{dashboardError}</span>}
+                </div>
+              )}
 
               <div className="sm:col-span-2">
                 <label className={LABEL}>Redes</label>

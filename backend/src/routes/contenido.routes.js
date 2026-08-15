@@ -35,6 +35,7 @@ router.patch ('/projects/:id/pieces/:pid',           content.updatePiece)
 router.delete('/projects/:id/pieces/:pid',           content.deletePiece)
 router.patch ('/projects/:id/pieces/:pid/position',  content.movePiece)
 router.get   ('/projects/:id/pieces/:pid/history',   content.getHistory)
+router.post  ('/projects/:id/pieces/:pid/send-to-dashboard', content.sendToDashboard)
 
 router.get   ('/projects/:id/summary',     content.getSummary)
 

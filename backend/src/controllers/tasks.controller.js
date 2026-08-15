@@ -5,6 +5,9 @@ const {
 } = require('../services/recurrence.service')
 const { isAdmin } = require('../lib/projectAccess')
 const { resolveMentions } = require('../lib/mentions')
+const { emitTo } = require('../lib/socket')
+const { nextOnTaskDone } = require('../lib/contentCatalog')
+const { statusSideEffects, logEvent, loadPiece, formatPiece } = require('./content.controller')
 
 // Resuelve @menciones de un texto contra los miembros activos del workspace (cualquiera
 // puede ser mencionado en una tarea, sea o no su responsable — la etiqueta de proyecto/
@@ -269,7 +272,10 @@ async function startTask(req, res, next) {
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
     ])
     // Reabrir una tarea vinculada destilda su To-Do de L10 / de reunión de proyecto,
-    // y reabre la próxima acción de Ventas si la tarea venía de una.
+    // y reabre la próxima acción de Ventas si la tarea venía de una. Las piezas de
+    // Contenido son la excepción deliberada: reabrir la tarea NO retrocede el estado
+    // de la pieza (una pieza ya "Esperando aprobación" no debe volver a "Revisión
+    // interna" solo porque alguien reabrió su tarea del dashboard).
     await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.leadAction.updateMany({ where: { taskId }, data: { status: 'pending', doneAt: null, doneById: null } })
@@ -330,7 +336,8 @@ async function resumeTask(req, res, next) {
       prisma.taskSession.create({ data: { taskId, startedAt: now } }),
     ])
     // Reanudar una tarea vinculada destilda su To-Do de L10 / de reunión de proyecto,
-    // y reabre la próxima acción de Ventas si la tarea venía de una.
+    // y reabre la próxima acción de Ventas si la tarea venía de una. Mismo criterio
+    // que en startTask: una pieza de Contenido NO retrocede de estado acá.
     await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.leadAction.updateMany({ where: { taskId }, data: { status: 'pending', doneAt: null, doneById: null } })
@@ -379,6 +386,27 @@ async function completeTask(req, res, next) {
     // Si la tarea está vinculada a un To-Do (L10 o reunión de proyecto), tildarlo (sync un sentido: tarea → To-Do).
     await prisma.eOSTodo.updateMany({ where: { taskId: task.id }, data: { done: true, completedAt: now } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId: task.id }, data: { done: true, completedAt: now } })
+
+    // Si viene de una pieza de Contenido, avanzarla — a diferencia de los to-dos de
+    // arriba esto NO es un updateMany ciego: hace falta leer el estado ACTUAL de la
+    // pieza para saber a qué estado avanza (ADVANCE_ON_TASK_DONE), y dejar el salto
+    // registrado en su historial (ContentStatusEvent). Fuera del mapa (ej. una pieza
+    // ya aprobada) no pasa nada — completar la tarea no la mueve.
+    const linkedPiece = await prisma.contentPiece.findUnique({ where: { taskId: task.id } })
+    if (linkedPiece) {
+      const toStatus = nextOnTaskDone(linkedPiece.status)
+      if (toStatus) {
+        await prisma.contentPiece.update({ where: { id: linkedPiece.id }, data: statusSideEffects(toStatus) })
+        await logEvent({
+          pieceId: linkedPiece.id, workspaceId: linkedPiece.workspaceId,
+          action: 'task_completed', fromStatus: linkedPiece.status, toStatus, req,
+        })
+        const freshPiece = await loadPiece(linkedPiece.id, linkedPiece.projectId, linkedPiece.workspaceId)
+        emitTo(`workspace:${linkedPiece.workspaceId}`, 'content:piece:updated', {
+          projectId: linkedPiece.projectId, piece: formatPiece(freshPiece),
+        })
+      }
+    }
 
     // Si viene de una próxima acción de Ventas, resolverla también (sync en ambos
     // sentidos con el botón "Resolver" del lead — ver leads.controller.js resolveAction).

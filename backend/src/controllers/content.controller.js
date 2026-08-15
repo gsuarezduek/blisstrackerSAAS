@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma')
-const { dateStringInTz } = require('../utils/dates')
+const { dateStringInTz, todayString } = require('../utils/dates')
 const { canWrite } = require('../lib/projectAccess')
 const { emitTo } = require('../lib/socket')
 const {
@@ -523,6 +523,80 @@ async function getSummary(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * POST /api/contenido/projects/:id/pieces/:pid/send-to-dashboard
+ * Crea una Task en el dashboard del responsable y la vincula a la pieza
+ * (taskId @unique). Copia el patrón de sendTodoToDashboard en
+ * projectMeetings.controller.js:478-548 — mismas validaciones, mismo
+ * ensureWorkDay con manejo de P2002, misma notificación TASK_MENTION.
+ */
+async function sendToDashboard(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+    const { workspaceId, projectId, timezone } = ctx
+    const requesterId = req.user.userId
+
+    const piece = await loadPiece(req.params.pid, projectId, workspaceId)
+    if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
+    if (!piece.ownerId) return res.status(400).json({ error: 'Asigná un responsable a la pieza primero' })
+    if (piece.taskId)   return res.status(409).json({ error: 'Esta pieza ya tiene una tarea vinculada' })
+
+    const member = await prisma.workspaceMember.findUnique({
+      where:  { workspaceId_userId: { workspaceId, userId: piece.ownerId } },
+      select: { active: true },
+    })
+    if (!member || !member.active) return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
+
+    // WorkDay de hoy del responsable (crear si falta — mismo patrón que projectMeetings/tasks.create).
+    const today = todayString(timezone)
+    const wdKey = { userId_workspaceId_date: { userId: piece.ownerId, workspaceId, date: today } }
+    let workDay = await prisma.workDay.findUnique({ where: wdKey })
+    if (!workDay) {
+      try {
+        workDay = await prisma.workDay.create({ data: { userId: piece.ownerId, workspaceId, date: today } })
+      } catch (e) {
+        if (e.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
+        else throw e
+      }
+    }
+    if (!workDay) return res.status(500).json({ error: 'No se pudo obtener la jornada del responsable' })
+
+    const task = await prisma.task.create({
+      data: {
+        description: `Contenido - ${piece.title}`,
+        projectId,
+        userId:      piece.ownerId,
+        workDayId:   workDay.id,
+        createdById: piece.ownerId !== requesterId ? requesterId : null,
+      },
+    })
+
+    await prisma.contentPiece.update({ where: { id: piece.id }, data: { taskId: task.id } })
+
+    if (piece.ownerId !== requesterId) {
+      const desc = piece.title.length > 60 ? `${piece.title.slice(0, 57)}...` : piece.title
+      await prisma.notification.create({
+        data: {
+          userId:     piece.ownerId,
+          actorId:    requesterId,
+          taskId:     task.id,
+          projectId,
+          workspaceId,
+          contentPieceId: piece.id,
+          type:       'TASK_MENTION',
+          message:    `te asignó una tarea de contenido: "${desc}"`,
+        },
+      })
+    }
+
+    const fresh = await loadPiece(piece.id, projectId, workspaceId)
+    const formatted = formatPiece(fresh)
+    emitPieceUpdated(workspaceId, projectId, formatted)
+    res.status(201).json(formatted)
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   listPieces,
   createPiece,
@@ -532,6 +606,7 @@ module.exports = {
   movePiece,
   getHistory,
   getSummary,
+  sendToDashboard,
   // exportados para reuso en los controllers de F2–F4
   resolveProject,
   resolveCtx,

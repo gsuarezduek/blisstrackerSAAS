@@ -266,7 +266,7 @@ export default function Contenido() {
           isAdmin={user?.isAdmin}
           onUpdate={update}
           onDelete={handleDelete}
-          onAssetsChanged={reload}
+          onPieceChanged={reload}
           onClose={() => patchParams({ piece: '' })}
         />
       )}
