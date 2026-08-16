@@ -8,7 +8,7 @@ const {
   currentMonthStr,
   GENERATED_WHERE,
 } = require('./monthlyReport.controller')
-const { isAdmin, canWrite } = require('../lib/projectAccess')
+const { canWrite } = require('../lib/projectAccess')
 
 const SLUG_RE = /^[a-z0-9-]{3,40}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -36,17 +36,34 @@ async function resolveProjectId(param, workspaceId) {
   return p?.id ?? null
 }
 
-
+// `contacts` es opcional: cuando viene (getClientPortal, saveClientPortal) es
+// porque el caller ya los incluyó en el query; contactCount sale de ahí sin
+// una query aparte.
 function shapePortal(portal, workspaceSlug) {
   return {
-    slug:          portal.slug,
-    clientEmail:   portal.clientEmail,
-    clientName:    portal.clientName,
-    active:        portal.active,
-    liveSections:  JSON.parse(portal.liveSections || '[]'),
-    publicUrl:     `https://${workspaceSlug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/report/${portal.slug}`,
-    updatedAt:     portal.updatedAt,
+    slug:           portal.slug,
+    active:         portal.active,
+    contentEnabled: portal.contentEnabled,
+    liveSections:   JSON.parse(portal.liveSections || '[]'),
+    contactCount:   portal.contacts?.length ?? 0,
+    publicUrl:      `https://${workspaceSlug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/report/${portal.slug}`,
+    updatedAt:      portal.updatedAt,
   }
+}
+
+function shapeContact(c) {
+  return {
+    id:          c.id,
+    email:       c.email,
+    name:        c.name,
+    canApprove:  c.canApprove,
+    active:      c.active,
+    lastLoginAt: c.lastLoginAt,
+  }
+}
+
+function validEmail(e) {
+  return typeof e === 'string' && EMAIL_RE.test(e.trim())
 }
 
 function safeParseArr(str) {
@@ -64,14 +81,20 @@ async function getClientPortal(req, res, next) {
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const portal = await prisma.projectClientPortal.findUnique({ where: { projectId } })
-    res.json({ portal: portal ? shapePortal(portal, req.workspace.slug) : null })
+    const portal = await prisma.projectClientPortal.findUnique({
+      where:   { projectId },
+      include: { contacts: { orderBy: { createdAt: 'asc' } } },
+    })
+    if (!portal) return res.json({ portal: null })
+
+    res.json({ portal: { ...shapePortal(portal, req.workspace.slug), contacts: portal.contacts.map(shapeContact) } })
   } catch (err) { next(err) }
 }
 
 /**
  * PUT /api/projects/:id/client-portal
- * Body: { slug, clientEmail, clientName?, active, liveSections }. Upsert.
+ * Body: { slug, active, contentEnabled, liveSections }. Upsert. Los contactos
+ * se administran aparte (endpoints .../contacts) — no viajan acá.
  */
 async function saveClientPortal(req, res, next) {
   try {
@@ -82,13 +105,10 @@ async function saveClientPortal(req, res, next) {
       return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
     }
 
-    const { slug, clientEmail, clientName, active, liveSections } = req.body || {}
+    const { slug, active, contentEnabled, liveSections, clientEmail, clientName } = req.body || {}
 
     if (!slug || !SLUG_RE.test(slug)) {
       return res.status(400).json({ error: 'El slug debe tener 3-40 caracteres: minúsculas, números y guiones.' })
-    }
-    if (!clientEmail || !EMAIL_RE.test(clientEmail)) {
-      return res.status(400).json({ error: 'Email de cliente inválido.' })
     }
     const existing = await prisma.projectClientPortal.findUnique({ where: { slug } })
     if (existing && existing.projectId !== projectId) {
@@ -99,10 +119,9 @@ async function saveClientPortal(req, res, next) {
 
     const data = {
       slug,
-      clientEmail: clientEmail.trim().toLowerCase(),
-      clientName:  clientName ? String(clientName).trim() : null,
-      active:      active !== false,
-      liveSections: JSON.stringify(cleanSections),
+      active:         active !== false,
+      contentEnabled: contentEnabled === true,
+      liveSections:   JSON.stringify(cleanSections),
     }
 
     const portal = await prisma.projectClientPortal.upsert({
@@ -110,7 +129,24 @@ async function saveClientPortal(req, res, next) {
       update: data,
       create: { ...data, projectId, workspaceId },
     })
-    res.json({ portal: shapePortal(portal, req.workspace.slug) })
+
+    // Compat: un bundle viejo del frontend puede seguir mandando clientEmail —
+    // en vez de perder el dato lo upserteamos como contacto (ProjectClientPortal.clientEmail
+    // quedó legacy, ya no se escribe).
+    if (validEmail(clientEmail)) {
+      const email = clientEmail.trim().toLowerCase()
+      await prisma.clientPortalContact.upsert({
+        where:  { portalId_email: { portalId: portal.id, email } },
+        update: {},
+        create: { portalId: portal.id, workspaceId, email, name: clientName ? String(clientName).trim() : null },
+      })
+    }
+
+    const fresh = await prisma.projectClientPortal.findUnique({
+      where:   { id: portal.id },
+      include: { contacts: { orderBy: { createdAt: 'asc' } } },
+    })
+    res.json({ portal: { ...shapePortal(fresh, req.workspace.slug), contacts: fresh.contacts.map(shapeContact) } })
   } catch (err) { next(err) }
 }
 
@@ -127,6 +163,104 @@ async function deleteClientPortal(req, res, next) {
     }
     await prisma.projectClientPortal.deleteMany({ where: { projectId, workspaceId } })
     res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+// ─── Admin: contactos autorizados del portal ──────────────────────────────────
+// ABM independiente del PUT del portal — cada alta/baja pega directo, sin
+// depender de que el admin apriete "Guardar" en el resto del formulario.
+
+async function findPortalOr404(projectId, res) {
+  const portal = await prisma.projectClientPortal.findUnique({ where: { projectId } })
+  if (!portal) res.status(404).json({ error: 'Configurá el portal antes de gestionar contactos' })
+  return portal
+}
+
+/** GET /api/projects/:id/client-portal/contacts */
+async function listContacts(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const portal = await findPortalOr404(projectId, res)
+    if (!portal) return
+
+    const contacts = await prisma.clientPortalContact.findMany({ where: { portalId: portal.id }, orderBy: { createdAt: 'asc' } })
+    res.json({ contacts: contacts.map(shapeContact) })
+  } catch (err) { next(err) }
+}
+
+/** POST /api/projects/:id/client-portal/contacts — { email, name?, canApprove? } */
+async function createContact(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+
+    const portal = await findPortalOr404(projectId, res)
+    if (!portal) return
+
+    const { email, name, canApprove } = req.body || {}
+    if (!validEmail(email)) return res.status(400).json({ error: 'Email inválido.' })
+
+    try {
+      const contact = await prisma.clientPortalContact.create({
+        data: {
+          portalId: portal.id,
+          workspaceId,
+          email:      email.trim().toLowerCase(),
+          name:       name ? String(name).trim() : null,
+          canApprove: canApprove !== false,
+        },
+      })
+      res.status(201).json(shapeContact(contact))
+    } catch (e) {
+      if (e.code === 'P2002') return res.status(409).json({ error: 'Ese email ya está en la lista.' })
+      throw e
+    }
+  } catch (err) { next(err) }
+}
+
+/** PATCH /api/projects/:id/client-portal/contacts/:cid — { name?, canApprove?, active? } */
+async function updateContact(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+
+    const portal = await findPortalOr404(projectId, res)
+    if (!portal) return
+
+    const contact = await prisma.clientPortalContact.findFirst({ where: { id: Number(req.params.cid), portalId: portal.id } })
+    if (!contact) return res.status(404).json({ error: 'Contacto no encontrado' })
+
+    const { name, canApprove, active } = req.body || {}
+    const data = {}
+    if (name       !== undefined) data.name       = name ? String(name).trim() : null
+    if (canApprove !== undefined) data.canApprove = canApprove !== false
+    if (active     !== undefined) data.active     = active !== false
+
+    const updated = await prisma.clientPortalContact.update({ where: { id: contact.id }, data })
+    res.json(shapeContact(updated))
+  } catch (err) { next(err) }
+}
+
+/** DELETE /api/projects/:id/client-portal/contacts/:cid */
+async function deleteContact(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+
+    const portal = await findPortalOr404(projectId, res)
+    if (!portal) return
+
+    await prisma.clientPortalContact.deleteMany({ where: { id: Number(req.params.cid), portalId: portal.id } })
+    res.json({ deleted: true })
   } catch (err) { next(err) }
 }
 
@@ -180,8 +314,9 @@ async function getPortalPublic(req, res, next) {
 
 /**
  * POST /api/public/client-portal/:slug/live/request-code
- * Body: { email }. Genera y envía un código OTP de 6 dígitos si el email matchea
- * al registrado. Respuesta genérica siempre (no confirma si el email es correcto).
+ * Body: { email }. Genera y envía un código OTP de 6 dígitos si el email
+ * matchea a un contacto ACTIVO del portal. Respuesta genérica siempre (no
+ * confirma si el email está en la lista).
  */
 async function requestLoginCode(req, res, next) {
   try {
@@ -193,9 +328,15 @@ async function requestLoginCode(req, res, next) {
       return res.status(400).json({ error: 'Email inválido.' })
     }
 
-    if (email === portal.clientEmail.toLowerCase()) {
+    const contact = await prisma.clientPortalContact.findUnique({
+      where: { portalId_email: { portalId: portal.id, email } },
+    })
+
+    if (contact && contact.active) {
+      // Rate limit por (portal, email) — no por portal: con varios contactos, un
+      // límite compartido se agotaría con un solo login de cada uno.
       const recentCount = await prisma.clientPortalLoginCode.count({
-        where: { portalId: portal.id, createdAt: { gt: new Date(Date.now() - OTP_RATE_WINDOW_MS) } },
+        where: { portalId: portal.id, email, createdAt: { gt: new Date(Date.now() - OTP_RATE_WINDOW_MS) } },
       })
       if (recentCount >= OTP_RATE_LIMIT) {
         return res.status(429).json({ error: 'Demasiados intentos. Probá de nuevo en un rato.' })
@@ -203,20 +344,21 @@ async function requestLoginCode(req, res, next) {
 
       const code = String(Math.floor(100000 + Math.random() * 900000))
       const expiresAt = new Date(Date.now() + OTP_TTL_MS)
-      await prisma.clientPortalLoginCode.create({ data: { portalId: portal.id, email, code, expiresAt } })
+      await prisma.clientPortalLoginCode.create({ data: { portalId: portal.id, contactId: contact.id, email, code, expiresAt } })
 
       const project = await prisma.project.findUnique({ where: { id: portal.projectId }, select: { name: true } })
       await sendClientLoginCodeEmail(email, project?.name || 'tu proyecto', code, portal.workspaceId)
     }
 
-    // Respuesta idéntica exista o no coincidencia — no filtra el email registrado.
+    // Respuesta idéntica exista o no coincidencia — no filtra quién está en la lista.
     res.json({ ok: true })
   } catch (err) { next(err) }
 }
 
 /**
  * POST /api/public/client-portal/:slug/live/verify-code
- * Body: { email, code }. Devuelve { token } (JWT de propósito acotado) si es válido.
+ * Body: { email, code }. Devuelve { token } (JWT de propósito acotado, con
+ * contactId si el email matcheaba un contacto) si es válido.
  */
 async function verifyLoginCode(req, res, next) {
   try {
@@ -249,9 +391,12 @@ async function verifyLoginCode(req, res, next) {
     verifyAttemptsMap.delete(attemptKey)
 
     await prisma.clientPortalLoginCode.update({ where: { id: login.id }, data: { used: true } })
+    if (login.contactId) {
+      await prisma.clientPortalContact.update({ where: { id: login.contactId }, data: { lastLoginAt: new Date() } })
+    }
 
     const token = jwt.sign(
-      { portalId: portal.id, projectId: portal.projectId, workspaceId: portal.workspaceId, purpose: 'client-portal-live' },
+      { portalId: portal.id, projectId: portal.projectId, workspaceId: portal.workspaceId, contactId: login.contactId ?? null, purpose: 'client-portal-live' },
       process.env.JWT_SECRET,
       { expiresIn: '30d' },
     )
@@ -285,6 +430,9 @@ async function computeLiveData(portal) {
 /**
  * GET /api/public/client-portal/:slug/live
  * Devuelve el cache actual; si nunca se generó, dispara un primer fetch síncrono.
+ * No exige identidad de contacto: los tokens pre-migración (sin contactId)
+ * siguen viendo esto igual — solo las acciones que necesitan "quién sos"
+ * (aprobar/comentar, F7) exigen req.clientPortalContact.
  */
 async function getLiveData(req, res, next) {
   try {
@@ -328,6 +476,10 @@ module.exports = {
   getClientPortal,
   saveClientPortal,
   deleteClientPortal,
+  listContacts,
+  createContact,
+  updateContact,
+  deleteContact,
   getPortalPublic,
   requestLoginCode,
   verifyLoginCode,

@@ -37,6 +37,12 @@ router.get('/:id/client-portal',           clientPortal.getClientPortal)
 router.put('/:id/client-portal',           clientPortal.saveClientPortal)
 router.delete('/:id/client-portal',        clientPortal.deleteClientPortal)
 
+// Contactos autorizados del portal (multi-contacto) — ABM independiente del PUT de arriba
+router.get('/:id/client-portal/contacts',           clientPortal.listContacts)
+router.post('/:id/client-portal/contacts',          clientPortal.createContact)
+router.patch('/:id/client-portal/contacts/:cid',    clientPortal.updateContact)
+router.delete('/:id/client-portal/contacts/:cid',   clientPortal.deleteContact)
+
 // Reuniones del proyecto (formato L10 sin puntaje; con cronómetro y to-dos al dashboard)
 router.get('/:id/meetings',                                 meetings.listMeetings)
 router.post('/:id/meetings',                                meetings.createMeeting)

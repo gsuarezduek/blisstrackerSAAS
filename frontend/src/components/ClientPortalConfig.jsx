@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../api/client'
 import ConfirmModal from './ConfirmModal'
+import ClientPortalContacts from './ClientPortalContacts'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
 
 // Mismas claves que SECTION_KEYS en backend/src/controllers/monthlyReport.controller.js
 // (labels/iconos espejo de SECTION_CATALOG en marketing/InformesTab.jsx).
@@ -22,8 +24,12 @@ const LIVE_SECTIONS = [
 ]
 
 // Configuración del portal de cliente (Info → antes de Equipo). Acceso externo,
-// por proyecto, a Informes + Briefs (abierto) y Datos en vivo (con código OTP).
+// por proyecto, a Informes + Briefs (abierto), Datos en vivo (con código OTP) y,
+// si el módulo Contenido está habilitado, el calendario de piezas (aprobación).
+// Los contactos autorizados (multi-contacto) se administran en ClientPortalContacts,
+// con sus propios endpoints — no dependen de este "Guardar".
 export default function ClientPortalConfig({ projectId, canEdit }) {
+  const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
   const [portal,  setPortal]  = useState(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -34,17 +40,21 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => {
+  const loadPortal = useCallback(() => (
     api.get(`/projects/${projectId}/client-portal`)
       .then(r => setPortal(r.data.portal))
       .catch(() => setPortal(null))
-      .finally(() => setLoading(false))
-  }, [projectId])
+  ), [projectId])
+
+  useEffect(() => {
+    setLoading(true)
+    loadPortal().finally(() => setLoading(false))
+  }, [loadPortal])
 
   function openEdit() {
     setDraft(portal
-      ? { ...portal }
-      : { slug: '', clientEmail: '', clientName: '', active: true, liveSections: [] })
+      ? { slug: portal.slug, active: portal.active, contentEnabled: portal.contentEnabled, liveSections: portal.liveSections }
+      : { slug: '', active: true, contentEnabled: false, liveSections: [] })
     setError('')
     setEditing(true)
   }
@@ -62,11 +72,10 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
     setSaving(true); setError('')
     try {
       const { data } = await api.put(`/projects/${projectId}/client-portal`, {
-        slug:         draft.slug.trim().toLowerCase(),
-        clientEmail:  draft.clientEmail.trim(),
-        clientName:   draft.clientName?.trim() || null,
-        active:       draft.active,
-        liveSections: draft.liveSections,
+        slug:           draft.slug.trim().toLowerCase(),
+        active:         draft.active,
+        contentEnabled: draft.contentEnabled,
+        liveSections:   draft.liveSections,
       })
       setPortal(data.portal)
       setEditing(false)
@@ -107,24 +116,34 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
       </div>
 
       {!editing && portal && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${portal.active
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
-              {portal.active ? 'Activo' : 'Inactivo'}
-            </span>
-            <span className="text-sm text-gray-600 dark:text-gray-400">{portal.clientName || portal.clientEmail}</span>
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${portal.active
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
+                {portal.active ? 'Activo' : 'Inactivo'}
+              </span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                {portal.contactCount} contacto{portal.contactCount === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <code className="text-xs bg-gray-50 dark:bg-gray-900 px-2 py-1 rounded flex-1 truncate">{portal.publicUrl}</code>
+              <button onClick={copyLink} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium shrink-0">
+                {copied ? '¡Copiado!' : 'Copiar link'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Datos en vivo: {portal.liveSections.length > 0 ? `${portal.liveSections.length} secciones habilitadas` : 'ninguna sección habilitada'}
+              {contenidoEnabled && (portal.contentEnabled ? ' · Contenido visible' : ' · Contenido oculto')}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <code className="text-xs bg-gray-50 dark:bg-gray-900 px-2 py-1 rounded flex-1 truncate">{portal.publicUrl}</code>
-            <button onClick={copyLink} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium shrink-0">
-              {copied ? '¡Copiado!' : 'Copiar link'}
-            </button>
+
+          <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Contactos autorizados</p>
+            <ClientPortalContacts projectId={projectId} contacts={portal.contacts} canEdit={canEdit} onChanged={loadPortal} />
           </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            Datos en vivo: {portal.liveSections.length > 0 ? `${portal.liveSections.length} secciones habilitadas` : 'ninguna sección habilitada'}
-          </p>
         </div>
       )}
 
@@ -143,23 +162,6 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
               className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-900 rounded-lg"
             />
           </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Email del cliente</label>
-            <input
-              type="email"
-              value={draft.clientEmail}
-              onChange={e => setDraft(prev => ({ ...prev, clientEmail: e.target.value }))}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-900 rounded-lg"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">Nombre (opcional)</label>
-            <input
-              value={draft.clientName || ''}
-              onChange={e => setDraft(prev => ({ ...prev, clientName: e.target.value }))}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-900 rounded-lg"
-            />
-          </div>
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -169,6 +171,17 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
             />
             <span className="text-sm text-gray-700 dark:text-gray-300">Portal activo</span>
           </label>
+          {contenidoEnabled && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={draft.contentEnabled}
+                onChange={e => setDraft(prev => ({ ...prev, contentEnabled: e.target.checked }))}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el calendario de contenido en el portal</span>
+            </label>
+          )}
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">Secciones habilitadas para "Datos en vivo"</p>
             <div className="flex flex-wrap gap-1.5">

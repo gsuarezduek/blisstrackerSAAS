@@ -18,6 +18,15 @@ jest.mock('../../src/lib/prisma', () => ({
     update:     jest.fn(),
     deleteMany: jest.fn(),
   },
+  clientPortalContact: {
+    findUnique: jest.fn(),
+    findFirst:  jest.fn(),
+    findMany:   jest.fn(),
+    create:     jest.fn(),
+    update:     jest.fn(),
+    upsert:     jest.fn(),
+    deleteMany: jest.fn(),
+  },
   clientPortalLoginCode: {
     count:      jest.fn(),
     create:     jest.fn(),
@@ -66,19 +75,34 @@ function mockWorkspace(role = 'admin') {
   prisma.workspaceMember.findUnique.mockResolvedValue({ workspaceId: WORKSPACE_ID, userId: 1, role, active: true })
 }
 
+// clientEmail/clientName quedan como columnas legacy nullable en la fila real,
+// pero ya no son la fuente de verdad — los tests que importan multi-contacto
+// usan `contacts` (ver makeContact).
 function makePortal(overrides = {}) {
   return {
     id: PORTAL_ID,
     workspaceId: WORKSPACE_ID,
     projectId: PROJECT_ID,
     slug: 'kahuak',
-    clientEmail: 'cliente@example.com',
-    clientName: 'Cliente Demo',
+    clientEmail: null,
+    clientName: null,
     active: true,
+    contentEnabled: false,
     liveSections: '["instagram","analytics"]',
     liveDataCache: null,
     liveDataCachedAt: null,
     updatedAt: new Date(),
+    contacts: [],
+    ...overrides,
+  }
+}
+
+function makeContact(overrides = {}) {
+  return {
+    id: 1, workspaceId: WORKSPACE_ID, portalId: PORTAL_ID,
+    email: 'cliente@example.com', name: 'Cliente Demo',
+    canApprove: true, active: true, lastLoginAt: null,
+    createdAt: new Date(), updatedAt: new Date(),
     ...overrides,
   }
 }
@@ -101,22 +125,62 @@ describe('Portal de cliente — endpoints admin', () => {
     expect(res.body.portal).toBeNull()
   })
 
-  it('PUT crea el portal y devuelve publicUrl', async () => {
-    prisma.projectClientPortal.findUnique.mockResolvedValue(null) // chequeo de slug disponible
+  it('GET devuelve el portal con sus contactos y sin exponer clientEmail', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ contacts: [makeContact()] }))
+
+    const res = await request(app)
+      .get(`/api/projects/${PROJECT_ID}/client-portal`)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(res.body.portal.contactCount).toBe(1)
+    expect(res.body.portal.contacts).toEqual([
+      expect.objectContaining({ id: 1, email: 'cliente@example.com', canApprove: true, active: true }),
+    ])
+    expect(res.body.portal.clientEmail).toBeUndefined()
+  })
+
+  it('PUT crea el portal sin exigir clientEmail', async () => {
+    prisma.projectClientPortal.findUnique
+      .mockResolvedValueOnce(null)                 // chequeo de slug disponible
+      .mockResolvedValueOnce(makePortal())          // reload final para la respuesta
     prisma.projectClientPortal.upsert.mockResolvedValue(makePortal())
 
     const res = await request(app)
       .put(`/api/projects/${PROJECT_ID}/client-portal`)
       .set('Authorization', authHeader())
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ slug: 'kahuak', clientEmail: 'cliente@example.com', clientName: 'Cliente Demo', active: true, liveSections: ['instagram', 'analytics', 'not-a-real-key'] })
+      .send({ slug: 'kahuak', active: true, contentEnabled: true, liveSections: ['instagram', 'analytics', 'not-a-real-key'] })
 
     expect(res.status).toBe(200)
     expect(res.body.portal.slug).toBe('kahuak')
     expect(res.body.portal.publicUrl).toContain('/report/kahuak')
+    expect(res.body.portal.contentEnabled).toBe(false) // viene de lo que devuelve el mock del reload
     // sanitizeSections descarta claves inválidas
     expect(prisma.projectClientPortal.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      update: expect.objectContaining({ liveSections: JSON.stringify(['instagram', 'analytics']) }),
+      update: expect.objectContaining({ liveSections: JSON.stringify(['instagram', 'analytics']), contentEnabled: true }),
+    }))
+    expect(prisma.clientPortalContact.upsert).not.toHaveBeenCalled()
+  })
+
+  it('PUT con clientEmail (compat de un bundle viejo) upsertea ese contacto en vez de perderlo', async () => {
+    prisma.projectClientPortal.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(makePortal({ contacts: [makeContact()] }))
+    prisma.projectClientPortal.upsert.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.upsert.mockResolvedValue(makeContact())
+
+    const res = await request(app)
+      .put(`/api/projects/${PROJECT_ID}/client-portal`)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ slug: 'kahuak', active: true, liveSections: [], clientEmail: 'Cliente@Example.com', clientName: 'Cliente Demo' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.clientPortalContact.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where:  { portalId_email: { portalId: PORTAL_ID, email: 'cliente@example.com' } },
+      create: expect.objectContaining({ email: 'cliente@example.com', name: 'Cliente Demo' }),
     }))
   })
 
@@ -127,7 +191,7 @@ describe('Portal de cliente — endpoints admin', () => {
       .put(`/api/projects/${PROJECT_ID}/client-portal`)
       .set('Authorization', authHeader())
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ slug: 'kahuak', clientEmail: 'cliente@example.com', active: true, liveSections: [] })
+      .send({ slug: 'kahuak', active: true, liveSections: [] })
 
     expect(res.status).toBe(409)
   })
@@ -137,7 +201,7 @@ describe('Portal de cliente — endpoints admin', () => {
       .put(`/api/projects/${PROJECT_ID}/client-portal`)
       .set('Authorization', authHeader())
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ slug: 'AB', clientEmail: 'cliente@example.com', active: true, liveSections: [] })
+      .send({ slug: 'AB', active: true, liveSections: [] })
 
     expect(res.status).toBe(400)
   })
@@ -150,7 +214,7 @@ describe('Portal de cliente — endpoints admin', () => {
       .put(`/api/projects/${PROJECT_ID}/client-portal`)
       .set('Authorization', authHeader(1, 'member'))
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ slug: 'kahuak', clientEmail: 'cliente@example.com', active: true, liveSections: [] })
+      .send({ slug: 'kahuak', active: true, liveSections: [] })
 
     expect(res.status).toBe(403)
   })
@@ -164,6 +228,123 @@ describe('Portal de cliente — endpoints admin', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.ok).toBe(true)
+  })
+})
+
+describe('Portal de cliente — contactos (ABM)', () => {
+  const BASE = `/api/projects/${PROJECT_ID}/client-portal/contacts`
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockWorkspace()
+    prisma.project.findFirst.mockResolvedValue({ id: PROJECT_ID })
+  })
+
+  it('GET lista los contactos del portal', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findMany.mockResolvedValue([makeContact(), makeContact({ id: 2, email: 'otro@x.com' })])
+
+    const res = await request(app).get(BASE).set('Authorization', authHeader()).set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(res.body.contacts).toHaveLength(2)
+  })
+
+  it('GET 404 si el proyecto no tiene portal configurado', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(null)
+    const res = await request(app).get(BASE).set('Authorization', authHeader()).set('X-Workspace', WORKSPACE_SLUG)
+    expect(res.status).toBe(404)
+  })
+
+  it('POST agrega un contacto', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.create.mockResolvedValue(makeContact())
+
+    const res = await request(app)
+      .post(BASE)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ email: 'Cliente@Example.com', name: 'Cliente Demo' })
+
+    expect(res.status).toBe(201)
+    expect(prisma.clientPortalContact.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ portalId: PORTAL_ID, email: 'cliente@example.com', canApprove: true }),
+    }))
+  })
+
+  it('POST 400 con email inválido', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    const res = await request(app)
+      .post(BASE)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ email: 'no-es-un-email' })
+    expect(res.status).toBe(400)
+    expect(prisma.clientPortalContact.create).not.toHaveBeenCalled()
+  })
+
+  it('POST 409 si el email ya está en la lista', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.create.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }))
+
+    const res = await request(app)
+      .post(BASE)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ email: 'cliente@example.com' })
+
+    expect(res.status).toBe(409)
+  })
+
+  it('POST 403 si no puede escribir', async () => {
+    mockWorkspace('member')
+    prisma.projectMember.findUnique.mockResolvedValue(null)
+    const res = await request(app)
+      .post(BASE)
+      .set('Authorization', authHeader(1, 'member'))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ email: 'cliente@example.com' })
+    expect(res.status).toBe(403)
+  })
+
+  it('PATCH desactiva un contacto', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findFirst.mockResolvedValue(makeContact())
+    prisma.clientPortalContact.update.mockResolvedValue(makeContact({ active: false }))
+
+    const res = await request(app)
+      .patch(`${BASE}/1`)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ active: false })
+
+    expect(res.status).toBe(200)
+    expect(res.body.active).toBe(false)
+    expect(prisma.clientPortalContact.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { active: false } })
+  })
+
+  it('PATCH 404 si el contacto no es de este portal', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findFirst.mockResolvedValue(null)
+
+    const res = await request(app)
+      .patch(`${BASE}/999`)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ active: false })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('DELETE elimina un contacto', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.deleteMany.mockResolvedValue({ count: 1 })
+
+    const res = await request(app).delete(`${BASE}/1`).set('Authorization', authHeader()).set('X-Workspace', WORKSPACE_SLUG)
+
+    expect(res.status).toBe(200)
+    expect(res.body.deleted).toBe(true)
+    expect(prisma.clientPortalContact.deleteMany).toHaveBeenCalledWith({ where: { id: 1, portalId: PORTAL_ID } })
   })
 })
 
@@ -194,8 +375,10 @@ describe('Portal de cliente — público (sin auth)', () => {
     expect(res.body.hasLiveSections).toBe(true)
   })
 
-  it('request-code no crea código si el email no coincide (pero responde ok genérico)', async () => {
+  it('request-code no crea código si el email no matchea ningún contacto (pero responde ok genérico)', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(null)
+
     const res = await request(app)
       .post('/api/public/client-portal/kahuak/live/request-code')
       .send({ email: 'otro@distinto.com' })
@@ -206,8 +389,21 @@ describe('Portal de cliente — público (sin auth)', () => {
     expect(sendClientLoginCodeEmail).not.toHaveBeenCalled()
   })
 
-  it('request-code crea y envía el código si el email coincide', async () => {
+  it('request-code no crea código si el contacto está desactivado', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact({ active: false }))
+
+    const res = await request(app)
+      .post('/api/public/client-portal/kahuak/live/request-code')
+      .send({ email: 'cliente@example.com' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.clientPortalLoginCode.create).not.toHaveBeenCalled()
+  })
+
+  it('request-code crea y envía el código si el email matchea un contacto activo', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact())
     prisma.clientPortalLoginCode.count.mockResolvedValue(0)
     prisma.project.findUnique.mockResolvedValue({ name: 'Proyecto Demo' })
 
@@ -217,13 +413,14 @@ describe('Portal de cliente — público (sin auth)', () => {
 
     expect(res.status).toBe(200)
     expect(prisma.clientPortalLoginCode.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ portalId: PORTAL_ID, email: 'cliente@example.com' }),
+      data: expect.objectContaining({ portalId: PORTAL_ID, contactId: 1, email: 'cliente@example.com' }),
     }))
     expect(sendClientLoginCodeEmail).toHaveBeenCalled()
   })
 
-  it('request-code respeta el rate limit (429 tras 5 en la última hora)', async () => {
+  it('request-code respeta el rate limit por (portal, email) — 429 tras 5 en la última hora', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact())
     prisma.clientPortalLoginCode.count.mockResolvedValue(5)
 
     const res = await request(app)
@@ -231,6 +428,11 @@ describe('Portal de cliente — público (sin auth)', () => {
       .send({ email: 'cliente@example.com' })
 
     expect(res.status).toBe(429)
+    // el conteo del rate limit es por email, no solo por portal — así un contacto
+    // ruidoso no le agota el límite a los demás
+    expect(prisma.clientPortalLoginCode.count).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ portalId: PORTAL_ID, email: 'cliente@example.com' }),
+    }))
   })
 
   it('verify-code devuelve 401 con código inválido', async () => {
@@ -244,10 +446,11 @@ describe('Portal de cliente — público (sin auth)', () => {
     expect(res.status).toBe(401)
   })
 
-  it('verify-code devuelve un token válido con el código correcto', async () => {
+  it('verify-code devuelve un token con contactId y actualiza lastLoginAt', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
-    prisma.clientPortalLoginCode.findFirst.mockResolvedValue({ id: 1, code: '123456' })
+    prisma.clientPortalLoginCode.findFirst.mockResolvedValue({ id: 1, code: '123456', contactId: 7 })
     prisma.clientPortalLoginCode.update.mockResolvedValue({})
+    prisma.clientPortalContact.update.mockResolvedValue(makeContact({ id: 7 }))
 
     const res = await request(app)
       .post('/api/public/client-portal/kahuak/live/verify-code')
@@ -258,12 +461,18 @@ describe('Portal de cliente — público (sin auth)', () => {
     const decoded = jwt.verify(res.body.token, SECRET)
     expect(decoded.purpose).toBe('client-portal-live')
     expect(decoded.portalId).toBe(PORTAL_ID)
+    expect(decoded.contactId).toBe(7)
+    expect(prisma.clientPortalContact.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { lastLoginAt: expect.any(Date) } })
   })
 })
 
 describe('Portal de cliente — datos en vivo (requiere token)', () => {
-  function liveToken() {
+  // Sin contactId: simula un token emitido ANTES de la migración a multi-contacto.
+  function legacyLiveToken() {
     return jwt.sign({ portalId: PORTAL_ID, projectId: PROJECT_ID, workspaceId: WORKSPACE_ID, purpose: 'client-portal-live' }, SECRET, { expiresIn: '30d' })
+  }
+  function contactLiveToken(contactId) {
+    return jwt.sign({ portalId: PORTAL_ID, projectId: PROJECT_ID, workspaceId: WORKSPACE_ID, contactId, purpose: 'client-portal-live' }, SECRET, { expiresIn: '30d' })
   }
 
   beforeEach(() => jest.clearAllMocks())
@@ -276,12 +485,12 @@ describe('Portal de cliente — datos en vivo (requiere token)', () => {
   it('el token de portal NO sirve para rutas de staff (defense in depth)', async () => {
     const res = await request(app)
       .get('/api/projects')
-      .set('Authorization', `Bearer ${liveToken()}`)
+      .set('Authorization', `Bearer ${legacyLiveToken()}`)
       .set('X-Workspace', WORKSPACE_SLUG)
     expect(res.status).toBe(401)
   })
 
-  it('GET /live calcula y cachea la primera vez (sin llamar a Claude — cachedAnalysis dummy)', async () => {
+  it('un token pre-migración (sin contactId) sigue viendo Datos en vivo — compatibilidad', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ liveDataCachedAt: null }))
     aggregateReportData.mockResolvedValue({
       project: { id: PROJECT_ID, name: 'Demo' }, month: '2026-07', dataMonth: '2026-07',
@@ -292,15 +501,45 @@ describe('Portal de cliente — datos en vivo (requiere token)', () => {
 
     const res = await request(app)
       .get('/api/public/client-portal/kahuak/live')
-      .set('Authorization', `Bearer ${liveToken()}`)
+      .set('Authorization', `Bearer ${legacyLiveToken()}`)
 
     expect(res.status).toBe(200)
-    expect(aggregateReportData).toHaveBeenCalledWith(
-      PROJECT_ID, WORKSPACE_ID, expect.any(String),
-      expect.objectContaining({ resumen: '—' }), {}, null, ['instagram', 'analytics'],
-      expect.objectContaining({ periodStart: expect.any(Date), periodEnd: expect.any(Date) }),
-    )
+    // No debe haber intentado resolver ningún contacto — el token legacy no trae contactId.
+    expect(prisma.clientPortalContact.findUnique).not.toHaveBeenCalled()
     expect(res.body.data.sections.instagram.followersCount).toBe(100)
+  })
+
+  it('un token con contactId de un contacto activo funciona igual', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ liveDataCachedAt: new Date() }))
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact({ id: 7, active: true, portalId: PORTAL_ID }))
+
+    const res = await request(app)
+      .get('/api/public/client-portal/kahuak/live')
+      .set('Authorization', `Bearer ${contactLiveToken(7)}`)
+
+    expect(res.status).toBe(200)
+  })
+
+  it('un contacto desactivado pierde el acceso al instante, aunque el token siga vigente', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact({ id: 7, active: false }))
+
+    const res = await request(app)
+      .get('/api/public/client-portal/kahuak/live')
+      .set('Authorization', `Bearer ${contactLiveToken(7)}`)
+
+    expect(res.status).toBe(401)
+  })
+
+  it('un contacto borrado también corta el acceso', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(null)
+
+    const res = await request(app)
+      .get('/api/public/client-portal/kahuak/live')
+      .set('Authorization', `Bearer ${contactLiveToken(999)}`)
+
+    expect(res.status).toBe(401)
   })
 
   it('POST /live/refresh devuelve 429 si todavía no pasó el cooldown', async () => {
@@ -308,7 +547,7 @@ describe('Portal de cliente — datos en vivo (requiere token)', () => {
 
     const res = await request(app)
       .post('/api/public/client-portal/kahuak/live/refresh')
-      .set('Authorization', `Bearer ${liveToken()}`)
+      .set('Authorization', `Bearer ${legacyLiveToken()}`)
 
     expect(res.status).toBe(429)
     expect(aggregateReportData).not.toHaveBeenCalled()
@@ -322,7 +561,7 @@ describe('Portal de cliente — datos en vivo (requiere token)', () => {
 
     const res = await request(app)
       .post('/api/public/client-portal/kahuak/live/refresh')
-      .set('Authorization', `Bearer ${liveToken()}`)
+      .set('Authorization', `Bearer ${legacyLiveToken()}`)
 
     expect(res.status).toBe(200)
     expect(aggregateReportData).toHaveBeenCalled()

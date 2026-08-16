@@ -1,13 +1,12 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import ReportViewer from '../components/marketing/ReportViewer'
 import ClientBriefsView from '../components/ClientBriefsView'
+import PortalLoginGate from '../components/portal/PortalLoginGate'
 
 const API = import.meta.env.VITE_API_URL || ''
 const LIVE_REFRESH_COOLDOWN_MS = 15 * 60 * 1000
-
-function tokenKey(slug) { return `bliss_client_token_${slug}` }
 
 function TabButton({ active, onClick, children, brandPrimary }) {
   return (
@@ -22,6 +21,68 @@ function TabButton({ active, onClick, children, brandPrimary }) {
   )
 }
 
+// Contenido del tab "Datos en vivo" una vez autenticado — recibe el token del
+// cliente y `requireReauth` de PortalLoginGate (se llama si algún fetch propio
+// devuelve 401, ej. el contacto quedó desactivado mientras el token seguía vigente).
+function LiveDataPanel({ slug, token, requireReauth, workspace }) {
+  const [liveData,     setLiveData]     = useState(null)
+  const [liveCachedAt, setLiveCachedAt] = useState(null)
+  const [liveLoading,  setLiveLoading]  = useState(true)
+  const [liveError,    setLiveError]    = useState(null)
+  const [refreshing,   setRefreshing]   = useState(false)
+
+  useEffect(() => {
+    setLiveLoading(true)
+    setLiveError(null)
+    axios.get(`${API}/api/public/client-portal/${slug}/live`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => { setLiveData(r.data.data); setLiveCachedAt(r.data.cachedAt) })
+      .catch(err => {
+        if (err.response?.status === 401) requireReauth()
+        else setLiveError(err.response?.data?.error || 'No se pudieron cargar los datos en vivo')
+      })
+      .finally(() => setLiveLoading(false))
+  }, [slug, token, requireReauth])
+
+  async function handleRefreshLive() {
+    setRefreshing(true); setLiveError(null)
+    try {
+      const r = await axios.post(`${API}/api/public/client-portal/${slug}/live/refresh`, {}, { headers: { Authorization: `Bearer ${token}` } })
+      setLiveData(r.data.data); setLiveCachedAt(r.data.cachedAt)
+    } catch (err) {
+      if (err.response?.status === 401) {
+        requireReauth()
+      } else if (err.response?.status === 429) {
+        setLiveError(`Esperá ${err.response.data.waitMins} min antes de actualizar de nuevo.`)
+      } else {
+        setLiveError(err.response?.data?.error || 'No se pudo actualizar')
+      }
+    } finally { setRefreshing(false) }
+  }
+
+  const cooldownRemainingMs = liveCachedAt ? LIVE_REFRESH_COOLDOWN_MS - (Date.now() - new Date(liveCachedAt).getTime()) : 0
+  const canRefresh = cooldownRemainingMs <= 0
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs text-gray-400">
+          {liveCachedAt ? `Actualizado el ${new Date(liveCachedAt).toLocaleString('es-AR')}` : 'Sin datos aún'}
+        </p>
+        <button
+          onClick={handleRefreshLive}
+          disabled={refreshing || !canRefresh}
+          className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+        >
+          {refreshing ? 'Actualizando…' : canRefresh ? 'Actualizar' : `Actualizar (${Math.ceil(cooldownRemainingMs / 60000)} min)`}
+        </button>
+      </div>
+      {liveError && <p className="text-sm text-red-600 mb-3">{liveError}</p>}
+      {liveLoading && <p className="text-sm text-gray-500">Cargando datos en vivo...</p>}
+      {!liveLoading && liveData && <ReportViewer data={liveData} isPublic={true} report={null} workspace={workspace} />}
+    </div>
+  )
+}
+
 export default function ClientPortal() {
   const { token: slug } = useParams()
   const [meta,    setMeta]    = useState(null)
@@ -33,19 +94,6 @@ export default function ClientPortal() {
   const [selectedToken, setSelectedToken] = useState(null)
   const [reportData,    setReportData]    = useState(null)
   const [reportLoading, setReportLoading] = useState(false)
-
-  // Datos en vivo
-  const [clientToken, setClientToken]   = useState(() => localStorage.getItem(tokenKey(slug)))
-  const [loginStep,   setLoginStep]     = useState('email') // 'email' | 'code'
-  const [email,       setEmail]         = useState('')
-  const [code,        setCode]          = useState('')
-  const [loginBusy,   setLoginBusy]     = useState(false)
-  const [loginError,  setLoginError]    = useState(null)
-  const [liveData,    setLiveData]      = useState(null)
-  const [liveCachedAt, setLiveCachedAt] = useState(null)
-  const [liveLoading, setLiveLoading]   = useState(false)
-  const [liveError,   setLiveError]     = useState(null)
-  const [refreshing,  setRefreshing]    = useState(false)
 
   useEffect(() => {
     if (!slug) return
@@ -71,70 +119,10 @@ export default function ClientPortal() {
       .finally(() => setReportLoading(false))
   }, [selectedToken, tab])
 
-  const loadLiveData = useCallback((authToken) => {
-    setLiveLoading(true)
-    setLiveError(null)
-    axios.get(`${API}/api/public/client-portal/${slug}/live`, { headers: { Authorization: `Bearer ${authToken}` } })
-      .then(r => { setLiveData(r.data.data); setLiveCachedAt(r.data.cachedAt) })
-      .catch(err => {
-        if (err.response?.status === 401) {
-          localStorage.removeItem(tokenKey(slug))
-          setClientToken(null)
-        } else {
-          setLiveError(err.response?.data?.error || 'No se pudieron cargar los datos en vivo')
-        }
-      })
-      .finally(() => setLiveLoading(false))
-  }, [slug])
-
-  useEffect(() => {
-    if (tab === 'vivo' && clientToken) loadLiveData(clientToken)
-  }, [tab, clientToken, loadLiveData])
-
-  async function handleRequestCode(e) {
-    e.preventDefault()
-    setLoginBusy(true); setLoginError(null)
-    try {
-      await axios.post(`${API}/api/public/client-portal/${slug}/live/request-code`, { email: email.trim() })
-      setLoginStep('code')
-    } catch (err) {
-      setLoginError(err.response?.data?.error || 'No se pudo enviar el código')
-    } finally { setLoginBusy(false) }
-  }
-
-  async function handleVerifyCode(e) {
-    e.preventDefault()
-    setLoginBusy(true); setLoginError(null)
-    try {
-      const r = await axios.post(`${API}/api/public/client-portal/${slug}/live/verify-code`, { email: email.trim(), code: code.trim() })
-      localStorage.setItem(tokenKey(slug), r.data.token)
-      setClientToken(r.data.token)
-    } catch (err) {
-      setLoginError(err.response?.data?.error || 'Código inválido')
-    } finally { setLoginBusy(false) }
-  }
-
-  async function handleRefreshLive() {
-    setRefreshing(true); setLiveError(null)
-    try {
-      const r = await axios.post(`${API}/api/public/client-portal/${slug}/live/refresh`, {}, { headers: { Authorization: `Bearer ${clientToken}` } })
-      setLiveData(r.data.data); setLiveCachedAt(r.data.cachedAt)
-    } catch (err) {
-      if (err.response?.status === 429) {
-        setLiveError(`Esperá ${err.response.data.waitMins} min antes de actualizar de nuevo.`)
-      } else {
-        setLiveError(err.response?.data?.error || 'No se pudo actualizar')
-      }
-    } finally { setRefreshing(false) }
-  }
-
   const workspace = meta?.workspace || null
   const brandPrimary = workspace?.brandColors?.[0]?.hex || '#f97316'
   const reports = meta?.reports || []
   const briefs  = meta?.briefs  || []
-
-  const cooldownRemainingMs = liveCachedAt ? LIVE_REFRESH_COOLDOWN_MS - (Date.now() - new Date(liveCachedAt).getTime()) : 0
-  const canRefresh = cooldownRemainingMs <= 0
 
   if (loading) {
     return (
@@ -204,63 +192,11 @@ export default function ClientPortal() {
 
         {tab === 'vivo' && (
           <div className="bg-white rounded-2xl border border-gray-200 p-6">
-            {!clientToken ? (
-              <div className="max-w-sm mx-auto">
-                <h2 className="text-lg font-semibold text-gray-800 mb-2">Ingresá para ver los datos en vivo</h2>
-                <p className="text-sm text-gray-500 mb-4">Te vamos a enviar un código a tu email registrado.</p>
-                {loginStep === 'email' ? (
-                  <form onSubmit={handleRequestCode} className="space-y-3">
-                    <input
-                      type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                      placeholder="tu@email.com"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    />
-                    {loginError && <p className="text-sm text-red-600">{loginError}</p>}
-                    <button type="submit" disabled={loginBusy}
-                      className="w-full px-4 py-2 rounded-lg text-white font-semibold text-sm disabled:opacity-50"
-                      style={{ backgroundColor: brandPrimary }}>
-                      {loginBusy ? 'Enviando…' : 'Enviar código'}
-                    </button>
-                  </form>
-                ) : (
-                  <form onSubmit={handleVerifyCode} className="space-y-3">
-                    <p className="text-sm text-gray-600">Revisá <strong>{email}</strong> y pegá el código de 6 dígitos.</p>
-                    <input
-                      type="text" required value={code} onChange={e => setCode(e.target.value)}
-                      placeholder="000000" maxLength={6}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center tracking-[0.3em] font-semibold"
-                    />
-                    {loginError && <p className="text-sm text-red-600">{loginError}</p>}
-                    <button type="submit" disabled={loginBusy}
-                      className="w-full px-4 py-2 rounded-lg text-white font-semibold text-sm disabled:opacity-50"
-                      style={{ backgroundColor: brandPrimary }}>
-                      {loginBusy ? 'Verificando…' : 'Verificar'}
-                    </button>
-                    <button type="button" onClick={() => setLoginStep('email')} className="w-full text-xs text-gray-400 hover:underline">
-                      Cambiar email
-                    </button>
-                  </form>
-                )}
-              </div>
-            ) : (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-xs text-gray-400">
-                    {liveCachedAt ? `Actualizado el ${new Date(liveCachedAt).toLocaleString('es-AR')}` : 'Sin datos aún'}
-                  </p>
-                  <button
-                    onClick={handleRefreshLive}
-                    disabled={refreshing || !canRefresh}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
-                  >
-                    {refreshing ? 'Actualizando…' : canRefresh ? 'Actualizar' : `Actualizar (${Math.ceil(cooldownRemainingMs / 60000)} min)`}
-                  </button>
-                </div>
-                {liveError && <p className="text-sm text-red-600 mb-3">{liveError}</p>}
-                {liveLoading && <p className="text-sm text-gray-500">Cargando datos en vivo...</p>}
-                {!liveLoading && liveData && <ReportViewer data={liveData} isPublic={true} report={null} workspace={workspace} />}
-              </div>
-            )}
+            <PortalLoginGate slug={slug} brandPrimary={brandPrimary}>
+              {(token, { requireReauth }) => (
+                <LiveDataPanel slug={slug} token={token} requireReauth={requireReauth} workspace={workspace} />
+              )}
+            </PortalLoginGate>
           </div>
         )}
       </div>
