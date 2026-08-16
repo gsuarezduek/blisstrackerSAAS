@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { WIKI_CATEGORIES, ALL_ARTICLES, findArticle, WIKI_LAST_UPDATED } from '../../data/wikiContent'
 import { renderWikiMarkdown } from './wikiMarkdown'
 
-const MODULE_LABELS = { marketing: 'Módulo Marketing', eos: 'Módulo EOS' }
+const MODULE_LABELS = { marketing: 'Módulo Marketing', eos: 'Módulo EOS', contenido: 'Módulo Contenido' }
 
 function AudienceBadge({ audience }) {
   if (audience !== 'admin') return null

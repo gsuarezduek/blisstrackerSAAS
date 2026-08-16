@@ -57,6 +57,7 @@ export default function ProjectDetail() {
   const [searchParams] = useSearchParams()
   const { user: authUser } = useAuth()
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
+  const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
@@ -345,6 +346,15 @@ export default function ProjectDetail() {
                     title="Marketing"
                   >
                     🎯
+                  </button>
+                )}
+                {contenidoEnabled && (
+                  <button
+                    onClick={() => navigate(`/contenido?projectId=${data.project.id}`)}
+                    className="flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg rounded-xl transition-colors"
+                    title="Calendario de contenido"
+                  >
+                    📅
                   </button>
                 )}
                 <button

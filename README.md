@@ -6,7 +6,7 @@ Task tracker multi-tenant para agencias. Cada cliente opera en su propio workspa
 - **GitHub:** https://github.com/gsuarezduek/blisstrackerSAAS
 - **Backend:** Railway · **Frontend:** Vercel Pro (wildcard `*.blisstracker.app`)
 
-_Última actualización de este README: 17 jun 2026. La referencia de arquitectura completa y siempre al día es [`CLAUDE.md`](CLAUDE.md)._
+_Última actualización de este README: 16 ago 2026. La referencia de arquitectura completa y siempre al día es [`CLAUDE.md`](CLAUDE.md)._
 
 ---
 
@@ -308,6 +308,12 @@ team-tracker/
 | `SerpSnapshot` | Snapshot SERP de SerpAPI por keyword: posición, features, competidores top, "People Also Ask", "Related Searches". |
 | `LegalDocument` | Documentos legales por key (`terms_of_service`, `privacy_policy`) editados desde SuperAdmin. |
 | `EOSData`, `EOSIssue`, `EOSProcess`, `EOSScorecardMetric/Entry`, `EOSRock`, `EOSTodo`, `EOSMeeting`, `EOSPersonNode`, `EOSPersonRating`, `EOSPersonStrike`, `OrgAssessmentRound`, `OrgAssessmentResponse` | Modelos del módulo EOS — feature flag `eos`. |
+| `ProjectClientPortal` | Portal externo por proyecto (slug propio, secciones de "Datos en vivo" habilitadas, `contentEnabled` para el tab Contenido). |
+| `ClientPortalContact` | Contactos autorizados del portal (multi-contacto, login por código OTP, `canApprove` para decidir sobre piezas de Contenido). |
+| `ContentPiece` | Pieza de contenido (calendario tipo Airtable): estado (workflow fijo en código), tipo, redes, copy, fecha programada, responsable. Feature flag `contenido`. |
+| `ContentAsset` | Imagen o video de una pieza, subido directo a Cloudflare R2 vía presigned URL; `publicId` (UUID) no adivinable como control de acceso. |
+| `ContentComment` | Comentarios de una pieza — hilo interno del equipo o hilo con el cliente (`visibility`). |
+| `ContentStatusEvent` | Log append-only de cada cambio de estado de una pieza — quién (equipo o contacto del cliente), cuándo y por qué. |
 
 ---
 
@@ -326,6 +332,7 @@ Los arrays `links`, `adminSublinks` y `profileSections` en `Navbar.jsx` son la f
 | Mis Reportes | `/my-reports` |
 | Actividad | `/realtime` |
 | Marketing | `/marketing` — requiere feature flag `marketing`. Tabs: GEO, Web, SEO, Keywords, Canibalización, Instagram, TikTok, Meta Ads, Google Ads, Salud, Informes |
+| Contenido | `/contenido` — requiere feature flag `contenido`. Calendario de contenido: vistas Calendario, Tabla y Kanban, con aprobación del cliente desde el portal |
 | Perfil | `/profile` |
 | Preferencias | `/preferences` |
 | Facturación | `/billing` |
@@ -467,6 +474,21 @@ Tab **Web** en Marketing: conecta Google Analytics 4 y muestra métricas de perf
 - **Crear tarea:** desde cualquier oportunidad o diagnóstico se puede crear una tarea con prefijo "Perf - ".
 - **Historial:** badges con el score de los últimos N análisis.
 - **Cron automático:** cada 1° del mes a las 03:30 ART corre análisis mobile + desktop para todos los proyectos con websiteUrl.
+
+---
+
+## Contenido — calendario con aprobación del cliente
+
+Módulo tipo Airtable (`/contenido`, feature flag `contenido`) para coordinar la producción de contenido de redes sociales y que el cliente apruebe las piezas sin salir del sistema.
+
+- **Vistas:** Calendario, Tabla (edición inline estilo Airtable) y Kanban (drag & drop), más un modal de detalle por pieza.
+- **Workflow fijo:** cada pieza pasa por 9 estados (idea → producción → revisión interna → esperando aprobación → aprobado/cambios pedidos → programado → publicado, o archivado), definidos en un catálogo de código, no en la base de datos.
+- **Assets:** imágenes (hasta 15 MB) y video (hasta 150 MB) se suben directo desde el navegador a Cloudflare R2 con URL prefirmada — el backend nunca recibe los bytes, solo valida el archivo real al confirmar la subida.
+- **Aprobación del cliente:** desde el mismo **portal de cliente** que ya sirve los informes mensuales (`/report/:slug`), en un tab "Contenido". El cliente entra con un código por email (sin contraseña), ve solo las piezas listas para revisar y puede **aprobar** o **pedir cambios** con un comentario. El equipo recibe un email y una notificación in-app al instante, y ve el cambio reflejado en vivo (WebSocket) sin recargar.
+- **Portal multi-contacto:** el portal de cliente ahora admite varios contactos autorizados por proyecto (antes era un solo email), cada uno con permiso propio para aprobar o no.
+- **Tareas:** una pieza se puede "enviar al dashboard" como una `Task` normal para su responsable; completarla avanza la pieza automáticamente al siguiente estado.
+
+Ver [CLAUDE.md](./CLAUDE.md) — conceptos "Contenido" y "Portal de cliente (multi-contacto)" — para el detalle completo de modelos, endpoints y reglas de negocio.
 
 ---
 

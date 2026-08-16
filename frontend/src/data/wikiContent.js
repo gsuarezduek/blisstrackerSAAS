@@ -17,7 +17,7 @@
 
 // Fecha de última actualización del Wiki (YYYY-MM-DD). Actualizar al cambiar el contenido.
 // Se muestra al inicio del Wiki como referencia para el equipo.
-export const WIKI_LAST_UPDATED = '2026-06-17'
+export const WIKI_LAST_UPDATED = '2026-08-16'
 
 export const WIKI_CATEGORIES = [
   // ── Primeros pasos ────────────────────────────────────────────────────────
@@ -385,7 +385,7 @@ Cada brief muestra su progreso (X/Y campos) y un estado: Sin empezar / En progre
           'Cargá el sitio web en Info: sin él no funcionan GEO, SEO ni el Health Score.',
           'Arrancá siempre por el brief de Marca: el resto asume que ya está completo.',
         ],
-        related: ['marketing-intro', 'preferencias'],
+        related: ['marketing-intro', 'contenido-intro', 'preferencias'],
       },
     ],
   },
@@ -966,15 +966,98 @@ Cada workspace tiene un **presupuesto mensual de tokens** de IA. Cuando se acerc
         title: 'Notificaciones',
         audience: 'todos',
         module: null,
-        summary: 'Campanita con filtros por tipo: comentarios, menciones, bloqueos, tareas completadas, vacaciones…',
-        body: `La campanita agrupa tus notificaciones por tipo. Los tipos incluyen: tarea completada, tarea bloqueada, agregado a un proyecto, comentario en tarea, mención (@), y solicitudes/revisiones de vacaciones.
+        summary: 'Campanita con filtros por tipo: comentarios, menciones, bloqueos, tareas completadas, vacaciones, respuestas del cliente…',
+        body: `La campanita agrupa tus notificaciones por tipo. Los tipos incluyen: tarea completada, tarea bloqueada, agregado a un proyecto, comentario en tarea, mención (@), solicitudes/revisiones de vacaciones y, si usás el módulo Contenido, las **respuestas del cliente** (aprobó o pidió cambios en una pieza).
 
 ## Lectura por tipo
 
 El panel marca como leído **solo el tipo que estás viendo**, no todo. Cada ícono lleva un badge con la cantidad sin leer de ese tipo, así sabés qué te falta revisar.
 
-Cada notificación es un link que abre directamente la tarea o el comentario relacionado.`,
-        related: ['comentarios-menciones', 'vacaciones'],
+Cada notificación es un link que abre directamente la tarea, el comentario o la pieza de contenido relacionada.`,
+        related: ['comentarios-menciones', 'vacaciones', 'contenido-aprobacion'],
+      },
+    ],
+  },
+
+  // ── Contenido ─────────────────────────────────────────────────────────────
+  {
+    id: 'contenido',
+    label: 'Contenido',
+    icon: '📅',
+    articles: [
+      {
+        id: 'contenido-intro',
+        title: 'Qué es el calendario de Contenido',
+        audience: 'todos',
+        module: 'contenido',
+        summary: 'Un Airtable para coordinar piezas de RRSS: calendario, tabla y kanban, con imágenes y video.',
+        body: `El módulo **Contenido** es el lugar donde community managers, diseñadores y ejecutivos de cuenta coordinan qué se publica, quién lo hace y en qué etapa está — sin salir de BlissTracker.
+
+## Activarlo
+
+Es un **módulo opcional** que habilita el equipo de BlissTracker. Aparece en \`/contenido\`, y también como un botón 📅 en la cabecera de cada proyecto.
+
+## Las tres vistas
+
+- **Calendario** — las piezas agrupadas por fecha de publicación, mes a mes.
+- **Tabla** — estilo Airtable: edición directa de cada campo (fecha, estado, tipo, redes, responsable) sin abrir nada.
+- **Kanban** — arrastrá una pieza entre columnas para cambiar su estado.
+
+Las tres muestran las mismas piezas; elegí la que te resulte más cómoda según lo que estés haciendo.
+
+## El camino de una pieza
+
+Idea → En producción → Revisión interna → Esperando aprobación → (Aprobado o Cambios pedidos) → Programado → Publicado. Los estados son fijos, así que todo el equipo habla el mismo idioma sobre en qué está cada pieza.
+
+## Imágenes y video
+
+Cada pieza admite varios archivos: imágenes (hasta 15 MB) y video (hasta 150 MB). Se suben con una barra de progreso real y quedan disponibles apenas termina la subida.
+
+## Enviar al dashboard
+
+Desde el detalle de una pieza podés crearle una tarea a su responsable con un clic. Cuando esa tarea se completa, la pieza avanza sola al siguiente estado.`,
+        tips: [
+          'Usá la Tabla para cargar varias piezas rápido, y el Kanban para ver de un vistazo qué está trabado.',
+          'Escribí el copy y cargá los archivos antes de mandar a "Esperando aprobación": una vez ahí, el próximo paso es pedirle al cliente que la revise.',
+        ],
+        related: ['contenido-aprobacion', 'ficha-proyecto'],
+      },
+      {
+        id: 'contenido-aprobacion',
+        title: 'Aprobación del cliente',
+        audience: 'admin',
+        module: 'contenido',
+        summary: 'El cliente aprueba o pide cambios en cada pieza desde su propio portal, con un código por email.',
+        body: `Cuando una pieza está lista, el cliente la aprueba (o pide cambios) sin necesitar usuario ni contraseña en BlissTracker.
+
+## 1. Configurar el portal
+
+En la ficha del proyecto → pestaña **Info** → tarjeta **Cliente**: activá el portal, tildá "Mostrar el calendario de contenido en el portal" y agregá al menos un **contacto autorizado** (email + nombre). Podés agregar varios contactos, y elegir cuáles pueden aprobar y cuáles solo mirar.
+
+## 2. Pedir aprobación
+
+Mové la pieza a **"Esperando aprobación"** (en la Tabla, el Kanban o el detalle) y apretá el botón **"📨 Pedir aprobación"** en \`/contenido\`. Se les manda un email a los contactos que pueden aprobar, con un link al portal.
+
+## 3. Lo que ve y hace el cliente
+
+El cliente entra al link del portal, pone su email y recibe un código de 6 dígitos por mail (sin contraseña). Adentro, en el tab **Contenido**, ve solo las piezas que están en revisión o ya resueltas — nunca las ideas ni los borradores internos. Por cada una puede:
+
+- **✅ Aprobar** — con un comentario opcional.
+- **✏️ Pedir cambios** — con un comentario **obligatorio**, para que el equipo sepa qué corregir.
+
+También puede dejar mensajes sueltos en el hilo de cada pieza, para ida y vuelta con el equipo.
+
+## 4. Lo que ve el equipo
+
+Apenas el cliente decide, llega una **notificación** en la campanita (filtro 🤝 "Respuestas del cliente") y un **email** al equipo del proyecto. El estado de la pieza cambia solo, en vivo, sin recargar la página.`,
+        params: [
+          { name: 'canApprove', desc: 'Si un contacto no lo tiene tildado, puede ver el portal pero no aprobar ni pedir cambios.' },
+        ],
+        tips: [
+          'Si el cliente no recibe el email, revisá que su dirección esté cargada como contacto activo — el sistema nunca confirma si un email está o no en la lista, por privacidad.',
+          'Desactivar un contacto le corta el acceso al instante, aunque haya iniciado sesión hace poco.',
+        ],
+        related: ['contenido-intro', 'notificaciones'],
       },
     ],
   },
