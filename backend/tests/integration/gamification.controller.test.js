@@ -11,6 +11,7 @@ jest.mock('../../src/lib/prisma', () => ({
   project:              { findMany: jest.fn() },
   user:                 { findMany: jest.fn() },
   instagramFollowerLog: { findMany: jest.fn() },
+  notification:         { findMany: jest.fn(), createMany: jest.fn() },
   $transaction:         jest.fn((ops) => Promise.all(ops)),
 }))
 
@@ -46,6 +47,7 @@ function voteGame(overrides = {}) {
 beforeEach(() => {
   jest.clearAllMocks()
   prisma.game.aggregate.mockResolvedValue({ _min: { sortOrder: 0 } })
+  prisma.notification.findMany.mockResolvedValue([])
 })
 
 // ─── Crear ────────────────────────────────────────────────────────────────────
@@ -161,6 +163,34 @@ describe('GET /api/gamification/active — votación en curso', () => {
       .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
     expect(res.body.games).toHaveLength(1)
     expect(res.body.games[0].finished).toBe(true)
+  })
+
+  it('isNew es true si hay una notificación GAME_LAUNCHED sin leer de ese juego', async () => {
+    mockWorkspace('member')
+    prisma.game.findMany.mockResolvedValue([voteGame()])
+    prisma.gameVote.findMany.mockResolvedValue([])
+    prisma.workspaceMember.findMany.mockResolvedValue([])
+    prisma.notification.findMany.mockResolvedValue([{ gameId: 5 }])
+
+    const res = await request(app)
+      .get('/api/gamification/active')
+      .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
+
+    expect(res.body.games[0].isNew).toBe(true)
+  })
+
+  it('isNew es false sin notificación GAME_LAUNCHED pendiente (ya la vio)', async () => {
+    mockWorkspace('member')
+    prisma.game.findMany.mockResolvedValue([voteGame()])
+    prisma.gameVote.findMany.mockResolvedValue([])
+    prisma.workspaceMember.findMany.mockResolvedValue([])
+    prisma.notification.findMany.mockResolvedValue([])
+
+    const res = await request(app)
+      .get('/api/gamification/active')
+      .set('Authorization', authHeader(1, 'member')).set('X-Workspace', SLUG)
+
+    expect(res.body.games[0].isNew).toBe(false)
   })
 
   it('un finalizado sin finishedAt (o reordenado) NO se muestra', async () => {

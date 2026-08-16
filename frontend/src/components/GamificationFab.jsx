@@ -62,7 +62,18 @@ export default function GamificationFab() {
     }
   }, [games, pendingGameId])
 
+  // Con el panel abierto, "ya lo viste": marca leída la notificación GAME_LAUNCHED de cada
+  // juego nuevo (así el badge de "nuevo" no vuelve a aparecer) y limpia isNew localmente
+  // para que el badge se apague al instante, sin esperar al próximo poll.
+  useEffect(() => {
+    if (!open || !games.some(g => g.isNew)) return
+    api.post('/notifications/read', { types: ['GAME_LAUNCHED'] }).catch(() => {})
+    setGames(gs => gs.map(g => (g.isNew ? { ...g, isNew: false } : g)))
+  }, [open, games])
+
   if (!enabled || !user || games.length === 0) return null
+
+  const newCount = games.filter(g => g.isNew).length
 
   async function vote(gameId, targetUserId) {
     setVoting(gameId)
@@ -89,9 +100,11 @@ export default function GamificationFab() {
         className="fixed bottom-[168px] right-6 z-40 bg-amber-500 hover:bg-amber-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110"
       >
         <span className="text-xl leading-none">🏆</span>
-        <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-white dark:ring-gray-800">
-          {games.length}
-        </span>
+        {newCount > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-white dark:ring-gray-800 animate-pulse">
+            {newCount}
+          </span>
+        )}
       </button>
 
       {open && (

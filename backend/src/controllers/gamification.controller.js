@@ -573,12 +573,22 @@ async function getActive(req, res, next) {
     const qCounts = quizIds.length ? await prisma.gameQuestion.groupBy({ by: ['gameId'], where: { gameId: { in: quizIds } }, _count: { _all: true } }) : []
     const qCountByGame = new Map(qCounts.map((c) => [c.gameId, c._count._all]))
 
+    // "Nuevo" = todavía tiene sin leer la notificación GAME_LAUNCHED de este juego para
+    // este usuario. Reutiliza esa notificación como único registro de "visto" (sin agregar
+    // un modelo aparte) — el frontend la marca leída al abrir el flotante.
+    const unseenLaunches = await prisma.notification.findMany({
+      where: { userId: req.user.userId, workspaceId: req.workspace.id, type: 'GAME_LAUNCHED', read: false, gameId: { in: shown.map((g) => g.id) } },
+      select: { gameId: true },
+    })
+    const newGameIds = new Set(unseenLaunches.map((n) => n.gameId))
+
     const out = []
     for (const g of shown) {
       const leaderboard = maskLeaderboard(g, await computeLeaderboard(g))
       out.push({
         ...shapeGame(g, { teams: g.teams }),
         finished: g.status === 'finished',
+        isNew: newGameIds.has(g.id),
         leaderboard,
         ...(g.scoring === 'vote'
           ? { myVote: myVoteByGame.has(g.id) ? String(myVoteByGame.get(g.id)) : null }
