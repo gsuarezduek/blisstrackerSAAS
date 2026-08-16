@@ -898,6 +898,41 @@ async function sendContentClientDecisionEmail(emails, payload, workspaceId) {
   }
 }
 
+/**
+ * Aviso al equipo: un contacto del cliente hizo login por primera vez en el
+ * portal. Se dispara desde clientPortal.controller.js (verifyLoginCode),
+ * una sola vez por contacto — no por sesión.
+ * @param {string[]} emails  admins/owners + miembros del proyecto (getProjectNotifyRecipients)
+ * @param {object}   payload { projectName, contactName, contactEmail, projectUrl }
+ */
+async function sendPortalFirstLoginEmail(emails, payload, workspaceId) {
+  if (!emails || emails.length === 0) return
+  const { projectName, contactName, contactEmail, projectUrl } = payload
+  const from = await getEmailFrom(workspaceId)
+  const who = (contactName && contactName.trim()) ? contactName.trim() : (contactEmail || 'Un cliente')
+  const subject = `👋 ${who} entró al portal — ${projectName}`
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: emails,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 6px;font-size:20px;">👋 Nuevo acceso al portal</h2>
+          <p style="color:#475569;margin:0 0 20px;">
+            <strong>${escHtml(who)}</strong>${contactEmail ? ` (${escHtml(contactEmail)})` : ''} entró por primera vez al portal de <strong>${escHtml(projectName)}</strong>.
+          </p>
+          ${projectUrl ? `<a href="${projectUrl}" style="display:inline-block;background:#E67A1F;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;">Ver proyecto</a>` : ''}
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'portalFirstLogin', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'portalFirstLogin', status: 'failed', errorMsg: err.message })
+  }
+}
+
 // Alerta SEO mensual: caídas de tráfico/posición/DR/keywords por proyecto.
 // projectAlerts = [{ projectName, alerts: [{ type, severity, message }] }]. No-op si vacío.
 async function sendSeoAlertEmail(emails, workspaceName, monthLabel, projectAlerts, appUrl, workspaceId) {
@@ -944,6 +979,7 @@ module.exports = {
   sendReportFeedbackEmail,
   sendContentApprovalRequestEmail,
   sendContentClientDecisionEmail,
+  sendPortalFirstLoginEmail,
   sendClientLoginCodeEmail,
   sendPasswordReset,
   sendEmailChangeVerification,

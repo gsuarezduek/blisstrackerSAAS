@@ -1,3 +1,5 @@
+import ObjectiveProgressBars from '../marketing/ObjectiveProgressBars'
+
 // Pestaña "Inicio" del portal de cliente — punto de entrada único que resume
 // lo más accionable/reciente (contenido pendiente de aprobar, último informe,
 // próxima reunión, datos en vivo) y linkea al resto de las pestañas, en vez de
@@ -5,6 +7,11 @@
 //
 // Todas las tarjetas son condicionales — si `meta` no trae el dato, la
 // tarjeta no se muestra. Si ninguna aplica, se muestra un mensaje simple.
+// El cumplimiento de objetivos (si showObjectives está activo) va a todo el
+// ancho ARRIBA de las tarjetas — es lo más valioso para el cliente, así que
+// es lo primero que ve al entrar. ObjectiveProgressBars es el mismo
+// componente ya usado en Instagram/TikTok/Informes (frontend/src/components/marketing/),
+// se autooculta si no hay objetivos.
 
 function formatDate(dateStr) {
   if (!dateStr) return null
@@ -38,6 +45,7 @@ export default function PortalHome({ meta, onNavigate, brandPrimary }) {
   const latestReport   = meta.latestReportSummary || null
   const nextMeeting    = meta.nextMeeting || null
   const team           = meta.team || []
+  const objectives     = meta.objectives || []
   const hasLiveSections = !!meta.hasLiveSections
 
   const cards = []
@@ -86,7 +94,7 @@ export default function PortalHome({ meta, onNavigate, brandPrimary }) {
     )
   }
 
-  if (cards.length === 0) {
+  if (cards.length === 0 && objectives.length === 0) {
     return (
       <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
         <p className="text-3xl mb-2">🗂️</p>
@@ -95,5 +103,10 @@ export default function PortalHome({ meta, onNavigate, brandPrimary }) {
     )
   }
 
-  return <div className="grid sm:grid-cols-2 gap-3">{cards}</div>
+  return (
+    <div className="space-y-4">
+      {objectives.length > 0 && <ObjectiveProgressBars objectives={objectives} />}
+      {cards.length > 0 && <div className="grid sm:grid-cols-2 gap-3">{cards}</div>}
+    </div>
+  )
 }

@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken')
 const prisma = require('../lib/prisma')
 const { aggregateReportData } = require('../services/monthlyReport.service')
-const { sendClientLoginCodeEmail } = require('../services/email.service')
+const { computeObjectives } = require('../services/marketingObjectives.service')
+const { sendClientLoginCodeEmail, sendPortalFirstLoginEmail } = require('../services/email.service')
 const { todayString } = require('../utils/dates')
 const {
   sanitizeSections,
@@ -12,6 +13,8 @@ const {
 const { canWrite } = require('../lib/projectAccess')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 const { PORTAL_VISIBLE_STATUSES } = require('../lib/contentCatalog')
+const { emitTo } = require('../lib/socket')
+const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
 
 const SLUG_RE = /^[a-z0-9-]{3,40}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -49,6 +52,7 @@ function shapePortal(portal, workspaceSlug) {
     contentEnabled: portal.contentEnabled,
     showMeetings:   portal.showMeetings,
     showTeam:       portal.showTeam,
+    showObjectives: portal.showObjectives,
     liveSections:   JSON.parse(portal.liveSections || '[]'),
     contactCount:   portal.contacts?.length ?? 0,
     publicUrl:      `https://${workspaceSlug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/report/${portal.slug}`,
@@ -126,7 +130,7 @@ async function saveClientPortal(req, res, next) {
       return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
     }
 
-    const { slug, active, contentEnabled, showMeetings, showTeam, liveSections, clientEmail, clientName } = req.body || {}
+    const { slug, active, contentEnabled, showMeetings, showTeam, showObjectives, liveSections, clientEmail, clientName } = req.body || {}
 
     if (!slug || !SLUG_RE.test(slug)) {
       return res.status(400).json({ error: 'El slug debe tener 3-40 caracteres: minúsculas, números y guiones.' })
@@ -144,6 +148,7 @@ async function saveClientPortal(req, res, next) {
       contentEnabled: contentEnabled === true,
       showMeetings:   showMeetings === true,
       showTeam:       showTeam === true,
+      showObjectives: showObjectives === true,
       liveSections:   JSON.stringify(cleanSections),
     }
 
@@ -440,6 +445,16 @@ async function getPortalData(req, res, next) {
       }
     }
 
+    // Cumplimiento de objetivos en vivo para "Inicio" — computeObjectives ya
+    // devuelve [] de entrada si el proyecto no tiene MarketingObjective
+    // cargados, así que no hace falta un chequeo previo aparte.
+    let objectivesResults = []
+    if (portal.showObjectives) {
+      objectivesResults = await computeObjectives({
+        projectId: portal.projectId, workspaceId: portal.workspaceId, dataMonth: currentMonthStr(),
+      })
+    }
+
     res.json({
       project: project ? { name: project.name } : null,
       workspace: workspace ? {
@@ -464,6 +479,8 @@ async function getPortalData(req, res, next) {
       meetings: allMeetings.map(m => ({ date: m.date, title: m.title })),
       showTeam: portal.showTeam,
       team,
+      showObjectives: portal.showObjectives,
+      objectives: objectivesResults,
     })
   } catch (err) { next(err) }
 }
@@ -490,6 +507,48 @@ async function getPortalReport(req, res, next) {
 
     res.json(await buildPublicReportPayload(report))
   } catch (err) { next(err) }
+}
+
+/**
+ * Avisa al equipo (notificación in-app + email) la primera vez que un
+ * contacto hace login exitoso en el portal — les da visibilidad de que el
+ * cliente arrancó a usarlo, sin el ruido de un aviso por cada sesión. Fire-
+ * and-forget total (setImmediate + try/catch mudo, mismo patrón que
+ * notifyTeamOfDecision en contentPortal.controller.js): el login ya se
+ * respondió, un aviso caído no debe romper nada.
+ */
+async function notifyFirstPortalLogin(portal, contact) {
+  try {
+    const { userIds, emails } = await getProjectNotifyRecipients(portal.projectId, portal.workspaceId)
+    const who = (contact.name && contact.name.trim()) ? contact.name.trim() : contact.email
+    const message = `${who} (cliente) entró al portal por primera vez`
+
+    if (userIds.length > 0) {
+      await prisma.notification.createMany({
+        data: userIds.map(userId => ({
+          userId, actorId: null, workspaceId: portal.workspaceId, projectId: portal.projectId,
+          type: 'PORTAL_CLIENT_LOGIN', message,
+        })),
+      })
+      for (const userId of userIds) {
+        emitTo(`user:${userId}`, 'notification:new', { type: 'PORTAL_CLIENT_LOGIN' })
+      }
+    }
+
+    if (emails.length > 0) {
+      const [project, workspace] = await Promise.all([
+        prisma.project.findUnique({ where: { id: portal.projectId }, select: { name: true } }),
+        prisma.workspace.findUnique({ where: { id: portal.workspaceId }, select: { slug: true } }),
+      ])
+      const domain = process.env.APP_DOMAIN || 'blisstracker.app'
+      const projectUrl = workspace ? `https://${workspace.slug}.${domain}/my-projects/${portal.projectId}` : null
+      await sendPortalFirstLoginEmail(emails, {
+        projectName: project?.name || 'Proyecto', contactName: contact.name, contactEmail: contact.email, projectUrl,
+      }, portal.workspaceId)
+    }
+  } catch {
+    // best-effort — nunca debe tumbar el login ya emitido.
+  }
 }
 
 /**
@@ -572,7 +631,13 @@ async function verifyLoginCode(req, res, next) {
 
     await prisma.clientPortalLoginCode.update({ where: { id: login.id }, data: { used: true } })
     if (login.contactId) {
+      const contactBefore = await prisma.clientPortalContact.findUnique({
+        where: { id: login.contactId }, select: { lastLoginAt: true, name: true, email: true },
+      })
       await prisma.clientPortalContact.update({ where: { id: login.contactId }, data: { lastLoginAt: new Date() } })
+      if (contactBefore && !contactBefore.lastLoginAt) {
+        setImmediate(() => notifyFirstPortalLogin(portal, contactBefore))
+      }
     }
 
     const token = jwt.sign(

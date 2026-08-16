@@ -53,8 +53,8 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
 
   function openEdit() {
     setDraft(portal
-      ? { slug: portal.slug, active: portal.active, contentEnabled: portal.contentEnabled, showMeetings: portal.showMeetings, showTeam: portal.showTeam, liveSections: portal.liveSections }
-      : { slug: '', active: true, contentEnabled: false, showMeetings: false, showTeam: false, liveSections: [] })
+      ? { slug: portal.slug, active: portal.active, contentEnabled: portal.contentEnabled, showMeetings: portal.showMeetings, showTeam: portal.showTeam, showObjectives: portal.showObjectives, liveSections: portal.liveSections }
+      : { slug: '', active: true, contentEnabled: false, showMeetings: false, showTeam: false, showObjectives: false, liveSections: [] })
     setError('')
     setEditing(true)
   }
@@ -77,6 +77,7 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
         contentEnabled: draft.contentEnabled,
         showMeetings:   draft.showMeetings,
         showTeam:       draft.showTeam,
+        showObjectives: draft.showObjectives,
         liveSections:   draft.liveSections,
       })
       setPortal(data.portal)
@@ -141,6 +142,7 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
               {contenidoEnabled && (portal.contentEnabled ? ' · Contenido visible' : ' · Contenido oculto')}
               {portal.showMeetings && ' · Próxima reunión visible'}
               {portal.showTeam && ' · Equipo visible'}
+              {portal.showObjectives && ' · Objetivos visibles'}
             </p>
           </div>
 
@@ -203,6 +205,15 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
               className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
             />
             <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el equipo del proyecto en "Tu equipo" (foto, nombre y rol)</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={draft.showObjectives}
+              onChange={e => setDraft(prev => ({ ...prev, showObjectives: e.target.checked }))}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el cumplimiento de objetivos en "Inicio"</span>
           </label>
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">Secciones habilitadas para "Datos en vivo"</p>

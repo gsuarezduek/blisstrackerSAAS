@@ -17,7 +17,7 @@ const isFollowedCompleted = n => n.type === 'COMPLETED' && (n.relation === 'foll
 const FILTERS = [
   { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                  match: n => n.type === 'BLOCKED' || n.type === 'UNBLOCKED' },
   { key: 'ACTION',       label: '🙋', title: 'Requieren tu acción',       match: n => n.type === 'VACATION_REQUEST' },
-  { key: 'CLIENT',       label: '🤝', title: 'Respuestas del cliente',    match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' },
+  { key: 'CLIENT',       label: '🤝', title: 'Actividad del cliente',     match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' || n.type === 'PORTAL_CLIENT_LOGIN' },
   { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: isFollowedCompleted },
@@ -233,6 +233,7 @@ export default function NotificationBell() {
                 const isContentMention = n.type === 'CONTENT_MENTION'
                 const isContentApproved = n.type === 'CONTENT_APPROVED'
                 const isContentChanges  = n.type === 'CONTENT_CHANGES_REQUESTED'
+                const isPortalLogin     = n.type === 'PORTAL_CLIENT_LOGIN'
                 const isVacationAction = n.type === 'VACATION_REQUEST'
                 const isVacation       = isVacationAction || n.type === 'VACATION_REVIEWED'
                 const isGameLaunched   = n.type === 'GAME_LAUNCHED'
@@ -311,8 +312,9 @@ export default function NotificationBell() {
                   >
                     <div className="flex items-start gap-2.5">
                       <div className="relative flex-shrink-0 mt-0.5">
-                        {/* CONTENT_APPROVED/CONTENT_CHANGES_REQUESTED no tienen actor (User) —
-                            el que decidió es un contacto del cliente, no alguien del equipo. */}
+                        {/* CONTENT_APPROVED/CONTENT_CHANGES_REQUESTED/PORTAL_CLIENT_LOGIN no
+                            tienen actor (User) — quien actuó es un contacto del cliente, no
+                            alguien del equipo. */}
                         {n.actor ? (
                           <img
                             src={avatarUrl(n.actor.avatar)}
@@ -321,7 +323,7 @@ export default function NotificationBell() {
                           />
                         ) : (
                           <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-sm">
-                            {isContentApproved ? '✅' : isContentChanges ? '✏️' : '🤝'}
+                            {isContentApproved ? '✅' : isContentChanges ? '✏️' : isPortalLogin ? '👋' : '🤝'}
                           </div>
                         )}
                         {isBlocked && (

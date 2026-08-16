@@ -58,6 +58,15 @@ jest.mock('../../src/lib/prisma', () => ({
     findFirst: jest.fn(),
     findMany:  jest.fn(),
   },
+  marketingObjective: {
+    findMany: jest.fn(),
+  },
+  analyticsSnapshot: {
+    findMany: jest.fn(),
+  },
+  notification: {
+    createMany: jest.fn(),
+  },
 }))
 
 jest.mock('../../src/services/monthlyReport.service', () => ({
@@ -65,14 +74,18 @@ jest.mock('../../src/services/monthlyReport.service', () => ({
 }))
 
 jest.mock('../../src/services/email.service', () => ({
-  sendClientLoginCodeEmail: jest.fn().mockResolvedValue(undefined),
+  sendClientLoginCodeEmail:  jest.fn().mockResolvedValue(undefined),
+  sendPortalFirstLoginEmail: jest.fn().mockResolvedValue(undefined),
 }))
+
+jest.mock('../../src/lib/socket', () => ({ emitTo: jest.fn() }))
 
 const request = require('supertest')
 const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
 const { aggregateReportData } = require('../../src/services/monthlyReport.service')
-const { sendClientLoginCodeEmail } = require('../../src/services/email.service')
+const { sendClientLoginCodeEmail, sendPortalFirstLoginEmail } = require('../../src/services/email.service')
+const { emitTo } = require('../../src/lib/socket')
 const app = require('../../src/app')
 
 const SECRET = process.env.JWT_SECRET
@@ -119,6 +132,7 @@ function makePortal(overrides = {}) {
     contentEnabled: false,
     showMeetings: false,
     showTeam: false,
+    showObjectives: false,
     liveSections: '["instagram","analytics"]',
     liveDataCache: null,
     liveDataCachedAt: null,
@@ -230,6 +244,25 @@ describe('Portal de cliente — endpoints admin', () => {
     expect(res.body.portal.showTeam).toBe(true)
     expect(prisma.projectClientPortal.upsert).toHaveBeenCalledWith(expect.objectContaining({
       update: expect.objectContaining({ showTeam: true }),
+    }))
+  })
+
+  it('PUT persiste showObjectives', async () => {
+    prisma.projectClientPortal.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(makePortal({ showObjectives: true }))
+    prisma.projectClientPortal.upsert.mockResolvedValue(makePortal())
+
+    const res = await request(app)
+      .put(`/api/projects/${PROJECT_ID}/client-portal`)
+      .set('Authorization', authHeader())
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ slug: 'kahuak', active: true, showObjectives: true, liveSections: [] })
+
+    expect(res.status).toBe(200)
+    expect(res.body.portal.showObjectives).toBe(true)
+    expect(prisma.projectClientPortal.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: expect.objectContaining({ showObjectives: true }),
     }))
   })
 
@@ -713,6 +746,38 @@ describe('Portal de cliente — meta completa (requiere token)', () => {
     expect(res.status).toBe(200)
     expect(res.body.team).toEqual([{ id: 2, name: 'Ana', avatar: 'ana.png', roleLabel: 'Diseñadora' }])
   })
+
+  it('objectives viene vacío (sin query) si el portal no activó showObjectives', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ showObjectives: false }))
+    mockBaseData()
+
+    const res = await request(app)
+      .get('/api/public/client-portal/kahuak')
+      .set('Authorization', `Bearer ${legacyLiveToken()}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.showObjectives).toBe(false)
+    expect(res.body.objectives).toEqual([])
+    expect(prisma.marketingObjective.findMany).not.toHaveBeenCalled()
+  })
+
+  it('objectives trae el resultado calculado por el motor cuando showObjectives está activo', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ showObjectives: true }))
+    mockBaseData()
+    prisma.marketingObjective.findMany.mockResolvedValue([
+      { id: 1, projectId: PROJECT_ID, workspaceId: WORKSPACE_ID, category: 'web', metric: 'visitas', periodicity: 'monthly', target: 100, platform: null, trackedKeywordId: null, competitorId: null, createdAt: new Date(), trackedKeyword: null, competitor: null },
+    ])
+    prisma.analyticsSnapshot.findMany.mockResolvedValue([])
+
+    const res = await request(app)
+      .get('/api/public/client-portal/kahuak')
+      .set('Authorization', `Bearer ${legacyLiveToken()}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.objectives).toEqual([
+      expect.objectContaining({ id: 1, metric: 'visitas', label: 'Visitas al sitio', status: 'no_data', actual: null, target: 100 }),
+    ])
+  })
 })
 
 describe('Portal de cliente — informe individual (requiere token)', () => {
@@ -868,6 +933,10 @@ describe('Portal de cliente — login OTP (sin auth)', () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
     prisma.clientPortalLoginCode.findFirst.mockResolvedValue({ id: 1, code: '123456', contactId: 7 })
     prisma.clientPortalLoginCode.update.mockResolvedValue({})
+    // lastLoginAt ya seteado — NO es el primer login, este test se queda solo
+    // con el comportamiento del token/lastLoginAt (ver el describe de abajo
+    // para el aviso de primer login).
+    prisma.clientPortalContact.findUnique.mockResolvedValue({ lastLoginAt: new Date(), name: 'Cliente Demo', email: 'cliente@example.com' })
     prisma.clientPortalContact.update.mockResolvedValue(makeContact({ id: 7 }))
 
     const res = await request(app)
@@ -881,6 +950,41 @@ describe('Portal de cliente — login OTP (sin auth)', () => {
     expect(decoded.portalId).toBe(PORTAL_ID)
     expect(decoded.contactId).toBe(7)
     expect(prisma.clientPortalContact.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { lastLoginAt: expect.any(Date) } })
+
+    await new Promise(r => setImmediate(r))
+    expect(prisma.notification.createMany).not.toHaveBeenCalled()
+  })
+
+  it('verify-code notifica al equipo (in-app + email) la primera vez que un contacto loguea', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalLoginCode.findFirst.mockResolvedValue({ id: 1, code: '123456', contactId: 7 })
+    prisma.clientPortalLoginCode.update.mockResolvedValue({})
+    prisma.clientPortalContact.findUnique.mockResolvedValue({ lastLoginAt: null, name: 'Cliente Demo', email: 'cliente@example.com' })
+    prisma.clientPortalContact.update.mockResolvedValue(makeContact({ id: 7 }))
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 2, role: 'admin', user: { email: 'admin@bliss.test' } },
+    ])
+    prisma.projectMember.findMany.mockResolvedValue([])
+    prisma.project.findUnique.mockResolvedValue({ name: 'Proyecto Demo' })
+    prisma.workspace.findUnique.mockResolvedValue({ slug: WORKSPACE_SLUG })
+
+    const res = await request(app)
+      .post('/api/public/client-portal/kahuak/live/verify-code')
+      .send({ email: 'cliente@example.com', code: '123456' })
+
+    expect(res.status).toBe(200)
+
+    // La notificación se dispara vía setImmediate — flusheamos el event loop.
+    await new Promise(r => setImmediate(r))
+    expect(prisma.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.arrayContaining([expect.objectContaining({ userId: 2, actorId: null, type: 'PORTAL_CLIENT_LOGIN', projectId: PROJECT_ID })]),
+    }))
+    expect(emitTo).toHaveBeenCalledWith('user:2', 'notification:new', expect.objectContaining({ type: 'PORTAL_CLIENT_LOGIN' }))
+    expect(sendPortalFirstLoginEmail).toHaveBeenCalledWith(
+      ['admin@bliss.test'],
+      expect.objectContaining({ projectName: 'Proyecto Demo', contactName: 'Cliente Demo' }),
+      WORKSPACE_ID,
+    )
   })
 })
 
