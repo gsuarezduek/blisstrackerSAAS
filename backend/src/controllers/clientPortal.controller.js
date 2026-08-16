@@ -9,6 +9,8 @@ const {
   GENERATED_WHERE,
 } = require('./monthlyReport.controller')
 const { canWrite } = require('../lib/projectAccess')
+const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
+const { PORTAL_VISIBLE_STATUSES } = require('../lib/contentCatalog')
 
 const SLUG_RE = /^[a-z0-9-]{3,40}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -275,11 +277,11 @@ async function getPortalPublic(req, res, next) {
     const portal = await prisma.projectClientPortal.findUnique({ where: { slug: req.params.slug } })
     if (!portal || !portal.active) return res.status(404).json({ error: 'Portal no encontrado' })
 
-    const [project, workspace, reportRows, briefRows] = await Promise.all([
+    const [project, workspace, reportRows, briefRows, contentFlag] = await Promise.all([
       prisma.project.findUnique({ where: { id: portal.projectId }, select: { id: true, name: true } }),
       prisma.workspace.findUnique({
         where:  { id: portal.workspaceId },
-        select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, brandColors: true, brandFonts: true },
+        select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, brandColors: true, brandFonts: true, disabledFeatureKeys: true },
       }),
       prisma.monthlyReport.findMany({
         where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, status: 'published', ...GENERATED_WHERE },
@@ -290,7 +292,26 @@ async function getPortalPublic(req, res, next) {
         where:   { projectId: portal.projectId, workspaceId: portal.workspaceId },
         orderBy: { updatedAt: 'desc' },
       }),
+      prisma.featureFlag.findUnique({ where: { key: 'contenido' } }),
     ])
+
+    // hasContent/pendingApprovalCount: nunca títulos ni imágenes acá (endpoint
+    // sin login) — solo booleano + conteo. Requiere el flag `contenido` grant
+    // (SuperAdmin) sin opt-out del workspace, ADEMÁS de contentEnabled del portal
+    // (mismo criterio que assertContentAccess en contentPortal.controller.js).
+    let hasContent = false
+    let pendingApprovalCount = 0
+    if (portal.contentEnabled && workspace) {
+      const disabledKeys = JSON.parse(workspace.disabledFeatureKeys || '[]')
+      if (isFlagEnabledForWorkspace(contentFlag, portal.workspaceId, disabledKeys)) {
+        const [visibleCount, pendingCount] = await Promise.all([
+          prisma.contentPiece.count({ where: { projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES } } }),
+          prisma.contentPiece.count({ where: { projectId: portal.projectId, workspaceId: portal.workspaceId, status: 'aprobacion' } }),
+        ])
+        hasContent = visibleCount > 0
+        pendingApprovalCount = pendingCount
+      }
+    }
 
     res.json({
       project: project ? { name: project.name } : null,
@@ -308,6 +329,8 @@ async function getPortalPublic(req, res, next) {
       reports: reportRows.map(r => ({ token: r.token, month: r.month })),
       briefs:  briefRows.map(b => ({ type: b.type, answers: b.answers && typeof b.answers === 'object' ? b.answers : {}, updatedAt: b.updatedAt })),
       hasLiveSections: safeParseArr(portal.liveSections).length > 0,
+      hasContent,
+      pendingApprovalCount,
     })
   } catch (err) { next(err) }
 }

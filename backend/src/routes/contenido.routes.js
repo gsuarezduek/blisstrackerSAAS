@@ -38,6 +38,7 @@ router.get   ('/projects/:id/pieces/:pid/history',   content.getHistory)
 router.post  ('/projects/:id/pieces/:pid/send-to-dashboard', content.sendToDashboard)
 
 router.get   ('/projects/:id/summary',     content.getSummary)
+router.post  ('/projects/:id/request-approval', content.requestApproval)
 
 // Assets. presign/confirm es el camino normal (subida directa a R2); el
 // multipart es el fallback sin R2 configurado (solo imagen, ver contentAssets.controller.js).

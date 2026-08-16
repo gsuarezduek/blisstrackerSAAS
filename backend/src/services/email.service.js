@@ -824,6 +824,80 @@ async function sendReportFeedbackEmail(emails, payload, workspaceId) {
   }
 }
 
+/**
+ * Aviso al cliente: hay piezas de Contenido esperando su aprobación. Se dispara
+ * desde el botón "Pedir aprobación" (content.controller.js requestApproval).
+ * @param {string[]} emails  contactos activos con canApprove del portal
+ * @param {object}   payload { projectName, portalUrl, pieces: [{title}], workspaceName }
+ */
+async function sendContentApprovalRequestEmail(emails, payload, workspaceId) {
+  if (!emails || emails.length === 0) return
+  const { projectName, portalUrl, pieces, workspaceName } = payload
+  const from = await getEmailFrom(workspaceId)
+  const count = pieces?.length || 0
+  const subject = `${count} pieza${count === 1 ? '' : 's'} para aprobar — ${projectName}`
+  const list = (pieces || []).slice(0, 10).map(p => `
+    <li style="color:#334155;font-size:14px;line-height:1.8;">${escHtml(p.title)}</li>
+  `).join('')
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: emails,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">Tenés contenido para revisar</h2>
+          <p style="color:#475569;margin:0 0 16px;">
+            ${escHtml(workspaceName || 'Tu agencia')} preparó ${count} pieza${count === 1 ? '' : 's'} de <strong>${escHtml(projectName)}</strong> y está${count === 1 ? '' : 'n'} lista${count === 1 ? '' : 's'} para tu aprobación:
+          </p>
+          <ul style="margin:0 0 20px;padding-left:20px;">${list}</ul>
+          ${portalUrl ? `<a href="${portalUrl}" style="display:inline-block;background:#E67A1F;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;">Revisar y aprobar</a>` : ''}
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'contentApprovalRequest', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'contentApprovalRequest', status: 'failed', errorMsg: err.message })
+  }
+}
+
+/**
+ * Aviso al equipo: el cliente aprobó una pieza o pidió cambios. Se dispara desde
+ * contentPortal.controller.js (approvePiece / requestChanges).
+ * @param {string[]} emails  admins/owners + miembros del proyecto (getProjectNotifyRecipients)
+ * @param {object}   payload { projectName, pieceTitle, decision: 'approved'|'changes_requested', comment?, contactName, pieceUrl }
+ */
+async function sendContentClientDecisionEmail(emails, payload, workspaceId) {
+  if (!emails || emails.length === 0) return
+  const { projectName, pieceTitle, decision, comment, contactName, pieceUrl } = payload
+  const from = await getEmailFrom(workspaceId)
+  const approved = decision === 'approved'
+  const who = (contactName && contactName.trim()) ? contactName.trim() : 'El cliente'
+  const subject = `${approved ? '✅ Aprobó' : '✏️ Pidió cambios en'} "${pieceTitle}" — ${projectName}`
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: emails,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 6px;font-size:20px;">${approved ? '✅ Pieza aprobada' : '✏️ Pidieron cambios'}</h2>
+          <p style="color:#475569;margin:0 0 18px;">
+            <strong>${escHtml(who)}</strong> ${approved ? 'aprobó' : 'pidió cambios en'} <strong>${escHtml(pieceTitle)}</strong> de <strong>${escHtml(projectName)}</strong>.
+          </p>
+          ${comment ? `<div style="background:#f8fafc;border-left:3px solid #cbd5e1;border-radius:6px;padding:12px 16px;color:#334155;font-size:14px;line-height:1.6;margin:0 0 20px;">"${escHtml(comment)}"</div>` : ''}
+          ${pieceUrl ? `<a href="${pieceUrl}" style="display:inline-block;background:#E67A1F;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;">Ver la pieza</a>` : ''}
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'contentClientDecision', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'contentClientDecision', status: 'failed', errorMsg: err.message })
+  }
+}
+
 // Alerta SEO mensual: caídas de tráfico/posición/DR/keywords por proyecto.
 // projectAlerts = [{ projectName, alerts: [{ type, severity, message }] }]. No-op si vacío.
 async function sendSeoAlertEmail(emails, workspaceName, monthLabel, projectAlerts, appUrl, workspaceId) {
@@ -868,6 +942,8 @@ module.exports = {
   sendSeoAlertEmail,
   sendGameFinishedEmail,
   sendReportFeedbackEmail,
+  sendContentApprovalRequestEmail,
+  sendContentClientDecisionEmail,
   sendClientLoginCodeEmail,
   sendPasswordReset,
   sendEmailChangeVerification,

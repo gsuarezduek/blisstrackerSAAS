@@ -2,6 +2,7 @@ const { randomUUID }           = require('crypto')
 const prisma                   = require('../lib/prisma')
 const { aggregateReportData, getAvailableSections }  = require('../services/monthlyReport.service')
 const { sendReportFeedbackEmail } = require('../services/email.service')
+const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
 const { monthLabel, prevMonthStr, monthBounds, rangeLabel } = require('../lib/monthUtils')
 const { DEFAULT_TZ } = require('../utils/dates')
 
@@ -781,28 +782,18 @@ async function submitReportFeedback(req, res, next) {
 // Avisa a admins/owners del workspace + miembros del proyecto que un cliente dejó feedback.
 async function notifyReportFeedback(report, feedback) {
   const { id: reportId, projectId, workspaceId } = report
-  const [fullReport, project, workspace, activeMembers, projMembers] = await Promise.all([
+  const [fullReport, project, workspace, { emails }] = await Promise.all([
     prisma.monthlyReport.findUnique({ where: { id: reportId }, select: { token: true, month: true, periodStart: true, periodEnd: true } }),
     prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true, name: true, companyName: true } }),
-    prisma.workspaceMember.findMany({ where: { workspaceId, active: true }, select: { userId: true, role: true, user: { select: { email: true } } } }),
-    prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } }),
+    getProjectNotifyRecipients(projectId, workspaceId),
   ])
-  if (!fullReport || !workspace) return
-
-  const projMemberIds = new Set(projMembers.map(p => p.userId))
-  const emails = new Set()
-  for (const m of activeMembers) {
-    const isAdmin       = m.role === 'admin' || m.role === 'owner'
-    const isProjMember  = projMemberIds.has(m.userId)
-    if ((isAdmin || isProjMember) && m.user?.email) emails.add(m.user.email)
-  }
-  if (emails.size === 0) return
+  if (!fullReport || !workspace || emails.length === 0) return
 
   const domain    = process.env.APP_DOMAIN || 'blisstracker.app'
   const reportUrl = `https://${workspace.slug}.${domain}/report/${fullReport.token}`
 
-  await sendReportFeedbackEmail([...emails], {
+  await sendReportFeedbackEmail(emails, {
     projectName:   project?.name || 'Proyecto',
     periodLabel:   reportLabel(fullReport),
     reportUrl,

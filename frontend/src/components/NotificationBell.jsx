@@ -17,6 +17,7 @@ const isFollowedCompleted = n => n.type === 'COMPLETED' && (n.relation === 'foll
 const FILTERS = [
   { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                  match: n => n.type === 'BLOCKED' || n.type === 'UNBLOCKED' },
   { key: 'ACTION',       label: '🙋', title: 'Requieren tu acción',       match: n => n.type === 'VACATION_REQUEST' },
+  { key: 'CLIENT',       label: '🤝', title: 'Respuestas del cliente',    match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' },
   { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: isFollowedCompleted },
@@ -230,21 +231,23 @@ export default function NotificationBell() {
                 const isLeadAssigned   = n.type === 'LEAD_ASSIGNED'
                 const isChatMention    = n.type === 'CHAT_MENTION'
                 const isContentMention = n.type === 'CONTENT_MENTION'
+                const isContentApproved = n.type === 'CONTENT_APPROVED'
+                const isContentChanges  = n.type === 'CONTENT_CHANGES_REQUESTED'
                 const isVacationAction = n.type === 'VACATION_REQUEST'
                 const isVacation       = isVacationAction || n.type === 'VACATION_REVIEWED'
                 const isGameLaunched   = n.type === 'GAME_LAUNCHED'
                 const isCompleted      = n.type === 'COMPLETED'
                 const isAssignment     = isMention || isLeadAssigned || isChatMention || isContentMention
-                const isAmberFamily    = isVacation || isGameLaunched
+                const isAmberFamily    = isVacation || isGameLaunched || isContentChanges
+
+                const isGreenFamily = isUnblocked || isAddedProject || isContentApproved
 
                 const bgClass = isCompleted
                   ? 'bg-gray-50 dark:bg-gray-800/60'
                   : isBlocked
                   ? (!n.read ? 'bg-red-100 dark:bg-red-900/40'      : 'bg-red-50 dark:bg-red-900/20')
-                  : isUnblocked
+                  : isGreenFamily
                     ? (!n.read ? 'bg-green-100 dark:bg-green-900/40' : 'bg-green-50 dark:bg-green-900/20')
-                    : isAddedProject
-                      ? (!n.read ? 'bg-green-100 dark:bg-green-900/40' : 'bg-green-50 dark:bg-green-900/20')
                       : isComment
                         ? (!n.read ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-blue-50 dark:bg-blue-900/20')
                         : isAssignment
@@ -253,15 +256,13 @@ export default function NotificationBell() {
                             ? (!n.read ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-gray-800')
                             : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
 
-                const dotClass = isBlocked ? 'bg-red-500' : isUnblocked ? 'bg-green-500' : isAddedProject ? 'bg-green-500' : isComment ? 'bg-blue-500' : isAssignment ? 'bg-purple-500' : isAmberFamily ? 'bg-amber-500' : 'bg-primary-500'
+                const dotClass = isBlocked ? 'bg-red-500' : isGreenFamily ? 'bg-green-500' : isComment ? 'bg-blue-500' : isAssignment ? 'bg-purple-500' : isAmberFamily ? 'bg-amber-500' : 'bg-primary-500'
                 const textClass = isCompleted
                   ? 'text-gray-500 dark:text-gray-400'
                   : isBlocked
                   ? 'text-red-800 dark:text-red-200'
-                  : isUnblocked
+                  : isGreenFamily
                     ? 'text-green-800 dark:text-green-200'
-                    : isAddedProject
-                      ? 'text-green-800 dark:text-green-200'
                       : isComment
                         ? 'text-blue-800 dark:text-blue-200'
                         : isAssignment
@@ -310,11 +311,19 @@ export default function NotificationBell() {
                   >
                     <div className="flex items-start gap-2.5">
                       <div className="relative flex-shrink-0 mt-0.5">
-                        <img
-                          src={avatarUrl(n.actor.avatar)}
-                          alt={n.actor.name}
-                          className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600"
-                        />
+                        {/* CONTENT_APPROVED/CONTENT_CHANGES_REQUESTED no tienen actor (User) —
+                            el que decidió es un contacto del cliente, no alguien del equipo. */}
+                        {n.actor ? (
+                          <img
+                            src={avatarUrl(n.actor.avatar)}
+                            alt={n.actor.name}
+                            className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-600"
+                          />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-sm">
+                            {isContentApproved ? '✅' : isContentChanges ? '✏️' : '🤝'}
+                          </div>
+                        )}
                         {isBlocked && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">⚠</span>
                         )}
@@ -354,7 +363,9 @@ export default function NotificationBell() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm leading-snug ${textClass}`}>
-                          <span className="font-semibold">{n.actor.name}</span>{' '}
+                          {/* Sin actor, el mensaje ya es autocontenido (ej. "María (cliente) aprobó..."). */}
+                          {n.actor && <span className="font-semibold">{n.actor.name}</span>}
+                          {n.actor && ' '}
                           {n.message}
                         </p>
                         <div className="flex items-center gap-2 mt-0.5">

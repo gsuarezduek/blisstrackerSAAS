@@ -41,6 +41,9 @@ export default function Contenido() {
   const [projects,  setProjects]  = useState([])
   const [projectId, setProjectId] = useState(searchParams.get('projectId') ?? '')
   const [filters,   setFilters]   = useState({ status: '', network: '', ownerId: '', q: '' })
+  const [summary,   setSummary]   = useState(null) // { byStatus, total, awaitingClient } — GET /summary
+  const [requestingApproval, setRequestingApproval] = useState(false)
+  const [approvalMsg, setApprovalMsg] = useState(null) // { type: 'success'|'error', text }
 
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
@@ -81,6 +84,34 @@ export default function Contenido() {
   })
 
   const openPiece = useMemo(() => pieces.find(p => String(p.id) === String(pieceId)) ?? null, [pieces, pieceId])
+
+  // Conteo por estado (incluye `awaitingClient`, el badge del botón "Pedir
+  // aprobación"). Independiente de `filters`/`view` — siempre refleja TODAS las
+  // piezas del proyecto, no solo las que la vista actual tiene cargadas.
+  useEffect(() => {
+    setApprovalMsg(null)
+    if (!projectId) { setSummary(null); return }
+    let cancelled = false
+    api.get(`/contenido/projects/${projectId}/summary`).then(r => { if (!cancelled) setSummary(r.data) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [projectId, pieces])
+
+  async function handleRequestApproval() {
+    if (!projectId || requestingApproval) return
+    setRequestingApproval(true)
+    setApprovalMsg(null)
+    try {
+      const { data } = await api.post(`/contenido/projects/${projectId}/request-approval`)
+      setApprovalMsg({
+        type: 'success',
+        text: `Avisamos a ${data.sent} contacto${data.sent === 1 ? '' : 's'} sobre ${data.pieces} pieza${data.pieces === 1 ? '' : 's'}.`,
+      })
+    } catch (err) {
+      setApprovalMsg({ type: 'error', text: err.response?.data?.error || 'No se pudo enviar el aviso' })
+    } finally {
+      setRequestingApproval(false)
+    }
+  }
 
   // Espejo exacto de canWrite() del backend: admin/owner del workspace, o
   // miembro del equipo del proyecto.
@@ -251,6 +282,31 @@ export default function Contenido() {
             >
               {VIEWS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
             </select>
+
+            {projectId && canEdit && (
+              <div className="mb-4 flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={handleRequestApproval}
+                  disabled={requestingApproval || !summary?.awaitingClient}
+                  title={!summary?.awaitingClient
+                    ? 'No hay piezas esperando aprobación'
+                    : 'Avisa por email a los contactos del portal que pueden aprobar'}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors inline-flex items-center gap-1.5"
+                >
+                  📨 {requestingApproval ? 'Enviando…' : 'Pedir aprobación'}
+                  {summary?.awaitingClient ? ` (${summary.awaitingClient})` : ''}
+                </button>
+                {approvalMsg && (
+                  <span className={`text-xs font-medium ${
+                    approvalMsg.type === 'success'
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'}`}
+                  >
+                    {approvalMsg.text}
+                  </span>
+                )}
+              </div>
+            )}
 
             {renderContent()}
           </>

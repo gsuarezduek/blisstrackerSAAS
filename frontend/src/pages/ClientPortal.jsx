@@ -4,6 +4,7 @@ import axios from 'axios'
 import ReportViewer from '../components/marketing/ReportViewer'
 import ClientBriefsView from '../components/ClientBriefsView'
 import PortalLoginGate from '../components/portal/PortalLoginGate'
+import ClientContentTab from '../components/portal/ClientContentTab'
 
 const API = import.meta.env.VITE_API_URL || ''
 const LIVE_REFRESH_COOLDOWN_MS = 15 * 60 * 1000
@@ -158,6 +159,11 @@ export default function ClientPortal() {
         <div className="bg-white/80 backdrop-blur rounded-xl border border-gray-200/80 shadow-sm px-3 py-2 flex items-center gap-2">
           {reports.length > 0 && <TabButton active={tab === 'informes'} onClick={() => setTab('informes')} brandPrimary={brandPrimary}>Informes</TabButton>}
           {briefs.length > 0  && <TabButton active={tab === 'briefs'}   onClick={() => setTab('briefs')}   brandPrimary={brandPrimary}>Briefs</TabButton>}
+          {meta.hasContent && (
+            <TabButton active={tab === 'contenido'} onClick={() => setTab('contenido')} brandPrimary={brandPrimary}>
+              Contenido{meta.pendingApprovalCount > 0 ? ` (${meta.pendingApprovalCount})` : ''}
+            </TabButton>
+          )}
           <TabButton active={tab === 'vivo'} onClick={() => setTab('vivo')} brandPrimary={brandPrimary}>Datos en vivo</TabButton>
         </div>
       </div>
@@ -189,6 +195,16 @@ export default function ClientPortal() {
         )}
 
         {tab === 'briefs' && <ClientBriefsView briefs={briefs} />}
+
+        {tab === 'contenido' && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <PortalLoginGate slug={slug} brandPrimary={brandPrimary}>
+              {(token, { requireReauth }) => (
+                <ClientContentTab slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary} />
+              )}
+            </PortalLoginGate>
+          </div>
+        )}
 
         {tab === 'vivo' && (
           <div className="bg-white rounded-2xl border border-gray-200 p-6">

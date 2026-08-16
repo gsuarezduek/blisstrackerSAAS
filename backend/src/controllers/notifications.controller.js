@@ -57,7 +57,7 @@ async function markAllRead(req, res, next) {
 // Marca como leídas notificaciones puntuales. Acepta `ids` (preferido — un filtro del
 // panel puede agrupar por relación, no solo por tipo) o `types` (compat). Se usa para el
 // modelo "marcar leído al ver ese filtro" del panel de notificaciones.
-const VALID_TYPES = ['COMPLETED', 'BLOCKED', 'UNBLOCKED', 'ADDED_TO_PROJECT', 'TASK_COMMENT', 'TASK_MENTION', 'VACATION_REQUEST', 'VACATION_REVIEWED', 'LEAD_ASSIGNED', 'GAME_LAUNCHED', 'CHAT_MENTION', 'CONTENT_MENTION']
+const VALID_TYPES = ['COMPLETED', 'BLOCKED', 'UNBLOCKED', 'ADDED_TO_PROJECT', 'TASK_COMMENT', 'TASK_MENTION', 'VACATION_REQUEST', 'VACATION_REVIEWED', 'LEAD_ASSIGNED', 'GAME_LAUNCHED', 'CHAT_MENTION', 'CONTENT_MENTION', 'CONTENT_APPROVED', 'CONTENT_CHANGES_REQUESTED']
 
 async function markRead(req, res, next) {
   try {

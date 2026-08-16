@@ -39,6 +39,12 @@ jest.mock('../../src/lib/prisma', () => ({
   projectBrief: {
     findMany: jest.fn(),
   },
+  featureFlag: {
+    findUnique: jest.fn(),
+  },
+  contentPiece: {
+    count: jest.fn(),
+  },
 }))
 
 jest.mock('../../src/services/monthlyReport.service', () => ({
@@ -373,6 +379,49 @@ describe('Portal de cliente — público (sin auth)', () => {
     expect(res.body.reports).toEqual([{ token: 'abc-123', month: '2026-06' }])
     expect(res.body.briefs[0].type).toBe('marca')
     expect(res.body.hasLiveSections).toBe(true)
+    expect(res.body.hasContent).toBe(false)
+    expect(res.body.pendingApprovalCount).toBe(0)
+  })
+
+  it('hasContent/pendingApprovalCount se calculan cuando el portal + el flag están habilitados', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ contentEnabled: true }))
+    prisma.project.findUnique.mockResolvedValue({ id: PROJECT_ID, name: 'Proyecto Demo' })
+    prisma.workspace.findUnique.mockResolvedValue({
+      slug: WORKSPACE_SLUG, name: 'Bliss', companyName: null, companyDescription: null,
+      industry: null, companyWebsite: null, logoData: null, brandColors: '[]', brandFonts: '[]',
+      disabledFeatureKeys: '[]',
+    })
+    prisma.monthlyReport.findMany.mockResolvedValue([])
+    prisma.projectBrief.findMany.mockResolvedValue([])
+    prisma.featureFlag.findUnique.mockResolvedValue({ key: 'contenido', enabledGlobally: true, enabledWorkspaceIds: '[]' })
+    prisma.contentPiece.count
+      .mockResolvedValueOnce(3) // visibleCount (PORTAL_VISIBLE_STATUSES)
+      .mockResolvedValueOnce(2) // pendingCount (status: 'aprobacion')
+
+    const res = await request(app).get('/api/public/client-portal/kahuak')
+
+    expect(res.status).toBe(200)
+    expect(res.body.hasContent).toBe(true)
+    expect(res.body.pendingApprovalCount).toBe(2)
+  })
+
+  it('hasContent es false si el workspace optó por apagar el flag, aunque el portal lo tenga habilitado', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ contentEnabled: true }))
+    prisma.project.findUnique.mockResolvedValue({ id: PROJECT_ID, name: 'Proyecto Demo' })
+    prisma.workspace.findUnique.mockResolvedValue({
+      slug: WORKSPACE_SLUG, name: 'Bliss', companyName: null, companyDescription: null,
+      industry: null, companyWebsite: null, logoData: null, brandColors: '[]', brandFonts: '[]',
+      disabledFeatureKeys: '["contenido"]',
+    })
+    prisma.monthlyReport.findMany.mockResolvedValue([])
+    prisma.projectBrief.findMany.mockResolvedValue([])
+    prisma.featureFlag.findUnique.mockResolvedValue({ key: 'contenido', enabledGlobally: true, enabledWorkspaceIds: '[]' })
+
+    const res = await request(app).get('/api/public/client-portal/kahuak')
+
+    expect(res.status).toBe(200)
+    expect(res.body.hasContent).toBe(false)
+    expect(prisma.contentPiece.count).not.toHaveBeenCalled()
   })
 
   it('request-code no crea código si el email no matchea ningún contacto (pero responde ok genérico)', async () => {
