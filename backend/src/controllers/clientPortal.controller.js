@@ -7,6 +7,7 @@ const {
   sanitizeSections,
   currentMonthStr,
   GENERATED_WHERE,
+  buildPublicReportPayload,
 } = require('./monthlyReport.controller')
 const { canWrite } = require('../lib/projectAccess')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
@@ -46,6 +47,8 @@ function shapePortal(portal, workspaceSlug) {
     slug:           portal.slug,
     active:         portal.active,
     contentEnabled: portal.contentEnabled,
+    showMeetings:   portal.showMeetings,
+    showTeam:       portal.showTeam,
     liveSections:   JSON.parse(portal.liveSections || '[]'),
     contactCount:   portal.contacts?.length ?? 0,
     publicUrl:      `https://${workspaceSlug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/report/${portal.slug}`,
@@ -70,6 +73,22 @@ function validEmail(e) {
 
 function safeParseArr(str) {
   try { const v = JSON.parse(str); return Array.isArray(v) ? v : [] } catch { return [] }
+}
+
+// Limpia el `resumen` de un análisis de informe para mostrarlo como snippet en
+// "Inicio": puede venir en texto plano con saltos de línea (\n\n, generado por
+// la IA) o como HTML (si el admin lo editó a mano con el WYSIWYG) — mismo
+// criterio de "sacar tags" que ya usa ReportViewer.jsx#handleCreateTaskFromStep.
+const RESUMEN_SNIPPET_LEN = 180
+function resumenSnippet(analysisJson) {
+  if (!analysisJson) return null
+  let parsed
+  try { parsed = JSON.parse(analysisJson) } catch { return null }
+  const raw = parsed?.resumen
+  if (!raw || typeof raw !== 'string') return null
+  const clean = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!clean) return null
+  return clean.length > RESUMEN_SNIPPET_LEN ? `${clean.slice(0, RESUMEN_SNIPPET_LEN).trim()}…` : clean
 }
 
 // ─── Admin: configuración del portal (autenticado, dentro del proyecto) ───────
@@ -107,7 +126,7 @@ async function saveClientPortal(req, res, next) {
       return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
     }
 
-    const { slug, active, contentEnabled, liveSections, clientEmail, clientName } = req.body || {}
+    const { slug, active, contentEnabled, showMeetings, showTeam, liveSections, clientEmail, clientName } = req.body || {}
 
     if (!slug || !SLUG_RE.test(slug)) {
       return res.status(400).json({ error: 'El slug debe tener 3-40 caracteres: minúsculas, números y guiones.' })
@@ -123,6 +142,8 @@ async function saveClientPortal(req, res, next) {
       slug,
       active:         active !== false,
       contentEnabled: contentEnabled === true,
+      showMeetings:   showMeetings === true,
+      showTeam:       showTeam === true,
       liveSections:   JSON.stringify(cleanSections),
     }
 
@@ -266,18 +287,54 @@ async function deleteContact(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// ─── Público: portal del cliente (sin auth) ───────────────────────────────────
+// ─── Público: pantalla de marca previa al login (sin auth) ────────────────────
 
 /**
- * GET /api/public/client-portal/:slug
- * Meta del proyecto/workspace + informes publicados + briefs. Abierto, sin login.
+ * GET /api/public/client-portal/:slug/branding
+ * Público, sin auth. SOLO nombre de proyecto + branding del workspace — lo
+ * justo para pintar la pantalla de login antes de autenticarse. Nunca
+ * reports/briefs/hasContent/pendingApprovalCount: eso exige login (getPortalData) —
+ * todo el resto del portal queda detrás del login OTP, no solo "Datos en vivo"/"Contenido".
  */
-async function getPortalPublic(req, res, next) {
+async function getPortalBranding(req, res, next) {
   try {
     const portal = await prisma.projectClientPortal.findUnique({ where: { slug: req.params.slug } })
     if (!portal || !portal.active) return res.status(404).json({ error: 'Portal no encontrado' })
 
-    const [project, workspace, reportRows, briefRows, contentFlag] = await Promise.all([
+    const [project, workspace] = await Promise.all([
+      prisma.project.findUnique({ where: { id: portal.projectId }, select: { id: true, name: true } }),
+      prisma.workspace.findUnique({
+        where:  { id: portal.workspaceId },
+        select: { slug: true, name: true, companyName: true, logoData: true, brandColors: true },
+      }),
+    ])
+
+    res.json({
+      project: project ? { name: project.name } : null,
+      workspace: workspace ? {
+        slug:        workspace.slug,
+        name:        workspace.name,
+        companyName: workspace.companyName,
+        hasLogo:     !!workspace.logoData,
+        brandColors: workspace.brandColors ? JSON.parse(workspace.brandColors) : [],
+      } : null,
+    })
+  } catch (err) { next(err) }
+}
+
+// ─── Datos del portal (requiere clientPortalAuth) ─────────────────────────────
+
+/**
+ * GET /api/public/client-portal/:slug
+ * Meta del proyecto/workspace + informes publicados + briefs. Requiere el JWT
+ * de propósito acotado del login OTP — ya NO es público (ver getPortalBranding
+ * para lo mínimo que sí puede verse antes de loguearse).
+ */
+async function getPortalData(req, res, next) {
+  try {
+    const portal = req.clientPortal
+
+    const [project, workspace, reportRows, latestReport, briefRows, contentFlag, nextMeeting, allMeetings] = await Promise.all([
       prisma.project.findUnique({ where: { id: portal.projectId }, select: { id: true, name: true } }),
       prisma.workspace.findUnique({
         where:  { id: portal.workspaceId },
@@ -288,19 +345,46 @@ async function getPortalPublic(req, res, next) {
         select:  { token: true, month: true },
         orderBy: { month: 'desc' },
       }),
+      // Aparte del listado liviano de arriba (sin analysis): solo para el
+      // snippet de "Inicio", el informe más reciente con su análisis.
+      prisma.monthlyReport.findFirst({
+        where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, status: 'published', ...GENERATED_WHERE },
+        orderBy: { month: 'desc' },
+        select:  { token: true, month: true, analysis: true },
+      }),
       prisma.projectBrief.findMany({
         where:   { projectId: portal.projectId, workspaceId: portal.workspaceId },
         orderBy: { updatedAt: 'desc' },
       }),
       prisma.featureFlag.findUnique({ where: { key: 'contenido' } }),
+      // Próxima reunión con el cliente para "Inicio" — solo fecha/título (nunca
+      // notas internas), y solo si el admin prendió el opt-in showMeetings.
+      portal.showMeetings
+        ? prisma.projectMeeting.findFirst({
+            where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, type: 'client', date: { gte: todayString() } },
+            orderBy: { date: 'asc' },
+            select:  { date: true, title: true },
+          })
+        : Promise.resolve(null),
+      // Historial completo (pasadas + futuras) para la pestaña "Tu equipo" —
+      // mismo criterio de privacidad que nextMeeting: solo fecha/título.
+      portal.showMeetings
+        ? prisma.projectMeeting.findMany({
+            where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, type: 'client' },
+            orderBy: { date: 'desc' },
+            select:  { date: true, title: true },
+          })
+        : Promise.resolve([]),
     ])
 
-    // hasContent/pendingApprovalCount: nunca títulos ni imágenes acá (endpoint
-    // sin login) — solo booleano + conteo. Requiere el flag `contenido` grant
-    // (SuperAdmin) sin opt-out del workspace, ADEMÁS de contentEnabled del portal
-    // (mismo criterio que assertContentAccess en contentPortal.controller.js).
+    // hasContent/pendingApprovalCount: nunca títulos ni imágenes acá (solo
+    // booleano + conteo, el detalle vive en /content). Requiere el flag
+    // `contenido` grant (SuperAdmin) sin opt-out del workspace, ADEMÁS de
+    // contentEnabled del portal (mismo criterio que assertContentAccess en
+    // contentPortal.controller.js).
     let hasContent = false
     let pendingApprovalCount = 0
+    let pendingPreview = []
     if (portal.contentEnabled && workspace) {
       const disabledKeys = JSON.parse(workspace.disabledFeatureKeys || '[]')
       if (isFlagEnabledForWorkspace(contentFlag, portal.workspaceId, disabledKeys)) {
@@ -310,6 +394,49 @@ async function getPortalPublic(req, res, next) {
         ])
         hasContent = visibleCount > 0
         pendingApprovalCount = pendingCount
+        if (pendingCount > 0) {
+          const previewRows = await prisma.contentPiece.findMany({
+            where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, status: 'aprobacion' },
+            select:  { id: true, title: true },
+            orderBy: { updatedAt: 'desc' },
+            take:    2,
+          })
+          pendingPreview = previewRows
+        }
+      }
+    }
+
+    // Equipo del proyecto para "Tu equipo" — solo foto/nombre/rol, nunca
+    // email/teléfono. Se resuelve server-side (el label del teamRole sale de
+    // UserRole) porque el hook useRoles del front pega a /api/roles, que
+    // requiere auth de equipo y no está disponible en el portal. Filtra
+    // automáticamente a integrantes desactivados del workspace.
+    let team = []
+    if (portal.showTeam) {
+      const projectMembers = await prisma.projectMember.findMany({
+        where:   { projectId: portal.projectId },
+        select:  { userId: true, user: { select: { id: true, name: true, avatar: true } } },
+        orderBy: { user: { name: 'asc' } },
+      })
+      if (projectMembers.length > 0) {
+        const userIds = projectMembers.map(pm => pm.userId)
+        const [activeMembers, roles] = await Promise.all([
+          prisma.workspaceMember.findMany({
+            where:  { workspaceId: portal.workspaceId, userId: { in: userIds }, active: true },
+            select: { userId: true, teamRole: true },
+          }),
+          prisma.userRole.findMany({ where: { workspaceId: portal.workspaceId }, select: { name: true, label: true } }),
+        ])
+        const teamRoleByUserId = new Map(activeMembers.map(m => [m.userId, m.teamRole]))
+        const labelByName = new Map(roles.map(r => [r.name, r.label]))
+        team = projectMembers
+          .filter(pm => teamRoleByUserId.has(pm.userId))
+          .map(pm => ({
+            id:        pm.user.id,
+            name:      pm.user.name,
+            avatar:    pm.user.avatar,
+            roleLabel: labelByName.get(teamRoleByUserId.get(pm.userId)) || null,
+          }))
       }
     }
 
@@ -331,7 +458,37 @@ async function getPortalPublic(req, res, next) {
       hasLiveSections: safeParseArr(portal.liveSections).length > 0,
       hasContent,
       pendingApprovalCount,
+      pendingPreview,
+      latestReportSummary: latestReport ? { token: latestReport.token, month: latestReport.month, resumen: resumenSnippet(latestReport.analysis) } : null,
+      nextMeeting: nextMeeting ? { date: nextMeeting.date, title: nextMeeting.title } : null,
+      meetings: allMeetings.map(m => ({ date: m.date, title: m.title })),
+      showTeam: portal.showTeam,
+      team,
     })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/public/client-portal/:slug/reports/:token
+ * Sirve un informe DENTRO del portal — mismo payload que el link público
+ * individual (GET /api/public/report/:token, que sigue público a propósito
+ * para los links compartidos sueltos de un informe), pero exige el JWT del
+ * portal y valida que el informe pertenezca al MISMO proyecto/workspace que
+ * req.clientPortal — así un token de informe no alcanza por sí solo (ni de
+ * este portal ni de otro) para ver nada sin haber pasado el login OTP.
+ */
+async function getPortalReport(req, res, next) {
+  try {
+    const portal = req.clientPortal
+    const report = await prisma.monthlyReport.findUnique({ where: { token: req.params.token } })
+    if (!report || report.projectId !== portal.projectId || report.workspaceId !== portal.workspaceId) {
+      return res.status(404).json({ error: 'Informe no encontrado' })
+    }
+    if (report.status !== 'published') {
+      return res.status(404).json({ error: 'Este informe todavía no está publicado.', code: 'REPORT_DRAFT' })
+    }
+
+    res.json(await buildPublicReportPayload(report))
   } catch (err) { next(err) }
 }
 
@@ -503,7 +660,9 @@ module.exports = {
   createContact,
   updateContact,
   deleteContact,
-  getPortalPublic,
+  getPortalBranding,
+  getPortalData,
+  getPortalReport,
   requestLoginCode,
   verifyLoginCode,
   getLiveData,

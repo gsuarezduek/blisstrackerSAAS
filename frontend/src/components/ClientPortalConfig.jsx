@@ -53,8 +53,8 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
 
   function openEdit() {
     setDraft(portal
-      ? { slug: portal.slug, active: portal.active, contentEnabled: portal.contentEnabled, liveSections: portal.liveSections }
-      : { slug: '', active: true, contentEnabled: false, liveSections: [] })
+      ? { slug: portal.slug, active: portal.active, contentEnabled: portal.contentEnabled, showMeetings: portal.showMeetings, showTeam: portal.showTeam, liveSections: portal.liveSections }
+      : { slug: '', active: true, contentEnabled: false, showMeetings: false, showTeam: false, liveSections: [] })
     setError('')
     setEditing(true)
   }
@@ -75,6 +75,8 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
         slug:           draft.slug.trim().toLowerCase(),
         active:         draft.active,
         contentEnabled: draft.contentEnabled,
+        showMeetings:   draft.showMeetings,
+        showTeam:       draft.showTeam,
         liveSections:   draft.liveSections,
       })
       setPortal(data.portal)
@@ -137,6 +139,8 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
             <p className="text-xs text-gray-400 dark:text-gray-500">
               Datos en vivo: {portal.liveSections.length > 0 ? `${portal.liveSections.length} secciones habilitadas` : 'ninguna sección habilitada'}
               {contenidoEnabled && (portal.contentEnabled ? ' · Contenido visible' : ' · Contenido oculto')}
+              {portal.showMeetings && ' · Próxima reunión visible'}
+              {portal.showTeam && ' · Equipo visible'}
             </p>
           </div>
 
@@ -182,6 +186,24 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
               <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el calendario de contenido en el portal</span>
             </label>
           )}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={draft.showMeetings}
+              onChange={e => setDraft(prev => ({ ...prev, showMeetings: e.target.checked }))}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar la próxima reunión con el cliente en "Inicio" (fecha y título, sin notas)</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={draft.showTeam}
+              onChange={e => setDraft(prev => ({ ...prev, showTeam: e.target.checked }))}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el equipo del proyecto en "Tu equipo" (foto, nombre y rol)</span>
+          </label>
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">Secciones habilitadas para "Datos en vivo"</p>
             <div className="flex flex-wrap gap-1.5">

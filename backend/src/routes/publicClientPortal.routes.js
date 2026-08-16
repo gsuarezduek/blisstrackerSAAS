@@ -1,7 +1,9 @@
 const express = require('express')
 const router  = express.Router()
 const {
-  getPortalPublic,
+  getPortalBranding,
+  getPortalData,
+  getPortalReport,
   requestLoginCode,
   verifyLoginCode,
   getLiveData,
@@ -17,8 +19,10 @@ const {
 } = require('../controllers/contentPortal.controller')
 const { clientPortalAuth } = require('../middleware/clientPortalAuth')
 
-// Sin auth — portal de cliente (Informes + Briefs abiertos)
-router.get('/client-portal/:slug', getPortalPublic)
+// Sin auth — SOLO branding (nombre de proyecto + logo/color) para pintar la
+// pantalla de login previa. Todo lo demás del portal (Informes, Briefs,
+// Contenido, Datos en vivo) exige loguearse primero — ver getPortalData.
+router.get('/client-portal/:slug/branding', getPortalBranding)
 router.post('/client-portal/:slug/live/request-code', requestLoginCode)
 router.post('/client-portal/:slug/live/verify-code',  verifyLoginCode)
 
@@ -28,8 +32,10 @@ router.post('/client-portal/:slug/live/verify-code',  verifyLoginCode)
 router.get('/content-asset/:publicId', serveContentAsset)
 
 // Requieren el JWT de propósito acotado emitido tras el código OTP
-router.get('/client-portal/:slug/live',           clientPortalAuth, getLiveData)
-router.post('/client-portal/:slug/live/refresh',  clientPortalAuth, refreshLiveData)
+router.get('/client-portal/:slug',                clientPortalAuth, getPortalData)
+router.get('/client-portal/:slug/reports/:token',  clientPortalAuth, getPortalReport)
+router.get('/client-portal/:slug/live',            clientPortalAuth, getLiveData)
+router.post('/client-portal/:slug/live/refresh',   clientPortalAuth, refreshLiveData)
 
 // Contenido — aprobación de piezas desde el portal. Mismo JWT; identidad de
 // contacto (req.clientPortalContact) y el flag `contenido` se chequean dentro

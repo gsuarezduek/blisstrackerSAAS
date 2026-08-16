@@ -1785,6 +1785,8 @@ model ProjectClientPortal {
   clientName       String?
   active           Boolean   @default(true)
   contentEnabled   Boolean   @default(false) // habilita el tab "Contenido" (aprobación de piezas)
+  showMeetings     Boolean   @default(false) // opt-in: expone fecha/título (sin notas) de la próxima reunión tipo 'client' en "Inicio"
+  showTeam         Boolean   @default(false) // opt-in: expone el equipo del proyecto (ProjectMember: foto/nombre/rol) en "Tu equipo"
   liveSections     String    @default("[]") // JSON array, subset de SECTION_KEYS habilitado para "Datos en vivo"
   liveDataCache    String? // JSON: último resultado de aggregateReportData (sections/objectives/period)
   liveDataCachedAt DateTime?

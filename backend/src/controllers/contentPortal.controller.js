@@ -365,7 +365,7 @@ module.exports = {
   approvePiece,
   requestChanges,
   addPortalComment,
-  // exportado para el test de fuga y para getPortalPublic (F7.5)
+  // exportado para el test de fuga y para getPortalData (F7.5)
   formatPiecePublic,
   PORTAL_VISIBLE_STATUSES,
 }

@@ -20,7 +20,7 @@ const tokenKey = (slug) => `bliss_client_token_${slug}`
  * fetch que reciba `code: 'CONTACT_REQUIRED'` (token válido pero sin
  * `contactId` — emitido antes de la migración a multi-contacto).
  */
-export default function PortalLoginGate({ slug, brandPrimary = '#f97316', children }) {
+export default function PortalLoginGate({ slug, brandPrimary = '#f97316', projectName, children }) {
   const [token, setToken] = useState(() => localStorage.getItem(tokenKey(slug)))
   const [loginStep,  setLoginStep]  = useState('email') // 'email' | 'code'
   const [email,      setEmail]      = useState('')
@@ -60,11 +60,16 @@ export default function PortalLoginGate({ slug, brandPrimary = '#f97316', childr
   if (token) return children(token, { requireReauth })
 
   return (
-    <div className="max-w-sm mx-auto">
-      <h2 className="text-lg font-semibold text-gray-800 mb-2">Ingresá para continuar</h2>
-      <p className="text-sm text-gray-500 mb-4">Te vamos a enviar un código a tu email.</p>
+    <div className="max-w-sm mx-auto bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-center">
+      <p className="text-3xl mb-2">👋</p>
+      <h2 className="text-lg font-semibold text-gray-800 mb-1">
+        {projectName ? `Ingresá al portal de ${projectName}` : 'Ingresá al portal'}
+      </h2>
+      <p className="text-sm text-gray-500 mb-5">
+        Ahí vas a encontrar tus informes, contenido para revisar y más. Ingresá tu email y te mandamos un código de acceso.
+      </p>
       {loginStep === 'email' ? (
-        <form onSubmit={handleRequestCode} className="space-y-3">
+        <form onSubmit={handleRequestCode} className="space-y-3 text-left">
           <input
             type="email" required value={email} onChange={e => setEmail(e.target.value)}
             placeholder="tu@email.com"
@@ -76,6 +81,7 @@ export default function PortalLoginGate({ slug, brandPrimary = '#f97316', childr
             style={{ backgroundColor: brandPrimary }}>
             {loginBusy ? 'Enviando…' : 'Enviar código'}
           </button>
+          <p className="text-xs text-gray-400 text-center">Solo funciona con el email autorizado para este proyecto.</p>
         </form>
       ) : (
         <form onSubmit={handleVerifyCode} className="space-y-3">

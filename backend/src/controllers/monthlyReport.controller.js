@@ -373,6 +373,71 @@ async function updateReport(req, res, next) {
  * GET /api/public/report/:token
  * Endpoint PÚBLICO (sin auth). Devuelve los datos del informe para el cliente.
  */
+// Arma { report, workspace, siblings, data } para un MonthlyReport YA validado
+// (existe, status==='published'). Compartido por el link público individual
+// (getPublicReport) y por el informe dentro del portal de cliente
+// (clientPortal.controller.js#getPortalReport) — evita duplicar
+// aggregateReportData/briefs/siblings/persistencia del análisis.
+async function buildPublicReportPayload(report) {
+  const [cachedAnalysis, workspace] = await Promise.all([
+    Promise.resolve(report.analysis ? safeParseObj(report.analysis) : null),
+    prisma.workspace.findUnique({
+      where:  { id: report.workspaceId },
+      select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, brandColors: true, brandFonts: true },
+    }),
+  ])
+
+  const objectives      = {}
+  const enabledSections = report.enabledSections ? safeParseArr(report.enabledSections) : null
+  const cachedData      = report.dataCache ? safeParseObj(report.dataCache) : null
+  const briefs          = await loadBriefs(report.projectId)
+  const [data, siblingRows] = await Promise.all([
+    aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives, cachedData, enabledSections, {
+      periodStart: report.periodStart, periodEnd: report.periodEnd, briefs,
+    }),
+    // Otros informes PUBLICADOS del mismo proyecto, para navegar desde el link público
+    prisma.monthlyReport.findMany({
+      where:   { projectId: report.projectId, workspaceId: report.workspaceId, status: 'published', ...GENERATED_WHERE },
+      select:  { token: true, month: true, periodStart: true, periodEnd: true },
+      orderBy: { month: 'desc' },
+    }),
+  ])
+  const siblings = siblingRows.map(r => ({ token: r.token, month: r.month, label: reportLabel(r) }))
+
+  // Si se generó un análisis nuevo también lo guardamos (ej: primera vez que el cliente abre el link)
+  if (data._analysisIsNew && data.analysis) {
+    await prisma.monthlyReport.update({
+      where: { id: report.id },
+      data:  { analysis: JSON.stringify(data.analysis) },
+    })
+  }
+  delete data._analysisIsNew
+
+  return {
+    report: {
+      month:       report.month,
+      token:       report.token,
+      objectives:  {},
+      notes:       report.notes,
+      hasBanner:   !!report.bannerData,
+      periodLabel: reportLabel(report),
+    },
+    workspace: workspace ? {
+      slug:               workspace.slug,
+      name:               workspace.name,
+      companyName:        workspace.companyName,
+      companyDescription: workspace.companyDescription,
+      industry:           workspace.industry,
+      companyWebsite:     workspace.companyWebsite,
+      hasLogo:            !!workspace.logoData,
+      brandColors:        workspace.brandColors ? JSON.parse(workspace.brandColors) : [],
+      brandFonts:         workspace.brandFonts  ? JSON.parse(workspace.brandFonts)  : [],
+    } : null,
+    siblings,
+    data,
+  }
+}
+
 async function getPublicReport(req, res, next) {
   try {
     const { token } = req.params
@@ -385,63 +450,7 @@ async function getPublicReport(req, res, next) {
       return res.status(404).json({ error: 'Este informe todavía no está publicado.', code: 'REPORT_DRAFT' })
     }
 
-    const [cachedAnalysis, workspace] = await Promise.all([
-      Promise.resolve(report.analysis ? safeParseObj(report.analysis) : null),
-      prisma.workspace.findUnique({
-        where:  { id: report.workspaceId },
-        select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, brandColors: true, brandFonts: true },
-      }),
-    ])
-
-    const objectives      = {}
-    const enabledSections = report.enabledSections ? safeParseArr(report.enabledSections) : null
-    const cachedData      = report.dataCache ? safeParseObj(report.dataCache) : null
-    const briefs          = await loadBriefs(report.projectId)
-    const [data, siblingRows] = await Promise.all([
-      aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives, cachedData, enabledSections, {
-        periodStart: report.periodStart, periodEnd: report.periodEnd, briefs,
-      }),
-      // Otros informes PUBLICADOS del mismo proyecto, para navegar desde el link público
-      prisma.monthlyReport.findMany({
-        where:   { projectId: report.projectId, workspaceId: report.workspaceId, status: 'published', ...GENERATED_WHERE },
-        select:  { token: true, month: true, periodStart: true, periodEnd: true },
-        orderBy: { month: 'desc' },
-      }),
-    ])
-    const siblings = siblingRows.map(r => ({ token: r.token, month: r.month, label: reportLabel(r) }))
-
-    // Si se generó un análisis nuevo también lo guardamos (ej: primera vez que el cliente abre el link)
-    if (data._analysisIsNew && data.analysis) {
-      await prisma.monthlyReport.update({
-        where: { id: report.id },
-        data:  { analysis: JSON.stringify(data.analysis) },
-      })
-    }
-    delete data._analysisIsNew
-
-    res.json({
-      report: {
-        month:       report.month,
-        token:       report.token,
-        objectives:  {},
-        notes:       report.notes,
-        hasBanner:   !!report.bannerData,
-        periodLabel: reportLabel(report),
-      },
-      workspace: workspace ? {
-        slug:               workspace.slug,
-        name:               workspace.name,
-        companyName:        workspace.companyName,
-        companyDescription: workspace.companyDescription,
-        industry:           workspace.industry,
-        companyWebsite:     workspace.companyWebsite,
-        hasLogo:            !!workspace.logoData,
-        brandColors:        workspace.brandColors ? JSON.parse(workspace.brandColors) : [],
-        brandFonts:         workspace.brandFonts  ? JSON.parse(workspace.brandFonts)  : [],
-      } : null,
-      siblings,
-      data,
-    })
+    res.json(await buildPublicReportPayload(report))
   } catch (err) {
     next(err)
   }
@@ -804,4 +813,4 @@ async function notifyReportFeedback(report, feedback) {
   }, workspaceId)
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, uploadReportBanner, deleteReportBanner, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE }
+module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, uploadReportBanner, deleteReportBanner, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE, buildPublicReportPayload }
