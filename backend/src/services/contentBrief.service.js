@@ -1,6 +1,7 @@
 const prisma    = require('../lib/prisma')
 const { parseAIJson } = require('../utils/parseAIJson')
 const { logTokens }   = require('../lib/logTokens')
+const { briefLines, briefDump } = require('../lib/briefContext')
 const { gscCountryToSerp, extractDomain, fetchSerpData, parseSerpResponse } = require('./serpApi.service')
 
 const { anthropic } = require('../lib/claude')
@@ -17,23 +18,6 @@ const SEO_LABELS = {
   blog:                 'Blog / capacidad de generar contenido',
   autor_experto:        'Autor/referente de la marca (E-E-A-T)',
   competidores:         'Competidores bien posicionados',
-}
-
-function briefLines(answers, labels) {
-  if (!answers || typeof answers !== 'object') return ''
-  const lines = []
-  for (const [k, label] of Object.entries(labels)) {
-    const v = answers[k]
-    if (v && String(v).trim()) lines.push(`- ${label}: ${String(v).trim()}`)
-  }
-  return lines.join('\n')
-}
-
-// Vuelca los valores de un brief (sin conocer sus claves) truncado, para dar contexto de marca.
-function briefDump(answers, maxChars = 1500) {
-  if (!answers || typeof answers !== 'object') return ''
-  const txt = Object.values(answers).filter(v => v && String(v).trim()).map(v => String(v).trim()).join(' · ')
-  return txt.length > maxChars ? txt.slice(0, maxChars) + '…' : txt
 }
 
 /**

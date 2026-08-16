@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
+import AdsAdvisorPanel from './AdsAdvisorPanel'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -522,7 +523,7 @@ function CrossProjectMetaAdsPanel({ onSelectProject }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function MetaAdsTab({ projectId, onSelectProject }) {
+export default function MetaAdsTab({ projectId, onSelectProject, projects = [] }) {
   const objectives = useObjectiveProgress(projectId).filter(o => o.category === 'ads' && o.detail?.platform === 'meta_ads')
   const [integration,    setIntegration]   = useState(null)
   const [data,           setData]          = useState(null)
@@ -736,6 +737,14 @@ export default function MetaAdsTab({ projectId, onSelectProject }) {
 
       {/* Objetivos de Meta Ads del proyecto */}
       <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Meta Ads" />
+
+      {/* Análisis con IA: diagnóstico + ideas de anuncios nuevos */}
+      <AdsAdvisorPanel
+        projectId={projectId}
+        projectName={projects.find(p => String(p.id) === String(projectId))?.name}
+        platform="meta_ads"
+        datePreset={datePreset}
+      />
 
       {/* Mejores anuncios (creativo) */}
       {data && <MetaTopAds ads={data.topAds} />}

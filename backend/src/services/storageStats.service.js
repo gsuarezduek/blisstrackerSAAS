@@ -28,6 +28,7 @@ const IMAGE_REF_SOURCES = [
   { model: 'tikTokSnapshot',     field: 'topVideos' },
   { model: 'youTubeSnapshot',    field: 'topVideos' },
   { model: 'monthlyReport',      field: 'dataCache' },
+  { model: 'projectClientPortal', field: 'liveDataCache' },
 ]
 
 // UUID v4 que sigue a "/api/social-image/" en cualquier texto serializado.

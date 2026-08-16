@@ -181,8 +181,8 @@ export default function Marketing() {
     if (tab === 'rrss'     && sub === 'linkedin')  return <LinkedinTab  projectId={projectId} onSelectProject={handleProjectChange} />
     if (tab === 'rrss'     && sub === 'facebook')  return <FacebookTab  projectId={projectId} onSelectProject={handleProjectChange} />
     if (tab === 'rrss'     && sub === 'competidores') return <CompetitorsTab projectId={projectId} onSelectProject={handleProjectChange} />
-    if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} onSelectProject={handleProjectChange} />
-    if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} onSelectProject={handleProjectChange} />
+    if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
+    if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
 
     return <ComingSoon label={activeSub?.label ?? activeNav.label} />
   }

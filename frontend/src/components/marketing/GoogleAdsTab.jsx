@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
 import useObjectiveProgress from './useObjectiveProgress'
+import AdsAdvisorPanel from './AdsAdvisorPanel'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -517,7 +518,7 @@ function CrossProjectGoogleAdsPanel({ onSelectProject }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function GoogleAdsTab({ projectId, onSelectProject }) {
+export default function GoogleAdsTab({ projectId, onSelectProject, projects = [] }) {
   const objectives = useObjectiveProgress(projectId).filter(o => o.category === 'ads' && o.detail?.platform === 'google_ads')
   const [integration,        setIntegration]        = useState(null)
   const [initLoading,        setInitLoading]        = useState(true)
@@ -803,6 +804,14 @@ export default function GoogleAdsTab({ projectId, onSelectProject }) {
 
       {/* Objetivos de Google Ads del proyecto */}
       <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Google Ads" />
+
+      {/* Análisis con IA: diagnóstico + ideas de anuncios nuevos */}
+      <AdsAdvisorPanel
+        projectId={projectId}
+        projectName={projects.find(p => String(p.id) === String(projectId))?.name}
+        platform="google_ads"
+        datePreset={datePreset}
+      />
 
       {/* Mejores anuncios (preview de texto) */}
       {data && <GoogleTopAds ads={data.topAds} />}

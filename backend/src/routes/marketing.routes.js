@@ -34,6 +34,7 @@ const seoOpportunities  = require('../controllers/seoOpportunities.controller')
 const contentBrief      = require('../controllers/contentBrief.controller')
 const onPageAudit       = require('../controllers/onPageAudit.controller')
 const contentGap        = require('../controllers/contentGap.controller')
+const adsAdvisor        = require('../controllers/adsAdvisor.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -76,10 +77,12 @@ router.get('/projects/:id/search-console/query-pages',     searchConsole.getQuer
 router.get('/projects/:id/health-score',                   healthScore.getHealthScore)
 
 // Meta Ads
-router.get('/projects/:id/meta-ads',    metaAds.getMetaAdsData)
+router.get('/projects/:id/meta-ads',           metaAds.getMetaAdsData)
+router.post('/projects/:id/meta-ads/advisor',  adsAdvisor.runMetaAdvisor)
 
 // Google Ads
-router.get('/projects/:id/google-ads',  googleAds.getGoogleAdsData)
+router.get('/projects/:id/google-ads',           googleAds.getGoogleAdsData)
+router.post('/projects/:id/google-ads/advisor',  adsAdvisor.runGoogleAdvisor)
 
 // Instagram
 router.get('/projects/:id/instagram/snapshots',  instagram.getSnapshots)
