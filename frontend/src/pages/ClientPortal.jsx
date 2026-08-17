@@ -87,7 +87,7 @@ function LiveDataPanel({ slug, token, requireReauth, workspace }) {
       </div>
       {liveError && <p className="text-sm text-red-600 mb-3">{liveError}</p>}
       {liveLoading && <p className="text-sm text-gray-500">Cargando datos en vivo...</p>}
-      {!liveLoading && liveData && <ReportViewer data={liveData} isPublic={true} report={null} workspace={workspace} showFooter={false} />}
+      {!liveLoading && liveData && <ReportViewer data={liveData} isPublic={true} report={null} workspace={workspace} showFooter={false} compactHero={true} />}
     </div>
   )
 }
@@ -249,7 +249,7 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportTok
           {reportLoading && <p className="text-sm text-gray-500">Cargando informe...</p>}
           {!reportLoading && reportData && (
             <>
-              <ReportViewer data={reportData.data} isPublic={true} report={reportData.report} workspace={reportData.workspace} showFooter={false} />
+              <ReportViewer data={reportData.data} isPublic={true} report={reportData.report} workspace={reportData.workspace} showFooter={false} compactHero={true} />
               {/* key={selectedToken}: resetea el widget (estrellas/comentario) al cambiar de mes */}
               <ReportFeedbackWidget key={selectedToken} token={selectedToken} brandPrimary={brandPrimary} agencyName={agencyName} />
             </>

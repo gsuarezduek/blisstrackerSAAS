@@ -12,7 +12,7 @@ import {
   BestLinkedinPost, BestFacebookPost, LinkedinAudience, ObjectivesResults, CompetitorComparison,
 } from './ReportViewerParts'
 
-export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onRemoveSection, report = null, workspace = null, showFooter = true }) {
+export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onRemoveSection, report = null, workspace = null, showFooter = true, compactHero = false }) {
   const [pendingRemove,    setPendingRemove]    = useState(null)   // { keys, label } — confirmación de borrado de sección
   const [removing,         setRemoving]         = useState(false)
   const [editingResumen,   setEditingResumen]   = useState(false)
@@ -360,7 +360,23 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       <style>{PRINT_STYLES}</style>
 
       {/* ── Header ── */}
-      {isPublic ? (
+      {isPublic && compactHero ? (
+        /* Hero compacto: el portal de cliente ya muestra nombre del proyecto + logo/nombre
+           de la agencia en su propio hero (ver PortalHero) — acá solo lo que no se repite. */
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-gray-400 dark:text-gray-500 text-[11px] font-semibold uppercase tracking-[0.18em] mb-0.5">Informe de marketing</p>
+            <p className="text-gray-800 dark:text-gray-100 text-lg font-bold capitalize">{periodTitle}</p>
+            {periodRange && <p className="text-gray-400 dark:text-gray-500 text-xs mt-0.5">{periodRange}</p>}
+          </div>
+          <button
+            onClick={() => window.print()}
+            className="no-print flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
+          >
+            🖨️ PDF
+          </button>
+        </div>
+      ) : isPublic ? (
         /* Hero de gradiente de marca (el banner de portada ahora vive a nivel de portal, ver PortalHero) */
         <div className="relative rounded-2xl overflow-hidden print-break-avoid shadow-sm">
           <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})` }} />
