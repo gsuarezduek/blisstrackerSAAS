@@ -938,9 +938,10 @@ function ClientFeedbackPanel({ feedback }) {
 // Se abre solo al pasar de borrador a publicado (nunca al despublicar). El envío
 // requiere portal de cliente activo con contactos — mismo criterio que "Pedir
 // aprobación" de Contenido; si falta algo, el error del backend lo explica acá.
-function PublishNotifyModal({ projectId, month, onClose }) {
+function PublishNotifyModal({ projectId, month, contacts = [], onClose }) {
   const [state, setState] = useState('idle') // 'idle' | 'sending' | 'sent' | 'error'
   const [error, setError] = useState('')
+  const activeContacts = contacts.filter(c => c.active)
 
   async function handleSend() {
     setState('sending')
@@ -970,7 +971,28 @@ function PublishNotifyModal({ projectId, month, onClose }) {
           <>
             <p className="text-4xl mb-3">✅</p>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Informe publicado</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">¿Querés avisarle a tu cliente por email de que ya está disponible?</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">¿Querés avisarle a tu cliente por email de que ya está disponible?</p>
+
+            {activeContacts.length > 0 ? (
+              <div className="text-left bg-gray-50 dark:bg-gray-900/40 rounded-xl p-3 mb-3 max-h-32 overflow-y-auto">
+                <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">Le va a llegar a:</p>
+                <ul className="space-y-0.5">
+                  {activeContacts.map(c => (
+                    <li key={c.id} className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                      {c.name || c.email}
+                      {c.name && <span className="text-gray-400 dark:text-gray-500"> · {c.email}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">No hay contactos activos configurados en el portal de este proyecto.</p>
+            )}
+
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-4">
+              ¿Falta alguien o querés cambiar los destinatarios? Se administra desde Proyecto → Info → Portal Cliente.
+            </p>
+
             {error && <p className="text-xs text-red-600 dark:text-red-400 mb-3">{error}</p>}
             <div className="flex gap-2">
               <button
@@ -981,7 +1003,7 @@ function PublishNotifyModal({ projectId, month, onClose }) {
               </button>
               <button
                 onClick={handleSend}
-                disabled={state === 'sending'}
+                disabled={state === 'sending' || activeContacts.length === 0}
                 className="flex-1 py-2 text-sm bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
               >
                 {state === 'sending' ? 'Enviando…' : 'Sí, avisar'}
@@ -1304,6 +1326,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
         <PublishNotifyModal
           projectId={projectId}
           month={month}
+          contacts={portalConfig?.contacts}
           onClose={() => setShowNotifyModal(false)}
         />
       )}

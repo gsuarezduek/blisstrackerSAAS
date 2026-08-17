@@ -4,7 +4,20 @@
       "Bash(git pull *)",
       "Bash(awk -F: '$1>209 && $1<300')",
       "Bash(node -e ' *)",
-      "Bash(grep -rln '$queryRaw' /Users/gaston/team-tracker/backend/src/)"
+      "Bash(grep -rln '$queryRaw' /Users/gaston/team-tracker/backend/src/)",
+      "Bash(npm run lint *)",
+      "Bash(npm test *)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(npx jest *)",
+      "Bash(railway deployment list *)",
+      "Bash(npm run test:run *)",
+      "Bash(railway logs *)",
+      "Bash(npx eslint *)",
+      "Bash(npx vitest *)",
+      "Bash(railway domain status *)",
+      "Bash(railway service list *)",
+      "Bash(railway whoami *)",
+      "Bash(railway status *)"
     ]
   }
 }
