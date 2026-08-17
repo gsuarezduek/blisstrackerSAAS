@@ -4,6 +4,8 @@ import ReportViewer from './ReportViewer'
 import ObjectivesManager from './ObjectivesManager'
 import ProjectSearchSelect from './ProjectSearchSelect'
 import { ObjectiveCard } from './ReportViewerParts'
+import useObjectiveProgress from './useObjectiveProgress'
+import ObjectiveProgressBars from './ObjectiveProgressBars'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -932,6 +934,66 @@ function ClientFeedbackPanel({ feedback }) {
   )
 }
 
+// ─── Popup tras publicar: ofrece avisar al cliente por email ──────────────────
+// Se abre solo al pasar de borrador a publicado (nunca al despublicar). El envío
+// requiere portal de cliente activo con contactos — mismo criterio que "Pedir
+// aprobación" de Contenido; si falta algo, el error del backend lo explica acá.
+function PublishNotifyModal({ projectId, month, onClose }) {
+  const [state, setState] = useState('idle') // 'idle' | 'sending' | 'sent' | 'error'
+  const [error, setError] = useState('')
+
+  async function handleSend() {
+    setState('sending')
+    setError('')
+    try {
+      await api.post(`/marketing/projects/${projectId}/reports/${month}/notify`)
+      setState('sent')
+    } catch (err) {
+      setState('error')
+      setError(err.response?.data?.error || 'No se pudo enviar el aviso')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+        {state === 'sent' ? (
+          <>
+            <p className="text-4xl mb-3">📨</p>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Aviso enviado</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Le avisamos por email a los contactos del portal de este proyecto.</p>
+            <button onClick={onClose} className="w-full py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-xl transition-colors">
+              Listo
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-4xl mb-3">✅</p>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Informe publicado</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">¿Querés avisarle a tu cliente por email de que ya está disponible?</p>
+            {error && <p className="text-xs text-red-600 dark:text-red-400 mb-3">{error}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={onClose}
+                className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Ahora no
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={state === 'sending'}
+                className="flex-1 py-2 text-sm bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+              >
+                {state === 'sending' ? 'Enviando…' : 'Sí, avisar'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function InformesTab({ projectId, onSelectProject, projects = [] }) {
@@ -951,6 +1013,9 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
   const [generating,   setGenerating]   = useState(false)
   const [showSectionsConfig, setShowSectionsConfig] = useState(false)
   const [portalConfig, setPortalConfig] = useState(null) // { active, publicUrl, ... } | null
+  const [showNotifyModal, setShowNotifyModal] = useState(false)
+  const [objRefreshKey, setObjRefreshKey] = useState(0)
+  const liveObjectives = useObjectiveProgress(projectId, objRefreshKey)
 
   const isGenerated = !!reportMeta?.isGenerated
 
@@ -1027,6 +1092,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
     try {
       await api.patch(`/marketing/projects/${projectId}/reports/${month}/status`, { status: next })
       setReportMeta(prev => prev ? { ...prev, status: next } : prev)
+      if (next === 'published') setShowNotifyModal(true)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo cambiar el estado del informe')
     }
@@ -1060,6 +1126,13 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
 
   return (
     <div className="space-y-4">
+
+      {/* ── Objetivos en vivo del mes en curso — mismos datos que la vista "En vivo"
+          del hub sin proyecto seleccionado, acá recortados a este proyecto. No depende
+          de que el informe del mes ya esté generado. ── */}
+      {liveObjectives.length > 0 && (
+        <ObjectiveProgressBars objectives={liveObjectives} title="🎯 Objetivos del mes en curso" />
+      )}
 
       {/* ── Barra de navegación de mes ── */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
@@ -1222,7 +1295,16 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
       {showObjModal && (
         <ObjectivesManager
           projectId={projectId}
-          onClose={() => setShowObjModal(false)}
+          onClose={() => { setShowObjModal(false); setObjRefreshKey(k => k + 1) }}
+        />
+      )}
+
+      {/* ── Popup tras publicar: ofrece avisar al cliente por email ── */}
+      {showNotifyModal && (
+        <PublishNotifyModal
+          projectId={projectId}
+          month={month}
+          onClose={() => setShowNotifyModal(false)}
         />
       )}
 

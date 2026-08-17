@@ -863,6 +863,40 @@ async function sendContentApprovalRequestEmail(emails, payload, workspaceId) {
 }
 
 /**
+ * Aviso al cliente: se publicó un informe nuevo. Se dispara desde
+ * monthlyReport.controller.js (notifyReportPublished), a demanda del admin
+ * (popup tras publicar) — nunca automático.
+ * @param {string[]} emails  contactos activos del portal de cliente del proyecto
+ * @param {object}   payload { projectName, periodLabel, portalUrl, workspaceName }
+ */
+async function sendReportPublishedEmail(emails, payload, workspaceId) {
+  if (!emails || emails.length === 0) return
+  const { projectName, periodLabel, portalUrl, workspaceName } = payload
+  const from = await getEmailFrom(workspaceId)
+  const subject = `Nuevo informe disponible — ${projectName}`
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: emails,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">Ya está disponible tu informe</h2>
+          <p style="color:#475569;margin:0 0 20px;">
+            ${escHtml(workspaceName || 'Tu agencia')} publicó el informe de <strong>${escHtml(projectName)}</strong>${periodLabel ? ` · ${escHtml(periodLabel)}` : ''}.
+          </p>
+          ${portalUrl ? `<a href="${portalUrl}" style="display:inline-block;background:#E67A1F;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;">Ver informe</a>` : ''}
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'reportPublished', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'reportPublished', status: 'failed', errorMsg: err.message })
+  }
+}
+
+/**
  * Aviso al equipo: el cliente aprobó una pieza o pidió cambios. Se dispara desde
  * contentPortal.controller.js (approvePiece / requestChanges).
  * @param {string[]} emails  admins/owners + miembros del proyecto (getProjectNotifyRecipients)
@@ -977,6 +1011,7 @@ module.exports = {
   sendSeoAlertEmail,
   sendGameFinishedEmail,
   sendReportFeedbackEmail,
+  sendReportPublishedEmail,
   sendContentApprovalRequestEmail,
   sendContentClientDecisionEmail,
   sendPortalFirstLoginEmail,

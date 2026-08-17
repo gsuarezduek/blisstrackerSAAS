@@ -1,7 +1,7 @@
 const { randomUUID }           = require('crypto')
 const prisma                   = require('../lib/prisma')
 const { aggregateReportData, getAvailableSections }  = require('../services/monthlyReport.service')
-const { sendReportFeedbackEmail } = require('../services/email.service')
+const { sendReportFeedbackEmail, sendReportPublishedEmail } = require('../services/email.service')
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
 const { monthLabel, prevMonthStr, monthBounds, rangeLabel } = require('../lib/monthUtils')
 const { DEFAULT_TZ } = require('../utils/dates')
@@ -617,6 +617,65 @@ async function setReportStatus(req, res, next) {
 }
 
 /**
+ * POST /api/marketing/projects/:id/reports/:month/notify
+ * Avisa por email a los contactos activos del portal de cliente de que el
+ * informe (ya publicado) está disponible. Requiere portal activo con al menos
+ * un contacto — mismo criterio que "Pedir aprobación" de Contenido.
+ */
+async function notifyReportPublished(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.params
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
+    }
+
+    const report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month } })
+    if (!report) return res.status(404).json({ error: 'Informe no encontrado' })
+    if (report.status !== 'published') {
+      return res.status(400).json({ error: 'Publicá el informe antes de avisarle al cliente' })
+    }
+
+    const portal = await prisma.projectClientPortal.findUnique({ where: { projectId } })
+    if (!portal || !portal.active) {
+      return res.status(400).json({ error: 'Este proyecto no tiene un portal de cliente activo — configuralo en la pestaña Info' })
+    }
+
+    const contacts = await prisma.clientPortalContact.findMany({
+      where:  { portalId: portal.id, active: true },
+      select: { email: true },
+    })
+    if (contacts.length === 0) {
+      return res.status(400).json({ error: 'No hay contactos activos en el portal — agregá uno en la configuración' })
+    }
+
+    const [project, workspace] = await Promise.all([
+      prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+      prisma.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true, name: true, companyName: true } }),
+    ])
+
+    const domain    = process.env.APP_DOMAIN || 'blisstracker.app'
+    const portalUrl = `https://${workspace.slug}.${domain}/report/${portal.slug}?report=${report.token}`
+    const emails    = contacts.map(c => c.email)
+
+    setImmediate(() => {
+      sendReportPublishedEmail(emails, {
+        projectName:   project?.name || 'Proyecto',
+        periodLabel:   reportLabel(report),
+        portalUrl,
+        workspaceName: workspace?.companyName || workspace?.name,
+      }, workspaceId).catch(() => {})
+    })
+
+    res.json({ sent: emails.length })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
  * PATCH /api/marketing/projects/:id/reports/:month/sections
  * Elimina secciones/sub-secciones de un informe ya generado, sin regenerar ni
  * llamar a la IA. Actualiza `enabledSections` y poda el `dataCache` para que las
@@ -737,4 +796,4 @@ async function notifyReportFeedback(report, feedback) {
   }, workspaceId)
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE, buildPublicReportPayload }
+module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, notifyReportPublished, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE, buildPublicReportPayload }
