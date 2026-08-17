@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import ReportViewer from '../components/marketing/ReportViewer'
+import ReportFeedbackWidget from '../components/marketing/ReportFeedbackWidget'
 import ClientBriefsView from '../components/ClientBriefsView'
 import PortalLoginGate from '../components/portal/PortalLoginGate'
 import ClientContentTab from '../components/portal/ClientContentTab'
@@ -104,14 +105,16 @@ function PortalUnavailable({ error }) {
 // (informes/briefs/contenido) + los 4 tabs. Vive DENTRO de <PortalLoginGate> —
 // antes de este componente el visitante solo vio la pantalla de marca y el
 // formulario de login, sin un solo dato del proyecto.
-function PortalTabs({ slug, token, requireReauth, brandPrimary }) {
+function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportToken }) {
   const [meta,    setMeta]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
-  const [tab,     setTab]     = useState('inicio')
+  // Si el link ya trae un informe puntual (?report=<token>, ej. "Link del cliente" desde
+  // Informes), arrancamos directo en esa pestaña en vez de "Inicio".
+  const [tab,     setTab]     = useState(initialReportToken ? 'informes' : 'inicio')
 
   // Informes
-  const [selectedToken, setSelectedToken] = useState(null)
+  const [selectedToken, setSelectedToken] = useState(initialReportToken || null)
   const [reportData,    setReportData]    = useState(null)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError,   setReportError]   = useState(null)
@@ -123,7 +126,10 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary }) {
       .then(r => {
         setMeta(r.data)
         const reports = r.data.reports || []
-        if (reports.length) setSelectedToken(reports[0].token)
+        // Conserva el token pedido por query param (o el ya elegido) si sigue existiendo
+        // entre los informes publicados; si no (link viejo, informe despublicado, o
+        // primera carga sin query param), cae al más reciente.
+        setSelectedToken(prev => (prev && reports.some(r2 => r2.token === prev)) ? prev : (reports[0]?.token ?? null))
       })
       .catch(err => {
         if (err.response?.status === 401) requireReauth()
@@ -146,7 +152,8 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary }) {
       .finally(() => setReportLoading(false))
   }, [slug, token, selectedToken, tab, requireReauth])
 
-  const workspace = meta?.workspace || null
+  const workspace   = meta?.workspace || null
+  const agencyName  = workspace?.companyName || workspace?.name || ''
   const reports = meta?.reports || []
   const briefs  = meta?.briefs  || []
 
@@ -194,7 +201,11 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary }) {
           )}
           {reportLoading && <p className="text-sm text-gray-500">Cargando informe...</p>}
           {!reportLoading && reportData && (
-            <ReportViewer data={reportData.data} isPublic={true} report={reportData.report} workspace={reportData.workspace} />
+            <>
+              <ReportViewer data={reportData.data} isPublic={true} report={reportData.report} workspace={reportData.workspace} />
+              {/* key={selectedToken}: resetea el widget (estrellas/comentario) al cambiar de mes */}
+              <ReportFeedbackWidget key={selectedToken} token={selectedToken} brandPrimary={brandPrimary} agencyName={agencyName} />
+            </>
           )}
           {!reportLoading && !reportData && (
             <p className="text-sm text-red-600 text-center py-8">{reportError || 'No se pudo cargar el informe.'}</p>
@@ -204,7 +215,7 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary }) {
 
       {tab === 'briefs' && <ClientBriefsView briefs={briefs} />}
 
-      {tab === 'equipo' && <ClientTeamTab team={meta.team} meetings={meta.meetings} />}
+      {tab === 'equipo' && <ClientTeamTab team={meta.team} meetings={meta.meetings} today={meta.today} />}
 
       {tab === 'contenido' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
@@ -223,6 +234,8 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary }) {
 
 export default function ClientPortal() {
   const { token: slug } = useParams()
+  const [searchParams]  = useSearchParams()
+  const initialReportToken = searchParams.get('report') || null
   const [branding, setBranding] = useState(null)
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState(null)
@@ -265,7 +278,7 @@ export default function ClientPortal() {
       <div className="max-w-4xl mx-auto">
         <PortalLoginGate slug={slug} brandPrimary={brandPrimary} projectName={branding.project?.name}>
           {(token, { requireReauth }) => (
-            <PortalTabs slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary} />
+            <PortalTabs slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary} initialReportToken={initialReportToken} />
           )}
         </PortalLoginGate>
       </div>

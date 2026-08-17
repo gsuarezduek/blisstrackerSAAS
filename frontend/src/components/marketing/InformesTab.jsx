@@ -950,8 +950,19 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
   const [showGenModal, setShowGenModal] = useState(false)
   const [generating,   setGenerating]   = useState(false)
   const [showSectionsConfig, setShowSectionsConfig] = useState(false)
+  const [portalConfig, setPortalConfig] = useState(null) // { active, publicUrl, ... } | null
 
   const isGenerated = !!reportMeta?.isGenerated
+
+  // Portal del Cliente del proyecto (si tiene uno configurado) — determina si "Link del
+  // cliente" manda al portal (con login) o al link directo de siempre. Independiente del
+  // mes que se esté viendo, solo depende del proyecto.
+  useEffect(() => {
+    if (!projectId) { setPortalConfig(null); return }
+    api.get(`/projects/${projectId}/client-portal`)
+      .then(res => setPortalConfig(res.data.portal))
+      .catch(() => setPortalConfig(null))
+  }, [projectId])
 
   useEffect(() => {
     if (!projectId) return
@@ -1044,7 +1055,11 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
 
   function handleCopyLink() {
     if (!reportMeta?.token) return
-    const url = `${window.location.origin}/report/${reportMeta.token}`
+    // Si el proyecto tiene Portal del Cliente activo, mandamos ahí (con login por email
+    // autorizado) directo a este informe en particular; si no, el link directo de siempre.
+    const url = portalConfig?.active
+      ? `${portalConfig.publicUrl}?report=${reportMeta.token}`
+      : `${window.location.origin}/report/${reportMeta.token}`
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
@@ -1132,7 +1147,13 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
             <button
               onClick={handleCopyLink}
               disabled={!reportMeta?.token || reportMeta?.status !== 'published'}
-              title={reportMeta?.status !== 'published' ? 'Publicá el informe para habilitar el link del cliente' : ''}
+              title={
+                reportMeta?.status !== 'published'
+                  ? 'Publicá el informe para habilitar el link del cliente'
+                  : portalConfig?.active
+                    ? 'Copia el link del Portal del Cliente, con acceso directo a este informe (pide login con el email autorizado)'
+                    : 'Copia el link directo al informe, sin login'
+              }
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-40"
             >
               {copied ? '✓ Copiado' : '📋 Link del cliente'}

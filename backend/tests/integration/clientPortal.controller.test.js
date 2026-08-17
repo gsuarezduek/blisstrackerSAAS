@@ -653,14 +653,11 @@ describe('Portal de cliente — meta completa (requiere token)', () => {
     expect(prisma.projectMeeting.findMany).not.toHaveBeenCalled()
   })
 
-  it('nextMeeting trae fecha+título (nunca notes) cuando showMeetings está activo y hay una reunión futura; meetings trae el historial completo', async () => {
+  it('nextMeeting trae fecha+título (nunca notes) cuando showMeetings está activo y hay una reunión futura, y solo mira ESTRICTAMENTE después de hoy', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ showMeetings: true }))
     mockBaseData()
     prisma.projectMeeting.findFirst.mockResolvedValue({ date: '2026-09-01', title: 'Revisión mensual' })
-    prisma.projectMeeting.findMany.mockResolvedValue([
-      { date: '2026-09-01', title: 'Revisión mensual' },
-      { date: '2026-07-01', title: 'Kickoff' },
-    ])
+    prisma.projectMeeting.findMany.mockResolvedValue([])
 
     const res = await request(app)
       .get('/api/public/client-portal/kahuak')
@@ -668,18 +665,38 @@ describe('Portal de cliente — meta completa (requiere token)', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.nextMeeting).toEqual({ date: '2026-09-01', title: 'Revisión mensual' })
+    // `gt`, no `gte`: una reunión de HOY no cuenta como "próxima" — se suele cargar
+    // el mismo día que se tiene (o después), así que ya sucedió.
     expect(prisma.projectMeeting.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ type: 'client' }),
+      where: expect.objectContaining({ type: 'client', date: { gt: expect.any(String) } }),
       select: { date: true, title: true },
     }))
+  })
+
+  it('meetings trae el historial completo CON notas (son reuniones type:client, el cliente ya estuvo) + today para clasificar próximas/anteriores en el front', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ showMeetings: true }))
+    mockBaseData()
+    prisma.projectMeeting.findFirst.mockResolvedValue(null)
+    prisma.projectMeeting.findMany.mockResolvedValue([
+      { date: '2026-09-01', title: 'Revisión mensual', notes: '<p>Quedamos en subir el presupuesto</p>' },
+      { date: '2026-07-01', title: 'Kickoff', notes: null },
+    ])
+
+    const res = await request(app)
+      .get('/api/public/client-portal/kahuak')
+      .set('Authorization', `Bearer ${legacyLiveToken()}`)
+
+    expect(res.status).toBe(200)
     expect(res.body.meetings).toEqual([
-      { date: '2026-09-01', title: 'Revisión mensual' },
-      { date: '2026-07-01', title: 'Kickoff' },
+      { date: '2026-09-01', title: 'Revisión mensual', notes: '<p>Quedamos en subir el presupuesto</p>' },
+      { date: '2026-07-01', title: 'Kickoff', notes: null },
     ])
     expect(prisma.projectMeeting.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ type: 'client' }),
-      select: { date: true, title: true },
+      where:  expect.objectContaining({ type: 'client' }),
+      select: { date: true, title: true, notes: true },
     }))
+    expect(typeof res.body.today).toBe('string')
+    expect(res.body.today).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   it('team viene vacío (sin queries) si el portal no activó showTeam', async () => {

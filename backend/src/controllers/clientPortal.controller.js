@@ -362,22 +362,26 @@ async function getPortalData(req, res, next) {
         orderBy: { updatedAt: 'desc' },
       }),
       prisma.featureFlag.findUnique({ where: { key: 'contenido' } }),
-      // Próxima reunión con el cliente para "Inicio" — solo fecha/título (nunca
-      // notas internas), y solo si el admin prendió el opt-in showMeetings.
+      // Próxima reunión con el cliente para "Inicio" — solo si el admin prendió
+      // el opt-in showMeetings. `gt` (no `gte`): las reuniones se suelen cargar
+      // el mismo día que se tienen (o después), así que "hoy" ya cuenta como
+      // sucedida — solo lo estrictamente posterior a hoy es "próxima" de verdad.
       portal.showMeetings
         ? prisma.projectMeeting.findFirst({
-            where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, type: 'client', date: { gte: todayString() } },
+            where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, type: 'client', date: { gt: todayString() } },
             orderBy: { date: 'asc' },
             select:  { date: true, title: true },
           })
         : Promise.resolve(null),
-      // Historial completo (pasadas + futuras) para la pestaña "Tu equipo" —
-      // mismo criterio de privacidad que nextMeeting: solo fecha/título.
+      // Historial completo (pasadas + futuras) para la pestaña "Tu equipo",
+      // con notas — a diferencia de nextMeeting, acá sí se muestran: son
+      // reuniones type:'client' (el cliente ya estuvo presente), y el cliente
+      // pidió poder ver qué se anotó.
       portal.showMeetings
         ? prisma.projectMeeting.findMany({
             where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, type: 'client' },
             orderBy: { date: 'desc' },
-            select:  { date: true, title: true },
+            select:  { date: true, title: true, notes: true },
           })
         : Promise.resolve([]),
     ])
@@ -476,7 +480,8 @@ async function getPortalData(req, res, next) {
       pendingPreview,
       latestReportSummary: latestReport ? { token: latestReport.token, month: latestReport.month, resumen: resumenSnippet(latestReport.analysis) } : null,
       nextMeeting: nextMeeting ? { date: nextMeeting.date, title: nextMeeting.title } : null,
-      meetings: allMeetings.map(m => ({ date: m.date, title: m.title })),
+      meetings: allMeetings.map(m => ({ date: m.date, title: m.title, notes: m.notes || null })),
+      today: todayString(),
       showTeam: portal.showTeam,
       team,
       showObjectives: portal.showObjectives,

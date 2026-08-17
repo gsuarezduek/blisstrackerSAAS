@@ -1,12 +1,16 @@
+import { useState } from 'react'
+import DOMPurify from 'dompurify'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { roleColor } from '../../utils/roleColor'
+import '../situation-editor.css'
 
 // Pestaña "Tu equipo" del portal de cliente — dos secciones independientes,
 // cada una condicional a su propio toggle (showTeam / showMeetings):
 // quién trabaja en el proyecto (ProjectMember: foto/nombre/rol, sin
 // email/teléfono) y el historial completo de reuniones con el cliente
-// (fecha/título, nunca las notas internas). Se gatea a nivel ClientPortal.jsx
-// (no se monta si ambas están vacías).
+// (fecha/título y, si el equipo tomó notas, las notas — son reuniones
+// type:'client', el cliente ya estuvo presente). Se gatea a nivel
+// ClientPortal.jsx (no se monta si ambas están vacías).
 
 function formatDate(dateStr) {
   const [y, m, d] = dateStr.split('-')
@@ -34,18 +38,39 @@ function TeamMemberCard({ member }) {
 }
 
 function MeetingRow({ meeting }) {
+  const [open, setOpen] = useState(false)
+  const hasNotes = !!(meeting.notes && meeting.notes.trim())
+
   return (
-    <div className="flex items-baseline gap-2 py-2 px-3 rounded-lg hover:bg-gray-50">
-      <span className="text-sm font-medium text-gray-700 shrink-0">{formatDate(meeting.date)}</span>
-      {meeting.title && <span className="text-sm text-gray-500 truncate">{meeting.title}</span>}
+    <div className="py-2 px-3">
+      <button
+        type="button"
+        onClick={() => hasNotes && setOpen(v => !v)}
+        className={`w-full flex items-baseline gap-2 rounded-lg px-0 py-1 text-left ${hasNotes ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'}`}
+      >
+        <span className="text-sm font-medium text-gray-700 shrink-0">{formatDate(meeting.date)}</span>
+        {meeting.title && <span className="text-sm text-gray-500 truncate">{meeting.title}</span>}
+        {hasNotes && (
+          <span className="ml-auto text-xs font-medium text-primary-600 shrink-0">{open ? 'Ocultar notas ▲' : 'Ver notas ▾'}</span>
+        )}
+      </button>
+      {hasNotes && open && (
+        <div
+          className="situation-content text-sm text-gray-600 mt-2 mb-1 px-3 py-2 bg-gray-50 rounded-lg"
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(meeting.notes) }}
+        />
+      )}
     </div>
   )
 }
 
-export default function ClientTeamTab({ team = [], meetings = [] }) {
-  const today = new Date().toISOString().slice(0, 10)
-  const upcoming = meetings.filter(m => m.date >= today).sort((a, b) => a.date.localeCompare(b.date))
-  const past     = meetings.filter(m => m.date <  today).sort((a, b) => b.date.localeCompare(a.date))
+export default function ClientTeamTab({ team = [], meetings = [], today }) {
+  // "Hoy" ya cuenta como sucedida (las reuniones se suelen cargar el mismo
+  // día que se tienen, o después) — solo lo estrictamente posterior es
+  // "próxima" de verdad. `today` viene del backend (timezone del workspace),
+  // nunca se calcula acá para no depender de la zona horaria del navegador.
+  const upcoming = meetings.filter(m => m.date > today).sort((a, b) => a.date.localeCompare(b.date))
+  const past     = meetings.filter(m => m.date <= today).sort((a, b) => b.date.localeCompare(a.date))
 
   if (team.length === 0 && meetings.length === 0) return null
 
