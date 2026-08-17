@@ -6,28 +6,24 @@ import ReportFeedbackWidget from '../components/marketing/ReportFeedbackWidget'
 
 const API = import.meta.env.VITE_API_URL || ''
 
-// Selector de informes del mismo proyecto (navegación entre meses)
-function ReportSwitcher({ siblings, currentToken, onSelect, brandPrimary }) {
+// Selector de informes del mismo proyecto (navegación entre meses) — por
+// defecto queda seleccionado el más reciente (currentToken); este control solo
+// deja elegir otro anterior.
+function ReportSwitcher({ siblings, currentToken, onSelect }) {
   if (!siblings || siblings.length < 2) return null
   return (
-    <div className="max-w-4xl mx-auto mb-5">
-      <div className="bg-white/80 backdrop-blur rounded-xl border border-gray-200/80 shadow-sm px-3 py-2 flex items-center gap-2 overflow-x-auto">
-        <span className="text-xs text-gray-400 shrink-0 pr-1 font-medium">Informes</span>
-        {siblings.map(s => {
-          const active = s.token === currentToken
-          return (
-            <button
-              key={s.token}
-              onClick={() => !active && onSelect(s.token)}
-              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
-                active ? 'text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
-              style={active ? { backgroundColor: brandPrimary } : undefined}
-            >
-              {s.label}
-            </button>
-          )
-        })}
-      </div>
+    <div className="max-w-4xl mx-auto mb-5 flex items-center gap-2">
+      <label htmlFor="report-month-switcher" className="text-xs text-gray-400 font-medium shrink-0">Mes</label>
+      <select
+        id="report-month-switcher"
+        value={currentToken}
+        onChange={e => e.target.value !== currentToken && onSelect(e.target.value)}
+        className="text-sm font-semibold text-gray-700 bg-white/80 backdrop-blur border border-gray-200/80 rounded-lg px-3 py-1.5 shadow-sm focus:outline-none"
+      >
+        {siblings.map(s => (
+          <option key={s.token} value={s.token}>{s.label}</option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -93,7 +89,7 @@ export default function ReportPublic() {
       className="min-h-screen py-8 px-4"
       style={{ background: `radial-gradient(1200px 500px at 50% -10%, ${brandPrimary}14, transparent 60%), #f6f7f9` }}
     >
-      <ReportSwitcher siblings={siblings} currentToken={token} onSelect={(t) => navigate(`/report/${t}`)} brandPrimary={brandPrimary} />
+      <ReportSwitcher siblings={siblings} currentToken={token} onSelect={(t) => navigate(`/report/${t}`)} />
       <div className="max-w-4xl mx-auto">
         <ReportViewer
           data={data}

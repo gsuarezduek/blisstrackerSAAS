@@ -16,6 +16,7 @@ const { PORTAL_VISIBLE_STATUSES } = require('../lib/contentCatalog')
 const { emitTo } = require('../lib/socket')
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
 
+const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 const SLUG_RE = /^[a-z0-9-]{3,40}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const OTP_TTL_MS = 10 * 60 * 1000
@@ -53,6 +54,7 @@ function shapePortal(portal, workspaceSlug) {
     showMeetings:   portal.showMeetings,
     showTeam:       portal.showTeam,
     showObjectives: portal.showObjectives,
+    hasBanner:      !!portal.bannerMimeType,
     liveSections:   JSON.parse(portal.liveSections || '[]'),
     contactCount:   portal.contacts?.length ?? 0,
     publicUrl:      `https://${workspaceSlug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/report/${portal.slug}`,
@@ -194,6 +196,77 @@ async function deleteClientPortal(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * POST /api/projects/:id/client-portal/banner
+ * Sube o reemplaza la imagen hero del portal (única por proyecto, no por informe).
+ */
+async function uploadPortalBanner(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) {
+      return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    }
+    if (!req.file) return res.status(400).json({ error: 'No se recibió ninguna imagen' })
+
+    const mimeType = req.file.mimetype
+    if (!ALLOWED_BANNER_TYPES.includes(mimeType)) {
+      return res.status(400).json({ error: 'Formato no soportado. Usá PNG, JPG o WebP.' })
+    }
+
+    const portal = await findPortalOr404(projectId, res)
+    if (!portal) return
+
+    await prisma.projectClientPortal.update({
+      where: { id: portal.id },
+      data:  { bannerData: req.file.buffer, bannerMimeType: mimeType },
+    })
+
+    res.json({ hasBanner: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/projects/:id/client-portal/banner
+ */
+async function deletePortalBanner(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (!(await canWrite(req, projectId))) {
+      return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    }
+
+    await prisma.projectClientPortal.updateMany({
+      where: { projectId, workspaceId },
+      data:  { bannerData: null, bannerMimeType: null },
+    })
+
+    res.json({ hasBanner: false })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/public/client-portal-banner/:slug
+ * Sirve la imagen hero del portal. Sin auth (igual que el logo del workspace o
+ * el banner de un informe individual) — es solo una imagen decorativa.
+ */
+async function servePortalBanner(req, res, next) {
+  try {
+    const portal = await prisma.projectClientPortal.findUnique({
+      where:  { slug: req.params.slug },
+      select: { bannerData: true, bannerMimeType: true },
+    })
+    if (!portal?.bannerData) return res.status(404).end()
+
+    res.set('Content-Type', portal.bannerMimeType)
+    res.set('Cache-Control', 'public, max-age=3600')
+    res.send(Buffer.from(portal.bannerData))
+  } catch (err) { next(err) }
+}
+
 // ─── Admin: contactos autorizados del portal ──────────────────────────────────
 // ABM independiente del PUT del portal — cada alta/baja pega directo, sin
 // depender de que el admin apriete "Guardar" en el resto del formulario.
@@ -323,6 +396,7 @@ async function getPortalBranding(req, res, next) {
         hasLogo:     !!workspace.logoData,
         brandColors: workspace.brandColors ? JSON.parse(workspace.brandColors) : [],
       } : null,
+      hasBanner: !!portal.bannerMimeType,
     })
   } catch (err) { next(err) }
 }
@@ -726,6 +800,9 @@ module.exports = {
   getClientPortal,
   saveClientPortal,
   deleteClientPortal,
+  uploadPortalBanner,
+  deletePortalBanner,
+  servePortalBanner,
   listContacts,
   createContact,
   updateContact,

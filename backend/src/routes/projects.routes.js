@@ -1,10 +1,13 @@
 const router = require('express').Router()
+const multer = require('multer')
 const c = require('../controllers/projects.controller')
 const briefs = require('../controllers/briefs.controller')
 const meetings = require('../controllers/projectMeetings.controller')
 const clientPortal = require('../controllers/clientPortal.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
+
+const uploadPortalBanner = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 
 router.use(auth)
 router.use(resolveWorkspace)
@@ -36,6 +39,8 @@ router.delete('/:id/briefs/:type',         briefs.deleteBrief)
 router.get('/:id/client-portal',           clientPortal.getClientPortal)
 router.put('/:id/client-portal',           clientPortal.saveClientPortal)
 router.delete('/:id/client-portal',        clientPortal.deleteClientPortal)
+router.post('/:id/client-portal/banner',   uploadPortalBanner.single('image'), clientPortal.uploadPortalBanner)
+router.delete('/:id/client-portal/banner', clientPortal.deletePortalBanner)
 
 // Contactos autorizados del portal (multi-contacto) — ABM independiente del PUT de arriba
 router.get('/:id/client-portal/contacts',           clientPortal.listContacts)

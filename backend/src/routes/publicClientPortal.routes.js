@@ -8,6 +8,7 @@ const {
   verifyLoginCode,
   getLiveData,
   refreshLiveData,
+  servePortalBanner,
 } = require('../controllers/clientPortal.controller')
 const { serveContentAsset } = require('../controllers/contentAssets.controller')
 const {
@@ -23,6 +24,7 @@ const { clientPortalAuth } = require('../middleware/clientPortalAuth')
 // pantalla de login previa. Todo lo demás del portal (Informes, Briefs,
 // Contenido, Datos en vivo) exige loguearse primero — ver getPortalData.
 router.get('/client-portal/:slug/branding', getPortalBranding)
+router.get('/client-portal-banner/:slug',   servePortalBanner)
 router.post('/client-portal/:slug/live/request-code', requestLoginCode)
 router.post('/client-portal/:slug/live/verify-code',  verifyLoginCode)
 

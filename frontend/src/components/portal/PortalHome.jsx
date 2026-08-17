@@ -88,7 +88,7 @@ export default function PortalHome({ meta, onNavigate, brandPrimary }) {
 
   if (hasLiveSections) {
     cards.push(
-      <HomeCard key="vivo" icon="📊" title="Datos en vivo" onClick={() => onNavigate('vivo')} brandPrimary={brandPrimary}>
+      <HomeCard key="vivo" icon="📊" title="Datos Actuales" onClick={() => onNavigate('vivo')} brandPrimary={brandPrimary}>
         <p>Métricas actualizadas de tu proyecto, en tiempo real.</p>
       </HomeCard>
     )

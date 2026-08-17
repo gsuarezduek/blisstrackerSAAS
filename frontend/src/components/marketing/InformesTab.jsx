@@ -1038,21 +1038,6 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
     setReportData(prev => prev ? { ...prev, analysis: updatedAnalysis } : prev)
   }
 
-  async function handleBannerUpload(file) {
-    const fd = new FormData()
-    fd.append('image', file)
-    const res = await api.post(`/marketing/projects/${projectId}/reports/${month}/banner`, fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-    setReportMeta(prev => prev ? { ...prev, hasBanner: true } : prev)
-    return res.data
-  }
-
-  async function handleBannerDelete() {
-    await api.delete(`/marketing/projects/${projectId}/reports/${month}/banner`)
-    setReportMeta(prev => prev ? { ...prev, hasBanner: false } : prev)
-  }
-
   function handleCopyLink() {
     if (!reportMeta?.token) return
     // Si el proyecto tiene Portal del Cliente activo, mandamos ahí (con login por email
@@ -1205,8 +1190,6 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
           data={reportData}
           isPublic={false}
           onSaveAnalysis={handleSaveAnalysis}
-          onBannerUpload={handleBannerUpload}
-          onBannerDelete={handleBannerDelete}
           onRemoveSection={handleRemoveSections}
           report={reportMeta}
           workspace={reportWorkspace}

@@ -51,7 +51,7 @@ export default function ClientPortalContacts({ projectId, contacts, canEdit, onC
   return (
     <div className="space-y-2">
       {contacts.length === 0 && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin contactos — el cliente no puede ingresar a "Datos en vivo".</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin contactos — el cliente no puede ingresar a "Datos Actuales".</p>
       )}
 
       {contacts.map(c => (

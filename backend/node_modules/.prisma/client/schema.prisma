@@ -1789,6 +1789,8 @@ model ProjectClientPortal {
   showMeetings     Boolean   @default(false) // opt-in: expone fecha/título (sin notas) de la próxima reunión tipo 'client' en "Inicio"
   showTeam         Boolean   @default(false) // opt-in: expone el equipo del proyecto (ProjectMember: foto/nombre/rol) en "Tu equipo"
   showObjectives   Boolean   @default(false) // opt-in: expone el cumplimiento de MarketingObjective (computeObjectives, en vivo) arriba de las tarjetas en "Inicio"
+  bannerData       Bytes? // Imagen hero del portal (PNG/JPG/WebP, max 5MB) — reemplaza al viejo banner por informe (MonthlyReport.bannerData, deprecado)
+  bannerMimeType   String? // ej: "image/jpeg"
   liveSections     String    @default("[]") // JSON array, subset de SECTION_KEYS habilitado para "Datos en vivo"
   liveDataCache    String? // JSON: último resultado de aggregateReportData (sections/objectives/period)
   liveDataCachedAt DateTime?

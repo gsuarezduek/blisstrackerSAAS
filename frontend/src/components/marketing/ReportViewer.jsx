@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import DOMPurify from 'dompurify'
 import RichTextEditor from '../RichTextEditor'
 import SocialIcon from './SocialIcon'
 import api from '../../api/client'
+import { linkify } from '../../utils/linkify'
 import '../situation-editor.css'
 import {
   PRINT_STYLES, ReportEditContext, fmt, fmtDuration, monthLabel, dataPeriodLabel,
@@ -11,7 +12,7 @@ import {
   BestLinkedinPost, BestFacebookPost, LinkedinAudience, ObjectivesResults, CompetitorComparison,
 } from './ReportViewerParts'
 
-export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onBannerUpload, onBannerDelete, onRemoveSection, report = null, workspace = null }) {
+export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onRemoveSection, report = null, workspace = null, showFooter = true }) {
   const [pendingRemove,    setPendingRemove]    = useState(null)   // { keys, label } — confirmación de borrado de sección
   const [removing,         setRemoving]         = useState(false)
   const [editingResumen,   setEditingResumen]   = useState(false)
@@ -34,12 +35,6 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   const [editingContext, setEditingContext] = useState(null)
   const [contextDraft,   setContextDraft]  = useState('')
   const [savingContext,  setSavingContext]  = useState(false)
-
-  // Banner del informe (por informe individual, no por workspace)
-  const [bannerUploading, setBannerUploading] = useState(false)
-  const [bannerKey,       setBannerKey]       = useState(0)   // fuerza recarga de img tras upload
-  const [hasBanner,       setHasBanner]       = useState(report?.hasBanner ?? false)
-  const bannerInputRef = useRef()
 
   // "Próximos pasos → tareas": estado por índice de paso ('creating' | 'done' | 'error')
   const [createdSteps, setCreatedSteps] = useState({})
@@ -78,24 +73,6 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       setCreatedSteps(prev => ({ ...prev, [i]: 'done' }))
     } catch {
       setCreatedSteps(prev => ({ ...prev, [i]: 'error' }))
-    }
-  }
-
-  // ── Banner upload ────────────────────────────────────────────────────────────
-  async function handleBannerFile(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!onBannerUpload) return
-    setBannerUploading(true)
-    try {
-      await onBannerUpload(file)
-      setHasBanner(true)
-      setBannerKey(k => k + 1)
-    } catch (err) {
-      alert(err.response?.data?.error || 'Error al subir la imagen')
-    } finally {
-      setBannerUploading(false)
-      e.target.value = ''
     }
   }
 
@@ -384,24 +361,11 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
       {/* ── Header ── */}
       {isPublic ? (
-        /* Hero premium para el cliente: portada con overlay o gradiente de marca */
+        /* Hero de gradiente de marca (el banner de portada ahora vive a nivel de portal, ver PortalHero) */
         <div className="relative rounded-2xl overflow-hidden print-break-avoid shadow-sm">
-          {hasBanner && report?.token ? (
-            <>
-              <img
-                key={bannerKey}
-                src={`${import.meta.env.VITE_API_URL}/api/public/report-banner/${report?.token}?t=${bannerKey}`}
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover"
-                onError={() => setHasBanner(false)}
-              />
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,.80), rgba(0,0,0,.28) 48%, rgba(0,0,0,.08))' }} />
-            </>
-          ) : (
-            <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})` }} />
-          )}
+          <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})` }} />
 
-          <div className="relative flex flex-col justify-end p-6 sm:p-8" style={{ minHeight: hasBanner ? '17rem' : '12rem' }}>
+          <div className="relative flex flex-col justify-end p-6 sm:p-8" style={{ minHeight: '12rem' }}>
             {/* fila superior: PDF */}
             <div className="absolute top-5 left-6 right-6 sm:left-8 sm:right-8 flex items-center justify-end gap-3">
               <button
@@ -440,50 +404,9 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
           </div>
         </div>
       ) : (
-        /* Header de edición (vista agencia) */
+        /* Header de edición (vista agencia) — el banner de portada ahora se administra
+           una sola vez desde la config del portal de cliente (ClientPortalConfig), no por informe */
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden print-break-avoid">
-          {hasBanner && report?.token ? (
-            <div className="relative w-full overflow-hidden group" style={{ height: '15rem' }}>
-              <img
-                key={bannerKey}
-                src={`${import.meta.env.VITE_API_URL}/api/public/report-banner/${report?.token}?t=${bannerKey}`}
-                alt="Banner"
-                className="w-full h-full object-cover"
-                onError={() => setHasBanner(false)}
-              />
-              <button
-                onClick={() => bannerInputRef.current?.click()}
-                disabled={bannerUploading}
-                className="no-print absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/0 group-hover:bg-black/40 transition-all duration-200 opacity-0 group-hover:opacity-100"
-              >
-                <span className="text-white text-2xl">{bannerUploading ? '⏳' : '🖼️'}</span>
-                <span className="text-white text-xs font-semibold drop-shadow">
-                  {bannerUploading ? 'Subiendo...' : 'Cambiar imagen'}
-                </span>
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => bannerInputRef.current?.click()}
-              disabled={bannerUploading}
-              className="no-print w-full flex flex-col items-center justify-center gap-2 border-b-2 border-dashed border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              style={{ height: '15rem' }}
-            >
-              <span className="text-3xl text-gray-300 dark:text-gray-500">{bannerUploading ? '⏳' : '🖼️'}</span>
-              <span className="text-sm font-medium text-gray-400 dark:text-gray-500">
-                {bannerUploading ? 'Subiendo...' : 'Agregar imagen de fondo al informe'}
-              </span>
-              <span className="text-xs text-gray-300 dark:text-gray-600">PNG, JPG o WebP · máx. 5 MB</span>
-            </button>
-          )}
-          <input
-            ref={bannerInputRef}
-            type="file"
-            accept=".png,.jpg,.jpeg,.webp"
-            className="hidden"
-            onChange={handleBannerFile}
-          />
-
           <div className="p-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
@@ -492,7 +415,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                 {periodRange && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{periodRange}</p>}
                 {project.websiteUrl && (
                   <a href={project.websiteUrl} target="_blank" rel="noreferrer" className="text-xs hover:underline mt-1 block" style={{ color: brandPrimary }}>
-                    {project.websiteUrl}
+                    {project.websiteUrl.replace(/^https?:\/\//, '')}
                   </a>
                 )}
               </div>
@@ -1423,7 +1346,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
               return (
                 <li key={task.id} className="flex items-start gap-2 text-sm">
                   <span className="text-green-500 mt-0.5 shrink-0">✓</span>
-                  <span className="text-gray-700 dark:text-gray-300 flex-1">{task.description}</span>
+                  <span className="text-gray-700 dark:text-gray-300 flex-1 min-w-0 break-words">{linkify(task.description)}</span>
                   <div className="ml-2 flex items-center gap-2 shrink-0">
                     {duration && (
                       <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">{duration}</span>
@@ -1439,8 +1362,9 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
         </SectionCard>
       )}
 
-      {/* ── Footer público ── */}
-      {isPublic && (
+      {/* ── Footer público ── (se apaga dentro del portal de cliente, que ya
+          muestra su propio footer institucional a nivel de página) */}
+      {isPublic && showFooter && (
         <div className="text-center py-4 space-y-1">
           {workspace?.companyName && (
             <p className="text-xs font-semibold" style={{ color: brandPrimary }}>{workspace.companyName}</p>

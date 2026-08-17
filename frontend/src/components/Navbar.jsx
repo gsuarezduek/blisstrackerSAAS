@@ -102,7 +102,7 @@ export default function Navbar() {
   const profileRef = useRef(null)
   const adminRef   = useRef(null)
 
-  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification') || !!useMatch('/admin/ventas')
+  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification') || !!useMatch('/admin/ventas') || !!useMatch('/reports')
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -146,20 +146,22 @@ export default function Navbar() {
   const links = [
     { to: '/', label: 'Dashboard' },
     { to: '/my-projects', label: 'Mis Proyectos' },
-    ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
     { to: '/realtime', label: 'Actividad', dot: true },
-    ...(isAdmin ? [{ to: '/reports', label: 'Reportes' }] : []),
     ...(contenidoEnabled ? [{ to: '/contenido', label: 'Contenido' }] : []),
     ...(marketingEnabled ? [{ to: '/marketing', label: 'Marketing' }] : []),
     // Ventas como link principal SOLO para el equipo comercial no-admin.
     // Los admins (incluidos admin+ventas) lo ven bajo Administración, nunca duplicado.
     ...(ventasEnabled && !isAdmin && user?.isSales ? [{ to: '/ventas', label: 'Ventas' }] : []),
+    // "Mis Reportes" va al final del menú para usuarios no-admin (los admins usan
+    // "Reportes" dentro de Administración → Productividad, ver adminSublinks).
+    ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
   const adminSublinks = [
     ...(productivityEnabled ? [{ to: '/admin/productivity', label: '📊 Productividad' }] : []),
+    { to: '/reports',            label: '📈 Reportes' },
     { to: '/admin/rrhh',         label: '👥 RRHH' },
     ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
     ...(gamificationEnabled ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),

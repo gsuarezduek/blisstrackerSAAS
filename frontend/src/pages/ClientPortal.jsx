@@ -2,15 +2,19 @@ import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import ReportViewer from '../components/marketing/ReportViewer'
+import { monthLabel } from '../components/marketing/ReportViewerParts'
 import ReportFeedbackWidget from '../components/marketing/ReportFeedbackWidget'
 import ClientBriefsView from '../components/ClientBriefsView'
 import PortalLoginGate from '../components/portal/PortalLoginGate'
 import ClientContentTab from '../components/portal/ClientContentTab'
 import PortalHome from '../components/portal/PortalHome'
 import ClientTeamTab from '../components/portal/ClientTeamTab'
+import PortalFooter from '../components/portal/PortalFooter'
 
 const API = import.meta.env.VITE_API_URL || ''
 const LIVE_REFRESH_COOLDOWN_MS = 15 * 60 * 1000
+
+function capitalize(str) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : str }
 
 function TabButton({ active, onClick, children, brandPrimary }) {
   return (
@@ -25,7 +29,7 @@ function TabButton({ active, onClick, children, brandPrimary }) {
   )
 }
 
-// Contenido del tab "Datos en vivo" — recibe el token del portal (ya
+// Contenido del tab "Datos Actuales" — recibe el token del portal (ya
 // autenticado a nivel raíz por <PortalLoginGate>) y `requireReauth` (se llama
 // si algún fetch propio devuelve 401, ej. el contacto quedó desactivado
 // mientras el token seguía vigente).
@@ -83,7 +87,51 @@ function LiveDataPanel({ slug, token, requireReauth, workspace }) {
       </div>
       {liveError && <p className="text-sm text-red-600 mb-3">{liveError}</p>}
       {liveLoading && <p className="text-sm text-gray-500">Cargando datos en vivo...</p>}
-      {!liveLoading && liveData && <ReportViewer data={liveData} isPublic={true} report={null} workspace={workspace} />}
+      {!liveLoading && liveData && <ReportViewer data={liveData} isPublic={true} report={null} workspace={workspace} showFooter={false} />}
+    </div>
+  )
+}
+
+// Hero del portal — banner propio (uno solo, sube el admin desde ClientPortalConfig)
+// o, si no hay, gradiente de marca. Visible ya en la pantalla de login (branding
+// pública), mismo look premium que el hero de un informe individual.
+function PortalHero({ slug, branding, workspace, brandPrimary, brandSecondary }) {
+  const [imgOk, setImgOk] = useState(true)
+  const hasBanner = !!branding.hasBanner && imgOk
+  const agencyName = workspace?.companyName || workspace?.name || ''
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden shadow-sm">
+      {hasBanner ? (
+        <>
+          <img
+            src={`${API}/api/public/client-portal-banner/${slug}`}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={() => setImgOk(false)}
+          />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,.25) 50%, rgba(0,0,0,.05))' }} />
+        </>
+      ) : (
+        <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})` }} />
+      )}
+      <div className="relative flex items-end justify-between gap-4 p-6 sm:p-7" style={{ minHeight: hasBanner ? '13rem' : '8rem' }}>
+        <div>
+          <h1 className="text-white text-2xl sm:text-3xl font-bold leading-tight" style={{ textShadow: '0 2px 14px rgba(0,0,0,.35)' }}>
+            {branding.project?.name}
+          </h1>
+          {agencyName && <p className="text-white/85 text-sm font-medium mt-1">{agencyName}</p>}
+        </div>
+        {workspace?.hasLogo && workspace?.slug ? (
+          <img
+            src={`${API}/api/public/logo/${workspace.slug}`}
+            alt={agencyName}
+            className="h-9 max-w-[140px] object-contain shrink-0"
+            style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.45))' }}
+            onError={(e) => { e.currentTarget.style.display = 'none' }}
+          />
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -175,7 +223,7 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportTok
           <TabButton active={tab === 'equipo'} onClick={() => setTab('equipo')} brandPrimary={brandPrimary}>Tu equipo</TabButton>
         )}
         {meta.hasLiveSections && (
-          <TabButton active={tab === 'vivo'} onClick={() => setTab('vivo')} brandPrimary={brandPrimary}>Datos en vivo</TabButton>
+          <TabButton active={tab === 'vivo'} onClick={() => setTab('vivo')} brandPrimary={brandPrimary}>Datos Actuales</TabButton>
         )}
       </div>
 
@@ -184,25 +232,24 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportTok
       {tab === 'informes' && (
         <>
           {reports.length > 1 && (
-            <div className="bg-white/80 backdrop-blur rounded-xl border border-gray-200/80 shadow-sm px-3 py-2 flex items-center gap-2 overflow-x-auto mb-5">
-              <span className="text-xs text-gray-400 shrink-0 pr-1 font-medium">Mes</span>
-              {reports.map(r => (
-                <button
-                  key={r.token}
-                  onClick={() => setSelectedToken(r.token)}
-                  className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                    r.token === selectedToken ? 'text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
-                  style={r.token === selectedToken ? { backgroundColor: brandPrimary } : undefined}
-                >
-                  {r.month}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 mb-5">
+              <label htmlFor="portal-report-month" className="text-xs text-gray-400 font-medium shrink-0">Mes</label>
+              <select
+                id="portal-report-month"
+                value={selectedToken || ''}
+                onChange={e => setSelectedToken(e.target.value)}
+                className="text-sm font-semibold text-gray-700 bg-white/80 backdrop-blur border border-gray-200/80 rounded-lg px-3 py-1.5 shadow-sm focus:outline-none"
+              >
+                {reports.map(r => (
+                  <option key={r.token} value={r.token}>{capitalize(monthLabel(r.month))}</option>
+                ))}
+              </select>
             </div>
           )}
           {reportLoading && <p className="text-sm text-gray-500">Cargando informe...</p>}
           {!reportLoading && reportData && (
             <>
-              <ReportViewer data={reportData.data} isPublic={true} report={reportData.report} workspace={reportData.workspace} />
+              <ReportViewer data={reportData.data} isPublic={true} report={reportData.report} workspace={reportData.workspace} showFooter={false} />
               {/* key={selectedToken}: resetea el widget (estrellas/comentario) al cambiar de mes */}
               <ReportFeedbackWidget key={selectedToken} token={selectedToken} brandPrimary={brandPrimary} agencyName={agencyName} />
             </>
@@ -253,7 +300,8 @@ export default function ClientPortal() {
   }, [slug])
 
   const workspace = branding?.workspace || null
-  const brandPrimary = workspace?.brandColors?.[0]?.hex || '#f97316'
+  const brandPrimary   = workspace?.brandColors?.[0]?.hex || '#f97316'
+  const brandSecondary = workspace?.brandColors?.[1]?.hex || '#3b82f6'
 
   if (loading) {
     return (
@@ -271,8 +319,7 @@ export default function ClientPortal() {
       style={{ background: `radial-gradient(1200px 500px at 50% -10%, ${brandPrimary}14, transparent 60%), #f6f7f9` }}
     >
       <div className="max-w-4xl mx-auto mb-5">
-        <h1 className="text-xl font-bold text-gray-800 mb-1">{branding.project?.name}</h1>
-        <p className="text-sm text-gray-500">{workspace?.companyName || workspace?.name}</p>
+        <PortalHero slug={slug} branding={branding} workspace={workspace} brandPrimary={brandPrimary} brandSecondary={brandSecondary} />
       </div>
 
       <div className="max-w-4xl mx-auto">
@@ -281,6 +328,10 @@ export default function ClientPortal() {
             <PortalTabs slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary} initialReportToken={initialReportToken} />
           )}
         </PortalLoginGate>
+      </div>
+
+      <div className="max-w-4xl mx-auto">
+        <PortalFooter />
       </div>
     </div>
   )

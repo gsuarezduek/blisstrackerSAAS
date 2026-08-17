@@ -72,8 +72,6 @@ async function loadBriefs(projectId) {
   }
 }
 
-const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
-
 // Claves de sección válidas para `enabledSections` (deben coincidir con las del servicio/ReportViewer)
 const SECTION_KEYS = [
   'objectives', 'analytics', 'performance', 'geo', 'seo', 'keywords',
@@ -148,18 +146,8 @@ async function getReport(req, res, next) {
     // Obtener o crear el registro de informe
     let report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month } })
     if (!report) {
-      // Heredar banner del informe más reciente del mismo proyecto
-      const prevReport = await prisma.monthlyReport.findFirst({
-        where:   { projectId, workspaceId, bannerData: { not: null } },
-        orderBy: { month: 'desc' },
-        select:  { bannerData: true, bannerMimeType: true },
-      })
       report = await prisma.monthlyReport.create({
-        data: {
-          projectId, workspaceId, month, token: randomUUID(),
-          generatedById: req.user?.userId ?? null,
-          ...(prevReport?.bannerData ? { bannerData: prevReport.bannerData, bannerMimeType: prevReport.bannerMimeType } : {}),
-        },
+        data: { projectId, workspaceId, month, token: randomUUID(), generatedById: req.user?.userId ?? null },
       })
     }
 
@@ -491,70 +479,6 @@ async function getPublicReportMeta(req, res, next) {
   }
 }
 
-/**
- * POST /api/marketing/projects/:id/reports/:month/banner
- * Sube o reemplaza la imagen de portada del informe (solo afecta este mes).
- */
-async function uploadReportBanner(req, res, next) {
-  try {
-    const projectId   = Number(req.params.id)
-    const workspaceId = req.workspace.id
-    const { month }   = req.params
-
-    if (!/^\d{4}-\d{2}$/.test(month)) {
-      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
-    }
-
-    if (!req.file) return res.status(400).json({ error: 'No se recibió ninguna imagen' })
-
-    const mimeType = req.file.mimetype
-    if (!ALLOWED_BANNER_TYPES.includes(mimeType)) {
-      return res.status(400).json({ error: 'Formato no soportado. Usá PNG, JPG o WebP.' })
-    }
-
-    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
-    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
-
-    const report = await prisma.monthlyReport.upsert({
-      where:  { projectId_month: { projectId, month } },
-      update: { bannerData: req.file.buffer, bannerMimeType: mimeType },
-      create: { projectId, workspaceId, month, token: randomUUID(), bannerData: req.file.buffer, bannerMimeType: mimeType },
-    })
-
-    res.json({ hasBanner: true, token: report.token })
-  } catch (err) {
-    next(err)
-  }
-}
-
-/**
- * DELETE /api/marketing/projects/:id/reports/:month/banner
- * Elimina la imagen de portada del informe.
- */
-async function deleteReportBanner(req, res, next) {
-  try {
-    const projectId   = Number(req.params.id)
-    const workspaceId = req.workspace.id
-    const { month }   = req.params
-
-    if (!/^\d{4}-\d{2}$/.test(month)) {
-      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
-    }
-
-    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
-    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
-
-    await prisma.monthlyReport.updateMany({
-      where: { projectId, workspaceId, month },
-      data:  { bannerData: null, bannerMimeType: null },
-    })
-
-    res.json({ hasBanner: false })
-  } catch (err) {
-    next(err)
-  }
-}
-
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
 function safeParseObj(str) {
@@ -813,4 +737,4 @@ async function notifyReportFeedback(report, feedback) {
   }, workspaceId)
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, uploadReportBanner, deleteReportBanner, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE, buildPublicReportPayload }
+module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE, buildPublicReportPayload }

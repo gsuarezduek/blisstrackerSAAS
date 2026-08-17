@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../api/client'
 import ConfirmModal from './ConfirmModal'
 import ClientPortalContacts from './ClientPortalContacts'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+
+const API = import.meta.env.VITE_API_URL || ''
 
 // Mismas claves que SECTION_KEYS en backend/src/controllers/monthlyReport.controller.js
 // (labels/iconos espejo de SECTION_CATALOG en marketing/InformesTab.jsx).
@@ -24,7 +26,7 @@ const LIVE_SECTIONS = [
 ]
 
 // Configuración del portal de cliente (Info → antes de Equipo). Acceso externo,
-// por proyecto, a Informes + Briefs (abierto), Datos en vivo (con código OTP) y,
+// por proyecto, a Informes + Briefs (abierto), Datos Actuales (con código OTP) y,
 // si el módulo Contenido está habilitado, el calendario de piezas (aprobación).
 // Los contactos autorizados (multi-contacto) se administran en ClientPortalContacts,
 // con sus propios endpoints — no dependen de este "Guardar".
@@ -39,6 +41,10 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
   const [copied,  setCopied]  = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [bannerUploading, setBannerUploading] = useState(false)
+  const [bannerKey,       setBannerKey]       = useState(0)   // fuerza recarga de la preview tras subir
+  const [bannerError,     setBannerError]     = useState('')
+  const bannerInputRef = useRef()
 
   const loadPortal = useCallback(() => (
     api.get(`/projects/${projectId}/client-portal`)
@@ -98,6 +104,29 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
     }
   }
 
+  async function handleBannerFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBannerUploading(true); setBannerError('')
+    try {
+      const fd = new FormData()
+      fd.append('image', file)
+      await api.post(`/projects/${projectId}/client-portal/banner`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setPortal(prev => prev ? { ...prev, hasBanner: true } : prev)
+      setBannerKey(k => k + 1)
+    } catch (err) {
+      setBannerError(err.response?.data?.error || 'Error al subir la imagen')
+    } finally {
+      setBannerUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleBannerDelete() {
+    await api.delete(`/projects/${projectId}/client-portal/banner`)
+    setPortal(prev => prev ? { ...prev, hasBanner: false } : prev)
+  }
+
   function copyLink() {
     navigator.clipboard.writeText(portal.publicUrl)
     setCopied(true)
@@ -138,13 +167,52 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
               </button>
             </div>
             <p className="text-xs text-gray-400 dark:text-gray-500">
-              Datos en vivo: {portal.liveSections.length > 0 ? `${portal.liveSections.length} secciones habilitadas` : 'ninguna sección habilitada'}
+              Datos Actuales: {portal.liveSections.length > 0 ? `${portal.liveSections.length} secciones habilitadas` : 'ninguna sección habilitada'}
               {contenidoEnabled && (portal.contentEnabled ? ' · Contenido visible' : ' · Contenido oculto')}
               {portal.showMeetings && ' · Próxima reunión visible'}
               {portal.showTeam && ' · Equipo visible'}
               {portal.showObjectives && ' · Objetivos visibles'}
             </p>
           </div>
+
+          {canEdit && (
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Imagen hero del portal</p>
+              <div className="flex items-center gap-3">
+                <div className="w-24 h-14 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shrink-0 flex items-center justify-center">
+                  {portal.hasBanner ? (
+                    <img
+                      key={bannerKey}
+                      src={`${API}/api/public/client-portal-banner/${portal.slug}?t=${bannerKey}`}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={() => setPortal(prev => prev ? { ...prev, hasBanner: false } : prev)}
+                    />
+                  ) : (
+                    <span className="text-[10px] text-gray-400">Sin imagen</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => bannerInputRef.current?.click()}
+                    disabled={bannerUploading}
+                    className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    {bannerUploading ? 'Subiendo...' : portal.hasBanner ? 'Cambiar' : 'Subir imagen'}
+                  </button>
+                  {portal.hasBanner && (
+                    <button type="button" onClick={handleBannerDelete} className="text-xs text-red-600 hover:text-red-700 font-medium">
+                      Quitar
+                    </button>
+                  )}
+                </div>
+                <input ref={bannerInputRef} type="file" accept=".png,.jpg,.jpeg,.webp" className="hidden" onChange={handleBannerFile} />
+              </div>
+              {bannerError && <p className="text-xs text-red-600 mt-1.5">{bannerError}</p>}
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">Se usa como fondo del encabezado en todo el portal. PNG, JPG o WebP · máx. 5 MB.</p>
+            </div>
+          )}
 
           <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Contactos autorizados</p>
@@ -216,7 +284,7 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
             <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el cumplimiento de objetivos en "Inicio"</span>
           </label>
           <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">Secciones habilitadas para "Datos en vivo"</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">Secciones habilitadas para "Datos Actuales"</p>
             <div className="flex flex-wrap gap-1.5">
               {LIVE_SECTIONS.map(s => (
                 <label

@@ -1,11 +1,9 @@
 const express = require('express')
-const multer  = require('multer')
 const router  = express.Router()
 const { auth }             = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
 
-const uploadBanner = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 const geo               = require('../controllers/geo.controller')
 const integrations      = require('../controllers/integrations.controller')
 const analytics         = require('../controllers/analytics.controller')
@@ -163,8 +161,6 @@ router.patch('/projects/:id/reports/:month',                                   m
 router.post('/projects/:id/reports/:month/regenerate',                         monthlyReport.regenerateReport)
 router.patch('/projects/:id/reports/:month/status',                            monthlyReport.setReportStatus)
 router.patch('/projects/:id/reports/:month/sections',                          monthlyReport.removeReportSections)
-router.post('/projects/:id/reports/:month/banner', uploadBanner.single('image'), monthlyReport.uploadReportBanner)
-router.delete('/projects/:id/reports/:month/banner',                           monthlyReport.deleteReportBanner)
 
 // Objetivos de marketing (estructurados, persistentes por proyecto)
 router.get('/projects/:id/objectives/progress',   objectives.getObjectivesProgress)
