@@ -294,6 +294,7 @@ export default function UserProfile() {
 
 // Fila de tarea (activa / delegada / futura).
 function TaskRow({ task, ownerId, onOpen, person, showScheduled }) {
+  const { members } = useMembers()
   const delegatedBy = task.createdBy && task.createdBy.id !== ownerId
   return (
     <button
