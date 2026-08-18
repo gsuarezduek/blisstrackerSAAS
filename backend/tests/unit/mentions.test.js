@@ -49,4 +49,35 @@ describe('resolveMentions', () => {
     const result = resolveMentions('@GASTÓN SUAREZ mirá esto', members, 99)
     expect(result.has(1)).toBe(true)
   })
+
+  describe('homónimos por primer nombre (ej. "Marti V" y "Marti G")', () => {
+    const homonyms = [
+      { id: 10, name: 'Marti V' },
+      { id: 11, name: 'Marti G' },
+    ]
+
+    test('"@Marti V" no notifica de rebote a "Marti G"', () => {
+      const result = resolveMentions('hola @Marti V como estás', homonyms, 99)
+      expect(result.has(10)).toBe(true)
+      expect(result.has(11)).toBe(false)
+    })
+
+    test('"@Marti G" no notifica de rebote a "Marti V"', () => {
+      const result = resolveMentions('hola @Marti G como estás', homonyms, 99)
+      expect(result.has(11)).toBe(true)
+      expect(result.has(10)).toBe(false)
+    })
+
+    test('mencionar a ambos por nombre completo notifica a los dos', () => {
+      const result = resolveMentions('avisale a @Marti V y a @Marti G', homonyms, 99)
+      expect(result.has(10)).toBe(true)
+      expect(result.has(11)).toBe(true)
+    })
+
+    test('"@Marti" sin apellido es ambiguo y notifica a los dos', () => {
+      const result = resolveMentions('che @Marti alguien se fija?', homonyms, 99)
+      expect(result.has(10)).toBe(true)
+      expect(result.has(11)).toBe(true)
+    })
+  })
 })
