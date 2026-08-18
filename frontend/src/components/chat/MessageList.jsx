@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { avatarUrl } from '../../utils/avatarUrl'
 import UserLink from '../UserLink'
 import LoadingSpinner from '../LoadingSpinner'
-import { renderMessageText } from './messageText'
+import { renderRichText } from '../../utils/richText'
 import MessageReactionPicker from './MessageReactionPicker'
 import { groupReactions } from './reactions'
 
@@ -28,7 +28,7 @@ function sameGroup(a, b) {
 
 export default function MessageList({
   messages, loading, loadingMore, hasMore, onLoadMore,
-  firstUnreadMessageId, currentUserId, canModerate,
+  firstUnreadMessageId, currentUserId, canModerate, members = [],
   onSaveEdit, onDelete, onTogglePin, onToggleReaction,
 }) {
   const scrollRef = useRef(null)
@@ -227,7 +227,7 @@ export default function MessageList({
                   <>
                     {m.content && (
                       <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">
-                        {renderMessageText(m.content)}
+                        {renderRichText(m.content, { members, everyone: true })}
                         {m.editedAt && <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-1">(editado)</span>}
                       </p>
                     )}

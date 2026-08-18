@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMentionAutocomplete } from '../chat/useMentionAutocomplete'
-import { renderMessageText } from '../chat/messageText'
+import { renderRichText } from '../../utils/richText'
 import { avatarUrl } from '../../utils/avatarUrl'
 
 function formatWhen(iso) {
@@ -93,7 +93,7 @@ export default function ContentCommentThread({ comments, visibility, currentUser
                     </button>
                   )}
                 </div>
-                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line break-words">{renderMessageText(c.body)}</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line break-words">{renderRichText(c.body, { members })}</p>
               </div>
             </div>
           )

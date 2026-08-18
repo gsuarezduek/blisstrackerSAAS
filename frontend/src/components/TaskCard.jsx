@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, memo } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
-import { linkify } from '../utils/linkify'
+import { renderRichText } from '../utils/richText'
 import { fmtMins, activeMinutes, completedDuration, completedMinutes } from '../utils/format'
 import UserLink from './UserLink'
+import useMembers from '../hooks/useMembers'
 
 function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments }) {
+  const { members } = useMembers()
   const [loading, setLoading] = useState(false)
   const [showBlockForm, setShowBlockForm] = useState(false)
   const [blockReason, setBlockReason] = useState('')
@@ -218,7 +220,7 @@ function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, on
             onClick={() => onOpenComments?.(task)}
             className={`text-sm font-medium text-justify whitespace-pre-wrap break-words ${task.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'} ${onOpenComments ? 'cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors' : ''}`}
           >
-            {linkify(task.description)}
+            {renderRichText(task.description, { members })}
           </p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <Link to={`/my-projects/${task.project.id}`} className="text-xs bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded px-2 py-0.5 hover:bg-primary-100 dark:hover:bg-primary-900/70 transition-colors">{task.project.name}</Link>

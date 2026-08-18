@@ -306,6 +306,7 @@ export default function ChatWidget() {
                   firstUnreadMessageId={firstUnreadMessageId}
                   currentUserId={user?.id}
                   canModerate={!!user?.isAdmin}
+                  members={members}
                   onSaveEdit={handleSaveEdit}
                   onDelete={handleDelete}
                   onTogglePin={handleTogglePin}

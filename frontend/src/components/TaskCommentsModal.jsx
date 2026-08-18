@@ -1,27 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api/client'
-import { linkify } from '../utils/linkify'
+import { renderRichText } from '../utils/richText'
 import { useAuth } from '../context/AuthContext'
+import useMembers from '../hooks/useMembers'
 import LoadingSpinner from './LoadingSpinner'
 import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
 import { avatarUrl } from '../utils/avatarUrl'
 import UserLink from './UserLink'
-
-// Resalta @menciones en texto plano. Captura exactamente una palabra después del @.
-// El backend maneja la detección de nombres de dos palabras por su cuenta.
-function renderWithMentions(text) {
-  const parts = []
-  let lastIndex = 0
-  const regex = /@([A-Za-záéíóúÁÉÍÓÚñÑüÜ]+)/g
-  let match
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index))
-    parts.push(<span key={match.index} className="text-purple-600 dark:text-purple-400 font-medium">{match[0]}</span>)
-    lastIndex = match.index + match[0].length
-  }
-  if (lastIndex < text.length) parts.push(text.slice(lastIndex))
-  return parts.length > 0 ? parts : text
-}
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -90,7 +75,11 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
 
   // Edición de proyecto / responsable / fecha futura
   const [projects, setProjects]       = useState([])
-  const [wsMembers, setWsMembers]     = useState([])
+  // Miembros del workspace vía el hook cacheado (no gated por `editing`): la
+  // descripción necesita esta lista desde el primer render para poder
+  // resolver @menciones a un perfil clickeable, no solo al entrar a editar.
+  const { members: allWsMembers } = useMembers()
+  const wsMembers = allWsMembers.filter(m => m.active)
   const [editProjectId, setEditProjectId]   = useState(String(task.project?.id ?? task.projectId ?? ''))
   const [editAssignee, setEditAssignee]     = useState(String(task.userId ?? ''))
   const [editSchedule, setEditSchedule]     = useState(task.scheduledFor || '')
@@ -99,13 +88,11 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   // Solo las tareas futuras one-off (no recurrentes) permiten editar la fecha
   const isFutureTask = !!task.scheduledFor && !task.recurrenceId
 
-  // Cargar proyectos + miembros del workspace solo cuando se entra en modo edición
+  // Cargar proyectos solo cuando se entra en modo edición (los miembros ya
+  // están disponibles siempre vía useMembers, arriba).
   useEffect(() => {
     if (!editing || projects.length) return
     api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
-    api.get('/workspaces/current/members')
-      .then(r => setWsMembers(r.data.filter(m => m.active)))
-      .catch(() => {})
   }, [editing, projects.length])
 
   const editMentionMatches = editMentionQuery !== null
@@ -502,7 +489,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
           ) : (
             <div className="group flex items-start gap-2">
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug flex-1 whitespace-pre-wrap break-words">
-                {linkify(currentDesc)}
+                {renderRichText(currentDesc, { members: wsMembers })}
               </p>
               {canEdit && (
                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -623,7 +610,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                   <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(c.createdAt)}</span>
                 </div>
                 <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug mt-0.5 whitespace-pre-wrap break-words">
-                  {renderWithMentions(c.content)}
+                  {renderRichText(c.content, { members })}
                 </p>
               </div>
             </div>

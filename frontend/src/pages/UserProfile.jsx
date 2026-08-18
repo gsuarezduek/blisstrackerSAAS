@@ -9,9 +9,10 @@ import RoleBadge from '../components/RoleBadge'
 import AdminUserPanel from '../components/profile/AdminUserPanel'
 import api from '../api/client'
 import { avatarUrl } from '../utils/avatarUrl'
-import { linkify } from '../utils/linkify'
+import { renderRichText } from '../utils/richText'
 import { fmtMins } from '../utils/format'
 import { useAuth } from '../context/AuthContext'
+import useMembers from '../hooks/useMembers'
 
 const STATUS_LABEL = { IN_PROGRESS: 'En curso', PENDING: 'Pendiente', PAUSED: 'Pausada', BLOCKED: 'Bloqueada' }
 const STATUS_CLASS = {
@@ -37,6 +38,7 @@ function fmtLongDate(d) {
 export default function UserProfile() {
   const { id } = useParams()
   const { user: viewer } = useAuth()
+  const { members } = useMembers()
 
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -259,7 +261,7 @@ export default function UserProfile() {
                 >
                   <span className="text-green-500 flex-shrink-0 mt-0.5 text-sm">✓</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(t.description)}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{renderRichText(t.description, { members })}</p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                       {t.project?.name}
                       {' · '}creada {fmtDate(t.createdAt)}
@@ -302,7 +304,7 @@ function TaskRow({ task, ownerId, onOpen, person, showScheduled }) {
         {STATUS_LABEL[task.status] || task.status}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
+        <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{renderRichText(task.description, { members })}</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
           {task.project?.name}
           {' · '}creada {fmtDate(task.createdAt)}
