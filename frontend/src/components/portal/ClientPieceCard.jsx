@@ -113,7 +113,9 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
           {firstAsset ? (
             firstAsset.kind === 'video'
               ? (firstAsset.posterUrl ? <img src={firstAsset.posterUrl} className="w-full h-full object-cover" alt="" /> : '🎬')
-              : <img src={firstAsset.url} className="w-full h-full object-cover" alt="" />
+              : firstAsset.kind === 'link'
+                ? '🔗'
+                : <img src={firstAsset.url} className="w-full h-full object-cover" alt="" />
           ) : '📄'}
         </div>
         <div className="flex-1 min-w-0">
@@ -140,6 +142,16 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
                 <div className="rounded-lg overflow-hidden bg-black mt-3 flex items-center justify-center" style={{ maxHeight: 420 }}>
                   {activeAsset.kind === 'video' ? (
                     <video src={activeAsset.url} poster={activeAsset.posterUrl || undefined} controls className="max-h-[420px] w-auto max-w-full" />
+                  ) : activeAsset.kind === 'link' ? (
+                    <a
+                      href={activeAsset.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex flex-col items-center gap-2 text-gray-300 hover:text-white transition-colors px-4 py-8 text-center"
+                    >
+                      <span className="text-4xl">🔗</span>
+                      <span className="text-sm break-all">{activeAsset.fileName || activeAsset.url}</span>
+                    </a>
                   ) : (
                     <img src={activeAsset.url} alt="" className="max-h-[420px] w-auto max-w-full object-contain" />
                   )}
@@ -151,10 +163,12 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
                     <button
                       key={a.id}
                       onClick={() => setActiveAssetId(a.id)}
-                      className={`w-12 h-12 rounded-lg overflow-hidden border-2 shrink-0 ${
+                      className={`w-12 h-12 rounded-lg overflow-hidden border-2 shrink-0 flex items-center justify-center bg-gray-100 text-lg ${
                         a.id === (activeAsset?.id) ? 'border-primary-500' : 'border-transparent'}`}
                     >
-                      <img src={a.kind === 'video' ? (a.posterUrl || a.url) : a.url} alt="" className="w-full h-full object-cover" />
+                      {a.kind === 'link' ? '🔗' : (
+                        <img src={a.kind === 'video' ? (a.posterUrl || a.url) : a.url} alt="" className="w-full h-full object-cover" />
+                      )}
                     </button>
                   ))}
                 </div>

@@ -214,6 +214,16 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
                         poster={activeAsset.posterUrl || undefined}
                         className="w-full h-full object-contain"
                       />
+                    ) : activeAsset.kind === 'link' ? (
+                      <a
+                        href={activeAsset.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-2 text-gray-300 hover:text-white transition-colors px-4 text-center"
+                      >
+                        <span className="text-4xl">🔗</span>
+                        <span className="text-sm break-all">{activeAsset.fileName || activeAsset.url}</span>
+                      </a>
                     ) : (
                       <img src={activeAsset.url} alt="" className="w-full h-full object-contain" />
                     )}
@@ -340,7 +350,7 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
                   value={copy}
                   onChange={e => setCopy(e.target.value)}
                   disabled={!canEdit}
-                  rows={4}
+                  rows={7}
                   placeholder="Texto del posteo…"
                   className={`${INPUT} resize-y`}
                 />
@@ -363,7 +373,7 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
                   value={internalNotes}
                   onChange={e => setInternalNotes(e.target.value)}
                   disabled={!canEdit}
-                  rows={3}
+                  rows={5}
                   className={`${INPUT} resize-y`}
                 />
               </div>

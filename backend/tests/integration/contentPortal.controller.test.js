@@ -16,14 +16,12 @@ jest.mock('../../src/lib/socket', () => ({ emitTo: jest.fn() }))
 
 jest.mock('../../src/services/email.service', () => ({
   sendContentApprovalRequestEmail: jest.fn().mockResolvedValue(undefined),
-  sendContentClientDecisionEmail:  jest.fn().mockResolvedValue(undefined),
 }))
 
 const request = require('supertest')
 const jwt     = require('jsonwebtoken')
 const prisma  = require('../../src/lib/prisma')
 const { emitTo } = require('../../src/lib/socket')
-const { sendContentClientDecisionEmail } = require('../../src/services/email.service')
 const app = require('../../src/app')
 
 const SECRET         = process.env.JWT_SECRET
@@ -220,7 +218,7 @@ describe('POST /content/:pid/approve', () => {
     expect(res.status).toBe(409)
   })
 
-  it('200 happy path: aprueba, deja evento con actorContactId, avisa al equipo (in-app + email)', async () => {
+  it('200 happy path: aprueba, deja evento con actorContactId, avisa al equipo (solo in-app)', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
     prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact())
     mockAccessGranted()
@@ -261,11 +259,6 @@ describe('POST /content/:pid/approve', () => {
     expect(prisma.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.arrayContaining([expect.objectContaining({ userId: 2, actorId: null, type: 'CONTENT_APPROVED' })]),
     }))
-    expect(sendContentClientDecisionEmail).toHaveBeenCalledWith(
-      ['admin@bliss.test'],
-      expect.objectContaining({ decision: 'approved', pieceTitle: 'Post de lanzamiento' }),
-      WORKSPACE_ID,
-    )
     expect(emitTo).toHaveBeenCalledWith(`workspace:${WORKSPACE_ID}`, 'content:piece:updated', expect.any(Object))
   })
 })
@@ -345,6 +338,5 @@ describe('POST /content/:pid/comments', () => {
     expect(prisma.contentComment.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ visibility: 'client', authorContactId: 1 }),
     }))
-    expect(sendContentClientDecisionEmail).not.toHaveBeenCalled()
   })
 })

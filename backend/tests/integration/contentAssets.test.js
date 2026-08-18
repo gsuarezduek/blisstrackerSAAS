@@ -364,6 +364,68 @@ describe('POST /assets (fallback multipart, sin R2)', () => {
   })
 })
 
+describe('POST /assets/link', () => {
+  const dbLinkAsset = (over = {}) => dbAsset({
+    kind: 'link', mimeType: null, objectKey: null, sourceUrl: 'https://drive.google.com/file/x', ...over,
+  })
+
+  it('crea un asset kind:link ready, con la URL tal cual', async () => {
+    mockBase()
+    prisma.contentAsset.count.mockResolvedValue(0)
+    prisma.contentAsset.create.mockResolvedValue(dbLinkAsset())
+
+    const res = await req('post', `${BASE}/link`).send({ url: 'https://drive.google.com/file/x', fileName: 'brief.pdf' })
+
+    expect(res.status).toBe(201)
+    expect(res.body.kind).toBe('link')
+    expect(res.body.url).toBe('https://drive.google.com/file/x')
+    expect(prisma.contentAsset.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        pieceId: PIECE_ID, workspaceId: WORKSPACE_ID, kind: 'link', status: 'ready',
+        sourceUrl: 'https://drive.google.com/file/x',
+      }),
+    }))
+    // No pasa por R2 — nunca firma ni sube nada.
+    expect(objectStorage.presignPut).not.toHaveBeenCalled()
+  })
+
+  it('400 sin url', async () => {
+    mockBase()
+    const res = await req('post', `${BASE}/link`).send({})
+    expect(res.status).toBe(400)
+    expect(prisma.contentAsset.create).not.toHaveBeenCalled()
+  })
+
+  it('400 con un esquema no http/https (ej. javascript:)', async () => {
+    mockBase()
+    const res = await req('post', `${BASE}/link`).send({ url: 'javascript:alert(1)' })
+    expect(res.status).toBe(400)
+    expect(prisma.contentAsset.create).not.toHaveBeenCalled()
+  })
+
+  it('400 si la pieza ya tiene 8 assets ready', async () => {
+    mockBase()
+    prisma.contentAsset.count.mockResolvedValue(8)
+    const res = await req('post', `${BASE}/link`).send({ url: 'https://drive.google.com/file/x' })
+    expect(res.status).toBe(400)
+    expect(prisma.contentAsset.create).not.toHaveBeenCalled()
+  })
+
+  it('403 si no puede escribir', async () => {
+    mockBase({ workspaceRole: 'member' })
+    prisma.projectMember.findUnique.mockResolvedValue(null)
+    const res = await req('post', `${BASE}/link`).send({ url: 'https://drive.google.com/file/x' })
+    expect(res.status).toBe(403)
+  })
+
+  it('404 si la pieza no existe', async () => {
+    mockBase()
+    prisma.contentPiece.findFirst.mockResolvedValue(null)
+    const res = await req('post', `${BASE}/link`).send({ url: 'https://drive.google.com/file/x' })
+    expect(res.status).toBe(404)
+  })
+})
+
 describe('PATCH /assets/:aid (reorder)', () => {
   it('reindexa los assets ready de la pieza', async () => {
     mockBase()

@@ -45,6 +45,7 @@ router.post  ('/projects/:id/request-approval', content.requestApproval)
 router.post  ('/projects/:id/pieces/:pid/assets/presign',        assets.presignAsset)
 router.post  ('/projects/:id/pieces/:pid/assets/:aid/confirm',   assets.confirmAsset)
 router.post  ('/projects/:id/pieces/:pid/assets',                uploadFallback.single('file'), assets.uploadAssetFallback)
+router.post  ('/projects/:id/pieces/:pid/assets/link',           assets.createLinkAsset)
 router.patch ('/projects/:id/pieces/:pid/assets/:aid',           assets.reorderAsset)
 router.delete('/projects/:id/pieces/:pid/assets/:aid',           assets.deleteAsset)
 

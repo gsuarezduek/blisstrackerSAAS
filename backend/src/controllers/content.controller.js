@@ -79,7 +79,7 @@ function formatAsset(a) {
     id:          a.id,
     kind:        a.kind,
     mimeType:    a.mimeType,
-    url:         assetUrl(a.publicId),
+    url:         a.kind === 'link' ? a.sourceUrl : assetUrl(a.publicId),
     posterUrl:   a.posterKey ? assetUrl(a.publicId, true) : null,
     width:       a.width,
     height:      a.height,
@@ -286,7 +286,10 @@ async function listPieces(req, res, next) {
       prisma.contentPiece.count({ where }),
       prisma.contentPiece.findMany({
         where,
-        orderBy: [{ scheduledDate: 'desc' }, { updatedAt: 'desc' }],
+        // Fecha más próxima primero (no última edición). Postgres ya deja las
+        // NULL al final en ASC por default, así que las piezas sin fecha
+        // quedan al fondo sin necesidad de un `nulls: 'last'` explícito.
+        orderBy: [{ scheduledDate: 'asc' }, { scheduledAt: 'asc' }],
         include: PIECE_INCLUDE,
         skip,
         take,

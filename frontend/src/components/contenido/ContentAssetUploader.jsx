@@ -87,10 +87,18 @@ let nextLocalId = 1
  * fallback multipart (`POST .../assets`, sin R2); un video sin R2 no tiene
  * fallback y se muestra como error. Sube varios archivos en paralelo, cada
  * uno con su propia barra de progreso y botón de cancelar.
+ *
+ * Debajo del dropzone hay una alternativa liviana: "Agregar link" crea un
+ * asset kind:'link' con la URL tal cual (Google Drive, etc.) — sin subir
+ * nada, va directo a `POST .../assets/link` y queda 'ready' al instante.
  */
 export default function ContentAssetUploader({ projectId, pieceId, onUploaded, disabled }) {
   const [queue, setQueue] = useState([]) // [{ id, name, kind, progress, status, error }]
   const [dragOver, setDragOver] = useState(false)
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkError, setLinkError] = useState(null)
   const inputRef = useRef(null)
   const cancelRef = useRef(new Map()) // localId -> xhr | AbortController
 
@@ -198,6 +206,24 @@ export default function ContentAssetUploader({ projectId, pieceId, onUploaded, d
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, pieceId])
 
+  async function handleAddLink(e) {
+    e.preventDefault()
+    const url = linkUrl.trim()
+    if (!url || linkBusy) return
+    setLinkBusy(true)
+    setLinkError(null)
+    try {
+      const { data } = await api.post(`/contenido/projects/${projectId}/pieces/${pieceId}/assets/link`, { url })
+      setLinkUrl('')
+      setLinkOpen(false)
+      onUploaded?.(data)
+    } catch (err) {
+      setLinkError(err.response?.data?.error || 'No se pudo agregar el link')
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
   function cancel(id) {
     const token = cancelRef.current.get(id)
     if (token instanceof AbortController) token.abort()
@@ -263,6 +289,47 @@ export default function ContentAssetUploader({ projectId, pieceId, onUploaded, d
           ))}
         </div>
       )}
+
+      {/* Link externo (Google Drive, etc.) — alternativa a subir el archivo. */}
+      {!disabled && (
+        linkOpen ? (
+          <form onSubmit={handleAddLink} className="mt-2 flex items-center gap-1.5">
+            <input
+              type="url"
+              autoFocus
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              placeholder="https://drive.google.com/…"
+              disabled={linkBusy}
+              className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={linkBusy || !linkUrl.trim()}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white font-medium transition-colors shrink-0"
+            >
+              {linkBusy ? 'Agregando…' : 'Agregar'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLinkOpen(false); setLinkUrl(''); setLinkError(null) }}
+              disabled={linkBusy}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+            >
+              Cancelar
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setLinkOpen(true)}
+            className="mt-2 text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center gap-1"
+          >
+            🔗 Agregar link (Google Drive, etc.)
+          </button>
+        )
+      )}
+      {linkError && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{linkError}</p>}
     </div>
   )
 }

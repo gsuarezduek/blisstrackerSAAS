@@ -40,7 +40,7 @@ export default function Contenido() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects,  setProjects]  = useState([])
   const [projectId, setProjectId] = useState(searchParams.get('projectId') ?? '')
-  const [filters,   setFilters]   = useState({ status: '', network: '', ownerId: '', q: '' })
+  const [filters,   setFilters]   = useState({ status: '', network: '', ownerId: '', q: '', from: '', to: '' })
   const [summary,   setSummary]   = useState(null) // { byStatus, total, awaitingClient } — GET /summary
   const [requestingApproval, setRequestingApproval] = useState(false)
   const [approvalMsg, setApprovalMsg] = useState(null) // { type: 'success'|'error', text }

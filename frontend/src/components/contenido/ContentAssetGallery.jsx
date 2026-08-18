@@ -74,6 +74,8 @@ export default function ContentAssetGallery({ assets, activeId, onSelectActive, 
               ) : (
                 <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xl">🎬</div>
               )
+            ) : a.kind === 'link' ? (
+              <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xl">🔗</div>
             ) : (
               <img src={a.url} alt="" className="w-full h-full object-cover" />
             )}

@@ -2969,7 +2969,7 @@ model ContentPiece {
   @@index([workspaceId])
   @@index([projectId, scheduledDate]) // vista Calendario (rango de mes)
   @@index([projectId, status, order]) // vista Kanban
-  @@index([projectId, updatedAt]) // vista Tabla (orden por defecto)
+  @@index([projectId, updatedAt]) // tiebreak legacy / futuras vistas por última edición
 }
 
 // Asset de una pieza. Ciclo de vida en dos pasos por el flujo de presigned URL:
@@ -2986,11 +2986,12 @@ model ContentAsset {
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   pieceId     Int
   piece       ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
-  kind        String // "image" | "video"
+  kind        String // "image" | "video" | "link"
   status      String       @default("pending") // "pending" | "ready"
-  mimeType    String
+  mimeType    String? // null para kind:"link" (no hay archivo propio)
   objectKey   String? // key en R2, bajo el prefijo content/<workspaceId>/
   imageData   Bytes? // fallback sin R2 (solo imagen, dev local) — patrón de SocialImage
+  sourceUrl   String? // URL externa para kind:"link" (Google Drive, etc.) — sin subir archivo
   posterKey   String? // thumbnail del video, generado en el browser
   sizeBytes   Int? // autoritativo: sale del HeadObject post-upload, no del cliente
   width       Int?

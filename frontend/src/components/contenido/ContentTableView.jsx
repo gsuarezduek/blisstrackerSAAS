@@ -113,14 +113,16 @@ const COLUMNS = [
 ]
 
 export default function ContentTableView({ pieces, members, loading, canEdit, onCreate, onUpdate, onDelete, onOpen }) {
-  const [sort, setSort] = useState({ key: 'scheduledAt', dir: 'desc' })
+  // Por defecto, fecha más próxima arriba (no última edición) — mismo criterio
+  // que el orderBy del backend (content.controller.js listPieces).
+  const [sort, setSort] = useState({ key: 'scheduledAt', dir: 'asc' })
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const sorted = useMemo(() => {
     const val = (p) => {
       switch (sort.key) {
-        case 'scheduledAt': return p.scheduledAt ? new Date(p.scheduledAt).getTime() : 0
+        case 'scheduledAt': return p.scheduledAt ? new Date(p.scheduledAt).getTime() : null
         case 'title':       return p.title?.toLowerCase() ?? ''
         case 'status':      return statusMeta(p.status).order ?? 0
         case 'type':        return p.type ?? ''
@@ -130,6 +132,12 @@ export default function ContentTableView({ pieces, members, loading, canEdit, on
     }
     return [...pieces].sort((a, b) => {
       const av = val(a), bv = val(b)
+      // Piezas sin fecha van siempre al final, sea cual sea la dirección del sort.
+      if (sort.key === 'scheduledAt') {
+        if (av === null && bv === null) return 0
+        if (av === null) return 1
+        if (bv === null) return -1
+      }
       if (av === bv) return 0
       return (av > bv ? 1 : -1) * (sort.dir === 'asc' ? 1 : -1)
     })

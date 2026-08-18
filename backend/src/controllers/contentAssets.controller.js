@@ -33,6 +33,14 @@ function sanitizeFileName(name) {
   return clean ? clean.slice(0, 200) : null
 }
 
+const MAX_URL_LEN = 2000
+function isValidHttpUrl(str) {
+  try {
+    const u = new URL(str)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch { return false }
+}
+
 // width/height/durationSec son metadata de display declarada por el cliente —
 // NUNCA se confían para nada de seguridad, solo se acotan a rangos razonables.
 function clampDimension(v) {
@@ -255,6 +263,49 @@ async function uploadAssetFallback(req, res, next) {
 }
 
 /**
+ * POST /api/contenido/projects/:id/pieces/:pid/assets/link
+ * Body: { url, fileName? } — asset tipo "link" (Google Drive, etc.): sin
+ * archivo propio, no pasa por R2. Queda 'ready' directo, mismo cupo
+ * (assertReadySlot) que imagen/video.
+ */
+async function createLinkAsset(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+
+    const piece = await loadPiece(req.params.pid, ctx.projectId, ctx.workspaceId)
+    if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
+
+    const url = typeof req.body?.url === 'string' ? req.body.url.trim() : ''
+    if (!url || url.length > MAX_URL_LEN || !isValidHttpUrl(url)) {
+      return res.status(400).json({ error: 'Ingresá un link válido (http/https)' })
+    }
+
+    const slotError = await assertReadySlot(piece.id)
+    if (slotError) return res.status(400).json({ error: slotError })
+
+    const order = await prisma.contentAsset.count({ where: { pieceId: piece.id } })
+
+    const asset = await prisma.contentAsset.create({
+      data: {
+        pieceId: piece.id,
+        workspaceId: ctx.workspaceId,
+        kind: 'link',
+        status: 'ready',
+        sourceUrl: url,
+        fileName: sanitizeFileName(req.body?.fileName),
+        order,
+        uploadedById: req.user.userId,
+        confirmedAt: new Date(),
+      },
+    })
+
+    await emitPieceUpdated(ctx.workspaceId, ctx.projectId, piece.id)
+    res.status(201).json(formatAsset(asset))
+  } catch (err) { next(err) }
+}
+
+/**
  * PATCH /api/contenido/projects/:id/pieces/:pid/assets/:aid — { order }
  * Reindexa todos los assets 'ready' de la pieza en una transacción, mismo
  * patrón que movePiece (content.controller.js) para el Kanban.
@@ -358,6 +409,7 @@ module.exports = {
   presignAsset,
   confirmAsset,
   uploadAssetFallback,
+  createLinkAsset,
   reorderAsset,
   deleteAsset,
   serveContentAsset,

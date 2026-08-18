@@ -23,7 +23,12 @@ export default function ContentFilters({ value, onChange, members = [], total = 
   useEffect(() => { setQ(value.q ?? '') }, [value.q])
 
   const set = (patch) => onChange({ ...value, ...patch })
-  const hasFilters = Boolean(value.status || value.network || value.ownerId || value.q)
+  const hasFilters = Boolean(value.status || value.network || value.ownerId || value.q || value.from || value.to)
+
+  // Un solo selector de fecha exacta: pide al backend from === to === la fecha
+  // elegida (listPieces ya soporta el rango, ver content.controller.js).
+  const exactDate = (value.from && value.from === value.to) ? value.from : ''
+  const setExactDate = (date) => set({ from: date, to: date })
 
   return (
     <div className="flex items-center gap-2 flex-wrap mb-3">
@@ -46,12 +51,36 @@ export default function ContentFilters({ value, onChange, members = [], total = 
 
       <select value={value.ownerId ?? ''} onChange={e => set({ ownerId: e.target.value })} className={SELECT}>
         <option value="">Todos los responsables</option>
-        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        <optgroup label="Equipo del proyecto">
+          {members.filter(m => m.inTeam).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </optgroup>
+        <optgroup label="Otros del workspace">
+          {members.filter(m => !m.inTeam).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </optgroup>
       </select>
+
+      <div className="flex items-center gap-1">
+        <input
+          type="date"
+          value={exactDate}
+          onChange={e => setExactDate(e.target.value)}
+          title="Publicaciones en una fecha determinada"
+          className={SELECT}
+        />
+        {exactDate && (
+          <button
+            onClick={() => setExactDate('')}
+            title="Quitar filtro de fecha"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm px-1"
+          >
+            ✕
+          </button>
+        )}
+      </div>
 
       {hasFilters && (
         <button
-          onClick={() => onChange({ ...value, status: '', network: '', ownerId: '', q: '' })}
+          onClick={() => onChange({ ...value, status: '', network: '', ownerId: '', q: '', from: '', to: '' })}
           className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1.5"
         >
           Limpiar filtros

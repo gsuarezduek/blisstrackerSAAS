@@ -2,7 +2,6 @@ const prisma = require('../lib/prisma')
 const { emitTo } = require('../lib/socket')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
-const { sendContentClientDecisionEmail } = require('../services/email.service')
 const {
   PORTAL_VISIBLE_STATUSES,
   CLIENT_APPROVE_FROM,
@@ -104,11 +103,13 @@ async function assertContentAccess(portal) {
 }
 
 /**
- * Avisa al equipo (notificación in-app + email) que el cliente decidió sobre
- * una pieza. Fire-and-forget total — se llama con setImmediate después de
- * responder; una aprobación ya persistida no debe fallar por un aviso caído.
+ * Avisa al equipo (solo notificación in-app, sin email — los emails quedan
+ * reservados para avisos al cliente, no de vuelta al equipo) que el cliente
+ * decidió sobre una pieza. Fire-and-forget total — se llama con setImmediate
+ * después de responder; una aprobación ya persistida no debe fallar por un
+ * aviso caído.
  */
-async function notifyTeamOfDecision(portal, piece, contact, decision, comment) {
+async function notifyTeamOfDecision(portal, piece, contact, decision) {
   try {
     const type = decision === 'approved' ? 'CONTENT_APPROVED' : 'CONTENT_CHANGES_REQUESTED'
     const who  = (contact.name && contact.name.trim()) ? contact.name.trim() : contact.email
@@ -119,7 +120,7 @@ async function notifyTeamOfDecision(portal, piece, contact, decision, comment) {
     // apoyarse en `actor.name` como el resto de las notificaciones.
     const message = `${who} (cliente) ${verb} "${preview}"`
 
-    const { userIds, emails } = await getProjectNotifyRecipients(portal.projectId, portal.workspaceId)
+    const { userIds } = await getProjectNotifyRecipients(portal.projectId, portal.workspaceId)
 
     if (userIds.length > 0) {
       await prisma.notification.createMany({
@@ -131,23 +132,6 @@ async function notifyTeamOfDecision(portal, piece, contact, decision, comment) {
       for (const userId of userIds) {
         emitTo(`user:${userId}`, 'notification:new', { type, contentPieceId: piece.id })
       }
-    }
-
-    if (emails.length > 0) {
-      const [project, workspace] = await Promise.all([
-        prisma.project.findUnique({ where: { id: portal.projectId }, select: { name: true } }),
-        prisma.workspace.findUnique({ where: { id: portal.workspaceId }, select: { slug: true } }),
-      ])
-      const domain   = process.env.APP_DOMAIN || 'blisstracker.app'
-      const pieceUrl = workspace ? `https://${workspace.slug}.${domain}/contenido?piece=${piece.id}` : null
-      await sendContentClientDecisionEmail(emails, {
-        projectName: project?.name || 'Proyecto',
-        pieceTitle:  piece.title,
-        decision,
-        comment,
-        contactName: contact.name,
-        pieceUrl,
-      }, portal.workspaceId)
     }
   } catch {
     // best-effort — nunca debe tumbar nada, ya se respondió al cliente.
@@ -250,7 +234,7 @@ async function approvePiece(req, res, next) {
       })
     }
 
-    setImmediate(() => notifyTeamOfDecision(portal, piece, contact, 'approved', comment || null))
+    setImmediate(() => notifyTeamOfDecision(portal, piece, contact, 'approved'))
 
     const freshInternal = await loadPiece(piece.id, portal.projectId, portal.workspaceId)
     emitTo(`workspace:${portal.workspaceId}`, 'content:piece:updated', { projectId: portal.projectId, piece: formatPiece(freshInternal) })
@@ -309,7 +293,7 @@ async function requestChanges(req, res, next) {
       },
     })
 
-    setImmediate(() => notifyTeamOfDecision(portal, piece, contact, 'changes', comment))
+    setImmediate(() => notifyTeamOfDecision(portal, piece, contact, 'changes'))
 
     const freshInternal = await loadPiece(piece.id, portal.projectId, portal.workspaceId)
     emitTo(`workspace:${portal.workspaceId}`, 'content:piece:updated', { projectId: portal.projectId, piece: formatPiece(freshInternal) })

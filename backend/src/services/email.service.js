@@ -897,42 +897,6 @@ async function sendReportPublishedEmail(emails, payload, workspaceId) {
 }
 
 /**
- * Aviso al equipo: el cliente aprobó una pieza o pidió cambios. Se dispara desde
- * contentPortal.controller.js (approvePiece / requestChanges).
- * @param {string[]} emails  admins/owners + miembros del proyecto (getProjectNotifyRecipients)
- * @param {object}   payload { projectName, pieceTitle, decision: 'approved'|'changes_requested', comment?, contactName, pieceUrl }
- */
-async function sendContentClientDecisionEmail(emails, payload, workspaceId) {
-  if (!emails || emails.length === 0) return
-  const { projectName, pieceTitle, decision, comment, contactName, pieceUrl } = payload
-  const from = await getEmailFrom(workspaceId)
-  const approved = decision === 'approved'
-  const who = (contactName && contactName.trim()) ? contactName.trim() : 'El cliente'
-  const subject = `${approved ? '✅ Aprobó' : '✏️ Pidió cambios en'} "${pieceTitle}" — ${projectName}`
-  try {
-    const { error } = await resend.emails.send({
-      from,
-      to: emails,
-      subject,
-      html: emailShell(`
-        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
-          <h2 style="color:#1e293b;margin:0 0 6px;font-size:20px;">${approved ? '✅ Pieza aprobada' : '✏️ Pidieron cambios'}</h2>
-          <p style="color:#475569;margin:0 0 18px;">
-            <strong>${escHtml(who)}</strong> ${approved ? 'aprobó' : 'pidió cambios en'} <strong>${escHtml(pieceTitle)}</strong> de <strong>${escHtml(projectName)}</strong>.
-          </p>
-          ${comment ? `<div style="background:#f8fafc;border-left:3px solid #cbd5e1;border-radius:6px;padding:12px 16px;color:#334155;font-size:14px;line-height:1.6;margin:0 0 20px;">"${escHtml(comment)}"</div>` : ''}
-          ${pieceUrl ? `<a href="${pieceUrl}" style="display:inline-block;background:#E67A1F;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;">Ver la pieza</a>` : ''}
-        </div>
-      `),
-    })
-    if (error) throw new Error(error.message)
-    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'contentClientDecision', status: 'sent' })
-  } catch (err) {
-    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'contentClientDecision', status: 'failed', errorMsg: err.message })
-  }
-}
-
-/**
  * Aviso al equipo: un contacto del cliente hizo login por primera vez en el
  * portal. Se dispara desde clientPortal.controller.js (verifyLoginCode),
  * una sola vez por contacto — no por sesión.
@@ -1013,7 +977,6 @@ module.exports = {
   sendReportFeedbackEmail,
   sendReportPublishedEmail,
   sendContentApprovalRequestEmail,
-  sendContentClientDecisionEmail,
   sendPortalFirstLoginEmail,
   sendClientLoginCodeEmail,
   sendPasswordReset,
