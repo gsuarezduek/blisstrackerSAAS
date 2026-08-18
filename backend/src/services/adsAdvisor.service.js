@@ -92,8 +92,12 @@ function objectivesBlock(results) {
 function campaignsBlock(campaigns) {
   if (!campaigns?.length) return '  (sin campañas con actividad en el período)'
   return campaigns.slice(0, 8).map(c => {
+    // Meta Ads expone el gasto de campaña como `spend`; Google Ads lo expone como `cost`
+    // (ver googleAds.service.js) — se normaliza acá en vez de renombrar en cualquiera de
+    // los dos servicios, que ya tienen ese naming consistente en el resto del código.
+    const spend = c.spend ?? c.cost ?? 0
     const convTxt = c.conversions != null ? `, conversiones ${c.conversions}` : ''
-    return `  - "${c.name}" (${c.status}): gasto $${c.spend.toFixed(0)}, clicks ${c.clicks}, CTR ${c.ctr.toFixed(2)}%${convTxt}`
+    return `  - "${c.name}" (${c.status}): gasto $${spend.toFixed(0)}, clicks ${c.clicks}, CTR ${c.ctr.toFixed(2)}%${convTxt}`
   }).join('\n')
 }
 
