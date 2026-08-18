@@ -9,6 +9,7 @@ import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import ChannelFormModal from './ChannelFormModal'
 import PinnedBar from './PinnedBar'
+import ChatSoundToggle from './ChatSoundToggle'
 
 // Chat interno como ícono flotante (no una página/sección aparte): mismo botón y
 // posición que antes ocupaba FeedbackButton — Feedback queda en standby por ahora
@@ -17,7 +18,10 @@ import PinnedBar from './PinnedBar'
 // (mismo patrón que GamificationFab con `bliss:open-game`).
 export default function ChatWidget() {
   const { user } = useAuth()
-  const { channels = [], loadChannels, unreadChannelsCount = 0, mentionChannelsCount = 0 } = useChat() || {}
+  const {
+    channels = [], loadChannels, unreadChannelsCount = 0, mentionChannelsCount = 0,
+    soundPref = 'mentions', setSoundPref = () => {},
+  } = useChat() || {}
 
   const [open, setOpen] = useState(false)
   const [activeSlug, setActiveSlug] = useState(null)
@@ -275,6 +279,7 @@ export default function ChatWidget() {
                       {activeChannel.isPrivate ? '🔒' : '🔓'}
                     </button>
                   )}
+                  <ChatSoundToggle pref={soundPref} onChange={setSoundPref} />
                   <button
                     onClick={() => setOpen(false)}
                     className="text-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 leading-none flex-shrink-0"
