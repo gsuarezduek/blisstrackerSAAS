@@ -247,6 +247,7 @@ model User {
   healthInsurance   String?
   emergencyContact  String?
   avatar            String    @default("2bee.png")
+  customAvatar      Avatar?   // foto propia subida por el usuario (Avatar.ownerId), si tiene
 
   // Relaciones
   workspaceMembers          WorkspaceMember[]
@@ -1097,9 +1098,16 @@ model Avatar {
   label     String
   order     Int      @default(0)
   active    Boolean  @default(true)
-  imageData Bytes
+  imageData Bytes?   // null cuando vive en object storage (objectKey seteado)
+  objectKey String?  // key en R2 (dual storage, mismo patrón que SocialImage)
+  sizeBytes Int?
   mimeType  String   @default("image/png")
   createdAt DateTime @default(now())
+
+  // Foto propia subida por un usuario (privada, no aparece en el catálogo curado).
+  // ownerId null = avatar del catálogo compartido, gestionado desde SuperAdmin.
+  ownerId Int?  @unique
+  owner   User? @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([order])
   @@index([active])

@@ -5,6 +5,12 @@ const prisma = require('../lib/prisma')
 const { resolveLegajoFields, coerceCustomValue } = require('../lib/legajoCatalog')
 const { sendEmailChangeVerification } = require('../services/email.service')
 const { validatePassword } = require('../lib/passwordPolicy')
+const { validateImageUpload } = require('../lib/imageType')
+const objectStorage = require('../services/objectStorage.service')
+
+// Mismo mapeo mime→extensión que objectStorage.service.js (no exportado ahí, así
+// que se replica acá para nombrar el archivo cuando cae al fallback de DB).
+const AVATAR_EXT_BY_MIME = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -20,6 +26,7 @@ const USER_SELECT = {
   id: true, name: true, email: true,
   googleId: true,
   createdAt: true, avatar: true,
+  customAvatar: { select: { filename: true, label: true } }, // foto propia, si tiene una cargada
   phone: true, birthday: true, address: true, dni: true,
   cuit: true, alias: true, bankName: true, maritalStatus: true, children: true,
   educationLevel: true, educationTitle: true, bloodType: true,
@@ -120,12 +127,18 @@ async function updateProfile(req, res, next) {
 
 /**
  * PATCH /api/profile/avatar
+ * Selecciona un avatar del catálogo compartido (ownerId null, activo) o la
+ * foto propia del usuario (ownerId === el propio usuario).
  */
 async function updateAvatar(req, res, next) {
   try {
     const { avatar } = req.body
-    const avatarRecord = await prisma.avatar.findUnique({ where: { filename: avatar }, select: { active: true } })
-    if (!avatarRecord || !avatarRecord.active) {
+    const avatarRecord = await prisma.avatar.findUnique({ where: { filename: avatar }, select: { active: true, ownerId: true } })
+    const valid = avatarRecord && (
+      (avatarRecord.ownerId === null && avatarRecord.active) ||
+      avatarRecord.ownerId === req.user.userId
+    )
+    if (!valid) {
       return res.status(400).json({ error: 'Avatar no válido' })
     }
     const user = await prisma.user.update({
@@ -134,6 +147,74 @@ async function updateAvatar(req, res, next) {
       select: { id: true, name: true, email: true, avatar: true },
     })
     res.json({ ...user, role: req.workspaceMember?.teamRole ?? '' })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/profile/avatar/upload
+ * Sube (o reemplaza) la foto propia del usuario y la selecciona como avatar
+ * activo. Guarda en R2 si está configurado (services/objectStorage), si no
+ * cae al fallback de bytes en DB — mismo patrón dual que SocialImage. Cada
+ * subida genera un filename nuevo (contenido inmutable por key) y borra la
+ * fila/objeto anterior, para no dejar huérfanos ni fotos viejas cacheadas.
+ */
+async function uploadAvatarImage(req, res, next) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No se recibió ninguna imagen' })
+
+    const check = validateImageUpload(req.file.buffer, ['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+    if (!check.ok) {
+      return res.status(400).json({ error: 'Formato no soportado. Usá PNG, JPG, WEBP o GIF.' })
+    }
+    const mimeType = check.mimeType
+    const buffer   = req.file.buffer
+    const ext      = AVATAR_EXT_BY_MIME[mimeType] || 'bin'
+    const filename = `custom-${crypto.randomUUID()}.${ext}`
+    const userId   = req.user.userId
+
+    const storageData = objectStorage.isConfigured()
+      ? await objectStorage.putObject(buffer, mimeType, { prefix: 'avatars' })
+          .then(({ key, size }) => ({ objectKey: key, sizeBytes: size, imageData: null }))
+      : { imageData: buffer, sizeBytes: buffer.length, objectKey: null }
+
+    const previous = await prisma.avatar.findUnique({ where: { ownerId: userId }, select: { id: true, objectKey: true } })
+
+    await prisma.$transaction(async (tx) => {
+      if (previous) await tx.avatar.delete({ where: { id: previous.id } })
+      await tx.avatar.create({
+        data: { filename, label: 'Mi foto', order: 0, active: true, mimeType, ownerId: userId, ...storageData },
+      })
+      await tx.user.update({ where: { id: userId }, data: { avatar: filename } })
+    })
+
+    // Best-effort, después de confirmar la transacción: borra el objeto viejo en R2 si tenía.
+    if (previous?.objectKey) objectStorage.deleteObject(previous.objectKey).catch(() => {})
+
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: USER_SELECT })
+    res.json(buildProfileResponse(user, req.workspaceMember))
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/profile/avatar/upload
+ * Elimina la foto propia del usuario. Si estaba seleccionada como avatar
+ * activo, vuelve al default.
+ */
+async function deleteAvatarImage(req, res, next) {
+  try {
+    const userId = req.user.userId
+    const existing = await prisma.avatar.findUnique({ where: { ownerId: userId } })
+    if (!existing) return res.status(404).json({ error: 'No tenés una foto propia cargada' })
+
+    await prisma.$transaction(async (tx) => {
+      await tx.avatar.delete({ where: { id: existing.id } })
+      await tx.user.updateMany({ where: { id: userId, avatar: existing.filename }, data: { avatar: '2bee.png' } })
+    })
+
+    if (existing.objectKey) objectStorage.deleteObject(existing.objectKey).catch(() => {})
+
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: USER_SELECT })
+    res.json(buildProfileResponse(user, req.workspaceMember))
   } catch (err) { next(err) }
 }
 
@@ -307,4 +388,4 @@ async function sendTestWeeklyEmail(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getProfile, updateProfile, changePassword, requestEmailChange, googleLinkToken, disconnectGoogle, updateAvatar, updatePreferences, sendTestWeeklyEmail }
+module.exports = { getProfile, updateProfile, changePassword, requestEmailChange, googleLinkToken, disconnectGoogle, updateAvatar, uploadAvatarImage, deleteAvatarImage, updatePreferences, sendTestWeeklyEmail }

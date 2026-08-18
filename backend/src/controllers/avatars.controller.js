@@ -1,17 +1,20 @@
 const prisma = require('../lib/prisma')
 const fs     = require('fs')
 const { validateImageUpload } = require('../lib/imageType')
+const objectStorage = require('../services/objectStorage.service')
 
 // ─── Público / usuarios autenticados ─────────────────────────────────────────
 
 /**
  * GET /api/avatars
- * Lista de avatares activos ordenados. No incluye imageData.
+ * Lista de avatares activos del catálogo compartido, ordenados. No incluye
+ * imageData ni las fotos propias subidas por usuarios (ownerId != null,
+ * privadas — ver profile.controller.js para esas).
  */
 async function list(req, res, next) {
   try {
     const avatars = await prisma.avatar.findMany({
-      where:   { active: true },
+      where:   { active: true, ownerId: null },
       orderBy: { order: 'asc' },
       select:  { id: true, filename: true, label: true, order: true },
     })
@@ -21,17 +24,26 @@ async function list(req, res, next) {
 
 /**
  * GET /api/avatars/img/:filename
- * Sirve la imagen directamente desde la DB. Ruta pública (sin auth).
+ * Sirve la imagen. Ruta pública (sin auth). Dos orígenes posibles (mismo
+ * patrón dual que SocialImage): objectKey → redirect a R2; imageData → bytes
+ * desde la DB (legacy / sin R2 configurado).
  */
 async function serveImage(req, res, next) {
   try {
     const { filename } = req.params
     const avatar = await prisma.avatar.findUnique({
       where:  { filename },
-      select: { imageData: true, mimeType: true, active: true },
+      select: { imageData: true, mimeType: true, objectKey: true },
     })
 
     if (!avatar) return res.status(404).json({ error: 'Imagen no encontrada' })
+
+    if (avatar.objectKey) {
+      res.set('Cache-Control', 'public, max-age=86400') // 1 día — el objeto en R2 ya cachea 1 año
+      return res.redirect(302, objectStorage.publicUrl(avatar.objectKey))
+    }
+
+    if (!avatar.imageData) return res.status(404).json({ error: 'Imagen no encontrada' })
 
     res.set('Content-Type', avatar.mimeType)
     res.set('X-Content-Type-Options', 'nosniff')
@@ -49,6 +61,7 @@ async function serveImage(req, res, next) {
 async function listAll(req, res, next) {
   try {
     const avatars = await prisma.avatar.findMany({
+      where:   { ownerId: null }, // el catálogo de SuperAdmin no gestiona fotos propias de usuarios
       orderBy: { order: 'asc' },
       select:  { id: true, filename: true, label: true, order: true, active: true, createdAt: true },
     })
@@ -124,7 +137,7 @@ async function update(req, res, next) {
     const { label, order } = req.body
 
     const existing = await prisma.avatar.findUnique({ where: { id } })
-    if (!existing) return res.status(404).json({ error: 'Avatar no encontrado' })
+    if (!existing || existing.ownerId) return res.status(404).json({ error: 'Avatar no encontrado' })
 
     const data = {}
     if (label !== undefined) data.label = label.trim()
@@ -175,8 +188,8 @@ async function reorder(req, res, next) {
 async function toggle(req, res, next) {
   try {
     const id = Number(req.params.id)
-    const existing = await prisma.avatar.findUnique({ where: { id }, select: { active: true } })
-    if (!existing) return res.status(404).json({ error: 'Avatar no encontrado' })
+    const existing = await prisma.avatar.findUnique({ where: { id }, select: { active: true, ownerId: true } })
+    if (!existing || existing.ownerId) return res.status(404).json({ error: 'Avatar no encontrado' })
 
     const avatar = await prisma.avatar.update({
       where:  { id },
@@ -196,7 +209,7 @@ async function remove(req, res, next) {
   try {
     const id = Number(req.params.id)
     const existing = await prisma.avatar.findUnique({ where: { id } })
-    if (!existing) return res.status(404).json({ error: 'Avatar no encontrado' })
+    if (!existing || existing.ownerId) return res.status(404).json({ error: 'Avatar no encontrado' })
 
     // Verificar si algún usuario lo usa actualmente
     const usersWithAvatar = await prisma.user.count({

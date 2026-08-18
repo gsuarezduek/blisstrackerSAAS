@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Navbar from '../components/Navbar'
 import AvatarLightbox from '../components/AvatarLightbox'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -175,6 +175,9 @@ export default function MyProfile() {
   const [avatarSaving, setAvatarSaving] = useState(false)
   const [selectedAvatar, setSelectedAvatar] = useState(null)
   const [lightboxIndex, setLightboxIndex] = useState(null) // null = cerrado
+  const [avatarUploadBusy, setAvatarUploadBusy] = useState(false)
+  const [avatarUploadError, setAvatarUploadError] = useState('')
+  const avatarFileInputRef = useRef(null)
 
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue]     = useState('')
@@ -185,8 +188,14 @@ export default function MyProfile() {
   const [vacHistoryOpen, setVacHistoryOpen] = useState(false)
   const [vacRequestOpen, setVacRequestOpen] = useState(false)
 
+  // Foto propia primero (si tiene) + catálogo — mismo orden que se muestra en el picker.
+  const lightboxAvatars = [
+    ...(profile?.customAvatar ? [{ file: profile.customAvatar.filename, label: profile.customAvatar.label }] : []),
+    ...avatars.map(a => ({ file: a.filename, label: a.label })),
+  ]
+
   function openLightbox(file) {
-    const idx = avatars.findIndex(a => a.filename === file)
+    const idx = lightboxAvatars.findIndex(a => a.file === file)
     setLightboxIndex(idx >= 0 ? idx : 0)
   }
 
@@ -250,6 +259,39 @@ export default function MyProfile() {
       updateUser({ avatar: data.avatar })
     } catch (_) {}
     finally { setAvatarSaving(false) }
+  }
+
+  async function handleAvatarFileSelected(e) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permite volver a elegir el mismo archivo si hace falta
+    if (!file) return
+    setAvatarUploadError('')
+    setAvatarUploadBusy(true)
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+      const { data } = await api.post('/profile/avatar/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setProfile(data)
+      setSelectedAvatar(data.avatar)
+      updateUser({ avatar: data.avatar })
+    } catch (err) {
+      setAvatarUploadError(err.response?.data?.error || 'No se pudo subir la imagen')
+    } finally { setAvatarUploadBusy(false) }
+  }
+
+  async function handleRemoveCustomAvatar() {
+    setAvatarUploadError('')
+    setAvatarUploadBusy(true)
+    try {
+      const { data } = await api.delete('/profile/avatar/upload')
+      setProfile(data)
+      setSelectedAvatar(data.avatar)
+      updateUser({ avatar: data.avatar })
+    } catch (err) {
+      setAvatarUploadError(err.response?.data?.error || 'No se pudo eliminar la foto')
+    } finally { setAvatarUploadBusy(false) }
   }
 
   async function handleSavePersonal(e) {
@@ -448,6 +490,36 @@ export default function MyProfile() {
           <div>
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">Foto de perfil</p>
             <div className="flex items-end gap-3 flex-wrap">
+              {profile.customAvatar && (
+                <div className="relative group">
+                  <button
+                    onClick={() => setSelectedAvatar(profile.customAvatar.filename)}
+                    title={profile.customAvatar.label}
+                    className={`rounded-full transition-all ${
+                      selectedAvatar === profile.customAvatar.filename
+                        ? 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-800'
+                        : 'opacity-60 hover:opacity-90'
+                    }`}
+                  >
+                    <img
+                      src={avatarUrl(profile.customAvatar.filename)}
+                      alt={profile.customAvatar.label}
+                      className="w-12 h-12 rounded-full object-cover"
+                    />
+                  </button>
+                  {/* Botón para eliminar la foto propia */}
+                  <button
+                    onClick={handleRemoveCustomAvatar}
+                    disabled={avatarUploadBusy}
+                    title="Eliminar tu foto"
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-600/90 hover:bg-red-600 disabled:opacity-40 rounded-full text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                      <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482 41.03 41.03 0 00-2.365-.298V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               {avatars.map((a, i) => (
                 <div key={a.filename} className="relative group">
                   <button
@@ -465,9 +537,9 @@ export default function MyProfile() {
                       className="w-12 h-12 rounded-full object-cover"
                     />
                   </button>
-                  {/* Botón de zoom */}
+                  {/* Botón de zoom (offset +1 si hay foto propia, que va primera en lightboxAvatars) */}
                   <button
-                    onClick={() => setLightboxIndex(i)}
+                    onClick={() => setLightboxIndex(i + (profile.customAvatar ? 1 : 0))}
                     title={`Ver ${a.label}`}
                     className="absolute -top-1 -right-1 w-5 h-5 bg-gray-800/80 hover:bg-gray-700 rounded-full text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   >
@@ -477,6 +549,35 @@ export default function MyProfile() {
                   </button>
                 </div>
               ))}
+
+              {/* Subir tu propia foto */}
+              <div>
+                <input
+                  ref={avatarFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  onChange={handleAvatarFileSelected}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => avatarFileInputRef.current?.click()}
+                  disabled={avatarUploadBusy}
+                  title={profile.customAvatar ? 'Reemplazar tu foto' : 'Subir tu foto'}
+                  className="w-12 h-12 rounded-full border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:text-primary-600 hover:border-primary-400 flex items-center justify-center transition-colors disabled:opacity-50"
+                >
+                  {avatarUploadBusy ? (
+                    <svg className="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                      <path fillRule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h.5c.966 0 1.813-.51 2.295-1.288A2.25 2.25 0 018 .75h4a2.25 2.25 0 012 1.98C14.437 3.51 15.284 4 16.25 4h.5A2.25 2.25 0 0119 6.25v8.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zM10 14a4 4 0 100-8 4 4 0 000 8z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+
               {selectedAvatar && selectedAvatar !== (profile.avatar ?? '2bee.png') && (
                 <button
                   onClick={handleSaveAvatar}
@@ -487,6 +588,8 @@ export default function MyProfile() {
                 </button>
               )}
             </div>
+            {avatarUploadError && <p className="text-xs text-red-500 mt-2">{avatarUploadError}</p>}
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">PNG, JPG, WEBP o GIF — máx. 2MB</p>
           </div>
         </div>
 
@@ -777,7 +880,7 @@ export default function MyProfile() {
 
       {lightboxIndex !== null && (
         <AvatarLightbox
-          avatars={avatars.map(a => ({ file: a.filename, label: a.label }))}
+          avatars={lightboxAvatars}
           index={lightboxIndex}
           onNavigate={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
