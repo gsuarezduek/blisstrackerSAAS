@@ -2865,10 +2865,15 @@ model ChatMessage {
   workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   channelId   Int
   channel     ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  authorId    Int
-  author      User        @relation(fields: [authorId], references: [id])
+  // authorId null = mensaje del SISTEMA (no lo escribió una persona): deja constancia de
+  // un hito del proyecto (informe generado, brief completo, reunión cerrada, etc.).
+  // `systemType` identifica cuál — catálogo en lib/chatSystemMessage.js. Un mensaje
+  // normal siempre tiene authorId set y systemType null (o viceversa).
+  authorId    Int?
+  author      User?       @relation(fields: [authorId], references: [id])
   content     String?     @db.Text // nullable: un mensaje puede ser solo un GIF
   gifUrl      String?
+  systemType  String?
   editedAt    DateTime?
   createdAt   DateTime    @default(now())
 

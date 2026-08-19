@@ -4,14 +4,9 @@ const { resolveMentions } = require('../lib/mentions')
 const { slugify } = require('../lib/slugify')
 const { emitTo } = require('../lib/socket')
 const { channelLabel, uniqueSlug, materializeChannels } = require('../lib/chatChannels')
+const { MESSAGE_INCLUDE } = require('../lib/chatMessageInclude')
 
 const MESSAGE_PAGE_SIZE = 50
-const AUTHOR_SELECT = { id: true, name: true, avatar: true }
-const MESSAGE_INCLUDE = {
-  author: { select: AUTHOR_SELECT },
-  pinnedBy: { select: AUTHOR_SELECT },
-  reactions: { orderBy: { createdAt: 'asc' }, select: { id: true, emoji: true, userId: true, user: { select: { name: true } } } },
-}
 
 // Canal privado (ChatChannel.isPrivate): solo lo ven/usan admin/owner del workspace —
 // mismo criterio que workspaceAdminOnly, pero evaluado por canal en vez de por ruta

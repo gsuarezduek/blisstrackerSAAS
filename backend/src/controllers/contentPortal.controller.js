@@ -10,6 +10,7 @@ const {
   statusMeta,
 } = require('../lib/contentCatalog')
 const { formatAsset, formatPiece, loadPiece } = require('./content.controller')
+const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
 
 const MAX_COMMENT = 2000
 
@@ -109,7 +110,7 @@ async function assertContentAccess(portal) {
  * después de responder; una aprobación ya persistida no debe fallar por un
  * aviso caído.
  */
-async function notifyTeamOfDecision(portal, piece, contact, decision) {
+async function notifyTeamOfDecision(portal, piece, contact, decision, comment) {
   try {
     const type = decision === 'approved' ? 'CONTENT_APPROVED' : 'CONTENT_CHANGES_REQUESTED'
     const who  = (contact.name && contact.name.trim()) ? contact.name.trim() : contact.email
@@ -133,6 +134,18 @@ async function notifyTeamOfDecision(portal, piece, contact, decision) {
         emitTo(`user:${userId}`, 'notification:new', { type, contentPieceId: piece.id })
       }
     }
+
+    // Deja constancia en el chat del proyecto — reutiliza el mismo `message` que ya
+    // arma la notificación, la única diferencia es el ícono y, si pidió cambios, el
+    // comentario (siempre obligatorio en ese flujo, así que suele venir).
+    const icon = decision === 'approved' ? '✅' : '✏️'
+    const cleanComment = (comment || '').trim()
+    const commentPart = cleanComment ? `: "${cleanComment.length > 140 ? `${cleanComment.slice(0, 137)}…` : cleanComment}"` : ''
+    await postProjectSystemMessage(
+      portal.projectId, portal.workspaceId,
+      decision === 'approved' ? SYSTEM_TYPES.CONTENT_APPROVED : SYSTEM_TYPES.CONTENT_CHANGES_REQUESTED,
+      `${icon} ${message}${commentPart}`
+    )
   } catch {
     // best-effort — nunca debe tumbar nada, ya se respondió al cliente.
   }
@@ -234,7 +247,7 @@ async function approvePiece(req, res, next) {
       })
     }
 
-    setImmediate(() => notifyTeamOfDecision(portal, piece, contact, 'approved'))
+    setImmediate(() => notifyTeamOfDecision(portal, piece, contact, 'approved', comment))
 
     const freshInternal = await loadPiece(piece.id, portal.projectId, portal.workspaceId)
     emitTo(`workspace:${portal.workspaceId}`, 'content:piece:updated', { projectId: portal.projectId, piece: formatPiece(freshInternal) })
@@ -293,7 +306,7 @@ async function requestChanges(req, res, next) {
       },
     })
 
-    setImmediate(() => notifyTeamOfDecision(portal, piece, contact, 'changes'))
+    setImmediate(() => notifyTeamOfDecision(portal, piece, contact, 'changes', comment))
 
     const freshInternal = await loadPiece(piece.id, portal.projectId, portal.workspaceId)
     emitTo(`workspace:${portal.workspaceId}`, 'content:piece:updated', { projectId: portal.projectId, piece: formatPiece(freshInternal) })

@@ -8,7 +8,9 @@ const {
   isValidType,
   sanitizeNetworks,
   statusMeta,
+  CONTENT_NETWORKS,
 } = require('../lib/contentCatalog')
+const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
 
 // Todas las mutaciones de una pieza emiten a workspace:<id> con la pieza ya
 // formateada — así el Kanban/Tabla/Calendario de otra pestaña se actualiza sin
@@ -16,6 +18,25 @@ const {
 // en este repo cualquier miembro activo ya puede leer cualquier proyecto.
 function emitPieceUpdated(workspaceId, projectId, piece) {
   emitTo(`workspace:${workspaceId}`, 'content:piece:updated', { projectId, piece })
+}
+
+function networkLabel(key) {
+  return CONTENT_NETWORKS.find(n => n.key === key)?.label || key
+}
+
+// Mensaje de sistema en el chat del proyecto cuando una pieza llega a "publicado" — un
+// hito de cara al cliente, a diferencia del resto de las transiciones de estado (que son
+// trabajo interno del equipo y no ameritan dejar constancia acá).
+function announceIfPublished(projectId, workspaceId, statusChanged, piece, req) {
+  if (statusChanged !== 'publicado') return
+  const actorName = req.user?.name || 'Alguien'
+  const networks = (piece.networks || []).map(networkLabel).join(', ')
+  setImmediate(() => {
+    postProjectSystemMessage(
+      projectId, workspaceId, SYSTEM_TYPES.CONTENT_PUBLISHED,
+      `📣 ${actorName} publicó "${piece.title}"${networks ? ` en ${networks}` : ''}.`
+    ).catch(() => {})
+  })
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -382,6 +403,7 @@ async function updatePiece(req, res, next) {
     const fresh = await loadPiece(existing.id, projectId, workspaceId)
     const formatted = formatPiece(fresh)
     emitPieceUpdated(workspaceId, projectId, formatted)
+    announceIfPublished(projectId, workspaceId, statusChanged, formatted, req)
     res.json(formatted)
   } catch (err) { next(err) }
 }
@@ -462,6 +484,7 @@ async function movePiece(req, res, next) {
     const fresh = await loadPiece(existing.id, projectId, workspaceId)
     const formatted = formatPiece(fresh)
     emitPieceUpdated(workspaceId, projectId, formatted)
+    announceIfPublished(projectId, workspaceId, statusChanged ? status : null, formatted, req)
     res.json(formatted)
   } catch (err) { next(err) }
 }

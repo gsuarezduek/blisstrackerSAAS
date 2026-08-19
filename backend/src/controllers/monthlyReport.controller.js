@@ -5,6 +5,7 @@ const { sendReportFeedbackEmail, sendReportPublishedEmail } = require('../servic
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
 const { monthLabel, prevMonthStr, monthBounds, rangeLabel } = require('../lib/monthUtils')
 const { DEFAULT_TZ } = require('../utils/dates')
+const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
 
 // Filtro Prisma para informes "generados" (no placeholders vacíos)
 const GENERATED_WHERE = {
@@ -561,6 +562,14 @@ async function regenerateReport(req, res, next) {
     const updatedReport = await prisma.monthlyReport.findUnique({ where: { id: report.id } })
     const period = reportPeriod(updatedReport)
 
+    const actorName = req.user?.name || 'Alguien'
+    setImmediate(() => {
+      postProjectSystemMessage(
+        projectId, workspaceId, SYSTEM_TYPES.REPORT_GENERATED,
+        `📊 ${actorName} generó el informe de ${reportLabel(updatedReport)}.`
+      ).catch(() => {})
+    })
+
     res.json({
       report: {
         id:              updatedReport.id,
@@ -780,7 +789,21 @@ async function notifyReportFeedback(report, feedback) {
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true, name: true, companyName: true } }),
     getProjectNotifyRecipients(projectId, workspaceId),
   ])
-  if (!fullReport || !workspace || emails.length === 0) return
+  if (!fullReport) return
+
+  // Deja constancia en el chat del proyecto aunque no haya nadie a quien avisar por
+  // email (workspace/emails vacío) — el resto de la función es solo el aviso por mail.
+  const clientLabel = (feedback.name || '').trim() || 'Un cliente'
+  const comment = (feedback.comment || '').trim()
+  const commentPart = comment ? `: "${comment.length > 140 ? `${comment.slice(0, 137)}…` : comment}"` : ''
+  setImmediate(() => {
+    postProjectSystemMessage(
+      projectId, workspaceId, SYSTEM_TYPES.REPORT_RATED,
+      `⭐ ${clientLabel} calificó el informe de ${reportLabel(fullReport)}: ${feedback.rating}/5${commentPart}`
+    ).catch(() => {})
+  })
+
+  if (!workspace || emails.length === 0) return
 
   const domain    = process.env.APP_DOMAIN || 'blisstracker.app'
   const reportUrl = `https://${workspace.slug}.${domain}/report/${fullReport.token}`

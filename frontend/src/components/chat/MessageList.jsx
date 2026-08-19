@@ -23,6 +23,9 @@ function dayLabel(iso) {
 }
 
 function sameGroup(a, b) {
+  // Los mensajes de sistema (sin autor) nunca agrupan — ni entre sí ni con un mensaje
+  // de una persona real justo antes/después.
+  if (a.systemType || b.systemType) return false
   return a.authorId === b.authorId && (new Date(b.createdAt) - new Date(a.createdAt)) < GROUP_WINDOW_MS
 }
 
@@ -160,22 +163,43 @@ export default function MessageList({
         const canEdit = m.authorId === currentUserId
         const canDelete = canEdit || canModerate
 
+        const dayDivider = isNewDay && (
+          <div className="flex items-center gap-3 my-3">
+            <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+            <span className="text-xs font-medium text-gray-400 dark:text-gray-500">{dayLabel(m.createdAt)}</span>
+            <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+          </div>
+        )
+        const unreadDivider = isUnreadDivider && (
+          <div className="flex items-center gap-3 my-3">
+            <div className="flex-1 h-px bg-red-300 dark:bg-red-700" />
+            <span className="text-xs font-semibold text-red-500 dark:text-red-400">No leídos</span>
+            <div className="flex-1 h-px bg-red-300 dark:bg-red-700" />
+          </div>
+        )
+
+        // Mensaje del sistema (sin autor): fila centrada y muda, sin avatar ni acciones
+        // (reaccionar/fijar/editar/eliminar) — deja constancia de un hito del proyecto,
+        // no es una intervención de una persona.
+        if (m.systemType) {
+          return (
+            <div key={m.id} id={`chat-msg-${m.id}`}>
+              {dayDivider}
+              {unreadDivider}
+              <div className="flex items-center justify-center my-1.5 px-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400 text-center px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800/70">
+                  {renderRichText(m.content, { members })}
+                  <span className="text-gray-400 dark:text-gray-500 ml-1.5">· {timeLabel(m.createdAt)}</span>
+                </span>
+              </div>
+            </div>
+          )
+        }
+
         return (
           <div key={m.id} id={`chat-msg-${m.id}`}>
-            {isNewDay && (
-              <div className="flex items-center gap-3 my-3">
-                <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-                <span className="text-xs font-medium text-gray-400 dark:text-gray-500">{dayLabel(m.createdAt)}</span>
-                <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-              </div>
-            )}
-            {isUnreadDivider && (
-              <div className="flex items-center gap-3 my-3">
-                <div className="flex-1 h-px bg-red-300 dark:bg-red-700" />
-                <span className="text-xs font-semibold text-red-500 dark:text-red-400">No leídos</span>
-                <div className="flex-1 h-px bg-red-300 dark:bg-red-700" />
-              </div>
-            )}
+            {dayDivider}
+            {unreadDivider}
             <div
               className={`group flex items-start gap-3 rounded-lg px-2 -mx-2 hover:bg-gray-50 dark:hover:bg-gray-800/60 ${grouped ? 'py-0.5' : 'py-1.5'}`}
             >

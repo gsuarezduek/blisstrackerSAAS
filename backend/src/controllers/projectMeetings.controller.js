@@ -1,6 +1,15 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { isAdmin, canWrite } = require('../lib/projectAccess')
+const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
+
+// "45 min" o "1h 20min" — para el mensaje de sistema del chat al cerrar una reunión.
+function durationLabel(mins) {
+  if (mins < 60) return `${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m > 0 ? `${h}h ${m}min` : `${h}h`
+}
 
 const VALID_TYPE = ['internal', 'client']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -340,6 +349,18 @@ async function finishMeeting(req, res, next) {
       data:  { endedAt: now, durationMins },
     })
     const fresh = await loadMeeting(existing.id, projectId, workspaceId)
+
+    const actorName = req.user?.name || 'Alguien'
+    const typeLabel = existing.type === 'client' ? 'con el cliente' : 'interna'
+    const titlePart = existing.title ? ` "${existing.title}"` : ''
+    const n = existing.participants.length
+    setImmediate(() => {
+      postProjectSystemMessage(
+        projectId, workspaceId, SYSTEM_TYPES.MEETING_HELD,
+        `🗓️ ${actorName} cerró la reunión ${typeLabel}${titlePart} — ${durationLabel(durationMins)}, ${n} participante${n === 1 ? '' : 's'}.`
+      ).catch(() => {})
+    })
+
     res.json(formatMeeting(fresh))
   } catch (err) { next(err) }
 }

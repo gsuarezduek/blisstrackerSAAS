@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
-const { isValidBriefType } = require('../lib/briefCatalog')
+const { isValidBriefType, briefLabel, isBriefComplete } = require('../lib/briefCatalog')
 const { isAdmin, canWrite } = require('../lib/projectAccess')
+const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
 
 // Resuelve :id (numérico o name) a un projectId del workspace actual.
 async function resolveProjectId(param, workspaceId) {
@@ -81,11 +82,27 @@ async function saveBrief(req, res, next) {
       if (str) clean[k] = str
     }
 
+    const before = await prisma.projectBrief.findUnique({ where: { projectId_type: { projectId, type } } })
+    const wasComplete = before ? isBriefComplete(type, before.answers) : false
+
     const saved = await prisma.projectBrief.upsert({
       where:  { projectId_type: { projectId, type } },
       update: { answers: clean },
       create: { projectId, workspaceId, type, answers: clean },
     })
+
+    // Solo se anuncia la transición incompleto → completo (no cada guardado de un brief
+    // que ya estaba completo, ni retroceder no dispara nada).
+    if (!wasComplete && isBriefComplete(type, clean)) {
+      const actorName = req.user?.name || 'Alguien'
+      setImmediate(() => {
+        postProjectSystemMessage(
+          projectId, workspaceId, SYSTEM_TYPES.BRIEF_COMPLETED,
+          `📋 Se completó el brief de ${briefLabel(type)} (${actorName}).`
+        ).catch(() => {})
+      })
+    }
+
     res.json({ brief: shape(saved) })
   } catch (err) { next(err) }
 }
