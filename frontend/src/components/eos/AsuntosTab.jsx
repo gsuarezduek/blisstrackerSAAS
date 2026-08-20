@@ -40,6 +40,7 @@ function IssueCard({ issue, members, onUpdate, onDelete }) {
   function commitNotes() { if (notesDirty.current) { notesDirty.current = false; onUpdate(issue.id, { notes: notesDraft })       } }
 
   const owner = members.find(m => m.id === issue.ownerId)
+  const creator = members.find(m => m.id === issue.createdById)
   const isSolved = issue.status === 'solved'
 
   return (
@@ -80,6 +81,13 @@ function IssueCard({ issue, members, onUpdate, onDelete }) {
       {/* Expanded body */}
       {expanded && (
         <div className="px-3 pb-3 pt-1 space-y-3 border-t border-gray-100 dark:border-gray-700" onClick={e => e.stopPropagation()}>
+
+          {/* Creado por */}
+          {creator && (
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Creado por {creator.name} · {new Date(issue.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+            </p>
+          )}
 
           {/* Description */}
           <div>
