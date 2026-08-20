@@ -50,14 +50,12 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   const bottomRef                 = useRef(null)
   const textareaRef               = useRef(null)
 
-  // @mention autocomplete
-  const [members, setMembers]               = useState([])
+  // @mention autocomplete — contra los miembros del workspace (cualquiera puede ser
+  // mencionado en un comentario, sea o no del equipo del proyecto, mismo criterio que la
+  // descripción de la tarea más abajo). `wsMembers` se declara unas líneas más abajo.
   const [mentionQuery, setMentionQuery]     = useState(null)  // null = inactive
   const [mentionStart, setMentionStart]     = useState(-1)
   const [mentionIdx, setMentionIdx]         = useState(0)
-  const mentionMatches = mentionQuery !== null
-    ? members.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()))
-    : []
 
   // Edit state
   const [editing, setEditing]         = useState(false)
@@ -97,6 +95,10 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
 
   const editMentionMatches = editMentionQuery !== null
     ? wsMembers.filter(m => m.name.toLowerCase().includes(editMentionQuery.toLowerCase()))
+    : []
+
+  const mentionMatches = mentionQuery !== null
+    ? wsMembers.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()))
     : []
 
   const selectEditMention = useCallback((member) => {
@@ -180,14 +182,6 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
       .finally(() => setLoading(false))
   }, [task.id])
 
-  useEffect(() => {
-    const projectId = task.project?.id ?? task.projectId
-    if (projectId) {
-      api.get(`/projects/${projectId}/members`)
-        .then(r => setMembers(r.data))
-        .catch(() => {})
-    }
-  }, [task.project?.id, task.projectId])
 
   const selectMention = useCallback((member) => {
     const cursorPos = textareaRef.current?.selectionStart ?? text.length
@@ -610,7 +604,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                   <span className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(c.createdAt)}</span>
                 </div>
                 <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug mt-0.5 whitespace-pre-wrap break-words">
-                  {renderRichText(c.content, { members })}
+                  {renderRichText(c.content, { members: wsMembers })}
                 </p>
               </div>
             </div>

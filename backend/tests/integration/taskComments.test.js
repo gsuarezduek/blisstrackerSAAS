@@ -1,6 +1,6 @@
 jest.mock('../../src/lib/prisma', () => ({
   workspace:       { findUnique: jest.fn() },
-  workspaceMember: { findUnique: jest.fn() },
+  workspaceMember: { findUnique: jest.fn(), findMany: jest.fn() },
   task:            { findUnique: jest.fn(), findFirst: jest.fn() },
   projectMember:   { findUnique: jest.fn(), findMany: jest.fn() },
   taskComment:     { create: jest.fn(), findMany: jest.fn() },
@@ -179,7 +179,7 @@ describe('POST /api/tasks/:id/comments', () => {
   it('notifica con TASK_MENTION a un nombre completo de 3 palabras (autocompletado)', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1 }))
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
-    prisma.projectMember.findMany.mockResolvedValue([
+    prisma.workspaceMember.findMany.mockResolvedValue([
       { user: { id: 7, name: 'María José García' } },
     ])
     prisma.taskComment.create.mockResolvedValue(makeComment())
@@ -201,10 +201,38 @@ describe('POST /api/tasks/:id/comments', () => {
     )
   })
 
+  it('menciona a alguien del workspace que NO es del equipo del proyecto', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1 }))
+    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
+    // Resuelve contra TODO el workspace, no contra ProjectMember — no hace falta
+    // (ni se consulta) que la persona mencionada sea parte del equipo del proyecto.
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { user: { id: 9, name: 'Persona Externa Al Equipo' } },
+    ])
+    prisma.taskComment.create.mockResolvedValue(makeComment())
+    prisma.taskComment.findMany.mockResolvedValue([])
+    prisma.notification.createMany.mockResolvedValue({ count: 1 })
+
+    await request(app)
+      .post('/api/tasks/10/comments')
+      .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ text: 'avisale a @Persona Externa Al Equipo' })
+
+    expect(prisma.projectMember.findMany).not.toHaveBeenCalled()
+    expect(prisma.notification.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ userId: 9, type: 'TASK_MENTION' }),
+        ]),
+      })
+    )
+  })
+
   it('no confunde un prefijo: "@Ana" no menciona a "Analía"', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1 }))
     prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
-    prisma.projectMember.findMany.mockResolvedValue([
+    prisma.workspaceMember.findMany.mockResolvedValue([
       { user: { id: 8, name: 'Analía Suárez' } },
     ])
     prisma.taskComment.create.mockResolvedValue(makeComment())

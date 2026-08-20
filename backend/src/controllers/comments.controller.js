@@ -53,14 +53,17 @@ async function addComment(req, res, next) {
 
     const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
 
+    // Contra miembros activos del workspace, no solo del equipo del proyecto — cualquiera
+    // puede ser mencionado y notificado en un comentario, mismo criterio que la mención
+    // en la descripción de la tarea (ver resolveTaskMentions en tasks.controller.js).
     let mentionedUserIds = new Set()
 
     if (text.includes('@')) {
-      const projectMembers = await prisma.projectMember.findMany({
-        where: { projectId: task.projectId },
+      const wsMembers = await prisma.workspaceMember.findMany({
+        where: { workspaceId, active: true },
         include: { user: { select: { id: true, name: true } } },
       })
-      mentionedUserIds = resolveMentions(text, projectMembers.map(pm => pm.user), userId)
+      mentionedUserIds = resolveMentions(text, wsMembers.map(m => m.user), userId)
     }
 
     if (mentionedUserIds.size > 0) {
