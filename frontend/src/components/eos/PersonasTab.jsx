@@ -154,7 +154,7 @@ function PeopleAnalyzer({ members, coreValues, ratingsMap, onRatingChange }) {
     <PeopleScoreSummary score={score} rightPeople={rightPeople} total={total} />
     <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <tr>
             <th className="text-left py-2 pr-4 text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[140px]">Persona</th>
             {allColumns.map((col, i) => (
