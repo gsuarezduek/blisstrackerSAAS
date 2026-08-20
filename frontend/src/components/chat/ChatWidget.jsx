@@ -34,6 +34,7 @@ export default function ChatWidget() {
   const [firstUnreadMessageId, setFirstUnreadMessageId] = useState(null)
   const [channelForm, setChannelForm] = useState(null) // null | true (crear) | channel (editar)
   const [pinnedMessages, setPinnedMessages] = useState([])
+  const [replyingTo, setReplyingTo] = useState(null)
   const activeChannelIdRef = useRef(null)
   const switcherRef = useRef(null)
 
@@ -82,6 +83,7 @@ export default function ChatWidget() {
     setMessages([])
     setFirstUnreadMessageId(null)
     setPinnedMessages([])
+    setReplyingTo(null)
 
     loadMessages(activeChannel.id).then(data => {
       if (activeChannelIdRef.current !== activeChannel.id) return
@@ -158,8 +160,8 @@ export default function ChatWidget() {
     }
   }
 
-  async function handleSend(content, gifUrl) {
-    await api.post(`/chat/channels/${activeChannel.id}/messages`, { content, gifUrl })
+  async function handleSend(content, gifUrl, replyToId) {
+    await api.post(`/chat/channels/${activeChannel.id}/messages`, { content, gifUrl, replyToId })
   }
 
   async function handleSaveEdit(messageId, content) {
@@ -311,9 +313,15 @@ export default function ChatWidget() {
                   onDelete={handleDelete}
                   onTogglePin={handleTogglePin}
                   onToggleReaction={handleToggleReaction}
+                  onReply={setReplyingTo}
                 />
 
-                <MessageInput onSend={handleSend} members={members} />
+                <MessageInput
+                  onSend={handleSend}
+                  members={members}
+                  replyingTo={replyingTo}
+                  onCancelReply={() => setReplyingTo(null)}
+                />
               </>
             )}
           </div>

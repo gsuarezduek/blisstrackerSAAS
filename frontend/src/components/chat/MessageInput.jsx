@@ -8,8 +8,8 @@ import { avatarUrl } from '../../utils/avatarUrl'
 const EVERYONE_ID = '__everyone__'
 const EVERYONE_ITEM = { id: EVERYONE_ID, name: 'everyone' }
 
-// Input del chat: texto + @menciones + GIF.
-export default function MessageInput({ onSend, members }) {
+// Input del chat: texto + @menciones + GIF + responder.
+export default function MessageInput({ onSend, members, replyingTo, onCancelReply }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
@@ -32,8 +32,9 @@ export default function MessageInput({ onSend, members }) {
     if (!text.trim() || sending) return
     setSending(true)
     try {
-      await onSend(text.trim(), null)
+      await onSend(text.trim(), null, replyingTo?.id ?? null)
       setText('')
+      onCancelReply?.()
     } finally {
       setSending(false)
       textareaRef.current?.focus()
@@ -42,7 +43,8 @@ export default function MessageInput({ onSend, members }) {
 
   async function handleSendGif(url) {
     setShowPicker(false)
-    await onSend(null, url)
+    await onSend(null, url, replyingTo?.id ?? null)
+    onCancelReply?.()
   }
 
   // Inserta el emoji en la posición del cursor (no envía ni cierra el picker, para
@@ -66,10 +68,36 @@ export default function MessageInput({ onSend, members }) {
       e.preventDefault()
       handleSend()
     }
+    if (e.key === 'Escape' && replyingTo) onCancelReply?.()
   }
+
+  // Foco automático al elegir "Responder" en un mensaje — mismo gesto que WhatsApp/Discord.
+  useEffect(() => {
+    if (replyingTo) textareaRef.current?.focus()
+  }, [replyingTo])
 
   return (
     <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
+      {replyingTo && (
+        <div className="flex items-center gap-2 mb-2 pl-2.5 pr-1.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/60 border-l-2 border-primary-400">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-primary-600 dark:text-primary-400">
+              Respondiendo a {replyingTo.systemType ? 'un mensaje del sistema' : (replyingTo.author?.name || 'alguien')}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+              {replyingTo.gifUrl ? '🖼️ GIF' : (replyingTo.content || '')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            title="Cancelar respuesta"
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded flex-shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <div className="flex items-end gap-2">
         <div ref={pickerRef} className="relative flex-shrink-0">
           <button

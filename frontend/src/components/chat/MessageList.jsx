@@ -29,10 +29,21 @@ function sameGroup(a, b) {
   return a.authorId === b.authorId && (new Date(b.createdAt) - new Date(a.createdAt)) < GROUP_WINDOW_MS
 }
 
+// Lleva el scroll hasta el mensaje citado por un "Respondiendo a" (si sigue cargado en
+// esta página) y lo resalta un instante — solo funciona con lo que ya está en el DOM, no
+// dispara una carga de páginas viejas.
+function scrollToMessage(id) {
+  const el = document.getElementById(`chat-msg-${id}`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('bg-primary-50', 'dark:bg-primary-900/20')
+  setTimeout(() => el.classList.remove('bg-primary-50', 'dark:bg-primary-900/20'), 1200)
+}
+
 export default function MessageList({
   messages, loading, loadingMore, hasMore, onLoadMore,
   firstUnreadMessageId, currentUserId, canModerate, members = [],
-  onSaveEdit, onDelete, onTogglePin, onToggleReaction,
+  onSaveEdit, onDelete, onTogglePin, onToggleReaction, onReply,
 }) {
   const scrollRef = useRef(null)
   const contentRef = useRef(null)
@@ -228,6 +239,19 @@ export default function MessageList({
                     )}
                   </div>
                 )}
+                {m.replyTo && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToMessage(m.replyTo.id)}
+                    className="block w-full text-left mb-1 pl-2 py-0.5 border-l-2 border-gray-300 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 truncate"
+                  >
+                    <span className="font-medium">
+                      {m.replyTo.systemType ? '⚙️ Mensaje del sistema' : (m.replyTo.author?.name || 'Alguien')}
+                    </span>
+                    {' — '}
+                    {m.replyTo.gifUrl ? '🖼️ GIF' : (m.replyTo.content || '')}
+                  </button>
+                )}
                 {editingId === m.id ? (
                   <div className="mt-0.5">
                     <textarea
@@ -284,6 +308,13 @@ export default function MessageList({
 
               {editingId !== m.id && (
                 <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => onReply(m)}
+                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                    title="Responder"
+                  >
+                    ↩️
+                  </button>
                   <div className="relative">
                     <button
                       onClick={() => setReactingId(id => id === m.id ? null : m.id)}

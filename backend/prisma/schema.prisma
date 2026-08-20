@@ -2883,12 +2883,20 @@ model ChatMessage {
   pinnedById  Int?
   pinnedBy    User?       @relation("ChatMessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
 
+  // Responder un mensaje (estilo WhatsApp/Discord): auto-relación, null = no es una
+  // respuesta. Si se borra el original, la respuesta queda huérfana (SetNull) en vez de
+  // arrastrarla en cascada — el quote simplemente desaparece del mensaje que respondía.
+  replyToId   Int?
+  replyTo     ChatMessage?  @relation("ChatMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies     ChatMessage[] @relation("ChatMessageReplies")
+
   notifications Notification[]
   reactions     ChatMessageReaction[]
 
   @@index([channelId, createdAt])
   @@index([channelId, pinnedAt])
   @@index([workspaceId])
+  @@index([replyToId])
 }
 
 // Reacciones con emoji: cualquier miembro activo puede reaccionar, sin catálogo fijo

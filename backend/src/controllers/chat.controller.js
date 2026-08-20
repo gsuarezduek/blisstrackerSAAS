@@ -224,8 +224,19 @@ async function sendMessage(req, res, next) {
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
     if (!assertChannelAccess(req, res, channel)) return
 
+    // Responder: solo válido si el mensaje citado es del MISMO canal — si no existe
+    // (o es de otro canal/se borró justo ahora) se ignora en silencio, no rompe el envío.
+    const requestedReplyToId = req.body?.replyToId ? Number(req.body.replyToId) : null
+    let replyTarget = null
+    if (requestedReplyToId) {
+      replyTarget = await prisma.chatMessage.findFirst({
+        where: { id: requestedReplyToId, channelId },
+        select: { id: true, authorId: true },
+      })
+    }
+
     const message = await prisma.chatMessage.create({
-      data: { workspaceId, channelId, authorId: userId, content: text || null, gifUrl },
+      data: { workspaceId, channelId, authorId: userId, content: text || null, gifUrl, replyToId: replyTarget?.id ?? null },
       include: MESSAGE_INCLUDE,
     })
 
@@ -271,6 +282,24 @@ async function sendMessage(req, res, next) {
         })),
       })
       for (const uid of mentionedUserIds) emitTo(`user:${uid}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
+    }
+
+    // Responder equivale a una mención: notifica al autor del mensaje original (si tiene
+    // uno — no a un mensaje de sistema, ni a uno mismo, ni si ya se lo notificó arriba
+    // por @mención, para no duplicar).
+    if (replyTarget?.authorId && replyTarget.authorId !== userId && !mentionedUserIds.has(replyTarget.authorId)) {
+      await prisma.notification.create({
+        data: {
+          userId: replyTarget.authorId,
+          actorId: userId,
+          workspaceId,
+          channelId,
+          chatMessageId: message.id,
+          type: 'CHAT_MENTION',
+          message: `te respondió en #${channelLabel(channel)}`,
+        },
+      })
+      emitTo(`user:${replyTarget.authorId}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
     }
 
     emitTo(`channel:${channelId}`, 'chat:message', message)

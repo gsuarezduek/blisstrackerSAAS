@@ -9,7 +9,8 @@ const LABELS = {
 
 // Toggle de sonido del chat: no es un simple on/off sino 3 modos mutuamente
 // excluyentes (ver ChatContext.jsx `soundPref`). El ícono del botón refleja el
-// modo activo (🔔/⭐/🔕) para que se note de un vistazo sin abrir el popover.
+// modo activo (🔊/⭐/🔇) para que se note de un vistazo sin abrir el popover — familia
+// de parlante (no campana, que se confunde con la campana de Notificaciones del navbar).
 export default function ChatSoundToggle({ pref, onChange }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -22,7 +23,7 @@ export default function ChatSoundToggle({ pref, onChange }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const icon = pref === 'none' ? '🔕' : pref === 'favorites' ? '⭐' : '🔔'
+  const icon = pref === 'none' ? '🔇' : pref === 'favorites' ? '⭐' : '🔊'
 
   return (
     <div ref={ref} className="relative flex-shrink-0">
