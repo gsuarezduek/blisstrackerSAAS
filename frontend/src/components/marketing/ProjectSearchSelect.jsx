@@ -1,13 +1,21 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+
+const norm = s => (s || '').toLowerCase()
+const byName = (a, b) => norm(a.name).localeCompare(norm(b.name), 'es', { sensitivity: 'base' })
 
 /**
  * Selector de proyecto con búsqueda por nombre.
  * Props:
- *   projects   — array de proyectos [{ id, name, websiteUrl? }]
+ *   projects   — array de proyectos [{ id, name, websiteUrl?, starred? }]
  *   value      — projectId seleccionado (string) o ''
  *   onChange   — fn(id: string)
  *   showUrl    — mostrar websiteUrl como subtexto (default: false)
  *   placeholder
+ *
+ * Destacados primero (mismo `ProjectStar`/"starred" que "Mis Proyectos" y el
+ * selector de canales del Chat, ChannelSwitcher.jsx): si hay al menos un
+ * proyecto destacado se separan en dos grupos con encabezado ("Destacados" /
+ * "Proyectos"); si no hay ninguno, la lista queda plana como antes.
  */
 export default function ProjectSearchSelect({
   projects,
@@ -36,6 +44,17 @@ export default function ProjectSearchSelect({
   const filtered = search.trim()
     ? projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
     : projects
+
+  const groups = useMemo(() => {
+    const favorites = filtered.filter(p => p.starred).sort(byName)
+    if (favorites.length === 0) return [{ label: null, items: [...filtered].sort(byName) }]
+    const favIds = new Set(favorites.map(p => p.id))
+    const rest = filtered.filter(p => !favIds.has(p.id)).sort(byName)
+    return [
+      { label: 'Destacados', items: favorites },
+      { label: 'Proyectos',  items: rest },
+    ]
+  }, [filtered])
 
   function handleSelect(p) {
     onChange(String(p.id))
@@ -77,28 +96,38 @@ export default function ProjectSearchSelect({
       </div>
 
       {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+        <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg max-h-60 overflow-y-auto py-1">
           {filtered.length === 0 ? (
             <p className="px-4 py-3 text-sm text-gray-400 dark:text-gray-500">Sin resultados</p>
           ) : (
-            filtered.map(p => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => handleSelect(p)}
-                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors first:rounded-t-xl last:rounded-b-xl ${
-                  String(p.id) === value
-                    ? 'text-primary-600 dark:text-primary-400 font-medium bg-primary-50 dark:bg-primary-900/20'
-                    : 'text-gray-700 dark:text-gray-300'
-                }`}
-              >
-                {p.name}
-                {showUrl && (
-                  <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">
-                    {p.websiteUrl || 'sin URL'}
-                  </span>
+            groups.map(group => (
+              <div key={group.label ?? 'flat'} className="mb-1 last:mb-0">
+                {group.label && (
+                  <p className="px-4 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    {group.label}
+                  </p>
                 )}
-              </button>
+                {group.items.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleSelect(p)}
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                      String(p.id) === value
+                        ? 'text-primary-600 dark:text-primary-400 font-medium bg-primary-50 dark:bg-primary-900/20'
+                        : 'text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    {group.label === 'Destacados' && '⭐ '}
+                    {p.name}
+                    {showUrl && (
+                      <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">
+                        {p.websiteUrl || 'sin URL'}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
             ))
           )}
         </div>
