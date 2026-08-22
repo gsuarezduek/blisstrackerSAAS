@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import StatusBadge, { fmtMoney } from './StatusBadge'
@@ -78,6 +78,23 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
   // `archived`: '' = solo activos (default), 'true' = solo archivados (vista excluyente, no aditiva).
   const [filters, setFilters] = useState({ status: '', ownerId: '', origin: '', from: '', to: '', search: '', archived: '' })
 
+  // Orden de la tabla — client-side, sin refetch (mismo patrón que Reports.jsx).
+  // 'whatsapp' (default): leads con conversación de WhatsApp primero, no
+  // leídos antes que leídos, por último mensaje más reciente; el resto queda
+  // en su orden normal (backend: updatedAt desc) al final, sin mezclarse.
+  const [sortMode, setSortMode] = useState('whatsapp')
+
+  const sortedLeads = useMemo(() => {
+    if (sortMode !== 'whatsapp') return leads
+    const withWa = leads.filter(l => l.whatsapp?.connected)
+    const withoutWa = leads.filter(l => !l.whatsapp?.connected)
+    withWa.sort((a, b) => {
+      if (a.whatsapp.unread !== b.whatsapp.unread) return a.whatsapp.unread ? -1 : 1
+      return new Date(b.whatsapp.lastMessageAt || 0) - new Date(a.whatsapp.lastMessageAt || 0)
+    })
+    return [...withWa, ...withoutWa]
+  }, [leads, sortMode])
+
   const loadLeads = useCallback(async () => {
     const params = new URLSearchParams()
     Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v) })
@@ -137,6 +154,13 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 space-y-3">
         <div className="flex items-center gap-3">
           <input className={`${input} flex-1`} placeholder="Buscar por empresa o título…" value={filters.search} onChange={e => setFilter('search', e.target.value)} />
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-gray-500 dark:text-gray-400">Ordenar por</span>
+            <select className={input} value={sortMode} onChange={e => setSortMode(e.target.value)}>
+              <option value="whatsapp">WhatsApp sin leer primero</option>
+              <option value="recent">Más recientes</option>
+            </select>
+          </div>
           <button onClick={() => setShowModal(true)} className="shrink-0 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">+ Nuevo lead</button>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -166,7 +190,7 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
 
       {/* Listado de leads */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
-        {leads.length === 0 ? (
+        {sortedLeads.length === 0 ? (
           <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">{filters.archived ? 'No hay leads archivados.' : 'No hay leads que coincidan con los filtros.'}</div>
         ) : (
           <div className="overflow-x-auto">
@@ -183,10 +207,18 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {leads.map(l => (
+                {sortedLeads.map(l => (
                   <tr key={l.id} onClick={() => onOpenLead(l.id)} className="hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900 dark:text-white">{l.company?.name || '—'}</div>
+                      <div className="font-medium text-gray-900 dark:text-white flex items-center gap-1.5">
+                        {l.company?.name || '—'}
+                        {l.whatsapp?.connected && (
+                          <span
+                            className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${l.whatsapp.unread ? 'bg-primary-500 animate-pulse' : 'bg-green-500'}`}
+                            title={l.whatsapp.unread ? 'WhatsApp: tiene mensajes sin leer' : 'WhatsApp conectado'}
+                          />
+                        )}
+                      </div>
                       {l.title && <div className="text-xs text-gray-500 dark:text-gray-400">{l.title}</div>}
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={l.status} title={l.status === 'perdido' ? l.lostReason : undefined} /></td>

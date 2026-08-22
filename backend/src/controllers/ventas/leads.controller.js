@@ -1,7 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { isValidStatus, isValidOrigin, statusMeta } = require('../../lib/salesCatalog')
 const { assertActiveMember } = require('../../lib/assertActiveMember')
-const { LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent, assertContactAvailable } = require('./_shared')
+const { LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent, assertContactAvailable, attachWhatsappStatus } = require('./_shared')
 const { createProject } = require('../../services/projects.service')
 const { todayString } = require('../../utils/dates')
 
@@ -75,7 +75,7 @@ async function listLeads(req, res, next) {
       orderBy: { updatedAt: 'desc' },
       include: LEAD_LIST_INCLUDE,
     })
-    res.json(leads)
+    res.json(await attachWhatsappStatus(leads, workspaceId, req.user.userId))
   } catch (err) { next(err) }
 }
 
