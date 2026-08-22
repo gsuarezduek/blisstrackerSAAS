@@ -9,6 +9,10 @@
  *   sendTemplateMessage({ account, to, templateName, mapping, ... }) → { waMessageId }
  *   verifyWebhookSignature(rawBody, signatureHeader, secret)         → boolean
  *   parseInboundEvent(payload)                                       → evento normalizado | null
+ *   fetchMediaMeta({ account, mediaId })                             → { url, mimeType, sizeBytes } (Fase 3)
+ *   downloadMedia({ account, url })                                  → Buffer (Fase 3)
+ *   uploadMedia({ account, buffer, mimeType, fileName })             → { mediaId } (Fase 3)
+ *   sendMediaMessage({ account, to, mediaId, kind, caption, fileName }) → { waMessageId } (Fase 3)
  *
  * `account` es siempre una fila de WhatsappAccount con accessToken ya
  * descifrado (ver decryptAccount en este mismo archivo) — ningún adaptador

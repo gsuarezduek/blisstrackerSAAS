@@ -65,6 +65,18 @@ const EXT_BY_MIME = {
   'video/mp4':       'mp4',
   'video/quicktime': 'mov',
   'video/webm':      'webm',
+  // Audio y documentos (WhatsApp — ver whatsappMedia.service.js).
+  'audio/ogg':    'ogg', // notas de voz de WhatsApp (Opus en contenedor OGG)
+  'audio/mpeg':   'mp3',
+  'audio/mp4':    'm4a',
+  'audio/amr':    'amr',
+  'audio/aac':    'aac',
+  'application/pdf':    'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':   'docx',
+  'application/vnd.ms-excel':                                                 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':        'xlsx',
+  'text/plain': 'txt',
 }
 
 /** URL pública absoluta de un objeto a partir de su key. */

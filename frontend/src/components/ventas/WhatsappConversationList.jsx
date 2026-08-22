@@ -1,3 +1,15 @@
+const MEDIA_PREVIEW = { image: '📷 Foto', sticker: '🩹 Sticker', audio: '🎤 Audio', video: '🎥 Video', document: '📄 Documento' }
+
+// Preview del último mensaje: si es un adjunto sin caption, se muestra el
+// tipo (📷 Foto, 🎤 Audio…) en vez de dejar el renglón vacío.
+function previewText(lastMessage) {
+  if (!lastMessage) return 'Sin mensajes'
+  const prefix = lastMessage.direction === 'out' ? 'Vos: ' : ''
+  if (lastMessage.content) return prefix + lastMessage.content
+  if (lastMessage.mediaKind) return prefix + (MEDIA_PREVIEW[lastMessage.mediaKind] || '📎 Adjunto')
+  return prefix
+}
+
 function timeLabel(iso) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -44,7 +56,7 @@ export default function WhatsappConversationList({ conversations, activeId, onSe
             </div>
             <div className="flex items-center justify-between gap-2 mt-0.5">
               <p className={`text-xs truncate ${c.unread ? 'text-gray-700 dark:text-gray-300 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
-                {c.lastMessage ? (c.lastMessage.direction === 'out' ? 'Vos: ' : '') + (c.lastMessage.content || '') : 'Sin mensajes'}
+                {previewText(c.lastMessage)}
               </p>
               {c.unread && <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" />}
             </div>

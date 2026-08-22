@@ -96,6 +96,16 @@ export default function WhatsappTab() {
     loadConversations()
   }, [activeId, loadConversations])
 
+  // Adjuntos (Fase 3 del plan) — multipart, campo `file` + `caption` opcional.
+  const handleSendMedia = useCallback(async (file, caption) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (caption) form.append('caption', caption)
+    const { data } = await api.post(`/whatsapp/conversations/${activeId}/media`, form)
+    setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
+    loadConversations()
+  }, [activeId, loadConversations])
+
   // Tiempo real: un solo listener para todo el tab (no hay concepto de "unirse
   // a un canal" como en el chat interno — WhatsApp emite directo a
   // workspace:<id>, ver backend/src/webhooks/whatsapp.webhook.js).
@@ -207,7 +217,7 @@ export default function WhatsappTab() {
                 )}
               </div>
               <WhatsappMessageList messages={messages} loading={loadingMessages} loadingMore={loadingMore} hasMore={hasMore} onLoadMore={loadMoreMessages} />
-              <WhatsappMessageInput onSend={handleSend} windowExpired={isWindowExpired(activeConversation)} />
+              <WhatsappMessageInput onSend={handleSend} onSendMedia={handleSendMedia} windowExpired={isWindowExpired(activeConversation)} />
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center">

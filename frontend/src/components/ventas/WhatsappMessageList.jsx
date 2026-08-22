@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import LoadingSpinner from '../LoadingSpinner'
+import { whatsappMediaUrl } from '../../utils/whatsappMediaUrl'
 
 function timeLabel(iso) {
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
@@ -13,6 +14,45 @@ function dayLabel(iso) {
   if (sameDay(d, today)) return 'Hoy'
   if (sameDay(d, yesterday)) return 'Ayer'
   return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined, timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
+function fmtBytes(n) {
+  if (!n) return ''
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// Adjunto de un mensaje (Fase 3 del plan) — la url es siempre pública/no
+// adivinable, ver whatsappMediaUrl. Documento se muestra como tarjeta con
+// ícono + nombre + tamaño y abre en pestaña nueva; el resto se renderiza inline.
+function MediaContent({ media }) {
+  const url = whatsappMediaUrl(media.id)
+  if (media.kind === 'image' || media.kind === 'sticker') {
+    return (
+      <a href={url} target="_blank" rel="noreferrer">
+        <img src={url} alt="" className="rounded-lg max-w-full max-h-64 object-contain mb-1" />
+      </a>
+    )
+  }
+  if (media.kind === 'video') {
+    return <video controls src={url} className="rounded-lg max-w-full max-h-64 mb-1" />
+  }
+  if (media.kind === 'audio') {
+    return <audio controls src={url} className="max-w-full mb-1" style={{ minWidth: 220 }} />
+  }
+  // document
+  return (
+    <a
+      href={url} target="_blank" rel="noreferrer"
+      className="flex items-center gap-2 bg-black/5 dark:bg-white/10 rounded-lg px-2.5 py-2 mb-1 hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
+    >
+      <span className="text-xl">📄</span>
+      <span className="min-w-0">
+        <span className="block text-xs font-medium truncate max-w-[180px]">{media.fileName || 'Documento'}</span>
+        {media.sizeBytes ? <span className="block text-[10px] opacity-70">{fmtBytes(media.sizeBytes)}</span> : null}
+      </span>
+    </a>
+  )
 }
 
 // ✓ enviado · ✓✓ entregado · ✓✓ (azul) leído · ⚠️ falló — mismo lenguaje visual
@@ -111,7 +151,8 @@ export default function WhatsappMessageList({ messages, loading, loadingMore, ha
                 {out && m.senderType === 'user' && m.senderUser && (
                   <span className="block text-[10px] font-semibold opacity-75 mb-0.5">{m.senderUser.name}</span>
                 )}
-                <p className="whitespace-pre-wrap break-words leading-snug">{m.content}</p>
+                {m.media && <MediaContent media={m.media} />}
+                {m.content && <p className="whitespace-pre-wrap break-words leading-snug">{m.content}</p>}
                 <div className={`flex items-center gap-1 justify-end mt-1 text-[10px] ${out ? 'text-primary-100' : 'text-gray-400 dark:text-gray-500'}`}>
                   <span>{timeLabel(m.createdAt)}</span>
                   {out && <StatusTicks status={m.status} />}

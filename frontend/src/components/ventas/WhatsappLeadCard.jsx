@@ -88,6 +88,16 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
     onChanged?.() // refresca el timeline del lead (quedó una entrada liviana del mensaje)
   }, [conversation?.id, onChanged])
 
+  // Adjuntos (Fase 3 del plan) — multipart, campo `file` + `caption` opcional.
+  const handleSendMedia = useCallback(async (file, caption) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (caption) form.append('caption', caption)
+    const { data } = await api.post(`/whatsapp/conversations/${conversation.id}/media`, form)
+    setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
+    onChanged?.()
+  }, [conversation?.id, onChanged])
+
   async function reassign(e) {
     const userId = e.target.value || null
     setAssigning(true)
@@ -155,7 +165,7 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
       ) : (
         <div className="flex flex-col h-96">
           <WhatsappMessageList messages={messages} loading={loadingMessages} loadingMore={loadingMore} hasMore={hasMore} onLoadMore={loadMoreMessages} />
-          <WhatsappMessageInput onSend={handleSend} windowExpired={isWindowExpired(conversation)} />
+          <WhatsappMessageInput onSend={handleSend} onSendMedia={handleSendMedia} windowExpired={isWindowExpired(conversation)} />
         </div>
       )}
     </div>

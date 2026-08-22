@@ -164,6 +164,7 @@ model Workspace {
   whatsappConversations     WhatsappConversation[]
   whatsappMessages          WhatsappMessage[]
   whatsappConversationReads WhatsappConversationRead[]
+  whatsappMedia             WhatsappMedia[]
 
   @@index([slug])
 }
@@ -3172,8 +3173,7 @@ model WhatsappMessage {
   conversation   WhatsappConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   direction String // "in" | "out"
-  content   String? @db.Text
-  mediaUrl  String? // Fase 3 (multimedia) — no usado todavía
+  content   String? @db.Text // para media, es el caption si vino
 
   waMessageId String @unique // id del mensaje en el BSP, para deduplicar reintentos del webhook
 
@@ -3187,7 +3187,36 @@ model WhatsappMessage {
   status    String   @default("sent") // sent | delivered | read | failed
   createdAt DateTime @default(now())
 
+  media WhatsappMedia?
+
   @@index([conversationId, createdAt])
+  @@index([workspaceId])
+}
+
+// Adjunto multimedia de un mensaje (Fase 3 del plan) — 1:1 con WhatsappMessage,
+// WhatsApp permite un solo adjunto por mensaje. URL pública no-adivinable
+// (mismo criterio que SocialImage/ContentAsset: un <img>/<audio> src no puede
+// llevar Authorization, así que la no-adivinabilidad ES el control de acceso),
+// servida por GET /api/public/whatsapp-media/:id — nunca el dominio del bucket
+// directo (mismo motivo que SocialImage: poder cambiar de bucket sin romper
+// mensajes viejos). Dual storage: objectKey en R2 si está configurado, si no
+// mediaData en la DB (mismo patrón que SocialImage/ContentAsset).
+model WhatsappMedia {
+  id          String          @id @default(uuid())
+  workspaceId Int
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messageId   Int             @unique
+  message     WhatsappMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  kind      String // "image" | "audio" | "video" | "document" | "sticker" — WhatsApp message.type
+  mimeType  String
+  fileName  String? // solo documentos, informativo — nunca se usa para armar la key
+  sizeBytes Int?
+  objectKey String? // key en R2, bajo el prefijo whatsapp/<workspaceId>/
+  mediaData Bytes? // fallback sin R2 (dev local / legacy)
+
+  createdAt DateTime @default(now())
+
   @@index([workspaceId])
 }
 

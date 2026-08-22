@@ -5,6 +5,9 @@ const { emitTo } = require('../lib/socket')
 const { assertActiveMember } = require('../lib/assertActiveMember')
 const { ACTIVE_LEAD_STATUS_KEYS } = require('../lib/salesCatalog')
 const { logLeadEvent } = require('./ventas/_shared')
+const objectStorage = require('../services/objectStorage.service')
+const { validateImageUpload } = require('../lib/imageType')
+const { validateMediaHeader } = require('../lib/mediaType')
 
 const MESSAGE_PAGE_SIZE = 50
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -122,7 +125,7 @@ async function listConversations(req, res, next) {
       orderBy: { lastMessageAt: 'desc' },
       include: {
         contact: { select: { id: true, name: true, companyId: true } },
-        messages: { orderBy: { id: 'desc' }, take: 1 },
+        messages: { orderBy: { id: 'desc' }, take: 1, include: { media: { select: { kind: true } } } },
         reads: { where: { userId: req.user.userId }, take: 1 },
       },
     })
@@ -137,7 +140,9 @@ async function listConversations(req, res, next) {
         contact: c.contact,
         lastMessageAt: c.lastMessageAt,
         lastInboundAt: c.lastInboundAt,
-        lastMessage: lastMessage ? { content: lastMessage.content, direction: lastMessage.direction, createdAt: lastMessage.createdAt } : null,
+        lastMessage: lastMessage
+          ? { content: lastMessage.content, direction: lastMessage.direction, createdAt: lastMessage.createdAt, mediaKind: lastMessage.media?.kind || null }
+          : null,
         unread: Boolean(lastMessage && lastMessage.id > lastRead),
       }
     })
@@ -173,7 +178,7 @@ async function getMessages(req, res, next) {
       where: { conversationId: conversation.id, ...(before ? { id: { lt: before } } : {}) },
       orderBy: { id: 'desc' },
       take: limit,
-      include: { senderUser: { select: { id: true, name: true, avatar: true } } },
+      include: { senderUser: { select: { id: true, name: true, avatar: true } }, media: true },
     })
     messages.reverse()
 
@@ -253,6 +258,132 @@ async function sendMessage(req, res, next) {
         await logLeadEvent({
           workspaceId: req.workspace.id, leadId: lead.id, userId: req.user.userId, type: 'whatsapp_message',
           content: `respondió por WhatsApp: "${content.trim().slice(0, 120)}"`,
+        })
+      }
+    }
+
+    res.status(201).json(message)
+  } catch (err) { next(err) }
+}
+
+function resolveMediaKind(mimetype) {
+  if (mimetype.startsWith('image/')) return 'image'
+  if (mimetype.startsWith('audio/')) return 'audio'
+  if (mimetype.startsWith('video/')) return 'video'
+  return 'document' // WhatsApp acepta bastante variedad de documentos (pdf, doc, xls, etc.)
+}
+
+/**
+ * POST /api/whatsapp/conversations/:id/media — multipart, campo `file` +
+ * `caption?` opcional (Fase 3 del plan). Sube el archivo a Meta vía el
+ * provider (para poder referenciarlo en el mensaje) Y a R2/DB (nuestra propia
+ * copia — el mediaId de Meta no sirve para servirlo de vuelta), y lo manda.
+ * Mismo guardrail de ventana de 24hs que sendMessage; se duplica la
+ * validación de cuenta/pluginId en vez de extraerla a un helper para no tocar
+ * sendMessage (ya probado en producción) — ver nota de estilo del repo.
+ *
+ * Límite MVP: 16MB (cubre imagen/audio/video reales de WhatsApp); documentos
+ * grandes (WhatsApp permite hasta 100MB) no están soportados por este
+ * endpoint todavía — ver límite de multer en whatsapp.routes.js.
+ */
+async function sendMedia(req, res, next) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Adjuntá un archivo' })
+    const caption = (req.body.caption || '').trim() || null
+
+    const conversation = await assertConversation(req)
+    if (!conversation.lastInboundAt || Date.now() - conversation.lastInboundAt.getTime() > SESSION_WINDOW_MS) {
+      return res.status(400).json({
+        error: 'Pasaron más de 24hs desde el último mensaje del contacto — hace falta una plantilla aprobada para reabrir la conversación.',
+        code: 'SESSION_WINDOW_EXPIRED',
+      })
+    }
+
+    const account = await prisma.whatsappAccount.findFirst({ where: { workspaceId: req.workspace.id } })
+    if (!account) return res.status(400).json({ error: 'No hay ninguna cuenta de WhatsApp conectada', code: 'WHATSAPP_NOT_CONNECTED' })
+    if (!account.pluginId) {
+      return res.status(400).json({ error: 'A la cuenta le falta el Plugin ID — completalo desde "Editar" antes de responder.', code: 'WHATSAPP_MISSING_PLUGIN_ID' })
+    }
+
+    const kind = resolveMediaKind(req.file.mimetype)
+    let mimeType = req.file.mimetype
+    // Igual que Contenido (contentAssets.controller.js): esto SÍ es un upload
+    // directo de un usuario nuestro, así que valida magic bytes en serio
+    // (a diferencia de whatsappMedia.service.js, que es lo que ya entregó Meta).
+    if (kind === 'image') {
+      const check = validateImageUpload(req.file.buffer, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+      if (!check.ok) return res.status(400).json({ error: check.error })
+      mimeType = check.mimeType
+    } else if (kind === 'video') {
+      const check = validateMediaHeader(req.file.buffer, 'video', ['video/mp4', 'video/quicktime', 'video/webm'])
+      if (!check.ok) return res.status(400).json({ error: check.error })
+      mimeType = check.mimeType
+    }
+
+    const provider = getProvider(account.provider)
+    const decrypted = decryptAccount(account)
+
+    let waMessageId
+    try {
+      const { mediaId: waMediaId } = await provider.uploadMedia({ account: decrypted, buffer: req.file.buffer, mimeType, fileName: req.file.originalname })
+      if (!waMediaId) throw new Error('Meta no devolvió un mediaId')
+      ;({ waMessageId } = await provider.sendMediaMessage({
+        account: decrypted, to: conversation.phoneE164, mediaId: waMediaId, kind, caption, fileName: req.file.originalname,
+      }))
+    } catch (err) {
+      const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message
+      console.error('[WhatsApp] Error enviando adjunto vía', account.provider, ':', detail)
+      return res.status(502).json({ error: `No se pudo enviar el adjunto por WhatsApp: ${detail}`, code: 'WHATSAPP_SEND_FAILED' })
+    }
+
+    const stored = objectStorage.isConfigured()
+      ? await (async () => {
+          const { key, size } = await objectStorage.putObject(req.file.buffer, mimeType, { prefix: `whatsapp/${req.workspace.id}` })
+          return { objectKey: key, mediaData: null, sizeBytes: size }
+        })()
+      : { objectKey: null, mediaData: req.file.buffer, sizeBytes: req.file.buffer.length }
+
+    const message = await prisma.whatsappMessage.create({
+      data: {
+        workspaceId: req.workspace.id,
+        conversationId: conversation.id,
+        direction: 'out',
+        content: caption,
+        waMessageId: waMessageId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        senderType: 'user',
+        senderUserId: req.user.userId,
+        status: 'sent',
+        media: {
+          create: {
+            workspaceId: req.workspace.id,
+            kind,
+            mimeType,
+            fileName: req.file.originalname || null,
+            ...stored,
+          },
+        },
+      },
+      include: { senderUser: { select: { id: true, name: true, avatar: true } }, media: true },
+    })
+
+    await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } })
+    await prisma.whatsappConversationRead.upsert({
+      where: { conversationId_userId: { conversationId: conversation.id, userId: req.user.userId } },
+      update: { lastReadMessageId: message.id, lastReadAt: new Date() },
+      create: { workspaceId: req.workspace.id, conversationId: conversation.id, userId: req.user.userId, lastReadMessageId: message.id },
+    })
+
+    emitTo(`workspace:${req.workspace.id}`, 'whatsapp:message', { conversationId: conversation.id, message })
+
+    if (conversation.contactId) {
+      const lead = await prisma.lead.findFirst({
+        where: { workspaceId: req.workspace.id, primaryContactId: conversation.contactId, status: { in: ACTIVE_LEAD_STATUS_KEYS } },
+        select: { id: true },
+      })
+      if (lead) {
+        await logLeadEvent({
+          workspaceId: req.workspace.id, leadId: lead.id, userId: req.user.userId, type: 'whatsapp_message',
+          content: `envió un adjunto por WhatsApp${caption ? `: "${caption.slice(0, 120)}"` : ''}`,
         })
       }
     }
@@ -377,6 +508,6 @@ async function markRead(req, res, next) {
 }
 
 module.exports = {
-  connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, markRead,
+  connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, sendMedia, markRead,
   assignConversation, linkContact, createContactFromConversation,
 }

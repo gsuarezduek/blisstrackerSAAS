@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const axios = require('axios')
+const FormData = require('form-data')
 
 const BASE_URL = 'https://api.chakrahq.com/v1/ext'
 
@@ -42,6 +43,78 @@ async function sendSessionMessage({ account, to, text }) {
     to,
     type: 'text',
     text: { body: text },
+  })
+  return { waMessageId: extractMessageId(data) }
+}
+
+const MEDIA_TYPES = ['image', 'audio', 'video', 'document', 'sticker']
+
+/**
+ * Metadata de un media entrante (Fase 3 del plan) — espejo de
+ * `GET /{media-id}` de la WhatsApp Cloud API real, que devuelve una URL de
+ * descarga temporal (~5min) + mime_type + tamaño. Se asume que Chakra proxea
+ * este endpoint con la misma convención de path que /messages (mismo
+ * pluginId+phoneNumberId+version), pero a diferencia de sendSessionMessage
+ * (confirmado contra la doc pública de Chakra), esto NO está confirmado —
+ * falta probarlo con un mensaje de imagen/audio real antes de confiar en
+ * producción.
+ */
+function mediaMetaUrl(account, mediaId) {
+  return `/plugin/whatsapp/${account.pluginId}/api/${WHATSAPP_API_VERSION}/${mediaId}`
+}
+
+async function fetchMediaMeta({ account, mediaId }) {
+  const { data } = await client(account).get(mediaMetaUrl(account, mediaId))
+  return {
+    url: data?.url || null,
+    mimeType: data?.mime_type ? String(data.mime_type).split(';')[0].trim() : null,
+    sizeBytes: data?.file_size ? Number(data.file_size) : null,
+  }
+}
+
+/**
+ * Descarga los bytes desde la URL temporal que devuelve fetchMediaMeta. Esa
+ * URL (de Meta o reescrita por Chakra) requiere el MISMO Bearer que el resto
+ * de la API — no es pública. Axios usa la URL absoluta tal cual (ignora el
+ * baseURL del cliente) y sigue mandando el header Authorization del client().
+ */
+async function downloadMedia({ account, url }) {
+  const { data } = await client(account).get(url, { responseType: 'arraybuffer' })
+  return Buffer.from(data)
+}
+
+/**
+ * Sube un archivo para poder referenciarlo en un mensaje saliente — espejo de
+ * `POST /{phone-number-id}/media` (multipart) de la Cloud API real. Mismo
+ * disclaimer que fetchMediaMeta/downloadMedia: la URL es un espejo razonado
+ * del patrón de messagesUrl, no confirmada contra Chakra todavía.
+ */
+function mediaUploadUrl(account) {
+  return `/plugin/whatsapp/${account.pluginId}/api/${WHATSAPP_API_VERSION}/${account.phoneNumberId}/media`
+}
+
+async function uploadMedia({ account, buffer, mimeType, fileName }) {
+  const form = new FormData()
+  form.append('messaging_product', 'whatsapp')
+  form.append('file', buffer, { filename: fileName || 'file', contentType: mimeType })
+  const { data } = await client(account).post(mediaUploadUrl(account), form, { headers: form.getHeaders() })
+  return { mediaId: data?.id || null }
+}
+
+/**
+ * Manda un mensaje con adjunto ya subido (uploadMedia) referenciado por
+ * mediaId — mismo endpoint que sendSessionMessage, `type` = kind del media.
+ */
+async function sendMediaMessage({ account, to, mediaId, kind, caption, fileName }) {
+  const { data } = await client(account).post(messagesUrl(account), {
+    messaging_product: 'whatsapp',
+    to,
+    type: kind,
+    [kind]: {
+      id: mediaId,
+      ...(caption ? { caption } : {}),
+      ...(kind === 'document' && fileName ? { filename: fileName } : {}),
+    },
   })
   return { waMessageId: extractMessageId(data) }
 }
@@ -96,6 +169,7 @@ function parseChakraFormat(payload) {
   if (payload?.event === 'message') {
     const p = payload.payload || {}
     const msg = p.message || {}
+    const media = MEDIA_TYPES.includes(msg.type) ? msg[msg.type] : null
     return {
       kind: 'message',
       wabaId: p.wabaId,
@@ -104,6 +178,10 @@ function parseChakraFormat(payload) {
       contactName: p.contacts?.[0]?.profile?.name || null,
       type: msg.type,
       text: msg.type === 'text' ? (msg.text?.body ?? null) : null,
+      mediaId: media?.id || null,
+      mediaMimeType: media?.mime_type ? String(media.mime_type).split(';')[0].trim() : null,
+      mediaCaption: media?.caption || null,
+      mediaFileName: media?.filename || null,
       timestamp: msg.timestamp || p.timestamp,
     }
   }
@@ -146,6 +224,7 @@ function parseMetaRawFormat(payload) {
   const message = value.messages?.[0]
   if (message) {
     const contact = value.contacts?.[0]
+    const media = MEDIA_TYPES.includes(message.type) ? message[message.type] : null
     return {
       kind: 'message',
       wabaId,
@@ -154,6 +233,10 @@ function parseMetaRawFormat(payload) {
       contactName: contact?.profile?.name || null,
       type: message.type,
       text: message.type === 'text' ? (message.text?.body ?? null) : null,
+      mediaId: media?.id || null,
+      mediaMimeType: media?.mime_type ? String(media.mime_type).split(';')[0].trim() : null,
+      mediaCaption: media?.caption || null,
+      mediaFileName: media?.filename || null,
       timestamp: message.timestamp,
     }
   }
@@ -182,4 +265,7 @@ function parseInboundEvent(payload) {
   return parseMetaRawFormat(payload) || parseChakraFormat(payload)
 }
 
-module.exports = { sendSessionMessage, sendTemplateMessage, verifyWebhookSignature, parseInboundEvent }
+module.exports = {
+  sendSessionMessage, sendTemplateMessage, verifyWebhookSignature, parseInboundEvent,
+  fetchMediaMeta, downloadMedia, uploadMedia, sendMediaMessage,
+}

@@ -1,21 +1,35 @@
 import { useRef, useState } from 'react'
 
+function fmtBytes(n) {
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 // A diferencia del chat interno, acá no hay @menciones/GIF/reply — es texto
-// libre hacia un lead externo. `windowExpired` deshabilita el envío cuando
-// pasaron más de 24hs desde el último mensaje del contacto (guardrail mínimo
-// de la Fase 1 del plan; las plantillas para reabrir son la Fase 5).
-export default function WhatsappMessageInput({ onSend, windowExpired }) {
+// libre (u adjuntos, Fase 3 del plan) hacia un lead externo. `windowExpired`
+// deshabilita el envío cuando pasaron más de 24hs desde el último mensaje del
+// contacto (guardrail mínimo de la Fase 1; las plantillas para reabrir son la
+// Fase 5). Con un archivo elegido, el texto pasa a ser el caption (opcional).
+export default function WhatsappMessageInput({ onSend, onSendMedia, windowExpired }) {
   const [text, setText] = useState('')
+  const [file, setFile] = useState(null)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState(null)
   const textareaRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   async function handleSend() {
-    if (!text.trim() || sending || windowExpired) return
+    if (sending || windowExpired) return
+    if (!file && !text.trim()) return
     setSending(true)
     setError(null)
     try {
-      await onSend(text.trim())
+      if (file) {
+        await onSendMedia(file, text.trim())
+        setFile(null)
+      } else {
+        await onSend(text.trim())
+      }
       setText('')
     } catch (err) {
       // Antes esto fallaba en silencio (el usuario veía el mensaje "perdido"
@@ -26,6 +40,12 @@ export default function WhatsappMessageInput({ onSend, windowExpired }) {
       setSending(false)
       textareaRef.current?.focus()
     }
+  }
+
+  function handleFilePick(e) {
+    const f = e.target.files?.[0]
+    if (f) setFile(f)
+    e.target.value = '' // permite re-elegir el mismo archivo después de sacarlo
   }
 
   function handleKeyDown(e) {
@@ -50,19 +70,35 @@ export default function WhatsappMessageInput({ onSend, windowExpired }) {
       {error && (
         <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">⚠️ {error}</p>
       )}
+      {file && (
+        <div className="flex items-center gap-2 mb-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300">
+          <span className="flex-1 truncate">📎 {file.name} <span className="text-gray-400">({fmtBytes(file.size)})</span></span>
+          <button onClick={() => setFile(null)} className="text-gray-400 hover:text-red-500 flex-shrink-0" title="Quitar archivo">✕</button>
+        </div>
+      )}
       <div className="flex items-end gap-2">
+        <input ref={fileInputRef} type="file" onChange={handleFilePick} className="hidden" />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={sending}
+          className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full text-gray-400 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 transition-colors"
+          title="Adjuntar archivo"
+        >
+          📎
+        </button>
         <textarea
           ref={textareaRef}
           rows={1}
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Escribí un mensaje…"
+          placeholder={file ? 'Agregá un texto (opcional)…' : 'Escribí un mensaje…'}
           className="flex-1 text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none max-h-28"
         />
         <button
           onClick={handleSend}
-          disabled={sending || !text.trim()}
+          disabled={sending || (!file && !text.trim())}
           className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:hover:bg-primary-600 text-white transition-colors"
           title="Enviar (Enter)"
         >

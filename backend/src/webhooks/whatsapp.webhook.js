@@ -3,6 +3,7 @@ const { getProvider, decryptAccount } = require('../lib/whatsappProvider')
 const { emitTo } = require('../lib/socket')
 const { ACTIVE_LEAD_STATUS_KEYS } = require('../lib/salesCatalog')
 const { logLeadEvent } = require('../controllers/ventas/_shared')
+const { downloadInboundMedia } = require('../services/whatsappMedia.service')
 
 // WhatsApp entrega el "from" en dígitos (con o sin "+"). Normalizamos a un
 // único formato ("+<dígitos>") para que WhatsappConversation.phoneE164 sea
@@ -62,14 +63,39 @@ async function handleInboundMessage(account, event) {
       workspaceId: account.workspaceId,
       conversationId: conversation.id,
       direction: 'in',
-      content: event.text,
+      // Para media, `text` viene null y el caption (si vino) es lo que se
+      // muestra como contenido del mensaje — mismo campo que un texto plano.
+      content: event.mediaId ? (event.mediaCaption || null) : event.text,
       waMessageId: event.waMessageId,
       senderType: 'contact',
       status: 'delivered',
     },
+    include: { media: true },
   })
 
-  emitTo(`workspace:${account.workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message })
+  // Adjunto (Fase 3 del plan) — best-effort: si falla la descarga, el mensaje
+  // ya está guardado (con su caption si tenía), solo queda sin el archivo.
+  if (event.mediaId) {
+    const media = await downloadInboundMedia({
+      account, mediaId: event.mediaId, kind: event.type, mimeType: event.mediaMimeType,
+    })
+    if (media) {
+      await prisma.whatsappMedia.create({
+        data: {
+          workspaceId: account.workspaceId,
+          messageId: message.id,
+          fileName: event.mediaFileName || null,
+          ...media,
+        },
+      })
+    }
+  }
+
+  const fullMessage = event.mediaId
+    ? await prisma.whatsappMessage.findUnique({ where: { id: message.id }, include: { media: true } })
+    : message
+
+  emitTo(`workspace:${account.workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message: fullMessage })
 
   if (contact) await notifyLeadOfMessage({ workspaceId: account.workspaceId, contact, conversation, event })
 }
