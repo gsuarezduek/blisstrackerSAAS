@@ -36,6 +36,12 @@ const LEAD_ORIGINS = [
 const LEAD_STATUS_KEYS = LEAD_STATUSES.map(s => s.key)
 const LEAD_ORIGIN_KEYS = LEAD_ORIGINS.map(o => o.key)
 
+// Estados no terminales (todavía "en juego"). Usado para la regla de negocio
+// "un Contact no puede ser primaryContact de más de un Lead activo a la vez"
+// (ver assertContactAvailable en controllers/ventas/_shared.js) y para
+// resolver el lead vigente de un contacto que escribe por WhatsApp (Fase 2).
+const ACTIVE_LEAD_STATUS_KEYS = LEAD_STATUSES.filter(s => !s.isWon && !s.isLost).map(s => s.key)
+
 function isValidStatus(key) { return LEAD_STATUS_KEYS.includes(key) }
 function isValidOrigin(key) { return key == null || LEAD_ORIGIN_KEYS.includes(key) }
 function statusMeta(key)    { return LEAD_STATUSES.find(s => s.key === key) || null }
@@ -45,6 +51,7 @@ module.exports = {
   LEAD_ORIGINS,
   LEAD_STATUS_KEYS,
   LEAD_ORIGIN_KEYS,
+  ACTIVE_LEAD_STATUS_KEYS,
   isValidStatus,
   isValidOrigin,
   statusMeta,

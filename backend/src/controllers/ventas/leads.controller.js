@@ -1,7 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { isValidStatus, isValidOrigin, statusMeta } = require('../../lib/salesCatalog')
 const { assertActiveMember } = require('../../lib/assertActiveMember')
-const { LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent } = require('./_shared')
+const { LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent, assertContactAvailable } = require('./_shared')
 const { createProject } = require('../../services/projects.service')
 const { todayString } = require('../../utils/dates')
 
@@ -148,6 +148,14 @@ async function createLead(req, res, next) {
       // las métricas (win rate, ganados del mes) sean consistentes con changeStatus/convert.
       const initStatus = status || 'prospecto'
       const initMeta = statusMeta(initStatus)
+
+      // Un contacto no puede ser principal de 2 leads activos a la vez (ver
+      // assertContactAvailable) — solo aplica si el lead nace en un estado no
+      // terminal, uno que arranca ganado/perdido no compite por el contacto.
+      if (!initMeta?.isWon && !initMeta?.isLost) {
+        await assertContactAvailable(tx, { workspaceId, contactId: resolvedContactId })
+      }
+
       return tx.lead.create({
         data: {
           workspaceId,
@@ -203,13 +211,22 @@ async function updateLead(req, res, next) {
         const targetCompany = data.companyId ?? lead.companyId
         const ct = await prisma.contact.findFirst({ where: { id: Number(primaryContactId), workspaceId, companyId: targetCompany }, select: { id: true } })
         if (!ct) return res.status(400).json({ error: 'El contacto no pertenece a la empresa' })
+        // Solo compite por el contacto si este lead está activo — uno terminal
+        // (ganado/perdido) reasignando su contacto no crea 2 leads activos a la vez.
+        const meta = statusMeta(lead.status)
+        if (!meta?.isWon && !meta?.isLost) {
+          await assertContactAvailable(prisma, { workspaceId, contactId: Number(primaryContactId), excludeLeadId: lead.id })
+        }
         data.primaryContactId = Number(primaryContactId)
       }
     }
 
     const updated = await prisma.lead.update({ where: { id: lead.id }, data, include: LEAD_DETAIL_INCLUDE })
     res.json(updated)
-  } catch (err) { next(err) }
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
+    next(err)
+  }
 }
 
 // PATCH /api/ventas/leads/:id/status  { status, lostReason? }
@@ -227,6 +244,11 @@ async function changeStatus(req, res, next) {
     const meta = statusMeta(status)
     if (meta?.isLost && !lostReason?.trim()) {
       return res.status(400).json({ error: 'Indicá el motivo de la pérdida' })
+    }
+    // Reabrir un lead ganado/perdido a un estado activo puede chocar con otro
+    // lead activo que ya tenga el mismo contacto principal (ver assertContactAvailable).
+    if (!meta?.isWon && !meta?.isLost) {
+      await assertContactAvailable(prisma, { workspaceId, contactId: lead.primaryContactId, excludeLeadId: lead.id })
     }
     const data = { status }
     data.wonAt  = meta?.isWon  ? new Date() : null
@@ -548,7 +570,32 @@ async function convertToProject(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// GET /api/ventas/leads/:id/whatsapp
+// Resuelve la conversación de WhatsApp del contacto principal del lead (Fase 2
+// del plan) — el panel de mensajes se reusa tal cual de Fase 1
+// (GET/POST /api/whatsapp/conversations/:id/...), esto solo resuelve de dónde
+// partir. Como un Contact es principal de a lo sumo 1 lead activo (ver
+// assertContactAvailable), la conversación por contactId no es ambigua.
+async function getLeadWhatsapp(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const lead = await findLead(req.params.id, workspaceId, { primaryContact: { select: { id: true, name: true, phone: true } } })
+    if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
+
+    const account = await prisma.whatsappAccount.findFirst({ where: { workspaceId }, select: { id: true } })
+    if (!account) return res.json({ hasAccount: false, contact: lead.primaryContact, conversation: null })
+    if (!lead.primaryContactId) return res.json({ hasAccount: true, contact: null, conversation: null })
+
+    const conversation = await prisma.whatsappConversation.findFirst({
+      where: { workspaceId, contactId: lead.primaryContactId },
+      include: { assignedTo: { select: { id: true, name: true, avatar: true } } },
+    })
+    res.json({ hasAccount: true, contact: lead.primaryContact, conversation })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   listLeads, getLead, createLead, updateLead, changeStatus, changeOwner, archiveLead,
   addAction, resolveAction, deleteAction, addNote, deleteNote, deleteLead, convertToProject,
+  getLeadWhatsapp,
 }

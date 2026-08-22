@@ -1,6 +1,8 @@
 const prisma = require('../lib/prisma')
 const { getProvider, decryptAccount } = require('../lib/whatsappProvider')
 const { emitTo } = require('../lib/socket')
+const { ACTIVE_LEAD_STATUS_KEYS } = require('../lib/salesCatalog')
+const { logLeadEvent } = require('../controllers/ventas/_shared')
 
 // WhatsApp entrega el "from" en dígitos (con o sin "+"). Normalizamos a un
 // único formato ("+<dígitos>") para que WhatsappConversation.phoneE164 sea
@@ -68,6 +70,56 @@ async function handleInboundMessage(account, event) {
   })
 
   emitTo(`workspace:${account.workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message })
+
+  if (contact) await notifyLeadOfMessage({ workspaceId: account.workspaceId, contact, conversation, event })
+}
+
+/**
+ * Si el contacto que escribió es el principal de un lead activo: deja una
+ * entrada liviana en su timeline (LeadActivity — el timeline apunta, el panel
+ * de WhatsApp del lead muestra el contenido completo) y avisa al responsable
+ * (conversation.assignedToId, o el ownerId del lead si nadie reasignó la
+ * conversación puntual — Fase 2 del plan). Como un contacto es principal de a
+ * lo sumo 1 lead activo (ver assertContactAvailable en
+ * controllers/ventas/_shared.js), la búsqueda no es ambigua. Best-effort:
+ * nunca debe romper el procesamiento del mensaje entrante.
+ */
+async function notifyLeadOfMessage({ workspaceId, contact, conversation, event }) {
+  try {
+    const lead = await prisma.lead.findFirst({
+      where: { workspaceId, primaryContactId: contact.id, status: { in: ACTIVE_LEAD_STATUS_KEYS } },
+      select: { id: true, ownerId: true },
+    })
+    if (!lead) return
+
+    const contactLabel = contact.name || event.contactName || conversation.phoneE164
+    const snippet = (event.text || '[mensaje]').slice(0, 120)
+
+    // userId: null → el timeline lo muestra con prefijo "Sistema" (nadie del
+    // equipo actuó acá), por eso el texto sigue en minúscula como el resto de
+    // los eventos ("Sistema registró...", igual que "Fulano creó el lead").
+    await logLeadEvent({
+      workspaceId, leadId: lead.id, userId: null, type: 'whatsapp_message',
+      content: `registró un mensaje de WhatsApp de ${contactLabel}: "${snippet}"`,
+    })
+
+    const targetUserId = conversation.assignedToId || lead.ownerId
+    if (!targetUserId) return
+    // Sin actorId: quien escribió es el contacto (no un User) — mismo criterio
+    // que CONTENT_APPROVED, mensaje autocontenido con el nombre incluido.
+    await prisma.notification.create({
+      data: {
+        userId: targetUserId,
+        workspaceId,
+        leadId: lead.id,
+        type: 'WHATSAPP_MESSAGE',
+        message: `${contactLabel} te escribió por WhatsApp: "${snippet}"`,
+      },
+    })
+    emitTo(`user:${targetUserId}`, 'notification:new', { type: 'WHATSAPP_MESSAGE', leadId: lead.id })
+  } catch (err) {
+    console.error('[WhatsApp Webhook] Error notificando al lead:', err.message)
+  }
 }
 
 async function handleStatusUpdate(account, event) {

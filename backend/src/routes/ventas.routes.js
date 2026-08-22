@@ -1,6 +1,7 @@
 const router = require('express').Router()
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, salesGuard } = require('../middleware/workspace')
+const { requireFeatureFlag } = require('../lib/featureFlags')
 
 const dashboard = require('../controllers/ventas/salesDashboard.controller')
 const companies = require('../controllers/ventas/companies.controller')
@@ -50,6 +51,10 @@ router.delete('/leads/:id/actions/:actionId',     leads.deleteAction)
 router.post('/leads/:id/notes',         leads.addNote)
 router.delete('/leads/:id/notes/:noteId', leads.deleteNote)
 router.post('/leads/:id/convert',       leads.convertToProject)
+
+// WhatsApp embebido (Fase 2 del plan de WhatsApp) — requiere además el
+// feature flag propio `whatsapp` (independiente de `ventas`, ver whatsapp.routes.js).
+router.get('/leads/:id/whatsapp', requireFeatureFlag('whatsapp'), leads.getLeadWhatsapp)
 
 // IA (Fase 2): investigación de la empresa + generador de propuestas
 router.post('/leads/:id/research',      research.startResearch)

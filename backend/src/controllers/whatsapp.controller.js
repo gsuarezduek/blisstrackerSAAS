@@ -2,6 +2,9 @@ const prisma = require('../lib/prisma')
 const { encrypt } = require('../lib/encryption')
 const { getProvider, decryptAccount } = require('../lib/whatsappProvider')
 const { emitTo } = require('../lib/socket')
+const { assertActiveMember } = require('../lib/assertActiveMember')
+const { ACTIVE_LEAD_STATUS_KEYS } = require('../lib/salesCatalog')
+const { logLeadEvent } = require('./ventas/_shared')
 
 const MESSAGE_PAGE_SIZE = 50
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -238,7 +241,47 @@ async function sendMessage(req, res, next) {
     })
 
     emitTo(`workspace:${req.workspace.id}`, 'whatsapp:message', { conversationId: conversation.id, message })
+
+    // Entrada liviana en el timeline del lead (best-effort, ver notifyLeadOfMessage
+    // en whatsapp.webhook.js — misma idea, dirección "out").
+    if (conversation.contactId) {
+      const lead = await prisma.lead.findFirst({
+        where: { workspaceId: req.workspace.id, primaryContactId: conversation.contactId, status: { in: ACTIVE_LEAD_STATUS_KEYS } },
+        select: { id: true },
+      })
+      if (lead) {
+        await logLeadEvent({
+          workspaceId: req.workspace.id, leadId: lead.id, userId: req.user.userId, type: 'whatsapp_message',
+          content: `respondió por WhatsApp: "${content.trim().slice(0, 120)}"`,
+        })
+      }
+    }
+
     res.status(201).json(message)
+  } catch (err) { next(err) }
+}
+
+/**
+ * PATCH /api/whatsapp/conversations/:id/assign  { userId }
+ * Reasigna el responsable de una conversación puntual (Fase 2 del plan) —
+ * cualquier miembro activo del equipo comercial, no solo admin/owner, mismo
+ * criterio que changeOwner de un Lead. `userId: null` desasigna (vuelve al
+ * default implícito del lead.ownerId, resuelto en el frontend).
+ */
+async function assignConversation(req, res, next) {
+  try {
+    const conversation = await assertConversation(req)
+    const { userId } = req.body
+    const newAssigneeId = userId != null ? Number(userId) : null
+    if (newAssigneeId != null && !(await assertActiveMember(newAssigneeId, req.workspace.id))) {
+      return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
+    }
+    const updated = await prisma.whatsappConversation.update({
+      where: { id: conversation.id },
+      data: { assignedToId: newAssigneeId },
+      include: { assignedTo: { select: { id: true, name: true, avatar: true } } },
+    })
+    res.json(updated)
   } catch (err) { next(err) }
 }
 
@@ -258,4 +301,4 @@ async function markRead(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, markRead }
+module.exports = { connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, markRead, assignConversation }

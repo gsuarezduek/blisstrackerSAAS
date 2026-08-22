@@ -9,6 +9,7 @@ import LeadModal from './LeadModal'
 import ConvertToProjectModal from './ConvertToProjectModal'
 import ResearchPanel from './ResearchPanel'
 import ProposalsPanel from './ProposalsPanel'
+import WhatsappLeadCard from './WhatsappLeadCard'
 import LeadNotes from './LeadNotes'
 import { LEAD_STATUSES, originLabel, statusMeta } from './salesCatalog'
 
@@ -22,7 +23,7 @@ const EVENT_ICON = {
   next_action_set: '📌', next_action_added: '📌', next_action_done: '✅',
   proposal_created: '📄', research_run: '🔎', diagnostic_report_created: '📣',
   converted_to_client: '🎉', project_created: '🚀',
-  archived: '🗄', unarchived: '↩️',
+  archived: '🗄', unarchived: '↩️', whatsapp_message: '💬',
 }
 
 function fmtDateTime(d) {
@@ -364,6 +365,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
         </div>
 
         <ProposalsPanel leadId={leadId} companyName={c?.name} currency={lead.currency} onChanged={load} />
+        <WhatsappLeadCard leadId={leadId} lead={lead} onChanged={load} />
         <div className={card}>
           <h3 className={sectionTitle}>Historial</h3>
           <div className="flex gap-2 mb-4">

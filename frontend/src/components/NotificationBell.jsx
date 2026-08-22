@@ -18,7 +18,7 @@ const FILTERS = [
   { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                  match: n => n.type === 'BLOCKED' || n.type === 'UNBLOCKED' },
   { key: 'ACTION',       label: '🙋', title: 'Requieren tu acción',       match: n => n.type === 'VACATION_REQUEST' },
   { key: 'CLIENT',       label: '🤝', title: 'Actividad del cliente',     match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' || n.type === 'PORTAL_CLIENT_LOGIN' },
-  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' },
+  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: isFollowedCompleted },
   { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED'].includes(n.type) },
@@ -234,11 +234,12 @@ export default function NotificationBell() {
                 const isContentApproved = n.type === 'CONTENT_APPROVED'
                 const isContentChanges  = n.type === 'CONTENT_CHANGES_REQUESTED'
                 const isPortalLogin     = n.type === 'PORTAL_CLIENT_LOGIN'
+                const isWhatsappMessage = n.type === 'WHATSAPP_MESSAGE'
                 const isVacationAction = n.type === 'VACATION_REQUEST'
                 const isVacation       = isVacationAction || n.type === 'VACATION_REVIEWED'
                 const isGameLaunched   = n.type === 'GAME_LAUNCHED'
                 const isCompleted      = n.type === 'COMPLETED'
-                const isAssignment     = isMention || isLeadAssigned || isChatMention || isContentMention
+                const isAssignment     = isMention || isLeadAssigned || isChatMention || isContentMention || isWhatsappMessage
                 const isAmberFamily    = isVacation || isGameLaunched || isContentChanges
 
                 const isGreenFamily = isUnblocked || isAddedProject || isContentApproved
@@ -312,9 +313,9 @@ export default function NotificationBell() {
                   >
                     <div className="flex items-start gap-2.5">
                       <div className="relative flex-shrink-0 mt-0.5">
-                        {/* CONTENT_APPROVED/CONTENT_CHANGES_REQUESTED/PORTAL_CLIENT_LOGIN no
-                            tienen actor (User) — quien actuó es un contacto del cliente, no
-                            alguien del equipo. */}
+                        {/* CONTENT_APPROVED/CONTENT_CHANGES_REQUESTED/PORTAL_CLIENT_LOGIN/WHATSAPP_MESSAGE
+                            no tienen actor (User) — quien actuó es un contacto externo (cliente
+                            o lead), no alguien del equipo. */}
                         {n.actor ? (
                           <img
                             src={avatarUrl(n.actor.avatar)}
@@ -323,7 +324,7 @@ export default function NotificationBell() {
                           />
                         ) : (
                           <div className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center text-sm">
-                            {isContentApproved ? '✅' : isContentChanges ? '✏️' : isPortalLogin ? '👋' : '🤝'}
+                            {isContentApproved ? '✅' : isContentChanges ? '✏️' : isPortalLogin ? '👋' : isWhatsappMessage ? '📱' : '🤝'}
                           </div>
                         )}
                         {isBlocked && (
@@ -349,6 +350,9 @@ export default function NotificationBell() {
                         )}
                         {isContentMention && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">📅</span>
+                        )}
+                        {isWhatsappMessage && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">📱</span>
                         )}
                         {isVacationAction && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] leading-none">🙋</span>

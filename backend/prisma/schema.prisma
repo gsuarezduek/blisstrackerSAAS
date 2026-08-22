@@ -318,6 +318,7 @@ model User {
   whatsappAccountsConnected WhatsappAccount[]
   whatsappMessagesSent      WhatsappMessage[]
   whatsappConversationReads WhatsappConversationRead[]
+  whatsappConversationsAssigned WhatsappConversation[] @relation("WhatsappConversationAssignee")
 }
 
 model UserLogin {
@@ -760,6 +761,7 @@ enum NotificationType {
   CONTENT_CHANGES_REQUESTED
   CONTENT_MENTION
   PORTAL_CLIENT_LOGIN
+  WHATSAPP_MESSAGE
 }
 
 model Notification {
@@ -3141,6 +3143,12 @@ model WhatsappConversation {
 
   contactId Int?
   contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  // Responsable de esta conversación puntual — reasignable, default implícito
+  // (calculado en el frontend/controller, no persistido hasta reasignar) es el
+  // ownerId del Lead activo del contacto. Ver Fase 2 del plan de WhatsApp.
+  assignedToId Int?
+  assignedTo   User? @relation("WhatsappConversationAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   lastMessageAt DateTime?
   lastInboundAt DateTime? // ancla de la ventana de 24hs para poder mandar texto libre
