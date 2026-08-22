@@ -72,16 +72,17 @@ function verifyWebhookSignature(rawBody, signatureHeader, secret) {
 }
 
 /**
- * Confirmado (apidocs.chakrahq.com/doc-919167). Dos shapes de evento:
- * "message" (entrante) y "status" (delivery status). Devuelve null si el
- * evento no es reconocido — el caller decide si lo ignora o lo loguea.
+ * Formato propio de Chakra (apidocs.chakrahq.com/doc-919167) — solo se recibe
+ * si la cuenta tiene configurada la "Chakra webhook url" (no la pass-through).
+ * Dos shapes de evento: "message" (entrante) y "status" (delivery status).
  */
-function parseInboundEvent(payload) {
+function parseChakraFormat(payload) {
   if (payload?.event === 'message') {
     const p = payload.payload || {}
     const msg = p.message || {}
     return {
       kind: 'message',
+      wabaId: p.wabaId,
       waMessageId: msg.id || p.messageId,
       from: msg.from || p.contacts?.[0]?.wa_id,
       contactName: p.contacts?.[0]?.profile?.name || null,
@@ -94,12 +95,75 @@ function parseInboundEvent(payload) {
     const p = payload.payload || {}
     return {
       kind: 'status',
+      wabaId: p.wabaId,
       waMessageId: p.id,
       status: p.deliveryStatus, // delivered | read | failed
       timestamp: p.timestamp,
     }
   }
   return null
+}
+
+/**
+ * Formato crudo de WhatsApp Cloud API (Meta) — CONFIRMADO contra un webhook
+ * real el 2026-08-22. Es lo que llega cuando la cuenta tiene configurada la
+ * URL de "pass-through" en vez de la "Chakra webhook url" (que nunca llegó a
+ * probarse). Shape estándar de Meta, documentado públicamente:
+ * https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples
+ *
+ * {
+ *   object: "whatsapp_business_account",
+ *   entry: [{ id: "<wabaId>", changes: [{ field: "messages", value: {
+ *     metadata: { phone_number_id, display_phone_number },
+ *     contacts: [{ profile: { name }, wa_id }],
+ *     messages: [{ from, id, timestamp, type, text: { body } }],
+ *     statuses: [{ id, status, timestamp, recipient_id }],
+ *   }}] }],
+ * }
+ */
+function parseMetaRawFormat(payload) {
+  const entry = payload?.entry?.[0]
+  const value = entry?.changes?.[0]?.value
+  if (!value) return null
+  const wabaId = entry.id
+
+  const message = value.messages?.[0]
+  if (message) {
+    const contact = value.contacts?.[0]
+    return {
+      kind: 'message',
+      wabaId,
+      waMessageId: message.id,
+      from: message.from,
+      contactName: contact?.profile?.name || null,
+      type: message.type,
+      text: message.type === 'text' ? (message.text?.body ?? null) : null,
+      timestamp: message.timestamp,
+    }
+  }
+
+  const status = value.statuses?.[0]
+  if (status) {
+    return {
+      kind: 'status',
+      wabaId,
+      waMessageId: status.id,
+      status: status.status, // sent | delivered | read | failed
+      timestamp: status.timestamp,
+    }
+  }
+
+  return null
+}
+
+/**
+ * Acepta cualquiera de los dos shapes (pass-through de Meta o formato propio
+ * de Chakra) sin que dependa de cuál URL de webhook terminó configurada en el
+ * dashboard — más robusto que forzar una sola. Devuelve null si no matchea
+ * ninguna, el caller decide si lo ignora o lo loguea.
+ */
+function parseInboundEvent(payload) {
+  return parseMetaRawFormat(payload) || parseChakraFormat(payload)
 }
 
 module.exports = { sendSessionMessage, sendTemplateMessage, verifyWebhookSignature, parseInboundEvent }
