@@ -1,26 +1,15 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { isWorkspaceSubdomain } from '../utils/domain'
 import AddTaskModal from './AddTaskModal'
 
-// Catálogo de atajos — alimenta el overlay de ayuda (tecla "?").
-// Todas las teclas son combinaciones (Shift + X); por eso `chord` no se usa acá.
+// Catálogo de atajos — alimenta el overlay de ayuda (tecla "?"). Se sacaron los
+// atajos de navegación (Shift + D/Y/A/M/R) y las acciones de tarea con Shift
+// (I/C/P/B, que vivían en Dashboard.jsx): en la práctica no se usaban. Se
+// mantiene únicamente el de crear tarea.
 const SHORTCUT_GROUPS = [
-  { title: 'Navegación', items: [
-    { keys: ['Shift', 'D'], desc: 'Ir al Dashboard' },
-    { keys: ['Shift', 'Y'], desc: 'Ir a Mis Proyectos' },
-    { keys: ['Shift', 'A'], desc: 'Ir a Actividad (tiempo real)' },
-    { keys: ['Shift', 'M'], desc: 'Ir a Marketing' },
-    { keys: ['Shift', 'R'], desc: 'Ir a Reportes' },
-  ]},
   { title: 'Tareas', items: [
-    { keys: ['N'],          desc: 'Nueva tarea (desde cualquier página; si estás en un proyecto, queda asociada a ese proyecto)' },
-    { keys: ['Shift', 'I'], desc: 'Iniciar la primera tarea (si no hay ninguna en curso)' },
-    { keys: ['Shift', 'C'], desc: 'Completar la tarea en curso' },
-    { keys: ['Shift', 'P'], desc: 'Pausar la tarea en curso' },
-    { keys: ['Shift', 'B'], desc: 'Bloquear la tarea en curso' },
+    { keys: ['N'], desc: 'Nueva tarea (desde cualquier página; si estás en un proyecto, queda asociada a ese proyecto)' },
   ]},
   { title: 'General', items: [
     { keys: ['Ctrl/Cmd', 'B'], desc: 'Abrir / cerrar la pizarra de notas' },
@@ -28,20 +17,6 @@ const SHORTCUT_GROUPS = [
     { keys: ['Esc'],           desc: 'Cerrar la ventana actual' },
   ]},
 ]
-
-// Destino de navegación para "Shift + X". Reportes depende del rol; Marketing
-// depende del feature flag (igual que el link del Navbar, que no aparece si está
-// deshabilitado — el atajo no debería mandar a una página bloqueada).
-function navDest(key, isAdmin, marketingEnabled) {
-  switch (key) {
-    case 'd': return '/'
-    case 'y': return '/my-projects'
-    case 'a': return '/realtime'
-    case 'm': return marketingEnabled ? '/marketing' : null
-    case 'r': return isAdmin ? '/reports' : '/my-reports'
-    default:  return null
-  }
-}
 
 // ¿El foco está en un campo editable? Entonces no disparamos atajos de una sola tecla.
 function isTypingTarget(el) {
@@ -60,7 +35,6 @@ function Kbd({ children }) {
 
 export default function GlobalShortcuts() {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const [taskOpen, setTaskOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [toast, setToast] = useState('')
@@ -70,7 +44,6 @@ export default function GlobalShortcuts() {
 
   // Solo activo para usuarios autenticados dentro de un workspace (no en landing/login).
   const enabled = !!user && isWorkspaceSubdomain()
-  const { enabled: marketingEnabled } = useFeatureFlag('marketing')
 
   useEffect(() => {
     if (!enabled) return
@@ -100,13 +73,8 @@ export default function GlobalShortcuts() {
 
       const lower = e.key.toLowerCase()
 
-      // Navegación con Shift + tecla. Las teclas de tarea (C/P/B/I) no están en el
-      // mapa de navegación, así que acá se ignoran y las maneja el Dashboard.
-      if (e.shiftKey) {
-        const dest = navDest(lower, !!user?.isAdmin, marketingEnabled)
-        if (dest) { e.preventDefault(); navigate(dest) }
-        return
-      }
+      // Shift + tecla ya no dispara nada acá (ver comentario en SHORTCUT_GROUPS).
+      if (e.shiftKey) return
 
       // Atajos de una sola tecla (sin Shift).
       if (taskOpen || helpOpen) return
@@ -115,7 +83,7 @@ export default function GlobalShortcuts() {
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [enabled, navigate, taskOpen, helpOpen, user, marketingEnabled])
+  }, [enabled, taskOpen, helpOpen])
 
   function handleAdd(task) {
     // Avisamos a la página activa (ej. Dashboard) para que refresque su lista.

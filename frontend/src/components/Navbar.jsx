@@ -99,15 +99,20 @@ export default function Navbar() {
   const [profileOpen,    setProfileOpen]    = useState(false)
   const [adminOpen,      setAdminOpen]      = useState(false)
   const [adminMobileOpen, setAdminMobileOpen] = useState(false)
+  const [modulesOpen,       setModulesOpen]       = useState(false)
+  const [modulesMobileOpen, setModulesMobileOpen] = useState(false)
   const profileRef = useRef(null)
   const adminRef   = useRef(null)
+  const modulesRef = useRef(null)
 
-  const isAdminRoute = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification') || !!useMatch('/admin/ventas') || !!useMatch('/reports')
+  const isAdminRoute   = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification') || !!useMatch('/reports')
+  const isModulesRoute = !!useMatch('/marketing') || !!useMatch('/contenido') || !!useMatch('/ventas') || !!useMatch('/admin/ventas')
 
   useEffect(() => {
     function handleClickOutside(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)
       if (adminRef.current   && !adminRef.current.contains(e.target))   setAdminOpen(false)
+      if (modulesRef.current && !modulesRef.current.contains(e.target)) setModulesOpen(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -147,14 +152,24 @@ export default function Navbar() {
     { to: '/', label: 'Dashboard' },
     { to: '/my-projects', label: 'Mis Proyectos' },
     { to: '/realtime', label: 'Actividad', dot: true },
-    ...(contenidoEnabled ? [{ to: '/contenido', label: 'Contenido' }] : []),
-    ...(marketingEnabled ? [{ to: '/marketing', label: 'Marketing' }] : []),
-    // Ventas como link principal SOLO para el equipo comercial no-admin.
-    // Los admins (incluidos admin+ventas) lo ven bajo Administración, nunca duplicado.
-    ...(ventasEnabled && !isAdmin && user?.isSales ? [{ to: '/ventas', label: 'Ventas' }] : []),
     // "Mis Reportes" va al final del menú para usuarios no-admin (los admins usan
     // "Reportes" dentro de Administración → Productividad, ver adminSublinks).
     ...(!isAdmin ? [{ to: '/my-reports', label: 'Mis Reportes' }] : []),
+  ]
+
+  // ── Sublinks de Módulos ───────────────────────────────────────────────────
+  // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
+  // Siempre agrupados bajo "Módulos" (nunca se aplanan al nivel superior aunque
+  // solo haya uno activo) — la posición de cada módulo en el menú es estable sin
+  // importar qué otros estén prendidos en el workspace. Mismo criterio de acceso a
+  // Ventas que ya usan NotificationBell/SetupChecklist: admin → /admin/ventas,
+  // equipo comercial no-admin → /ventas.
+  const moduleSublinks = [
+    ...(marketingEnabled ? [{ to: '/marketing', label: '🎯 Marketing' }] : []),
+    ...(contenidoEnabled ? [{ to: '/contenido', label: '📅 Contenido' }] : []),
+    ...(ventasEnabled && (isAdmin || user?.isSales)
+      ? [{ to: isAdmin ? '/admin/ventas' : '/ventas', label: '💰 Ventas' }]
+      : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────
@@ -165,7 +180,6 @@ export default function Navbar() {
     { to: '/admin/rrhh',         label: '👥 RRHH' },
     ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
     ...(gamificationEnabled ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
-    ...(ventasEnabled ? [{ to: '/admin/ventas', label: '💰 Ventas' }] : []),
     { to: '/admin',              label: '⚙️ Panel' },
   ]
 
@@ -336,6 +350,43 @@ export default function Navbar() {
           <div className="hidden lg:flex gap-5 text-sm items-center">
             {links.map(l => <NavLink key={l.to} {...l} />)}
 
+            {moduleSublinks.length > 0 && (
+              <div ref={modulesRef} className="relative">
+                <button
+                  onClick={() => setModulesOpen(o => !o)}
+                  className={`flex items-center gap-1 transition-colors ${
+                    isModulesRoute
+                      ? 'text-primary-600 dark:text-primary-400 font-semibold'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400'
+                  }`}
+                >
+                  Módulos
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                    className={`w-3.5 h-3.5 transition-transform ${modulesOpen ? 'rotate-180' : ''}`}>
+                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                {modulesOpen && (
+                  <div className="absolute left-0 mt-2 w-44 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg py-1 z-50">
+                    {moduleSublinks.map(s => (
+                      <Link
+                        key={s.to}
+                        to={s.to}
+                        onClick={() => setModulesOpen(false)}
+                        className={`flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
+                          location.pathname === s.to
+                            ? 'text-primary-600 dark:text-primary-400 font-semibold bg-primary-50 dark:bg-primary-900/20'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {s.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {isAdmin && (
               <div ref={adminRef} className="relative">
                 <button
@@ -469,6 +520,44 @@ export default function Navbar() {
                   <NavLink {...l} onClick={closeMenu} />
                 </div>
               ))}
+
+              {/* Módulos — usa el mismo array `moduleSublinks` que desktop */}
+              {moduleSublinks.length > 0 && (
+                <div className="py-2">
+                  <button
+                    onClick={() => setModulesMobileOpen(o => !o)}
+                    className={`flex items-center gap-1 text-sm transition-colors w-full ${
+                      isModulesRoute
+                        ? 'text-primary-600 dark:text-primary-400 font-semibold'
+                        : 'text-gray-600 dark:text-gray-300'
+                    }`}
+                  >
+                    Módulos
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                      className={`w-3.5 h-3.5 ml-auto transition-transform ${modulesMobileOpen ? 'rotate-180' : ''}`}>
+                      <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                  {modulesMobileOpen && (
+                    <div className="ml-3 mt-1 space-y-1 border-l-2 border-gray-200 dark:border-gray-700 pl-3">
+                      {moduleSublinks.map(s => (
+                        <Link
+                          key={s.to}
+                          to={s.to}
+                          onClick={closeMenu}
+                          className={`block py-1.5 text-sm transition-colors ${
+                            location.pathname === s.to
+                              ? 'text-primary-600 dark:text-primary-400 font-semibold'
+                              : 'text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400'
+                          }`}
+                        >
+                          {s.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Administración — usa el mismo array `adminSublinks` que desktop */}
               {isAdmin && (

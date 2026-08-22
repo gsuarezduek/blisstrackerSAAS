@@ -456,55 +456,6 @@ export default function Dashboard() {
 
   const activeTask = useMemo(() => focusTasks.find(t => t.status === 'IN_PROGRESS') ?? null, [focusTasks])
 
-  // ── Atajos de teclado para acciones de tarea ───────────────────────────────
-  // Con tarea en curso: Shift+C completar, Shift+P pausar, Shift+B bloquear.
-  // Sin tarea en curso: Shift+I inicia la primera tarea de la lista.
-  const shortcutRef = useRef(null)
-  shortcutRef.current = { activeTask, focusTasks, ended: !!workDay?.endedAt, update: handleUpdateTask }
-
-  useEffect(() => {
-    function isTyping(el) {
-      if (!el) return false
-      const t = el.tagName
-      return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable
-    }
-    async function run(task, endpoint, body) {
-      try {
-        const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`, body)
-        shortcutRef.current.update(data)
-      } catch (err) {
-        if (err.response?.data?.error) alert(err.response.data.error)
-      }
-    }
-    function onKey(e) {
-      // Solo combinaciones Shift + tecla (sin otros modificadores), y nunca mientras se escribe.
-      if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return
-      if (isTyping(e.target)) return
-      const k = e.key.toLowerCase()
-      if (!['c', 'p', 'b', 'i'].includes(k)) return
-      const { activeTask, focusTasks, ended } = shortcutRef.current
-      if (ended) return
-
-      if (activeTask) {
-        if (k === 'c') { e.preventDefault(); run(activeTask, 'complete') }
-        else if (k === 'p') { e.preventDefault(); run(activeTask, 'pause') }
-        else if (k === 'b') {
-          e.preventDefault()
-          const reason = window.prompt('¿Por qué está bloqueada esta tarea?')
-          if (reason && reason.trim()) run(activeTask, 'block', { reason: reason.trim() })
-        }
-        // 'i' con una tarea ya en curso: no hace nada
-      } else if (k === 'i') {
-        // Primera tarea de la lista que se pueda iniciar/reanudar
-        e.preventDefault()
-        const next = focusTasks.find(t => t.status === 'PENDING' || t.status === 'PAUSED')
-        if (next) run(next, next.status === 'PAUSED' ? 'resume' : 'start')
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
-
   // Lista de la pestaña activa de Seguimiento (Seguidas / Delegadas)
   const seguimientoSource = seguimientoTab === 'SEGUIDAS' ? followedTasks : delegated
 
