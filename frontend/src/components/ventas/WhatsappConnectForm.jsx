@@ -15,6 +15,7 @@ import api from '../../api/client'
 export default function WhatsappConnectForm({ onClose, onConnected, initialAccount }) {
   const isEdit = Boolean(initialAccount)
   const [form, setForm] = useState({
+    id: initialAccount?.id || null,
     phoneNumberId: initialAccount?.phoneNumberId || '',
     wabaId: initialAccount?.wabaId || '',
     displayPhoneNumber: initialAccount?.displayPhoneNumber || '',
@@ -65,7 +66,13 @@ export default function WhatsappConnectForm({ onClose, onConnected, initialAccou
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          <Field label="Phone Number ID *" value={form.phoneNumberId} onChange={set('phoneNumberId')} placeholder="775966265503012" disabled={isEdit} />
+          <Field
+            label="Phone Number ID *"
+            value={form.phoneNumberId}
+            onChange={set('phoneNumberId')}
+            placeholder="1300293189836092"
+            hint="El ID técnico numérico (metadata.phone_number_id en el payload de Meta) — NO el número en formato +54 9 11..., ese va en el campo de abajo."
+          />
           <Field label="WABA ID" value={form.wabaId} onChange={set('wabaId')} placeholder="identifica la cuenta ante los webhooks" />
           <Field label="Número (informativo)" value={form.displayPhoneNumber} onChange={set('displayPhoneNumber')} placeholder="+54 9 11 2233-4455" />
           <Field label="Plugin ID *" value={form.pluginId} onChange={set('pluginId')} placeholder="UUID del plugin de WhatsApp en Chakra" />
@@ -88,7 +95,7 @@ export default function WhatsappConnectForm({ onClose, onConnected, initialAccou
   )
 }
 
-function Field({ label, value, onChange, placeholder, secret, disabled }) {
+function Field({ label, value, onChange, placeholder, secret, disabled, hint }) {
   return (
     <label className="block">
       <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</span>
@@ -101,6 +108,7 @@ function Field({ label, value, onChange, placeholder, secret, disabled }) {
         autoComplete="off"
         className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-60"
       />
+      {hint && <span className="block text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{hint}</span>}
     </label>
   )
 }

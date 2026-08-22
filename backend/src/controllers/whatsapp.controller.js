@@ -24,7 +24,7 @@ function publicAccount(account) {
  */
 async function connectAccount(req, res, next) {
   try {
-    const { wabaId, phoneNumberId, displayPhoneNumber, pluginId, accessToken, webhookSecret } = req.body
+    const { id, wabaId, phoneNumberId, displayPhoneNumber, pluginId, accessToken, webhookSecret } = req.body
     // pluginId es obligatorio para poder enviar mensajes: el endpoint de envío
     // de Chakra lo requiere como parte de la URL (ver lib/whatsappProvider/chakra.js
     // messagesUrl), confirmado contra su documentación real — sin esto se puede
@@ -33,44 +33,56 @@ async function connectAccount(req, res, next) {
       return res.status(400).json({ error: 'phoneNumberId y pluginId son obligatorios' })
     }
 
-    const existing = await prisma.whatsappAccount.findUnique({
-      where: { workspaceId_phoneNumberId: { workspaceId: req.workspace.id, phoneNumberId } },
-    })
+    // Editar (viene `id`) identifica la fila por su PK, no por phoneNumberId —
+    // así se puede corregir un phoneNumberId cargado mal (ej. el número en
+    // formato legible en vez del ID técnico) sin crear una fila duplicada.
+    // Conectar por primera vez sigue buscando por phoneNumberId (evita
+    // duplicar si se reenvía el mismo alta dos veces).
+    const existing = id
+      ? await prisma.whatsappAccount.findFirst({ where: { id: Number(id), workspaceId: req.workspace.id } })
+      : await prisma.whatsappAccount.findUnique({
+          where: { workspaceId_phoneNumberId: { workspaceId: req.workspace.id, phoneNumberId } },
+        })
+    if (id && !existing) return res.status(404).json({ error: 'Cuenta no encontrada' })
     // accessToken solo es obligatorio para conectar por primera vez — al editar
-    // una cuenta ya conectada (ej. para completar el pluginId) dejarlo vacío
-    // conserva el token cifrado que ya había, no lo pisa con vacío.
+    // una cuenta ya conectada dejarlo vacío conserva el token cifrado que ya
+    // había, no lo pisa con vacío.
     if (!existing && !accessToken) {
       return res.status(400).json({ error: 'accessToken es obligatorio para conectar por primera vez' })
     }
 
-    const account = await prisma.whatsappAccount.upsert({
-      where: { workspaceId_phoneNumberId: { workspaceId: req.workspace.id, phoneNumberId } },
-      update: {
-        wabaId: wabaId || null,
-        displayPhoneNumber: displayPhoneNumber || null,
-        pluginId,
-        ...(accessToken ? { accessToken: encrypt(accessToken) } : {}),
-        ...(webhookSecret ? { webhookSecret: encrypt(webhookSecret) } : {}),
-        status: 'active',
-        connectedById: req.user.userId,
-        connectedAt: new Date(),
-      },
-      create: {
-        workspaceId: req.workspace.id,
-        wabaId: wabaId || null,
-        phoneNumberId,
-        displayPhoneNumber: displayPhoneNumber || null,
-        pluginId,
-        accessToken: encrypt(accessToken),
-        webhookSecret: webhookSecret ? encrypt(webhookSecret) : null,
-        connectedById: req.user.userId,
-      },
-    })
+    const baseData = {
+      wabaId: wabaId || null,
+      phoneNumberId,
+      displayPhoneNumber: displayPhoneNumber || null,
+      pluginId,
+      status: 'active',
+      connectedById: req.user.userId,
+      connectedAt: new Date(),
+    }
+
+    const account = existing
+      ? await prisma.whatsappAccount.update({
+          where: { id: existing.id },
+          data: {
+            ...baseData,
+            ...(accessToken ? { accessToken: encrypt(accessToken) } : {}),
+            ...(webhookSecret ? { webhookSecret: encrypt(webhookSecret) } : {}),
+          },
+        })
+      : await prisma.whatsappAccount.create({
+          data: {
+            workspaceId: req.workspace.id,
+            ...baseData,
+            accessToken: encrypt(accessToken),
+            webhookSecret: webhookSecret ? encrypt(webhookSecret) : null,
+          },
+        })
 
     res.status(201).json(publicAccount(account))
   } catch (err) {
     if (err.code === 'P2002') {
-      return res.status(409).json({ error: 'Ese wabaId ya está conectado en otro workspace' })
+      return res.status(409).json({ error: 'Ese wabaId o phoneNumberId ya está conectado en otro workspace' })
     }
     next(err)
   }
