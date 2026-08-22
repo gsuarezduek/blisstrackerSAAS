@@ -9,22 +9,28 @@ import DashboardTab from '../components/ventas/DashboardTab'
 import PipelineTab from '../components/ventas/PipelineTab'
 import MetricsTab from '../components/ventas/MetricsTab'
 import CompaniesTab from '../components/ventas/CompaniesTab'
+import WhatsappTab from '../components/ventas/WhatsappTab'
 import LeadDetail from '../components/ventas/LeadDetail'
 import SalesTeamModal from '../components/ventas/SalesTeamModal'
 
-const TABS = [
+const BASE_TABS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'pipeline',  label: 'Pipeline' },
   { id: 'metricas',  label: 'Métricas' },
   { id: 'empresas',  label: 'Empresas' },
 ]
-const VALID = new Set(TABS.map(t => t.id))
+const WHATSAPP_TAB = { id: 'whatsapp', label: 'WhatsApp' }
 
 export default function Ventas() {
   const { user } = useAuth()
   const { enabled, loading: flagLoading } = useFeatureFlag('ventas')
+  // Flag propio (independiente de 'ventas') — solo agrega el tab si SuperAdmin
+  // habilitó WhatsApp para este workspace, ver backend/src/config/featureFlags.js.
+  const { enabled: whatsappEnabled } = useFeatureFlag('whatsapp')
   const [searchParams, setSearchParams] = useSearchParams()
 
+  const TABS = whatsappEnabled ? [...BASE_TABS, WHATSAPP_TAB] : BASE_TABS
+  const VALID = new Set(TABS.map(t => t.id))
   const tab = VALID.has(searchParams.get('tab')) ? searchParams.get('tab') : 'dashboard'
   const leadId = searchParams.get('lead') ? Number(searchParams.get('lead')) : null
 
@@ -101,6 +107,7 @@ export default function Ventas() {
             {tab === 'pipeline'  && <PipelineTab onOpenLead={openLead} />}
             {tab === 'metricas'  && <MetricsTab />}
             {tab === 'empresas'  && <CompaniesTab onDataChange={loadShared} />}
+            {tab === 'whatsapp'  && whatsappEnabled && <WhatsappTab />}
           </>
         )}
 

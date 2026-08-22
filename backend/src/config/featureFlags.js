@@ -36,6 +36,11 @@ const FEATURE_FLAGS = [
     name: 'Sección Contenido',
     description: 'Calendario de contenido por proyecto: piezas de RRSS con vistas Calendario, Tabla y Kanban, assets (imagen y video), comentarios internos y aprobación del cliente desde el portal.',
   },
+  {
+    key: 'whatsapp',
+    name: 'WhatsApp (Ventas)',
+    description: 'Conectá el WhatsApp del workspace vía un BSP (hoy: Chakra) para ver y responder conversaciones con leads desde Ventas. Flag independiente de "ventas" por su costo operativo real (BSP + tokens de IA).',
+  },
 ]
 
 module.exports = { FEATURE_FLAGS }

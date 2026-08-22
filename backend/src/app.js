@@ -56,7 +56,9 @@ const gamificationRoutes      = require('./routes/gamification.routes')
 const ventasRoutes            = require('./routes/ventas.routes')
 const contenidoRoutes         = require('./routes/contenido.routes')
 const chatRoutes              = require('./routes/chat.routes')
+const whatsappRoutes          = require('./routes/whatsapp.routes')
 const { handleWebhook }       = require('./webhooks/stripe.webhook')
+const { handleChakraWebhook } = require('./webhooks/whatsapp.webhook')
 
 const app = express()
 
@@ -78,6 +80,9 @@ app.use(cors({
 
 // El webhook de Stripe necesita el body RAW — debe montarse ANTES de express.json()
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleWebhook)
+
+// Mismo motivo: el webhook de Chakra firma el body crudo (X-Chakra-Signature-256).
+app.post('/api/whatsapp/webhook/chakra', express.raw({ type: 'application/json' }), handleChakraWebhook)
 
 // 1mb: los editores WYSIWYG (informes, briefs, notas) y payloads de regeneración
 // superan holgadamente 100kb. Multipart (uploads de imagen) va por multer, no por acá.
@@ -163,6 +168,7 @@ app.use('/api/gamification',     gamificationRoutes)
 app.use('/api/ventas',           ventasRoutes)
 app.use('/api/contenido',        contenidoRoutes)
 app.use('/api/chat',             chatRoutes)
+app.use('/api/whatsapp',         whatsappRoutes)
 
 app.get('/api/health', (_, res) => res.json({ ok: true }))
 
