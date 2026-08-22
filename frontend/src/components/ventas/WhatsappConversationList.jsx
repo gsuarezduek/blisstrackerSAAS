@@ -10,8 +10,9 @@ function timeLabel(iso) {
 
 // Lista de conversaciones (más reciente primero). Cada fila muestra el nombre
 // del Contact vinculado si matcheó, si no el número + nombre de perfil de
-// WhatsApp (informativo) — ver Fase 1 del plan, bucket "sin vincular".
-export default function WhatsappConversationList({ conversations, activeId, onSelect }) {
+// WhatsApp (informativo) con un botón para vincularlo a mano (Fase 2 del plan
+// — el matching automático por teléfono no cubre todos los casos).
+export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact }) {
   if (conversations.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
@@ -48,9 +49,12 @@ export default function WhatsappConversationList({ conversations, activeId, onSe
               {c.unread && <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" />}
             </div>
             {!c.contact && (
-              <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
-                Sin vincular a un contacto
-              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); onLinkContact(c) }}
+                className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50"
+              >
+                Sin vincular · 🔗 Vincular a un contacto
+              </button>
             )}
           </button>
         )

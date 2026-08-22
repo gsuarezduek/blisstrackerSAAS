@@ -24,5 +24,7 @@ router.get('/conversations/:id/messages',    whatsapp.getMessages)
 router.post('/conversations/:id/messages',   whatsapp.sendMessage)
 router.post('/conversations/:id/read',       whatsapp.markRead)
 router.patch('/conversations/:id/assign',    whatsapp.assignConversation)
+router.patch('/conversations/:id/contact',   whatsapp.linkContact)
+router.post('/conversations/:id/contact',    whatsapp.createContactFromConversation)
 
 module.exports = router

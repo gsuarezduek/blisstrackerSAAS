@@ -5,6 +5,7 @@ import { connectSocket } from '../../lib/socket'
 import LoadingSpinner from '../LoadingSpinner'
 import WhatsappConnectForm from './WhatsappConnectForm'
 import WhatsappConversationList from './WhatsappConversationList'
+import WhatsappLinkContactModal from './WhatsappLinkContactModal'
 import WhatsappMessageList from './WhatsappMessageList'
 import WhatsappMessageInput from './WhatsappMessageInput'
 
@@ -26,6 +27,7 @@ export default function WhatsappTab() {
 
   const [conversations, setConversations] = useState([])
   const [loadingConversations, setLoadingConversations] = useState(false)
+  const [linkingConversation, setLinkingConversation] = useState(null)
   const [activeId, setActiveId] = useState(null)
   const [activeConversation, setActiveConversation] = useState(null)
   const [messages, setMessages] = useState([])
@@ -189,7 +191,7 @@ export default function WhatsappTab() {
           {loadingConversations && conversations.length === 0 ? (
             <LoadingSpinner size="sm" className="flex-1 py-10" />
           ) : (
-            <WhatsappConversationList conversations={conversations} activeId={activeId} onSelect={openConversation} />
+            <WhatsappConversationList conversations={conversations} activeId={activeId} onSelect={openConversation} onLinkContact={setLinkingConversation} />
           )}
         </div>
 
@@ -214,6 +216,14 @@ export default function WhatsappTab() {
           )}
         </div>
       </div>
+
+      {linkingConversation && (
+        <WhatsappLinkContactModal
+          conversation={linkingConversation}
+          onClose={() => setLinkingConversation(null)}
+          onLinked={() => { setLinkingConversation(null); loadConversations() }}
+        />
+      )}
     </div>
   )
 }

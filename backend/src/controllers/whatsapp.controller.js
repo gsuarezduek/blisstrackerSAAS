@@ -262,6 +262,81 @@ async function sendMessage(req, res, next) {
 }
 
 /**
+ * PATCH /api/whatsapp/conversations/:id/contact  { contactId }
+ * Vincula manualmente la conversación a un Contact existente — cubre lo que
+ * el matching automático por teléfono (findMatchingContact, en
+ * whatsapp.webhook.js) no resuelve solo: el contacto se cargó/corrigió
+ * después de que la conversación ya existía, y ese matching solo se
+ * recalcula cuando llega un mensaje entrante nuevo, no al editar el contacto.
+ */
+async function linkContact(req, res, next) {
+  try {
+    const conversation = await assertConversation(req)
+    const { contactId } = req.body
+    if (!contactId) return res.status(400).json({ error: 'contactId es obligatorio' })
+
+    const contact = await prisma.contact.findFirst({ where: { id: Number(contactId), workspaceId: req.workspace.id } })
+    if (!contact) return res.status(404).json({ error: 'Contacto no encontrado' })
+
+    const updated = await prisma.whatsappConversation.update({
+      where: { id: conversation.id },
+      data: { contactId: contact.id },
+      include: { contact: { select: { id: true, name: true, companyId: true } } },
+    })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/whatsapp/conversations/:id/contact  { name, title?, email?, companyId?, newCompany? }
+ * Crea un Contact nuevo a partir de una conversación sin vincular y lo
+ * asocia — mismo patrón empresa existente/nueva que createLead
+ * (leads.controller.js). El teléfono del contacto sale de la propia
+ * conversación (phoneE164), no se vuelve a pedir.
+ */
+async function createContactFromConversation(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const conversation = await assertConversation(req)
+    const { name, title, email, companyId, newCompany } = req.body
+    if (!name || !name.trim()) return res.status(400).json({ error: 'El nombre del contacto es requerido' })
+
+    let resolvedCompanyId = companyId ? Number(companyId) : null
+    if (!resolvedCompanyId && !newCompany?.name?.trim()) {
+      return res.status(400).json({ error: 'Empresa requerida' })
+    }
+    if (resolvedCompanyId) {
+      const c = await prisma.company.findFirst({ where: { id: resolvedCompanyId, workspaceId }, select: { id: true } })
+      if (!c) return res.status(404).json({ error: 'Empresa no encontrada' })
+    }
+
+    const contact = await prisma.$transaction(async (tx) => {
+      if (!resolvedCompanyId) {
+        const company = await tx.company.create({ data: { workspaceId, name: newCompany.name.trim() } })
+        resolvedCompanyId = company.id
+      }
+      return tx.contact.create({
+        data: {
+          workspaceId,
+          companyId: resolvedCompanyId,
+          name: name.trim(),
+          title: title?.trim() || null,
+          email: email?.trim() || null,
+          phone: conversation.phoneE164,
+        },
+      })
+    })
+
+    const updated = await prisma.whatsappConversation.update({
+      where: { id: conversation.id },
+      data: { contactId: contact.id },
+      include: { contact: { select: { id: true, name: true, companyId: true } } },
+    })
+    res.status(201).json(updated)
+  } catch (err) { next(err) }
+}
+
+/**
  * PATCH /api/whatsapp/conversations/:id/assign  { userId }
  * Reasigna el responsable de una conversación puntual (Fase 2 del plan) —
  * cualquier miembro activo del equipo comercial, no solo admin/owner, mismo
@@ -301,4 +376,7 @@ async function markRead(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, markRead, assignConversation }
+module.exports = {
+  connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, markRead,
+  assignConversation, linkContact, createContactFromConversation,
+}
