@@ -23,8 +23,10 @@ function timeLabel(iso) {
 // Lista de conversaciones (más reciente primero). Cada fila muestra el nombre
 // del Contact vinculado si matcheó, si no el número + nombre de perfil de
 // WhatsApp (informativo) con un botón para vincularlo a mano (Fase 2 del plan
-// — el matching automático por teléfono no cubre todos los casos).
-export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact }) {
+// — el matching automático por teléfono no cubre todos los casos). Si el
+// contacto está vinculado, además muestra su empresa y un atajo para abrir el
+// lead asociado (resuelto server-side en listConversations).
+export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact, onOpenLead }) {
   if (conversations.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
@@ -54,20 +56,33 @@ export default function WhatsappConversationList({ conversations, activeId, onSe
               </span>
               <span className="text-[11px] text-gray-400 dark:text-gray-500 flex-shrink-0">{timeLabel(c.lastMessageAt)}</span>
             </div>
+            {c.contact?.company?.name && (
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5">🏢 {c.contact.company.name}</p>
+            )}
             <div className="flex items-center justify-between gap-2 mt-0.5">
               <p className={`text-xs truncate ${c.unread ? 'text-gray-700 dark:text-gray-300 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
                 {previewText(c.lastMessage)}
               </p>
               {c.unread && <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" />}
             </div>
-            {!c.contact && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onLinkContact(c) }}
-                className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50"
-              >
-                Sin vincular · 🔗 Vincular a un contacto
-              </button>
-            )}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {!c.contact && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onLinkContact(c) }}
+                  className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50"
+                >
+                  Sin vincular · 🔗 Vincular a un contacto
+                </button>
+              )}
+              {c.leadId && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenLead(c.leadId) }}
+                  className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 hover:bg-primary-200 dark:hover:bg-primary-900/50"
+                >
+                  🔗 Abrir lead
+                </button>
+              )}
+            </div>
           </button>
         )
       })}

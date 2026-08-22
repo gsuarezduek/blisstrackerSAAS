@@ -180,7 +180,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <button onClick={onBack} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-2">← Volver al pipeline</button>
+          <button onClick={onBack} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-2">← Volver</button>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{c?.name || 'Lead'}</h1>
             <StatusBadge status={lead.status} title={lead.status === 'perdido' ? lead.lostReason : undefined} />

@@ -19,7 +19,7 @@ function isWindowExpired(conversation) {
 // Inbox de WhatsApp — Fase 1 del plan: conectar, ver y responder. Todavía no
 // está embebido dentro de cada Lead (Fase 2) ni tiene bot (Fase 4); por ahora
 // es un tab propio dentro de Ventas, como el resto de las secciones.
-export default function WhatsappTab() {
+export default function WhatsappTab({ onOpenLead }) {
   const { user } = useAuth()
   const [loadingAccount, setLoadingAccount] = useState(true)
   const [account, setAccount] = useState(null)
@@ -201,19 +201,30 @@ export default function WhatsappTab() {
           {loadingConversations && conversations.length === 0 ? (
             <LoadingSpinner size="sm" className="flex-1 py-10" />
           ) : (
-            <WhatsappConversationList conversations={conversations} activeId={activeId} onSelect={openConversation} onLinkContact={setLinkingConversation} />
+            <WhatsappConversationList conversations={conversations} activeId={activeId} onSelect={openConversation} onLinkContact={setLinkingConversation} onOpenLead={onOpenLead} />
           )}
         </div>
 
         <div className="flex-1 flex flex-col min-w-0">
           {activeId ? (
             <>
-              <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700">
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                  {activeConversation?.contactName || activeConversation?.phoneE164}
-                </p>
-                {activeConversation?.contactName && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">{activeConversation.phoneE164}</p>
+              <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
+                    {activeConversation?.contact?.name || activeConversation?.contactName || activeConversation?.phoneE164}
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                    {activeConversation?.contact?.company?.name ? `🏢 ${activeConversation.contact.company.name} · ` : ''}
+                    {activeConversation?.phoneE164}
+                  </p>
+                </div>
+                {activeConversation?.leadId && (
+                  <button
+                    onClick={() => onOpenLead?.(activeConversation.leadId)}
+                    className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/40 font-medium"
+                  >
+                    🔗 Abrir lead
+                  </button>
                 )}
               </div>
               <WhatsappMessageList messages={messages} loading={loadingMessages} loadingMore={loadingMore} hasMore={hasMore} onLoadMore={loadMoreMessages} />

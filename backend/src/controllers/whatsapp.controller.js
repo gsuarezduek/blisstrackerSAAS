@@ -113,10 +113,39 @@ async function disconnectAccount(req, res, next) {
 }
 
 /**
+ * Resuelve, para un set de contactos, el lead "más relevante" al que abrir
+ * desde la conversación de WhatsApp — mismo criterio que attachWhatsappStatus
+ * en ventas/_shared.js pero en la dirección inversa (contacto → lead). Por la
+ * regla de negocio "1 lead activo por contacto" (assertContactAvailable) a lo
+ * sumo hay un lead activo por contacto; si no hay ninguno activo, cae al más
+ * reciente (útil para leads ya Ganados/Perdidos, que siguen queriendo verse).
+ */
+async function resolveLeadByContact(workspaceId, contactIds) {
+  const map = new Map()
+  if (contactIds.length === 0) return map
+  const leads = await prisma.lead.findMany({
+    where: { workspaceId, primaryContactId: { in: contactIds } },
+    select: { id: true, primaryContactId: true, status: true, archived: true },
+    orderBy: { createdAt: 'desc' },
+  })
+  for (const l of leads) {
+    const existing = map.get(l.primaryContactId)
+    const isActive = ACTIVE_LEAD_STATUS_KEYS.includes(l.status) && !l.archived
+    if (!existing || (isActive && !existing.active)) {
+      map.set(l.primaryContactId, { id: l.id, active: isActive })
+    }
+  }
+  return map
+}
+
+/**
  * GET /api/whatsapp/conversations
  * Lista conversaciones del workspace, más reciente primero, con el último
  * mensaje y no-leídos por usuario (mismo cálculo que listChannels del chat
  * interno: solo cuenta si hay mensajes más nuevos que el último leído).
+ * Suma el nombre de la empresa del contacto vinculado y el `leadId` al que
+ * saltar (si existe) — así la vista de WhatsApp puede mostrar "de qué
+ * empresa/oportunidad es" y abrir el lead con un clic.
  */
 async function listConversations(req, res, next) {
   try {
@@ -124,11 +153,14 @@ async function listConversations(req, res, next) {
       where: { workspaceId: req.workspace.id },
       orderBy: { lastMessageAt: 'desc' },
       include: {
-        contact: { select: { id: true, name: true, companyId: true } },
+        contact: { select: { id: true, name: true, companyId: true, company: { select: { name: true } } } },
         messages: { orderBy: { id: 'desc' }, take: 1, include: { media: { select: { kind: true } } } },
         reads: { where: { userId: req.user.userId }, take: 1 },
       },
     })
+
+    const contactIds = [...new Set(conversations.map(c => c.contactId).filter(Boolean))]
+    const leadByContact = await resolveLeadByContact(req.workspace.id, contactIds)
 
     const result = conversations.map((c) => {
       const lastMessage = c.messages[0] ?? null
@@ -138,6 +170,7 @@ async function listConversations(req, res, next) {
         phoneE164: c.phoneE164,
         contactName: c.contactName,
         contact: c.contact,
+        leadId: (c.contactId && leadByContact.get(c.contactId)?.id) || null,
         lastMessageAt: c.lastMessageAt,
         lastInboundAt: c.lastInboundAt,
         lastMessage: lastMessage
@@ -182,7 +215,19 @@ async function getMessages(req, res, next) {
     })
     messages.reverse()
 
-    res.json({ conversation, messages, hasMore: messages.length === limit })
+    // Mismo enriquecimiento que listConversations (empresa + lead al que
+    // saltar) — acá para el header de la conversación abierta, no solo la lista.
+    let contact = null, leadId = null
+    if (conversation.contactId) {
+      contact = await prisma.contact.findFirst({
+        where: { id: conversation.contactId },
+        select: { id: true, name: true, companyId: true, company: { select: { name: true } } },
+      })
+      const leadByContact = await resolveLeadByContact(req.workspace.id, [conversation.contactId])
+      leadId = leadByContact.get(conversation.contactId)?.id || null
+    }
+
+    res.json({ conversation: { ...conversation, contact, leadId }, messages, hasMore: messages.length === limit })
   } catch (err) { next(err) }
 }
 

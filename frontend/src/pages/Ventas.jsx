@@ -48,8 +48,10 @@ export default function Ventas() {
   useEffect(() => { if (enabled) loadShared() }, [enabled, loadShared])
 
   function setTab(id)      { setSearchParams({ tab: id }, { replace: true }) }
-  function openLead(id)    { setSearchParams({ lead: String(id) }, { replace: false }) }
-  function backToPipeline() { setSearchParams({ tab: 'dashboard' }, { replace: false }) }
+  // Conserva el tab actual al abrir un lead (y al volver) — así "Volver"
+  // regresa a donde se estaba (Pipeline, WhatsApp, etc.), no siempre a Dashboard.
+  function openLead(id)    { setSearchParams({ tab, lead: String(id) }, { replace: false }) }
+  function backToPipeline() { setSearchParams({ tab }, { replace: false }) }
 
   if (flagLoading) {
     return <div className="min-h-screen bg-gray-50 dark:bg-gray-900"><Navbar /><div className="py-20"><LoadingSpinner /></div></div>
@@ -84,30 +86,32 @@ export default function Ventas() {
           )}
         </div>
 
+        {/* Tabs — se mantienen visibles incluso dentro de un Lead (no solo en
+            las vistas de lista), para poder saltar a otra sección sin tener
+            que volver primero. El tab activo sigue marcando de dónde se vino. */}
+        <div className="mb-6">
+          <div className="hidden sm:flex flex-wrap gap-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-1 w-fit">
+            {TABS.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t.id ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <select className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium" value={tab} onChange={e => setTab(e.target.value)}>
+            {TABS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </div>
+
         {leadId ? (
           <LeadDetail leadId={leadId} team={team} companies={companies} onBack={backToPipeline} onChanged={loadShared} />
         ) : (
           <>
-            {/* Tabs */}
-            <div className="mb-6">
-              <div className="hidden sm:flex flex-wrap gap-1 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl p-1 w-fit">
-                {TABS.map(t => (
-                  <button key={t.id} onClick={() => setTab(t.id)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t.id ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <select className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium" value={tab} onChange={e => setTab(e.target.value)}>
-                {TABS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-              </select>
-            </div>
-
             {tab === 'dashboard' && <DashboardTab team={team} companies={companies} onOpenLead={openLead} onDataChange={loadShared} />}
             {tab === 'pipeline'  && <PipelineTab onOpenLead={openLead} />}
             {tab === 'metricas'  && <MetricsTab />}
             {tab === 'empresas'  && <CompaniesTab onDataChange={loadShared} />}
-            {tab === 'whatsapp'  && whatsappEnabled && <WhatsappTab />}
+            {tab === 'whatsapp'  && whatsappEnabled && <WhatsappTab onOpenLead={openLead} />}
           </>
         )}
 
