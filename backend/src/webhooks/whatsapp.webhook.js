@@ -107,7 +107,12 @@ async function handleChakraWebhook(req, res) {
     const chakra = getProvider('chakra')
     const event = chakra.parseInboundEvent(payload)
     if (!event) {
-      return res.json({ received: true }) // evento no reconocido — nada que hacer, pero no es un error
+      // Diagnóstico temporal: el shape exacto del payload de Chakra no está 100%
+      // confirmado contra una cuenta real (ver chakra.js) — loguear el payload
+      // crudo acá es la forma más rápida de confirmarlo/corregirlo contra datos
+      // reales en vez de seguir adivinando contra documentación parcial.
+      console.warn('[WhatsApp Webhook] Evento no reconocido, payload crudo:', JSON.stringify(payload).slice(0, 2000))
+      return res.json({ received: true })
     }
 
     // wabaId es lo único que identifica el workspace en el payload confirmado
