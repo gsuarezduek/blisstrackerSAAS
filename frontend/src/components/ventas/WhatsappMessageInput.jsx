@@ -7,14 +7,21 @@ import { useRef, useState } from 'react'
 export default function WhatsappMessageInput({ onSend, windowExpired }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [error, setError] = useState(null)
   const textareaRef = useRef(null)
 
   async function handleSend() {
     if (!text.trim() || sending || windowExpired) return
     setSending(true)
+    setError(null)
     try {
       await onSend(text.trim())
       setText('')
+    } catch (err) {
+      // Antes esto fallaba en silencio (el usuario veía el mensaje "perdido"
+      // sin ningún aviso) — ver el mensaje real del backend, que ya viene
+      // formateado (ej. WHATSAPP_SEND_FAILED con el detalle de Chakra).
+      setError(err.response?.data?.error || 'No se pudo enviar el mensaje')
     } finally {
       setSending(false)
       textareaRef.current?.focus()
@@ -40,6 +47,9 @@ export default function WhatsappMessageInput({ onSend, windowExpired }) {
 
   return (
     <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
+      {error && (
+        <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">⚠️ {error}</p>
+      )}
       <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}

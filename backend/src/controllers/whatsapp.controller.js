@@ -25,8 +25,22 @@ function publicAccount(account) {
 async function connectAccount(req, res, next) {
   try {
     const { wabaId, phoneNumberId, displayPhoneNumber, pluginId, accessToken, webhookSecret } = req.body
-    if (!phoneNumberId || !accessToken) {
-      return res.status(400).json({ error: 'phoneNumberId y accessToken son obligatorios' })
+    // pluginId es obligatorio para poder enviar mensajes: el endpoint de envío
+    // de Chakra lo requiere como parte de la URL (ver lib/whatsappProvider/chakra.js
+    // messagesUrl), confirmado contra su documentación real — sin esto se puede
+    // conectar y recibir, pero no responder.
+    if (!phoneNumberId || !pluginId) {
+      return res.status(400).json({ error: 'phoneNumberId y pluginId son obligatorios' })
+    }
+
+    const existing = await prisma.whatsappAccount.findUnique({
+      where: { workspaceId_phoneNumberId: { workspaceId: req.workspace.id, phoneNumberId } },
+    })
+    // accessToken solo es obligatorio para conectar por primera vez — al editar
+    // una cuenta ya conectada (ej. para completar el pluginId) dejarlo vacío
+    // conserva el token cifrado que ya había, no lo pisa con vacío.
+    if (!existing && !accessToken) {
+      return res.status(400).json({ error: 'accessToken es obligatorio para conectar por primera vez' })
     }
 
     const account = await prisma.whatsappAccount.upsert({
@@ -34,9 +48,9 @@ async function connectAccount(req, res, next) {
       update: {
         wabaId: wabaId || null,
         displayPhoneNumber: displayPhoneNumber || null,
-        pluginId: pluginId || null,
-        accessToken: encrypt(accessToken),
-        webhookSecret: webhookSecret ? encrypt(webhookSecret) : null,
+        pluginId,
+        ...(accessToken ? { accessToken: encrypt(accessToken) } : {}),
+        ...(webhookSecret ? { webhookSecret: encrypt(webhookSecret) } : {}),
         status: 'active',
         connectedById: req.user.userId,
         connectedAt: new Date(),
@@ -46,7 +60,7 @@ async function connectAccount(req, res, next) {
         wabaId: wabaId || null,
         phoneNumberId,
         displayPhoneNumber: displayPhoneNumber || null,
-        pluginId: pluginId || null,
+        pluginId,
         accessToken: encrypt(accessToken),
         webhookSecret: webhookSecret ? encrypt(webhookSecret) : null,
         connectedById: req.user.userId,
@@ -172,10 +186,23 @@ async function sendMessage(req, res, next) {
 
     const account = await prisma.whatsappAccount.findFirst({ where: { workspaceId: req.workspace.id } })
     if (!account) return res.status(400).json({ error: 'No hay ninguna cuenta de WhatsApp conectada', code: 'WHATSAPP_NOT_CONNECTED' })
+    if (!account.pluginId) {
+      return res.status(400).json({ error: 'A la cuenta le falta el Plugin ID — completalo desde "Editar" antes de responder.', code: 'WHATSAPP_MISSING_PLUGIN_ID' })
+    }
 
     const provider = getProvider(account.provider)
     const decrypted = decryptAccount(account)
-    const { waMessageId } = await provider.sendSessionMessage({ account: decrypted, to: conversation.phoneE164, text: content.trim() })
+    let waMessageId
+    try {
+      ;({ waMessageId } = await provider.sendSessionMessage({ account: decrypted, to: conversation.phoneE164, text: content.trim() }))
+    } catch (err) {
+      // El error crudo de axios ("Request failed with status code 404") no le
+      // dice nada al usuario — exponemos el detalle real que devuelve Chakra
+      // (si vino) para poder diagnosticar sin tener que ir a los logs.
+      const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message
+      console.error('[WhatsApp] Error enviando mensaje vía', account.provider, ':', detail)
+      return res.status(502).json({ error: `No se pudo enviar el mensaje por WhatsApp: ${detail}`, code: 'WHATSAPP_SEND_FAILED' })
+    }
 
     const message = await prisma.whatsappMessage.create({
       data: {

@@ -1,15 +1,26 @@
 import { useState } from 'react'
 import api from '../../api/client'
 
-// Conecta el WhatsApp del workspace pegando las credenciales obtenidas del
-// dashboard del BSP (hoy: Chakra, Admin ▸ Team ▸ Secrets) — mismo patrón que
-// el "Token de Business Manager" ya usado para Meta Ads/Instagram/Facebook,
-// no un redirect OAuth (el embedded signup multi-tenant de Chakra no está
-// confirmado, ver Fase 1 del plan de WhatsApp). Solo admin/owner (ver
-// whatsapp.routes.js).
-export default function WhatsappConnectForm({ onClose, onConnected }) {
+// Conecta (o edita) el WhatsApp del workspace pegando las credenciales
+// obtenidas del dashboard del BSP (hoy: Chakra, Admin ▸ Team ▸ Secrets) —
+// mismo patrón que el "Token de Business Manager" ya usado para Meta
+// Ads/Instagram/Facebook, no un redirect OAuth (el embedded signup
+// multi-tenant de Chakra no está confirmado, ver Fase 1 del plan de
+// WhatsApp). Solo admin/owner (ver whatsapp.routes.js).
+//
+// `initialAccount` (opcional): si se pasa, el form arranca en modo edición —
+// prellena los campos no sensibles (nunca los secretos, el backend no los
+// devuelve) y accessToken/webhookSecret quedan opcionales: dejarlos vacíos
+// conserva lo ya guardado en vez de pisarlo.
+export default function WhatsappConnectForm({ onClose, onConnected, initialAccount }) {
+  const isEdit = Boolean(initialAccount)
   const [form, setForm] = useState({
-    phoneNumberId: '', wabaId: '', displayPhoneNumber: '', pluginId: '', accessToken: '', webhookSecret: '',
+    phoneNumberId: initialAccount?.phoneNumberId || '',
+    wabaId: initialAccount?.wabaId || '',
+    displayPhoneNumber: initialAccount?.displayPhoneNumber || '',
+    pluginId: initialAccount?.pluginId || '',
+    accessToken: '',
+    webhookSecret: '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -20,8 +31,12 @@ export default function WhatsappConnectForm({ onClose, onConnected }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!form.phoneNumberId.trim() || !form.accessToken.trim()) {
-      setError('phoneNumberId y accessToken son obligatorios')
+    if (!form.phoneNumberId.trim() || !form.pluginId.trim()) {
+      setError('phoneNumberId y Plugin ID son obligatorios')
+      return
+    }
+    if (!isEdit && !form.accessToken.trim()) {
+      setError('accessToken es obligatorio para conectar por primera vez')
       return
     }
     setSaving(true)
@@ -42,18 +57,20 @@ export default function WhatsappConnectForm({ onClose, onConnected }) {
         className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6"
         onClick={e => e.stopPropagation()}
       >
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Conectar WhatsApp</h2>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{isEdit ? 'Editar conexión de WhatsApp' : 'Conectar WhatsApp'}</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Pegá los datos del número que diste de alta en tu dashboard de Chakra (Admin ▸ WhatsApp Setup / Admin ▸ Team ▸ Secrets).
+          {isEdit
+            ? 'Los campos de token/secret quedan vacíos por seguridad — dejalos así si no cambiaron.'
+            : 'Pegá los datos del número que diste de alta en tu dashboard de Chakra (Admin ▸ WhatsApp Setup / Admin ▸ Team ▸ Secrets).'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          <Field label="Phone Number ID *" value={form.phoneNumberId} onChange={set('phoneNumberId')} placeholder="775966265503012" />
+          <Field label="Phone Number ID *" value={form.phoneNumberId} onChange={set('phoneNumberId')} placeholder="775966265503012" disabled={isEdit} />
           <Field label="WABA ID" value={form.wabaId} onChange={set('wabaId')} placeholder="identifica la cuenta ante los webhooks" />
           <Field label="Número (informativo)" value={form.displayPhoneNumber} onChange={set('displayPhoneNumber')} placeholder="+54 9 11 2233-4455" />
-          <Field label="Plugin ID" value={form.pluginId} onChange={set('pluginId')} placeholder="opcional — para mensajes de plantilla" />
-          <Field label="Access Token *" value={form.accessToken} onChange={set('accessToken')} placeholder="token permanente" secret />
-          <Field label="Webhook Secret" value={form.webhookSecret} onChange={set('webhookSecret')} placeholder="para verificar la firma del webhook" secret />
+          <Field label="Plugin ID *" value={form.pluginId} onChange={set('pluginId')} placeholder="UUID del plugin de WhatsApp en Chakra" />
+          <Field label={isEdit ? 'Access Token (dejar vacío para no cambiar)' : 'Access Token *'} value={form.accessToken} onChange={set('accessToken')} placeholder="token permanente" secret />
+          <Field label={isEdit ? 'Webhook Secret (dejar vacío para no cambiar)' : 'Webhook Secret'} value={form.webhookSecret} onChange={set('webhookSecret')} placeholder="para verificar la firma del webhook" secret />
 
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
@@ -62,7 +79,7 @@ export default function WhatsappConnectForm({ onClose, onConnected }) {
               Cancelar
             </button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-xl">
-              {saving ? 'Conectando…' : 'Conectar'}
+              {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Conectar'}
             </button>
           </div>
         </form>
@@ -71,7 +88,7 @@ export default function WhatsappConnectForm({ onClose, onConnected }) {
   )
 }
 
-function Field({ label, value, onChange, placeholder, secret }) {
+function Field({ label, value, onChange, placeholder, secret, disabled }) {
   return (
     <label className="block">
       <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</span>
@@ -80,8 +97,9 @@ function Field({ label, value, onChange, placeholder, secret }) {
         value={value}
         onChange={onChange}
         placeholder={placeholder}
+        disabled={disabled}
         autoComplete="off"
-        className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
+        className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-60"
       />
     </label>
   )

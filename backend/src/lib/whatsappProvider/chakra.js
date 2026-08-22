@@ -3,6 +3,12 @@ const axios = require('axios')
 
 const BASE_URL = 'https://api.chakrahq.com/v1/ext'
 
+// Versión de la WhatsApp Cloud API que Chakra pasa por delante en su proxy
+// (path param, no header). Igual criterio que LINKEDIN_API_VERSION en
+// linkedin.service.js: constante con override por env var, porque Meta
+// deprecia versiones ~cada 12 meses y en algún momento hay que subirla.
+const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v22.0'
+
 function client(account) {
   return axios.create({
     baseURL: BASE_URL,
@@ -11,46 +17,56 @@ function client(account) {
   })
 }
 
-/**
- * Manda un mensaje de texto libre (dentro de la ventana de 24hs del último
- * mensaje entrante).
- *
- * ⚠️ Path NO confirmado contra documentación pública de Chakra — solo se pudo
- * verificar el endpoint de plantillas (ver sendTemplateMessage, tomado del SDK
- * oficial). La doc pública de apidocs.chakrahq.com no expone el endpoint de
- * mensaje de sesión en lo que se pudo relevar sin una cuenta real. Confirmar
- * el path exacto contra el dashboard/docs de la cuenta de Chakra antes de
- * depender de esto — ver Fase 1 del plan de WhatsApp, sección "Abierto".
- */
-async function sendSessionMessage({ account, to, text }) {
-  const { data } = await client(account).post('/whatsapp/session-messages/send', {
-    whatsappPhoneNumberId: account.phoneNumberId,
-    toPhoneNumber: to,
-    text,
-  })
-  return { waMessageId: data?.messageId ?? data?.id }
+// Confirmado contra apidocs.chakrahq.com (api-22547477 / api-26944128): tanto
+// el mensaje de sesión como el de plantilla van al MISMO endpoint — es el
+// pass-through de Chakra a la propia API de mensajes de Meta, diferenciado
+// solo por el campo `type` del body. Requiere pluginId (UUID del "plugin" de
+// WhatsApp en Chakra) como parte de la URL, no solo el accessToken.
+function messagesUrl(account) {
+  return `/plugin/whatsapp/${account.pluginId}/api/${WHATSAPP_API_VERSION}/${account.phoneNumberId}/messages`
+}
+
+function extractMessageId(data) {
+  return data?._data?.whatsappMessageId ?? null
 }
 
 /**
- * Mensaje de plantilla aprobada (para reabrir conversación fuera de la ventana
- * de 24hs — Fase 5 del plan). Shape confirmado por el SDK oficial de Chakra
- * (github.com/chakrahq/chakra-chat-sdk):
- *   client.whatsapp.templateMessages.send({ pluginId, toPhoneNumber, whatsappPhoneNumberId, templateName, mapping, imageUrl })
- * Acá se replica la misma llamada por REST directo (mismo base URL/auth que el
- * resto del adaptador) en vez de sumar el SDK como dependencia — el path REST
- * exacto (a diferencia del método del SDK) tampoco está confirmado en docs
- * públicas; mismo caveat que sendSessionMessage.
+ * Manda un mensaje de texto libre (dentro de la ventana de 24hs del último
+ * mensaje entrante). Body y respuesta confirmados contra la doc real
+ * (apidocs.chakrahq.com/api-22547477) — sigue el formato nativo de WhatsApp
+ * Cloud API, no una simplificación propia de Chakra.
  */
-async function sendTemplateMessage({ account, to, templateName, mapping = [], imageUrl }) {
-  const { data } = await client(account).post('/whatsapp/template-messages/send', {
-    pluginId: account.pluginId,
-    whatsappPhoneNumberId: account.phoneNumberId,
-    toPhoneNumber: to,
-    templateName,
-    mapping,
-    imageUrl,
+async function sendSessionMessage({ account, to, text }) {
+  const { data } = await client(account).post(messagesUrl(account), {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'text',
+    text: { body: text },
   })
-  return { waMessageId: data?.messageId ?? data?.id }
+  return { waMessageId: extractMessageId(data) }
+}
+
+/**
+ * Mensaje de plantilla aprobada (para reabrir conversación fuera de la
+ * ventana de 24hs — Fase 5 del plan). Confirmado contra
+ * apidocs.chakrahq.com/api-26944128 — mismo endpoint que sendSessionMessage,
+ * body en formato nativo de WhatsApp Cloud API (`template.name`/`language`/
+ * `components`), no el `{templateName, mapping, imageUrl}` que sugería el
+ * README del SDK (ese es azúcar sintáctico del lado del SDK, no el body real).
+ */
+async function sendTemplateMessage({ account, to, templateName, languageCode = 'es_AR', components = [] }) {
+  const { data } = await client(account).post(messagesUrl(account), {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { policy: 'deterministic', code: languageCode },
+      components,
+    },
+  })
+  return { waMessageId: extractMessageId(data) }
 }
 
 /**

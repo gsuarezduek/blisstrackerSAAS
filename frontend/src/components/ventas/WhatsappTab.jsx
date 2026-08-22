@@ -150,22 +150,39 @@ export default function WhatsappTab() {
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
         <span className="text-sm text-gray-600 dark:text-gray-300">
           📞 {account.displayPhoneNumber || account.phoneNumberId}
+          {!account.pluginId && (
+            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+              Falta Plugin ID — no se puede responder
+            </span>
+          )}
         </span>
         {user?.isAdmin && (
-          <button
-            onClick={async () => {
-              if (!window.confirm('¿Desconectar este WhatsApp? Se pierde el acceso a enviar/recibir hasta reconectarlo.')) return
-              await api.delete('/whatsapp/account')
-              setAccount(null)
-              setConversations([])
-              setActiveId(null)
-            }}
-            className="text-xs text-gray-400 hover:text-red-600 dark:hover:text-red-400"
-          >
-            Desconectar
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setShowConnectForm(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
+              Editar
+            </button>
+            <button
+              onClick={async () => {
+                if (!window.confirm('¿Desconectar este WhatsApp? Se borran también las conversaciones guardadas.')) return
+                await api.delete('/whatsapp/account')
+                setAccount(null)
+                setConversations([])
+                setActiveId(null)
+              }}
+              className="text-xs text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+            >
+              Desconectar
+            </button>
+          </div>
         )}
       </div>
+      {showConnectForm && (
+        <WhatsappConnectForm
+          initialAccount={account}
+          onClose={() => setShowConnectForm(false)}
+          onConnected={(acc) => { setAccount(acc); setShowConnectForm(false) }}
+        />
+      )}
 
       <div className="flex h-[70vh]">
         <div className="w-72 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col">
