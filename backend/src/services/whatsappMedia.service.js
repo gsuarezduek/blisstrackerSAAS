@@ -15,32 +15,30 @@ const MAX_BYTES = {
 }
 
 /**
- * Descarga un adjunto entrante de WhatsApp (fetchMediaMeta + downloadMedia
- * del provider) y lo persiste — R2 si está configurado, si no bytes en
- * WhatsappMedia.mediaData (mismo dual storage que SocialImage/ContentAsset).
- * Best-effort: devuelve null ante cualquier fallo (URL vencida, timeout,
- * archivo demasiado grande) — un adjunto que no se pudo bajar no debe tirar
- * abajo el mensaje entrante, que igual se guarda (con el caption si vino).
+ * Descarga un adjunto entrante de WhatsApp (downloadMedia del provider, un
+ * solo paso — ver disclaimer en chakra.js) y lo persiste — R2 si está
+ * configurado, si no bytes en WhatsappMedia.mediaData (mismo dual storage que
+ * SocialImage/ContentAsset). Best-effort: devuelve null ante cualquier fallo
+ * (timeout, archivo demasiado grande) — un adjunto que no se pudo bajar no
+ * debe tirar abajo el mensaje entrante, que igual se guarda (con el caption
+ * si vino).
  *
  * Validación de magic bytes: solo para imagen/sticker/video, que son los
  * únicos formatos con detector en este repo (lib/imageType.js, lib/mediaType.js).
- * Audio y documentos confían en el mime_type que devuelve la propia API de
- * Meta — a diferencia de un upload arbitrario (ContentAsset), este archivo ya
- * fue aceptado y entregado por Meta, no es input directo de un usuario nuestro.
+ * Audio y documentos confían en el mime_type que devuelve la propia API —
+ * a diferencia de un upload arbitrario (ContentAsset), este archivo ya fue
+ * aceptado y entregado por WhatsApp, no es input directo de un usuario nuestro.
  */
 async function downloadInboundMedia({ account, mediaId, kind, mimeType }) {
   try {
     const provider = getProvider(account.provider)
     const decrypted = decryptAccount(account)
 
-    const meta = await provider.fetchMediaMeta({ account: decrypted, mediaId })
-    if (!meta.url) return null
-
-    const buffer = await provider.downloadMedia({ account: decrypted, url: meta.url })
+    const { buffer, mimeType: fetchedMime } = await provider.downloadMedia({ account: decrypted, mediaId })
     const cap = MAX_BYTES[kind] || MAX_BYTES.document
     if (!buffer || buffer.length === 0 || buffer.length > cap) return null
 
-    let finalMime = meta.mimeType || mimeType || 'application/octet-stream'
+    let finalMime = fetchedMime || mimeType || 'application/octet-stream'
     if (kind === 'image' || kind === 'sticker') {
       const check = validateImageUpload(buffer, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
       if (check.ok) finalMime = check.mimeType

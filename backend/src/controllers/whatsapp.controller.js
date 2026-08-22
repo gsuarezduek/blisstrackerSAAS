@@ -325,10 +325,10 @@ async function sendMedia(req, res, next) {
 
     let waMessageId
     try {
-      const { mediaId: waMediaId } = await provider.uploadMedia({ account: decrypted, buffer: req.file.buffer, mimeType, fileName: req.file.originalname })
-      if (!waMediaId) throw new Error('Meta no devolvió un mediaId')
+      const { publicMediaUrl } = await provider.uploadMedia({ account: decrypted, buffer: req.file.buffer, mimeType, fileName: req.file.originalname })
+      if (!publicMediaUrl) throw new Error('Chakra no devolvió una URL pública del archivo subido')
       ;({ waMessageId } = await provider.sendMediaMessage({
-        account: decrypted, to: conversation.phoneE164, mediaId: waMediaId, kind, caption, fileName: req.file.originalname,
+        account: decrypted, to: conversation.phoneE164, mediaUrl: publicMediaUrl, kind, caption, fileName: req.file.originalname,
       }))
     } catch (err) {
       const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message

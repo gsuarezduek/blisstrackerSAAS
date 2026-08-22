@@ -49,70 +49,65 @@ async function sendSessionMessage({ account, to, text }) {
 
 const MEDIA_TYPES = ['image', 'audio', 'video', 'document', 'sticker']
 
+// Base separada de BASE_URL (/v1/ext) — el endpoint de descarga de media de
+// Chakra vive bajo /v2/whatsapp, sin pluginId en el path. Confirmado contra
+// apidocs.chakrahq.com/api-20534488 el 2026-08-22 (la primera versión de este
+// archivo asumía que todo colgaba de /v1/ext/plugin/whatsapp/{pluginId}/api/...,
+// que resultó ser el shape correcto SOLO para /messages, no para media).
+const MEDIA_SHOW_BASE_URL = 'https://api.chakrahq.com/v2/whatsapp'
+
 /**
- * Metadata de un media entrante (Fase 3 del plan) — espejo de
- * `GET /{media-id}` de la WhatsApp Cloud API real, que devuelve una URL de
- * descarga temporal (~5min) + mime_type + tamaño. Se asume que Chakra proxea
- * este endpoint con la misma convención de path que /messages (mismo
- * pluginId+phoneNumberId+version), pero a diferencia de sendSessionMessage
- * (confirmado contra la doc pública de Chakra), esto NO está confirmado —
- * falta probarlo con un mensaje de imagen/audio real antes de confiar en
- * producción.
+ * Descarga un adjunto entrante por su mediaId — `GET /v2/whatsapp/{version}/media/{mediaId}/show`,
+ * confirmado contra apidocs.chakrahq.com/api-20534488. A diferencia de la
+ * Cloud API real de Meta (metadata con URL temporal + segunda descarga), acá
+ * es un solo paso: el endpoint devuelve el binario directo (content-type
+ * genérico/wildcard) con el mismo Bearer que el resto de la API. El mimeType
+ * real sale del header Content-Type de la respuesta (más confiable que lo que
+ * vino en el payload del webhook).
  */
-function mediaMetaUrl(account, mediaId) {
-  return `/plugin/whatsapp/${account.pluginId}/api/${WHATSAPP_API_VERSION}/${mediaId}`
-}
-
-async function fetchMediaMeta({ account, mediaId }) {
-  const { data } = await client(account).get(mediaMetaUrl(account, mediaId))
-  return {
-    url: data?.url || null,
-    mimeType: data?.mime_type ? String(data.mime_type).split(';')[0].trim() : null,
-    sizeBytes: data?.file_size ? Number(data.file_size) : null,
-  }
+async function downloadMedia({ account, mediaId }) {
+  const url = `${MEDIA_SHOW_BASE_URL}/${WHATSAPP_API_VERSION}/media/${mediaId}/show`
+  const res = await client(account).get(url, { responseType: 'arraybuffer' })
+  const mimeType = res.headers['content-type'] ? String(res.headers['content-type']).split(';')[0].trim() : null
+  return { buffer: Buffer.from(res.data), mimeType }
 }
 
 /**
- * Descarga los bytes desde la URL temporal que devuelve fetchMediaMeta. Esa
- * URL (de Meta o reescrita por Chakra) requiere el MISMO Bearer que el resto
- * de la API — no es pública. Axios usa la URL absoluta tal cual (ignora el
- * baseURL del cliente) y sigue mandando el header Authorization del client().
- */
-async function downloadMedia({ account, url }) {
-  const { data } = await client(account).get(url, { responseType: 'arraybuffer' })
-  return Buffer.from(data)
-}
-
-/**
- * Sube un archivo para poder referenciarlo en un mensaje saliente — espejo de
- * `POST /{phone-number-id}/media` (multipart) de la Cloud API real. Mismo
- * disclaimer que fetchMediaMeta/downloadMedia: la URL es un espejo razonado
- * del patrón de messagesUrl, no confirmada contra Chakra todavía.
+ * Sube un archivo para poder referenciarlo en un mensaje saliente —
+ * `POST /plugin/whatsapp/{pluginId}/upload-public-media`, confirmado contra
+ * apidocs.chakrahq.com/api-11313630. A diferencia de la Cloud API real de
+ * Meta (`POST /{phone-number-id}/media` → `media_id` privado), Chakra sube el
+ * archivo a un storage público propio y devuelve una URL pública directa —
+ * por eso sendMediaMessage manda `link`, no `id` (ver abajo).
  */
 function mediaUploadUrl(account) {
-  return `/plugin/whatsapp/${account.pluginId}/api/${WHATSAPP_API_VERSION}/${account.phoneNumberId}/media`
+  return `/plugin/whatsapp/${account.pluginId}/upload-public-media`
 }
 
 async function uploadMedia({ account, buffer, mimeType, fileName }) {
   const form = new FormData()
-  form.append('messaging_product', 'whatsapp')
   form.append('file', buffer, { filename: fileName || 'file', contentType: mimeType })
+  if (fileName) form.append('filename', fileName)
   const { data } = await client(account).post(mediaUploadUrl(account), form, { headers: form.getHeaders() })
-  return { mediaId: data?.id || null }
+  return { publicMediaUrl: data?._data?.publicMediaUrl || null }
 }
 
 /**
- * Manda un mensaje con adjunto ya subido (uploadMedia) referenciado por
- * mediaId — mismo endpoint que sendSessionMessage, `type` = kind del media.
+ * Manda un mensaje con adjunto ya subido (uploadMedia) referenciado por su
+ * URL pública — mismo endpoint que sendSessionMessage, `type` = kind del
+ * media, formato nativo de WhatsApp Cloud API para media por `link` (en vez
+ * de `id`, que requeriría el media_id privado de Meta que Chakra no expone).
+ * `caption` se omite para audio: el objeto `audio` de la Cloud API de Meta no
+ * tiene ese campo documentado (a diferencia de image/video/document).
  */
-async function sendMediaMessage({ account, to, mediaId, kind, caption, fileName }) {
+async function sendMediaMessage({ account, to, mediaUrl, kind, caption, fileName }) {
   const { data } = await client(account).post(messagesUrl(account), {
     messaging_product: 'whatsapp',
     to,
     type: kind,
     [kind]: {
-      id: mediaId,
-      ...(caption ? { caption } : {}),
+      link: mediaUrl,
+      ...(caption && kind !== 'audio' ? { caption } : {}),
       ...(kind === 'document' && fileName ? { filename: fileName } : {}),
     },
   })
@@ -267,5 +262,5 @@ function parseInboundEvent(payload) {
 
 module.exports = {
   sendSessionMessage, sendTemplateMessage, verifyWebhookSignature, parseInboundEvent,
-  fetchMediaMeta, downloadMedia, uploadMedia, sendMediaMessage,
+  downloadMedia, uploadMedia, sendMediaMessage,
 }
