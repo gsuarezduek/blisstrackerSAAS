@@ -4,6 +4,7 @@ const { emitTo } = require('../lib/socket')
 const { ACTIVE_LEAD_STATUS_KEYS } = require('../lib/salesCatalog')
 const { logLeadEvent } = require('../controllers/ventas/_shared')
 const { downloadInboundMedia } = require('../services/whatsappMedia.service')
+const { maybeRespondWithBot } = require('../services/whatsappBot.service')
 
 // WhatsApp entrega el "from" en dígitos (con o sin "+"). Normalizamos a un
 // único formato ("+<dígitos>") para que WhatsappConversation.phoneE164 sea
@@ -98,6 +99,15 @@ async function handleInboundMessage(account, event) {
   emitTo(`workspace:${account.workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message: fullMessage })
 
   if (contact) await notifyLeadOfMessage({ workspaceId: account.workspaceId, contact, conversation, event })
+
+  // Bot (Fase 4 del plan) — fire-and-forget: la llamada a Claude tarda
+  // segundos y no debe demorar el 200 al webhook (Meta/Chakra reintenta
+  // agresivamente si tarda). maybeRespondWithBot ya maneja sus propios errores.
+  setImmediate(() => {
+    maybeRespondWithBot({ account, conversation, contact }).catch(err => {
+      console.error('[WhatsApp Bot] Error inesperado:', err.message)
+    })
+  })
 }
 
 /**

@@ -5,6 +5,7 @@ import useMembers from '../../hooks/useMembers'
 import { connectSocket } from '../../lib/socket'
 import WhatsappMessageList from './WhatsappMessageList'
 import WhatsappMessageInput from './WhatsappMessageInput'
+import WhatsappBotToggle from './WhatsappBotToggle'
 
 const card = 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden'
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -28,6 +29,7 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
   const [hasAccount, setHasAccount] = useState(false)
   const [contact, setContact] = useState(null)
   const [conversation, setConversation] = useState(null)
+  const [botConfig, setBotConfig] = useState(null)
 
   const [messages, setMessages] = useState([])
   const [loadingMessages, setLoadingMessages] = useState(false)
@@ -46,6 +48,7 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
       setHasAccount(data.hasAccount)
       setContact(data.contact)
       setConversation(data.conversation)
+      if (data.hasAccount) api.get('/whatsapp/bot').then(({ data: bc }) => setBotConfig(bc)).catch(() => {})
     } finally {
       setLoading(false)
     }
@@ -143,16 +146,24 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-700">
         <h3 className="text-sm font-bold text-gray-900 dark:text-white">💬 WhatsApp</h3>
         {conversation && (
-          <select
-            value={assignedToId}
-            onChange={reassign}
-            disabled={assigning}
-            title="Responsable de esta conversación"
-            className="text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
-          >
-            <option value="">Sin asignar</option>
-            {activeMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          <div className="flex items-center gap-2">
+            <WhatsappBotToggle
+              conversationId={conversation.id}
+              botEnabled={conversation.botEnabled}
+              workspaceBotEnabled={botConfig?.enabled}
+              onChanged={(botEnabled) => setConversation(c => ({ ...c, botEnabled }))}
+            />
+            <select
+              value={assignedToId}
+              onChange={reassign}
+              disabled={assigning}
+              title="Responsable de esta conversación"
+              className="text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+            >
+              <option value="">Sin asignar</option>
+              {activeMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
         )}
       </div>
 

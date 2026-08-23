@@ -8,6 +8,8 @@ import WhatsappConversationList from './WhatsappConversationList'
 import WhatsappLinkContactModal from './WhatsappLinkContactModal'
 import WhatsappMessageList from './WhatsappMessageList'
 import WhatsappMessageInput from './WhatsappMessageInput'
+import WhatsappBotToggle from './WhatsappBotToggle'
+import WhatsappBotConfigModal from './WhatsappBotConfigModal'
 
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
 
@@ -16,14 +18,16 @@ function isWindowExpired(conversation) {
   return Date.now() - new Date(conversation.lastInboundAt).getTime() > SESSION_WINDOW_MS
 }
 
-// Inbox de WhatsApp — Fase 1 del plan: conectar, ver y responder. Todavía no
-// está embebido dentro de cada Lead (Fase 2) ni tiene bot (Fase 4); por ahora
-// es un tab propio dentro de Ventas, como el resto de las secciones.
+// Inbox de WhatsApp — Fase 1 del plan: conectar, ver y responder. Fase 2
+// (embebido en el Lead) vive en WhatsappLeadCard; acá es un tab propio dentro
+// de Ventas, como el resto de las secciones. Bot (Fase 4): WhatsappBotToggle.
 export default function WhatsappTab({ onOpenLead }) {
   const { user } = useAuth()
   const [loadingAccount, setLoadingAccount] = useState(true)
   const [account, setAccount] = useState(null)
   const [showConnectForm, setShowConnectForm] = useState(false)
+  const [botConfig, setBotConfig] = useState(null)
+  const [showBotConfig, setShowBotConfig] = useState(false)
 
   const [conversations, setConversations] = useState([])
   const [loadingConversations, setLoadingConversations] = useState(false)
@@ -59,7 +63,11 @@ export default function WhatsappTab({ onOpenLead }) {
   }, [])
 
   useEffect(() => { loadAccount() }, [loadAccount])
-  useEffect(() => { if (account) loadConversations() }, [account, loadConversations])
+  useEffect(() => {
+    if (!account) return
+    loadConversations()
+    api.get('/whatsapp/bot').then(({ data }) => setBotConfig(data)).catch(() => {})
+  }, [account, loadConversations])
 
   const openConversation = useCallback(async (id) => {
     setActiveId(id)
@@ -170,6 +178,9 @@ export default function WhatsappTab({ onOpenLead }) {
         </span>
         {user?.isAdmin && (
           <div className="flex items-center gap-3">
+            <button onClick={() => setShowBotConfig(true)} className={`text-xs ${botConfig?.enabled ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 hover:text-primary-600 dark:hover:text-primary-400'}`}>
+              🤖 Bot{botConfig?.enabled ? ' (activo)' : ''}
+            </button>
             <button onClick={() => setShowConnectForm(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
               Editar
             </button>
@@ -195,6 +206,13 @@ export default function WhatsappTab({ onOpenLead }) {
           onConnected={(acc) => { setAccount(acc); setShowConnectForm(false) }}
         />
       )}
+      {showBotConfig && (
+        <WhatsappBotConfigModal
+          config={botConfig}
+          onClose={() => setShowBotConfig(false)}
+          onSaved={(data) => { setBotConfig(data); setShowBotConfig(false) }}
+        />
+      )}
 
       <div className="flex h-[70vh]">
         <div className="w-72 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col">
@@ -218,14 +236,22 @@ export default function WhatsappTab({ onOpenLead }) {
                     {activeConversation?.phoneE164}
                   </p>
                 </div>
-                {activeConversation?.leadId && (
-                  <button
-                    onClick={() => onOpenLead?.(activeConversation.leadId)}
-                    className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/40 font-medium"
-                  >
-                    🔗 Abrir lead
-                  </button>
-                )}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <WhatsappBotToggle
+                    conversationId={activeConversation?.id}
+                    botEnabled={activeConversation?.botEnabled}
+                    workspaceBotEnabled={botConfig?.enabled}
+                    onChanged={(botEnabled) => setActiveConversation(c => ({ ...c, botEnabled }))}
+                  />
+                  {activeConversation?.leadId && (
+                    <button
+                      onClick={() => onOpenLead?.(activeConversation.leadId)}
+                      className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/40 font-medium"
+                    >
+                      🔗 Abrir lead
+                    </button>
+                  )}
+                </div>
               </div>
               <WhatsappMessageList messages={messages} loading={loadingMessages} loadingMore={loadingMore} hasMore={hasMore} onLoadMore={loadMoreMessages} />
               <WhatsappMessageInput onSend={handleSend} onSendMedia={handleSendMedia} windowExpired={isWindowExpired(activeConversation)} />

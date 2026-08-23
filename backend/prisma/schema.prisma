@@ -165,6 +165,7 @@ model Workspace {
   whatsappMessages          WhatsappMessage[]
   whatsappConversationReads WhatsappConversationRead[]
   whatsappMedia             WhatsappMedia[]
+  whatsappBotConfig         WhatsappBotConfig?
 
   @@index([slug])
 }
@@ -3154,6 +3155,13 @@ model WhatsappConversation {
   lastMessageAt DateTime?
   lastInboundAt DateTime? // ancla de la ventana de 24hs para poder mandar texto libre
 
+  // Handoff bot/humano (Fase 4 del plan) — true = el bot responde los mensajes
+  // entrantes de esta conversación (si además WhatsappBotConfig.enabled); false
+  // = un humano "tomó el control" a mano y el bot deja de responder acá hasta
+  // que se le devuelve. Default true: si el workspace prende el bot, las
+  // conversaciones existentes quedan bot-handled sin necesitar un backfill.
+  botEnabled Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -3234,4 +3242,23 @@ model WhatsappConversationRead {
   lastReadAt        DateTime             @default(now())
 
   @@unique([conversationId, userId])
+}
+
+// Config del bot de WhatsApp por workspace (Fase 4 del plan) — 1 fila por
+// workspace (no por conversación). `enabled` es el interruptor maestro: sin
+// esto en true, ninguna conversación recibe respuesta automática aunque
+// tenga `WhatsappConversation.botEnabled=true`. `prompt` define la
+// personalidad/instrucciones; sin texto se usa un default genérico (ver
+// whatsappBot.service.js). v1 sin horario ni condiciones de activación —
+// solo on/off + takeover manual por conversación (ver plan, "Fase 4").
+model WhatsappBotConfig {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int       @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  enabled Boolean @default(false)
+  prompt  String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

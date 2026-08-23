@@ -8,6 +8,7 @@ const { logLeadEvent } = require('./ventas/_shared')
 const objectStorage = require('../services/objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
+const { DEFAULT_PROMPT } = require('../services/whatsappBot.service')
 
 const MESSAGE_PAGE_SIZE = 50
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -552,7 +553,55 @@ async function markRead(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * GET /api/whatsapp/bot
+ * Config del bot del workspace (Fase 4 del plan) — siempre devuelve algo,
+ * aunque nunca se haya guardado (fila inexistente = bot deshabilitado con el
+ * prompt default, para que el frontend tenga un placeholder editable).
+ */
+async function getBotConfig(req, res, next) {
+  try {
+    const config = await prisma.whatsappBotConfig.findUnique({ where: { workspaceId: req.workspace.id } })
+    res.json(config || { enabled: false, prompt: DEFAULT_PROMPT })
+  } catch (err) { next(err) }
+}
+
+/**
+ * PUT /api/whatsapp/bot  { enabled, prompt }
+ * Solo admin/owner (ver whatsapp.routes.js) — es un interruptor con costo
+ * operativo real (tokens de IA por cada mensaje entrante mientras esté on).
+ */
+async function saveBotConfig(req, res, next) {
+  try {
+    const { enabled, prompt } = req.body
+    const config = await prisma.whatsappBotConfig.upsert({
+      where: { workspaceId: req.workspace.id },
+      update: { enabled: Boolean(enabled), prompt: prompt?.trim() || null },
+      create: { workspaceId: req.workspace.id, enabled: Boolean(enabled), prompt: prompt?.trim() || null },
+    })
+    res.json(config)
+  } catch (err) { next(err) }
+}
+
+/**
+ * PATCH /api/whatsapp/conversations/:id/bot  { botEnabled }
+ * "Tomar el control" / "Devolver al bot" de una conversación puntual —
+ * cualquier miembro del equipo comercial (mismo criterio que assignConversation),
+ * no requiere ser admin: es una acción operativa del día a día, no una
+ * configuración del workspace.
+ */
+async function toggleConversationBot(req, res, next) {
+  try {
+    const conversation = await assertConversation(req)
+    const updated = await prisma.whatsappConversation.update({
+      where: { id: conversation.id },
+      data: { botEnabled: Boolean(req.body.botEnabled) },
+    })
+    res.json({ id: updated.id, botEnabled: updated.botEnabled })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, sendMedia, markRead,
-  assignConversation, linkContact, createContactFromConversation,
+  assignConversation, linkContact, createContactFromConversation, getBotConfig, saveBotConfig, toggleConversationBot,
 }
