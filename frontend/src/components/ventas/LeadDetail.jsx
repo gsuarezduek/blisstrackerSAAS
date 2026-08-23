@@ -23,7 +23,7 @@ const EVENT_ICON = {
   next_action_set: '📌', next_action_added: '📌', next_action_done: '✅',
   proposal_created: '📄', research_run: '🔎', diagnostic_report_created: '📣',
   converted_to_client: '🎉', project_created: '🚀',
-  archived: '🗄', unarchived: '↩️', whatsapp_message: '💬',
+  archived: '🗄', unarchived: '↩️', whatsapp_message: '💬', whatsapp_insight: '🧠',
 }
 
 function fmtDateTime(d) {
