@@ -11,6 +11,7 @@ import ResearchPanel from './ResearchPanel'
 import ProposalsPanel from './ProposalsPanel'
 import WhatsappLeadCard from './WhatsappLeadCard'
 import LeadNotes from './LeadNotes'
+import CollapsibleSectionHeader from './CollapsibleSectionHeader'
 import { LEAD_STATUSES, originLabel, statusMeta } from './salesCatalog'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -45,6 +46,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
   const [naOpen, setNaOpen] = useState(false)
   const [na, setNa] = useState({ title: '', dueAt: '', ownerId: '' })
   const [histOpen, setHistOpen] = useState(false)
+  const [timelineOpen, setTimelineOpen] = useState(false)
   const [savingAction, setSavingAction] = useState(false)
   const [contactEdit, setContactEdit] = useState(false)
   const [ncMode, setNcMode] = useState(false) // sub-form "nuevo contacto"
@@ -211,8 +213,11 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
         onCancel={() => setConfirmDelete(false)}
       />
 
-      {/* Notas de reunión — WYSIWYG, ancho completo, arriba de todo */}
-      <LeadNotes leadId={leadId} initialContent={lead.notes} />
+      {/* Notas de reunión + Investigación de la empresa (IA) — 50/50, arriba de todo */}
+      <div className="grid lg:grid-cols-2 gap-5">
+        <LeadNotes leadId={leadId} initialContent={lead.notes} />
+        <ResearchPanel leadId={leadId} companyName={c?.name} onChanged={load} />
+      </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
         {/* Columna izquierda: Información, Empresa, Contacto */}
@@ -367,7 +372,14 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
         <ProposalsPanel leadId={leadId} companyName={c?.name} currency={lead.currency} onChanged={load} />
         <WhatsappLeadCard leadId={leadId} lead={lead} onChanged={load} />
         <div className={card}>
-          <h3 className={sectionTitle}>Historial</h3>
+          <CollapsibleSectionHeader
+            title="🕘 Historial"
+            hasContent={lead.activities.length > 0}
+            open={timelineOpen}
+            onToggle={() => setTimelineOpen(o => !o)}
+          />
+          {timelineOpen && (
+          <div className="mt-3">
           <div className="flex gap-2 mb-4">
             <input className={input} placeholder="Agregar una nota (reunión, llamada, comentario…)" value={note} onChange={e => setNote(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addNote() }} />
             <button onClick={addNote} disabled={!note.trim()} className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg px-4 text-sm font-semibold shrink-0">Agregar</button>
@@ -393,12 +405,11 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
               </li>
             ))}
           </ol>
+          </div>
+          )}
         </div>
         </div>
       </div>
-
-      {/* Investigación de la empresa (IA) — ancho completo */}
-      <ResearchPanel leadId={leadId} companyName={c?.name} onChanged={load} />
 
       {showEdit && <LeadModal lead={lead} companies={companies} team={team} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load(); onChanged?.() }} />}
       {showConvert && <ConvertToProjectModal lead={lead} onClose={() => setShowConvert(false)} onConverted={() => { setShowConvert(false); load(); onChanged?.() }} />}

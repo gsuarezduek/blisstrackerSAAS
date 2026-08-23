@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import DOMPurify from 'dompurify'
 import api from '../../api/client'
 import RichTextEditor from '../RichTextEditor'
+import CollapsibleSectionHeader from './CollapsibleSectionHeader'
 import { exportProposalPdf } from './proposalPdf'
 import '../situation-editor.css'
 
@@ -21,6 +22,7 @@ const FIELDS = [
 ]
 
 export default function ResearchPanel({ leadId, companyName, onChanged }) {
+  const [open, setOpen] = useState(false)
   const [research, setResearch] = useState(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
@@ -119,11 +121,21 @@ export default function ResearchPanel({ leadId, companyName, onChanged }) {
   }
 
   const running = research && (research.status === 'pending' || research.status === 'running')
+  const hasContent = !!research?.result
 
   return (
     <div className={card}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">🔎 Investigación de la empresa (IA)</h3>
+      <CollapsibleSectionHeader
+        title="🔎 Investigación de la empresa (IA)"
+        hasContent={hasContent}
+        open={open}
+        onToggle={() => setOpen(o => !o)}
+        extra={running ? <span className="inline-block w-2.5 h-2.5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" title="Investigando…" /> : null}
+      />
+
+      {open && (
+      <div className="mt-3">
+      <div className="flex justify-end mb-3">
         <button onClick={run} disabled={starting || running}
           className="bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white rounded-lg px-3 py-1.5 text-xs font-semibold">
           {running ? 'Investigando…' : starting ? 'Iniciando…' : (research ? 'Investigar de nuevo' : 'Investigar empresa')}
@@ -203,6 +215,8 @@ export default function ResearchPanel({ leadId, companyName, onChanged }) {
             )}
           </div>
         </div>
+      )}
+      </div>
       )}
     </div>
   )
