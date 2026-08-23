@@ -9,7 +9,7 @@ const objectStorage = require('../services/objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
 const { DEFAULT_PROMPT } = require('../services/whatsappBot.service')
-const { syncTemplates: syncTemplatesFromProvider, createTemplateForAccount, sendTemplateToConversation } = require('../services/whatsappTemplates.service')
+const { syncTemplates: syncTemplatesFromProvider, createTemplateForAccount, sendTemplateToConversation, deleteTemplateForAccount } = require('../services/whatsappTemplates.service')
 
 const MESSAGE_PAGE_SIZE = 50
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -673,6 +673,40 @@ async function createTemplate(req, res, next) {
 }
 
 /**
+ * DELETE /api/whatsapp/templates/:id — solo admin/owner (mismo criterio que
+ * crear/sincronizar). Meta no permite editar una plantilla rechazada in situ
+ * (name+language es su identidad inmutable) — borrar y crear de nuevo es el
+ * único camino, así que esto es lo que le falta al flujo para no dejar
+ * plantillas rechazadas atascadas para siempre en la lista.
+ */
+async function deleteTemplate(req, res, next) {
+  try {
+    const template = await prisma.whatsappTemplate.findFirst({
+      where: { id: Number(req.params.id), workspaceId: req.workspace.id },
+      include: { account: true },
+    })
+    if (!template) return res.status(404).json({ error: 'Plantilla no encontrada' })
+
+    const rulesUsingIt = await prisma.whatsappAutomationRule.count({ where: { templateId: template.id } })
+    if (rulesUsingIt > 0) {
+      return res.status(409).json({
+        error: `Esta plantilla está en uso por ${rulesUsingIt} regla${rulesUsingIt > 1 ? 's' : ''} de automatización — borrá o reasigná ${rulesUsingIt > 1 ? 'esas reglas' : 'esa regla'} primero.`,
+      })
+    }
+
+    try {
+      await deleteTemplateForAccount(template.account, template)
+    } catch (err) {
+      const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message
+      console.error('[WhatsApp] Error borrando plantilla vía', template.account.provider, ':', detail)
+      return res.status(502).json({ error: `No se pudo borrar la plantilla en Meta: ${detail}` })
+    }
+
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+/**
  * POST /api/whatsapp/conversations/:id/reopen  { templateId, variables? }
  * Único caso en el que se puede mandar algo con la ventana de 24hs vencida
  * (Fase 5 del plan) — manda la plantilla elegida con sus variables, sin
@@ -733,5 +767,5 @@ async function reopenConversation(req, res, next) {
 module.exports = {
   connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, sendMedia, markRead,
   assignConversation, linkContact, createContactFromConversation, getBotConfig, saveBotConfig, toggleConversationBot,
-  listTemplates, syncTemplates, createTemplate, reopenConversation,
+  listTemplates, syncTemplates, createTemplate, deleteTemplate, reopenConversation,
 }

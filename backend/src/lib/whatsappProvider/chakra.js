@@ -186,6 +186,22 @@ async function createTemplate({ account, name, language, category, bodyText, bod
 }
 
 /**
+ * Borra una plantilla (aprobada, pendiente o rechazada) — Meta no permite
+ * "editar" una plantilla en su lugar, `name`+`language` es la identidad
+ * inmutable; la única forma de corregir una rechazada es borrarla y crear
+ * otra. Path shape de la Cloud API real: `DELETE /{waba-id}/message_templates
+ * ?hsm_id={template_id}&name={name}` borra solo ESE idioma/versión (sin
+ * `hsm_id` borraría TODOS los idiomas que compartan el nombre, que no es lo
+ * que queremos acá). No confirmado contra la doc pública de Chakra para este
+ * verbo en particular (a diferencia de list/create, que sí están linkeadas
+ * arriba) — se asume el mismo pass-through 1:1 a la Cloud API que ya se
+ * verificó para GET/POST sobre esta misma URL base.
+ */
+async function deleteTemplate({ account, externalId, name }) {
+  await client(account).delete(templatesBaseUrl(account), { params: { hsm_id: externalId, name } })
+}
+
+/**
  * Confirmado (apidocs.chakrahq.com/doc-919167): HMAC-SHA256 sobre el body RAW
  * (string, no el JSON parseado), con el secret configurado en Admin ▸ Team ▸
  * Secrets del dashboard de Chakra. Header `X-Chakra-Signature-256`, sin
@@ -310,5 +326,5 @@ function parseInboundEvent(payload) {
 
 module.exports = {
   sendSessionMessage, sendTemplateMessage, verifyWebhookSignature, parseInboundEvent,
-  downloadMedia, uploadMedia, sendMediaMessage, listTemplates, createTemplate,
+  downloadMedia, uploadMedia, sendMediaMessage, listTemplates, createTemplate, deleteTemplate,
 }

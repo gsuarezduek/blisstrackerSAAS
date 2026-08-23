@@ -144,4 +144,22 @@ async function sendTemplateToConversation({ workspaceId, conversation, account, 
   return { message, content }
 }
 
-module.exports = { syncTemplates, renderTemplateBody, createTemplateForAccount, sendTemplateToConversation }
+/**
+ * Borra una plantilla en Meta y su caché local (Fase 5 del plan, ampliada —
+ * ver createTemplateForAccount). Si Meta ya no la tiene (404 — por ejemplo
+ * borrada a mano desde el dashboard del BSP) no se trata como error: el
+ * objetivo final ("que no quede más") ya está cumplido, se limpia igual el
+ * registro local para no dejarlo huérfano.
+ */
+async function deleteTemplateForAccount(account, template) {
+  const provider = getProvider(account.provider)
+  const decrypted = decryptAccount(account)
+  try {
+    await provider.deleteTemplate({ account: decrypted, externalId: template.externalId, name: template.name })
+  } catch (err) {
+    if (err.response?.status !== 404) throw err
+  }
+  await prisma.whatsappTemplate.delete({ where: { id: template.id } })
+}
+
+module.exports = { syncTemplates, renderTemplateBody, createTemplateForAccount, sendTemplateToConversation, deleteTemplateForAccount }

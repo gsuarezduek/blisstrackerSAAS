@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
+import ConfirmModal from '../ConfirmModal'
 
 const CATEGORIES = [
   { value: 'UTILITY', label: 'Utility (recordatorios, actualizaciones — revisión más simple)' },
@@ -32,6 +33,8 @@ export default function WhatsappTemplateManager({ onClose }) {
   const [examples, setExamples] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [toDelete, setToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -76,6 +79,22 @@ export default function WhatsappTemplateManager({ onClose }) {
       setError(err.response?.data?.error || 'No se pudo crear la plantilla')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!toDelete) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await api.delete(`/whatsapp/templates/${toDelete.id}`)
+      setToDelete(null)
+      await load()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo borrar la plantilla')
+      setToDelete(null)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -188,7 +207,17 @@ export default function WhatsappTemplateManager({ onClose }) {
                 <div key={t.id} className="border border-gray-100 dark:border-gray-700 rounded-xl p-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{t.name}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[t.status] || 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>{t.status}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[t.status] || 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>{t.status}</span>
+                      <button
+                        onClick={() => setToDelete(t)}
+                        title="Borrar plantilla"
+                        aria-label="Borrar plantilla"
+                        className="text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-colors"
+                      >
+                        🗑
+                      </button>
+                    </div>
                   </div>
                   <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{t.category} · {t.language}</p>
                   {t.bodyText && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 whitespace-pre-wrap">{t.bodyText}</p>}
@@ -198,6 +227,16 @@ export default function WhatsappTemplateManager({ onClose }) {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!toDelete}
+        title="¿Borrar esta plantilla?"
+        message={toDelete ? `"${toDelete.name}" se va a borrar de Meta y de acá — si la necesitás de nuevo hay que crearla otra vez.` : ''}
+        confirmLabel="Borrar"
+        loading={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   )
 }

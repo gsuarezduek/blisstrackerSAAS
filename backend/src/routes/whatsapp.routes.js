@@ -65,6 +65,7 @@ router.put('/bot',  workspaceAdminOnly, whatsapp.saveBotConfig)
 router.get('/templates',       whatsapp.listTemplates)
 router.post('/templates',      workspaceAdminOnly, whatsapp.createTemplate)
 router.post('/templates/sync', workspaceAdminOnly, whatsapp.syncTemplates)
+router.delete('/templates/:id', workspaceAdminOnly, whatsapp.deleteTemplate)
 
 // Motor de reglas de reactivación (extiende Fase 5): criterios configurables
 // que reabren conversaciones vencidas solas, vía cron diario — admin-only,

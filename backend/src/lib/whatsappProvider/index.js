@@ -14,6 +14,7 @@
  *   sendMediaMessage({ account, to, mediaUrl, kind, caption, fileName }) → { waMessageId } (Fase 3)
  *   listTemplates({ account })                                       → { templates: [...] } (Fase 5, raw shape de Meta)
  *   createTemplate({ account, name, language, category, bodyText, bodyExamples }) → { id, status, category } (Fase 5)
+ *   deleteTemplate({ account, externalId, name })                    → void (Fase 5)
  *
  * `account` es siempre una fila de WhatsappAccount con accessToken ya
  * descifrado (ver decryptAccount en este mismo archivo) — ningún adaptador
