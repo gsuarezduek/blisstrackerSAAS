@@ -26,35 +26,38 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">🤖 Bot de WhatsApp</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Mientras esté activo, responde automáticamente los mensajes entrantes usando el historial de cada conversación como
-          contexto — hasta que alguien del equipo toca "Tomar el control" en esa conversación puntual. Consume el mismo
-          presupuesto de IA del workspace que el resto de las funciones (Reportes, Investigar empresa, etc.).
-        </p>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="p-6 pb-0">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">🤖 Bot de WhatsApp</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Mientras esté activo, responde automáticamente los mensajes entrantes usando el historial de cada conversación como
+            contexto — hasta que alguien del equipo toca "Tomar el control" en esa conversación puntual. Consume el mismo
+            presupuesto de IA del workspace que el resto de las funciones (Reportes, Investigar empresa, etc.). Los servicios
+            activos del catálogo (Admin → Servicios, con su descripción) se agregan solos al contexto — no hace falta
+            listarlos acá.
+          </p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="flex items-center gap-2 cursor-pointer">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 px-6">
+          <label className="flex items-center gap-2 cursor-pointer flex-shrink-0 mb-4">
             <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} className="w-4 h-4 rounded" />
             <span className="text-sm font-medium text-gray-800 dark:text-gray-200">Bot activo</span>
           </label>
 
-          <label className="block">
-            <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Personalidad / instrucciones</span>
+          <label className="flex flex-col flex-1 min-h-0 mb-1">
+            <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 flex-shrink-0">Personalidad / instrucciones</span>
             <textarea
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
-              rows={6}
               placeholder="Sos un asistente comercial que responde por WhatsApp en nombre del equipo. Respondé de forma breve, cordial y directa…"
-              className="w-full px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
+              className="w-full flex-1 min-h-[320px] px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-y font-mono"
             />
-            <span className="block text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Vacío = usa un texto genérico por defecto.</span>
           </label>
+          <span className="block text-[11px] text-gray-400 dark:text-gray-500 mb-4 flex-shrink-0">Vacío = usa un texto genérico por defecto. Se puede agrandar tirando de la esquina inferior derecha.</span>
 
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400 flex-shrink-0 mb-2">{error}</p>}
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pb-6 flex-shrink-0">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl">
               Cancelar
             </button>

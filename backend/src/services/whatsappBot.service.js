@@ -56,12 +56,26 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
     contextLine = `\n\nContexto: estás hablando con ${contact.name}${company?.name ? ` de ${company.name}` : ''}.`
   }
 
+  // Catálogo de servicios del workspace (mismo dato que ya usa salesProposal.service.js
+  // para las propuestas) — se agrega solo al contexto para no obligar a
+  // copiarlo a mano dentro del prompt libre. No incluye precios: acá no hay
+  // ningún catálogo de precios estructurado (ver Proposal.plans, que son
+  // ad-hoc por propuesta, no un listado general) — esos siguen yendo en el
+  // texto del prompt si el admin quiere que el bot los mencione.
+  const services = await prisma.service.findMany({
+    where: { workspaceId: account.workspaceId, active: true },
+    select: { name: true, description: true },
+  })
+  const servicesBlock = services.length
+    ? `\n\nServicios de la agencia:\n${services.map(s => `- ${s.name}${s.description ? `: ${s.description}` : ''}`).join('\n')}`
+    : ''
+
   let replyText
   try {
     const msg = await createMessage({
       model: MODEL,
       max_tokens: 500,
-      system: (config.prompt?.trim() || DEFAULT_PROMPT) + contextLine,
+      system: (config.prompt?.trim() || DEFAULT_PROMPT) + contextLine + servicesBlock,
       messages: [{
         role: 'user',
         content: `Historial de la conversación de WhatsApp (más reciente al final):\n\n${transcript}\n\nRespondé como "Asistente" al último mensaje del Cliente. Solo el texto de la respuesta, sin comillas ni prefijos.`,
@@ -86,7 +100,12 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
   try {
     ;({ waMessageId } = await provider.sendSessionMessage({ account: decrypted, to: fresh.phoneE164, text: replyText }))
   } catch (err) {
-    console.error('[WhatsApp Bot] Error enviando respuesta vía', account.provider, ':', err.message)
+    // Mismo criterio que sendMessage/sendMedia en whatsapp.controller.js: el
+    // mensaje crudo de axios ("Request failed with status code 400") no dice
+    // nada — el detalle real que devuelve Chakra es lo único que sirve para
+    // diagnosticar sin adivinar.
+    const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 500) : err.message
+    console.error('[WhatsApp Bot] Error enviando respuesta vía', account.provider, ':', detail, '| texto:', replyText)
     return
   }
 
