@@ -213,18 +213,25 @@ async function handleChakraWebhook(req, res) {
       return res.json({ received: true }) // 200 igual — reintentar no va a resolver una cuenta que no existe
     }
 
-    // ⚠️ TEMPORAL: todavía no confirmamos qué header/esquema de firma manda
-    // Chakra en modo pass-through (puede no ser X-Chakra-Signature-256 con la
-    // "HMAC Verification Secret" — eso es lo documentado para SU formato
-    // propio, no necesariamente lo que reenvía sin modificar). Mientras tanto
-    // solo logueamos si matchea o no, sin bloquear el mensaje, para juntar
-    // evidencia real. Hay que volver a poner el 401 duro antes de manejar
-    // datos de clientes reales — ver Fase 1 del plan, nota de seguridad.
+    // Confirmado contra un webhook real el 2026-08-23 (modo pass-through, el
+    // que usa esta cuenta): X-Chakra-Signature-256 con la "HMAC Verification
+    // Secret" matchea igual que en el formato propio de Chakra — no hacía
+    // falta un esquema distinto. A partir de acá se rechaza en firme si no
+    // coincide (antes solo se logueaba, en modo diagnóstico, mientras no
+    // había evidencia real contra la que confirmar). Si la cuenta nunca
+    // configuró un Webhook Secret (campo opcional al conectar), no hay nada
+    // contra qué verificar — se sigue procesando igual que antes para no
+    // romper integraciones que jamás lo cargaron.
     const decrypted = decryptAccount(account)
     const sig = req.headers['x-chakra-signature-256']
-    const sigValid = chakra.verifyWebhookSignature(req.body.toString('utf8'), sig, decrypted.webhookSecret)
-    if (!sigValid) {
-      console.warn('[WhatsApp Webhook] Firma no coincide (procesando igual, modo diagnóstico) — header recibido:', sig || '(ninguno)')
+    if (decrypted.webhookSecret) {
+      const sigValid = chakra.verifyWebhookSignature(req.body.toString('utf8'), sig, decrypted.webhookSecret)
+      if (!sigValid) {
+        console.warn('[WhatsApp Webhook] Firma inválida — evento rechazado. Header recibido:', sig || '(ninguno)')
+        return res.status(401).json({ error: 'Firma inválida' })
+      }
+    } else {
+      console.warn('[WhatsApp Webhook] Cuenta sin Webhook Secret configurado — no se puede verificar la firma del evento entrante.')
     }
 
     if (event.kind === 'message') {
