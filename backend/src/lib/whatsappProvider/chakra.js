@@ -138,6 +138,34 @@ async function sendTemplateMessage({ account, to, templateName, languageCode = '
 }
 
 /**
+ * Catálogo de plantillas aprobadas del WABA (Fase 5 del plan). A diferencia
+ * de /messages y /media (scoped por pluginId+phoneNumberId), este endpoint
+ * cuelga directo del wabaId — confirmado contra apidocs.chakrahq.com/api-17615391,
+ * que coincide además con el shape real de la Cloud API de Meta
+ * (`GET /{waba-id}/message_templates`), buena señal extra de que el path está
+ * bien. Paginado por cursor (`after`); se sigue hasta agotar `paging.next` o
+ * un tope duro de páginas (protección ante un catálogo enorme/bucle raro).
+ */
+function templatesUrl(account, after) {
+  const base = `/plugin/whatsapp/api/${WHATSAPP_API_VERSION}/${account.wabaId}/message_templates?limit=100`
+  return after ? `${base}&after=${encodeURIComponent(after)}` : base
+}
+
+const MAX_TEMPLATE_PAGES = 10
+
+async function listTemplates({ account }) {
+  const templates = []
+  let after = null
+  for (let page = 0; page < MAX_TEMPLATE_PAGES; page++) {
+    const { data } = await client(account).get(templatesUrl(account, after))
+    for (const t of data?.data || []) templates.push(t)
+    after = data?.paging?.next ? data.paging.cursors?.after : null
+    if (!after) break
+  }
+  return { templates }
+}
+
+/**
  * Confirmado (apidocs.chakrahq.com/doc-919167): HMAC-SHA256 sobre el body RAW
  * (string, no el JSON parseado), con el secret configurado en Admin ▸ Team ▸
  * Secrets del dashboard de Chakra. Header `X-Chakra-Signature-256`, sin
@@ -262,5 +290,5 @@ function parseInboundEvent(payload) {
 
 module.exports = {
   sendSessionMessage, sendTemplateMessage, verifyWebhookSignature, parseInboundEvent,
-  downloadMedia, uploadMedia, sendMediaMessage,
+  downloadMedia, uploadMedia, sendMediaMessage, listTemplates,
 }

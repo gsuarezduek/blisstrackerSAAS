@@ -114,6 +114,14 @@ export default function WhatsappTab({ onOpenLead }) {
     loadConversations()
   }, [activeId, loadConversations])
 
+  // Reabrir con plantilla (Fase 5 del plan) — único envío posible con la
+  // ventana de 24hs vencida.
+  const handleReopen = useCallback(async (templateId, variables) => {
+    const { data } = await api.post(`/whatsapp/conversations/${activeId}/reopen`, { templateId, variables })
+    setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
+    loadConversations()
+  }, [activeId, loadConversations])
+
   // Tiempo real: un solo listener para todo el tab (no hay concepto de "unirse
   // a un canal" como en el chat interno — WhatsApp emite directo a
   // workspace:<id>, ver backend/src/webhooks/whatsapp.webhook.js).
@@ -254,7 +262,7 @@ export default function WhatsappTab({ onOpenLead }) {
                 </div>
               </div>
               <WhatsappMessageList messages={messages} loading={loadingMessages} loadingMore={loadingMore} hasMore={hasMore} onLoadMore={loadMoreMessages} />
-              <WhatsappMessageInput onSend={handleSend} onSendMedia={handleSendMedia} windowExpired={isWindowExpired(activeConversation)} />
+              <WhatsappMessageInput onSend={handleSend} onSendMedia={handleSendMedia} onReopen={handleReopen} windowExpired={isWindowExpired(activeConversation)} />
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center">

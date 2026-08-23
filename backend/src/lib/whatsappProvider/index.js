@@ -12,6 +12,7 @@
  *   downloadMedia({ account, mediaId })                              → { buffer, mimeType } (Fase 3)
  *   uploadMedia({ account, buffer, mimeType, fileName })             → { publicMediaUrl } (Fase 3)
  *   sendMediaMessage({ account, to, mediaUrl, kind, caption, fileName }) → { waMessageId } (Fase 3)
+ *   listTemplates({ account })                                       → { templates: [...] } (Fase 5, raw shape de Meta)
  *
  * `account` es siempre una fila de WhatsappAccount con accessToken ya
  * descifrado (ver decryptAccount en este mismo archivo) — ningún adaptador

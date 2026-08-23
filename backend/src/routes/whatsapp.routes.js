@@ -50,11 +50,18 @@ router.patch('/conversations/:id/assign',    whatsapp.assignConversation)
 router.patch('/conversations/:id/contact',   whatsapp.linkContact)
 router.post('/conversations/:id/contact',    whatsapp.createContactFromConversation)
 router.patch('/conversations/:id/bot',       whatsapp.toggleConversationBot)
+router.post('/conversations/:id/reopen',     whatsapp.reopenConversation)
 
 // Bot (Fase 4): la config es workspace-wide y tiene costo operativo real
 // (tokens de IA por cada mensaje entrante) — solo admin/owner la edita, igual
 // que conectar/desconectar la cuenta.
 router.get('/bot',  whatsapp.getBotConfig)
 router.put('/bot',  workspaceAdminOnly, whatsapp.saveBotConfig)
+
+// Plantillas (Fase 5): catálogo de solo lectura de nuestro lado — sincronizar
+// desde Chakra (con costo/aprobación real de Meta detrás) queda para admin,
+// leerlas para elegir una y reabrir es operativo del día a día.
+router.get('/templates',       whatsapp.listTemplates)
+router.post('/templates/sync', workspaceAdminOnly, whatsapp.syncTemplates)
 
 module.exports = router

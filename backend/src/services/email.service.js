@@ -701,12 +701,14 @@ async function sendProductivityDigestEmail(emails, workspaceName, digest, appUrl
 }
 
 // Recordatorio diario de Ventas: próximas acciones para hoy + vencidas del responsable.
-async function sendSalesReminderEmail(email, { name, workspaceName, today = [], overdue = [], appUrl }, workspaceId) {
+async function sendSalesReminderEmail(email, { name, workspaceName, today = [], overdue = [], whatsapp = [], appUrl, tz = 'America/Argentina/Buenos_Aires' }, workspaceId) {
   const from = await getEmailFrom(workspaceId)
-  const nT = today.length, nO = overdue.length
-  const subject = nO > 0
-    ? `🔔 Ventas: ${nO} acción${nO === 1 ? '' : 'es'} vencida${nO === 1 ? '' : 's'}${nT ? ` · ${nT} para hoy` : ''}`
-    : `🔔 Ventas: ${nT} acción${nT === 1 ? '' : 'es'} para hoy`
+  const nT = today.length, nO = overdue.length, nW = whatsapp.length
+  const subjectParts = []
+  if (nO > 0) subjectParts.push(`${nO} vencida${nO === 1 ? '' : 's'}`)
+  if (nT > 0) subjectParts.push(`${nT} para hoy`)
+  if (nW > 0) subjectParts.push(`${nW} WhatsApp sin responder`)
+  const subject = `🔔 Ventas: ${subjectParts.join(' · ')}`
 
   const item = (l, overdueRow) => `
     <tr>
@@ -716,6 +718,17 @@ async function sendSalesReminderEmail(email, { name, workspaceName, today = [], 
       </td>
       <td style="padding:9px 0;border-top:1px solid #f1f5f9;text-align:right;white-space:nowrap;vertical-align:top;">
         <span style="color:${overdueRow ? '#dc2626' : '#64748b'};font-size:12px;">${l.due}</span>
+      </td>
+    </tr>`
+
+  const waItem = (w) => `
+    <tr>
+      <td style="padding:9px 0;border-top:1px solid #f1f5f9;">
+        <span style="color:#1e293b;font-size:14px;font-weight:600;">${escHtml(w.name)}</span>
+        ${w.company ? `<br><span style="color:#64748b;font-size:13px;">${escHtml(w.company)}</span>` : ''}
+      </td>
+      <td style="padding:9px 0;border-top:1px solid #f1f5f9;text-align:right;white-space:nowrap;vertical-align:top;">
+        <span style="color:#0f766e;font-size:12px;">${new Date(w.since).toLocaleDateString('es-AR', { timeZone: tz, day: '2-digit', month: 'short' })}</span>
       </td>
     </tr>`
 
@@ -729,6 +742,7 @@ async function sendSalesReminderEmail(email, { name, workspaceName, today = [], 
       <p style="color:#475569;margin:0 0 8px;font-size:14px;">Hola ${name || ''}, esto es lo que tenés pendiente en <strong>${workspaceName}</strong>.</p>
       ${section('⚠️ Vencidas', overdue.map(l => item(l, true)), '#dc2626')}
       ${section('📅 Para hoy', today.map(l => item(l, false)), '#0f766e')}
+      ${section('💬 WhatsApp sin responder', whatsapp.map(waItem), '#0f766e')}
       <div style="text-align:center;margin-top:24px;">
         <a href="${appUrl}" style="display:inline-block;background:#F7931A;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 22px;border-radius:8px;">Ver mis leads</a>
       </div>

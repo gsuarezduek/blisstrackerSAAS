@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import WhatsappTemplateModal from './WhatsappTemplateModal'
 
 function fmtBytes(n) {
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
@@ -6,15 +7,17 @@ function fmtBytes(n) {
 }
 
 // A diferencia del chat interno, acá no hay @menciones/GIF/reply — es texto
-// libre (u adjuntos, Fase 3 del plan) hacia un lead externo. `windowExpired`
+// libre (u adjuntos, Fase 3) hacia un lead externo. `windowExpired`
 // deshabilita el envío cuando pasaron más de 24hs desde el último mensaje del
-// contacto (guardrail mínimo de la Fase 1; las plantillas para reabrir son la
-// Fase 5). Con un archivo elegido, el texto pasa a ser el caption (opcional).
-export default function WhatsappMessageInput({ onSend, onSendMedia, windowExpired }) {
+// contacto — en ese estado, si el caller pasó `onReopen` (Fase 5), se ofrece
+// reabrir con una plantilla aprobada en vez del input normal. Con un archivo
+// elegido, el texto pasa a ser el caption (opcional).
+export default function WhatsappMessageInput({ onSend, onSendMedia, onReopen, windowExpired }) {
   const [text, setText] = useState('')
   const [file, setFile] = useState(null)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState(null)
+  const [showReopen, setShowReopen] = useState(false)
   const textareaRef = useRef(null)
   const fileInputRef = useRef(null)
 
@@ -58,9 +61,25 @@ export default function WhatsappMessageInput({ onSend, onSendMedia, windowExpire
   if (windowExpired) {
     return (
       <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700 flex-shrink-0 bg-amber-50 dark:bg-amber-900/20">
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          ⏱️ Pasaron más de 24hs desde el último mensaje del contacto — WhatsApp ya no permite texto libre. Hace falta una plantilla aprobada para reabrir la conversación (todavía no implementado, ver Fase 5 del plan).
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            ⏱️ Pasaron más de 24hs desde el último mensaje del contacto — WhatsApp ya no permite texto libre. Hace falta una plantilla aprobada para reabrir la conversación.
+          </p>
+          {onReopen && (
+            <button
+              onClick={() => setShowReopen(true)}
+              className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium"
+            >
+              🔄 Reabrir
+            </button>
+          )}
+        </div>
+        {showReopen && (
+          <WhatsappTemplateModal
+            onClose={() => setShowReopen(false)}
+            onSend={async (templateId, variables) => { await onReopen(templateId, variables); setShowReopen(false) }}
+          />
+        )}
       </div>
     )
   }

@@ -166,6 +166,7 @@ model Workspace {
   whatsappConversationReads WhatsappConversationRead[]
   whatsappMedia             WhatsappMedia[]
   whatsappBotConfig         WhatsappBotConfig?
+  whatsappTemplates         WhatsappTemplate[]
 
   @@index([slug])
 }
@@ -3125,6 +3126,7 @@ model WhatsappAccount {
   updatedAt     DateTime @updatedAt
 
   conversations WhatsappConversation[]
+  templates     WhatsappTemplate[]
 
   @@unique([workspaceId, phoneNumberId])
   @@index([workspaceId])
@@ -3261,4 +3263,32 @@ model WhatsappBotConfig {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Cache local de plantillas aprobadas por Meta (Fase 5 del plan) — de solo
+// lectura de nuestro lado: se sincronizan desde el catálogo de Chakra
+// (GET .../message_templates, scoped por wabaId), nunca se crean ni se
+// someten a aprobación desde BlissTracker. Sirven para reabrir una
+// conversación fuera de la ventana de 24hs, único caso en el que WhatsApp
+// permite mandar algo sin texto libre.
+model WhatsappTemplate {
+  id          Int             @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  accountId   Int
+  account     WhatsappAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  externalId String // id de Meta/Chakra del template — para upsert idempotente al re-sincronizar
+  name       String
+  language   String // ej. "es_AR" — se manda tal cual a sendTemplateMessage
+  category   String // MARKETING | UTILITY | AUTHENTICATION
+  status     String // APPROVED | PENDING | REJECTED | ... — solo se ofrecen APPROVED para reabrir
+
+  bodyText      String? @db.Text // texto del componente BODY, con placeholders {{1}} {{2}}…
+  variableCount Int     @default(0) // cantidad de {{N}} en bodyText, para armar el form de variables al enviar
+
+  syncedAt DateTime @default(now())
+
+  @@unique([accountId, externalId])
+  @@index([workspaceId])
 }

@@ -101,6 +101,14 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
     onChanged?.()
   }, [conversation?.id, onChanged])
 
+  // Reabrir con plantilla (Fase 5 del plan) — único envío posible con la
+  // ventana de 24hs vencida.
+  const handleReopen = useCallback(async (templateId, variables) => {
+    const { data } = await api.post(`/whatsapp/conversations/${conversation.id}/reopen`, { templateId, variables })
+    setMessages(prev => (prev.some(m => m.id === data.id) ? prev : [...prev, data]))
+    onChanged?.()
+  }, [conversation?.id, onChanged])
+
   async function reassign(e) {
     const userId = e.target.value || null
     setAssigning(true)
@@ -176,7 +184,7 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
       ) : (
         <div className="flex flex-col h-96">
           <WhatsappMessageList messages={messages} loading={loadingMessages} loadingMore={loadingMore} hasMore={hasMore} onLoadMore={loadMoreMessages} />
-          <WhatsappMessageInput onSend={handleSend} onSendMedia={handleSendMedia} windowExpired={isWindowExpired(conversation)} />
+          <WhatsappMessageInput onSend={handleSend} onSendMedia={handleSendMedia} onReopen={handleReopen} windowExpired={isWindowExpired(conversation)} />
         </div>
       )}
     </div>
