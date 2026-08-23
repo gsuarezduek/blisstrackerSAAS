@@ -282,6 +282,13 @@ cron.schedule('0 8 * * *', () => runCron('salesReminders', 30 * 60 * 1000, async
   catch (err) { console.error('[SalesReminders] Error en cron diario:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
+// Cron: motor de reglas de WhatsApp (reactivación automática con plantillas) — diario 08:05 ART
+cron.schedule('5 8 * * *', () => runCron('whatsappAutomation', 30 * 60 * 1000, async () => {
+  const { runAllWhatsappAutomations } = require('./services/whatsappAutomation.service')
+  try { await runAllWhatsappAutomations() }
+  catch (err) { console.error('[WhatsappAutomation] Error en cron diario:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
 // Cron: eliminar workspaces vencidos — cada 15 minutos
 cron.schedule('*/15 * * * *', () => runCron('workspaceDeletion', 10 * 60 * 1000, async () => {
   const prisma = require('./lib/prisma')

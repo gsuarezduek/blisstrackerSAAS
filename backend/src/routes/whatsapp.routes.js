@@ -5,6 +5,7 @@ const { resolveWorkspace, salesGuard, workspaceAdminOnly } = require('../middlew
 const { requireFeatureFlag } = require('../lib/featureFlags')
 
 const whatsapp = require('../controllers/whatsapp.controller')
+const automation = require('../controllers/whatsappAutomation.controller')
 
 // MVP: 16MB cubre imagen/audio/video reales de WhatsApp; documentos grandes
 // (Meta permite hasta 100MB) no están soportados por este endpoint todavía —
@@ -64,5 +65,16 @@ router.put('/bot',  workspaceAdminOnly, whatsapp.saveBotConfig)
 router.get('/templates',       whatsapp.listTemplates)
 router.post('/templates',      workspaceAdminOnly, whatsapp.createTemplate)
 router.post('/templates/sync', workspaceAdminOnly, whatsapp.syncTemplates)
+
+// Motor de reglas de reactivación (extiende Fase 5): criterios configurables
+// que reabren conversaciones vencidas solas, vía cron diario — admin-only,
+// mismo criterio que conectar la cuenta o configurar el bot (define un
+// comportamiento automático con costo/riesgo real, no una acción operativa
+// del día a día).
+router.get('/automation-rules',              workspaceAdminOnly, automation.listRules)
+router.post('/automation-rules',             workspaceAdminOnly, automation.createRule)
+router.patch('/automation-rules/:id',        workspaceAdminOnly, automation.updateRule)
+router.delete('/automation-rules/:id',       workspaceAdminOnly, automation.deleteRule)
+router.post('/automation-rules/:id/run-now', workspaceAdminOnly, automation.runRuleNow)
 
 module.exports = router

@@ -11,6 +11,7 @@ import WhatsappMessageInput from './WhatsappMessageInput'
 import WhatsappBotToggle from './WhatsappBotToggle'
 import WhatsappBotConfigModal from './WhatsappBotConfigModal'
 import WhatsappTemplateManager from './WhatsappTemplateManager'
+import WhatsappAutomationManager from './WhatsappAutomationManager'
 
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
 
@@ -30,6 +31,7 @@ export default function WhatsappTab({ onOpenLead }) {
   const [botConfig, setBotConfig] = useState(null)
   const [showBotConfig, setShowBotConfig] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [showAutomation, setShowAutomation] = useState(false)
 
   const [conversations, setConversations] = useState([])
   const [loadingConversations, setLoadingConversations] = useState(false)
@@ -194,6 +196,9 @@ export default function WhatsappTab({ onOpenLead }) {
             <button onClick={() => setShowTemplates(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
               📄 Plantillas
             </button>
+            <button onClick={() => setShowAutomation(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
+              ⚙️ Automatizaciones
+            </button>
             <button onClick={() => setShowConnectForm(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
               Editar
             </button>
@@ -227,6 +232,7 @@ export default function WhatsappTab({ onOpenLead }) {
         />
       )}
       {showTemplates && <WhatsappTemplateManager onClose={() => setShowTemplates(false)} />}
+      {showAutomation && <WhatsappAutomationManager onClose={() => setShowAutomation(false)} />}
 
       <div className="flex h-[70vh]">
         <div className="w-72 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col">

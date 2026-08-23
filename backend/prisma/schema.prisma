@@ -167,6 +167,8 @@ model Workspace {
   whatsappMedia             WhatsappMedia[]
   whatsappBotConfig         WhatsappBotConfig?
   whatsappTemplates         WhatsappTemplate[]
+  whatsappAutomationRules   WhatsappAutomationRule[]
+  whatsappAutomationLogs    WhatsappAutomationLog[]
 
   @@index([slug])
 }
@@ -322,6 +324,7 @@ model User {
   whatsappMessagesSent      WhatsappMessage[]
   whatsappConversationReads WhatsappConversationRead[]
   whatsappConversationsAssigned WhatsappConversation[] @relation("WhatsappConversationAssignee")
+  whatsappAutomationRulesCreated WhatsappAutomationRule[]
 }
 
 model UserLogin {
@@ -2721,6 +2724,7 @@ model Lead {
   researches    LeadResearch[]
   actions       LeadAction[]
   notifications Notification[]
+  whatsappAutomationLogs WhatsappAutomationLog[]
 
   @@index([workspaceId])
   @@index([workspaceId, status])
@@ -3289,6 +3293,73 @@ model WhatsappTemplate {
 
   syncedAt DateTime @default(now())
 
+  automationRules WhatsappAutomationRule[]
+
   @@unique([accountId, externalId])
   @@index([workspaceId])
+}
+
+// Motor de reglas de reactivación (extiende la Fase 5 del plan, pedido
+// explícito del usuario: "dejar criterios configurados que se envíen las
+// plantillas"). Cada regla es independiente y simple (un trigger + un umbral
+// de días + filtros opcionales de estado/origen + una plantilla) — no es un
+// armador de condiciones AND/OR, varias reglas simples cubren el mismo caso
+// (ej. una regla para leads en "contactado" con la plantilla A, otra para
+// "propuesta" con la plantilla B). Evaluada por un cron diario
+// (whatsappAutomation.service.js, enganchado al mismo horario que
+// salesReminders). `triggerType` es un catálogo cerrado en código
+// (whatsappAutomationCatalog.js), no un enum de Prisma, mismo criterio que
+// ContentPiece.status.
+model WhatsappAutomationRule {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  name   String
+  active Boolean @default(true)
+
+  triggerType  String // 'no_reply_days' | 'action_overdue_days' — ver whatsappAutomationCatalog.js
+  triggerDays  Int // umbral en días para que la regla dispare
+  statusFilter String? // JSON array de LEAD_STATUSES keys; null/[] = todos los estados activos
+  originFilter String? // JSON array de ORIGIN keys; null/[] = todos los orígenes
+
+  templateId Int
+  template   WhatsappTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  // Mapeo de las variables {{1}} {{2}}… del template: texto libre que puede
+  // incluir merge tags ({{contact_name}}, {{company_name}}, {{lead_title}},
+  // {{owner_name}}) resueltos por lead al momento de enviar — ver
+  // whatsappAutomation.service.js resolveVariableMapping().
+  variableMapping String? // JSON array de strings, mismo largo que template.variableCount
+
+  cooldownDays Int @default(14) // no re-disparar la misma regla sobre el mismo lead antes de N días
+
+  createdById Int?
+  createdBy   User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  logs WhatsappAutomationLog[]
+
+  @@index([workspaceId, active])
+}
+
+// Auditoría + cooldown: 1 fila por intento de disparo (regla, lead), exitoso
+// o no. El cron consulta esto para no re-disparar la misma regla sobre el
+// mismo lead antes de `rule.cooldownDays`.
+model WhatsappAutomationLog {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ruleId      Int
+  rule        WhatsappAutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  leadId      Int
+  lead        Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  status   String // 'sent' | 'skipped' | 'failed'
+  errorMsg String?
+
+  createdAt DateTime @default(now())
+
+  @@index([ruleId, leadId, createdAt])
+  @@index([workspaceId, createdAt])
 }

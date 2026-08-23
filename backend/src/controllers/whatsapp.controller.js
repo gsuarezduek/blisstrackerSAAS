@@ -9,7 +9,7 @@ const objectStorage = require('../services/objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
 const { DEFAULT_PROMPT } = require('../services/whatsappBot.service')
-const { syncTemplates: syncTemplatesFromProvider, renderTemplateBody, createTemplateForAccount } = require('../services/whatsappTemplates.service')
+const { syncTemplates: syncTemplatesFromProvider, createTemplateForAccount, sendTemplateToConversation } = require('../services/whatsappTemplates.service')
 
 const MESSAGE_PAGE_SIZE = 50
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -701,43 +701,17 @@ async function reopenConversation(req, res, next) {
       return res.status(400).json({ error: `Esta plantilla necesita ${template.variableCount} variable(s), llegaron ${vars.length}.` })
     }
 
-    const provider = getProvider(account.provider)
-    const decrypted = decryptAccount(account)
-    let waMessageId
+    let message, content
     try {
-      ;({ waMessageId } = await provider.sendTemplateMessage({
-        account: decrypted, to: conversation.phoneE164, templateName: template.name, languageCode: template.language,
-        components: vars.length ? [{ type: 'body', parameters: vars.map(v => ({ type: 'text', text: v })) }] : [],
+      ;({ message, content } = await sendTemplateToConversation({
+        workspaceId: req.workspace.id, conversation, account, template, variables: vars,
+        senderUserId: req.user.userId, senderType: 'user',
       }))
     } catch (err) {
       const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message
       console.error('[WhatsApp] Error reabriendo conversación vía', account.provider, ':', detail)
       return res.status(502).json({ error: `No se pudo mandar la plantilla: ${detail}`, code: 'WHATSAPP_SEND_FAILED' })
     }
-
-    const content = renderTemplateBody(template.bodyText, vars)
-    const message = await prisma.whatsappMessage.create({
-      data: {
-        workspaceId: req.workspace.id,
-        conversationId: conversation.id,
-        direction: 'out',
-        content,
-        waMessageId: waMessageId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        senderType: 'user',
-        senderUserId: req.user.userId,
-        status: 'sent',
-      },
-      include: { senderUser: { select: { id: true, name: true, avatar: true } } },
-    })
-
-    await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } })
-    await prisma.whatsappConversationRead.upsert({
-      where: { conversationId_userId: { conversationId: conversation.id, userId: req.user.userId } },
-      update: { lastReadMessageId: message.id, lastReadAt: new Date() },
-      create: { workspaceId: req.workspace.id, conversationId: conversation.id, userId: req.user.userId, lastReadMessageId: message.id },
-    })
-
-    emitTo(`workspace:${req.workspace.id}`, 'whatsapp:message', { conversationId: conversation.id, message })
 
     if (conversation.contactId) {
       const lead = await prisma.lead.findFirst({

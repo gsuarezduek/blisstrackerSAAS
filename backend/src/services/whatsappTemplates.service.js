@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const { getProvider, decryptAccount } = require('../lib/whatsappProvider')
+const { emitTo } = require('../lib/socket')
 
 /** Reemplaza {{1}}, {{2}}… por los valores dados, en orden — para mostrar el
  * texto legible en nuestro propio hilo (Meta solo ve los `parameters`, no el
@@ -100,4 +101,47 @@ async function createTemplateForAccount(account, { name, language, category, bod
   })
 }
 
-module.exports = { syncTemplates, renderTemplateBody, createTemplateForAccount }
+/**
+ * Manda una plantilla ya aprobada a una conversación y deja el registro
+ * (mensaje + estado de la conversación + realtime) — el único código que
+ * realmente le pega al BSP para reabrir. Extraído de reopenConversation
+ * (whatsapp.controller.js) para que el motor de reglas automáticas
+ * (whatsappAutomation.service.js) lo reuse sin duplicar la llamada al
+ * proveedor. El caller es responsable de validar `variables.length ===
+ * template.variableCount` ANTES de llamar — acá no se vuelve a validar para
+ * poder distinguir "plantilla mal configurada" (falla dura para el humano
+ * que reabre a mano) de "regla desactualizada" (se loguea y se saltea, sin
+ * romper el cron para las demás reglas/leads).
+ */
+async function sendTemplateToConversation({ workspaceId, conversation, account, template, variables = [], senderUserId = null, senderType = 'user' }) {
+  const provider = getProvider(account.provider)
+  const decrypted = decryptAccount(account)
+  const { waMessageId } = await provider.sendTemplateMessage({
+    account: decrypted, to: conversation.phoneE164, templateName: template.name, languageCode: template.language,
+    components: variables.length ? [{ type: 'body', parameters: variables.map(v => ({ type: 'text', text: v })) }] : [],
+  })
+
+  const content = renderTemplateBody(template.bodyText, variables)
+  const message = await prisma.whatsappMessage.create({
+    data: {
+      workspaceId, conversationId: conversation.id, direction: 'out', content,
+      waMessageId: waMessageId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      senderType, senderUserId, status: 'sent',
+    },
+    include: { senderUser: { select: { id: true, name: true, avatar: true } } },
+  })
+
+  await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } })
+  if (senderUserId) {
+    await prisma.whatsappConversationRead.upsert({
+      where: { conversationId_userId: { conversationId: conversation.id, userId: senderUserId } },
+      update: { lastReadMessageId: message.id, lastReadAt: new Date() },
+      create: { workspaceId, conversationId: conversation.id, userId: senderUserId, lastReadMessageId: message.id },
+    })
+  }
+
+  emitTo(`workspace:${workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message })
+  return { message, content }
+}
+
+module.exports = { syncTemplates, renderTemplateBody, createTemplateForAccount, sendTemplateToConversation }
