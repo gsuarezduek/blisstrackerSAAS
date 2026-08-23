@@ -68,6 +68,7 @@ router.get('/feedback',                 c.listFeedback)
 router.put('/feedback/:id/read',        c.markFeedbackRead)
 router.get('/email-logs',               c.listEmailLogs)
 router.get('/ai-tokens',                c.getAiTokenStats)
+router.get('/whatsapp-usage',           c.getWhatsappUsageStats)
 router.get('/conversion-funnel',        c.getConversionFunnel)
 router.get('/metrics',                  c.getMetrics)
 

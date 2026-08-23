@@ -1,6 +1,7 @@
 const prisma = require('../../lib/prisma')
 const { isValidStatus, isValidOrigin, statusMeta } = require('../../lib/salesCatalog')
 const { assertActiveMember } = require('../../lib/assertActiveMember')
+const { normalizePhone } = require('../../lib/phone')
 const { LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent, assertContactAvailable, attachWhatsappStatus } = require('./_shared')
 const { createProject } = require('../../services/projects.service')
 const { todayString } = require('../../utils/dates')
@@ -135,7 +136,7 @@ async function createLead(req, res, next) {
             name: newContact.name.trim(),
             title: newContact.title?.trim() || null,
             email: newContact.email?.trim() || null,
-            phone: newContact.phone?.trim() || null,
+            phone: normalizePhone(newContact.phone),
           },
         })
         resolvedContactId = ct.id

@@ -1,6 +1,8 @@
 const prisma = require('../../lib/prisma')
 const { todayString } = require('../../utils/dates')
 const { LEAD_STATUSES } = require('../../lib/salesCatalog')
+const { isFlagEnabledForWorkspace } = require('../../lib/featureFlags')
+const { computeWorkspaceWhatsappUsage } = require('../../services/whatsappUsage.service')
 
 const PROB = Object.fromEntries(LEAD_STATUSES.map(s => [s.key, s.prob]))
 const isOpen = status => { const m = LEAD_STATUSES.find(s => s.key === status); return m && !m.isWon && !m.isLost }
@@ -10,6 +12,22 @@ function monthStart(tz) {
   return new Date(Date.UTC(y, m - 1, 1))
 }
 
+// Uso de WhatsApp del mes en curso (Fase 6 del plan) — solo si el workspace
+// tiene el flag propio habilitado (independiente de `ventas`, que es lo único
+// que este endpoint valida vía salesGuard). Best-effort: nunca rompe el resto
+// de las métricas si algo falla acá.
+async function getWhatsappUsageIfEnabled(workspaceId, disabledFeatureKeys, tz) {
+  try {
+    const flag = await prisma.featureFlag.findUnique({ where: { key: 'whatsapp' } })
+    const disabledKeys = JSON.parse(disabledFeatureKeys || '[]')
+    if (!isFlagEnabledForWorkspace(flag, workspaceId, disabledKeys)) return null
+    return await computeWorkspaceWhatsappUsage(workspaceId, todayString(tz).slice(0, 7))
+  } catch (err) {
+    console.error('[SalesMetrics] Error calculando uso de WhatsApp:', err.message)
+    return null
+  }
+}
+
 // GET /api/ventas/metrics — forecast del pipeline + métricas comerciales (todo derivado, sin persistir).
 async function getMetrics(req, res, next) {
   try {
@@ -17,14 +35,17 @@ async function getMetrics(req, res, next) {
     const tz = req.workspace.timezone
     const mStart = monthStart(tz)
 
-    const leads = await prisma.lead.findMany({
-      where: { workspaceId },
-      select: {
-        id: true, status: true, estimatedValue: true, currency: true, origin: true,
-        ownerId: true, createdAt: true, wonAt: true, lostAt: true,
-        owner: { select: { id: true, name: true, avatar: true } },
-      },
-    })
+    const [leads, whatsapp] = await Promise.all([
+      prisma.lead.findMany({
+        where: { workspaceId },
+        select: {
+          id: true, status: true, estimatedValue: true, currency: true, origin: true,
+          ownerId: true, createdAt: true, wonAt: true, lostAt: true,
+          owner: { select: { id: true, name: true, avatar: true } },
+        },
+      }),
+      getWhatsappUsageIfEnabled(workspaceId, req.workspace.disabledFeatureKeys, tz),
+    ])
 
     const val = l => (l.estimatedValue != null ? Number(l.estimatedValue) : 0)
 
@@ -100,6 +121,7 @@ async function getMetrics(req, res, next) {
       byStage,
       byOwner: [...owners.values()].sort((a, b) => b.openValue - a.openValue),
       byOrigin: [...origins.values()].sort((a, b) => b.count - a.count),
+      whatsapp, // null si el flag `whatsapp` no está habilitado para el workspace
     })
   } catch (err) { next(err) }
 }

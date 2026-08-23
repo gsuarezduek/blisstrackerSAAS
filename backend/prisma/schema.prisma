@@ -2805,6 +2805,7 @@ model Proposal {
   content     String? // propuesta generada por IA (HTML editable)
   signatureId String? // id (dentro de Workspace.salesSignatures) de la firma elegida para esta propuesta
   status      String    @default("draft") // draft | confirmed
+  publicToken String    @unique // UUID (crypto.randomUUID(), generado en createProposal, mismo criterio que MonthlyReport.token) — GET /api/public/proposal/:token solo sirve la propuesta si status:'confirmed' (mismo gate draft/published de los Informes)
   createdById Int?
   createdBy   User?     @relation("ProposalCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
@@ -3201,10 +3202,19 @@ model WhatsappMessage {
   status    String   @default("sent") // sent | delivered | read | failed
   createdAt DateTime @default(now())
 
+  // true = este mensaje saliente abrió/reabrió la conversación con una
+  // plantilla aprobada (reopenConversation manual o el motor de
+  // automatización) — es lo único que Meta factura como "conversación
+  // iniciada por el negocio". Un reply de texto libre dentro de una ventana
+  // ya abierta queda en false. Usado por Fase 6 (analítica y costo/uso) para
+  // no confundir volumen de mensajes con volumen facturable.
+  viaTemplate Boolean @default(false)
+
   media WhatsappMedia?
 
   @@index([conversationId, createdAt])
   @@index([workspaceId])
+  @@index([workspaceId, createdAt])
 }
 
 // Adjunto multimedia de un mensaje (Fase 3 del plan) — 1:1 con WhatsappMessage,

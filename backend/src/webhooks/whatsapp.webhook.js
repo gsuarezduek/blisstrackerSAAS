@@ -5,23 +5,22 @@ const { ACTIVE_LEAD_STATUS_KEYS } = require('../lib/salesCatalog')
 const { logLeadEvent } = require('../controllers/ventas/_shared')
 const { downloadInboundMedia } = require('../services/whatsappMedia.service')
 const { maybeRespondWithBot } = require('../services/whatsappBot.service')
-
-// WhatsApp entrega el "from" en dígitos (con o sin "+"). Normalizamos a un
-// único formato ("+<dígitos>") para que WhatsappConversation.phoneE164 sea
-// consistente de acá en adelante. Heurística simple — no valida longitud por
-// país; alcanza para deduplicar conversaciones del mismo remitente.
-function normalizePhone(raw) {
-  const digits = String(raw || '').replace(/\D/g, '')
-  return digits ? `+${digits}` : null
-}
+const { normalizePhone } = require('../lib/phone')
 
 /**
- * Best-effort: matchea contra un Contact existente por los últimos 8 dígitos
- * del teléfono. Contact.phone no está normalizado hoy (formato libre) — ver
- * Fase 1 del plan de WhatsApp, nota "Abierto: normalización de teléfono".
- * Heurística de transición, no la solución definitiva.
+ * Matchea contra un Contact existente. `Contact.phone` ya se normaliza al
+ * guardarse (contacts.controller.js / leads.controller.js, mismo formato
+ * "+<dígitos>" que `phoneE164`) — primero se intenta un match EXACTO, rápido
+ * e inequívoco cuando el contacto se cargó con código de país. Si no matchea
+ * (típicamente porque se tipeó el número sin código de país, algo que no se
+ * puede inferir de forma confiable), cae a la heurística de los últimos 8
+ * dígitos como red de contención — sigue sin ser 100% preciso, pero cubre el
+ * caso común sin arriesgar falsos positivos del match exacto.
  */
 async function findMatchingContact(workspaceId, phoneE164) {
+  const exact = await prisma.contact.findFirst({ where: { workspaceId, phone: phoneE164 } })
+  if (exact) return exact
+
   const last8 = phoneE164.replace(/\D/g, '').slice(-8)
   if (!last8) return null
   return prisma.contact.findFirst({ where: { workspaceId, phone: { contains: last8 } } })

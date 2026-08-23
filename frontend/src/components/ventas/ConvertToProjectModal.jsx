@@ -14,6 +14,7 @@ export default function ConvertToProjectModal({ lead, onClose, onConverted }) {
   const [memberIds, setMemberIds] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [prefilledFrom, setPrefilledFrom] = useState(null) // propuesta usada para prellenar servicios, si hubo match
 
   useEffect(() => {
     Promise.all([api.get('/services'), api.get('/workspaces/current/members')])
@@ -21,8 +22,28 @@ export default function ConvertToProjectModal({ lead, onClose, onConverted }) {
       .catch(() => {})
   }, [])
 
+  // Prellena los servicios con los de la propuesta confirmada (o, si no hay
+  // ninguna confirmada, la versión más reciente) — Proposal.services guarda
+  // nombres, no ids (sobreviven aunque se borre el Service del catálogo), así
+  // que el match es por nombre. Corre una sola vez, apenas llega el catálogo
+  // de servicios, y solo si el usuario todavía no tocó nada a mano.
+  useEffect(() => {
+    if (services.length === 0 || serviceIds.length > 0) return
+    const best = lead.proposals?.find(p => p.status === 'confirmed') || lead.proposals?.[0]
+    if (!best?.services?.length) return
+    const names = best.services.map(n => String(n).toLowerCase())
+    const matched = services.filter(s => names.includes(s.name.toLowerCase())).map(s => s.id)
+    if (matched.length) { setServiceIds(matched); setPrefilledFrom(best) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services])
+
   function toggle(list, setList, id) {
     setList(list.includes(id) ? list.filter(x => x !== id) : [...list, id])
+  }
+
+  function toggleService(id) {
+    setPrefilledFrom(null) // el usuario ajustó a mano — la leyenda de "prellenado" ya no aplica
+    toggle(serviceIds, setServiceIds, id)
   }
 
   async function handleSubmit(e) {
@@ -58,12 +79,17 @@ export default function ConvertToProjectModal({ lead, onClose, onConverted }) {
               <label className={label}>Servicios</label>
               <div className="flex flex-wrap gap-2">
                 {services.map(s => (
-                  <button key={s.id} type="button" onClick={() => toggle(serviceIds, setServiceIds, s.id)}
+                  <button key={s.id} type="button" onClick={() => toggleService(s.id)}
                     className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${serviceIds.includes(s.id) ? 'bg-primary-600 border-primary-600 text-white' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}>
                     {s.name}
                   </button>
                 ))}
               </div>
+              {prefilledFrom && (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  Prellenado desde la propuesta {prefilledFrom.status === 'confirmed' ? 'confirmada' : `v${prefilledFrom.version}`} — ajustalo si hace falta.
+                </p>
+              )}
             </div>
           )}
 

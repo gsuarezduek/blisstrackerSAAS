@@ -609,6 +609,50 @@ async function getAiTokenStats(req, res, next) {
 }
 
 /**
+ * GET /api/superadmin/whatsapp-usage?month=YYYY-MM
+ * Uso de WhatsApp por workspace/mes (Fase 6 del plan) — mirror de
+ * getAiTokenStats. El costo es una ESTIMACIÓN simple (costo fijo por
+ * plantilla × cantidad enviada) porque Meta cobra por conversación con
+ * precio variable por país/categoría, no expone eso vía la API del BSP —
+ * ver PlatformSetting `whatsappTemplateCostUsd`. Con el setting en 0
+ * (default, "sin configurar") no se calcula costo, solo volumen.
+ */
+async function getWhatsappUsageStats(req, res, next) {
+  try {
+    const { computeAllWorkspacesWhatsappUsage } = require('../services/whatsappUsage.service')
+    const { todayString } = require('../utils/dates')
+    const month = req.query.month || todayString(DEFAULT_TZ).slice(0, 7)
+
+    const [rows, { whatsappTemplateCostUsd: costPerTemplate }, workspaces] = await Promise.all([
+      computeAllWorkspacesWhatsappUsage(month),
+      getSettings(['whatsappTemplateCostUsd']),
+      prisma.workspace.findMany({ select: { id: true, name: true, slug: true, status: true } }),
+    ])
+    const wsMap = Object.fromEntries(workspaces.map(w => [w.id, w]))
+
+    const byWorkspace = rows
+      .map(r => ({
+        ...r,
+        name: wsMap[r.workspaceId]?.name ?? `Workspace #${r.workspaceId}`,
+        slug: wsMap[r.workspaceId]?.slug ?? '',
+        status: wsMap[r.workspaceId]?.status ?? 'unknown',
+        estimatedCostUsd: Math.round(r.templatesSent * costPerTemplate * 100) / 100,
+      }))
+      .sort((a, b) => b.templatesSent - a.templatesSent)
+
+    const totals = byWorkspace.reduce((acc, w) => ({
+      messagesIn: acc.messagesIn + w.messagesIn,
+      messagesOut: acc.messagesOut + w.messagesOut,
+      templatesSent: acc.templatesSent + w.templatesSent,
+      conversationsActive: acc.conversationsActive + w.conversationsActive,
+      estimatedCostUsd: Math.round((acc.estimatedCostUsd + w.estimatedCostUsd) * 100) / 100,
+    }), { messagesIn: 0, messagesOut: 0, templatesSent: 0, conversationsActive: 0, estimatedCostUsd: 0 })
+
+    res.json({ month, costPerTemplate, totals, byWorkspace })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/superadmin/users
  * Lista global de usuarios con búsqueda y paginación.
  * Query: ?search=&limit=50&offset=0&status=all|active|inactive|orphan
@@ -956,4 +1000,4 @@ async function getMetrics(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, listUsers, toggleUserActive, toggleUserDailyInsight, toggleUserSuperAdmin, getConversionFunnel, getMetrics }
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, getWhatsappUsageStats, listUsers, toggleUserActive, toggleUserDailyInsight, toggleUserSuperAdmin, getConversionFunnel, getMetrics }

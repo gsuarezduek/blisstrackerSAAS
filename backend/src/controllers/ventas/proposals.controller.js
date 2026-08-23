@@ -1,3 +1,4 @@
+const { randomUUID } = require('crypto')
 const prisma = require('../../lib/prisma')
 const { assertTokenBudget } = require('../../lib/tokenBudget')
 const { generateProposalHtml } = require('../../services/salesProposal.service')
@@ -94,6 +95,7 @@ async function createProposal(req, res, next) {
         content: html,
         signatureId: typeof signatureId === 'string' && signatureId.trim() ? signatureId.trim() : null,
         status: 'draft',
+        publicToken: randomUUID(),
         createdById: userId,
       },
       include: { createdBy: { select: { id: true, name: true, avatar: true } } },
@@ -144,4 +146,59 @@ async function deleteProposal(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listProposals, createProposal, updateProposal, deleteProposal }
+// GET /api/public/proposal/:token — sin auth. Solo sirve propuestas
+// status:'confirmed' (mismo gate draft/published que los Informes de
+// Marketing) y expone únicamente lo necesario para renderizar la vista del
+// cliente: nunca leadId/workspaceId/createdById/objectives (instrucciones
+// internas de generación, no contenido para el cliente).
+async function getPublicProposal(req, res, next) {
+  try {
+    const proposal = await prisma.proposal.findUnique({
+      where: { publicToken: req.params.token },
+      select: {
+        title: true, content: true, version: true, signatureId: true, createdAt: true, status: true,
+        workspaceId: true,
+        lead: { select: { company: { select: { name: true } } } },
+      },
+    })
+    if (!proposal) return res.status(404).json({ error: 'Propuesta no encontrada' })
+    if (proposal.status !== 'confirmed') {
+      return res.status(404).json({ error: 'Esta propuesta todavía no está confirmada.', code: 'PROPOSAL_DRAFT' })
+    }
+
+    const ws = await prisma.workspace.findUnique({
+      where: { id: proposal.workspaceId },
+      select: { slug: true, name: true, companyName: true, logoData: true, brandColors: true, salesSignatures: true },
+    })
+
+    // Misma resolución de firma que exportProposalPdf: la elegida por
+    // signatureId, o si nunca se eligió una (propuestas de antes de soportar
+    // múltiples firmas) la única/primera configurada.
+    const allSignatures = Array.isArray(ws?.salesSignatures) ? ws.salesSignatures : []
+    const signature = allSignatures.find(s => s.id === proposal.signatureId)
+      || (proposal.signatureId == null ? allSignatures[0] : null)
+      || null
+
+    let brandColors = []
+    try { brandColors = JSON.parse(ws?.brandColors || '[]') } catch { /* deja [] */ }
+
+    res.json({
+      title: proposal.title,
+      content: proposal.content,
+      version: proposal.version,
+      createdAt: proposal.createdAt,
+      signatureId: proposal.signatureId, // para pasarle a exportProposalPdf, que resuelve la firma él mismo contra workspace.salesSignatures
+      companyName: proposal.lead?.company?.name || null,
+      workspace: {
+        slug: ws?.slug,
+        name: ws?.companyName || ws?.name || '',
+        hasLogo: !!ws?.logoData,
+        brandColors,
+        salesSignatures: allSignatures,
+      },
+      signature, // ya resuelta, para el bloque de contacto de esta misma página
+    })
+  } catch (err) { next(err) }
+}
+
+module.exports = { listProposals, createProposal, updateProposal, deleteProposal, getPublicProposal }

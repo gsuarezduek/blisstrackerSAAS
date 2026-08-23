@@ -104,6 +104,36 @@ export default function MetricsTab() {
           </div>
         )}
       </div>
+
+      {/* WhatsApp (Fase 6 del plan) — solo si el workspace tiene el módulo habilitado */}
+      {m.whatsapp && (
+        <div className={card}>
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-4">💬 WhatsApp — este mes</h3>
+          <div className="flex flex-wrap gap-3">
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 min-w-[120px]">
+              <div className="text-lg font-bold text-gray-900 dark:text-white">{m.whatsapp.conversationsActive}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Conversaciones activas</div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 min-w-[120px]">
+              <div className="text-lg font-bold text-gray-900 dark:text-white">{m.whatsapp.messagesIn}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Mensajes recibidos</div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 min-w-[120px]">
+              <div className="text-lg font-bold text-gray-900 dark:text-white">{m.whatsapp.messagesOut}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Mensajes enviados</div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 min-w-[120px]">
+              <div className="text-lg font-bold text-primary-600 dark:text-primary-400">{m.whatsapp.templatesSent}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Plantillas enviadas</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">manual + automáticas</div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 min-w-[120px]">
+              <div className="text-lg font-bold text-gray-900 dark:text-white">{m.whatsapp.avgFirstResponseMins != null ? `${m.whatsapp.avgFirstResponseMins} min` : '—'}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Primera respuesta prom.</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

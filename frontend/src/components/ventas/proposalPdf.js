@@ -9,15 +9,23 @@ function esc(s = '') {
  * Exporta una propuesta a PDF con diseño branded del workspace.
  * Abre una ventana de impresión con una plantilla propia (portada + contenido tipografiado
  * + sección Contacto/firma configurable) y dispara window.print() → guardar como PDF.
+ *
+ * `workspace`: opcional — si el caller ya tiene el branding a mano (ej. la
+ * vista pública de la propuesta, que no tiene JWT para pegarle a
+ * /workspaces/current) lo pasa directo y se salta el fetch autenticado.
+ * Acepta tanto el shape de /workspaces/current (`logoMimeType`) como el del
+ * endpoint público de la propuesta (`hasLogo`).
  */
-export async function exportProposalPdf(proposal, { companyName } = {}) {
+export async function exportProposalPdf(proposal, { companyName, workspace } = {}) {
   // Branding + firma del workspace.
-  let ws = {}
-  try { ws = (await api.get('/workspaces/current')).data } catch { /* seguimos sin branding */ }
+  let ws = workspace || {}
+  if (!workspace) {
+    try { ws = (await api.get('/workspaces/current')).data } catch { /* seguimos sin branding */ }
+  }
 
   const accent = (Array.isArray(ws.brandColors) && ws.brandColors[0]?.hex) || '#F7931A'
   const agency = ws.companyName || ws.name || ''
-  const hasLogo = !!ws.logoMimeType
+  const hasLogo = !!(ws.logoMimeType || ws.hasLogo)
   const logoUrl = hasLogo ? `${import.meta.env.VITE_API_URL}/api/public/logo/${ws.slug}` : ''
   const date = new Date(proposal.createdAt || Date.now()).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
   const title = proposal.title || `Propuesta v${proposal.version || 1}`

@@ -100,6 +100,7 @@ const Ventas           = lazyWithReload(() => import('./pages/Ventas'))
 const Contenido        = lazyWithReload(() => import('./pages/Contenido'))
 const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
 const ReportOrClientPortal = lazyWithReload(() => import('./pages/ReportOrClientPortal'))
+const ProposalPublic   = lazyWithReload(() => import('./pages/ProposalPublic'))
 
 function PrivateRoute({ children }) {
   const { user, loading, workspaceSuspended } = useAuth()
@@ -162,6 +163,7 @@ export default function App() {
           <Route path="/auth"         element={<AuthCallback  />} />
           <Route path="/oauth-result" element={<OAuthResult   />} />
           <Route path="/report/:token" element={<ReportOrClientPortal />} />
+          <Route path="/proposal/:token" element={<ProposalPublic />} />
           <Route path="/condiciones"  element={<LegalPage docKey="terms_of_service" />} />
           <Route path="/privacidad"   element={<LegalPage docKey="privacy_policy"   />} />
           <Route path="/join"     element={<JoinWorkspace />} />

@@ -74,6 +74,15 @@ const PLATFORM_SETTINGS = [
     label:   'Costo Claude Haiku — output (USD / 1M tokens)',
     help:    'Precio actual de Anthropic para tokens de salida de Claude Haiku.',
   },
+  {
+    key:     'whatsappTemplateCostUsd',
+    type:    'float',
+    default: 0,
+    min:     0,
+    group:   'commercial',
+    label:   'Costo estimado por plantilla de WhatsApp (USD)',
+    help:    'Meta cobra por conversación (no por mensaje) y el precio varía por país/categoría — esto es una aproximación simple: costo fijo × cantidad de plantillas enviadas (manual + automáticas), no un cálculo exacto de Meta. 0 = no mostrar costo estimado, solo volumen.',
+  },
 
   // ─── Operativo ─────────────────────────────────────────────────────────────
   {

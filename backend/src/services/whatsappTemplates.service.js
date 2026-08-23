@@ -126,7 +126,7 @@ async function sendTemplateToConversation({ workspaceId, conversation, account, 
     data: {
       workspaceId, conversationId: conversation.id, direction: 'out', content,
       waMessageId: waMessageId || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      senderType, senderUserId, status: 'sent',
+      senderType, senderUserId, status: 'sent', viaTemplate: true,
     },
     include: { senderUser: { select: { id: true, name: true, avatar: true } } },
   })

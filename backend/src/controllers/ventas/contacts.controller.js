@@ -1,4 +1,5 @@
 const prisma = require('../../lib/prisma')
+const { normalizePhone } = require('../../lib/phone')
 
 // Verifica que la empresa exista dentro del workspace. Devuelve la company o null.
 async function assertCompany(companyId, workspaceId) {
@@ -36,7 +37,7 @@ async function createContact(req, res, next) {
         name: name.trim(),
         title: title?.trim() || null,
         email: email?.trim() || null,
-        phone: phone?.trim() || null,
+        phone: normalizePhone(phone),
       },
     })
     res.status(201).json(contact)
@@ -56,7 +57,7 @@ async function updateContact(req, res, next) {
     if (name  !== undefined) { if (!name.trim()) return res.status(400).json({ error: 'Nombre requerido' }); data.name = name.trim() }
     if (title !== undefined) data.title = title?.trim() || null
     if (email !== undefined) data.email = email?.trim() || null
-    if (phone !== undefined) data.phone = phone?.trim() || null
+    if (phone !== undefined) data.phone = normalizePhone(phone)
 
     const contact = await prisma.contact.update({ where: { id }, data })
     res.json(contact)

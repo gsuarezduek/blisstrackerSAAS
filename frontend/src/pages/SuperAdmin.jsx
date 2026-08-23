@@ -17,6 +17,7 @@ import { SectionLanding } from './superadmin/landing'
 import { SectionBilling } from './superadmin/billing'
 import { SectionFeatureFlags } from './superadmin/featureFlags'
 import { SectionAiTokens } from './superadmin/aiTokens'
+import { SectionWhatsappUsage } from './superadmin/whatsappUsage'
 import { SectionScraping } from './superadmin/scraping'
 import { SectionMetrics } from './superadmin/metrics'
 
@@ -107,6 +108,17 @@ const NAV_GROUPS = [
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
             <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
+          </svg>
+        ),
+      },
+      {
+        id: 'whatsapp-usage',
+        label: 'WhatsApp',
+        implemented: true,
+        description: 'Uso de WhatsApp por workspace y mes (mensajes, plantillas enviadas, conversaciones activas) y costo estimado configurable — Fase 6 del módulo de Ventas.',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a9.06 9.06 0 01-2.347-.306c-.584.297-1.925.955-4.181 1.234a.39.39 0 01-.415-.516c.257-.708.72-2.055.923-3.121C2.496 12.87 2 11.49 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7z" clipRule="evenodd" />
           </svg>
         ),
       },
@@ -305,6 +317,7 @@ export default function SuperAdmin() {
     if (section === 'feature-flags') return <SectionFeatureFlags />
     if (section === 'billing')       return <SectionBilling />
     if (section === 'ai-tokens')     return <SectionAiTokens />
+    if (section === 'whatsapp-usage') return <SectionWhatsappUsage />
     if (section === 'scraping')      return <SectionScraping />
     if (section === 'legal')         return <SectionLegales />
     if (section === 'brand')         return <SectionBrandManual />
