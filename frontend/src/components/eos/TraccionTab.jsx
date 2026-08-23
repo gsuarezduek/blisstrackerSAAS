@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import '../situation-editor.css'
+import HowToButton from '../HowToButton'
 import { RocasSection } from './TraccionRocas'
 import { MeetingSection } from './TraccionMeetings'
 
@@ -17,20 +18,23 @@ export default function TraccionTab() {
   return (
     <div className="space-y-5">
       {/* Sub-tab selector */}
-      <div className="flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
-        {SUB_TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setSubTab(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              subTab === t.id
-                ? 'bg-primary-600 text-white'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="flex items-center gap-2">
+        <div className="flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
+          {SUB_TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setSubTab(t.id)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                subTab === t.id
+                  ? 'bg-primary-600 text-white'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <HowToButton topic="eos.traccion" />
       </div>
 
       {/* Contenido */}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
+import HowToButton from '../HowToButton'
 import { fmtMoney } from './StatusBadge'
 import LostReasonModal from './LostReasonModal'
 import { LEAD_STATUSES, STATUS_BADGE, statusMeta } from './salesCatalog'
@@ -142,12 +143,15 @@ export default function PipelineTab({ onOpenLead }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-2">
-        <button
-          onClick={() => setShowArchived(s => !s)}
-          className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-        >
-          {showArchived ? '← Volver al pipeline' : '🗄 Ver archivados'}
-        </button>
+        <div className="flex items-center gap-2">
+          <HowToButton topic="ventas.pipeline" />
+          <button
+            onClick={() => setShowArchived(s => !s)}
+            className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+          >
+            {showArchived ? '← Volver al pipeline' : '🗄 Ver archivados'}
+          </button>
+        </div>
         {showArrows && (
           <div className="flex items-center gap-1.5">
             <ScrollArrow side="left" onClick={() => scrollByPage(-1)} disabled={!canScrollLeft} />

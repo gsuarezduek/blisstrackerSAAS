@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
+import HowToButton from '../components/HowToButton'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import ContentFilters from '../components/contenido/ContentFilters'
 import ContentTableView from '../components/contenido/ContentTableView'
@@ -212,7 +213,10 @@ export default function Contenido() {
         {/* Header */}
         <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Contenido</h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Contenido</h1>
+              <HowToButton topic="contenido.calendario" />
+            </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Calendario de piezas, producción y aprobación del cliente
             </p>

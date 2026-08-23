@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import AutosaveNotes from '../AutosaveNotes'
+import HowToButton from '../HowToButton'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -776,7 +777,8 @@ export default function ProjectMeetings({ projectId, canEdit }) {
   return (
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <p className="text-sm text-gray-500 dark:text-gray-400 flex items-start gap-1.5">
+          <HowToButton topic="proyecto.reuniones" className="mt-0.5" />
           Registro de reuniones del proyecto: fecha, tipo, notas libres y tareas con responsable que se conectan con el dashboard.
         </p>
         {canEdit && (

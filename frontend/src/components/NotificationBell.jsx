@@ -10,18 +10,17 @@ import { useAuth } from '../context/AuthContext'
 // enviada por el backend) — esas SÍ destacan; el resto de completadas quedan muteadas.
 const isFollowedCompleted = n => n.type === 'COMPLETED' && (n.relation === 'followed' || n.relation === 'delegated')
 
-// Orden por urgencia: lo bloqueado y lo que requiere una decisión tuya van primero.
+// Orden por urgencia: lo bloqueado va primero.
 // BLOCKED agrupa también UNBLOCKED (mismo hilo: se bloqueó → se resolvió) y
 // TASK_MENTION agrupa también LEAD_ASSIGNED, CHAT_MENTION y CONTENT_MENTION
 // (misma idea: "te mencionaron/asignaron algo" — el mismo ícono @ para cualquier mención).
 const FILTERS = [
   { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                  match: n => n.type === 'BLOCKED' || n.type === 'UNBLOCKED' },
-  { key: 'ACTION',       label: '🙋', title: 'Requieren tu acción',       match: n => n.type === 'VACATION_REQUEST' },
   { key: 'CLIENT',       label: '🤝', title: 'Actividad del cliente',     match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' || n.type === 'PORTAL_CLIENT_LOGIN' },
   { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: isFollowedCompleted },
-  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED'].includes(n.type) },
+  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED'].includes(n.type) },
   { key: 'COMPLETED',    label: '✓',  title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
 

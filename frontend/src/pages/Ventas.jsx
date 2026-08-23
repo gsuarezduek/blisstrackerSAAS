@@ -11,6 +11,7 @@ import MetricsTab from '../components/ventas/MetricsTab'
 import CompaniesTab from '../components/ventas/CompaniesTab'
 import WhatsappTab from '../components/ventas/WhatsappTab'
 import LeadDetail from '../components/ventas/LeadDetail'
+import LeadModal from '../components/ventas/LeadModal'
 import SalesTeamModal from '../components/ventas/SalesTeamModal'
 
 const BASE_TABS = [
@@ -38,6 +39,11 @@ export default function Ventas() {
   const [team, setTeam] = useState([])
   const [companies, setCompanies] = useState([])
   const [showConfig, setShowConfig] = useState(false)
+  // "+ Nuevo lead" vive acá (no en DashboardTab) para poder crear un lead desde
+  // cualquier tab, igual que "Configuración". `leadsTick` fuerza un remount del
+  // tab activo tras crear uno (Dashboard/Pipeline listan leads y recargan al montar).
+  const [showNewLead, setShowNewLead] = useState(false)
+  const [leadsTick, setLeadsTick] = useState(0)
 
   const loadShared = useCallback(async () => {
     const [t, c] = await Promise.all([api.get('/ventas/team'), api.get('/ventas/companies')])
@@ -46,6 +52,12 @@ export default function Ventas() {
   }, [])
 
   useEffect(() => { if (enabled) loadShared() }, [enabled, loadShared])
+
+  function handleLeadCreated() {
+    setShowNewLead(false)
+    loadShared()
+    setLeadsTick(t => t + 1)
+  }
 
   function setTab(id)      { setSearchParams({ tab: id }, { replace: true }) }
   // Conserva el tab actual al abrir un lead (y al volver) — así "Volver"
@@ -81,9 +93,12 @@ export default function Ventas() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ventas</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">CRM comercial · pipeline de leads, empresas y oportunidades</p>
           </div>
-          {user?.isAdmin && (
-            <button onClick={() => setShowConfig(true)} className="shrink-0 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-4 py-2 text-sm font-medium">⚙️ Configuración</button>
-          )}
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {user?.isAdmin && (
+              <button onClick={() => setShowConfig(true)} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl px-4 py-2 text-sm font-medium">⚙️ Configuración</button>
+            )}
+            <button onClick={() => setShowNewLead(true)} className="bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">+ Nuevo lead</button>
+          </div>
         </div>
 
         {/* Tabs — se mantienen visibles incluso dentro de un Lead (no solo en
@@ -107,8 +122,8 @@ export default function Ventas() {
           <LeadDetail leadId={leadId} team={team} companies={companies} onBack={backToPipeline} onChanged={loadShared} />
         ) : (
           <>
-            {tab === 'dashboard' && <DashboardTab team={team} companies={companies} onOpenLead={openLead} onDataChange={loadShared} />}
-            {tab === 'pipeline'  && <PipelineTab onOpenLead={openLead} />}
+            {tab === 'dashboard' && <DashboardTab key={leadsTick} team={team} onOpenLead={openLead} onDataChange={loadShared} />}
+            {tab === 'pipeline'  && <PipelineTab key={leadsTick} onOpenLead={openLead} />}
             {tab === 'metricas'  && <MetricsTab />}
             {tab === 'empresas'  && <CompaniesTab onDataChange={loadShared} />}
             {tab === 'whatsapp'  && whatsappEnabled && <WhatsappTab onOpenLead={openLead} />}
@@ -116,6 +131,7 @@ export default function Ventas() {
         )}
 
         {showConfig && <SalesTeamModal onClose={() => setShowConfig(false)} onSaved={loadShared} />}
+        {showNewLead && <LeadModal companies={companies} team={team} onClose={() => setShowNewLead(false)} onSaved={handleLeadCreated} />}
       </main>
     </div>
   )

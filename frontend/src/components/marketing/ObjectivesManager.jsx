@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import EmptyState from '../EmptyState'
+import HowToButton from '../HowToButton'
 import {
   CATEGORIES, METRICS, PERIODICITIES, AD_PLATFORMS, RRSS_PLATFORMS, PLATFORM_LABEL,
   metricsForCategory, fmtObjectiveValue, PERIODICITY_LABEL, CATEGORY_LABEL,
@@ -254,7 +255,10 @@ export default function ObjectivesManager({ projectId, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">🎯 Objetivos del proyecto</h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">🎯 Objetivos del proyecto</h2>
+            <HowToButton topic="marketing.objetivos" />
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">

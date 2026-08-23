@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../api/client'
 import ConfirmModal from './ConfirmModal'
 import ClientPortalContacts from './ClientPortalContacts'
+import HowToButton from './HowToButton'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -139,7 +140,10 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Cliente</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Cliente</p>
+          <HowToButton topic="portal.config" />
+        </div>
         {canEdit && !editing && (
           <button onClick={openEdit} className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium">
             {portal ? '✏️ Editar' : '+ Configurar acceso'}

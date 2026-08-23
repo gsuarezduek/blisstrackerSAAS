@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
+import HowToButton from '../components/HowToButton'
 import GeoTab      from '../components/marketing/GeoTab'
 import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
@@ -267,27 +268,30 @@ export default function Marketing() {
 
             {/* ── Subtabs — desktop ── */}
             {!activeNav.soon && activeNav.subs.length > 0 && (
-              <div className="hidden sm:flex gap-0 mb-5 border-b border-gray-200 dark:border-gray-700">
-                {activeNav.subs.map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => setSub(s.id)}
-                    className={`py-2 px-5 text-sm font-medium transition-colors relative ${
-                      sub === s.id
-                        ? 'text-primary-600 dark:text-primary-400 border-b-2 border-primary-600 dark:border-primary-400 -mb-px'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    {s.network
-                      ? <span className="inline-flex items-center gap-1.5"><SocialIcon network={s.network} className="w-4 h-4" />{s.label}</span>
-                      : s.label}
-                    {s.soon && sub !== s.id && (
-                      <span className="ml-1.5 text-[9px] bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 rounded-full px-1 leading-4">
-                        soon
-                      </span>
-                    )}
-                  </button>
-                ))}
+              <div className="hidden sm:flex items-center justify-between gap-2 mb-5 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex gap-0">
+                  {activeNav.subs.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSub(s.id)}
+                      className={`py-2 px-5 text-sm font-medium transition-colors relative ${
+                        sub === s.id
+                          ? 'text-primary-600 dark:text-primary-400 border-b-2 border-primary-600 dark:border-primary-400 -mb-px'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      }`}
+                    >
+                      {s.network
+                        ? <span className="inline-flex items-center gap-1.5"><SocialIcon network={s.network} className="w-4 h-4" />{s.label}</span>
+                        : s.label}
+                      {s.soon && sub !== s.id && (
+                        <span className="ml-1.5 text-[9px] bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 rounded-full px-1 leading-4">
+                          soon
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {tab === 'geo-seo' && <HowToButton topic="marketing.geoSeo" className="mb-2 mr-1" />}
               </div>
             )}
 

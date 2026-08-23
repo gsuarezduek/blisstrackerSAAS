@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import LoadingSpinner from '../LoadingSpinner'
+import HowToButton from '../HowToButton'
 import ConfirmModal from '../ConfirmModal'
 import StatusBadge, { fmtMoney } from './StatusBadge'
 import LostReasonModal from './LostReasonModal'
@@ -187,6 +188,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{c?.name || 'Lead'}</h1>
             <StatusBadge status={lead.status} title={lead.status === 'perdido' ? lead.lostReason : undefined} />
             {lead.archived && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">🗄 Archivado</span>}
+            <HowToButton topic="ventas.leadDetail" />
           </div>
           {lead.title && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{lead.title}</p>}
         </div>

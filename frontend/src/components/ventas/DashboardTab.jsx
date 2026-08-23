@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import StatusBadge, { fmtMoney } from './StatusBadge'
-import LeadModal from './LeadModal'
 import { LEAD_STATUSES, LEAD_ORIGINS, originLabel } from './salesCatalog'
 import { avatarUrl } from '../../utils/avatarUrl'
 
@@ -68,11 +67,10 @@ function ActionsPanel({ title, icon, items, onOpenLead, overdue }) {
   )
 }
 
-export default function DashboardTab({ team, companies, onOpenLead, onDataChange }) {
+export default function DashboardTab({ team, onOpenLead, onDataChange }) {
   const [dash, setDash] = useState(null)
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
 
   // Estructura de filtros extensible: agregar un objeto acá suma un control + su query param.
   // `archived`: '' = solo activos (default), 'true' = solo archivados (vista excluyente, no aditiva).
@@ -123,12 +121,6 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
     onDataChange?.()
   }
 
-  function handleSaved() {
-    setShowModal(false)
-    loadAll()
-    onDataChange?.()
-  }
-
   if (loading && !dash) return <LoadingSpinner />
 
   return (
@@ -161,7 +153,6 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
               <option value="recent">Más recientes</option>
             </select>
           </div>
-          <button onClick={() => setShowModal(true)} className="shrink-0 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors">+ Nuevo lead</button>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <select className={input} value={filters.status} onChange={e => setFilter('status', e.target.value)}>
@@ -238,8 +229,6 @@ export default function DashboardTab({ team, companies, onOpenLead, onDataChange
           </div>
         )}
       </div>
-
-      {showModal && <LeadModal companies={companies} team={team} onClose={() => setShowModal(false)} onSaved={handleSaved} />}
     </div>
   )
 }
