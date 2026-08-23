@@ -10,6 +10,7 @@ import WhatsappMessageList from './WhatsappMessageList'
 import WhatsappMessageInput from './WhatsappMessageInput'
 import WhatsappBotToggle from './WhatsappBotToggle'
 import WhatsappBotConfigModal from './WhatsappBotConfigModal'
+import WhatsappTemplateManager from './WhatsappTemplateManager'
 
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
 
@@ -28,6 +29,7 @@ export default function WhatsappTab({ onOpenLead }) {
   const [showConnectForm, setShowConnectForm] = useState(false)
   const [botConfig, setBotConfig] = useState(null)
   const [showBotConfig, setShowBotConfig] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
 
   const [conversations, setConversations] = useState([])
   const [loadingConversations, setLoadingConversations] = useState(false)
@@ -189,6 +191,9 @@ export default function WhatsappTab({ onOpenLead }) {
             <button onClick={() => setShowBotConfig(true)} className={`text-xs ${botConfig?.enabled ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 hover:text-primary-600 dark:hover:text-primary-400'}`}>
               🤖 Bot{botConfig?.enabled ? ' (activo)' : ''}
             </button>
+            <button onClick={() => setShowTemplates(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
+              📄 Plantillas
+            </button>
             <button onClick={() => setShowConnectForm(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
               Editar
             </button>
@@ -221,6 +226,7 @@ export default function WhatsappTab({ onOpenLead }) {
           onSaved={(data) => { setBotConfig(data); setShowBotConfig(false) }}
         />
       )}
+      {showTemplates && <WhatsappTemplateManager onClose={() => setShowTemplates(false)} />}
 
       <div className="flex h-[70vh]">
         <div className="w-72 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col">

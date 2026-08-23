@@ -146,8 +146,11 @@ async function sendTemplateMessage({ account, to, templateName, languageCode = '
  * bien. Paginado por cursor (`after`); se sigue hasta agotar `paging.next` o
  * un tope duro de páginas (protección ante un catálogo enorme/bucle raro).
  */
-function templatesUrl(account, after) {
-  const base = `/plugin/whatsapp/api/${WHATSAPP_API_VERSION}/${account.wabaId}/message_templates?limit=100`
+function templatesBaseUrl(account) {
+  return `/plugin/whatsapp/api/${WHATSAPP_API_VERSION}/${account.wabaId}/message_templates`
+}
+function templatesListUrl(account, after) {
+  const base = `${templatesBaseUrl(account)}?limit=100`
   return after ? `${base}&after=${encodeURIComponent(after)}` : base
 }
 
@@ -157,12 +160,29 @@ async function listTemplates({ account }) {
   const templates = []
   let after = null
   for (let page = 0; page < MAX_TEMPLATE_PAGES; page++) {
-    const { data } = await client(account).get(templatesUrl(account, after))
+    const { data } = await client(account).get(templatesListUrl(account, after))
     for (const t of data?.data || []) templates.push(t)
     after = data?.paging?.next ? data.paging.cursors?.after : null
     if (!after) break
   }
   return { templates }
+}
+
+/**
+ * Crea (envía a revisión de Meta) una plantilla nueva — confirmado contra
+ * apidocs.chakrahq.com/api-17615301, mismo path que listTemplates pero POST.
+ * v1 solo soporta un componente BODY (sin header/footer/botones, que nada
+ * más en el repo lee/renderiza todavía). Si el texto tiene variables
+ * `{{n}}`, Meta exige un `example.body_text` con valores de muestra para
+ * poder revisarla — sin esto la creación se rechaza.
+ */
+async function createTemplate({ account, name, language, category, bodyText, bodyExamples }) {
+  const bodyComponent = { type: 'BODY', text: bodyText }
+  if (bodyExamples?.length) bodyComponent.example = { body_text: [bodyExamples] }
+  const { data } = await client(account).post(templatesBaseUrl(account), {
+    name, language, category, components: [bodyComponent],
+  })
+  return { id: data?.id, status: data?.status, category: data?.category }
 }
 
 /**
@@ -290,5 +310,5 @@ function parseInboundEvent(payload) {
 
 module.exports = {
   sendSessionMessage, sendTemplateMessage, verifyWebhookSignature, parseInboundEvent,
-  downloadMedia, uploadMedia, sendMediaMessage, listTemplates,
+  downloadMedia, uploadMedia, sendMediaMessage, listTemplates, createTemplate,
 }

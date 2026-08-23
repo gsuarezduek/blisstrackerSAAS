@@ -9,7 +9,7 @@ const objectStorage = require('../services/objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
 const { DEFAULT_PROMPT } = require('../services/whatsappBot.service')
-const { syncTemplates: syncTemplatesFromProvider, renderTemplateBody } = require('../services/whatsappTemplates.service')
+const { syncTemplates: syncTemplatesFromProvider, renderTemplateBody, createTemplateForAccount } = require('../services/whatsappTemplates.service')
 
 const MESSAGE_PAGE_SIZE = 50
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -646,6 +646,33 @@ async function syncTemplates(req, res, next) {
 }
 
 /**
+ * POST /api/whatsapp/templates  { name, language, category, bodyText, bodyExamples? }
+ * Crea una plantilla nueva y la manda a revisión de Meta — solo admin/owner
+ * (mismo criterio que sync: tiene implicancias de aprobación/costo reales).
+ * Queda en PENDING hasta que Meta la revise (de minutos a ~1 día);
+ * "Sincronizar" trae el estado actualizado más adelante.
+ */
+async function createTemplate(req, res, next) {
+  try {
+    const account = await prisma.whatsappAccount.findFirst({ where: { workspaceId: req.workspace.id } })
+    if (!account) return res.status(400).json({ error: 'No hay ninguna cuenta de WhatsApp conectada', code: 'WHATSAPP_NOT_CONNECTED' })
+    if (!account.wabaId) return res.status(400).json({ error: 'A la cuenta le falta el WABA ID — completalo desde "Editar".', code: 'WHATSAPP_MISSING_WABA_ID' })
+
+    let template
+    try {
+      template = await createTemplateForAccount(account, req.body)
+    } catch (err) {
+      if (err.status === 400) return res.status(400).json({ error: err.message })
+      const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 400) : err.message
+      console.error('[WhatsApp] Error creando plantilla vía', account.provider, ':', detail)
+      return res.status(502).json({ error: `No se pudo crear la plantilla: ${detail}` })
+    }
+
+    res.status(201).json(template)
+  } catch (err) { next(err) }
+}
+
+/**
  * POST /api/whatsapp/conversations/:id/reopen  { templateId, variables? }
  * Único caso en el que se puede mandar algo con la ventana de 24hs vencida
  * (Fase 5 del plan) — manda la plantilla elegida con sus variables, sin
@@ -732,5 +759,5 @@ async function reopenConversation(req, res, next) {
 module.exports = {
   connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, sendMedia, markRead,
   assignConversation, linkContact, createContactFromConversation, getBotConfig, saveBotConfig, toggleConversationBot,
-  listTemplates, syncTemplates, reopenConversation,
+  listTemplates, syncTemplates, createTemplate, reopenConversation,
 }

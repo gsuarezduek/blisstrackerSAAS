@@ -62,6 +62,7 @@ router.put('/bot',  workspaceAdminOnly, whatsapp.saveBotConfig)
 // desde Chakra (con costo/aprobación real de Meta detrás) queda para admin,
 // leerlas para elegir una y reabrir es operativo del día a día.
 router.get('/templates',       whatsapp.listTemplates)
+router.post('/templates',      workspaceAdminOnly, whatsapp.createTemplate)
 router.post('/templates/sync', workspaceAdminOnly, whatsapp.syncTemplates)
 
 module.exports = router
