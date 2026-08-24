@@ -209,11 +209,31 @@ Respondé SOLO con un JSON válido, sin markdown ni texto adicional:
   const textBlock = response.content.find(b => b.type === 'text')
   const parsed = parseAIJson(textBlock?.text ?? '')
 
-  return {
+  const result = {
     diagnostico: Array.isArray(parsed.diagnostico) ? parsed.diagnostico : [],
     nuevosCopys: Array.isArray(parsed.nuevosCopys) ? parsed.nuevosCopys : [],
     generatedAt: new Date().toISOString(),
   }
+
+  // Cachea el último resultado para que el panel "Hoy" (marketingPending.service.js)
+  // pueda leerlo sin volver a pegarle a Claude. Best-effort: un fallo acá no debe
+  // romper la respuesta que el usuario ya está esperando.
+  await prisma.adsAdvisorResult.upsert({
+    where:  { projectId_platform: { projectId, platform } },
+    create: {
+      workspaceId, projectId, platform,
+      diagnostico: JSON.stringify(result.diagnostico),
+      nuevosCopys: JSON.stringify(result.nuevosCopys),
+      generatedAt: new Date(result.generatedAt),
+    },
+    update: {
+      diagnostico: JSON.stringify(result.diagnostico),
+      nuevosCopys: JSON.stringify(result.nuevosCopys),
+      generatedAt: new Date(result.generatedAt),
+    },
+  }).catch(() => {})
+
+  return result
 }
 
 module.exports = { generateAdsAdvisor }

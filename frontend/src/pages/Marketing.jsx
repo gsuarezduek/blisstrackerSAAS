@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import HowToButton from '../components/HowToButton'
+import HoyTab      from '../components/marketing/HoyTab'
 import GeoTab      from '../components/marketing/GeoTab'
 import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
@@ -28,6 +29,11 @@ import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import api from '../api/client'
 
 const NAV = [
+  {
+    id: 'hoy',
+    label: '✅ Hoy',
+    subs: [],
+  },
   {
     id: 'geo-seo',
     label: '🤖 GEO / SEO',
@@ -124,7 +130,7 @@ export default function Marketing() {
       return LEGACY_MAP[rawTab]
     }
 
-    const tab     = VALID_TABS.has(rawTab) ? rawTab : 'geo-seo'
+    const tab     = VALID_TABS.has(rawTab) ? rawTab : 'hoy'
     const navItem = NAV.find(n => n.id === tab)
     const validSubs = new Set(navItem?.subs.map(s => s.id) ?? [])
     const sub = validSubs.has(rawSub) ? rawSub : (navItem?.subs[0]?.id ?? '')
@@ -158,10 +164,20 @@ export default function Marketing() {
     }, { replace: true })
   }
 
+  // Navega a una sub-pestaña puntual (usado por el panel "Hoy" para llevar a cada
+  // hallazgo a su pestaña de origen), conservando el proyecto seleccionado.
+  function handleNavigateTo({ tab: destTab, sub: destSub }) {
+    const params = { tab: destTab }
+    if (destSub) params.sub = destSub
+    if (projectId) params.projectId = projectId
+    setSearchParams(params, { replace: true })
+  }
+
   const activeNav = NAV.find(n => n.id === tab) ?? NAV[0]
   const activeSub = activeNav.subs.find(s => s.id === sub) ?? activeNav.subs[0]
 
   function renderContent() {
+    if (tab === 'hoy')      return <HoyTab      projectId={projectId} onSelectProject={handleProjectChange} onNavigate={handleNavigateTo} />
     if (tab === 'informes') return <InformesTab projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
 
     if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />

@@ -33,6 +33,7 @@ const contentBrief      = require('../controllers/contentBrief.controller')
 const onPageAudit       = require('../controllers/onPageAudit.controller')
 const contentGap        = require('../controllers/contentGap.controller')
 const adsAdvisor        = require('../controllers/adsAdvisor.controller')
+const marketingPending  = require('../controllers/marketingPending.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
 router.get('/integrations/google/callback',    integrations.handleCallback)
@@ -190,6 +191,9 @@ router.post('/projects/:id/domain-rating/refresh', searchConsole.refreshDomainRa
 router.get('/projects/:id/seo/opportunities', seoOpportunities.getOpportunities)
 router.get('/projects/:id/seo/action-plan',   seoOpportunities.getActionPlan)
 
+// Panel "Hoy" — pendientes accionables cross-área (SEO, Objetivos, Contenido, Ads Advisor)
+router.get('/projects/:id/pending', marketingPending.getProjectPending)
+
 // SEO — Content Brief (generador de briefs de contenido con IA + SERP)
 router.get('/projects/:id/content-briefs',           contentBrief.listContentBriefs)
 router.post('/projects/:id/content-briefs',          contentBrief.createContentBrief)
@@ -241,5 +245,6 @@ router.get('/summary/reports',     summary.getReportsSummary)
 router.get('/summary/reports-stats', summary.getReportsStats)
 router.get('/summary/objectives-live', summary.getLiveObjectivesSummary)
 router.get('/summary/seo',         summary.getSeoSummary)
+router.get('/summary/pending',     marketingPending.getWorkspacePending)
 
 module.exports = router

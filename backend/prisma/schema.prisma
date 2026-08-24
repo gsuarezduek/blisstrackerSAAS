@@ -114,6 +114,7 @@ model Workspace {
   seoAiInsights          SeoAiInsight[]
   cannibalReports        CannibalReport[]
   adsSnapshots           AdsSnapshot[]
+  adsAdvisorResults      AdsAdvisorResult[]
   socialImages           SocialImage[]
   eosData                EOSData?
   peopleAnalyzerRatings  PeopleAnalyzerRating[]
@@ -471,6 +472,7 @@ model Project {
   seoAiInsights          SeoAiInsight[]
   cannibalReports        CannibalReport[]
   adsSnapshots           AdsSnapshot[]
+  adsAdvisorResults      AdsAdvisorResult[]
   competitors            CompetitorAccount[]
   marketingObjectives    MarketingObjective[]
   briefs                 ProjectBrief[]
@@ -1738,6 +1740,27 @@ model AdsSnapshot {
   @@unique([projectId, month, type])
   @@index([workspaceId])
   @@index([projectId])
+}
+
+// Último resultado del Ads Advisor (diagnóstico + copys IA) por proyecto+plataforma.
+// generateAdsAdvisor() sigue siendo 100% on-demand (no dispara nada automático) — esto
+// solo cachea el último resultado para que el panel "Hoy" pueda leerlo sin volver a
+// pegarle a Claude. Upsert por (projectId, platform), se pisa en cada nuevo análisis.
+model AdsAdvisorResult {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  platform    String // "meta_ads" | "google_ads"
+
+  diagnostico String // JSON: [{ ambito, referencia, tipo, prioridad, titulo, detalle }]
+  nuevosCopys String // JSON: [{ angulo, headline, texto, motivo }]
+  generatedAt DateTime
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, platform])
+  @@index([workspaceId])
 }
 
 // ─── MONTHLY REPORT ──────────────────────────────────────────────────────────
