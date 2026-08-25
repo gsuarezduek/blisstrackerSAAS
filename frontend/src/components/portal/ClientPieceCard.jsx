@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import axios from 'axios'
 import { statusBadgeClass, networkLabel } from '../contenido/contentCatalog'
+import { linkify } from '../../utils/linkify'
+import { findDriveEmbeds, driveEmbedUrl } from '../../utils/driveEmbed'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -103,6 +105,7 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
   const firstAsset = assets[0] || null
   const activeAsset = assets.find(a => a.id === activeAssetId) || firstAsset
   const detailPiece = detail?.piece || piece
+  const driveEmbeds = useMemo(() => findDriveEmbeds(detailPiece.copy), [detailPiece.copy])
 
   return (
     <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
@@ -174,11 +177,38 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
                 </div>
               )}
 
-              {piece.copy && <p className="text-sm text-gray-700 whitespace-pre-wrap mt-3">{piece.copy}</p>}
+              {piece.copy && <p className="text-sm text-gray-700 whitespace-pre-wrap break-words mt-3">{linkify(piece.copy)}</p>}
               {piece.hashtags && <p className="text-xs text-primary-600 mt-1.5">{piece.hashtags}</p>}
 
-              {detailPiece.approvedBy && (
-                <p className="text-xs text-green-700 mt-2">✅ Aprobado por {detailPiece.approvedBy.name}</p>
+              {driveEmbeds.map(d => (
+                <div
+                  key={d.id}
+                  className="mt-3 rounded-lg overflow-hidden border border-gray-200"
+                  style={{ height: d.type === 'folder' ? 220 : 320 }}
+                >
+                  <iframe
+                    src={driveEmbedUrl(d)}
+                    className="w-full h-full"
+                    style={{ border: 0 }}
+                    allow="autoplay"
+                    loading="lazy"
+                    title="Google Drive"
+                  />
+                </div>
+              ))}
+
+              {(detailPiece.createdBy || detailPiece.owner || detailPiece.approvedBy) && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-gray-500">
+                  {detailPiece.createdBy && (
+                    <span>📝 Creado por <span className="font-medium text-gray-700">{detailPiece.createdBy.name}</span></span>
+                  )}
+                  {detailPiece.owner && (
+                    <span>🎨 Diseñado por <span className="font-medium text-gray-700">{detailPiece.owner.name}</span></span>
+                  )}
+                  {detailPiece.approvedBy && (
+                    <span className="text-green-700">✅ Aprobado por <span className="font-medium">{detailPiece.approvedBy.name}</span></span>
+                  )}
+                </div>
               )}
 
               {piece.canDecide && (

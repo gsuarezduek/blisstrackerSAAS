@@ -69,7 +69,8 @@ const dbPiece = (over = {}) => ({
   internalNotes: 'ojo con el cliente, es picky', // NUNCA debe llegar al portal
   scheduledAt: new Date('2026-08-20T15:00:00Z'), scheduledDate: '2026-08-20',
   publishedAt: null, publishedUrl: null,
-  ownerId: 7, taskId: null, order: 3, // tampoco deben llegar al portal
+  ownerId: 7, taskId: null, order: 3, // ownerId (FK cruda) tampoco debe llegar al portal
+  createdBy: { name: 'Ana Diseño' }, owner: { name: 'Beto CM' }, // sí viajan (solo el name)
   assets: [],
   submittedAt: new Date(), approvedAt: null, approvedBy: null, changesRequestedAt: null,
   createdAt: new Date(), updatedAt: new Date(),
@@ -116,7 +117,7 @@ describe('Portal — Contenido: gating', () => {
 })
 
 describe('GET /content — listado', () => {
-  it('devuelve las piezas sin exponer internalNotes/ownerId/taskId/order', async () => {
+  it('devuelve las piezas sin exponer internalNotes/ownerId/taskId/order, pero sí quién creó/es dueño (solo el nombre)', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
     mockAccessGranted()
     prisma.contentPiece.findMany.mockResolvedValue([dbPiece()])
@@ -131,9 +132,10 @@ describe('GET /content — listado', () => {
     expect(p.title).toBe('Post de lanzamiento')
     expect(p.statusLabel).toBe('Esperando aprobación')
     expect(p.networks).toEqual(['instagram'])
+    expect(p.createdBy).toEqual({ name: 'Ana Diseño' })
+    expect(p.owner).toEqual({ name: 'Beto CM' })
     expect(p).not.toHaveProperty('internalNotes')
     expect(p).not.toHaveProperty('ownerId')
-    expect(p).not.toHaveProperty('owner')
     expect(p).not.toHaveProperty('taskId')
     expect(p).not.toHaveProperty('order')
 
