@@ -57,56 +57,6 @@ async function buildReminders(workspace) {
   return byOwner
 }
 
-/**
- * Conversaciones de WhatsApp donde el último mensaje es del contacto (le
- * escribió y nadie de nuestro lado respondió todavía) — Fase 5 del plan,
- * mismo espíritu que buildReminders pero para WhatsApp en vez de LeadAction.
- * Responsable efectivo: el asignado a la conversación (WhatsappConversation.
- * assignedToId), o si no hay, el owner del lead activo del contacto — mismo
- * fallback que ya usa el frontend (WhatsappLeadCard) para mostrar el
- * responsable por defecto.
- */
-async function buildWhatsappPending(workspace) {
-  const account = await prisma.whatsappAccount.findFirst({ where: { workspaceId: workspace.id }, select: { id: true } })
-  if (!account) return new Map()
-
-  const conversations = await prisma.whatsappConversation.findMany({
-    where: { workspaceId: workspace.id },
-    select: {
-      id: true, phoneE164: true, contactName: true, assignedToId: true, contactId: true,
-      contact: { select: { name: true, company: { select: { name: true } } } },
-      messages: { orderBy: { id: 'desc' }, take: 1, select: { direction: true, createdAt: true } },
-    },
-  })
-  const pending = conversations.filter(c => c.messages[0]?.direction === 'in')
-  if (pending.length === 0) return new Map()
-
-  const missingOwnerContactIds = [...new Set(pending.filter(c => !c.assignedToId && c.contactId).map(c => c.contactId))]
-  const leadOwnerByContact = new Map()
-  if (missingOwnerContactIds.length > 0) {
-    const leads = await prisma.lead.findMany({
-      where: { workspaceId: workspace.id, primaryContactId: { in: missingOwnerContactIds }, status: { notIn: ['ganado', 'perdido'] } },
-      select: { primaryContactId: true, ownerId: true },
-    })
-    for (const l of leads) {
-      if (l.ownerId && !leadOwnerByContact.has(l.primaryContactId)) leadOwnerByContact.set(l.primaryContactId, l.ownerId)
-    }
-  }
-
-  const byOwner = new Map()
-  for (const c of pending) {
-    const ownerId = c.assignedToId || (c.contactId ? leadOwnerByContact.get(c.contactId) : null)
-    if (!ownerId) continue
-    if (!byOwner.has(ownerId)) byOwner.set(ownerId, [])
-    byOwner.get(ownerId).push({
-      name: c.contact?.name || c.contactName || c.phoneE164,
-      company: c.contact?.company?.name || null,
-      since: c.messages[0].createdAt,
-    })
-  }
-  return byOwner
-}
-
 // ¿Ya se le mandó el recordatorio de hoy a este email? (dedup vía EmailLog).
 async function alreadySentToday(email, tz) {
   const [y, m, d] = todayString(tz).split('-').map(Number)
@@ -119,16 +69,13 @@ async function alreadySentToday(email, tz) {
 }
 
 async function sendWorkspaceReminders(workspace) {
-  const [byOwner, waByOwner] = await Promise.all([buildReminders(workspace), buildWhatsappPending(workspace)])
-  const ownerIds = new Set([...byOwner.keys(), ...waByOwner.keys()])
-  if (ownerIds.size === 0) return { sent: 0 }
+  const byOwner = await buildReminders(workspace)
+  if (byOwner.size === 0) return { sent: 0 }
   const appUrl = `https://${workspace.slug}.${APP_DOMAIN}/ventas`
 
   let sent = 0
-  for (const ownerId of ownerIds) {
-    const buckets = byOwner.get(ownerId) || { today: [], overdue: [] }
-    const whatsapp = waByOwner.get(ownerId) || []
-    if (buckets.today.length === 0 && buckets.overdue.length === 0 && whatsapp.length === 0) continue
+  for (const [ownerId, buckets] of byOwner) {
+    if (buckets.today.length === 0 && buckets.overdue.length === 0) continue
     const member = await prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId: workspace.id, userId: ownerId } },
       select: { active: true, user: { select: { name: true, email: true } } },
@@ -139,7 +86,7 @@ async function sendWorkspaceReminders(workspace) {
     try {
       await sendSalesReminderEmail(member.user.email, {
         name: member.user.name, workspaceName: workspace.name,
-        today: buckets.today, overdue: buckets.overdue, whatsapp, appUrl, tz: workspace.timezone,
+        today: buckets.today, overdue: buckets.overdue, appUrl, tz: workspace.timezone,
       }, workspace.id)
       sent++
     } catch (err) {
@@ -170,4 +117,4 @@ async function sendAllSalesReminders() {
   return total
 }
 
-module.exports = { sendAllSalesReminders, sendWorkspaceReminders, buildReminders, buildWhatsappPending }
+module.exports = { sendAllSalesReminders, sendWorkspaceReminders, buildReminders }
