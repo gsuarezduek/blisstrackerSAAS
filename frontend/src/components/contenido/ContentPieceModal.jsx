@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
+import { findDriveEmbeds, driveEmbedUrl } from '../../utils/driveEmbed'
 import ConfirmModal from '../ConfirmModal'
 import ContentStatusBadge from './ContentStatusBadge'
 import ContentNetworkChips from './ContentNetworkChips'
@@ -77,6 +78,9 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
   }, [piece.assets])
 
   const activeAsset = piece.assets.find(a => a.id === activeAssetId) ?? null
+  const activeAssetDrive = useMemo(() => (
+    activeAsset?.kind === 'link' ? (findDriveEmbeds(activeAsset.url)[0] || null) : null
+  ), [activeAsset])
 
   const handleAssetUploaded = useCallback(() => { onPieceChanged() }, [onPieceChanged])
 
@@ -215,15 +219,26 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
                         className="w-full h-full object-contain"
                       />
                     ) : activeAsset.kind === 'link' ? (
-                      <a
-                        href={activeAsset.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex flex-col items-center gap-2 text-gray-300 hover:text-white transition-colors px-4 text-center"
-                      >
-                        <span className="text-4xl">🔗</span>
-                        <span className="text-sm break-all">{activeAsset.fileName || activeAsset.url}</span>
-                      </a>
+                      activeAssetDrive ? (
+                        <iframe
+                          src={driveEmbedUrl(activeAssetDrive)}
+                          className="w-full h-full"
+                          style={{ border: 0 }}
+                          allow="autoplay"
+                          loading="lazy"
+                          title="Google Drive"
+                        />
+                      ) : (
+                        <a
+                          href={activeAsset.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-col items-center gap-2 text-gray-300 hover:text-white transition-colors px-4 text-center"
+                        >
+                          <span className="text-4xl">🔗</span>
+                          <span className="text-sm break-all">{activeAsset.fileName || activeAsset.url}</span>
+                        </a>
+                      )
                     ) : (
                       <img src={activeAsset.url} alt="" className="w-full h-full object-contain" />
                     )}

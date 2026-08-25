@@ -106,6 +106,9 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
   const activeAsset = assets.find(a => a.id === activeAssetId) || firstAsset
   const detailPiece = detail?.piece || piece
   const driveEmbeds = useMemo(() => findDriveEmbeds(detailPiece.copy), [detailPiece.copy])
+  const activeAssetDrive = useMemo(() => (
+    activeAsset?.kind === 'link' ? (findDriveEmbeds(activeAsset.url)[0] || null) : null
+  ), [activeAsset])
 
   return (
     <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
@@ -146,15 +149,26 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
                   {activeAsset.kind === 'video' ? (
                     <video src={activeAsset.url} poster={activeAsset.posterUrl || undefined} controls className="max-h-[420px] w-auto max-w-full" />
                   ) : activeAsset.kind === 'link' ? (
-                    <a
-                      href={activeAsset.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex flex-col items-center gap-2 text-gray-300 hover:text-white transition-colors px-4 py-8 text-center"
-                    >
-                      <span className="text-4xl">🔗</span>
-                      <span className="text-sm break-all">{activeAsset.fileName || activeAsset.url}</span>
-                    </a>
+                    activeAssetDrive ? (
+                      <iframe
+                        src={driveEmbedUrl(activeAssetDrive)}
+                        className="w-full"
+                        style={{ border: 0, height: 420 }}
+                        allow="autoplay"
+                        loading="lazy"
+                        title="Google Drive"
+                      />
+                    ) : (
+                      <a
+                        href={activeAsset.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-2 text-gray-300 hover:text-white transition-colors px-4 py-8 text-center"
+                      >
+                        <span className="text-4xl">🔗</span>
+                        <span className="text-sm break-all">{activeAsset.fileName || activeAsset.url}</span>
+                      </a>
+                    )
                   ) : (
                     <img src={activeAsset.url} alt="" className="max-h-[420px] w-auto max-w-full object-contain" />
                   )}
