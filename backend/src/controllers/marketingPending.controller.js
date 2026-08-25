@@ -1,4 +1,9 @@
-const { computeProjectPendingItems, computeWorkspacePendingSummary } = require('../services/marketingPending.service')
+const {
+  computeProjectPendingItems, computeWorkspacePendingSummary,
+  dismissFinding, listDismissedFindings, undismissFinding,
+} = require('../services/marketingPending.service')
+
+const VALID_SOURCES = new Set(['geo', 'cannibal', 'pagespeed', 'keywords', 'objective', 'content', 'ads_advisor'])
 
 /**
  * GET /api/marketing/projects/:id/pending
@@ -27,4 +32,48 @@ async function getWorkspacePending(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getProjectPending, getWorkspacePending }
+/**
+ * POST /api/marketing/projects/:id/pending/dismiss
+ * body: { source, title } — ignora un hallazgo del panel "Hoy".
+ */
+async function dismiss(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { source, title } = req.body
+    if (!VALID_SOURCES.has(source)) return res.status(400).json({ error: 'source inválido' })
+    if (!title || typeof title !== 'string') return res.status(400).json({ error: 'title requerido' })
+    await dismissFinding({ workspaceId, projectId, source, title, userId: req.user.userId })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/marketing/projects/:id/pending/dismissed
+ * Lista los hallazgos ignorados del proyecto (para "ver ignorados").
+ */
+async function listDismissed(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const items = await listDismissedFindings({ workspaceId, projectId })
+    res.json({ items })
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/marketing/projects/:id/pending/dismissed/:did
+ * Restaura (des-ignora) un hallazgo.
+ */
+async function undismiss(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const id = Number(req.params.did)
+    const ok = await undismissFinding({ workspaceId, projectId, id })
+    if (!ok) return res.status(404).json({ error: 'No encontrado' })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getProjectPending, getWorkspacePending, dismiss, listDismissed, undismiss }

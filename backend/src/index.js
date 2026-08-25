@@ -91,6 +91,7 @@ const { saveAllSearchConsoleSnapshots }   = require('./services/searchConsoleSna
 const { refreshAllDomainRatings }         = require('./services/ahrefs.service')
 const { checkAndSendAllSeoAlerts }        = require('./services/seoAlerts.service')
 const { saveAllAdsSnapshots }             = require('./services/adsSnapshot.service')
+const { runWeeklyAdsAdvisor }             = require('./services/adsAdvisor.service')
 const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnapshot.service')
 const { saveAllPreviousMonthSnapshots: saveAllPrevRrhhMetrics } = require('./services/rrhhMetricSnapshot.service')
 const { sendAllProductivityDigests } = require('./services/productivityDigest.service')
@@ -136,6 +137,15 @@ cron.schedule('30 6 * * 1', () => runCron('serpSnapshot', 60 * 60 * 1000, async 
   console.log('[SerpAPI] Iniciando captura semanal de SERP snapshots...')
   try { await captureAllSerpSnapshots() }
   catch (err) { console.error('[SerpAPI] Error en cron semanal:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
+// Cron: análisis automático de Ads Advisor (Meta/Google, IA) — lunes 09:00 ART. Corre
+// generateAdsAdvisor() para todo proyecto con integración de ads activa, en workspaces
+// con Marketing habilitado y el toggle adsAdvisorAutoEnabled prendido (opt-out).
+cron.schedule('0 9 * * 1', () => runCron('adsAdvisorWeekly', 30 * 60 * 1000, async () => {
+  console.log('[AdsAdvisorWeekly] Iniciando análisis semanal de Ads Advisor...')
+  try { await runWeeklyAdsAdvisor() }
+  catch (err) { console.error('[AdsAdvisorWeekly] Error:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
 // Cron: limpieza semanal de tablas de crecimiento ilimitado — domingos 03:00 hora Buenos Aires

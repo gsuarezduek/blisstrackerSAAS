@@ -42,6 +42,7 @@ model Workspace {
   attendanceTrackingEnabled Boolean @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
   productivityEnabled       Boolean @default(true) // Muestra la sección de Productividad (nav + página) para los admins
   productivityDigestEnabled Boolean @default(true) // Aviso semanal por mail a admins/owners con las personas en alerta de Productividad
+  adsAdvisorAutoEnabled     Boolean @default(true) // Corre el Ads Advisor (IA) automáticamente cada lunes para proyectos con Meta/Google Ads conectado
   lateToleranceMins   Int       @default(0) // Tolerancia (min) para tardanza: la llegada cuenta tarde solo si supera workStartTime + tolerancia
   lateNotifyEnabled   Boolean   @default(false) // Enviar email a quien acumula tardanzas en los últimos 30 días
   lateNotifyThreshold Int       @default(3) // Cantidad de tardanzas (1-10) en 30 días que dispara el email
@@ -115,6 +116,7 @@ model Workspace {
   cannibalReports        CannibalReport[]
   adsSnapshots           AdsSnapshot[]
   adsAdvisorResults      AdsAdvisorResult[]
+  dismissedFindings      DismissedFinding[]
   socialImages           SocialImage[]
   eosData                EOSData?
   peopleAnalyzerRatings  PeopleAnalyzerRating[]
@@ -326,6 +328,7 @@ model User {
   whatsappConversationReads WhatsappConversationRead[]
   whatsappConversationsAssigned WhatsappConversation[] @relation("WhatsappConversationAssignee")
   whatsappAutomationRulesCreated WhatsappAutomationRule[]
+  dismissedFindings         DismissedFinding[]
 }
 
 model UserLogin {
@@ -473,6 +476,7 @@ model Project {
   cannibalReports        CannibalReport[]
   adsSnapshots           AdsSnapshot[]
   adsAdvisorResults      AdsAdvisorResult[]
+  dismissedFindings      DismissedFinding[]
   competitors            CompetitorAccount[]
   marketingObjectives    MarketingObjective[]
   briefs                 ProjectBrief[]
@@ -1760,6 +1764,29 @@ model AdsAdvisorResult {
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, platform])
+  @@index([workspaceId])
+}
+
+// Recomendación descartada del panel "Hoy" (marketingPending.service.js). `signature` es
+// el título normalizado (trim+lowercase+espacios colapsados) — para fuentes deterministas
+// (canibalización, keywords, contenido, objetivos) es 100% estable; para GEO y Ads Advisor
+// (texto libre de IA) sobrevive solo si la redacción no cambia entre corridas. `title`
+// queda sin normalizar, únicamente para mostrar en "ver ignorados".
+model DismissedFinding {
+  id            Int      @id @default(autoincrement())
+  workspaceId   Int
+  projectId     Int
+  source        String // 'geo' | 'cannibal' | 'pagespeed' | 'keywords' | 'objective' | 'content' | 'ads_advisor'
+  signature     String
+  title         String
+  dismissedById Int?
+  dismissedAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dismissedBy User?     @relation(fields: [dismissedById], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, source, signature])
   @@index([workspaceId])
 }
 

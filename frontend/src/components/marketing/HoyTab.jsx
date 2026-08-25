@@ -12,6 +12,12 @@ const CATEGORY_ICON = {
   GEO: '🤖', 'Canibalización': '⚠️', Performance: '⚡', Keywords: '🔑',
   Objetivos: '🎯', Contenido: '🗓️', 'Meta Ads': '📣', 'Google Ads': '📣',
 }
+// `source` (clave interna, ej. 'geo'/'ads_advisor') → label legible, para la lista de
+// ignorados (que solo guarda `source`, no la `category` de display del item original).
+const SOURCE_LABEL = {
+  geo: 'GEO', cannibal: 'Canibalización', pagespeed: 'Performance', keywords: 'Keywords',
+  objective: 'Objetivos', content: 'Contenido', ads_advisor: 'Ads',
+}
 
 /**
  * Panel único "Hoy": agrega los pendientes accionables de todas las áreas de
@@ -82,10 +88,13 @@ function ProjectPending({ projectId, onNavigate }) {
   const [selected, setSelected] = useState(() => new Set())
   const [creating, setCreating] = useState(false)
   const [result, setResult]     = useState(null)
+  const [showDismissed, setShowDismissed] = useState(false)
+  const [dismissedList, setDismissedList] = useState(null)
 
   const load = useCallback((pid) => {
     if (!pid) return
     setLoading(true); setErr(''); setData(null); setSelected(new Set()); setResult(null)
+    setShowDismissed(false); setDismissedList(null)
     api.get(`/marketing/projects/${pid}/pending`)
       .then(r => setData(r.data))
       .catch(e => setErr(e.response?.data?.error || 'Error al cargar los pendientes'))
@@ -118,6 +127,36 @@ function ProjectPending({ projectId, onNavigate }) {
     setSelected(new Set())
   }
 
+  async function dismiss(it) {
+    try {
+      await api.post(`/marketing/projects/${projectId}/pending/dismiss`, { source: it.source, title: it.title })
+      setData(prev => ({
+        ...prev,
+        items: prev.items.filter(i => i.key !== it.key),
+        dismissedCount: (prev.dismissedCount ?? 0) + 1,
+      }))
+      setSelected(prev => { const n = new Set(prev); n.delete(it.key); return n })
+    } catch {}
+  }
+
+  function toggleDismissedPanel() {
+    const next = !showDismissed
+    setShowDismissed(next)
+    if (next && dismissedList === null) {
+      api.get(`/marketing/projects/${projectId}/pending/dismissed`)
+        .then(r => setDismissedList(r.data.items))
+        .catch(() => setDismissedList([]))
+    }
+  }
+
+  async function undismiss(id) {
+    try {
+      await api.delete(`/marketing/projects/${projectId}/pending/dismissed/${id}`)
+      setDismissedList(prev => prev.filter(d => d.id !== id))
+      load(projectId) // el item ignorado puede volver a la lista principal
+    } catch {}
+  }
+
   if (loading) return <LoadingSpinner size="lg" />
   if (err) return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
@@ -127,56 +166,92 @@ function ProjectPending({ projectId, onNavigate }) {
   )
   if (!data) return null
 
-  const { items } = data
-
-  if (items.length === 0) return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-      <div className="text-3xl mb-2">✅</div>
-      <p className="text-sm text-gray-600 dark:text-gray-300">No hay pendientes en este proyecto ahora mismo.</p>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">SEO/GEO, objetivos, contenido y Ads se revisan automáticamente acá.</p>
-    </div>
-  )
+  const { items, dismissedCount } = data
 
   return (
     <div className="space-y-5">
-      {/* Barra de acciones */}
-      <div className="flex items-center justify-between gap-3 flex-wrap sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 py-1">
-        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
-          <input type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleAll}
-            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-          Seleccionar todo ({items.length})
-        </label>
-        <div className="flex items-center gap-3">
-          {result && <span className="text-xs text-green-600 dark:text-green-400 font-medium">✅ {result.created} tarea(s) creada(s)</span>}
-          <button onClick={createTasks} disabled={selected.size === 0 || creating}
-            className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
-            {creating ? 'Creando…' : `Crear ${selected.size || ''} tarea${selected.size === 1 ? '' : 's'}`}
-          </button>
+      {items.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <div className="text-3xl mb-2">✅</div>
+          <p className="text-sm text-gray-600 dark:text-gray-300">No hay pendientes en este proyecto ahora mismo.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">SEO/GEO, objetivos, contenido y Ads se revisan automáticamente acá.</p>
         </div>
-      </div>
-
-      {/* Lista */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
-        {items.map(it => (
-          <div key={it.key} className={`flex items-start gap-3 px-5 py-3.5 ${selected.has(it.key) ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
-            <input type="checkbox" checked={selected.has(it.key)} onChange={() => toggle(it.key)}
-              className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500 flex-shrink-0 cursor-pointer" />
-            <div className="min-w-0 flex-1 cursor-pointer" onClick={() => toggle(it.key)}>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${PRIORITY[it.priority].cls}`}>{PRIORITY[it.priority].label}</span>
-                <span className="text-[11px] text-gray-400 dark:text-gray-500">{CATEGORY_ICON[it.category] ?? ''} {it.category}</span>
-              </div>
-              <p className="text-sm text-gray-800 dark:text-gray-200 mt-1">{it.title}</p>
-              {it.detail && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{it.detail}</p>}
+      ) : (
+        <>
+          {/* Barra de acciones */}
+          <div className="flex items-center justify-between gap-3 flex-wrap sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 py-1">
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
+              <input type="checkbox" checked={selected.size === items.length && items.length > 0} onChange={toggleAll}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+              Seleccionar todo ({items.length})
+            </label>
+            <div className="flex items-center gap-3">
+              {result && <span className="text-xs text-green-600 dark:text-green-400 font-medium">✅ {result.created} tarea(s) creada(s)</span>}
+              <button onClick={createTasks} disabled={selected.size === 0 || creating}
+                className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                {creating ? 'Creando…' : `Crear ${selected.size || ''} tarea${selected.size === 1 ? '' : 's'}`}
+              </button>
             </div>
-            {it.href ? (
-              <Link to={it.href} className="flex-shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">Ir →</Link>
-            ) : it.link ? (
-              <button onClick={() => onNavigate?.(it.link)} className="flex-shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">Ir →</button>
-            ) : null}
           </div>
-        ))}
-      </div>
+
+          {/* Lista */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+            {items.map(it => (
+              <div key={it.key} className={`flex items-start gap-3 px-5 py-3.5 ${selected.has(it.key) ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
+                <input type="checkbox" checked={selected.has(it.key)} onChange={() => toggle(it.key)}
+                  className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500 flex-shrink-0 cursor-pointer" />
+                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => toggle(it.key)}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${PRIORITY[it.priority].cls}`}>{PRIORITY[it.priority].label}</span>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500">{CATEGORY_ICON[it.category] ?? ''} {it.category}</span>
+                  </div>
+                  <p className="text-sm text-gray-800 dark:text-gray-200 mt-1">{it.title}</p>
+                  {it.detail && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{it.detail}</p>}
+                </div>
+                <div className="flex-shrink-0 flex items-center gap-3">
+                  {it.href ? (
+                    <Link to={it.href} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">Ir →</Link>
+                  ) : it.link ? (
+                    <button onClick={() => onNavigate?.(it.link)} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">Ir →</button>
+                  ) : null}
+                  <button onClick={() => dismiss(it)} title="Ignorar esta recomendación"
+                    className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400">
+                    ✕ Ignorar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Ignorados */}
+      {dismissedCount > 0 && (
+        <div>
+          <button onClick={toggleDismissedPanel} className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:underline">
+            👁 {showDismissed ? 'Ocultar' : 'Ver'} ignorados ({dismissedCount})
+          </button>
+          {showDismissed && (
+            <div className="mt-2 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+              {dismissedList === null ? (
+                <div className="p-4"><LoadingSpinner size="sm" /></div>
+              ) : dismissedList.length === 0 ? (
+                <p className="text-sm text-gray-400 dark:text-gray-500 p-4">Sin ignorados.</p>
+              ) : dismissedList.map(d => (
+                <div key={d.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{d.title}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500">{SOURCE_LABEL[d.source] ?? d.source}</p>
+                  </div>
+                  <button onClick={() => undismiss(d.id)} className="flex-shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">
+                    ↩️ Restaurar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -415,6 +415,7 @@ async function getGlobalSettings(req, res, next) {
       attendanceTrackingEnabled: workspace.attendanceTrackingEnabled ?? true,
       productivityEnabled: workspace.productivityEnabled ?? true,
       productivityDigestEnabled: workspace.productivityDigestEnabled ?? true,
+      adsAdvisorAutoEnabled: workspace.adsAdvisorAutoEnabled ?? true,
       lateToleranceMins: workspace.lateToleranceMins ?? 0,
       lateNotifyEnabled: workspace.lateNotifyEnabled ?? false,
       lateNotifyThreshold: workspace.lateNotifyThreshold ?? 3,
@@ -483,7 +484,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -495,6 +496,7 @@ async function saveGlobalSettings(req, res, next) {
     if (attendanceTrackingEnabled !== undefined) workspaceData.attendanceTrackingEnabled = Boolean(attendanceTrackingEnabled)
     if (productivityEnabled !== undefined) workspaceData.productivityEnabled = Boolean(productivityEnabled)
     if (productivityDigestEnabled !== undefined) workspaceData.productivityDigestEnabled = Boolean(productivityDigestEnabled)
+    if (adsAdvisorAutoEnabled !== undefined) workspaceData.adsAdvisorAutoEnabled = Boolean(adsAdvisorAutoEnabled)
     if (lateToleranceMins !== undefined) {
       const t = Number(lateToleranceMins)
       if (!Number.isInteger(t) || t < 0 || t > 120) {

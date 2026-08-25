@@ -554,6 +554,24 @@ export default function Preferences() {
                 </div>
               </div>
 
+              {/* Marketing */}
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Marketing</h2>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
+                  Configuración global compartida por todos los admins.
+                </p>
+
+                <div className="space-y-5">
+                  <div className="flex items-start justify-between gap-4 py-4">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Análisis automático de Ads (IA)</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las cuentas de Meta Ads / Google Ads conectadas de todos los proyectos y guarda el diagnóstico para el panel "Hoy" — no hace falta apretar "Analizar" a mano. Solo corre en proyectos con una cuenta de ads conectada.</p>
+                    </div>
+                    <Toggle on={globalSettings.adsAdvisorAutoEnabled !== false} onToggle={() => handleGlobalSetting({ adsAdvisorAutoEnabled: !(globalSettings.adsAdvisorAutoEnabled !== false) })} />
+                  </div>
+                </div>
+              </div>
+
               {/* Administración */}
               <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
                 <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Administración</h2>

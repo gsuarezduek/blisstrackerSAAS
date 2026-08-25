@@ -7,6 +7,15 @@ const { computeObjectives } = require('./marketingObjectives.service')
 const ADS_PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads' }
 const ADS_PLATFORM_SUB   = { meta_ads: 'meta-ads', google_ads: 'google-ads' }
 
+// Identidad de un hallazgo para "ignorar": título normalizado. Para fuentes
+// determinísticas (cannibal/pagespeed/keywords/content/objective) el título embebe un
+// dato real (query, nombre de pieza, label) y es 100% estable entre recálculos. Para
+// geo/ads_advisor es texto libre de IA — sobrevive solo si la redacción no cambia entre
+// corridas (limitación conocida y documentada, no resuelta acá).
+function normalizeTitle(title) {
+  return String(title || '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
 function daysAgo(date) {
   if (!date) return null
   return Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000))
@@ -85,16 +94,21 @@ async function adsItems({ projectId, workspaceId }) {
  * ya calculados/guardados — sin llamadas a IA ni a APIs externas.
  */
 async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT_TZ }) {
-  const [seo, objectives, content, ads] = await Promise.all([
+  const [seo, objectives, content, ads, dismissed] = await Promise.all([
     computeSeoActionItems({ projectId, workspaceId }).catch(() => null),
     objectiveItems({ projectId, workspaceId, tz }).catch(() => []),
     contentItems({ projectId, workspaceId }).catch(() => []),
     adsItems({ projectId, workspaceId }).catch(() => []),
+    prisma.dismissedFinding.findMany({ where: { projectId, workspaceId }, select: { source: true, signature: true } }),
   ])
   if (!seo) return null
 
+  const dismissedSet = new Set(dismissed.map(d => `${d.source}:${d.signature}`))
+
   const seoItems = seo.items.map(it => ({ ...it, taskPrefix: 'SEO', link: { tab: 'geo-seo', sub: 'plan' } }))
-  const items = [...seoItems, ...objectives, ...content, ...ads]
+  const allItems = [...seoItems, ...objectives, ...content, ...ads]
+  const items = allItems
+    .filter(it => !dismissedSet.has(`${it.source}:${normalizeTitle(it.title)}`))
     .sort((a, b) => PRIORITY_WEIGHT[b.priority] - PRIORITY_WEIGHT[a.priority])
     .map(({ key, ...rest }, i) => ({ key: `p-${i}`, ...rest }))
 
@@ -102,6 +116,7 @@ async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT
     projectName: seo.projectName,
     items,
     counts: { total: items.length, high: items.filter(i => i.priority === 'high').length },
+    dismissedCount: dismissed.length,
   }
 }
 
@@ -129,4 +144,39 @@ async function computeWorkspacePendingSummary({ workspaceId, tz = DEFAULT_TZ }) 
   })
 }
 
-module.exports = { computeProjectPendingItems, computeWorkspacePendingSummary }
+function invalidateWorkspacePending(workspaceId) {
+  pendingCache.del(`pending:${workspaceId}`)
+}
+
+/**
+ * Ignora un hallazgo del panel "Hoy" (por proyecto+fuente+título normalizado).
+ * Idempotente: ignorarlo dos veces no falla ni duplica fila.
+ */
+async function dismissFinding({ workspaceId, projectId, source, title, userId }) {
+  const signature = normalizeTitle(title)
+  await prisma.dismissedFinding.upsert({
+    where:  { projectId_source_signature: { projectId, source, signature } },
+    update: {},
+    create: { workspaceId, projectId, source, signature, title, dismissedById: userId ?? null },
+  })
+  invalidateWorkspacePending(workspaceId)
+}
+
+async function listDismissedFindings({ workspaceId, projectId }) {
+  return prisma.dismissedFinding.findMany({
+    where:   { projectId, workspaceId },
+    orderBy: { dismissedAt: 'desc' },
+    select:  { id: true, source: true, title: true, dismissedAt: true },
+  })
+}
+
+async function undismissFinding({ workspaceId, projectId, id }) {
+  const { count } = await prisma.dismissedFinding.deleteMany({ where: { id, projectId, workspaceId } })
+  if (count > 0) invalidateWorkspacePending(workspaceId)
+  return count > 0
+}
+
+module.exports = {
+  computeProjectPendingItems, computeWorkspacePendingSummary,
+  dismissFinding, listDismissedFindings, undismissFinding,
+}

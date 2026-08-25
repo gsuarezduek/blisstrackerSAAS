@@ -6,6 +6,8 @@ const { todayString, DEFAULT_TZ } = require('../utils/dates')
 const { getValidFbToken, fetchMetaAdsData } = require('./metaAds.service')
 const { fetchGoogleAdsData } = require('./googleAds.service')
 const { computeObjectives } = require('./marketingObjectives.service')
+const { enabledWorkspaceIds } = require('../lib/featureFlags')
+const { hasTokenBudget } = require('../lib/tokenBudget')
 
 const PLATFORM_LABEL = { meta_ads: 'Meta Ads (Facebook/Instagram)', google_ads: 'Google Ads' }
 
@@ -236,4 +238,62 @@ Respondé SOLO con un JSON válido, sin markdown ni texto adicional:
   return result
 }
 
-module.exports = { generateAdsAdvisor }
+/**
+ * Corre generateAdsAdvisor() automáticamente para todos los proyectos con integración
+ * de Meta Ads o Google Ads activa, en workspaces con Marketing habilitado y el toggle
+ * `adsAdvisorAutoEnabled` prendido (default on, opt-out). Invocada por el cron semanal
+ * de `index.js` — no dispara nada por su cuenta. Cada integración se procesa aislada
+ * (un fallo no corta el resto) y se chequea `hasTokenBudget` antes de llamar a Claude,
+ * para saltear en silencio los workspaces sin presupuesto en vez de que
+ * generateAdsAdvisor lance 429 (mismo criterio que insightMemory.service.js).
+ */
+async function runWeeklyAdsAdvisor() {
+  const enabled = await enabledWorkspaceIds('marketing')
+  if (enabled.size === 0) { console.log('[AdsAdvisorWeekly] Sin workspaces con Marketing habilitado.'); return }
+
+  const workspaces = await prisma.workspace.findMany({
+    where:  { id: { in: [...enabled] }, adsAdvisorAutoEnabled: true },
+    select: { id: true, timezone: true },
+  })
+  if (workspaces.length === 0) { console.log('[AdsAdvisorWeekly] Ningún workspace con el toggle prendido.'); return }
+  const wsById = new Map(workspaces.map(w => [w.id, w]))
+  const wsIds = [...wsById.keys()]
+
+  const [metaIntegrations, googleIntegrations] = await Promise.all([
+    prisma.projectIntegration.findMany({
+      where:  { type: 'meta_ads', status: 'active', propertyId: { not: null }, workspaceId: { in: wsIds } },
+      select: { projectId: true, workspaceId: true },
+    }),
+    prisma.projectIntegration.findMany({
+      where:  { type: 'google_ads', status: 'active', customerId: { not: null }, workspaceId: { in: wsIds } },
+      select: { projectId: true, workspaceId: true },
+    }),
+  ])
+  const jobs = [
+    ...metaIntegrations.map(i => ({ ...i, platform: 'meta_ads' })),
+    ...googleIntegrations.map(i => ({ ...i, platform: 'google_ads' })),
+  ]
+
+  let ok = 0, skipped = 0, failed = 0
+  for (const job of jobs) {
+    if (!(await hasTokenBudget(job.workspaceId))) {
+      skipped++
+      console.log(`[AdsAdvisorWeekly] Workspace ${job.workspaceId} sin presupuesto de tokens — se omite proyecto ${job.projectId}.`)
+      continue
+    }
+    try {
+      await generateAdsAdvisor({
+        projectId: job.projectId, workspaceId: job.workspaceId, userId: null,
+        platform: job.platform, datePreset: 'this_month', tz: wsById.get(job.workspaceId)?.timezone,
+      })
+      ok++
+    } catch (err) {
+      failed++
+      console.error(`[AdsAdvisorWeekly] Proyecto ${job.projectId} (${job.platform}):`, err.message)
+    }
+    await new Promise(r => setTimeout(r, 2000))
+  }
+  console.log(`[AdsAdvisorWeekly] ok=${ok} skipped=${skipped} failed=${failed} (de ${jobs.length} integraciones)`)
+}
+
+module.exports = { generateAdsAdvisor, runWeeklyAdsAdvisor }

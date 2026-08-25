@@ -193,6 +193,9 @@ router.get('/projects/:id/seo/action-plan',   seoOpportunities.getActionPlan)
 
 // Panel "Hoy" — pendientes accionables cross-área (SEO, Objetivos, Contenido, Ads Advisor)
 router.get('/projects/:id/pending', marketingPending.getProjectPending)
+router.post('/projects/:id/pending/dismiss',         marketingPending.dismiss)
+router.get('/projects/:id/pending/dismissed',         marketingPending.listDismissed)
+router.delete('/projects/:id/pending/dismissed/:did', marketingPending.undismiss)
 
 // SEO — Content Brief (generador de briefs de contenido con IA + SERP)
 router.get('/projects/:id/content-briefs',           contentBrief.listContentBriefs)
