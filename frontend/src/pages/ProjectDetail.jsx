@@ -12,6 +12,7 @@ import ProjectSituation from '../components/ProjectSituation'
 import ProjectInfoTab from '../components/ProjectInfoTab'
 import ProjectBriefs from '../components/briefs/ProjectBriefs'
 import ProjectMeetings from '../components/meetings/ProjectMeetings'
+import ProjectReports from '../components/ProjectReports'
 import ClientPortalConfig from '../components/ClientPortalConfig'
 import ProjectAccesos from '../components/ProjectAccesos'
 import { useAuth } from '../context/AuthContext'
@@ -383,6 +384,7 @@ export default function ProjectDetail() {
                   <option value="info">Info</option>
                   {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
                   <option value="reuniones">Reuniones</option>
+                  <option value="reportes">Reportes</option>
                 </select>
                 {/* Desktop */}
                 <div className="hidden sm:flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
@@ -421,6 +423,12 @@ export default function ProjectDetail() {
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'reuniones' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                   >
                     Reuniones
+                  </button>
+                  <button
+                    onClick={() => setInfoTab('reportes')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'reportes' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                  >
+                    Reportes
                   </button>
                 </div>
               </div>
@@ -659,6 +667,11 @@ export default function ProjectDetail() {
                   projectId={data.project.id}
                   canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
                 />
+              )}
+
+              {/* Tab: Reportes — horas y tareas completadas por mes, histórico */}
+              {infoTab === 'reportes' && (
+                <ProjectReports projectId={data.project.id} />
               )}
             </div>
 

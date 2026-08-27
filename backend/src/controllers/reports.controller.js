@@ -1,5 +1,5 @@
 const prisma = require('../lib/prisma')
-const { getProductivityPeriod, taskMins } = require('../lib/timeMetrics')
+const { getProductivityPeriod, taskMins, buildCompletedAtWhere } = require('../lib/timeMetrics')
 const { DEFAULT_TZ } = require('../utils/dates')
 const {
   getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median,
@@ -11,23 +11,6 @@ function defaultDateRange(tz = DEFAULT_TZ) {
   d.setDate(d.getDate() - 90)
   const from = d.toLocaleDateString('en-CA', { timeZone: tz })
   return { from, to }
-}
-
-// Filtra por completedAt usando el timezone del workspace
-function buildCompletedAtWhere(from, to, tz = DEFAULT_TZ) {
-  // Obtener el offset UTC para la timezone dada (aproximación para ART y similares)
-  const testDate = new Date(`${from}T12:00:00Z`)
-  const localStr = testDate.toLocaleDateString('en-CA', { timeZone: tz })
-  const offsetMs = new Date(`${localStr}T12:00:00Z`) - testDate
-  const offsetH  = -Math.round(offsetMs / 3600000)
-  const sign     = offsetH <= 0 ? '+' : '-'
-  const pad      = String(Math.abs(offsetH)).padStart(2, '0')
-  const tzStr    = `${sign}${pad}:00`
-
-  const range = {}
-  if (from) range.gte = new Date(`${from}T00:00:00${tzStr}`)
-  if (to)   range.lte = new Date(`${to}T23:59:59${tzStr}`)
-  return range
 }
 
 const taskSelect = {

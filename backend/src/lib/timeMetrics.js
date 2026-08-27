@@ -2,6 +2,7 @@
 // memoria de insights y el controller de productividad del admin.
 
 const { monthBounds, prevMonthStr } = require('./monthUtils')
+const { DEFAULT_TZ } = require('../utils/dates')
 
 // Offset UTC para una timezone, p.ej. "-03:00" o "+05:30".
 function tzOffsetStr(tz) {
@@ -85,6 +86,29 @@ function daysAgo(n, tz) {
   return date.toISOString().slice(0, 10)
 }
 
+// Filtra por completedAt usando el timezone del workspace. Devuelve un objeto
+// { gte?, lte? } listo para usar en un where de Prisma sobre un campo DateTime.
+function buildCompletedAtWhere(from, to, tz = DEFAULT_TZ) {
+  // Obtener el offset UTC para la timezone dada (aproximación para ART y similares)
+  const testDate = new Date(`${from}T12:00:00Z`)
+  const localStr = testDate.toLocaleDateString('en-CA', { timeZone: tz })
+  const offsetMs = new Date(`${localStr}T12:00:00Z`) - testDate
+  const offsetH  = -Math.round(offsetMs / 3600000)
+  const sign     = offsetH <= 0 ? '+' : '-'
+  const pad      = String(Math.abs(offsetH)).padStart(2, '0')
+  const tzStr    = `${sign}${pad}:00`
+
+  const range = {}
+  if (from) range.gte = new Date(`${from}T00:00:00${tzStr}`)
+  if (to)   range.lte = new Date(`${to}T23:59:59${tzStr}`)
+  return range
+}
+
+// Mes "YYYY-MM" de una fecha, en la timezone dada.
+function monthStringInTz(date, tz = DEFAULT_TZ) {
+  return new Date(date).toLocaleDateString('en-CA', { timeZone: tz }).slice(0, 7)
+}
+
 // Minutos activos reales de una tarea completada: descuenta pausas, tope 8h.
 function taskMins(t) {
   if (t.minutesOverride != null) return t.minutesOverride
@@ -101,4 +125,7 @@ function fmtMins(m) {
   return h > 0 ? `${h}h${min > 0 ? min + 'm' : ''}` : `${min}m`
 }
 
-module.exports = { tzOffsetStr, getNWeeksAgoMonday, getProductivityPeriod, daysAgo, taskMins, fmtMins, addDays, businessDaysBetween }
+module.exports = {
+  tzOffsetStr, getNWeeksAgoMonday, getProductivityPeriod, daysAgo, taskMins, fmtMins,
+  addDays, businessDaysBetween, buildCompletedAtWhere, monthStringInTz,
+}
