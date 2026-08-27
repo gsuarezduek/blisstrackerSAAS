@@ -5,7 +5,7 @@ import LoadingSpinner from '../LoadingSpinner'
 import HowToButton from '../HowToButton'
 import ConfirmModal from '../ConfirmModal'
 import StatusBadge, { fmtMoney } from './StatusBadge'
-import LostReasonModal from './LostReasonModal'
+import ReasonModal from './ReasonModal'
 import LeadModal from './LeadModal'
 import ConvertToProjectModal from './ConvertToProjectModal'
 import ResearchPanel from './ResearchPanel'
@@ -57,6 +57,9 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
   // Al pasar a estado Perdido se pide el motivo en un modal (no window.prompt).
   const [lostPendingStatus, setLostPendingStatus] = useState(null)
   const [lostSaving, setLostSaving] = useState(false)
+  // Al archivar también se pide el motivo (opcional) para poder evaluarlos después.
+  const [archivePending, setArchivePending] = useState(false)
+  const [archiveSaving, setArchiveSaving] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await api.get(`/ventas/leads/${leadId}`)
@@ -156,8 +159,22 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
     await load(); onChanged?.()
   }
 
-  async function toggleArchive() {
-    await patch(`/ventas/leads/${leadId}/archive`, { archived: !lead.archived })
+  function toggleArchive() {
+    if (lead.archived) {
+      patch(`/ventas/leads/${leadId}/archive`, { archived: false }) // desarchivar no pide motivo
+      return
+    }
+    setArchivePending(true) // pide el motivo (opcional) antes de archivar
+  }
+
+  async function confirmArchive(reason) {
+    setArchiveSaving(true)
+    try {
+      await patch(`/ventas/leads/${leadId}/archive`, { archived: true, reason })
+      setArchivePending(false)
+    } finally {
+      setArchiveSaving(false)
+    }
   }
 
   async function handleDelete() {
@@ -187,7 +204,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{c?.name || 'Lead'}</h1>
             <StatusBadge status={lead.status} title={lead.status === 'perdido' ? lead.lostReason : undefined} />
-            {lead.archived && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">🗄 Archivado</span>}
+            {lead.archived && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300" title={lead.archivedReason || undefined}>🗄 Archivado</span>}
             <HowToButton topic="ventas.leadDetail" />
           </div>
           {lead.title && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{lead.title}</p>}
@@ -240,6 +257,7 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
                 </select>
               </Row>
               {lead.status === 'perdido' && lead.lostReason && <Row label="Motivo de pérdida">{lead.lostReason}</Row>}
+              {lead.archived && lead.archivedReason && <Row label="Motivo del archivado">{lead.archivedReason}</Row>}
               <Row label="Origen">{originLabel(lead.origin)}</Row>
               <Row label="Valor estimado">{fmtMoney(lead.estimatedValue, lead.currency)}</Row>
               <Row label="Próximo contacto">{fmtDate(lead.nextContactAt)}</Row>
@@ -415,7 +433,19 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
 
       {showEdit && <LeadModal lead={lead} companies={companies} team={team} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load(); onChanged?.() }} />}
       {showConvert && <ConvertToProjectModal lead={lead} onClose={() => setShowConvert(false)} onConverted={() => { setShowConvert(false); load(); onChanged?.() }} />}
-      <LostReasonModal open={!!lostPendingStatus} loading={lostSaving} onConfirm={confirmLost} onCancel={() => setLostPendingStatus(null)} />
+      <ReasonModal open={!!lostPendingStatus} loading={lostSaving} onConfirm={confirmLost} onCancel={() => setLostPendingStatus(null)} />
+      <ReasonModal
+        open={archivePending}
+        loading={archiveSaving}
+        onConfirm={confirmArchive}
+        onCancel={() => setArchivePending(false)}
+        required={false}
+        title="Archivar lead"
+        description="El motivo es opcional — queda guardado para poder evaluar después por qué se archivan leads."
+        placeholder="Ej. Ya es cliente por otro proyecto, dejó de responder, duplicado…"
+        confirmLabel="Archivar"
+        confirmColor="bg-gray-700 hover:bg-gray-800"
+      />
     </div>
   )
 }

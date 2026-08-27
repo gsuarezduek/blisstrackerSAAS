@@ -3,7 +3,7 @@ import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import HowToButton from '../HowToButton'
 import { fmtMoney } from './StatusBadge'
-import LostReasonModal from './LostReasonModal'
+import ReasonModal from './ReasonModal'
 import { LEAD_STATUSES, STATUS_BADGE, statusMeta } from './salesCatalog'
 
 function ScrollArrow({ side, onClick, disabled }) {
@@ -232,7 +232,7 @@ export default function PipelineTab({ onOpenLead }) {
       </>
       )}
 
-      <LostReasonModal open={!!lostPending} loading={lostSaving} onConfirm={confirmLost} onCancel={() => setLostPending(null)} />
+      <ReasonModal open={!!lostPending} loading={lostSaving} onConfirm={confirmLost} onCancel={() => setLostPending(null)} />
     </div>
   )
 }

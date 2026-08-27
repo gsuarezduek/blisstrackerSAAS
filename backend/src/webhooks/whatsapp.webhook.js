@@ -157,6 +157,84 @@ async function notifyLeadOfMessage({ workspaceId, contact, conversation, event }
   }
 }
 
+/**
+ * Coexistence: alguien del equipo mandó un mensaje a mano desde la app de
+ * WhatsApp Business (o WhatsApp Web) del número conectado, no vía BlissTracker
+ * — sin esto, ese mensaje nunca llegaba al webhook y no aparecía acá (ver
+ * smb_message_echoes en chakra.js). A diferencia de un mensaje entrante,
+ * `event.to` es el CONTACTO (el negocio es quien manda). No dispara
+ * notifyLeadOfMessage (nadie del equipo necesita que le avisen de algo que el
+ * propio equipo mandó) ni al bot (no es un mensaje que requiera respuesta).
+ */
+async function handleOutboundEcho(account, event) {
+  if (!event.waMessageId || !event.to) return
+  // "revoke"/"edit" (el remitente borró o editó un mensaje ya ecoado) — no
+  // soportado en v1, se ignora en silencio; el mensaje original queda como está.
+  if (event.type === 'revoke' || event.type === 'edit') return
+
+  const existing = await prisma.whatsappMessage.findUnique({ where: { waMessageId: event.waMessageId } })
+  if (existing) return
+
+  const phoneE164 = normalizePhone(event.to)
+  if (!phoneE164) return
+
+  const contact = await findMatchingContact(account.workspaceId, phoneE164)
+  const now = new Date()
+
+  const conversation = await prisma.whatsappConversation.upsert({
+    where: { workspaceId_phoneE164: { workspaceId: account.workspaceId, phoneE164 } },
+    update: {
+      lastMessageAt: now,
+      ...(contact ? { contactId: contact.id } : {}),
+    },
+    create: {
+      workspaceId: account.workspaceId,
+      accountId: account.id,
+      phoneE164,
+      contactId: contact?.id ?? null,
+      lastMessageAt: now,
+    },
+  })
+
+  const message = await prisma.whatsappMessage.create({
+    data: {
+      workspaceId: account.workspaceId,
+      conversationId: conversation.id,
+      direction: 'out',
+      content: event.mediaId ? (event.mediaCaption || null) : event.text,
+      waMessageId: event.waMessageId,
+      senderType: 'app_echo', // ninguno de nuestros usuarios — Meta no dice qué persona lo mandó desde la app
+      status: 'sent',
+    },
+    include: { media: true },
+  })
+
+  // Mismo mecanismo de descarga que un adjunto entrante (downloadInboundMedia
+  // solo baja bytes por mediaId contra la API de Meta — el nombre es histórico,
+  // funciona igual sin importar la dirección del mensaje).
+  if (event.mediaId) {
+    const media = await downloadInboundMedia({
+      account, mediaId: event.mediaId, kind: event.type, mimeType: event.mediaMimeType,
+    })
+    if (media) {
+      await prisma.whatsappMedia.create({
+        data: {
+          workspaceId: account.workspaceId,
+          messageId: message.id,
+          fileName: event.mediaFileName || null,
+          ...media,
+        },
+      })
+    }
+  }
+
+  const fullMessage = event.mediaId
+    ? await prisma.whatsappMessage.findUnique({ where: { id: message.id }, include: { media: true } })
+    : message
+
+  emitTo(`workspace:${account.workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message: fullMessage })
+}
+
 async function handleStatusUpdate(account, event) {
   if (!event.waMessageId || !event.status) return
   const STATUS_MAP = { delivered: 'delivered', read: 'read', failed: 'failed' }
@@ -237,6 +315,8 @@ async function handleChakraWebhook(req, res) {
       await handleInboundMessage(account, event)
     } else if (event.kind === 'status') {
       await handleStatusUpdate(account, event)
+    } else if (event.kind === 'message_echo') {
+      await handleOutboundEcho(account, event)
     }
 
     res.json({ received: true })

@@ -290,20 +290,26 @@ async function changeOwner(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// PATCH /api/ventas/leads/:id/archive  { archived }
+// PATCH /api/ventas/leads/:id/archive  { archived, reason? }
 // Saca (o devuelve) el lead del Pipeline/lista principal. No borra nada ni
 // restringe por estado — a diferencia de delete, conserva historial y métricas.
+// `reason` es opcional y solo aplica al archivar (para poder evaluar patrones
+// después, análogo a Lead.lostReason); se limpia al desarchivar.
 async function archiveLead(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const userId = req.user.userId
     const archived = !!req.body.archived
+    const reason = req.body.reason?.trim() || null
 
     const lead = await findLead(req.params.id, workspaceId)
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
     if (lead.archived === archived) return res.json(await findLead(lead.id, workspaceId, LEAD_DETAIL_INCLUDE))
 
-    await prisma.lead.update({ where: { id: lead.id }, data: { archived, archivedAt: archived ? new Date() : null } })
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: { archived, archivedAt: archived ? new Date() : null, archivedReason: archived ? reason : null },
+    })
     await logLeadEvent({
       workspaceId, leadId: lead.id, userId,
       type: archived ? 'archived' : 'unarchived',

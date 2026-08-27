@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react'
 
-// Reemplaza a window.prompt() al marcar un lead como Perdido: mismo estilo que
-// ConfirmModal, pero pide texto libre en vez de solo confirmar. El motivo se guarda
-// en Lead.lostReason y se muestra en la ficha del lead y como tooltip del badge de
-// estado en el pipeline/tabla — ver "Motivo de pérdida" en LeadDetail.
-export default function LostReasonModal({ open, loading = false, onConfirm, onCancel }) {
+// Reemplaza a window.prompt() al pedir un motivo de texto libre — mismo estilo
+// que ConfirmModal, pero con un textarea en vez de solo confirmar. Genérico:
+// lo usan tanto marcar un lead como Perdido (Lead.lostReason, obligatorio) como
+// archivarlo (Lead.archivedReason, opcional) — ver "Motivo de pérdida" y
+// "Archivado de leads" en LeadDetail/PipelineTab/DashboardTab.
+export default function ReasonModal({
+  open, loading = false, onConfirm, onCancel,
+  title = 'Motivo de la pérdida',
+  description = 'Queda guardado en el lead — se ve en su ficha y como referencia rápida en el pipeline.',
+  placeholder = 'Ej. Eligió otra agencia, presupuesto, dejó de responder…',
+  confirmLabel = 'Marcar como perdido',
+  confirmColor = 'bg-red-500 hover:bg-red-600',
+  required = true,
+}) {
   const [reason, setReason] = useState('')
 
   useEffect(() => { if (open) setReason('') }, [open])
@@ -13,8 +22,8 @@ export default function LostReasonModal({ open, loading = false, onConfirm, onCa
 
   function submit() {
     const trimmed = reason.trim()
-    if (!trimmed || loading) return
-    onConfirm(trimmed)
+    if ((required && !trimmed) || loading) return
+    onConfirm(trimmed || null)
   }
 
   return (
@@ -24,14 +33,14 @@ export default function LostReasonModal({ open, loading = false, onConfirm, onCa
         onClick={e => e.stopPropagation()}
       >
         <div className="flex flex-col gap-1">
-          <h3 className="text-base font-bold text-gray-900 dark:text-white">Motivo de la pérdida</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Queda guardado en el lead — se ve en su ficha y como referencia rápida en el pipeline.</p>
+          <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
         </div>
         <textarea
           autoFocus
           rows={3}
           className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-          placeholder="Ej. Eligió otra agencia, presupuesto, dejó de responder…"
+          placeholder={placeholder}
           value={reason}
           onChange={e => setReason(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit() }}
@@ -46,10 +55,10 @@ export default function LostReasonModal({ open, loading = false, onConfirm, onCa
           </button>
           <button
             onClick={submit}
-            disabled={loading || !reason.trim()}
-            className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+            disabled={loading || (required && !reason.trim())}
+            className={`flex-1 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60 ${confirmColor}`}
           >
-            {loading ? 'Un momento…' : 'Marcar como perdido'}
+            {loading ? 'Un momento…' : confirmLabel}
           </button>
         </div>
       </div>

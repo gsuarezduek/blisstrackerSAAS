@@ -151,6 +151,9 @@ export default function WhatsappMessageList({ messages, loading, loadingMore, ha
                 {out && m.senderType === 'user' && m.senderUser && (
                   <span className="block text-[10px] font-semibold opacity-75 mb-0.5">{m.senderUser.name}</span>
                 )}
+                {out && m.senderType === 'app_echo' && (
+                  <span className="block text-[10px] font-semibold uppercase tracking-wide opacity-75 mb-0.5" title="Enviado a mano desde la app/WhatsApp Web del número, no desde BlissTracker">📱 WhatsApp</span>
+                )}
                 {m.media && <MediaContent media={m.media} />}
                 {m.content && <p className="whitespace-pre-wrap break-words leading-snug">{m.content}</p>}
                 <div className={`flex items-center gap-1 justify-end mt-1 text-[10px] ${out ? 'text-primary-100' : 'text-gray-400 dark:text-gray-500'}`}>

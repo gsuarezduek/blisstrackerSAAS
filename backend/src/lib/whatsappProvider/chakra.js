@@ -273,10 +273,17 @@ function parseChakraFormat(payload) {
  *     statuses: [{ id, status, timestamp, recipient_id }],
  *   }}] }],
  * }
+ *
+ * Coexistence agrega un "change" más con field:"smb_message_echoes" (no
+ * "messages") para mensajes salientes mandados a mano desde la app/WhatsApp
+ * Web del número, no vía esta API — shape (mismo `entry`/`changes`, otro
+ * `value`): { messaging_product, metadata, message_echoes: [{ from, to, id,
+ * timestamp, type, text?: { body } }] }. Ver parseMetaRawFormat.
  */
 function parseMetaRawFormat(payload) {
   const entry = payload?.entry?.[0]
-  const value = entry?.changes?.[0]?.value
+  const change = entry?.changes?.[0]
+  const value = change?.value
   if (!value) return null
   const wabaId = entry.id
 
@@ -308,6 +315,33 @@ function parseMetaRawFormat(payload) {
       waMessageId: status.id,
       status: status.status, // sent | delivered | read | failed
       timestamp: status.timestamp,
+    }
+  }
+
+  // Coexistence: eco de un mensaje SALIENTE que alguien del equipo mandó a
+  // mano desde la app de WhatsApp Business (o WhatsApp Web vinculado a ese
+  // número), no vía esta API — Meta lo entrega en un "change" separado con
+  // field:"smb_message_echoes" (confirmado contra la doc pública de Meta:
+  // developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/smb_message_echoes).
+  // Requiere que el número esté en modo Coexistence Y que el WABA tenga ese
+  // campo de webhook suscripto (se activa desde el dashboard del BSP, no acá).
+  // `type` puede venir también como "revoke"/"edit" (el remitente borró o
+  // editó un mensaje ya ecoado) — no soportado en v1, el caller los ignora.
+  const echo = change?.field === 'smb_message_echoes' ? value.message_echoes?.[0] : null
+  if (echo) {
+    const media = MEDIA_TYPES.includes(echo.type) ? echo[echo.type] : null
+    return {
+      kind: 'message_echo',
+      wabaId,
+      waMessageId: echo.id,
+      to: echo.to,
+      type: echo.type,
+      text: echo.type === 'text' ? (echo.text?.body ?? null) : null,
+      mediaId: media?.id || null,
+      mediaMimeType: media?.mime_type ? String(media.mime_type).split(';')[0].trim() : null,
+      mediaCaption: media?.caption || null,
+      mediaFileName: media?.filename || null,
+      timestamp: echo.timestamp,
     }
   }
 

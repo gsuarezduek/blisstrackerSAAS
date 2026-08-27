@@ -1,9 +1,29 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
-import StatusBadge, { fmtMoney } from './StatusBadge'
-import { LEAD_STATUSES, LEAD_ORIGINS, originLabel } from './salesCatalog'
+import { fmtMoney } from './StatusBadge'
+import ReasonModal from './ReasonModal'
+import { LEAD_STATUSES, LEAD_ORIGINS, originLabel, statusMeta, STATUS_BADGE } from './salesCatalog'
 import { avatarUrl } from '../../utils/avatarUrl'
+
+// Select de estado con look de badge — permite cambiar el estado de un lead
+// directo desde la tabla, sin entrar a su ficha. Pasar a "Perdido" pide el
+// motivo antes de aplicar (ver ReasonModal en el componente padre).
+function StatusSelect({ status, saving, onChange, title }) {
+  const meta = statusMeta(status)
+  return (
+    <select
+      value={status}
+      disabled={saving}
+      onClick={e => e.stopPropagation()}
+      onChange={e => onChange(e.target.value)}
+      title={title}
+      className={`text-xs font-semibold rounded-full pl-2.5 pr-1 py-0.5 border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-wait ${STATUS_BADGE[meta.color] || STATUS_BADGE.gray}`}
+    >
+      {LEAD_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+    </select>
+  )
+}
 
 const STAT_CARDS = [
   { key: 'totalLeads',          label: 'Total de leads',        icon: '📇', accent: 'text-gray-900 dark:text-white' },
@@ -71,6 +91,10 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
   const [dash, setDash] = useState(null)
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
+  // Cambio de estado inline desde la tabla (sin entrar al lead).
+  const [savingStatusId, setSavingStatusId] = useState(null)
+  const [lostPending, setLostPending] = useState(null) // { id } — pide motivo antes de aplicar "Perdido"
+  const [lostSaving, setLostSaving] = useState(false)
 
   // Estructura de filtros extensible: agregar un objeto acá suma un control + su query param.
   // `archived`: '' = solo activos (default), 'true' = solo archivados (vista excluyente, no aditiva).
@@ -119,6 +143,39 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
     await api.patch(`/ventas/leads/${id}/archive`, { archived: false })
     await loadLeads()
     onDataChange?.()
+  }
+
+  async function applyStatusChange(id, status, lostReason) {
+    setSavingStatusId(id)
+    setLeads(ls => ls.map(l => (l.id === id ? { ...l, status, ...(lostReason !== undefined ? { lostReason } : {}) } : l)))
+    try {
+      await api.patch(`/ventas/leads/${id}/status`, { status, ...(lostReason ? { lostReason } : {}) })
+      onDataChange?.() // refresca las tarjetas del dashboard (ganados/perdidos del mes, etc.)
+    } catch {
+      await loadLeads() // revertir ante error
+    } finally {
+      setSavingStatusId(null)
+    }
+  }
+
+  function handleStatusChange(lead, status) {
+    if (status === lead.status) return
+    if (statusMeta(status)?.isLost) {
+      setLostPending({ id: lead.id, status }) // pide el motivo antes de aplicar el cambio
+      return
+    }
+    applyStatusChange(lead.id, status)
+  }
+
+  async function confirmLost(reason) {
+    if (!lostPending) return
+    setLostSaving(true)
+    try {
+      await applyStatusChange(lostPending.id, lostPending.status, reason)
+      setLostPending(null)
+    } finally {
+      setLostSaving(false)
+    }
   }
 
   if (loading && !dash) return <LoadingSpinner />
@@ -212,7 +269,14 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
                       </div>
                       {l.title && <div className="text-xs text-gray-500 dark:text-gray-400">{l.title}</div>}
                     </td>
-                    <td className="px-4 py-3"><StatusBadge status={l.status} title={l.status === 'perdido' ? l.lostReason : undefined} /></td>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <StatusSelect
+                        status={l.status}
+                        saving={savingStatusId === l.id}
+                        onChange={status => handleStatusChange(l, status)}
+                        title={l.status === 'perdido' ? l.lostReason : undefined}
+                      />
+                    </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{l.owner?.name || <span className="text-gray-400">Sin asignar</span>}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{originLabel(l.origin)}</td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">{fmtMoney(l.estimatedValue, l.currency)}</td>
@@ -229,6 +293,8 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
           </div>
         )}
       </div>
+
+      <ReasonModal open={!!lostPending} loading={lostSaving} onConfirm={confirmLost} onCancel={() => setLostPending(null)} />
     </div>
   )
 }
