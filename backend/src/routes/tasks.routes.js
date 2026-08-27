@@ -1,6 +1,6 @@
 const router = require('express').Router()
 const { create, startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, remove, editTask, setDuration, starTask, addToToday, bringToToday, moveToBacklog, completedHistory, delegated, dismissDelegated, dismissDelegatedOne, followTask, unfollowTask, unfollowAll, followState, followed } = require('../controllers/tasks.controller')
-const { listComments, addComment } = require('../controllers/comments.controller')
+const { listComments, addComment, toggleReaction } = require('../controllers/comments.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 
@@ -32,5 +32,6 @@ router.delete('/:id',                remove)
 router.patch('/:id/duration',        setDuration)
 router.get('/:id/comments',          listComments)
 router.post('/:id/comments',         addComment)
+router.post('/:id/comments/:commentId/reactions', toggleReaction)
 
 module.exports = router

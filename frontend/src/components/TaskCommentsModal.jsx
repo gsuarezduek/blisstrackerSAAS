@@ -7,6 +7,8 @@ import LoadingSpinner from './LoadingSpinner'
 import { fmtMins, activeMinutes, completedDuration } from '../utils/format'
 import { avatarUrl } from '../utils/avatarUrl'
 import UserLink from './UserLink'
+import MessageReactionPicker from './chat/MessageReactionPicker'
+import { groupReactions } from './chat/reactions'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -49,6 +51,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
   const [error, setError]         = useState('')
   const bottomRef                 = useRef(null)
   const textareaRef               = useRef(null)
+  const [reactingId, setReactingId] = useState(null)
 
   // @mention autocomplete — contra los miembros del workspace (cualquiera puede ser
   // mencionado en un comentario, sea o no del equipo del proyecto, mismo criterio que la
@@ -221,6 +224,16 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
     } finally {
       setSaving(false)
       textareaRef.current?.focus()
+    }
+  }
+
+  async function handleToggleReaction(comment, emoji) {
+    setReactingId(null)
+    try {
+      const { data } = await api.post(`/tasks/${task.id}/comments/${comment.id}/reactions`, { emoji })
+      setComments(cs => cs.map(c => c.id === comment.id ? data : c))
+    } catch {
+      // best-effort: sin feedback visual si falla, mismo criterio que el resto de acciones optimistas del chat
     }
   }
 
@@ -590,7 +603,7 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
             </div>
           )}
           {comments.map(c => (
-            <div key={c.id} className="flex items-start gap-3">
+            <div key={c.id} className="group flex items-start gap-3">
               <UserLink userId={c.user.id} className="flex-shrink-0 mt-0.5">
                 <img
                   src={avatarUrl(c.user.avatar)}
@@ -606,6 +619,41 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
                 <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug mt-0.5 whitespace-pre-wrap break-words">
                   {renderRichText(c.content, { members: wsMembers })}
                 </p>
+                {groupReactions(c.reactions, user?.id).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {groupReactions(c.reactions, user?.id).map(g => (
+                      <button
+                        key={g.emoji}
+                        type="button"
+                        onClick={() => handleToggleReaction(c, g.emoji)}
+                        title={g.names.join(', ')}
+                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
+                          g.reacted
+                            ? 'bg-primary-100 dark:bg-primary-900/40 border-primary-300 dark:border-primary-600 text-primary-700 dark:text-primary-300'
+                            : 'bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        <span>{g.emoji}</span>
+                        <span className="font-medium">{g.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => setReactingId(id => id === c.id ? null : c.id)}
+                  title="Reaccionar"
+                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  🙂
+                </button>
+                {reactingId === c.id && (
+                  <MessageReactionPicker
+                    onSelect={emoji => handleToggleReaction(c, emoji)}
+                    onClose={() => setReactingId(null)}
+                  />
+                )}
               </div>
             </div>
           ))}

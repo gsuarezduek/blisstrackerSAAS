@@ -18,6 +18,11 @@ async function getTaskWithAccess(taskId, userId, admin, workspaceId) {
   return task
 }
 
+const COMMENT_INCLUDE = {
+  user: { select: { id: true, name: true, avatar: true } },
+  reactions: { orderBy: { createdAt: 'asc' }, select: { id: true, emoji: true, userId: true, user: { select: { name: true } } } },
+}
+
 async function listComments(req, res, next) {
   try {
     const taskId = Number(req.params.id)
@@ -27,7 +32,7 @@ async function listComments(req, res, next) {
 
     const comments = await prisma.taskComment.findMany({
       where: { taskId },
-      include: { user: { select: { id: true, name: true, avatar: true } } },
+      include: COMMENT_INCLUDE,
       orderBy: { createdAt: 'asc' },
     })
     res.json(comments)
@@ -48,7 +53,7 @@ async function addComment(req, res, next) {
 
     const comment = await prisma.taskComment.create({
       data: { taskId, userId, content: text.trim() },
-      include: { user: { select: { id: true, name: true, avatar: true } } },
+      include: COMMENT_INCLUDE,
     })
 
     const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
@@ -119,4 +124,37 @@ async function addComment(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listComments, addComment }
+// Reacciones con emoji sobre un comentario — mismo criterio que las reacciones del chat
+// interno (chat.controller.js toggleReaction): abierto a cualquier miembro con acceso a
+// la tarea (no solo el autor del comentario), sin catálogo fijo, toggle por
+// (comentario, usuario, emoji).
+async function toggleReaction(req, res, next) {
+  try {
+    const taskId = Number(req.params.id)
+    const commentId = Number(req.params.commentId)
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const emoji = (req.body?.emoji || '').trim()
+    if (!emoji || emoji.length > 32) return res.status(400).json({ error: 'Emoji inválido' })
+
+    const task = await getTaskWithAccess(taskId, userId, isAdmin(req), workspaceId)
+    if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
+
+    const comment = await prisma.taskComment.findFirst({ where: { id: commentId, taskId } })
+    if (!comment) return res.status(404).json({ error: 'Comentario no encontrado' })
+
+    const existingReaction = await prisma.taskCommentReaction.findUnique({
+      where: { commentId_userId_emoji: { commentId, userId, emoji } },
+    })
+    if (existingReaction) {
+      await prisma.taskCommentReaction.delete({ where: { id: existingReaction.id } })
+    } else {
+      await prisma.taskCommentReaction.create({ data: { workspaceId, commentId, userId, emoji } })
+    }
+
+    const updated = await prisma.taskComment.findUnique({ where: { id: commentId }, include: COMMENT_INCLUDE })
+    res.json(updated)
+  } catch (err) { next(err) }
+}
+
+module.exports = { listComments, addComment, toggleReaction }

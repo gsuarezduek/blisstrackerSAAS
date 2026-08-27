@@ -3,7 +3,8 @@ jest.mock('../../src/lib/prisma', () => ({
   workspaceMember: { findUnique: jest.fn(), findMany: jest.fn() },
   task:            { findUnique: jest.fn(), findFirst: jest.fn() },
   projectMember:   { findUnique: jest.fn(), findMany: jest.fn() },
-  taskComment:     { create: jest.fn(), findMany: jest.fn() },
+  taskComment:     { create: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
+  taskCommentReaction: { findUnique: jest.fn(), create: jest.fn(), delete: jest.fn() },
   taskFollow:      { findMany: jest.fn() },
   notification:    { createMany: jest.fn() },
 }))
@@ -277,6 +278,100 @@ describe('POST /api/tasks/:id/comments', () => {
     const res = await request(app)
       .post('/api/tasks/10/comments')
       .send({ text: 'Hola' })
+
+    expect(res.status).toBe(401)
+  })
+})
+
+// ── POST /api/tasks/:id/comments/:commentId/reactions ─────────────────────────
+
+describe('POST /api/tasks/:id/comments/:commentId/reactions', () => {
+  beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
+
+  it('agrega la reacción si no existía (toggle on) y devuelve 200', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask())
+    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
+    prisma.taskComment.findFirst.mockResolvedValue(makeComment())
+    prisma.taskCommentReaction.findUnique.mockResolvedValue(null)
+    prisma.taskCommentReaction.create.mockResolvedValue({ id: 1 })
+    prisma.taskComment.findUnique.mockResolvedValue({ ...makeComment(), reactions: [{ id: 1, emoji: '👍', userId: 1, user: { name: 'Test' } }] })
+
+    const res = await request(app)
+      .post('/api/tasks/10/comments/1/reactions')
+      .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ emoji: '👍' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.taskCommentReaction.create).toHaveBeenCalledWith({
+      data: { workspaceId: WORKSPACE_ID, commentId: 1, userId: 1, emoji: '👍' },
+    })
+    expect(prisma.taskCommentReaction.delete).not.toHaveBeenCalled()
+    expect(res.body.reactions).toHaveLength(1)
+  })
+
+  it('quita la reacción si ya existía (toggle off)', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask())
+    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
+    prisma.taskComment.findFirst.mockResolvedValue(makeComment())
+    prisma.taskCommentReaction.findUnique.mockResolvedValue({ id: 99 })
+    prisma.taskComment.findUnique.mockResolvedValue({ ...makeComment(), reactions: [] })
+
+    const res = await request(app)
+      .post('/api/tasks/10/comments/1/reactions')
+      .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ emoji: '👍' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.taskCommentReaction.delete).toHaveBeenCalledWith({ where: { id: 99 } })
+    expect(prisma.taskCommentReaction.create).not.toHaveBeenCalled()
+  })
+
+  it('devuelve 400 si el emoji está vacío', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask())
+    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
+
+    const res = await request(app)
+      .post('/api/tasks/10/comments/1/reactions')
+      .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ emoji: '  ' })
+
+    expect(res.status).toBe(400)
+  })
+
+  it('devuelve 404 si el comentario no existe en esa tarea', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask())
+    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
+    prisma.taskComment.findFirst.mockResolvedValue(null)
+
+    const res = await request(app)
+      .post('/api/tasks/10/comments/999/reactions')
+      .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ emoji: '👍' })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('devuelve 403 si el usuario no tiene acceso a la tarea', async () => {
+    prisma.task.findFirst.mockResolvedValue(makeTask())
+    prisma.projectMember.findUnique.mockResolvedValue(null)
+
+    const res = await request(app)
+      .post('/api/tasks/10/comments/1/reactions')
+      .set('Authorization', authHeader(1))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ emoji: '👍' })
+
+    expect(res.status).toBe(403)
+  })
+
+  it('devuelve 401 sin autenticación', async () => {
+    const res = await request(app)
+      .post('/api/tasks/10/comments/1/reactions')
+      .send({ emoji: '👍' })
 
     expect(res.status).toBe(401)
   })

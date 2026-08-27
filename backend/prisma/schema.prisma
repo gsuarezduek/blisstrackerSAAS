@@ -159,6 +159,7 @@ model Workspace {
   chatMessages           ChatMessage[]
   chatChannelReads       ChatChannelRead[]
   chatMessageReactions   ChatMessageReaction[]
+  taskCommentReactions   TaskCommentReaction[]
   contentPieces          ContentPiece[]
   contentAssets          ContentAsset[]
   contentComments        ContentComment[]
@@ -318,6 +319,7 @@ model User {
   chatChannelReads          ChatChannelRead[]
   chatMessagesPinned        ChatMessage[]              @relation("ChatMessagePinnedBy")
   chatMessageReactions      ChatMessageReaction[]
+  taskCommentReactions      TaskCommentReaction[]
   contentPiecesOwned        ContentPiece[]             @relation("ContentPieceOwner")
   contentPiecesCreated      ContentPiece[]             @relation("ContentPieceCreator")
   contentAssetsUploaded     ContentAsset[]             @relation("ContentAssetUploader")
@@ -734,7 +736,27 @@ model TaskComment {
   replies   TaskComment[] @relation("CommentReplies")
   createdAt DateTime      @default(now())
 
+  reactions TaskCommentReaction[]
+
   @@index([taskId])
+}
+
+// Reacciones con emoji sobre comentarios de tareas — mismo patrón que ChatMessageReaction:
+// sin catálogo fijo, abierto a cualquier miembro con acceso a la tarea, toggle por
+// (comentario, usuario, emoji).
+model TaskCommentReaction {
+  id          Int         @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  commentId   Int
+  comment     TaskComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId      Int
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji       String
+  createdAt   DateTime    @default(now())
+
+  @@unique([commentId, userId, emoji])
+  @@index([commentId])
 }
 
 // Seguimiento de una tarea por un usuario que no es necesariamente su dueño ni quien la creó.
