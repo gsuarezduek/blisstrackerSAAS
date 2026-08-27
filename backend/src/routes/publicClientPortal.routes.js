@@ -6,6 +6,7 @@ const {
   getPortalReport,
   requestLoginCode,
   verifyLoginCode,
+  magicLogin,
   getLiveData,
   refreshLiveData,
   servePortalBanner,
@@ -27,6 +28,7 @@ router.get('/client-portal/:slug/branding', getPortalBranding)
 router.get('/client-portal-banner/:slug',   servePortalBanner)
 router.post('/client-portal/:slug/live/request-code', requestLoginCode)
 router.post('/client-portal/:slug/live/verify-code',  verifyLoginCode)
+router.post('/client-portal/:slug/live/magic-login',  magicLogin)
 
 // Sin auth — asset de una pieza de Contenido, servido por publicId no adivinable
 // (mismo criterio que /api/social-image/:id). Vive acá y no en publicReport.routes.js

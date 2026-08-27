@@ -1005,6 +1005,108 @@ describe('Portal de cliente — login OTP (sin auth)', () => {
   })
 })
 
+// Magic-token de "Pedir aprobación" de Contenido (content.controller.js
+// requestApproval): mismo `purpose: 'client-portal-magic'` que emite ahí,
+// nunca `client-portal-live` — así un token de sesión normal no cuela acá.
+function magicToken(overrides = {}) {
+  return jwt.sign(
+    { purpose: 'client-portal-magic', portalId: PORTAL_ID, contactId: 1, ...overrides },
+    SECRET,
+    { expiresIn: overrides.expiresIn || '72h' },
+  )
+}
+
+describe('Portal de cliente — magic-login de "Pedir aprobación" (sin auth)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('devuelve 404 si el portal no existe o está inactivo', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(null)
+    const res = await request(app)
+      .post('/api/public/client-portal/kahuak/live/magic-login')
+      .send({ token: magicToken() })
+    expect(res.status).toBe(404)
+  })
+
+  it('devuelve 401 con un token vencido o con firma inválida', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    const res = await request(app)
+      .post('/api/public/client-portal/kahuak/live/magic-login')
+      .send({ token: 'esto-no-es-un-jwt' })
+    expect(res.status).toBe(401)
+    expect(prisma.clientPortalContact.update).not.toHaveBeenCalled()
+  })
+
+  it('devuelve 401 si el token es de propósito distinto (ej. un client-portal-live normal)', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    const liveToken = contactLiveToken(1)
+    const res = await request(app)
+      .post('/api/public/client-portal/kahuak/live/magic-login')
+      .send({ token: liveToken })
+    expect(res.status).toBe(401)
+  })
+
+  it('devuelve 401 si el token es de otro portal', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    const res = await request(app)
+      .post('/api/public/client-portal/kahuak/live/magic-login')
+      .send({ token: magicToken({ portalId: PORTAL_ID + 999 }) })
+    expect(res.status).toBe(401)
+    expect(prisma.clientPortalContact.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('devuelve 401 si el contacto ya no existe o fue desactivado, aunque el token siga vigente', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact({ active: false }))
+    const res = await request(app)
+      .post('/api/public/client-portal/kahuak/live/magic-login')
+      .send({ token: magicToken() })
+    expect(res.status).toBe(401)
+    expect(prisma.clientPortalContact.update).not.toHaveBeenCalled()
+  })
+
+  it('devuelve un token de sesión normal (client-portal-live) y actualiza lastLoginAt', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact({ lastLoginAt: new Date() }))
+    prisma.clientPortalContact.update.mockResolvedValue(makeContact({ id: 1 }))
+
+    const res = await request(app)
+      .post('/api/public/client-portal/kahuak/live/magic-login')
+      .send({ token: magicToken() })
+
+    expect(res.status).toBe(200)
+    expect(res.body.token).toBeTruthy()
+    const decoded = jwt.verify(res.body.token, SECRET)
+    expect(decoded.purpose).toBe('client-portal-live')
+    expect(decoded.portalId).toBe(PORTAL_ID)
+    expect(decoded.contactId).toBe(1)
+    expect(prisma.clientPortalContact.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { lastLoginAt: expect.any(Date) } })
+
+    await new Promise(r => setImmediate(r))
+    expect(prisma.notification.createMany).not.toHaveBeenCalled()
+  })
+
+  it('notifica al equipo (in-app + email) si es el primer login del contacto', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact({ lastLoginAt: null }))
+    prisma.clientPortalContact.update.mockResolvedValue(makeContact({ id: 1 }))
+    prisma.workspaceMember.findMany.mockResolvedValue([
+      { userId: 2, role: 'admin', user: { email: 'admin@bliss.test' } },
+    ])
+    prisma.projectMember.findMany.mockResolvedValue([])
+    prisma.project.findUnique.mockResolvedValue({ name: 'Proyecto Demo' })
+    prisma.workspace.findUnique.mockResolvedValue({ slug: WORKSPACE_SLUG })
+
+    const res = await request(app)
+      .post('/api/public/client-portal/kahuak/live/magic-login')
+      .send({ token: magicToken() })
+
+    expect(res.status).toBe(200)
+    await new Promise(r => setImmediate(r))
+    expect(prisma.notification.createMany).toHaveBeenCalled()
+    expect(sendPortalFirstLoginEmail).toHaveBeenCalled()
+  })
+})
+
 describe('Portal de cliente — datos en vivo (requiere token)', () => {
   beforeEach(() => jest.clearAllMocks())
 

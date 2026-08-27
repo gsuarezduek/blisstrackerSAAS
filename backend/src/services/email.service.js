@@ -827,12 +827,15 @@ async function sendReportFeedbackEmail(emails, payload, workspaceId) {
 
 /**
  * Aviso al cliente: hay piezas de Contenido esperando su aprobación. Se dispara
- * desde el botón "Pedir aprobación" (content.controller.js requestApproval).
- * @param {string[]} emails  contactos activos con canApprove del portal
- * @param {object}   payload { projectName, portalUrl, pieces: [{title}], workspaceName }
+ * desde el botón "Pedir aprobación" (content.controller.js requestApproval),
+ * UNA VEZ POR CONTACTO (no en batch): `portalUrl` es personal, lleva el
+ * magic-token de acceso directo de 72h atado a ese contactId — mandar un solo
+ * email a varios destinatarios forzaría a compartir el mismo link entre todos.
+ * @param {string} email    email del contacto
+ * @param {object} payload  { projectName, portalUrl, pieces: [{title}], workspaceName }
  */
-async function sendContentApprovalRequestEmail(emails, payload, workspaceId) {
-  if (!emails || emails.length === 0) return
+async function sendContentApprovalRequestEmail(email, payload, workspaceId) {
+  if (!email) return
   const { projectName, portalUrl, pieces, workspaceName } = payload
   const from = await getEmailFrom(workspaceId)
   const count = pieces?.length || 0
@@ -843,7 +846,7 @@ async function sendContentApprovalRequestEmail(emails, payload, workspaceId) {
   try {
     const { error } = await resend.emails.send({
       from,
-      to: emails,
+      to: email,
       subject,
       html: emailShell(`
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
@@ -853,13 +856,14 @@ async function sendContentApprovalRequestEmail(emails, payload, workspaceId) {
           </p>
           <ul style="margin:0 0 20px;padding-left:20px;">${list}</ul>
           ${portalUrl ? `<a href="${portalUrl}" style="display:inline-block;background:#E67A1F;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;">Revisar y aprobar</a>` : ''}
+          ${portalUrl ? `<p style="color:#94a3b8;font-size:12px;margin:16px 0 0;">Este link te deja entrar directo por 72 horas, sin pedirte código. Pasado ese tiempo, o desde cualquier otro momento, entrá como siempre desde el portal con tu email.</p>` : ''}
         </div>
       `),
     })
     if (error) throw new Error(error.message)
-    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'contentApprovalRequest', status: 'sent' })
+    await logEmail({ workspaceId, to: email, subject, type: 'contentApprovalRequest', status: 'sent' })
   } catch (err) {
-    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'contentApprovalRequest', status: 'failed', errorMsg: err.message })
+    await logEmail({ workspaceId, to: email, subject, type: 'contentApprovalRequest', status: 'failed', errorMsg: err.message })
   }
 }
 

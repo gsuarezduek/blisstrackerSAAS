@@ -1,3 +1,4 @@
+const jwt = require('jsonwebtoken')
 const prisma = require('../lib/prisma')
 const { dateStringInTz, todayString } = require('../utils/dates')
 const { canWrite } = require('../lib/projectAccess')
@@ -624,6 +625,12 @@ async function sendToDashboard(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Ventana del link de acceso directo que va en el email de "Pedir aprobación":
+// el contacto entra al portal sin código durante 72h desde el envío; pasado
+// ese tiempo (o desde cualquier otra vía de entrada), sigue rigiendo el login
+// OTP de siempre — ver clientPortal.controller.js#magicLogin.
+const APPROVAL_MAGIC_LINK_TTL = '72h'
+
 /**
  * POST /api/contenido/projects/:id/request-approval
  * Body: { pieceIds? } — sin pieceIds, avisa sobre TODAS las piezas en
@@ -658,7 +665,7 @@ async function requestApproval(req, res, next) {
 
     const contacts = await prisma.clientPortalContact.findMany({
       where:  { portalId: portal.id, active: true, canApprove: true },
-      select: { email: true },
+      select: { id: true, email: true },
     })
     if (contacts.length === 0) {
       return res.status(400).json({ error: 'No hay contactos activos que puedan aprobar — agregá uno en la configuración del portal' })
@@ -669,20 +676,27 @@ async function requestApproval(req, res, next) {
       prisma.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true, name: true, companyName: true } }),
     ])
 
-    const domain    = process.env.APP_DOMAIN || 'blisstracker.app'
-    const portalUrl = `https://${workspace.slug}.${domain}/report/${portal.slug}`
-    const emails    = contacts.map(c => c.email)
+    const domain = process.env.APP_DOMAIN || 'blisstracker.app'
+    const base   = `https://${workspace.slug}.${domain}/report/${portal.slug}`
 
     setImmediate(() => {
-      sendContentApprovalRequestEmail(emails, {
-        projectName:   project?.name || 'Proyecto',
-        portalUrl,
-        pieces,
-        workspaceName: workspace?.companyName || workspace?.name,
-      }, workspaceId).catch(() => {})
+      Promise.allSettled(contacts.map(contact => {
+        const magicToken = jwt.sign(
+          { purpose: 'client-portal-magic', portalId: portal.id, contactId: contact.id },
+          process.env.JWT_SECRET,
+          { expiresIn: APPROVAL_MAGIC_LINK_TTL },
+        )
+        const portalUrl = `${base}?tab=contenido&mt=${encodeURIComponent(magicToken)}`
+        return sendContentApprovalRequestEmail(contact.email, {
+          projectName:   project?.name || 'Proyecto',
+          portalUrl,
+          pieces,
+          workspaceName: workspace?.companyName || workspace?.name,
+        }, workspaceId)
+      }))
     })
 
-    res.json({ sent: emails.length, pieces: pieces.length })
+    res.json({ sent: contacts.length, pieces: pieces.length })
   } catch (err) { next(err) }
 }
 

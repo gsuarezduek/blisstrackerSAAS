@@ -153,13 +153,14 @@ function PortalUnavailable({ error }) {
 // (informes/briefs/contenido) + los 4 tabs. Vive DENTRO de <PortalLoginGate> —
 // antes de este componente el visitante solo vio la pantalla de marca y el
 // formulario de login, sin un solo dato del proyecto.
-function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportToken }) {
+function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportToken, initialTab }) {
   const [meta,    setMeta]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
   // Si el link ya trae un informe puntual (?report=<token>, ej. "Link del cliente" desde
-  // Informes), arrancamos directo en esa pestaña en vez de "Inicio".
-  const [tab,     setTab]     = useState(initialReportToken ? 'informes' : 'inicio')
+  // Informes) o una pestaña puntual (?tab=, ej. "Revisar y aprobar" del email de
+  // Contenido), arrancamos directo ahí en vez de "Inicio".
+  const [tab,     setTab]     = useState(initialTab || (initialReportToken ? 'informes' : 'inicio'))
 
   // Informes
   const [selectedToken, setSelectedToken] = useState(initialReportToken || null)
@@ -283,6 +284,10 @@ export default function ClientPortal() {
   const { token: slug } = useParams()
   const [searchParams]  = useSearchParams()
   const initialReportToken = searchParams.get('report') || null
+  const initialTab         = searchParams.get('tab') || null
+  // ?mt=<magic-token>, viene del email "Pedir aprobación" de Contenido — deja
+  // entrar directo por 72h desde el envío, sin pasar por el código OTP.
+  const magicToken          = searchParams.get('mt') || null
   const [branding, setBranding] = useState(null)
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState(null)
@@ -323,9 +328,9 @@ export default function ClientPortal() {
       </div>
 
       <div className="max-w-4xl mx-auto">
-        <PortalLoginGate slug={slug} brandPrimary={brandPrimary} projectName={branding.project?.name}>
+        <PortalLoginGate slug={slug} brandPrimary={brandPrimary} projectName={branding.project?.name} magicToken={magicToken}>
           {(token, { requireReauth }) => (
-            <PortalTabs slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary} initialReportToken={initialReportToken} />
+            <PortalTabs slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary} initialReportToken={initialReportToken} initialTab={initialTab} />
           )}
         </PortalLoginGate>
       </div>

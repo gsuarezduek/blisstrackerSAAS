@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -19,14 +19,44 @@ const tokenKey = (slug) => `bliss_client_token_${slug}`
  * tanto este componente (ante un 401 de un fetch del hijo) como, en F7, un
  * fetch que reciba `code: 'CONTACT_REQUIRED'` (token válido pero sin
  * `contactId` — emitido antes de la migración a multi-contacto).
+ *
+ * `magicToken` (?mt= en la URL, ver ClientPortal.jsx): viene del email
+ * "Pedir aprobación" de Contenido y deja entrar sin código durante 72h desde
+ * ese envío. Se intercambia una sola vez por la sesión normal de 30 días —
+ * el login por email/código sigue siendo el único camino "de siempre", esto
+ * es solo un atajo puntual para esa ventana. Si venció o es inválido, cae
+ * directo al formulario de siempre (sin romper nada).
  */
-export default function PortalLoginGate({ slug, brandPrimary = '#f97316', projectName, children }) {
+export default function PortalLoginGate({ slug, brandPrimary = '#f97316', projectName, magicToken, children }) {
   const [token, setToken] = useState(() => localStorage.getItem(tokenKey(slug)))
   const [loginStep,  setLoginStep]  = useState('email') // 'email' | 'code'
   const [email,      setEmail]      = useState('')
   const [code,       setCode]       = useState('')
   const [loginBusy,  setLoginBusy]  = useState(false)
   const [loginError, setLoginError] = useState(null)
+  const [exchangingMagic, setExchangingMagic] = useState(!!magicToken)
+
+  useEffect(() => {
+    if (!magicToken) return
+    // Saca ?mt= de la barra de direcciones apenas se intenta consumir, haya
+    // salido bien o mal — no queda un token de acceso directo dando vueltas
+    // en el historial/URL compartible.
+    const url = new URL(window.location.href)
+    url.searchParams.delete('mt')
+    window.history.replaceState(null, '', url.toString())
+
+    axios.post(`${API}/api/public/client-portal/${slug}/live/magic-login`, { token: magicToken })
+      .then(r => {
+        localStorage.setItem(tokenKey(slug), r.data.token)
+        setToken(r.data.token)
+      })
+      .catch(() => {
+        setLoginError('Ese link de acceso directo venció o ya no es válido. Ingresá tu email para pedir un código.')
+      })
+      .finally(() => setExchangingMagic(false))
+    // Se dispara una sola vez al montar con el magic-token de la URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function requireReauth() {
     localStorage.removeItem(tokenKey(slug))
@@ -58,6 +88,15 @@ export default function PortalLoginGate({ slug, brandPrimary = '#f97316', projec
   }
 
   if (token) return children(token, { requireReauth })
+
+  if (exchangingMagic) {
+    return (
+      <div className="max-w-sm mx-auto bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-center">
+        <div className="w-6 h-6 mx-auto mb-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-gray-500">Ingresando…</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-sm mx-auto bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-center">

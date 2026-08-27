@@ -728,6 +728,52 @@ async function verifyLoginCode(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * POST /api/public/client-portal/:slug/live/magic-login
+ * Body: { token }. Intercambia el magic-token de acceso directo que va en el
+ * email de "Pedir aprobación" de Contenido (content.controller.js#requestApproval,
+ * válido 72h desde ese envío, atado a un contactId puntual) por el JWT normal
+ * de sesión de 30 días — mismo resultado final que el login OTP, sólo cambia
+ * el paso previo. El portal SIGUE siempre disponible por el camino de siempre
+ * (email + código): si el magic-token venció, es de otro portal, o el contacto
+ * se desactivó mientras tanto, esto devuelve 401 y el frontend cae al
+ * formulario de login normal.
+ */
+async function magicLogin(req, res, next) {
+  try {
+    const portal = await prisma.projectClientPortal.findUnique({ where: { slug: req.params.slug } })
+    if (!portal || !portal.active) return res.status(404).json({ error: 'Portal no encontrado' })
+
+    let decoded
+    try {
+      decoded = jwt.verify(String(req.body?.token || ''), process.env.JWT_SECRET, { algorithms: ['HS256'] })
+    } catch {
+      return res.status(401).json({ error: 'Este link de acceso directo venció o no es válido.' })
+    }
+    if (decoded.purpose !== 'client-portal-magic' || decoded.portalId !== portal.id) {
+      return res.status(401).json({ error: 'Este link de acceso directo venció o no es válido.' })
+    }
+
+    const contact = await prisma.clientPortalContact.findUnique({ where: { id: decoded.contactId } })
+    if (!contact || !contact.active || contact.portalId !== portal.id) {
+      return res.status(401).json({ error: 'Este link de acceso directo venció o no es válido.' })
+    }
+
+    const wasFirstLogin = !contact.lastLoginAt
+    await prisma.clientPortalContact.update({ where: { id: contact.id }, data: { lastLoginAt: new Date() } })
+    if (wasFirstLogin) {
+      setImmediate(() => notifyFirstPortalLogin(portal, contact))
+    }
+
+    const token = jwt.sign(
+      { portalId: portal.id, projectId: portal.projectId, workspaceId: portal.workspaceId, contactId: contact.id, purpose: 'client-portal-live' },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' },
+    )
+    res.json({ token })
+  } catch (err) { next(err) }
+}
+
 // ─── Datos en vivo (requiere clientPortalAuth) ────────────────────────────────
 
 async function computeLiveData(portal) {
@@ -812,6 +858,7 @@ module.exports = {
   getPortalReport,
   requestLoginCode,
   verifyLoginCode,
+  magicLogin,
   getLiveData,
   refreshLiveData,
 }
