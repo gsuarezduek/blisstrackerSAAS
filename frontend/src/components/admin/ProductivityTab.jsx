@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import { avatarUrl } from '../../utils/avatarUrl'
@@ -161,9 +161,16 @@ function HoursAttendanceBlock({ att }) {
   )
 }
 
+const fmtChartDate = d => new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+const fmtTooltipDate = d => new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
+
 // Gráfico de líneas de horas registradas por día (últimos 60 días, contexto de tendencia).
+// Hover/foco por teclado muestran un tooltip con el día y las horas — mismo patrón que
+// el gráfico de horas por mes de Proyectos → Reportes (ProjectReports.jsx).
 // history = [{ date: 'YYYY-MM-DD', hours }]
 function HoursLineChart({ history }) {
+  const [activeIdx, setActiveIdx] = useState(null)
+  const svgRef = useRef(null)
   const data = history || []
   if (data.length < 2) return <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin datos suficientes.</p>
   const hrs = data.map(d => d.hours)
@@ -178,9 +185,49 @@ function HoursLineChart({ history }) {
   // Con muchos puntos diarios, marcar un punto por día encima de la línea es ruido visual —
   // solo se dibujan círculos donde también va la etiqueta del eje X (más el último, siempre).
   const dotRadius = n > 20 ? 2 : 2.5
-  const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  const lastIdx = n - 1
+  const active = activeIdx != null ? data[activeIdx] : null
+
+  function handlePointerMove(e) {
+    const svg = svgRef.current
+    if (!svg) return
+    const rect = svg.getBoundingClientRect()
+    const relX = ((e.clientX - rect.left) / rect.width) * W
+    let nearest = 0, best = Infinity
+    for (let i = 0; i < n; i++) {
+      const d = Math.abs(x(i) - relX)
+      if (d < best) { best = d; nearest = i }
+    }
+    setActiveIdx(nearest)
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'ArrowRight') { e.preventDefault(); setActiveIdx(i => Math.min(lastIdx, (i ?? lastIdx) + 1)) }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); setActiveIdx(i => Math.max(0, (i ?? lastIdx) - 1)) }
+    else if (e.key === 'Escape') { setActiveIdx(null) }
+  }
+
+  // Tooltip: caja angosta anclada al punto activo, recortada para no salirse del viewBox.
+  const tooltipW = 96
+  const tooltipX = active ? Math.min(Math.max(x(activeIdx) - tooltipW / 2, padL), W - padR - tooltipW) : 0
+  const tooltipY = active ? Math.max(y(active.hours) - 42, padT) : 0
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 190 }} preserveAspectRatio="xMidYMid meet">
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full touch-none"
+      style={{ maxHeight: 190 }}
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label={`Horas registradas por día: de ${fmtTooltipDate(data[0].date)} a ${fmtTooltipDate(data[lastIdx].date)}`}
+      tabIndex={0}
+      onMouseMove={handlePointerMove}
+      onMouseLeave={() => setActiveIdx(null)}
+      onFocus={() => setActiveIdx(i => i ?? lastIdx)}
+      onBlur={() => setActiveIdx(null)}
+      onKeyDown={handleKeyDown}
+    >
       {/* eje base + etiquetas Y */}
       <g className="text-gray-300 dark:text-gray-600">
         <line x1={padL} y1={y(0)} x2={W - padR} y2={y(0)} stroke="currentColor" strokeWidth="1" />
@@ -200,11 +247,26 @@ function HoursLineChart({ history }) {
               <circle cx={x(i)} cy={y(d.hours)} r={isLast ? 3.5 : dotRadius} fill="#F7931A" />
             )}
             {showTick && (
-              <text x={x(i)} y={H - 7} textAnchor="middle" fontSize="9" fill="currentColor" className="text-gray-400 dark:text-gray-500">{fmtDate(d.date)}</text>
+              <text x={x(i)} y={H - 7} textAnchor="middle" fontSize="9" fill="currentColor" className="text-gray-400 dark:text-gray-500">{fmtChartDate(d.date)}</text>
             )}
           </g>
         )
       })}
+
+      {/* Crosshair + punto activo (hover/foco por teclado) */}
+      {active && (
+        <g>
+          <line x1={x(activeIdx)} x2={x(activeIdx)} y1={padT} y2={H - padB} className="stroke-gray-300 dark:stroke-gray-600" strokeWidth={1} />
+          <circle cx={x(activeIdx)} cy={y(active.hours)} r={5} className="fill-white dark:fill-gray-800" />
+          <circle cx={x(activeIdx)} cy={y(active.hours)} r={3} fill="#F7931A" />
+
+          <g transform={`translate(${tooltipX}, ${tooltipY})`}>
+            <rect width={tooltipW} height={34} rx={5} className="fill-gray-800 dark:fill-gray-900" opacity={0.95} />
+            <text x={8} y={14} className="fill-white font-semibold" fontSize={11}>{fmtHours(active.hours)}</text>
+            <text x={8} y={26} className="fill-gray-300" fontSize={9}>{fmtTooltipDate(active.date)}</text>
+          </g>
+        </g>
+      )}
     </svg>
   )
 }
