@@ -173,6 +173,7 @@ model Workspace {
   whatsappTemplates         WhatsappTemplate[]
   whatsappAutomationRules   WhatsappAutomationRule[]
   whatsappAutomationLogs    WhatsappAutomationLog[]
+  whatsappBotDocuments      WhatsappBotDocument[]
 
   @@index([slug])
 }
@@ -330,6 +331,7 @@ model User {
   whatsappConversationReads WhatsappConversationRead[]
   whatsappConversationsAssigned WhatsappConversation[] @relation("WhatsappConversationAssignee")
   whatsappAutomationRulesCreated WhatsappAutomationRule[]
+  whatsappBotDocumentsUploaded WhatsappBotDocument[] @relation("WhatsappBotDocumentUploadedBy")
   dismissedFindings         DismissedFinding[]
 }
 
@@ -3348,8 +3350,53 @@ model WhatsappBotConfig {
   enabled Boolean @default(false)
   prompt  String? @db.Text
 
+  // Entrenamiento del bot (mejora de precisión + reglas de seguridad, ver
+  // whatsappBot.service.js `generateBotReply`): `blockedWords` son palabras/frases
+  // que el bot NUNCA debe usar en su respuesta (verificado después de generar, no
+  // solo pedido por prompt); `escalationWords` son palabras/frases del CLIENTE que
+  // disparan traspaso automático a un humano sin llamar a la IA. Ambas Json arrays
+  // de strings, mismo patrón que Workspace.salesRoleNames/disabledFeatureKeys.
+  // `handoffMessage` es el aviso neutro que se manda al escalar (por baja confianza
+  // del modelo o por escalationWords) — null usa un default embebido en código.
+  blockedWords    Json    @default("[]")
+  escalationWords Json    @default("[]")
+  handoffMessage  String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Documentos de contexto del bot de WhatsApp (base de conocimiento) — el texto
+// extraído se inyecta en el system prompt de cada respuesta del bot (ver
+// `knowledgeBlock` en whatsappBot.service.js). Contexto simple (texto completo
+// truncado), no RAG con embeddings: alcanza para pocos documentos tipo
+// brochure/FAQ/manual de servicios. Se extrae UNA VEZ al subir, no en cada mensaje.
+// Dual storage igual patrón que WhatsappMedia/SocialImage: objectKey (R2) o
+// fileData (bytes en DB, fallback sin R2 configurado).
+model WhatsappBotDocument {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  objectKey String? // R2, si está configurado
+  fileData  Bytes? // fallback DB, si no hay R2
+
+  extractedText String? @db.Text // lo que realmente se inyecta en el prompt
+  charCount     Int     @default(0)
+  truncated     Boolean @default(false) // true si extractedText se cortó por el tope de tamaño
+
+  status   String  @default("processing") // processing | ready | error
+  errorMsg String?
+
+  uploadedById Int?
+  uploadedBy   User? @relation("WhatsappBotDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId])
 }
 
 // Cache local de plantillas aprobadas por Meta (Fase 5 del plan) — de solo

@@ -255,6 +255,26 @@ const PLATFORM_SETTINGS = [
     label:   'Retención de assets de Contenido sin confirmar (horas)',
     help:    'Un asset queda en estado "pending" entre pedir la URL firmada de subida y confirmarla (POST .../assets/:id/confirm). Si el usuario abandona la subida (cierra la pestaña, corta la conexión) el asset queda huérfano; la limpieza semanal lo borra —primero del bucket R2, después de la DB— pasadas estas horas. NO usa el mismo mecanismo de "días" del resto de los retention: es horas porque un upload abandonado se detecta rápido, no en semanas.',
   },
+  {
+    key:     'whatsappBotDocumentMaxMb',
+    type:    'integer',
+    default: 10,
+    min:     1,
+    max:     100,
+    group:   'operational',
+    label:   'Tamaño máximo por documento de contexto del bot (MB)',
+    help:    'Tope de tamaño de archivo al subir un PDF/DOCX/TXT como base de conocimiento del bot de WhatsApp (POST /api/whatsapp/bot/documents). El texto extraído además se trunca a un tope de caracteres fijo por documento (no configurable acá) antes de inyectarse en el prompt.',
+  },
+  {
+    key:     'whatsappBotDocumentMaxCount',
+    type:    'integer',
+    default: 5,
+    min:     1,
+    max:     50,
+    group:   'operational',
+    label:   'Cantidad máxima de documentos de contexto del bot',
+    help:    'Tope de documentos activos por workspace en la base de conocimiento del bot de WhatsApp. Todos se concatenan en cada respuesta del bot — más documentos = más tokens de input por mensaje.',
+  },
 
   // ─── Scraping (Apify) ──────────────────────────────────────────────────────
   // Actores y topes de posts por red. El token de Apify (APIFY_API_TOKEN) sigue

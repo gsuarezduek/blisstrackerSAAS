@@ -8,7 +8,8 @@ const { logLeadEvent } = require('./ventas/_shared')
 const objectStorage = require('../services/objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
-const { DEFAULT_PROMPT } = require('../services/whatsappBot.service')
+const { DEFAULT_PROMPT, DEFAULT_HANDOFF_MESSAGE, generateBotReply, buildTranscript } = require('../services/whatsappBot.service')
+const botDocuments = require('../services/whatsappBotDocument.service')
 const { syncTemplates: syncTemplatesFromProvider, createTemplateForAccount, sendTemplateToConversation, deleteTemplateForAccount } = require('../services/whatsappTemplates.service')
 
 const MESSAGE_PAGE_SIZE = 50
@@ -563,24 +564,121 @@ async function markRead(req, res, next) {
 async function getBotConfig(req, res, next) {
   try {
     const config = await prisma.whatsappBotConfig.findUnique({ where: { workspaceId: req.workspace.id } })
-    res.json(config || { enabled: false, prompt: DEFAULT_PROMPT })
+    res.json(config || { enabled: false, prompt: DEFAULT_PROMPT, blockedWords: [], escalationWords: [], handoffMessage: DEFAULT_HANDOFF_MESSAGE })
   } catch (err) { next(err) }
 }
 
+const MAX_WORDS_PER_LIST = 50
+const MAX_WORD_LENGTH = 100
+
+// Arrays de strings cargados a mano por el admin (blockedWords/escalationWords)
+// — trim, descarta vacíos, corta longitud/cantidad para no permitir un abuso
+// (ni un array gigante que infle el prompt de cada mensaje del bot).
+function sanitizeWordList(input) {
+  if (!Array.isArray(input)) return []
+  return input
+    .map(w => String(w || '').trim().slice(0, MAX_WORD_LENGTH))
+    .filter(Boolean)
+    .slice(0, MAX_WORDS_PER_LIST)
+}
+
 /**
- * PUT /api/whatsapp/bot  { enabled, prompt }
+ * PUT /api/whatsapp/bot  { enabled, prompt, blockedWords?, escalationWords?, handoffMessage? }
  * Solo admin/owner (ver whatsapp.routes.js) — es un interruptor con costo
  * operativo real (tokens de IA por cada mensaje entrante mientras esté on).
  */
 async function saveBotConfig(req, res, next) {
   try {
-    const { enabled, prompt } = req.body
+    const { enabled, prompt, blockedWords, escalationWords, handoffMessage } = req.body
+    const data = {
+      enabled: Boolean(enabled),
+      prompt: prompt?.trim() || null,
+      blockedWords: sanitizeWordList(blockedWords),
+      escalationWords: sanitizeWordList(escalationWords),
+      handoffMessage: handoffMessage?.trim().slice(0, 500) || null,
+    }
     const config = await prisma.whatsappBotConfig.upsert({
       where: { workspaceId: req.workspace.id },
-      update: { enabled: Boolean(enabled), prompt: prompt?.trim() || null },
-      create: { workspaceId: req.workspace.id, enabled: Boolean(enabled), prompt: prompt?.trim() || null },
+      update: data,
+      create: { workspaceId: req.workspace.id, ...data },
     })
     res.json(config)
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/whatsapp/bot/test  { config: {prompt, blockedWords?, escalationWords?, handoffMessage?}, messages: [{role, text}] }
+ * Playground de prueba: corre `generateBotReply` con la config del FORMULARIO
+ * (no la guardada en DB) contra una transcripción armada en el frontend, sin
+ * persistir nada ni mandar nada por WhatsApp real — para poder iterar el
+ * prompt/reglas antes de "Guardar". Sigue gastando tokens reales (respeta el
+ * presupuesto del workspace vía createMessage/assertTokenBudget).
+ */
+async function testBotConfig(req, res, next) {
+  try {
+    const { config, messages } = req.body
+    if (!config || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'Falta config o messages' })
+    }
+    const safeConfig = {
+      prompt: config.prompt || null,
+      blockedWords: sanitizeWordList(config.blockedWords),
+      escalationWords: sanitizeWordList(config.escalationWords),
+      handoffMessage: config.handoffMessage || null,
+    }
+    const history = messages.map(m => ({
+      direction: m.role === 'cliente' ? 'in' : 'out',
+      content: String(m.text || '').slice(0, 2000),
+      senderType: m.role === 'cliente' ? 'contact' : 'bot',
+    }))
+    const transcript = buildTranscript(history)
+    const lastClientMessage = [...history].reverse().find(m => m.direction === 'in')?.content || ''
+
+    const result = await generateBotReply({
+      workspaceId: req.workspace.id, config: safeConfig, transcript, contact: null, lastClientMessage,
+    })
+    if (!result?.replyText) return res.status(502).json({ error: 'No se pudo generar una respuesta de prueba (revisá el presupuesto de IA del workspace).' })
+    res.json(result)
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message, code: err.code })
+    next(err)
+  }
+}
+
+/** GET /api/whatsapp/bot/documents — lista la base de conocimiento del bot. */
+async function listBotDocuments(req, res, next) {
+  try {
+    res.json(await botDocuments.listDocuments(req.workspace.id))
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/whatsapp/bot/documents — sube un PDF/DOCX/TXT como contexto del
+ * bot (multipart, campo "file" — mismo middleware `uploadFile` que /media,
+ * ver whatsapp.routes.js). Extrae el texto una sola vez acá, no en cada mensaje.
+ */
+async function uploadBotDocument(req, res, next) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Archivo requerido' })
+    const doc = await botDocuments.uploadDocument({
+      workspaceId: req.workspace.id,
+      uploadedById: req.user.userId,
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+    })
+    res.status(201).json(doc)
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
+    next(err)
+  }
+}
+
+/** DELETE /api/whatsapp/bot/documents/:id */
+async function deleteBotDocument(req, res, next) {
+  try {
+    const doc = await botDocuments.deleteDocument(req.workspace.id, req.params.id)
+    if (!doc) return res.status(404).json({ error: 'Documento no encontrado' })
+    res.json({ ok: true })
   } catch (err) { next(err) }
 }
 
@@ -766,6 +864,7 @@ async function reopenConversation(req, res, next) {
 
 module.exports = {
   connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, sendMedia, markRead,
-  assignConversation, linkContact, createContactFromConversation, getBotConfig, saveBotConfig, toggleConversationBot,
+  assignConversation, linkContact, createContactFromConversation, getBotConfig, saveBotConfig, testBotConfig, toggleConversationBot,
+  listBotDocuments, uploadBotDocument, deleteBotDocument,
   listTemplates, syncTemplates, createTemplate, deleteTemplate, reopenConversation,
 }

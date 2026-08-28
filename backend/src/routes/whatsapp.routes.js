@@ -58,6 +58,13 @@ router.post('/conversations/:id/reopen',     whatsapp.reopenConversation)
 // que conectar/desconectar la cuenta.
 router.get('/bot',  whatsapp.getBotConfig)
 router.put('/bot',  workspaceAdminOnly, whatsapp.saveBotConfig)
+router.post('/bot/test', workspaceAdminOnly, whatsapp.testBotConfig)
+
+// Base de conocimiento del bot (documentos de contexto) — mismo criterio de
+// permisos que el resto de la config del bot: solo admin/owner.
+router.get('/bot/documents',       workspaceAdminOnly, whatsapp.listBotDocuments)
+router.post('/bot/documents',      workspaceAdminOnly, uploadFile, whatsapp.uploadBotDocument)
+router.delete('/bot/documents/:id', workspaceAdminOnly, whatsapp.deleteBotDocument)
 
 // Plantillas (Fase 5): catálogo de solo lectura de nuestro lado — sincronizar
 // desde Chakra (con costo/aprobación real de Meta detrás) queda para admin,
