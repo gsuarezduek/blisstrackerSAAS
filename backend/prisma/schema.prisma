@@ -235,6 +235,12 @@ model User {
   name      String
   email     String   @unique
   password  String
+  // Email primario verificado. Default true para no afectar cuentas existentes
+  // (backfill); el signup nuevo en `createWorkspace` lo setea false explícitamente
+  // y dispara `EmailVerificationToken` — hasta confirmarlo, el frontend muestra un
+  // banner. `joinWorkspace` (invitación) lo deja en true: el control del email ya
+  // quedó probado por haber llegado el link de invitación a esa casilla.
+  emailVerified Boolean @default(true)
   // ID estable de la cuenta de Google vinculada (el `sub` del token de Google).
   // Permite iniciar sesión con Google aunque el email de esa cuenta difiera del
   // email primario, y sobrevive a un cambio de email. null = sin Google conectado.
@@ -283,6 +289,7 @@ model User {
   notificationsAsActor      Notification[]             @relation("NotificationActor")
   passwordResetTokens       PasswordResetToken[]
   emailChangeTokens         EmailChangeToken[]
+  emailVerificationTokens   EmailVerificationToken[]
   loginEvents               UserLogin[]
   sentInvitations           WorkspaceInvitation[]      @relation("InvitedByUser")
   deletionRequestsMade      WorkspaceDeletionRequest[] @relation("DeletionRequestedBy")
@@ -388,6 +395,19 @@ model EmailChangeToken {
   userId    Int
   user      User     @relation(fields: [userId], references: [id])
   newEmail  String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// Token de verificación del email primario al crear la cuenta (signup). Se confirma
+// desde el link enviado al momento de crear el workspace; hasta entonces
+// `User.emailVerified` queda false y el frontend muestra un banner de aviso.
+model EmailVerificationToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())

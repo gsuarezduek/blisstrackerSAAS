@@ -315,6 +315,39 @@ async function sendWelcomeEmail(email, name, workspaceId, slug) {
   }
 }
 
+// Verificación del email primario al crear la cuenta (signup). A diferencia de
+// sendWelcomeEmail (que asume que hay que volver a iniciar sesión), el owner ya
+// quedó logueado automáticamente en su workspace nuevo — este email solo confirma
+// la casilla; hasta que no se abra el link, el frontend muestra un banner de aviso.
+async function sendVerificationEmail(email, name, verifyUrl, workspaceId) {
+  const from = await getEmailFrom(workspaceId)
+  const subject = 'Confirmá tu email — BlissTracker'
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: email,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">¡Bienvenido, ${name}!</h2>
+          <p style="color:#475569;margin:0 0 20px;">Tu cuenta en BlissTracker ya está lista y podés usarla ahora mismo. Solo falta que confirmes tu email para asegurarte de recibir avisos importantes (facturación, notificaciones, recuperación de contraseña).</p>
+          <a href="${verifyUrl}"
+             style="display:inline-block;background:#E67A1F;color:white;text-decoration:none;
+                    padding:12px 24px;border-radius:8px;font-weight:600;margin-bottom:20px;">
+            Confirmar mi email
+          </a>
+          <p style="color:#94a3b8;font-size:14px;margin:0;">Si no creaste esta cuenta, podés ignorar este correo.</p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: email, subject, type: 'emailVerification', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: email, subject, type: 'emailVerification', status: 'failed', errorMsg: err.message })
+    throw err
+  }
+}
+
 async function sendWeeklySummaryEmail(email, name, html, weekLabel, workspaceId, workspaceName) {
   const from = await getEmailFrom(workspaceId)
   const wsLabel = workspaceName || 'BlissTracker'
@@ -988,6 +1021,7 @@ module.exports = {
   sendEmailChangeVerification,
   sendEmailChangedNotice,
   sendWelcomeEmail,
+  sendVerificationEmail,
   sendLateNotificationEmail,
   sendProductivityDigestEmail,
   sendSalesReminderEmail,

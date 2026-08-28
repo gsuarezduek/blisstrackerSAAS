@@ -7,6 +7,7 @@ const { OAuth2Client } = require('google-auth-library')
 const { isSalesUser } = require('../middleware/workspace')
 const prisma = require('../lib/prisma')
 const { validatePassword } = require('../lib/passwordPolicy')
+const { createAndSendVerificationEmail, RESEND_COOLDOWN_MS } = require('../lib/emailVerification')
 
 /**
  * Genera un JWT con el contexto workspace.
@@ -37,6 +38,7 @@ function formatUser(user, member) {
     role: member.teamRole,
     isAdmin: member.role === 'admin' || member.role === 'owner',
     avatar: user.avatar,
+    emailVerified: user.emailVerified,
     dailyInsightEnabled: member.dailyInsightEnabled,
     notesBoardEnabled: member.notesBoardEnabled,
   }
@@ -123,7 +125,7 @@ async function me(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
-      select: { id: true, name: true, email: true, avatar: true, isSuperAdmin: true },
+      select: { id: true, name: true, email: true, avatar: true, isSuperAdmin: true, emailVerified: true },
     })
 
     const member = req.workspaceMember
@@ -247,6 +249,56 @@ async function verifyEmailChange(req, res, next) {
     }
 
     res.json({ message: 'Email actualizado correctamente', email: record.newEmail })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/auth/verify-email
+ * Body: { token }
+ * Confirma el email primario (signup, ver `createAndSendVerificationEmail`).
+ * Público: se abre desde el link del correo, con o sin sesión activa.
+ */
+async function verifyEmail(req, res, next) {
+  try {
+    const { token } = req.body
+    if (!token) return res.status(400).json({ error: 'Token requerido' })
+
+    const record = await prisma.emailVerificationToken.findUnique({ where: { token } })
+    if (!record || record.used || record.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'El enlace es inválido o ha expirado' })
+    }
+
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: record.userId }, data: { emailVerified: true } }),
+      prisma.emailVerificationToken.update({ where: { id: record.id }, data: { used: true } }),
+    ])
+
+    res.json({ message: 'Email verificado correctamente' })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/auth/resend-verification
+ * Requiere auth. Reenvía el email de verificación del usuario actual (cooldown 60s).
+ */
+async function resendVerificationEmail(req, res, next) {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId } })
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
+    if (user.emailVerified) return res.json({ message: 'Tu email ya está verificado' })
+
+    const last = await prisma.emailVerificationToken.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (last && Date.now() - last.createdAt.getTime() < RESEND_COOLDOWN_MS) {
+      return res.status(429).json({ error: 'Esperá unos segundos antes de reenviar el email' })
+    }
+
+    const slug = req.headers['x-workspace']
+    await createAndSendVerificationEmail(user.id, user.email, user.name, { slug, workspaceId: req.workspace?.id })
+
+    res.json({ message: `Te reenviamos el correo de verificación a ${user.email}.` })
   } catch (err) { next(err) }
 }
 
@@ -413,4 +465,4 @@ function logout(req, res) {
   res.json({ ok: true })
 }
 
-module.exports = { login, me, forgotPassword, resetPassword, verifyEmailChange, connectGoogleWithToken, googleLogin, switchWorkspace, recordLogin, logout }
+module.exports = { login, me, forgotPassword, resetPassword, verifyEmailChange, verifyEmail, resendVerificationEmail, connectGoogleWithToken, googleLogin, switchWorkspace, recordLogin, logout }

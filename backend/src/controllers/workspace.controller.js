@@ -10,6 +10,7 @@ const { validateImageUpload } = require('../lib/imageType')
 const { seedWorkspace, removeDemoProject } = require('../services/workspaceSeed.service')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 const { validatePassword } = require('../lib/passwordPolicy')
+const { createAndSendVerificationEmail } = require('../lib/emailVerification')
 const { DEFAULT_TZ } = require('../utils/dates')
 
 const MEMBER_SELECT = {
@@ -582,7 +583,7 @@ async function createWorkspace(req, res, next) {
       let owner = await tx.user.findUnique({ where: { email: ownerEmail } })
       if (!owner) {
         owner = await tx.user.create({
-          data: { name: ownerName, email: ownerEmail, password: hashed },
+          data: { name: ownerName, email: ownerEmail, password: hashed, emailVerified: false },
         })
       }
 
@@ -623,7 +624,16 @@ async function createWorkspace(req, res, next) {
       return { workspace, owner }
     })
 
-    sendWelcomeEmail(ownerEmail, ownerName, result.workspace.id, result.workspace.slug).catch(err => console.error('[Workspace] Error enviando welcome email:', err.message))
+    // El owner ya queda logueado automáticamente (ver token más abajo), así que
+    // no hace falta un email que lo mande a un login manual: en su lugar le
+    // pedimos confirmar el email. Solo si aún no está verificado (owner nuevo,
+    // o una cuenta existente que nunca lo confirmó) — evita reenviar de más.
+    if (!result.owner.emailVerified) {
+      createAndSendVerificationEmail(result.owner.id, ownerEmail, ownerName, {
+        slug: result.workspace.slug,
+        workspaceId: result.workspace.id,
+      }).catch(err => console.error('[Workspace] Error enviando email de verificación:', err.message))
+    }
 
     // Aviso interno al equipo BlissTracker: nuevo workspace registrado.
     sendPlatformNotification('newWorkspace', {

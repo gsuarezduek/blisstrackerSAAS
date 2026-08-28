@@ -10,6 +10,7 @@ import NotificationBell from './NotificationBell'
 import { useTheme } from '../context/ThemeContext'
 import BlissLogo from './BlissLogo'
 import AnnouncementBanner from './AnnouncementBanner'
+import EmailVerifiedBanner from './EmailVerifiedBanner'
 import TrialBanner from './TrialBanner'
 import TokenBudgetBanner from './TokenBudgetBanner'
 import NotesBoard from './NotesBoard'
@@ -337,6 +338,7 @@ export default function Navbar() {
       <GamificationFab />
       <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         {user && <AnnouncementBanner />}
+        {user && <EmailVerifiedBanner />}
         {user && <TrialBanner />}
         {user && <TokenBudgetBanner />}
         <div className="px-4 py-3 flex items-center justify-between">

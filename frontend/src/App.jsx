@@ -86,6 +86,7 @@ const ProjectDetail    = lazyWithReload(() => import('./pages/ProjectDetail'))
 const ForgotPassword   = lazyWithReload(() => import('./pages/ForgotPassword'))
 const ResetPassword    = lazyWithReload(() => import('./pages/ResetPassword'))
 const VerifyEmailChange = lazyWithReload(() => import('./pages/VerifyEmailChange'))
+const VerifyEmail       = lazyWithReload(() => import('./pages/VerifyEmail'))
 const MyProfile        = lazyWithReload(() => import('./pages/MyProfile'))
 const UserProfile      = lazyWithReload(() => import('./pages/UserProfile'))
 const Preferences      = lazyWithReload(() => import('./pages/Preferences'))
@@ -170,6 +171,7 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/verify-email-change" element={<VerifyEmailChange />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/" element={<RootPage />} />
           <Route path="/my-reports"  element={<PrivateRoute><MyReports  /></PrivateRoute>} />
           <Route path="/my-projects" element={<PrivateRoute><MyProjects /></PrivateRoute>} />
