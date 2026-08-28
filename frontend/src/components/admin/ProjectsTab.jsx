@@ -448,14 +448,14 @@ export default function ProjectsTab() {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-5">
+                    <div className="p-4 sm:p-5">
                       {/* Name + actions row */}
-                      <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
                         <div className="flex items-center gap-2.5 min-w-0">
                           <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-green-500 mt-0.5" />
-                          <span className="text-base font-semibold text-gray-900 dark:text-white leading-tight">{p.name}</span>
+                          <span className="text-base font-semibold text-gray-900 dark:text-white leading-tight break-words">{p.name}</span>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             onClick={() => setTeamProject(p)}
                             className="text-xs px-3 py-1.5 rounded-lg font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors"
@@ -527,14 +527,14 @@ export default function ProjectsTab() {
                 <div className="space-y-2">
                   {archived.map(p => (
                     <div key={p.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 opacity-60 hover:opacity-100 transition-opacity">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2.5 min-w-0">
                           <span className="w-2 h-2 rounded-full flex-shrink-0 bg-gray-300 dark:bg-gray-500" />
-                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">{p.name}</span>
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-400 truncate">{p.name}</span>
                         </div>
                         <button
                           onClick={() => toggleActive(p)}
-                          className="text-xs px-3 py-1.5 rounded-lg font-medium bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors flex-shrink-0 ml-3"
+                          className="text-xs px-3 py-1.5 rounded-lg font-medium bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors flex-shrink-0"
                         >
                           Reactivar
                         </button>
