@@ -357,37 +357,47 @@ async function getAttendanceStats(workspaceId, tz, period) {
   return result
 }
 
-// Historial de horas activas (de tareas completadas) por semana ISO, últimas `weeks` semanas.
-// INDEPENDIENTE del período seleccionado — sirve como contexto de tendencia en la vista expandida.
-// Devuelve { history: Map<userId, [{weekStart, hours}]>, labels: [weekStart,...] }.
-async function getHoursHistory(workspaceId, tz, { weeks = 12 } = {}) {
+// Historial de horas activas (de tareas completadas), últimas `weeks` semanas o últimos `days`
+// días según `granularity`. INDEPENDIENTE del período seleccionado — sirve como contexto de
+// tendencia en la vista expandida. Devuelve { history: Map<userId, [{[key]: label, hours}]>,
+// labels: [label,...], key: 'weekStart'|'date' } — `key` le dice al caller cómo armar el
+// fallback de historial vacío para un usuario sin tareas en el rango.
+async function getHoursHistory(workspaceId, tz, { weeks = 12, granularity = 'weekly', days = 60 } = {}) {
+  const daily = granularity === 'daily'
   const offset = tzOffsetStr(tz)
   const today  = todayString(tz)
-  const startMonday = getNWeeksAgoMonday(weeks - 1, tz) // lunes de hace (weeks-1) semanas → cubre `weeks` semanas incl. la actual
+  // lunes de hace (weeks-1) semanas → cubre `weeks` semanas incl. la actual; en diario, hace (days-1) días → cubre `days` días incl. hoy.
+  const startDate = daily ? addDays(today, -(days - 1)) : getNWeeksAgoMonday(weeks - 1, tz)
+  const buckets = daily ? days : weeks
 
   const tasks = await prisma.task.findMany({
     where: {
       status: 'COMPLETED',
-      completedAt: { gte: new Date(startMonday + 'T00:00:00' + offset), lte: new Date(today + 'T23:59:59' + offset) },
+      completedAt: { gte: new Date(startDate + 'T00:00:00' + offset), lte: new Date(today + 'T23:59:59' + offset) },
       workDay: { workspaceId },
     },
     select: { userId: true, startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true },
   })
 
-  const labels = Array.from({ length: weeks }, (_, i) => addDays(startMonday, i * 7))
+  const labels = daily
+    ? Array.from({ length: buckets }, (_, i) => addDays(startDate, i))
+    : Array.from({ length: buckets }, (_, i) => addDays(startDate, i * 7))
   const minsByUser = new Map()
   for (const t of tasks) {
     const date = new Date(t.completedAt).toLocaleDateString('en-CA', { timeZone: tz })
-    const idx  = Math.min(weeks - 1, Math.max(0, Math.floor(dateDiffDays(startMonday, date) / 7)))
-    if (!minsByUser.has(t.userId)) minsByUser.set(t.userId, new Array(weeks).fill(0))
+    const idx  = daily
+      ? Math.min(buckets - 1, Math.max(0, dateDiffDays(startDate, date)))
+      : Math.min(buckets - 1, Math.max(0, Math.floor(dateDiffDays(startDate, date) / 7)))
+    if (!minsByUser.has(t.userId)) minsByUser.set(t.userId, new Array(buckets).fill(0))
     minsByUser.get(t.userId)[idx] += taskMins(t)
   }
 
+  const key = daily ? 'date' : 'weekStart'
   const history = new Map()
   for (const [uid, mins] of minsByUser) {
-    history.set(uid, mins.map((m, i) => ({ weekStart: labels[i], hours: Math.round(m / 60 * 10) / 10 })))
+    history.set(uid, mins.map((m, i) => ({ [key]: labels[i], hours: Math.round(m / 60 * 10) / 10 })))
   }
-  return { history, labels }
+  return { history, labels, key }
 }
 
 // Umbrales para clasificar el estado de cada miembro (determinístico, sin IA).

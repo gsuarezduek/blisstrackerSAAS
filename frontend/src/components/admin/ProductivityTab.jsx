@@ -161,8 +161,8 @@ function HoursAttendanceBlock({ att }) {
   )
 }
 
-// Gráfico de líneas de horas registradas por semana (últimas 12 semanas, contexto de tendencia).
-// history = [{ weekStart: 'YYYY-MM-DD', hours }]
+// Gráfico de líneas de horas registradas por día (últimos 60 días, contexto de tendencia).
+// history = [{ date: 'YYYY-MM-DD', hours }]
 function HoursLineChart({ history }) {
   const data = history || []
   if (data.length < 2) return <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin datos suficientes.</p>
@@ -174,8 +174,11 @@ function HoursLineChart({ history }) {
   const x = i => padL + (n === 1 ? innerW / 2 : (i * innerW) / (n - 1))
   const y = v => padT + innerH - (v / max) * innerH
   const points = data.map((d, i) => `${x(i).toFixed(1)},${y(d.hours).toFixed(1)}`).join(' ')
-  const step = Math.max(1, Math.ceil(n / 6))
-  const fmtWeek = w => new Date(w + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  const step = Math.max(1, Math.ceil(n / 8))
+  // Con muchos puntos diarios, marcar un punto por día encima de la línea es ruido visual —
+  // solo se dibujan círculos donde también va la etiqueta del eje X (más el último, siempre).
+  const dotRadius = n > 20 ? 2 : 2.5
+  const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 190 }} preserveAspectRatio="xMidYMid meet">
       {/* eje base + etiquetas Y */}
@@ -187,14 +190,17 @@ function HoursLineChart({ history }) {
         <text x={padL - 5} y={y(max) + 3} textAnchor="end" fontSize="9">{Math.round(max)}h</text>
         <text x={padL - 5} y={y(0) + 3} textAnchor="end" fontSize="9">0</text>
       </g>
-      <polyline points={points} fill="none" stroke="#F7931A" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={points} fill="none" stroke="#F7931A" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
       {data.map((d, i) => {
         const isLast = i === n - 1
+        const showTick = i % step === 0 || isLast
         return (
           <g key={i}>
-            <circle cx={x(i)} cy={y(d.hours)} r={isLast ? 3.5 : 2.5} fill="#F7931A" />
-            {(i % step === 0 || isLast) && (
-              <text x={x(i)} y={H - 7} textAnchor="middle" fontSize="9" fill="currentColor" className="text-gray-400 dark:text-gray-500">{fmtWeek(d.weekStart)}</text>
+            {(showTick || n <= 20) && (
+              <circle cx={x(i)} cy={y(d.hours)} r={isLast ? 3.5 : dotRadius} fill="#F7931A" />
+            )}
+            {showTick && (
+              <text x={x(i)} y={H - 7} textAnchor="middle" fontSize="9" fill="currentColor" className="text-gray-400 dark:text-gray-500">{fmtDate(d.date)}</text>
             )}
           </g>
         )
@@ -319,7 +325,7 @@ export function PersonProductivityDetail({ m, benchmark, mode, onRefresh, refres
       {/* Gráfico de horas — últimas 12 semanas (a todo el ancho, contexto de tendencia) */}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">
-          Horas registradas por semana <span className="normal-case font-normal text-gray-400 dark:text-gray-500">· últimas 12 semanas (contexto, no depende del período)</span>
+          Horas registradas por día <span className="normal-case font-normal text-gray-400 dark:text-gray-500">· últimos 60 días (contexto, no depende del período)</span>
         </p>
         <HoursLineChart history={s.hoursHistory} />
       </div>

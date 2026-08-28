@@ -33,7 +33,7 @@ function shapeMember(m, statsMap, attendanceMap, hist) {
   const availableHours   = att?.availableHours ?? null
   const utilization      = availableHours && availableHours > 0 ? registeredHours / availableHours : null
   const attendanceOut    = att ? { ...att, registeredHours, availableHours, utilization } : null
-  const hoursHistory     = hist.history.get(u.id) || hist.labels.map(w => ({ weekStart: w, hours: 0 }))
+  const hoursHistory     = hist.history.get(u.id) || hist.labels.map(v => ({ [hist.key]: v, hours: 0 }))
 
   return {
     id: u.id,
@@ -94,7 +94,7 @@ async function listProductivity(req, res, next) {
       }),
       getWorkspaceStats(workspaceId, tz, period),
       getAttendanceStats(workspaceId, tz, period),
-      getHoursHistory(workspaceId, tz, { weeks: 12 }),
+      getHoursHistory(workspaceId, tz, { granularity: 'daily', days: 60 }),
     ])
 
     const benchmark = computeBenchmark(statsMap)
@@ -167,7 +167,7 @@ async function userOverview(req, res, next) {
     const [statsMap, attendanceMap, hist] = await Promise.all([
       getWorkspaceStats(workspaceId, tz, period),
       getAttendanceStats(workspaceId, tz, period),
-      getHoursHistory(workspaceId, tz, { weeks: 12 }),
+      getHoursHistory(workspaceId, tz, { granularity: 'daily', days: 60 }),
     ])
     const benchmark = computeBenchmark(statsMap)
     if (benchmark) {
