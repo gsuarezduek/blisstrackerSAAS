@@ -174,6 +174,7 @@ model Workspace {
   whatsappAutomationRules   WhatsappAutomationRule[]
   whatsappAutomationLogs    WhatsappAutomationLog[]
   whatsappBotDocuments      WhatsappBotDocument[]
+  whatsappBotEscalations    WhatsappBotEscalation[]
 
   @@index([slug])
 }
@@ -3247,8 +3248,9 @@ model WhatsappConversation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  messages WhatsappMessage[]
-  reads    WhatsappConversationRead[]
+  messages    WhatsappMessage[]
+  reads       WhatsappConversationRead[]
+  escalations WhatsappBotEscalation[]
 
   @@unique([workspaceId, phoneE164])
   @@index([workspaceId, lastMessageAt])
@@ -3362,6 +3364,12 @@ model WhatsappBotConfig {
   escalationWords Json    @default("[]")
   handoffMessage  String?
 
+  // Ejemplos few-shot curados por el admin — Json array de `{question, answer}`,
+  // mismo patrón que blockedWords/escalationWords. Se inyectan en el system
+  // prompt (buildExamplesBlock) para guiar el estilo/precisión de las
+  // respuestas reales, no como conversación real del historial.
+  examples Json @default("[]")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -3386,7 +3394,13 @@ model WhatsappBotDocument {
 
   extractedText String? @db.Text // lo que realmente se inyecta en el prompt
   charCount     Int     @default(0)
-  truncated     Boolean @default(false) // true si extractedText se cortó por el tope de tamaño
+  // `truncated`: el texto se cortó a lo bruto por el tope de tamaño (fallback,
+  // ver `summarized`). `summarized`: en vez de cortar a lo bruto, se usó Claude
+  // para resumir preservando lo más útil (servicios, precios, políticas, FAQs)
+  // — es el camino normal para un documento largo; `truncated` solo queda en
+  // true si además el resumen en sí no pudo generarse y se cayó al corte crudo.
+  truncated  Boolean @default(false)
+  summarized Boolean @default(false)
 
   status   String  @default("processing") // processing | ready | error
   errorMsg String?
@@ -3397,6 +3411,30 @@ model WhatsappBotDocument {
   createdAt DateTime @default(now())
 
   @@index([workspaceId])
+}
+
+// Registro de cada vez que el bot pasa una conversación a un humano (baja
+// confianza del modelo, palabra de escalationWords del cliente, o blockedWords
+// persistentes en la respuesta incluso tras reintentar — ver
+// whatsappBot.service.js `generateBotReply`/`maybeRespondWithBot`). Independiente
+// de si la conversación tiene un Lead asociado (la notificación in-app sí lo
+// requiere, este log no) — fuente de verdad para el panel de calidad: revisar
+// casos reales en vez de ajustar el prompt a ciegas.
+model WhatsappBotEscalation {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  conversationId Int
+  conversation   WhatsappConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  trigger       String // 'confidence' | 'escalation_word' | 'blocked_word'
+  reason        String?
+  clientMessage String? @db.Text // último mensaje del cliente que originó el escalamiento
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
 }
 
 // Cache local de plantillas aprobadas por Meta (Fase 5 del plan) — de solo

@@ -3,6 +3,10 @@ const prisma = require('../lib/prisma')
 const objectStorage = require('./objectStorage.service')
 const { getSetting } = require('../lib/platformSettings')
 const { detectDocumentType } = require('../lib/documentType')
+const { createMessage } = require('../lib/claude')
+
+const SUMMARY_MODEL = 'claude-haiku-4-5-20251001' // costo bajo, mismo criterio que el resto del bot
+const MAX_SUMMARY_INPUT_CHARS = 100_000 // techo de lo que se manda a resumir (Haiku soporta mucho más; es solo un límite razonable)
 
 // Contexto simple (no RAG): el texto extraído se pega completo (truncado) en el
 // system prompt del bot en cada respuesta — ver whatsappBot.service.js
@@ -22,6 +26,38 @@ function truncate(text, maxChars) {
   const trimmed = (text || '').trim()
   if (trimmed.length <= maxChars) return { text: trimmed, truncated: false }
   return { text: trimmed.slice(0, maxChars), truncated: true }
+}
+
+/**
+ * Pide a Claude un resumen del documento que preserve lo útil para el bot
+ * (servicios, precios, políticas, horarios, FAQs) en vez de cortarlo a lo
+ * bruto a la mitad de una frase. Puede lanzar (presupuesto excedido, error de
+ * red) — el caller lo captura y cae al truncado crudo como fallback, nunca
+ * debe romper la subida del documento.
+ */
+async function summarizeText(workspaceId, rawText) {
+  const input = rawText.length > MAX_SUMMARY_INPUT_CHARS ? rawText.slice(0, MAX_SUMMARY_INPUT_CHARS) : rawText
+  const msg = await createMessage({
+    model: SUMMARY_MODEL,
+    max_tokens: 4000,
+    messages: [{
+      role: 'user',
+      content: `Resumí el siguiente documento en como máximo ${MAX_CHARS_PER_DOC} caracteres, preservando la información más útil para que un bot responda preguntas de clientes por WhatsApp (servicios ofrecidos, precios, políticas, horarios, preguntas frecuentes, datos de contacto). Devolvé SOLO el resumen en texto plano, sin comentarios ni encabezados tipo "Resumen:".\n\n--- Documento ---\n${input}`,
+    }],
+  }, { workspaceId, source: 'whatsapp_bot_document', enforceBudget: true })
+  return msg.content.find(b => b.type === 'text')?.text?.trim() || null
+}
+
+/** Arma el resultado final de texto a guardar: si hay `summary` (documento
+ * largo que se pudo resumir), usa eso; si no, trunca `raw` a lo bruto
+ * (documento corto que no necesitaba resumen, o el resumen falló). */
+function buildTextResult(raw, summary) {
+  if (summary) {
+    const capped = truncate(summary, MAX_CHARS_PER_DOC)
+    return { text: capped.text, charCount: capped.text.length, truncated: capped.truncated, summarized: true }
+  }
+  const capped = truncate(raw, MAX_CHARS_PER_DOC)
+  return { text: capped.text, charCount: capped.text.length, truncated: capped.truncated, summarized: false }
 }
 
 /**
@@ -93,13 +129,22 @@ async function uploadDocument({ workspaceId, uploadedById, buffer, originalName 
       })()
     : { objectKey: null, fileData: buffer, sizeBytes: buffer.length }
 
-  let extractedText = null, charCount = 0, truncated = false, status = 'ready', errorMsg = null
+  let extractedText = null, charCount = 0, truncated = false, summarized = false, status = 'ready', errorMsg = null
   try {
-    const raw = await extractText(buffer, kind)
-    const result = truncate(raw, MAX_CHARS_PER_DOC)
-    extractedText = result.text
-    charCount = result.text.length
-    truncated = result.truncated
+    const raw = ((await extractText(buffer, kind)) || '').trim()
+    let summary = null
+    if (raw.length > MAX_CHARS_PER_DOC) {
+      try {
+        summary = await summarizeText(workspaceId, raw)
+      } catch (err) {
+        console.error('[WhatsApp Bot] Error resumiendo documento con IA, cae a truncado crudo:', err.message)
+      }
+    }
+    const built = buildTextResult(raw, summary)
+    extractedText = built.text
+    charCount = built.charCount
+    truncated = built.truncated
+    summarized = built.summarized
     if (!extractedText) { status = 'error'; errorMsg = 'No se pudo extraer texto del archivo (¿está vacío o es una imagen escaneada?).' }
   } catch (err) {
     status = 'error'
@@ -116,6 +161,7 @@ async function uploadDocument({ workspaceId, uploadedById, buffer, originalName 
       extractedText,
       charCount,
       truncated,
+      summarized,
       status,
       errorMsg,
     },
@@ -128,7 +174,7 @@ async function uploadDocument({ workspaceId, uploadedById, buffer, originalName 
 // en el frontend y puede ser pesado.
 const DOCUMENT_LIST_SELECT = {
   id: true, fileName: true, mimeType: true, sizeBytes: true,
-  charCount: true, truncated: true, status: true, errorMsg: true, createdAt: true,
+  charCount: true, truncated: true, summarized: true, status: true, errorMsg: true, createdAt: true,
 }
 
 async function listDocuments(workspaceId) {
@@ -172,4 +218,4 @@ async function buildKnowledgeBlock(workspaceId) {
   return combined ? `\n\nBase de conocimiento (documentos cargados por la agencia):\n${combined}` : ''
 }
 
-module.exports = { uploadDocument, listDocuments, deleteDocument, buildKnowledgeBlock, truncate, MAX_CHARS_PER_DOC, MAX_KNOWLEDGE_CHARS }
+module.exports = { uploadDocument, listDocuments, deleteDocument, buildKnowledgeBlock, truncate, buildTextResult, MAX_CHARS_PER_DOC, MAX_KNOWLEDGE_CHARS }

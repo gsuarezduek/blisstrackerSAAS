@@ -66,6 +66,9 @@ router.get('/bot/documents',       workspaceAdminOnly, whatsapp.listBotDocuments
 router.post('/bot/documents',      workspaceAdminOnly, uploadFile, whatsapp.uploadBotDocument)
 router.delete('/bot/documents/:id', workspaceAdminOnly, whatsapp.deleteBotDocument)
 
+// Panel de calidad: casos donde el bot escaló a un humano.
+router.get('/bot/escalations', workspaceAdminOnly, whatsapp.listBotEscalations)
+
 // Plantillas (Fase 5): catálogo de solo lectura de nuestro lado — sincronizar
 // desde Chakra (con costo/aprobación real de Meta detrás) queda para admin,
 // leerlas para elegir una y reabrir es operativo del día a día.

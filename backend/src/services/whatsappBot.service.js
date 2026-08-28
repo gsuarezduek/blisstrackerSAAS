@@ -56,6 +56,24 @@ function buildSecurityBlock(blockedWords, escalationWords) {
   return `\n\nReglas obligatorias:\n${lines.join('\n')}`
 }
 
+/**
+ * Ejemplos few-shot curados por el admin (`WhatsappBotConfig.examples`, array
+ * `{question, answer}`) — se inyectan como texto en el system prompt (bloque
+ * estático, cacheable), NO como turnos reales de conversación: el modelo
+ * espera devolver el JSON envelope completo en cada respuesta, y meterlos como
+ * mensajes user/assistant reales rompería ese contrato (el "assistant" de
+ * ejemplo no tendría el shape {reply, escalate, ...}). Guían estilo/precisión
+ * sin ser una respuesta literal a copiar.
+ */
+function buildExamplesBlock(examples) {
+  const valid = Array.isArray(examples)
+    ? examples.filter(e => e?.question?.trim() && e?.answer?.trim())
+    : []
+  if (valid.length === 0) return ''
+  const lines = valid.map(e => `Cliente: ${e.question.trim()}\nVos responderías: ${e.answer.trim()}`).join('\n\n')
+  return `\n\nEjemplos de cómo responder (seguí este estilo/tono, no los copies literal si no aplican a la pregunta real):\n${lines}`
+}
+
 async function buildServicesBlock(workspaceId) {
   const services = await prisma.service.findMany({
     where: { workspaceId, active: true },
@@ -139,6 +157,7 @@ async function generateBotReply({ workspaceId, config, transcript, contact, last
       insights: null,
       escalate: true,
       escalateReason: `El cliente mencionó "${escalationMatch}"`,
+      escalateTrigger: 'escalation_word',
     }
   }
 
@@ -153,11 +172,12 @@ async function generateBotReply({ workspaceId, config, transcript, contact, last
   const servicesBlock = await buildServicesBlock(workspaceId)
   const knowledgeBlock = await buildKnowledgeBlock(workspaceId)
   const securityBlock = buildSecurityBlock(config.blockedWords, config.escalationWords)
+  const examplesBlock = buildExamplesBlock(config.examples)
   // Bloque ESTÁTICO (idéntico entre mensajes de cualquier conversación del mismo
   // workspace dentro de la ventana de cache) — cache_control ephemeral evita
   // repagar el precio completo de knowledgeBlock/servicesBlock en cada mensaje
   // entrante. `contextLine` (el contacto puntual) va aparte, sin cache.
-  const staticSystem = (config.prompt?.trim() || DEFAULT_PROMPT) + '\n\n' + CONFIDENCE_INSTRUCTIONS + securityBlock + servicesBlock + knowledgeBlock
+  const staticSystem = (config.prompt?.trim() || DEFAULT_PROMPT) + '\n\n' + CONFIDENCE_INSTRUCTIONS + securityBlock + examplesBlock + servicesBlock + knowledgeBlock
   const system = [{ type: 'text', text: staticSystem, cache_control: { type: 'ephemeral' } }]
   if (contextLine) system.push({ type: 'text', text: contextLine })
 
@@ -180,10 +200,15 @@ async function generateBotReply({ workspaceId, config, transcript, contact, last
         insights: null,
         escalate: true,
         escalateReason: `La respuesta generada mencionaba una palabra prohibida ("${blockedMatch}") incluso después de reintentar`,
+        escalateTrigger: 'blocked_word',
       }
     }
   }
 
+  // `result.escalate` acá viene del propio JSON de Claude (baja confianza,
+  // ver CONFIDENCE_INSTRUCTIONS) — a diferencia de los dos casos de arriba,
+  // que fuerza el código sin pedirle nada al modelo.
+  if (result.escalate) result.escalateTrigger = 'confidence'
   return result
 }
 
@@ -342,6 +367,18 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
   if (result.escalate) {
     await prisma.whatsappConversation.update({ where: { id: conversation.id }, data: { botEnabled: false } })
     await notifyEscalation({ workspaceId: account.workspaceId, contact, conversation: fresh, reason: result.escalateReason })
+    // Log independiente de si hay Lead asociado — fuente de verdad del panel
+    // de calidad (revisar casos reales de escalamiento, no solo lo que quedó
+    // en el timeline de un lead puntual). Best-effort: no debe romper el flujo.
+    await prisma.whatsappBotEscalation.create({
+      data: {
+        workspaceId: account.workspaceId,
+        conversationId: conversation.id,
+        trigger: result.escalateTrigger || 'confidence',
+        reason: result.escalateReason || null,
+        clientMessage: lastClientMessage?.slice(0, 2000) || null,
+      },
+    }).catch(err => console.error('[WhatsApp Bot] Error logueando escalamiento:', err.message))
   }
 
   if (contact) {
@@ -365,4 +402,25 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
   }
 }
 
-module.exports = { maybeRespondWithBot, generateBotReply, findMatch, buildTranscript, DEFAULT_PROMPT, DEFAULT_HANDOFF_MESSAGE }
+const ESCALATIONS_PAGE_SIZE = 50
+
+/**
+ * Panel de calidad: últimos casos donde el bot pasó una conversación a un
+ * humano, con datos del contacto para identificar de qué charla se trata sin
+ * tener que ir a buscarla. No pagina de verdad (alcanza con "los últimos N"
+ * para revisar patrones recientes) — si hiciera falta historial completo más
+ * adelante, se le suma cursor/skip.
+ */
+async function listEscalations(workspaceId) {
+  return prisma.whatsappBotEscalation.findMany({
+    where: { workspaceId },
+    orderBy: { createdAt: 'desc' },
+    take: ESCALATIONS_PAGE_SIZE,
+    select: {
+      id: true, trigger: true, reason: true, clientMessage: true, createdAt: true,
+      conversation: { select: { id: true, phoneE164: true, contactName: true, contactId: true } },
+    },
+  })
+}
+
+module.exports = { maybeRespondWithBot, generateBotReply, findMatch, buildTranscript, buildExamplesBlock, listEscalations, DEFAULT_PROMPT, DEFAULT_HANDOFF_MESSAGE }

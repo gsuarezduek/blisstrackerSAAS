@@ -4,7 +4,9 @@ import api from '../../api/client'
 const TABS = [
   { id: 'personalidad', label: 'Personalidad' },
   { id: 'seguridad',    label: '🛡️ Reglas de seguridad' },
+  { id: 'ejemplos',     label: '💬 Ejemplos' },
   { id: 'documentos',   label: '📄 Documentos' },
+  { id: 'calidad',      label: '📊 Calidad' },
   { id: 'probar',       label: '🧪 Probar' },
 ]
 
@@ -13,6 +15,16 @@ function fmtBytes(n) {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function fmtDateTime(d) {
+  return new Date(d).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+const TRIGGER_LABEL = {
+  confidence: 'Baja confianza del bot',
+  escalation_word: 'Palabra del cliente',
+  blocked_word: 'Palabra prohibida persistente',
 }
 
 // Input de "chips" de texto libre: escribir + Enter/botón agrega, click en la
@@ -59,6 +71,69 @@ function WordChipsInput({ words, onChange, placeholder }) {
   )
 }
 
+// Editor de ejemplos few-shot: pares pregunta/respuesta, agregar con los dos
+// campos completos, cada par mostrado con botón eliminar. Mismo criterio de
+// estado local (no persiste hasta "Guardar") que WordChipsInput.
+function ExamplesEditor({ examples, onChange }) {
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState('')
+
+  function add() {
+    const q = question.trim(), a = answer.trim()
+    if (!q || !a) return
+    onChange([...examples, { question: q, answer: a }])
+    setQuestion(''); setAnswer('')
+  }
+  function remove(idx) {
+    onChange(examples.filter((_, i) => i !== idx))
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Pares de pregunta/respuesta ideal para guiar el estilo y la precisión del bot — no son respuestas fijas que copia
+        textual, le muestran cómo responder casos parecidos.
+      </p>
+      <div className="space-y-2 bg-gray-50 dark:bg-gray-900/30 rounded-xl p-3">
+        <input
+          value={question}
+          onChange={e => setQuestion(e.target.value)}
+          placeholder="Pregunta del cliente, ej. ¿Cuánto sale el plan básico?"
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+        <textarea
+          value={answer}
+          onChange={e => setAnswer(e.target.value)}
+          placeholder="Respuesta ideal…"
+          rows={2}
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+        />
+        <div className="flex justify-end">
+          <button type="button" onClick={add} disabled={!question.trim() || !answer.trim()} className="px-3 py-1.5 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-40 rounded-lg">
+            + Agregar ejemplo
+          </button>
+        </div>
+      </div>
+
+      {examples.length === 0 ? (
+        <p className="text-sm text-gray-400">Todavía no hay ejemplos cargados.</p>
+      ) : (
+        <div className="space-y-2">
+          {examples.map((ex, i) => (
+            <div key={i} className="flex items-start justify-between gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2">
+              <div className="min-w-0 flex-1 text-sm">
+                <p className="text-gray-500 dark:text-gray-400">Cliente: {ex.question}</p>
+                <p className="text-gray-800 dark:text-gray-100">→ {ex.answer}</p>
+              </div>
+              <button type="button" onClick={() => remove(i)} className="text-xs font-medium text-red-500 hover:text-red-600 shrink-0">Eliminar</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DocumentsPanel({ documents, loading, uploading, error, onUpload, onDelete }) {
   return (
     <div className="space-y-4">
@@ -86,6 +161,7 @@ function DocumentsPanel({ documents, loading, uploading, error, onUpload, onDele
                   <span className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{d.fileName}</span>
                   {d.status === 'processing' && <span className="text-xs text-amber-500">procesando…</span>}
                   {d.status === 'error' && <span className="text-xs text-red-500" title={d.errorMsg}>error</span>}
+                  {d.summarized && <span className="text-xs text-primary-500" title="Se usó IA para resumirlo conservando lo más útil, en vez de cortarlo a lo bruto">resumido con IA</span>}
                   {d.truncated && <span className="text-xs text-amber-500" title="El texto se recortó por tamaño">recortado</span>}
                 </div>
                 <div className="text-xs text-gray-400 dark:text-gray-500">
@@ -93,6 +169,42 @@ function DocumentsPanel({ documents, loading, uploading, error, onUpload, onDele
                 </div>
               </div>
               <button onClick={() => onDelete(d.id)} className="text-xs font-medium text-red-500 hover:text-red-600 shrink-0">Eliminar</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Panel de calidad: últimos casos donde el bot pasó a un humano — revisar
+// patrones reales para ajustar prompt/reglas en vez de a ciegas.
+function QualityPanel({ escalations, loading }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        Últimas conversaciones donde el bot pasó a un humano (baja confianza, palabra del cliente, o palabra prohibida
+        persistente) — revisá los casos reales para ajustar el prompt o las reglas de seguridad.
+      </p>
+      {loading ? (
+        <p className="text-sm text-gray-400">Cargando…</p>
+      ) : escalations.length === 0 ? (
+        <p className="text-sm text-gray-400">Todavía no hubo ningún caso escalado.</p>
+      ) : (
+        <div className="space-y-2">
+          {escalations.map(e => (
+            <div key={e.id} className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                  {e.conversation?.contactName || e.conversation?.phoneE164 || 'Contacto desconocido'}
+                </span>
+                <span className="text-xs text-gray-400 shrink-0">{fmtDateTime(e.createdAt)}</span>
+              </div>
+              <span className="inline-block text-[11px] font-semibold text-amber-600 dark:text-amber-400 mb-1">
+                {TRIGGER_LABEL[e.trigger] || e.trigger}
+              </span>
+              {e.reason && <p className="text-xs text-gray-500 dark:text-gray-400">{e.reason}</p>}
+              {e.clientMessage && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 italic">"{e.clientMessage}"</p>}
             </div>
           ))}
         </div>
@@ -149,6 +261,7 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
   const [prompt, setPrompt] = useState(config?.prompt || '')
   const [blockedWords, setBlockedWords] = useState(config?.blockedWords || [])
   const [escalationWords, setEscalationWords] = useState(config?.escalationWords || [])
+  const [examples, setExamples] = useState(config?.examples || [])
   const [handoffMessage, setHandoffMessage] = useState(config?.handoffMessage || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -157,6 +270,9 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
   const [docsLoading, setDocsLoading] = useState(true)
   const [uploadingDoc, setUploadingDoc] = useState(false)
   const [docError, setDocError] = useState(null)
+
+  const [escalations, setEscalations] = useState([])
+  const [escalationsLoading, setEscalationsLoading] = useState(true)
 
   const [testMessages, setTestMessages] = useState([])
   const [testInput, setTestInput] = useState('')
@@ -177,12 +293,19 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
 
   useEffect(() => { loadDocuments() }, [loadDocuments])
 
+  useEffect(() => {
+    api.get('/whatsapp/bot/escalations')
+      .then(({ data }) => setEscalations(data))
+      .catch(() => {}) // silencioso — la pestaña igual muestra "no hubo casos"
+      .finally(() => setEscalationsLoading(false))
+  }, [])
+
   async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
     setError(null)
     try {
-      const { data } = await api.put('/whatsapp/bot', { enabled, prompt, blockedWords, escalationWords, handoffMessage })
+      const { data } = await api.put('/whatsapp/bot', { enabled, prompt, blockedWords, escalationWords, examples, handoffMessage })
       onSaved(data)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo guardar la configuración')
@@ -224,7 +347,7 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
     setTestError(null)
     try {
       const { data } = await api.post('/whatsapp/bot/test', {
-        config: { prompt, blockedWords, escalationWords, handoffMessage },
+        config: { prompt, blockedWords, escalationWords, examples, handoffMessage },
         messages: nextMessages,
       })
       setTestMessages(msgs => [...msgs, { role: 'bot', text: data.replyText, escalate: data.escalate, escalateReason: data.escalateReason }])
@@ -311,8 +434,16 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
             </div>
           )}
 
+          {tab === 'ejemplos' && (
+            <ExamplesEditor examples={examples} onChange={setExamples} />
+          )}
+
           {tab === 'documentos' && (
             <DocumentsPanel documents={documents} loading={docsLoading} uploading={uploadingDoc} error={docError} onUpload={handleUpload} onDelete={handleDeleteDoc} />
+          )}
+
+          {tab === 'calidad' && (
+            <QualityPanel escalations={escalations} loading={escalationsLoading} />
           )}
 
           {tab === 'probar' && (

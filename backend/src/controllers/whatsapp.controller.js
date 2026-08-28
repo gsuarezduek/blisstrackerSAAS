@@ -8,7 +8,7 @@ const { logLeadEvent } = require('./ventas/_shared')
 const objectStorage = require('../services/objectStorage.service')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
-const { DEFAULT_PROMPT, DEFAULT_HANDOFF_MESSAGE, generateBotReply, buildTranscript } = require('../services/whatsappBot.service')
+const { DEFAULT_PROMPT, DEFAULT_HANDOFF_MESSAGE, generateBotReply, buildTranscript, listEscalations } = require('../services/whatsappBot.service')
 const botDocuments = require('../services/whatsappBotDocument.service')
 const { syncTemplates: syncTemplatesFromProvider, createTemplateForAccount, sendTemplateToConversation, deleteTemplateForAccount } = require('../services/whatsappTemplates.service')
 
@@ -564,12 +564,14 @@ async function markRead(req, res, next) {
 async function getBotConfig(req, res, next) {
   try {
     const config = await prisma.whatsappBotConfig.findUnique({ where: { workspaceId: req.workspace.id } })
-    res.json(config || { enabled: false, prompt: DEFAULT_PROMPT, blockedWords: [], escalationWords: [], handoffMessage: DEFAULT_HANDOFF_MESSAGE })
+    res.json(config || { enabled: false, prompt: DEFAULT_PROMPT, blockedWords: [], escalationWords: [], examples: [], handoffMessage: DEFAULT_HANDOFF_MESSAGE })
   } catch (err) { next(err) }
 }
 
 const MAX_WORDS_PER_LIST = 50
 const MAX_WORD_LENGTH = 100
+const MAX_EXAMPLES = 20
+const MAX_EXAMPLE_FIELD_LENGTH = 500
 
 // Arrays de strings cargados a mano por el admin (blockedWords/escalationWords)
 // — trim, descarta vacíos, corta longitud/cantidad para no permitir un abuso
@@ -582,19 +584,33 @@ function sanitizeWordList(input) {
     .slice(0, MAX_WORDS_PER_LIST)
 }
 
+// Ejemplos few-shot { question, answer } — mismo criterio que sanitizeWordList:
+// trim, descarta pares incompletos, corta longitud/cantidad.
+function sanitizeExamples(input) {
+  if (!Array.isArray(input)) return []
+  return input
+    .map(e => ({
+      question: String(e?.question || '').trim().slice(0, MAX_EXAMPLE_FIELD_LENGTH),
+      answer: String(e?.answer || '').trim().slice(0, MAX_EXAMPLE_FIELD_LENGTH),
+    }))
+    .filter(e => e.question && e.answer)
+    .slice(0, MAX_EXAMPLES)
+}
+
 /**
- * PUT /api/whatsapp/bot  { enabled, prompt, blockedWords?, escalationWords?, handoffMessage? }
+ * PUT /api/whatsapp/bot  { enabled, prompt, blockedWords?, escalationWords?, examples?, handoffMessage? }
  * Solo admin/owner (ver whatsapp.routes.js) — es un interruptor con costo
  * operativo real (tokens de IA por cada mensaje entrante mientras esté on).
  */
 async function saveBotConfig(req, res, next) {
   try {
-    const { enabled, prompt, blockedWords, escalationWords, handoffMessage } = req.body
+    const { enabled, prompt, blockedWords, escalationWords, examples, handoffMessage } = req.body
     const data = {
       enabled: Boolean(enabled),
       prompt: prompt?.trim() || null,
       blockedWords: sanitizeWordList(blockedWords),
       escalationWords: sanitizeWordList(escalationWords),
+      examples: sanitizeExamples(examples),
       handoffMessage: handoffMessage?.trim().slice(0, 500) || null,
     }
     const config = await prisma.whatsappBotConfig.upsert({
@@ -607,7 +623,7 @@ async function saveBotConfig(req, res, next) {
 }
 
 /**
- * POST /api/whatsapp/bot/test  { config: {prompt, blockedWords?, escalationWords?, handoffMessage?}, messages: [{role, text}] }
+ * POST /api/whatsapp/bot/test  { config: {prompt, blockedWords?, escalationWords?, examples?, handoffMessage?}, messages: [{role, text}] }
  * Playground de prueba: corre `generateBotReply` con la config del FORMULARIO
  * (no la guardada en DB) contra una transcripción armada en el frontend, sin
  * persistir nada ni mandar nada por WhatsApp real — para poder iterar el
@@ -624,6 +640,7 @@ async function testBotConfig(req, res, next) {
       prompt: config.prompt || null,
       blockedWords: sanitizeWordList(config.blockedWords),
       escalationWords: sanitizeWordList(config.escalationWords),
+      examples: sanitizeExamples(config.examples),
       handoffMessage: config.handoffMessage || null,
     }
     const history = messages.map(m => ({
@@ -679,6 +696,18 @@ async function deleteBotDocument(req, res, next) {
     const doc = await botDocuments.deleteDocument(req.workspace.id, req.params.id)
     if (!doc) return res.status(404).json({ error: 'Documento no encontrado' })
     res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/whatsapp/bot/escalations — panel de calidad: últimos casos donde
+ * el bot pasó una conversación a un humano (baja confianza, escalationWords
+ * del cliente, o blockedWords persistentes), para revisar patrones reales y
+ * ajustar prompt/reglas en base a eso.
+ */
+async function listBotEscalations(req, res, next) {
+  try {
+    res.json(await listEscalations(req.workspace.id))
   } catch (err) { next(err) }
 }
 
@@ -865,6 +894,6 @@ async function reopenConversation(req, res, next) {
 module.exports = {
   connectAccount, getAccount, disconnectAccount, listConversations, getMessages, sendMessage, sendMedia, markRead,
   assignConversation, linkContact, createContactFromConversation, getBotConfig, saveBotConfig, testBotConfig, toggleConversationBot,
-  listBotDocuments, uploadBotDocument, deleteBotDocument,
+  listBotDocuments, uploadBotDocument, deleteBotDocument, listBotEscalations,
   listTemplates, syncTemplates, createTemplate, deleteTemplate, reopenConversation,
 }
