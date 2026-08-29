@@ -9,6 +9,30 @@ import SegmentCards from '../components/landing/SegmentCards'
 import ComparisonTable from '../components/landing/ComparisonTable'
 import TestimonialsSection from '../components/landing/TestimonialsSection'
 import FounderBio from '../components/landing/FounderBio'
+import { useTypewriter } from '../hooks/useTypewriter'
+
+// ─── Accent del hero: "de tu " + palabra animada (typewriter) + "." ───────────
+
+function joinWithOr(words) {
+  if (!words?.length) return ''
+  if (words.length === 1) return words[0]
+  return `${words.slice(0, -1).join(', ')} o ${words[words.length - 1]}`
+}
+
+function TypewriterAccent({ words }) {
+  const text = useTypewriter(words)
+  const readable = joinWithOr(words)
+  return (
+    <>
+      de tu{' '}
+      <span aria-hidden="true">
+        {text}
+        <span className="inline-block w-[3px] h-[0.85em] bg-primary-500 align-middle ml-1 animate-[blink_1s_step-end_infinite]" />
+      </span>
+      <span className="sr-only">{readable}</span>.
+    </>
+  )
+}
 
 // ─── App Mockup ───────────────────────────────────────────────────────────────
 
@@ -157,11 +181,11 @@ function FaqItem({ q, a, open, onClick }) {
 // Defaults hardcodeados — se usan mientras carga /landing/content o si el fetch falla,
 // así el hero nunca queda vacío. SuperAdmin → Landing puede sobreescribirlos.
 const HERO_DEFAULTS = {
-  heroBadge:       'Hecho para agencias de marketing · Gratis hasta 3 usuarios',
-  heroTitle:       'El sistema operativo',
-  heroTitleAccent: 'de tu agencia.',
-  heroSubtitle:    'Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.',
-  demoVideoUrl:    null,
+  heroBadge:            'Hecho para agencias de marketing · Gratis hasta 3 usuarios',
+  heroTitle:            'El sistema operativo',
+  heroTitleAccentWords: ['agencia', 'negocio', 'equipo', 'empresa'],
+  heroSubtitle:         'Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.',
+  demoVideoUrl:         null,
 }
 
 export default function Landing() {
@@ -370,6 +394,7 @@ export default function Landing() {
 
       {/* ── Hero ── */}
       <section className="pt-16 pb-20 sm:pt-24 sm:pb-28 px-4 sm:px-6 bg-gradient-to-b from-white via-white to-gray-50">
+        <style>{'@keyframes blink{50%{opacity:0}}'}</style>
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-primary-50 border border-primary-100 text-primary-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-8">
             <span className="w-1.5 h-1.5 bg-primary-500 rounded-full" />
@@ -378,7 +403,9 @@ export default function Landing() {
 
           <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold text-gray-900 leading-[1.08] tracking-tight mb-6">
             {hero.heroTitle}<br />
-            <span className="text-primary-500">{hero.heroTitleAccent}</span>
+            <span className="text-primary-500">
+              <TypewriterAccent words={hero.heroTitleAccentWords} />
+            </span>
           </h1>
 
           <p className="text-lg sm:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">

@@ -2,6 +2,25 @@ const prisma = require('../lib/prisma')
 const { validateImageUpload } = require('../lib/imageType')
 
 const CONTENT_ID = 1 // fila única
+const MAX_ACCENT_WORDS = 12
+const MAX_ACCENT_WORD_LEN = 40
+
+// Sanea la lista de palabras del typewriter del hero: strings no vacías, trim,
+// dedup, con tope de cantidad y largo (mismo criterio que blockedWords/examples
+// del bot de WhatsApp) para no dejar animar frases larguísimas o listas gigantes.
+function sanitizeAccentWords(input) {
+  if (!Array.isArray(input)) return null
+  const seen = new Set()
+  const words = []
+  for (const raw of input) {
+    const w = String(raw ?? '').trim().slice(0, MAX_ACCENT_WORD_LEN)
+    if (!w || seen.has(w)) continue
+    seen.add(w)
+    words.push(w)
+    if (words.length >= MAX_ACCENT_WORDS) break
+  }
+  return words
+}
 
 // ─── Hero / video (LandingContent) ───────────────────────────────────────────
 
@@ -18,28 +37,34 @@ async function getContent(req, res, next) {
 
     // Sin fila todavía: devolver los defaults sin crear nada (evita escribir en un GET).
     res.json({
-      heroBadge:       'Hecho para agencias de marketing · Gratis hasta 3 usuarios',
-      heroTitle:       'El sistema operativo',
-      heroTitleAccent: 'de tu agencia.',
-      heroSubtitle:    'Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.',
-      demoVideoUrl:    null,
+      heroBadge:            'Hecho para agencias de marketing · Gratis hasta 3 usuarios',
+      heroTitle:            'El sistema operativo',
+      heroTitleAccentWords: ['agencia', 'negocio', 'equipo', 'empresa'],
+      heroSubtitle:         'Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.',
+      demoVideoUrl:         null,
     })
   } catch (err) { next(err) }
 }
 
 /**
  * PUT /api/superadmin/landing/content
- * Body: { heroBadge?, heroTitle?, heroTitleAccent?, heroSubtitle?, demoVideoUrl? }
+ * Body: { heroBadge?, heroTitle?, heroTitleAccentWords?, heroSubtitle?, demoVideoUrl? }
  */
 async function updateContent(req, res, next) {
   try {
-    const { heroBadge, heroTitle, heroTitleAccent, heroSubtitle, demoVideoUrl } = req.body
+    const { heroBadge, heroTitle, heroTitleAccentWords, heroSubtitle, demoVideoUrl } = req.body
     const data = {}
-    if (heroBadge       !== undefined) data.heroBadge       = String(heroBadge).trim()
-    if (heroTitle       !== undefined) data.heroTitle       = String(heroTitle).trim()
-    if (heroTitleAccent !== undefined) data.heroTitleAccent = String(heroTitleAccent).trim()
-    if (heroSubtitle    !== undefined) data.heroSubtitle    = String(heroSubtitle).trim()
-    if (demoVideoUrl    !== undefined) data.demoVideoUrl    = demoVideoUrl?.trim() || null
+    if (heroBadge    !== undefined) data.heroBadge    = String(heroBadge).trim()
+    if (heroTitle    !== undefined) data.heroTitle    = String(heroTitle).trim()
+    if (heroSubtitle !== undefined) data.heroSubtitle = String(heroSubtitle).trim()
+    if (demoVideoUrl !== undefined) data.demoVideoUrl = demoVideoUrl?.trim() || null
+    if (heroTitleAccentWords !== undefined) {
+      const words = sanitizeAccentWords(heroTitleAccentWords)
+      if (!words || words.length === 0) {
+        return res.status(400).json({ error: 'heroTitleAccentWords debe ser una lista con al menos una palabra' })
+      }
+      data.heroTitleAccentWords = words
+    }
 
     const content = await prisma.landingContent.upsert({
       where:  { id: CONTENT_ID },

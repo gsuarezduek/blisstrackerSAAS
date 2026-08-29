@@ -6,6 +6,64 @@ const trustedLogoUrl = (id) => `${API_URL}/api/landing/trusted-companies/${id}/i
 
 // ─── Hero + video ─────────────────────────────────────────────────────────────
 
+// Lista de palabras que rotan con efecto typewriter en la 2ª línea del hero
+// ("de tu " + palabra + "."). Mismo patrón de chips que WordChipsInput (bot de
+// WhatsApp): texto libre + Enter/botón agrega, click en la × saca; acá además
+// se puede reordenar (el orden es el orden en que se van tipeando).
+function AccentWordsEditor({ words, onChange }) {
+  const [draft, setDraft] = useState('')
+
+  function add() {
+    const w = draft.trim()
+    if (!w || words.includes(w)) { setDraft(''); return }
+    onChange([...words, w])
+    setDraft('')
+  }
+  function remove(idx) {
+    onChange(words.filter((_, i) => i !== idx))
+  }
+  function move(idx, dir) {
+    const swap = dir === 'up' ? idx - 1 : idx + 1
+    if (swap < 0 || swap >= words.length) return
+    const next = [...words]
+    ;[next[idx], next[swap]] = [next[swap], next[idx]]
+    onChange(next)
+  }
+
+  return (
+    <div>
+      <p className="text-xs text-gray-400 mb-2">
+        Se muestran como <strong>"de tu {'{palabra}'}."</strong> — "de tu" y el punto final quedan fijos, solo la
+        palabra se anima con efecto máquina de escribir. Necesita al menos una.
+      </p>
+      <div className="flex gap-2">
+        <input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+          placeholder="ej: agencia"
+          className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+        <button type="button" onClick={add} className="px-4 py-2 text-sm font-medium text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg">
+          Agregar
+        </button>
+      </div>
+      {words.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {words.map((w, i) => (
+            <div key={`${w}-${i}`} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-1.5">
+              <span className="flex-1 text-sm text-gray-800 dark:text-gray-100">{w}</span>
+              <button type="button" onClick={() => move(i, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 text-gray-500 text-xs">↑</button>
+              <button type="button" onClick={() => move(i, 'down')} disabled={i === words.length - 1} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 text-gray-500 text-xs">↓</button>
+              <button type="button" onClick={() => remove(i)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs px-1">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function HeroEditor() {
   const [form,    setForm]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -60,29 +118,26 @@ function HeroEditor() {
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-            Título — línea 1
-          </label>
-          <input
-            type="text"
-            value={form.heroTitle}
-            onChange={e => set('heroTitle', e.target.value)}
-            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
-            Título — línea 2 (coloreada)
-          </label>
-          <input
-            type="text"
-            value={form.heroTitleAccent}
-            onChange={e => set('heroTitleAccent', e.target.value)}
-            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-        </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
+          Título — línea 1
+        </label>
+        <input
+          type="text"
+          value={form.heroTitle}
+          onChange={e => set('heroTitle', e.target.value)}
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
+          Título — línea 2 (coloreada, rota con efecto typewriter)
+        </label>
+        <AccentWordsEditor
+          words={form.heroTitleAccentWords ?? []}
+          onChange={words => set('heroTitleAccentWords', words)}
+        />
       </div>
 
       <div>
