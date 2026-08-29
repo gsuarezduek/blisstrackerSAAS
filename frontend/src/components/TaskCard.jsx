@@ -230,6 +230,15 @@ function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, on
             {task.recurrenceId && (
               <span title="Tarea recurrente" className="text-xs rounded px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">🔁</span>
             )}
+            {task.contentPiece && (
+              <Link
+                to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`}
+                title="Ver pieza de contenido"
+                className="text-xs rounded px-2 py-0.5 bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900/70 transition-colors"
+              >
+                📅 Contenido
+              </Link>
+            )}
 
             {task.status === 'IN_PROGRESS' && task.startedAt && (
               <span className="text-xs text-blue-500">⏱ {fmtMins(activeMinutes(task))}</span>
