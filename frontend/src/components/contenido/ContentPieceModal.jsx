@@ -170,10 +170,10 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
               <button
                 onClick={handleSendToDashboard}
                 disabled={sendingToDashboard || !piece.owner}
-                title={!piece.owner ? 'Asigná un responsable primero' : 'Enviar al dashboard'}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                title={!piece.owner ? 'Asigná un responsable primero' : 'Crea una tarea para el responsable en su dashboard'}
+                className="flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium border border-primary-200 dark:border-primary-800 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
               >
-                📋
+                📋 {sendingToDashboard ? 'Enviando…' : 'Enviar al dashboard'}
               </button>
             )}
             {canEdit && (
