@@ -1,35 +1,25 @@
+/**
+ * Testimonios reales, editables desde SuperAdmin → Landing → Testimonios
+ * (GET /api/landing/testimonials). Sin ninguno activo, la sección se oculta
+ * por completo — mejor eso que mostrar testimonios de relleno.
+ */
+import { useState, useEffect } from 'react'
+import api from '../../api/client'
 import TestimonialCard from './TestimonialCard'
 
-// TODO: reemplazar por testimonios reales cuando el usuario los envíe.
-// Estructura sugerida: 3 testimonios — ideal con métrica cuantitativa al menos en uno.
-const TESTIMONIALS = [
-  {
-    name:    'Nombre Cliente 1',
-    role:    'Founder',
-    company: 'Agencia X',
-    photo:   '/testimonials/cliente-1.jpg',
-    quote:   'Reemplazamos Asana, SEMrush y 4 spreadsheets. El equipo recuperó al menos 6 horas semanales de admin y los informes a clientes se generan solos.',
-    metric:  '−60% reuniones de status',
-  },
-  {
-    name:    'Nombre Cliente 2',
-    role:    'Head of Performance',
-    company: 'Agencia Y',
-    photo:   '/testimonials/cliente-2.jpg',
-    quote:   'Las URL públicas para clientes cambiaron la conversación. Antes mandábamos PDFs, ahora ellos ven el dashboard en tiempo real y firman renewals más rápido.',
-    metric:  '+38% renewal rate',
-  },
-  {
-    name:    'Nombre Cliente 3',
-    role:    'PM',
-    company: 'Agencia Z',
-    photo:   '/testimonials/cliente-3.jpg',
-    quote:   'El coach IA es el detalle que no sabía que necesitaba. A las 9 de la mañana ya sé qué priorizar — sin reunión, sin pestaña abierta.',
-    metric:  null,
-  },
-]
+const API_URL = import.meta.env.VITE_API_URL || ''
 
 export default function TestimonialsSection() {
+  const [testimonials, setTestimonials] = useState([])
+
+  useEffect(() => {
+    api.get('/landing/testimonials')
+      .then(({ data }) => setTestimonials(data))
+      .catch(() => {})
+  }, [])
+
+  if (testimonials.length === 0) return null
+
   return (
     <section id="testimonios" className="py-24 px-4 sm:px-6 bg-gray-50">
       <div className="max-w-6xl mx-auto">
@@ -46,8 +36,16 @@ export default function TestimonialsSection() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {TESTIMONIALS.map((t, i) => (
-            <TestimonialCard key={i} {...t} />
+          {testimonials.map(t => (
+            <TestimonialCard
+              key={t.id}
+              name={t.name}
+              role={t.role}
+              company={t.company}
+              quote={t.quote}
+              metric={t.metric}
+              photo={t.photoUrl ? `${API_URL}${t.photoUrl}` : null}
+            />
           ))}
         </div>
       </div>

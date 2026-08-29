@@ -179,82 +179,55 @@ function FaqItem({ q, a, open, onClick }) {
 // ─── Landing Page ─────────────────────────────────────────────────────────────
 
 // Defaults hardcodeados — se usan mientras carga /landing/content o si el fetch falla,
-// así el hero nunca queda vacío. SuperAdmin → Landing puede sobreescribirlos.
-const HERO_DEFAULTS = {
+// así la landing nunca queda vacía. Debe reflejar el mismo copy que CONTENT_DEFAULTS
+// en backend/src/controllers/landing.controller.js. SuperAdmin → Landing lo edita.
+const CONTENT_DEFAULTS = {
   heroBadge:            'Hecho para agencias de marketing · Gratis hasta 3 usuarios',
   heroTitle:            'El sistema operativo',
   heroTitleAccentWords: ['agencia', 'negocio', 'equipo', 'empresa'],
   heroSubtitle:         'Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.',
   demoVideoUrl:         null,
-}
 
-export default function Landing() {
-  const [openFaq, setOpenFaq] = useState(null)
-  const [hero, setHero] = useState(HERO_DEFAULTS)
+  problemTitle:    'Tu agencia merece dejar de hacer esto.',
+  problemSubtitle: 'Cuando reportar a un cliente se vuelve más caro que ejecutar para él, algo está roto.',
+  problemCards: [
+    { emoji: '🪟', title: '7 pestañas para reportar un mes', desc: 'GA4, Search Console, Ads, Meta, TikTok, Excel, PowerPoint. Tu PM pierde 4 horas armando lo que el cliente lee en 4 minutos.' },
+    { emoji: '🤷', title: '¿En qué está cada cuenta?', desc: 'Sin reunión de status, nadie sabe el avance. Con reunión, perdés 30 min × persona × semana. Y tampoco quedan respuestas.' },
+    { emoji: '🔥', title: 'Lo urgente del cliente come tu roadmap', desc: 'Cada cliente cree que es prioritario. Sin foco explícito, el equipo apaga incendios y el trabajo planificado queda para "después".' },
+  ],
 
-  useEffect(() => {
-    api.get('/landing/content')
-      .then(({ data }) => setHero(data))
-      .catch(() => {})
-  }, [])
+  solutionTitle:      'No es otro gestor de tareas.',
+  solutionParagraph1: 'Es una herramienta de ejecución. Diseñada para que tu equipo sepa exactamente en qué trabajar, en qué orden, y por qué.',
+  solutionParagraph2: 'Sin infinitas configuraciones. Sin flujos que nadie respeta. Con un coach de IA que conoce el contexto real de cada persona en tu equipo.',
 
-  const features = [
-    {
-      icon: '🎯',
-      title: 'Una tarea activa a la vez',
-      desc: 'El sistema te obliga a comprometerte con una tarea por persona. Sin multitasking disfrazado de productividad.',
-    },
-    {
-      icon: '🤖',
-      title: 'Coach de IA integrado',
-      desc: 'Cada mañana, tu IA analiza tus pendientes, historial y rol para decirte exactamente en qué deberías enfocarte primero.',
-    },
-    {
-      icon: '📊',
-      title: 'Visibilidad real del equipo',
-      desc: 'Ves en tiempo real qué está haciendo cada persona, en qué proyecto, y cuánto llevan. Sin reuniones de estado.',
-    },
-    {
-      icon: '📬',
-      title: 'Resúmenes semanales automáticos',
-      desc: 'Cada viernes, tu equipo recibe un análisis de su semana: logros, tiempo perdido y qué mejorar la próxima.',
-    },
-    {
-      icon: '⭐',
-      title: 'Foco del día con tareas destacadas',
-      desc: 'Marcá hasta 3 tareas como prioridad del día. Las que sí o sí tienen que avanzar, sin importar el resto.',
-    },
-    {
-      icon: '📁',
-      title: 'Proyectos y clientes separados',
-      desc: 'Cada proyecto tiene su equipo, sus tareas y su historial. Sin mezclas entre clientes, sin confusión.',
-    },
-  ]
+  featuresTitle: 'Todo lo que necesitás.\nNada que no necesitás.',
+  featureCards: [
+    { icon: '🎯', title: 'Una tarea activa a la vez', desc: 'El sistema te obliga a comprometerte con una tarea por persona. Sin multitasking disfrazado de productividad.' },
+    { icon: '🤖', title: 'Coach de IA integrado', desc: 'Cada mañana, tu IA analiza tus pendientes, historial y rol para decirte exactamente en qué deberías enfocarte primero.' },
+    { icon: '📊', title: 'Visibilidad real del equipo', desc: 'Ves en tiempo real qué está haciendo cada persona, en qué proyecto, y cuánto llevan. Sin reuniones de estado.' },
+    { icon: '📬', title: 'Resúmenes semanales automáticos', desc: 'Cada viernes, tu equipo recibe un análisis de su semana: logros, tiempo perdido y qué mejorar la próxima.' },
+    { icon: '⭐', title: 'Foco del día con tareas destacadas', desc: 'Marcá hasta 3 tareas como prioridad del día. Las que sí o sí tienen que avanzar, sin importar el resto.' },
+    { icon: '📁', title: 'Proyectos y clientes separados', desc: 'Cada proyecto tiene su equipo, sus tareas y su historial. Sin mezclas entre clientes, sin confusión.' },
+  ],
 
-  const steps = [
-    {
-      step: '01',
-      title: 'Creás tu workspace',
-      desc: 'Registrá tu equipo en segundos. Tu espacio propio en tuempresa.blisstracker.app, listo para usar.',
-    },
-    {
-      step: '02',
-      title: 'Elegís tus módulos',
-      desc: 'Marketing, EOS, ventas — activás lo que tu agencia usa. Lo cambiás cuando quieras desde Preferencias.',
-    },
-    {
-      step: '03',
-      title: 'Invitás a tu equipo',
-      desc: 'Mandás invitaciones por email. Cada persona acepta y empieza a trabajar. Sin onboarding eterno.',
-    },
-    {
-      step: '04',
-      title: 'Ejecutan con foco',
-      desc: 'El coach de IA guía las prioridades de cada uno. Vos ves el avance en tiempo real.',
-    },
-  ]
+  stepsTitle: 'De cero a equipo enfocado en minutos',
+  steps: [
+    { title: 'Creás tu workspace', desc: 'Registrá tu equipo en segundos. Tu espacio propio en tuempresa.blisstracker.app, listo para usar.' },
+    { title: 'Elegís tus módulos', desc: 'Marketing, EOS, ventas — activás lo que tu agencia usa. Lo cambiás cuando quieras desde Preferencias.' },
+    { title: 'Invitás a tu equipo', desc: 'Mandás invitaciones por email. Cada persona acepta y empieza a trabajar. Sin onboarding eterno.' },
+    { title: 'Ejecutan con foco', desc: 'El coach de IA guía las prioridades de cada uno. Vos ves el avance en tiempo real.' },
+  ],
 
-  const faqGroups = [
+  benefitsTitle:    'El resultado no es "más productividad".',
+  benefitsSubtitle: 'Son proyectos que avanzan, equipos que saben qué hacer, y tiempo del negocio bien usado.',
+  benefitCards: [
+    { label: 'Más foco',        desc: 'Menos tareas abiertas, más completadas' },
+    { label: 'Menos caos',      desc: 'Todo el equipo en la misma página' },
+    { label: 'Más control',     desc: 'Visibilidad sin reuniones de estado' },
+    { label: 'Mejor resultado', desc: 'El tiempo del equipo bien usado' },
+  ],
+
+  faqGroups: [
     {
       group: 'Producto',
       items: [
@@ -305,7 +278,22 @@ export default function Landing() {
           a: 'Sí. Tres roles a nivel workspace (owner, admin, member) más un teamRole operativo libre (ej: DESIGNER, PM). Los miembros solo ven proyectos donde están asignados.' },
       ],
     },
-  ]
+  ],
+}
+
+export default function Landing() {
+  const [openFaq, setOpenFaq] = useState(null)
+  const [hero, setHero] = useState(CONTENT_DEFAULTS)
+
+  useEffect(() => {
+    api.get('/landing/content')
+      .then(({ data }) => setHero(data))
+      .catch(() => {})
+  }, [])
+
+  const features = hero.featureCards
+  const steps = hero.steps
+  const faqGroups = hero.faqGroups
 
   // Para JSON-LD y rendering, aplanar.
   const faqs = faqGroups.flatMap(g => g.items)
@@ -455,31 +443,15 @@ export default function Landing() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
-              Tu agencia merece dejar de hacer esto.
+              {hero.problemTitle}
             </h2>
             <p className="text-gray-400 text-lg max-w-xl mx-auto">
-              Cuando reportar a un cliente se vuelve más caro que ejecutar para él, algo está roto.
+              {hero.problemSubtitle}
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {[
-              {
-                emoji: '🪟',
-                title: '7 pestañas para reportar un mes',
-                desc: 'GA4, Search Console, Ads, Meta, TikTok, Excel, PowerPoint. Tu PM pierde 4 horas armando lo que el cliente lee en 4 minutos.',
-              },
-              {
-                emoji: '🤷',
-                title: '¿En qué está cada cuenta?',
-                desc: 'Sin reunión de status, nadie sabe el avance. Con reunión, perdés 30 min × persona × semana. Y tampoco quedan respuestas.',
-              },
-              {
-                emoji: '🔥',
-                title: 'Lo urgente del cliente come tu roadmap',
-                desc: 'Cada cliente cree que es prioritario. Sin foco explícito, el equipo apaga incendios y el trabajo planificado queda para "después".',
-              },
-            ].map((item, i) => (
+            {hero.problemCards.map((item, i) => (
               <div key={i} className="bg-gray-800 border border-gray-700 rounded-2xl p-6">
                 <div className="flex items-center gap-3 mb-3">
                   <span className="text-2xl">{item.emoji}</span>
@@ -500,15 +472,13 @@ export default function Landing() {
           </p>
           <BlissLogo variant="lockup" dark={false} className="h-12 w-auto mx-auto mb-8" />
           <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-6">
-            No es otro gestor de tareas.
+            {hero.solutionTitle}
           </h2>
           <p className="text-gray-500 text-lg leading-relaxed mb-4">
-            Es una herramienta de ejecución. Diseñada para que tu equipo sepa exactamente en qué trabajar,
-            en qué orden, y por qué.
+            {hero.solutionParagraph1}
           </p>
           <p className="text-gray-500 text-lg leading-relaxed">
-            Sin infinitas configuraciones. Sin flujos que nadie respeta. Con un coach de IA que conoce
-            el contexto real de cada persona en tu equipo.
+            {hero.solutionParagraph2}
           </p>
         </div>
       </section>
@@ -524,7 +494,9 @@ export default function Landing() {
               Funcionalidades
             </p>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900">
-              Todo lo que necesitás.<br className="hidden sm:block" /> Nada que no necesitás.
+              {hero.featuresTitle.split('\n').flatMap((line, i, arr) =>
+                i < arr.length - 1 ? [line, <br key={`br-${i}`} className="hidden sm:block" />, ' '] : [line]
+              )}
             </h2>
           </div>
 
@@ -553,7 +525,7 @@ export default function Landing() {
               Cómo funciona
             </p>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900">
-              De cero a equipo enfocado en minutos
+              {hero.stepsTitle}
             </h2>
           </div>
 
@@ -561,7 +533,7 @@ export default function Landing() {
             {steps.map((s, i) => (
               <div key={i} className="text-center">
                 <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-50 border border-primary-100 text-primary-600 font-black text-xl mb-5">
-                  {s.step}
+                  {String(i + 1).padStart(2, '0')}
                 </div>
                 <h3 className="font-bold text-gray-900 text-xl mb-3">{s.title}</h3>
                 <p className="text-gray-500 text-sm leading-relaxed">{s.desc}</p>
@@ -581,19 +553,14 @@ export default function Landing() {
       <section className="py-24 px-4 sm:px-6 bg-primary-500">
         <div className="max-w-5xl mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
-            El resultado no es "más productividad".
+            {hero.benefitsTitle}
           </h2>
           <p className="text-primary-100 text-lg mb-12 max-w-xl mx-auto">
-            Son proyectos que avanzan, equipos que saben qué hacer, y tiempo del negocio bien usado.
+            {hero.benefitsSubtitle}
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: 'Más foco',          desc: 'Menos tareas abiertas, más completadas' },
-              { label: 'Menos caos',        desc: 'Todo el equipo en la misma página' },
-              { label: 'Más control',       desc: 'Visibilidad sin reuniones de estado' },
-              { label: 'Mejor resultado',   desc: 'El tiempo del equipo bien usado' },
-            ].map((b, i) => (
+            {hero.benefitCards.map((b, i) => (
               <div
                 key={i}
                 className="bg-primary-600/40 border border-primary-400/30 rounded-2xl p-5"

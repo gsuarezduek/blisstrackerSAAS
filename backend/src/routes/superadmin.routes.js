@@ -134,5 +134,13 @@ router.patch('/landing/trusted-companies/reorder',   land.reorderTrustedCompanie
 router.patch('/landing/trusted-companies/:id',       land.updateTrustedCompany)
 router.patch('/landing/trusted-companies/:id/toggle', land.toggleTrustedCompany)
 router.delete('/landing/trusted-companies/:id',      land.deleteTrustedCompany)
+// Testimonios: foto opcional solo al crear (mismo criterio que trusted-companies:
+// para reemplazarla, borrar y recrear el testimonio).
+router.get('/landing/testimonials',                  land.listAllTestimonials)
+router.post('/landing/testimonials',                 uploadAvatar, land.createTestimonial)
+router.patch('/landing/testimonials/reorder',        land.reorderTestimonials)
+router.patch('/landing/testimonials/:id',            land.updateTestimonial)
+router.patch('/landing/testimonials/:id/toggle',     land.toggleTestimonial)
+router.delete('/landing/testimonials/:id',           land.deleteTestimonial)
 
 module.exports = router

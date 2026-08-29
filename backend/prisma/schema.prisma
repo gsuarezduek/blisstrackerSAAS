@@ -1231,7 +1231,44 @@ model LandingContent {
   heroTitleAccentWords Json     @default("[\"agencia\",\"negocio\",\"equipo\",\"empresa\"]") // 2ª línea (coloreada): "de tu " + palabra que rota con efecto typewriter + "." — prefijo/sufijo fijos en el frontend
   heroSubtitle         String   @default("Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.")
   demoVideoUrl         String? // URL de EMBED de Loom/YouTube; null = se muestra el AppMockup de fallback
-  updatedAt            DateTime @updatedAt
+
+  // Secciones intermedias — defaults reales (copy original) viven en el controller
+  // (DEFAULTS), no en el schema: así el DEFAULT de la columna puede ser trivial
+  // ('' / '[]') sin arriesgar una migración con JSON largo escapado a mano, y
+  // getContent() mergea fila vacía + default por campo. Ver landing.controller.js.
+  problemTitle       String @default("")
+  problemSubtitle    String @default("")
+  problemCards       Json   @default("[]") // [{ emoji, title, desc }]
+  solutionTitle      String @default("")
+  solutionParagraph1 String @default("")
+  solutionParagraph2 String @default("")
+  featuresTitle      String @default("") // admite "\n" para el salto de línea del <h2>
+  featureCards       Json   @default("[]") // [{ icon, title, desc }]
+  stepsTitle         String @default("")
+  steps              Json   @default("[]") // [{ title, desc }] — el número "01" se calcula por posición
+  benefitsTitle      String @default("")
+  benefitsSubtitle   String @default("")
+  benefitCards       Json   @default("[]") // [{ label, desc }]
+  faqGroups          Json   @default("[]") // [{ group, items: [{ q, a }] }]
+
+  updatedAt DateTime @updatedAt
+}
+
+// Testimonios de clientes en la landing (sección "Lo que dicen las agencias...").
+// Mismo patrón que TrustedCompany: foto opcional en DB (TestimonialCard cae a
+// iniciales si no hay), gestionados desde SuperAdmin → Landing.
+model LandingTestimonial {
+  id        Int      @id @default(autoincrement())
+  name      String
+  role      String   @default("")
+  company   String   @default("")
+  quote     String
+  metric    String?
+  photoData Bytes?
+  mimeType  String?
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
 }
 
 model TrustedCompany {

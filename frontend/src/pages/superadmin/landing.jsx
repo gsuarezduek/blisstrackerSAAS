@@ -3,6 +3,10 @@ import api from '../../api/client'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const trustedLogoUrl = (id) => `${API_URL}/api/landing/trusted-companies/${id}/image`
+const testimonialPhotoUrl = (id) => `${API_URL}/api/landing/testimonials/${id}/image`
+
+const inputCls = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
+const reorderBtnCls = 'p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 text-gray-500 text-xs'
 
 // ─── Hero + video ─────────────────────────────────────────────────────────────
 
@@ -64,38 +68,10 @@ function AccentWordsEditor({ words, onChange }) {
   )
 }
 
+const HERO_FIELDS = ['heroBadge', 'heroTitle', 'heroTitleAccentWords', 'heroSubtitle', 'demoVideoUrl']
+
 function HeroEditor() {
-  const [form,    setForm]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [saving,  setSaving]  = useState(false)
-  const [saved,   setSaved]   = useState(false)
-  const [error,   setError]   = useState('')
-
-  useEffect(() => {
-    api.get('/superadmin/landing/content')
-      .then(r => setForm(r.data))
-      .catch(() => setError('No se pudo cargar el contenido'))
-      .finally(() => setLoading(false))
-  }, [])
-
-  function set(field, value) {
-    setForm(f => ({ ...f, [field]: value }))
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    setError('')
-    try {
-      const { data } = await api.put('/superadmin/landing/content', form)
-      setForm(data)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
-    } catch (e) {
-      setError(e.response?.data?.error || 'Error al guardar')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const { form, loading, saving, saved, error, set, handleSave } = useLandingContentForm(HERO_FIELDS)
 
   if (loading) return (
     <div className="flex justify-center py-12">
@@ -171,11 +147,146 @@ function HeroEditor() {
         />
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      <SaveBar saving={saving} saved={saved} error={error} onSave={handleSave} />
+    </div>
+  )
+}
 
+// ─── Secciones intermedias (Problem/Solution/Features/Cómo funciona/Benefits) ─
+
+// Editor genérico de listas de "tarjetas" homogéneas (mismos campos en cada
+// item, ej. { icon, title, desc }). Reusado por problemCards/featureCards/
+// steps/benefitCards — cada uno solo cambia qué campos tiene la tarjeta.
+function CardListEditor({ items, onChange, fields, addLabel = '+ Agregar' }) {
+  const emptyItem = () => Object.fromEntries(fields.map(f => [f.key, '']))
+  const [draft, setDraft] = useState(emptyItem())
+
+  function add() {
+    if (fields.some(f => !draft[f.key]?.trim())) return
+    onChange([...items, draft])
+    setDraft(emptyItem())
+  }
+  function remove(idx) { onChange(items.filter((_, i) => i !== idx)) }
+  function move(idx, dir) {
+    const swap = dir === 'up' ? idx - 1 : idx + 1
+    if (swap < 0 || swap >= items.length) return
+    const next = [...items]
+    ;[next[idx], next[swap]] = [next[swap], next[idx]]
+    onChange(next)
+  }
+  function updateItem(idx, key, value) {
+    onChange(items.map((it, i) => i === idx ? { ...it, [key]: value } : it))
+  }
+
+  function renderFields(item, onFieldChange) {
+    const singleLine = fields.filter(f => !f.multiline)
+    const multiline  = fields.filter(f => f.multiline)
+    return (
+      <>
+        <div className="flex flex-wrap gap-2">
+          {singleLine.map(f => (
+            <input
+              key={f.key}
+              value={item[f.key] ?? ''}
+              onChange={e => onFieldChange(f.key, e.target.value)}
+              placeholder={f.label}
+              className={`${inputCls} ${f.narrow ? 'w-16 text-center flex-none' : 'flex-1 min-w-[160px]'}`}
+            />
+          ))}
+        </div>
+        {multiline.map(f => (
+          <textarea
+            key={f.key}
+            value={item[f.key] ?? ''}
+            onChange={e => onFieldChange(f.key, e.target.value)}
+            placeholder={f.label}
+            rows={2}
+            className={`${inputCls} resize-y`}
+          />
+        ))}
+      </>
+    )
+  }
+
+  return (
+    <div className="space-y-2.5">
+      {items.map((item, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <div className="flex-1 space-y-1.5 border border-gray-200 dark:border-gray-600 rounded-xl p-2.5">
+            {renderFields(item, (key, value) => updateItem(i, key, value))}
+          </div>
+          <div className="flex flex-col gap-0.5 pt-0.5">
+            <button type="button" onClick={() => move(i, 'up')} disabled={i === 0} className={reorderBtnCls}>↑</button>
+            <button type="button" onClick={() => move(i, 'down')} disabled={i === items.length - 1} className={reorderBtnCls}>↓</button>
+            <button type="button" onClick={() => remove(i)} className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs">✕</button>
+          </div>
+        </div>
+      ))}
+
+      <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-2.5 space-y-1.5">
+        {renderFields(draft, (key, value) => setDraft(d => ({ ...d, [key]: value })))}
+        <button type="button" onClick={add} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">{addLabel}</button>
+      </div>
+    </div>
+  )
+}
+
+function SectionField({ label, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+// Hook chico compartido por los editores que viven en LandingContent pero solo
+// guardan un subconjunto de campos (Secciones, FAQ) — evita repetir el mismo
+// load/save/estado en cada uno.
+function useLandingContentForm(fields) {
+  const [form,    setForm]    = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving,  setSaving]  = useState(false)
+  const [saved,   setSaved]   = useState(false)
+  const [error,   setError]   = useState('')
+
+  useEffect(() => {
+    api.get('/superadmin/landing/content')
+      .then(r => setForm(r.data))
+      .catch(() => setError('No se pudo cargar el contenido'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  function set(field, value) {
+    setForm(f => ({ ...f, [field]: value }))
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setError('')
+    try {
+      const body = Object.fromEntries(fields.map(f => [f, form[f]]))
+      const { data } = await api.put('/superadmin/landing/content', body)
+      setForm(f => ({ ...f, ...data }))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return { form, loading, saving, saved, error, set, handleSave }
+}
+
+function SaveBar({ saving, saved, onSave, error }) {
+  return (
+    <>
+      {error && <p className="text-sm text-red-500">{error}</p>}
       <div className="flex items-center gap-3 pt-1">
         <button
-          onClick={handleSave}
+          onClick={onSave}
           disabled={saving}
           className="px-5 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
         >
@@ -183,6 +294,385 @@ function HeroEditor() {
         </button>
         {saved && <span className="text-sm text-emerald-500">✓ Guardado</span>}
       </div>
+    </>
+  )
+}
+
+const SECTIONS_FIELDS = [
+  'problemTitle', 'problemSubtitle', 'problemCards',
+  'solutionTitle', 'solutionParagraph1', 'solutionParagraph2',
+  'featuresTitle', 'featureCards',
+  'stepsTitle', 'steps',
+  'benefitsTitle', 'benefitsSubtitle', 'benefitCards',
+]
+
+function SectionsEditor() {
+  const { form, loading, saving, saved, error, set, handleSave } = useLandingContentForm(SECTIONS_FIELDS)
+
+  if (loading) return (
+    <div className="flex justify-center py-12">
+      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+  if (!form) return <p className="text-sm text-red-500">{error}</p>
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 space-y-6">
+      {/* Problem */}
+      <div className="space-y-3">
+        <p className="text-sm font-bold text-gray-900 dark:text-white">Problema ("Tu agencia merece dejar de hacer esto.")</p>
+        <SectionField label="Título">
+          <input value={form.problemTitle} onChange={e => set('problemTitle', e.target.value)} className={inputCls} />
+        </SectionField>
+        <SectionField label="Subtítulo">
+          <input value={form.problemSubtitle} onChange={e => set('problemSubtitle', e.target.value)} className={inputCls} />
+        </SectionField>
+        <SectionField label="Tarjetas de dolor (emoji + título + descripción)">
+          <CardListEditor
+            items={form.problemCards}
+            onChange={v => set('problemCards', v)}
+            fields={[{ key: 'emoji', label: '🪟', narrow: true }, { key: 'title', label: 'Título' }, { key: 'desc', label: 'Descripción', multiline: true }]}
+          />
+        </SectionField>
+      </div>
+
+      <hr className="border-gray-100 dark:border-gray-700" />
+
+      {/* Solution */}
+      <div className="space-y-3">
+        <p className="text-sm font-bold text-gray-900 dark:text-white">Solución ("No es otro gestor de tareas.")</p>
+        <SectionField label="Título">
+          <input value={form.solutionTitle} onChange={e => set('solutionTitle', e.target.value)} className={inputCls} />
+        </SectionField>
+        <SectionField label="Párrafo 1">
+          <textarea value={form.solutionParagraph1} onChange={e => set('solutionParagraph1', e.target.value)} rows={2} className={`${inputCls} resize-y`} />
+        </SectionField>
+        <SectionField label="Párrafo 2">
+          <textarea value={form.solutionParagraph2} onChange={e => set('solutionParagraph2', e.target.value)} rows={2} className={`${inputCls} resize-y`} />
+        </SectionField>
+      </div>
+
+      <hr className="border-gray-100 dark:border-gray-700" />
+
+      {/* Features */}
+      <div className="space-y-3">
+        <p className="text-sm font-bold text-gray-900 dark:text-white">Funcionalidades</p>
+        <SectionField label="Título (usá un salto de línea para partir el <h2> en dos)">
+          <textarea value={form.featuresTitle} onChange={e => set('featuresTitle', e.target.value)} rows={2} className={`${inputCls} resize-y`} />
+        </SectionField>
+        <SectionField label="Tarjetas de funcionalidades (icono + título + descripción)">
+          <CardListEditor
+            items={form.featureCards}
+            onChange={v => set('featureCards', v)}
+            fields={[{ key: 'icon', label: '🎯', narrow: true }, { key: 'title', label: 'Título' }, { key: 'desc', label: 'Descripción', multiline: true }]}
+          />
+        </SectionField>
+      </div>
+
+      <hr className="border-gray-100 dark:border-gray-700" />
+
+      {/* Steps */}
+      <div className="space-y-3">
+        <p className="text-sm font-bold text-gray-900 dark:text-white">Cómo funciona</p>
+        <SectionField label="Título">
+          <input value={form.stepsTitle} onChange={e => set('stepsTitle', e.target.value)} className={inputCls} />
+        </SectionField>
+        <SectionField label="Pasos (el número 01/02/03… se calcula solo por la posición)">
+          <CardListEditor
+            items={form.steps}
+            onChange={v => set('steps', v)}
+            fields={[{ key: 'title', label: 'Título' }, { key: 'desc', label: 'Descripción', multiline: true }]}
+          />
+        </SectionField>
+      </div>
+
+      <hr className="border-gray-100 dark:border-gray-700" />
+
+      {/* Benefits */}
+      <div className="space-y-3">
+        <p className="text-sm font-bold text-gray-900 dark:text-white">Beneficios (banda naranja)</p>
+        <SectionField label="Título">
+          <input value={form.benefitsTitle} onChange={e => set('benefitsTitle', e.target.value)} className={inputCls} />
+        </SectionField>
+        <SectionField label="Subtítulo">
+          <input value={form.benefitsSubtitle} onChange={e => set('benefitsSubtitle', e.target.value)} className={inputCls} />
+        </SectionField>
+        <SectionField label="Tarjetas (label + descripción)">
+          <CardListEditor
+            items={form.benefitCards}
+            onChange={v => set('benefitCards', v)}
+            fields={[{ key: 'label', label: 'Label' }, { key: 'desc', label: 'Descripción', multiline: true }]}
+          />
+        </SectionField>
+      </div>
+
+      <SaveBar saving={saving} saved={saved} error={error} onSave={handleSave} />
+    </div>
+  )
+}
+
+// ─── FAQ ──────────────────────────────────────────────────────────────────────
+
+// Grupos de preguntas (ej. "Producto", "Pricing y trial"). Cada grupo se puede
+// reordenar; las preguntas dentro de un grupo solo se agregan/quitan (se
+// reordenan borrando y re-agregando, alcanza para el volumen típico de FAQ).
+function FaqEditor({ groups, onChange }) {
+  function addGroup() { onChange([...groups, { group: 'Nuevo grupo', items: [] }]) }
+  function removeGroup(gi) { onChange(groups.filter((_, i) => i !== gi)) }
+  function moveGroup(gi, dir) {
+    const swap = dir === 'up' ? gi - 1 : gi + 1
+    if (swap < 0 || swap >= groups.length) return
+    const next = [...groups]
+    ;[next[gi], next[swap]] = [next[swap], next[gi]]
+    onChange(next)
+  }
+  function setGroupName(gi, name) {
+    onChange(groups.map((g, i) => i === gi ? { ...g, group: name } : g))
+  }
+  function addItem(gi) {
+    onChange(groups.map((g, i) => i === gi ? { ...g, items: [...g.items, { q: '', a: '' }] } : g))
+  }
+  function removeItem(gi, ii) {
+    onChange(groups.map((g, i) => i === gi ? { ...g, items: g.items.filter((_, j) => j !== ii) } : g))
+  }
+  function setItem(gi, ii, key, value) {
+    onChange(groups.map((g, i) => i === gi
+      ? { ...g, items: g.items.map((it, j) => j === ii ? { ...it, [key]: value } : it) }
+      : g))
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map((g, gi) => (
+        <div key={gi} className="border border-gray-200 dark:border-gray-600 rounded-xl p-3 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <input value={g.group} onChange={e => setGroupName(gi, e.target.value)} className={`${inputCls} font-semibold flex-1`} />
+            <button type="button" onClick={() => moveGroup(gi, 'up')} disabled={gi === 0} className={reorderBtnCls}>↑</button>
+            <button type="button" onClick={() => moveGroup(gi, 'down')} disabled={gi === groups.length - 1} className={reorderBtnCls}>↓</button>
+            <button type="button" onClick={() => removeGroup(gi)} className="text-xs text-gray-400 hover:text-red-600 dark:hover:text-red-400 px-1">✕ grupo</button>
+          </div>
+
+          <div className="space-y-2 pl-1">
+            {g.items.map((item, ii) => (
+              <div key={ii} className="bg-gray-50 dark:bg-gray-700/40 rounded-lg p-2.5 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input value={item.q} onChange={e => setItem(gi, ii, 'q', e.target.value)} placeholder="Pregunta" className={`${inputCls} flex-1`} />
+                  <button type="button" onClick={() => removeItem(gi, ii)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 text-xs px-1">✕</button>
+                </div>
+                <textarea value={item.a} onChange={e => setItem(gi, ii, 'a', e.target.value)} placeholder="Respuesta" rows={2} className={`${inputCls} resize-y`} />
+              </div>
+            ))}
+            <button type="button" onClick={() => addItem(gi)} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">+ Agregar pregunta</button>
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={addGroup} className="text-sm font-medium text-primary-600 dark:text-primary-400 hover:underline">+ Agregar grupo</button>
+    </div>
+  )
+}
+
+function FaqSectionEditor() {
+  const { form, loading, saving, saved, error, set, handleSave } = useLandingContentForm(['faqGroups'])
+
+  if (loading) return (
+    <div className="flex justify-center py-12">
+      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+  if (!form) return <p className="text-sm text-red-500">{error}</p>
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
+      <FaqEditor groups={form.faqGroups} onChange={v => set('faqGroups', v)} />
+      <SaveBar saving={saving} saved={saved} error={error} onSave={handleSave} />
+    </div>
+  )
+}
+
+// ─── Testimonios ──────────────────────────────────────────────────────────────
+
+function TestimonialsEditor() {
+  const [items,    setItems]    = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [draft,    setDraft]    = useState({ name: '', role: '', company: '', quote: '', metric: '' })
+  const [draftFile, setDraftFile] = useState(null)
+  const [editId,   setEditId]   = useState(null)
+  const [editDraft, setEditDraft] = useState(null)
+  const [deleteId, setDeleteId] = useState(null)
+  const fileRef = useRef()
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { data } = await api.get('/superadmin/landing/testimonials')
+      setItems(data)
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function handleCreate() {
+    if (!draft.name.trim() || !draft.quote.trim()) return
+    setCreating(true)
+    try {
+      const form = new FormData()
+      Object.entries(draft).forEach(([k, v]) => { if (v.trim()) form.append(k, v.trim()) })
+      if (draftFile) form.append('image', draftFile)
+      await api.post('/superadmin/landing/testimonials', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      setDraft({ name: '', role: '', company: '', quote: '', metric: '' })
+      setDraftFile(null)
+      if (fileRef.current) fileRef.current.value = ''
+      await load()
+    } catch (err) {
+      alert(err.response?.data?.error ?? 'Error al crear el testimonio')
+    } finally { setCreating(false) }
+  }
+
+  async function saveEdit(id) {
+    try {
+      const { data } = await api.patch(`/superadmin/landing/testimonials/${id}`, editDraft)
+      setItems(prev => prev.map(t => t.id === id ? { ...t, ...data } : t))
+    } catch (err) {
+      alert(err.response?.data?.error ?? 'Error al guardar')
+    } finally { setEditId(null) }
+  }
+
+  async function handleToggle(id) {
+    try {
+      const { data } = await api.patch(`/superadmin/landing/testimonials/${id}/toggle`)
+      setItems(prev => prev.map(t => t.id === id ? { ...t, active: data.active } : t))
+    } catch {}
+  }
+
+  async function handleDelete(id) {
+    try {
+      await api.delete(`/superadmin/landing/testimonials/${id}`)
+      setItems(prev => prev.filter(t => t.id !== id))
+    } catch (err) {
+      alert(err.response?.data?.error ?? 'Error al eliminar')
+    } finally { setDeleteId(null) }
+  }
+
+  async function move(id, direction) {
+    const idx = items.findIndex(t => t.id === id)
+    const swap = direction === 'up' ? idx - 1 : idx + 1
+    if (swap < 0 || swap >= items.length) return
+    const reordered = [...items]
+    ;[reordered[idx], reordered[swap]] = [reordered[swap], reordered[idx]]
+    const body = reordered.map((t, i) => ({ id: t.id, order: i + 1 }))
+    setItems(reordered.map((t, i) => ({ ...t, order: i + 1 })))
+    api.patch('/superadmin/landing/testimonials/reorder', { items: body }).catch(() => load())
+  }
+
+  const active   = items.filter(t => t.active)
+  const inactive = items.filter(t => !t.active)
+
+  if (loading) return (
+    <div className="flex justify-center py-12">
+      <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-400">
+        Sin testimonios activos, la sección directamente no se muestra en la landing (mejor eso que testimonios de relleno).
+      </p>
+
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+        {active.map((t, idx) => (
+          <div key={t.id} className="p-4">
+            {editId === t.id ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  <input value={editDraft.name} onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))} placeholder="Nombre" className={`${inputCls} flex-1 min-w-[140px]`} />
+                  <input value={editDraft.role} onChange={e => setEditDraft(d => ({ ...d, role: e.target.value }))} placeholder="Rol" className={`${inputCls} flex-1 min-w-[140px]`} />
+                  <input value={editDraft.company} onChange={e => setEditDraft(d => ({ ...d, company: e.target.value }))} placeholder="Empresa" className={`${inputCls} flex-1 min-w-[140px]`} />
+                </div>
+                <textarea value={editDraft.quote} onChange={e => setEditDraft(d => ({ ...d, quote: e.target.value }))} placeholder="Testimonio" rows={3} className={`${inputCls} resize-y`} />
+                <input value={editDraft.metric ?? ''} onChange={e => setEditDraft(d => ({ ...d, metric: e.target.value }))} placeholder="Métrica (opcional, ej: −60% reuniones de status)" className={inputCls} />
+                <div className="flex gap-3">
+                  <button onClick={() => saveEdit(t.id)} className="text-xs text-primary-600 font-medium hover:underline">Guardar</button>
+                  <button onClick={() => setEditId(null)} className="text-xs text-gray-400 hover:underline">Cancelar</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3">
+                {t.hasPhoto ? (
+                  <img src={testimonialPhotoUrl(t.id)} alt={t.name} className="w-11 h-11 rounded-full object-cover flex-shrink-0 bg-gray-100 dark:bg-gray-700" />
+                ) : (
+                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-300 to-primary-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    {t.name.split(' ').map(p => p[0]).slice(0, 2).join('')}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{t.name}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">{t.role}{t.company && ` · ${t.company}`}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1.5 leading-relaxed">“{t.quote}”</p>
+                  {t.metric && <p className="text-xs text-primary-600 dark:text-primary-400 font-semibold mt-1">{t.metric}</p>}
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => { setEditId(t.id); setEditDraft({ name: t.name, role: t.role, company: t.company, quote: t.quote, metric: t.metric ?? '' }) }}
+                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-1.5">Editar</button>
+                  <button onClick={() => move(t.id, 'up')} disabled={idx === 0} className={reorderBtnCls}>↑</button>
+                  <button onClick={() => move(t.id, 'down')} disabled={idx === active.length - 1} className={reorderBtnCls}>↓</button>
+                  <button onClick={() => handleToggle(t.id)} className="p-1 rounded hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-500 text-xs px-1.5">Ocultar</button>
+                  <button onClick={() => setDeleteId(t.id)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 hover:text-red-600 text-xs px-1.5">Eliminar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {active.length === 0 && (
+          <div className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">Sin testimonios activos</div>
+        )}
+      </div>
+
+      {inactive.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+          {inactive.map(t => (
+            <div key={t.id} className="flex items-center gap-3 px-4 py-2.5 opacity-50">
+              <span className="flex-1 text-sm text-gray-700 dark:text-gray-300 truncate">{t.name} — {t.quote}</span>
+              <button onClick={() => handleToggle(t.id)} className="text-xs text-primary-600 hover:underline font-medium flex-shrink-0">Reactivar</button>
+              <button onClick={() => setDeleteId(t.id)} className="text-xs text-red-400 hover:text-red-600 flex-shrink-0">Eliminar</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Nuevo testimonio */}
+      <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-4 space-y-2">
+        <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">+ Nuevo testimonio</p>
+        <div className="flex flex-wrap gap-2">
+          <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} placeholder="Nombre" className={`${inputCls} flex-1 min-w-[140px]`} />
+          <input value={draft.role} onChange={e => setDraft(d => ({ ...d, role: e.target.value }))} placeholder="Rol (ej: Founder)" className={`${inputCls} flex-1 min-w-[140px]`} />
+          <input value={draft.company} onChange={e => setDraft(d => ({ ...d, company: e.target.value }))} placeholder="Empresa" className={`${inputCls} flex-1 min-w-[140px]`} />
+        </div>
+        <textarea value={draft.quote} onChange={e => setDraft(d => ({ ...d, quote: e.target.value }))} placeholder="Testimonio" rows={3} className={`${inputCls} resize-y`} />
+        <input value={draft.metric} onChange={e => setDraft(d => ({ ...d, metric: e.target.value }))} placeholder="Métrica (opcional, ej: −60% reuniones de status)" className={inputCls} />
+        <div className="flex items-center gap-3">
+          <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setDraftFile(e.target.files?.[0] ?? null)}
+            className="text-xs text-gray-500 dark:text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:bg-gray-100 dark:file:bg-gray-700 file:text-gray-700 dark:file:text-gray-200" />
+          <button type="button" onClick={handleCreate} disabled={creating} className="bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">
+            {creating ? 'Creando…' : 'Agregar testimonio'}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400">Foto opcional — sin ella se muestran las iniciales.</p>
+      </div>
+
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-80 mx-4">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white text-center mb-1">¿Eliminar testimonio?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-5">No se puede deshacer.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteId(null)} className="flex-1 text-sm border border-gray-200 dark:border-gray-600 rounded-lg py-2 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">Cancelar</button>
+              <button onClick={() => handleDelete(deleteId)} className="flex-1 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 font-medium">Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -376,14 +866,30 @@ export function SectionLanding() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Landing</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Hero, video de demo y empresas destacadas de la landing pública (blisstracker.app). El resto
-          de la landing (features, comparativa, FAQ) se edita por código.
+          Hero, secciones intermedias, FAQ, testimonios y empresas destacadas de la landing pública
+          (blisstracker.app). La comparativa vs. competidores, "para quién es" y la bio del founder
+          todavía se editan por código.
         </p>
       </div>
 
       <div>
         <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Hero</h2>
         <HeroEditor />
+      </div>
+
+      <div>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Secciones intermedias</h2>
+        <SectionsEditor />
+      </div>
+
+      <div>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Testimonios</h2>
+        <TestimonialsEditor />
+      </div>
+
+      <div>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Preguntas frecuentes</h2>
+        <FaqSectionEditor />
       </div>
 
       <div>
