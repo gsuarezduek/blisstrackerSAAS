@@ -3102,7 +3102,12 @@ model ContentPiece {
   status        String    @default("idea") // clave de CONTENT_STATUSES
   type          String    @default("post") // clave de CONTENT_TYPES
   networks      String    @default("[]") // JSON array de claves de CONTENT_NETWORKS (una pieza puede salir a varias)
-  copy          String?
+  // Brief de diseño (WYSIWYG, HTML) — interno, NUNCA viaja al portal del cliente (mismo
+  // criterio que internalNotes). Hasta la migración `add_content_piece_design_details`
+  // este campo se llamaba `copy` y era el texto del posteo; ese dato viejo quedó acá
+  // (envuelto en HTML básico) y `copy` pasó a ser un campo nuevo, simple.
+  designDetails String?
+  copy          String? // texto simple del posteo — este SÍ viaja al portal del cliente
   hashtags      String?
   internalNotes String? // NUNCA viaja al portal del cliente
   scheduledAt   DateTime? // fecha+hora de publicación planificada (UTC)

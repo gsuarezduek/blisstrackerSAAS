@@ -56,7 +56,7 @@ function mockBase({ workspaceRole = 'member', flagOn = true } = {}) {
 const dbPiece = (over = {}) => ({
   id: 10, projectId: PROJECT_ID, workspaceId: WORKSPACE_ID,
   title: 'Reel de lanzamiento', status: 'idea', type: 'reel',
-  networks: '["instagram"]', copy: null, hashtags: null, internalNotes: null,
+  networks: '["instagram"]', designDetails: null, copy: null, hashtags: null, internalNotes: null,
   scheduledAt: null, scheduledDate: null, publishedAt: null, publishedUrl: null,
   order: 0, ownerId: null, taskId: null,
   submittedAt: null, approvedAt: null, approvedByContactId: null, changesRequestedAt: null,
@@ -227,6 +227,26 @@ describe('PATCH /pieces/:pid', () => {
 
     expect(res.status).toBe(200)
     expect(prisma.contentStatusEvent.create).not.toHaveBeenCalled()
+  })
+
+  it('acepta designDetails (HTML del WYSIWYG) por separado de copy', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    // findFirst se llama dos veces (existing + reload post-update); la segunda debe
+    // reflejar los valores nuevos, como haría una DB real.
+    prisma.contentPiece.findFirst
+      .mockResolvedValueOnce(dbPiece())
+      .mockResolvedValueOnce(dbPiece({ designDetails: '<p>usar la tipografía de marca</p>', copy: 'Texto del posteo' }))
+
+    const res = await req('patch', `${BASE}/10`).send({ designDetails: '<p>usar la tipografía de marca</p>', copy: 'Texto del posteo' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.contentPiece.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ designDetails: '<p>usar la tipografía de marca</p>', copy: 'Texto del posteo' }),
+      })
+    )
+    expect(res.body.designDetails).toBe('<p>usar la tipografía de marca</p>')
+    expect(res.body.copy).toBe('Texto del posteo')
   })
 
   it('registra ContentStatusEvent al cambiar de estado', async () => {

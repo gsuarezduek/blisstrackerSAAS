@@ -7,6 +7,7 @@
  *   onChange(html)  — callback en cada cambio (opcional)
  *   minHeight       — altura mínima del área de texto (px, default 140)
  *   placeholder     — texto placeholder cuando está vacío
+ *   editable        — false = solo lectura (oculta la toolbar, atenúa, bloquea edición). default true
  */
 
 import { useEditor, EditorContent } from '@tiptap/react'
@@ -114,10 +115,11 @@ export function Toolbar({ editor }) {
   )
 }
 
-export default function RichTextEditor({ defaultContent = '', onChange, onBlur, minHeight = 140, autoFocus = true, resizable = false }) {
+export default function RichTextEditor({ defaultContent = '', onChange, onBlur, minHeight = 140, autoFocus = true, resizable = false, editable = true }) {
   const editor = useEditor({
     extensions: [StarterKit, TextStyle, Color, TableKit.configure({ table: { resizable: false } })],
     content: defaultContent,
+    editable,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML())
     },
@@ -125,6 +127,12 @@ export default function RichTextEditor({ defaultContent = '', onChange, onBlur, 
       onBlur?.()
     },
   })
+
+  // Reactivo: el mismo editor puede pasar de editable a solo-lectura sin remontarse
+  // (ej. `canEdit` cambia al perder permisos, o la pieza cambia de estado).
+  useEffect(() => {
+    editor?.setEditable(editable)
+  }, [editor, editable])
 
   // Sincronizar si el contenido inicial cambia desde afuera
   useEffect(() => {
@@ -146,8 +154,8 @@ export default function RichTextEditor({ defaultContent = '', onChange, onBlur, 
     : { minHeight }
 
   return (
-    <div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
-      <Toolbar editor={editor} />
+    <div className={`border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden ${!editable ? 'opacity-60' : ''}`}>
+      {editable && <Toolbar editor={editor} />}
       <EditorContent
         editor={editor}
         className="situation-editor p-3 text-sm text-gray-800 dark:text-gray-200 focus:outline-none"

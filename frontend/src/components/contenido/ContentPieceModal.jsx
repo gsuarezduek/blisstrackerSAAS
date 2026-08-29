@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
+import RichTextEditor from '../RichTextEditor'
 import { findDriveEmbeds, driveEmbedUrl } from '../../utils/driveEmbed'
 import ConfirmModal from '../ConfirmModal'
 import ContentStatusBadge from './ContentStatusBadge'
@@ -113,6 +114,7 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
     const clean = t.trim()
     if (clean && clean !== piece.title) onUpdate(piece.id, { title: clean })
   })
+  const [designDetails, setDesignDetails] = useDebouncedCommit(piece.designDetails ?? '', v => onUpdate(piece.id, { designDetails: v || null }))
   const [copy, setCopy] = useDebouncedCommit(piece.copy ?? '', v => onUpdate(piece.id, { copy: v || null }))
   const [hashtags, setHashtags] = useDebouncedCommit(piece.hashtags ?? '', v => onUpdate(piece.id, { hashtags: v || null }))
   const [internalNotes, setInternalNotes] = useDebouncedCommit(piece.internalNotes ?? '', v => onUpdate(piece.id, { internalNotes: v || null }))
@@ -360,12 +362,24 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
               </div>
 
               <div className="sm:col-span-2">
+                <label className={LABEL}>Detalles de diseño <span className="italic text-gray-400">(interno, el cliente nunca los ve)</span></label>
+                <RichTextEditor
+                  defaultContent={designDetails}
+                  onChange={setDesignDetails}
+                  editable={canEdit}
+                  autoFocus={false}
+                  minHeight={280}
+                  resizable
+                />
+              </div>
+
+              <div className="sm:col-span-2">
                 <label className={LABEL}>Copy</label>
                 <textarea
                   value={copy}
                   onChange={e => setCopy(e.target.value)}
                   disabled={!canEdit}
-                  rows={7}
+                  rows={4}
                   placeholder="Texto del posteo…"
                   className={`${INPUT} resize-y`}
                 />

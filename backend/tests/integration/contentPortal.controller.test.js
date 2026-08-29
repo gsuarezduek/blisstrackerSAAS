@@ -66,6 +66,7 @@ const dbPiece = (over = {}) => ({
   id: PIECE_ID, projectId: PROJECT_ID, workspaceId: WORKSPACE_ID,
   title: 'Post de lanzamiento', status: 'aprobacion', type: 'post', networks: '["instagram"]',
   copy: 'Copy final', hashtags: '#launch',
+  designDetails: '<p>usar el logo isotipo, fondo violeta de marca</p>', // interno, NUNCA debe llegar al portal
   internalNotes: 'ojo con el cliente, es picky', // NUNCA debe llegar al portal
   scheduledAt: new Date('2026-08-20T15:00:00Z'), scheduledDate: '2026-08-20',
   publishedAt: null, publishedUrl: null,
@@ -135,6 +136,7 @@ describe('GET /content — listado', () => {
     expect(p.createdBy).toEqual({ name: 'Ana Diseño' })
     expect(p.owner).toEqual({ name: 'Beto CM' })
     expect(p).not.toHaveProperty('internalNotes')
+    expect(p).not.toHaveProperty('designDetails')
     expect(p).not.toHaveProperty('ownerId')
     expect(p).not.toHaveProperty('taskId')
     expect(p).not.toHaveProperty('order')
@@ -179,7 +181,9 @@ describe('GET /content/:pid — detalle + fuga de comentarios internos', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.piece).not.toHaveProperty('internalNotes')
+    expect(res.body.piece).not.toHaveProperty('designDetails')
     expect(JSON.stringify(res.body)).not.toContain('picky') // el valor real de internalNotes en dbPiece()
+    expect(JSON.stringify(res.body)).not.toContain('isotipo') // el valor real de designDetails en dbPiece()
 
     // El query de comentarios debe pedir SOLO visibility:'client' en el WHERE.
     const commentsCall = prisma.contentComment.findMany.mock.calls[0][0]

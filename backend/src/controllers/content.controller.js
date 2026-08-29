@@ -124,6 +124,7 @@ function formatPiece(p) {
     statusLabel:   statusMeta(p.status)?.label ?? p.status,
     type:          p.type,
     networks:      safeParseArr(p.networks),
+    designDetails: p.designDetails,
     copy:          p.copy,
     hashtags:      p.hashtags,
     internalNotes: p.internalNotes,
@@ -213,7 +214,7 @@ function buildPieceData(body, timezone, { isCreate = false } = {}) {
     data.networks = JSON.stringify(sanitizeNetworks(body.networks))
   }
 
-  for (const field of ['copy', 'hashtags', 'internalNotes', 'publishedUrl']) {
+  for (const field of ['designDetails', 'copy', 'hashtags', 'internalNotes', 'publishedUrl']) {
     if (body[field] !== undefined) {
       data[field] = typeof body[field] === 'string' && body[field].trim() ? body[field] : null
     }
@@ -295,8 +296,9 @@ async function listPieces(req, res, next) {
     if (q && String(q).trim()) {
       const term = String(q).trim()
       where.OR = [
-        { title: { contains: term, mode: 'insensitive' } },
-        { copy:  { contains: term, mode: 'insensitive' } },
+        { title:         { contains: term, mode: 'insensitive' } },
+        { copy:          { contains: term, mode: 'insensitive' } },
+        { designDetails: { contains: term, mode: 'insensitive' } },
       ]
     }
 
