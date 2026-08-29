@@ -166,6 +166,16 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {canEdit && !piece.taskId && (
+              <button
+                onClick={handleSendToDashboard}
+                disabled={sendingToDashboard || !piece.owner}
+                title={!piece.owner ? 'Asigná un responsable primero' : 'Enviar al dashboard'}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                📋
+              </button>
+            )}
             {canEdit && (
               <button
                 onClick={() => setConfirmDelete(true)}
@@ -183,6 +193,12 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
             </button>
           </div>
         </div>
+
+        {dashboardError && (
+          <div className="px-5 py-1.5 bg-red-50 dark:bg-red-900/20 border-b border-red-100 dark:border-red-800/50 text-xs text-red-600 dark:text-red-400 shrink-0">
+            {dashboardError}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 px-5 pt-3 shrink-0">
@@ -318,26 +334,14 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
                 </select>
               </div>
 
-              {canEdit && (
-                <div className="sm:col-span-2 flex items-center gap-2 flex-wrap">
-                  {piece.taskId ? (
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                      piece.task?.status === 'COMPLETED'
-                        ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
-                      {piece.task?.status === 'COMPLETED' ? '✅ Tarea completada' : '⏳ En el dashboard de ' + (piece.owner?.name ?? '—')}
-                    </span>
-                  ) : (
-                    <button
-                      onClick={handleSendToDashboard}
-                      disabled={sendingToDashboard || !piece.owner}
-                      title={!piece.owner ? 'Asigná un responsable primero' : undefined}
-                      className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {sendingToDashboard ? 'Enviando…' : '→ Enviar al dashboard'}
-                    </button>
-                  )}
-                  {dashboardError && <span className="text-xs text-red-600 dark:text-red-400">{dashboardError}</span>}
+              {canEdit && piece.taskId && (
+                <div className="sm:col-span-2">
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                    piece.task?.status === 'COMPLETED'
+                      ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
+                    {piece.task?.status === 'COMPLETED' ? '✅ Tarea completada' : '⏳ En el dashboard de ' + (piece.owner?.name ?? '—')}
+                  </span>
                 </div>
               )}
 
