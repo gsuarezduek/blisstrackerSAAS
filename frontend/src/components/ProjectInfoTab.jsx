@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import api from '../api/client'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import { useGoogleIntegration } from '../hooks/useGoogleIntegration'
@@ -10,16 +10,19 @@ const CONNECTIONS = [
   { key: 'youtube',   label: 'YouTube',   placeholder: 'https://youtube.com/@canal',       icon: '▶️' },
 ]
 
+// Integraciones Google (OAuth compartido vía useGoogleIntegration) — deben reflejar
+// 1 a 1 lo que soporta Marketing (GA4, Search Console, Ads, YouTube).
 const GOOGLE_INTEGRATIONS = [
   {
     key:   'google_analytics',
-    label: 'Google Analytics (GA4)',
+    label: 'Google Analytics',
     icon:  '📊',
     desc:  'Ver sesiones, usuarios y páginas en Marketing → Web',
+    requiredField: 'propertyId',
   },
   {
     key:   'google_search_console',
-    label: 'Google Search Console',
+    label: 'Search Console',
     icon:  '🔍',
     desc:  'Ver clicks, impresiones y palabras clave en Marketing → SEO',
   },
@@ -28,9 +31,18 @@ const GOOGLE_INTEGRATIONS = [
     label: 'Google Ads',
     icon:  '📣',
     desc:  'Ver campañas, clics y conversiones en Marketing → Anuncios',
+    requiredField: 'customerId',
+  },
+  {
+    key:   'google_youtube',
+    label: 'YouTube',
+    icon:  '▶️',
+    desc:  'Suscriptores, vistas y videos en Marketing → YouTube',
   },
 ]
 
+// Integraciones de Redes Sociales (popup OAuth propio, fuera del flujo de Google) —
+// deben reflejar 1 a 1 lo que soporta Marketing (Instagram, Facebook, TikTok, LinkedIn, Meta Ads).
 const SOCIAL_INTEGRATIONS = [
   {
     key:      'instagram',
@@ -39,6 +51,22 @@ const SOCIAL_INTEGRATIONS = [
     desc:     'Seguidores, engagement y métricas de publicaciones',
     authPath: (projectId) => `/marketing/integrations/meta/auth-url?projectId=${projectId}`,
     popup:    'instagram_oauth',
+  },
+  {
+    key:      'facebook',
+    label:    'Facebook',
+    icon:     '📘',
+    desc:     'Seguidores y métricas de la Página',
+    authPath: (projectId) => `/marketing/integrations/facebook/auth-url?projectId=${projectId}`,
+    popup:    'facebook_oauth',
+  },
+  {
+    key:      'linkedin',
+    label:    'LinkedIn',
+    icon:     '💼',
+    desc:     'Seguidores y métricas de la Company Page',
+    authPath: (projectId) => `/marketing/integrations/linkedin/auth-url?projectId=${projectId}`,
+    popup:    'linkedin_oauth',
   },
   {
     key:      'tiktok',
@@ -64,6 +92,51 @@ function parseConnections(raw) {
   try { return JSON.parse(raw) } catch { return {} }
 }
 
+// Estado visual de una integración: 'off' (gris, click para conectar) · 'on' (verde,
+// conectada y funcionando) · 'warn' (ámbar — expirada/error, o conectada pero le falta
+// un campo obligatorio como el Property ID de GA4).
+function integrationState(integ, connected) {
+  if (!connected) return { state: 'off' }
+  if (connected.status === 'expired') return { state: 'warn', reason: 'expired' }
+  if (connected.status === 'error')   return { state: 'warn', reason: 'error' }
+  if (integ.requiredField && !connected[integ.requiredField]) return { state: 'warn', reason: 'missingConfig' }
+  return { state: 'on' }
+}
+
+const CHIP_STATE_CLASS = {
+  on:   'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400',
+  warn: 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400',
+  off:  'bg-gray-50 dark:bg-gray-700/40 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 opacity-70 hover:opacity-100',
+}
+
+const DOT_STATE_CLASS = {
+  on:   'bg-emerald-500',
+  warn: 'bg-amber-400',
+  off:  'bg-gray-300 dark:bg-gray-500',
+}
+
+// Chip compacto — reemplaza la vieja card de ancho completo. Desconectado = gris
+// opaco y un click conecta directo; conectado/con problema = coloreado y un click
+// expande el panel de detalle debajo.
+function IntegrationChip({ integ, state, loading, expanded, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      title={integ.desc}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-wait ${CHIP_STATE_CLASS[state]} ${expanded ? 'ring-2 ring-primary-400 ring-offset-1 ring-offset-white dark:ring-offset-gray-800' : ''}`}
+    >
+      <span className="text-sm leading-none">{integ.icon}</span>
+      <span>{integ.label}</span>
+      {loading ? (
+        <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+      ) : (
+        <span className={`w-1.5 h-1.5 rounded-full inline-block ${DOT_STATE_CLASS[state]}`} />
+      )}
+    </button>
+  )
+}
+
 export default function ProjectInfoTab({ project, onSave }) {
   const connections = parseConnections(project.connections)
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
@@ -77,7 +150,6 @@ export default function ProjectInfoTab({ project, onSave }) {
   // Integraciones (Google + Sociales — misma lista de la API)
   const {
     integrations,
-    setIntegrations,
     loading: integLoading,
     propSaving,
     getIntegration,
@@ -91,6 +163,7 @@ export default function ProjectInfoTab({ project, onSave }) {
   const [propertyInput, setPropertyInput] = useState({})
   const [managerInput,  setManagerInput]  = useState({})   // Google Ads: Manager/MCC ID
   const [socialLoading, setSocialLoading] = useState({})
+  const [expandedKey,   setExpandedKey]   = useState(null) // key de la única integración expandida
 
   async function handleConnect(type) {
     await connectGoogle(type)
@@ -98,6 +171,7 @@ export default function ProjectInfoTab({ project, onSave }) {
 
   async function handleDisconnect(type) {
     await disconnectIntegration(type)
+    setExpandedKey(null)
   }
 
   async function handleConnectSocial(integ) {
@@ -128,6 +202,16 @@ export default function ProjectInfoTab({ project, onSave }) {
       }, 600)
     } catch {
       setSocialLoading(prev => ({ ...prev, [integ.key]: false }))
+    }
+  }
+
+  // Click en un chip: desconectado → conecta directo; conectado/con problema → expande el detalle.
+  function handleChipClick(integ, kind) {
+    const connected = getIntegration(integ.key)
+    if (!connected) {
+      kind === 'google' ? handleConnect(integ.key) : handleConnectSocial(integ)
+    } else {
+      setExpandedKey(k => k === integ.key ? null : integ.key)
     }
   }
 
@@ -172,6 +256,289 @@ export default function ProjectInfoTab({ project, onSave }) {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Renderiza el panel de detalle de UNA integración (debajo de la fila de chips del
+  // grupo al que pertenece), solo si es la que está expandida. `kind` distingue el
+  // flujo de conexión (Google vs. popup social) y qué campos extra mostrar.
+  function renderDetail(integ, kind) {
+    if (expandedKey !== integ.key) return null
+    const connected = getIntegration(integ.key)
+    if (!connected) return null
+    const { state, reason } = integrationState(integ, connected)
+    const isLoading = kind === 'google' ? integLoading[integ.key] : (socialLoading[integ.key] || integLoading[integ.key])
+    const reconnect = () => kind === 'google' ? handleConnect(integ.key) : handleConnectSocial(integ)
+
+    return (
+      <div className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-4 space-y-3 mt-1">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-xl flex-shrink-0">{integ.icon}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{integ.label}</p>
+              <p className="text-xs text-gray-400 truncate">{integ.desc}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {reason === 'expired' && (
+              <button onClick={reconnect} disabled={isLoading} className="text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline disabled:opacity-50">
+                {isLoading ? 'Reconectando…' : 'Reconectar (expiró)'}
+              </button>
+            )}
+            {reason === 'error' && (
+              <button onClick={reconnect} disabled={isLoading} className="text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline disabled:opacity-50">
+                {isLoading ? 'Reconectando…' : 'Reconectar (error)'}
+              </button>
+            )}
+            <button
+              onClick={() => handleDisconnect(integ.key)}
+              disabled={isLoading}
+              className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
+            >
+              {isLoading ? '…' : 'Desconectar'}
+            </button>
+            <button
+              onClick={() => setExpandedKey(null)}
+              className="text-gray-300 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
+              title="Cerrar"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Property ID para GA4 */}
+        {integ.key === 'google_analytics' && (
+          <div>
+            {connected.propertyId ? (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400">
+                  Property ID: <span className="font-mono text-gray-600 dark:text-gray-300">{connected.propertyId}</span>
+                </p>
+                <button
+                  onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.propertyId }))}
+                  className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
+                >
+                  Cambiar
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Ingresá el GA4 Property ID para ver los datos
+              </p>
+            )}
+            {(propertyInput[integ.key] !== undefined || !connected.propertyId) && (
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={propertyInput[integ.key] ?? ''}
+                  onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
+                  placeholder="349398319  (solo el número)"
+                  className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <button
+                  onClick={() => handleSavePropertyId(integ.key)}
+                  disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
+                  className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                >
+                  {propSaving[integ.key] ? '…' : 'Guardar'}
+                </button>
+                {connected.propertyId && (
+                  <button
+                    onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
+                    className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Customer ID + Manager ID para Google Ads */}
+        {integ.key === 'google_ads' && (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                Customer ID <span className="text-red-400">*</span>
+              </p>
+              {connected.customerId ? (
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs text-gray-600 dark:text-gray-300">{connected.customerId}</span>
+                  <button
+                    onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.customerId }))}
+                    className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Requerido — ID de la cuenta cliente (ej: 123-456-7890)
+                </p>
+              )}
+              {(propertyInput[integ.key] !== undefined || !connected.customerId) && (
+                <div className="flex gap-2 mt-1.5">
+                  <input
+                    type="text"
+                    value={propertyInput[integ.key] ?? ''}
+                    onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
+                    placeholder="123-456-7890"
+                    className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <button
+                    onClick={() => handleSaveCustomerId(integ.key)}
+                    disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
+                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                  >
+                    {propSaving[integ.key] ? '…' : 'Guardar'}
+                  </button>
+                  {connected.customerId && (
+                    <button
+                      onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
+                      className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                Manager ID <span className="text-gray-400 font-normal">(MCC — si la cuenta cliente está bajo un Manager Account)</span>
+              </p>
+              {connected.propertyId ? (
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs text-gray-600 dark:text-gray-300">{connected.propertyId}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setManagerInput(prev => ({ ...prev, [integ.key]: connected.propertyId }))}
+                      className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
+                    >
+                      Cambiar
+                    </button>
+                    <button
+                      onClick={() => savePropertyId(integ.key, null)}
+                      disabled={propSaving[integ.key]}
+                      className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  Sin Manager ID — la cuenta es directa o ya tenés acceso sin MCC
+                </p>
+              )}
+              {managerInput[integ.key] !== undefined && (
+                <div className="flex gap-2 mt-1.5">
+                  <input
+                    type="text"
+                    value={managerInput[integ.key] ?? ''}
+                    onChange={e => setManagerInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
+                    placeholder="123-456-7890  (ID del Manager Account)"
+                    className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <button
+                    onClick={() => handleSaveManagerId(integ.key)}
+                    disabled={propSaving[integ.key]}
+                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                  >
+                    {propSaving[integ.key] ? '…' : 'Guardar'}
+                  </button>
+                  <button
+                    onClick={() => setManagerInput(prev => ({ ...prev, [integ.key]: undefined }))}
+                    className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
+              {managerInput[integ.key] === undefined && !connected.propertyId && (
+                <button
+                  onClick={() => setManagerInput(prev => ({ ...prev, [integ.key]: '' }))}
+                  className="mt-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                >
+                  + Agregar Manager ID
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Site URL para Search Console (opcional; por defecto usa websiteUrl del proyecto) */}
+        {integ.key === 'google_search_console' && (
+          <div>
+            {connected.propertyId ? (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-400">
+                  Site URL: <span className="font-mono text-gray-600 dark:text-gray-300 break-all">{connected.propertyId}</span>
+                </p>
+                <button
+                  onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.propertyId }))}
+                  className="text-xs text-gray-400 hover:text-primary-500 transition-colors ml-2 flex-shrink-0"
+                >
+                  Cambiar
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">
+                Site URL: se usa la URL del sitio del proyecto
+                {project.websiteUrl && (
+                  <span className="font-mono ml-1 text-gray-500 dark:text-gray-400">({project.websiteUrl})</span>
+                )}
+              </p>
+            )}
+            {propertyInput[integ.key] !== undefined && (
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={propertyInput[integ.key] ?? ''}
+                  onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
+                  placeholder="https://ejemplo.com/ o sc-domain:ejemplo.com"
+                  className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <button
+                  onClick={() => handleSavePropertyId(integ.key)}
+                  disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
+                  className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                >
+                  {propSaving[integ.key] ? '…' : 'Guardar'}
+                </button>
+                <button
+                  onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
+                  className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
+            {!connected.propertyId && propertyInput[integ.key] === undefined && (
+              <button
+                onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: '' }))}
+                className="text-xs text-primary-500 hover:text-primary-600 mt-1 transition-colors"
+              >
+                Usar una URL diferente
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Info simple (ID + fecha) para las integraciones sin config propia */}
+        {!['google_analytics', 'google_ads', 'google_search_console'].includes(integ.key) && connected.propertyId && (
+          <p className="text-xs text-gray-400">
+            ID: <span className="font-mono text-gray-500 dark:text-gray-400">{connected.propertyId}</span>
+            {connected.connectedAt && (
+              <span className="ml-2">· conectado {new Date(connected.connectedAt).toLocaleDateString('es-AR')}</span>
+            )}
+          </p>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -230,413 +597,55 @@ export default function ProjectInfoTab({ project, onSave }) {
 
       {/* Integraciones Google + Sociales — solo si el workspace tiene el flag marketing */}
       {marketingEnabled && (
-      <><div className="border-t border-gray-200 dark:border-gray-700 pt-5">
-        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-          Integraciones Google
-        </p>
-        <div className="space-y-3">
-          {GOOGLE_INTEGRATIONS.map(integ => {
-            const connected = getIntegration(integ.key)
-            const isLoading = integLoading[integ.key]
-            const hasError  = connected?.status === 'error'
+        <>
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-5">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+              Integraciones Google
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {GOOGLE_INTEGRATIONS.map(integ => {
+                const connected = getIntegration(integ.key)
+                const { state } = integrationState(integ, connected)
+                return (
+                  <IntegrationChip
+                    key={integ.key}
+                    integ={integ}
+                    state={state}
+                    loading={integLoading[integ.key]}
+                    expanded={expandedKey === integ.key}
+                    onClick={() => handleChipClick(integ, 'google')}
+                  />
+                )
+              })}
+            </div>
+            {GOOGLE_INTEGRATIONS.map(integ => <div key={integ.key}>{renderDetail(integ, 'google')}</div>)}
+          </div>
 
-            return (
-              <div
-                key={integ.key}
-                className="border border-gray-200 dark:border-gray-600 rounded-xl p-4 space-y-3"
-              >
-                {/* Cabecera */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="text-xl flex-shrink-0">{integ.icon}</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{integ.label}</p>
-                      <p className="text-xs text-gray-400 truncate">{integ.desc}</p>
-                    </div>
-                  </div>
-
-                  {integ.comingSoon ? (
-                    <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-1 rounded-full flex-shrink-0">
-                      próximamente
-                    </span>
-                  ) : connected ? (
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {hasError ? (
-                        <span className="text-xs text-red-500 font-medium flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-                          Error
-                        </span>
-                      ) : (
-                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                          Conectado
-                        </span>
-                      )}
-                      <button
-                        onClick={() => handleDisconnect(integ.key)}
-                        disabled={isLoading}
-                        className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
-                      >
-                        {isLoading ? '…' : 'Desconectar'}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleConnect(integ.key)}
-                      disabled={isLoading}
-                      className="px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg transition-colors flex-shrink-0"
-                    >
-                      {isLoading ? 'Conectando…' : 'Conectar'}
-                    </button>
-                  )}
-                </div>
-
-                {/* Property ID para GA4 */}
-                {connected && integ.key === 'google_analytics' && (
-                  <div>
-                    {connected.propertyId ? (
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-400">
-                          Property ID:{' '}
-                          <span className="font-mono text-gray-600 dark:text-gray-300">
-                            {connected.propertyId}
-                          </span>
-                        </p>
-                        <button
-                          onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.propertyId }))}
-                          className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
-                        >
-                          Cambiar
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        Ingresá el GA4 Property ID para ver los datos
-                      </p>
-                    )}
-                    {(propertyInput[integ.key] !== undefined || !connected.propertyId) && (
-                      <div className="flex gap-2 mt-2">
-                        <input
-                          type="text"
-                          value={propertyInput[integ.key] ?? ''}
-                          onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
-                          placeholder="349398319  (solo el número)"
-                          className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                        <button
-                          onClick={() => handleSavePropertyId(integ.key)}
-                          disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
-                          className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
-                        >
-                          {propSaving[integ.key] ? '…' : 'Guardar'}
-                        </button>
-                        {connected.propertyId && (
-                          <button
-                            onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
-                            className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            Cancelar
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {hasError && (
-                      <p className="text-xs text-red-500 mt-1">
-                        El token fue revocado. Desconectá y volvé a conectar.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Customer ID + Manager ID para Google Ads */}
-                {connected && integ.key === 'google_ads' && (
-                  <div className="space-y-3">
-
-                    {/* ── Customer ID (cuenta cliente — obligatorio) ── */}
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                        Customer ID <span className="text-red-400">*</span>
-                      </p>
-                      {connected.customerId ? (
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-xs text-gray-600 dark:text-gray-300">
-                            {connected.customerId}
-                          </span>
-                          <button
-                            onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.customerId }))}
-                            className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
-                          >
-                            Cambiar
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-amber-600 dark:text-amber-400">
-                          Requerido — ID de la cuenta cliente (ej: 123-456-7890)
-                        </p>
-                      )}
-                      {(propertyInput[integ.key] !== undefined || !connected.customerId) && (
-                        <div className="flex gap-2 mt-1.5">
-                          <input
-                            type="text"
-                            value={propertyInput[integ.key] ?? ''}
-                            onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
-                            placeholder="123-456-7890"
-                            className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                          <button
-                            onClick={() => handleSaveCustomerId(integ.key)}
-                            disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
-                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
-                          >
-                            {propSaving[integ.key] ? '…' : 'Guardar'}
-                          </button>
-                          {connected.customerId && (
-                            <button
-                              onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
-                              className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                            >
-                              Cancelar
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* ── Manager ID / MCC (si la cuenta está bajo un Manager Account) ── */}
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                        Manager ID <span className="text-gray-400 font-normal">(MCC — si la cuenta cliente está bajo un Manager Account)</span>
-                      </p>
-                      {connected.propertyId ? (
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-xs text-gray-600 dark:text-gray-300">
-                            {connected.propertyId}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setManagerInput(prev => ({ ...prev, [integ.key]: connected.propertyId }))}
-                              className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
-                            >
-                              Cambiar
-                            </button>
-                            <button
-                              onClick={async () => {
-                                setPropSaving(prev => ({ ...prev, [`${integ.key}_mgr`]: true }))
-                                try {
-                                  const { data } = await api.patch(
-                                    `/marketing/projects/${project.id}/integrations/${integ.key}`,
-                                    { propertyId: null }
-                                  )
-                                  setIntegrations(prev => prev.map(i => i.type === integ.key ? { ...i, ...data } : i))
-                                } finally {
-                                  setPropSaving(prev => ({ ...prev, [`${integ.key}_mgr`]: false }))
-                                }
-                              }}
-                              disabled={propSaving[`${integ.key}_mgr`]}
-                              className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-                            >
-                              Quitar
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-gray-400 dark:text-gray-500">
-                          Sin Manager ID — la cuenta es directa o ya tenés acceso sin MCC
-                        </p>
-                      )}
-                      {managerInput[integ.key] !== undefined && (
-                        <div className="flex gap-2 mt-1.5">
-                          <input
-                            type="text"
-                            value={managerInput[integ.key] ?? ''}
-                            onChange={e => setManagerInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
-                            placeholder="123-456-7890  (ID del Manager Account)"
-                            className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                          <button
-                            onClick={() => handleSaveManagerId(integ.key)}
-                            disabled={propSaving[`${integ.key}_mgr`]}
-                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
-                          >
-                            {propSaving[`${integ.key}_mgr`] ? '…' : 'Guardar'}
-                          </button>
-                          <button
-                            onClick={() => setManagerInput(prev => ({ ...prev, [integ.key]: undefined }))}
-                            className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      )}
-                      {managerInput[integ.key] === undefined && !connected.propertyId && (
-                        <button
-                          onClick={() => setManagerInput(prev => ({ ...prev, [integ.key]: '' }))}
-                          className="mt-1 text-xs text-primary-600 dark:text-primary-400 hover:underline"
-                        >
-                          + Agregar Manager ID
-                        </button>
-                      )}
-                    </div>
-
-                    {hasError && (
-                      <p className="text-xs text-red-500">
-                        El token fue revocado. Desconectá y volvé a conectar.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Site URL para Search Console (opcional; por defecto usa websiteUrl del proyecto) */}
-                {connected && integ.key === 'google_search_console' && (
-                  <div>
-                    {connected.propertyId ? (
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-400">
-                          Site URL:{' '}
-                          <span className="font-mono text-gray-600 dark:text-gray-300 break-all">
-                            {connected.propertyId}
-                          </span>
-                        </p>
-                        <button
-                          onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: connected.propertyId }))}
-                          className="text-xs text-gray-400 hover:text-primary-500 transition-colors ml-2 flex-shrink-0"
-                        >
-                          Cambiar
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-400">
-                        Site URL: se usa la URL del sitio del proyecto
-                        {project.websiteUrl && (
-                          <span className="font-mono ml-1 text-gray-500 dark:text-gray-400">
-                            ({project.websiteUrl})
-                          </span>
-                        )}
-                      </p>
-                    )}
-                    {propertyInput[integ.key] !== undefined && (
-                      <div className="flex gap-2 mt-2">
-                        <input
-                          type="text"
-                          value={propertyInput[integ.key] ?? ''}
-                          onChange={e => setPropertyInput(prev => ({ ...prev, [integ.key]: e.target.value }))}
-                          placeholder="https://ejemplo.com/ o sc-domain:ejemplo.com"
-                          className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                        <button
-                          onClick={() => handleSavePropertyId(integ.key)}
-                          disabled={propSaving[integ.key] || !propertyInput[integ.key]?.trim()}
-                          className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
-                        >
-                          {propSaving[integ.key] ? '…' : 'Guardar'}
-                        </button>
-                        <button
-                          onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: undefined }))}
-                          className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    )}
-                    {!connected.propertyId && propertyInput[integ.key] === undefined && (
-                      <button
-                        onClick={() => setPropertyInput(prev => ({ ...prev, [integ.key]: '' }))}
-                        className="text-xs text-primary-500 hover:text-primary-600 mt-1 transition-colors"
-                      >
-                        Usar una URL diferente
-                      </button>
-                    )}
-                    {hasError && (
-                      <p className="text-xs text-red-500 mt-1">
-                        El token fue revocado. Desconectá y volvé a conectar.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Integraciones Redes Sociales */}
-      <div className="border-t border-gray-200 dark:border-gray-700 pt-5">
-        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
-          Integraciones Redes Sociales
-        </p>
-        <div className="space-y-3">
-          {SOCIAL_INTEGRATIONS.map(integ => {
-            const connected = getIntegration(integ.key)
-            const isLoading = socialLoading[integ.key] || integLoading[integ.key]
-            const isExpired = connected?.status === 'expired'
-            const isError   = connected?.status === 'error'
-
-            return (
-              <div
-                key={integ.key}
-                className="border border-gray-200 dark:border-gray-600 rounded-xl p-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="text-xl flex-shrink-0">{integ.icon}</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{integ.label}</p>
-                      <p className="text-xs text-gray-400 truncate">{integ.desc}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {connected && !isExpired && !isError && (
-                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                        Conectado
-                      </span>
-                    )}
-                    {(isExpired || isError) && (
-                      <span className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
-                        {isExpired ? 'Expirado' : 'Error'}
-                      </span>
-                    )}
-
-                    {connected && !isExpired && !isError ? (
-                      <button
-                        onClick={() => handleDisconnect(integ.key)}
-                        disabled={isLoading}
-                        className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
-                      >
-                        {isLoading ? '…' : 'Desconectar'}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleConnectSocial(integ)}
-                        disabled={isLoading}
-                        className="px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg transition-colors"
-                      >
-                        {isLoading ? 'Conectando…' : isExpired || isError ? 'Reconectar' : 'Conectar'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Info de la cuenta conectada */}
-                {connected && !isExpired && !isError && connected.propertyId && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    ID:{' '}
-                    <span className="font-mono text-gray-500 dark:text-gray-400">{connected.propertyId}</span>
-                    {connected.connectedAt && (
-                      <span className="ml-2">
-                        · conectado {new Date(connected.connectedAt).toLocaleDateString('es-AR')}
-                      </span>
-                    )}
-                  </p>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-      </>)}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-5">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+              Integraciones Redes Sociales
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {SOCIAL_INTEGRATIONS.map(integ => {
+                const connected = getIntegration(integ.key)
+                const { state } = integrationState(integ, connected)
+                const loading = socialLoading[integ.key] || integLoading[integ.key]
+                return (
+                  <IntegrationChip
+                    key={integ.key}
+                    integ={integ}
+                    state={state}
+                    loading={loading}
+                    expanded={expandedKey === integ.key}
+                    onClick={() => handleChipClick(integ, 'social')}
+                  />
+                )
+              })}
+            </div>
+            {SOCIAL_INTEGRATIONS.map(integ => <div key={integ.key}>{renderDetail(integ, 'social')}</div>)}
+          </div>
+        </>
+      )}
 
     </div>
   )
