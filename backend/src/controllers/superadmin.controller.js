@@ -927,23 +927,23 @@ async function getMetrics(req, res, next) {
       mauRow, wauRow, cohortRows,
     ] = await Promise.all([
       prisma.$queryRaw`
-        SELECT (("loginAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day,
+        SELECT (("loginAt" AT TIME ZONE 'UTC' AT TIME ZONE ${METRICS_TZ})::date)::text AS day,
                COUNT(DISTINCT "userId") AS users, COUNT(DISTINCT "workspaceId") AS workspaces
         FROM "UserLogin" WHERE "loginAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day, COUNT(*) AS n
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE ${METRICS_TZ})::date)::text AS day, COUNT(*) AS n
         FROM "Task" WHERE "createdAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("completedAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day, COUNT(*) AS n
+        SELECT (("completedAt" AT TIME ZONE 'UTC' AT TIME ZONE ${METRICS_TZ})::date)::text AS day, COUNT(*) AS n
         FROM "Task" WHERE "completedAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day, COUNT(*) AS n
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE ${METRICS_TZ})::date)::text AS day, COUNT(*) AS n
         FROM "Workspace" WHERE "createdAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day, COUNT(*) AS n
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE ${METRICS_TZ})::date)::text AS day, COUNT(*) AS n
         FROM "User" WHERE "createdAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`
-        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ)::date)::text AS day,
+        SELECT (("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE ${METRICS_TZ})::date)::text AS day,
                COALESCE(SUM("inputTokens" + "outputTokens"), 0) AS n
         FROM "AiTokenLog" WHERE "createdAt" >= ${since} GROUP BY 1`,
       prisma.$queryRaw`SELECT COUNT(DISTINCT "userId") AS n FROM "UserLogin" WHERE "loginAt" >= now() - interval '30 days'`,
@@ -951,7 +951,7 @@ async function getMetrics(req, res, next) {
       // Cohortes semanales: workspaces por semana de alta + cuántos siguen activos (login en últimos 14d)
       prisma.$queryRaw`
         WITH cohort AS (
-          SELECT id, to_char(("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE DEFAULT_TZ), 'IYYY-"W"IW') AS week
+          SELECT id, to_char(("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE ${METRICS_TZ}), 'IYYY-"W"IW') AS week
           FROM "Workspace" WHERE "createdAt" >= ${cohortSince}
         ),
         act AS (
