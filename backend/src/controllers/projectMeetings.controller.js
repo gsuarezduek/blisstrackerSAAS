@@ -1,15 +1,7 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { isAdmin, canWrite } = require('../lib/projectAccess')
-const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
-
-// "45 min" o "1h 20min" — para el mensaje de sistema del chat al cerrar una reunión.
-function durationLabel(mins) {
-  if (mins < 60) return `${mins} min`
-  const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return m > 0 ? `${h}h ${m}min` : `${h}h`
-}
+const { closeMeeting } = require('../lib/projectMeetingLifecycle')
 
 const VALID_TYPE = ['internal', 'client']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -330,36 +322,10 @@ async function finishMeeting(req, res, next) {
     const existing = await loadMeeting(req.params.mid, projectId, workspaceId)
     if (!existing) return res.status(404).json({ error: 'Reunión no encontrada' })
     if (!existing.startedAt) return res.status(400).json({ error: 'La reunión no fue iniciada' })
+    if (existing.endedAt) return res.status(409).json({ error: 'La reunión ya fue finalizada' })
 
-    const now = new Date()
-    const durationMins = Math.max(0, Math.round((now.getTime() - new Date(existing.startedAt).getTime()) / 60000))
-
-    // Completar las tareas de los participantes que sigan en curso (cerrar su sesión).
-    const taskIds = existing.participants.map(p => p.taskId).filter(Boolean)
-    if (taskIds.length) {
-      await prisma.taskSession.updateMany({ where: { taskId: { in: taskIds }, endedAt: null }, data: { endedAt: now } })
-      await prisma.task.updateMany({
-        where: { id: { in: taskIds }, status: 'IN_PROGRESS' },
-        data:  { status: 'COMPLETED', completedAt: now, pausedAt: null },
-      })
-    }
-
-    await prisma.projectMeeting.update({
-      where: { id: existing.id },
-      data:  { endedAt: now, durationMins },
-    })
+    await closeMeeting(existing, { actorName: req.user?.name || 'Alguien' })
     const fresh = await loadMeeting(existing.id, projectId, workspaceId)
-
-    const actorName = req.user?.name || 'Alguien'
-    const typeLabel = existing.type === 'client' ? 'con el cliente' : 'interna'
-    const titlePart = existing.title ? ` "${existing.title}"` : ''
-    const n = existing.participants.length
-    setImmediate(() => {
-      postProjectSystemMessage(
-        projectId, workspaceId, SYSTEM_TYPES.MEETING_HELD,
-        `🗓️ ${actorName} cerró la reunión ${typeLabel}${titlePart} — ${durationLabel(durationMins)}, ${n} participante${n === 1 ? '' : 's'}.`
-      ).catch(() => {})
-    })
 
     res.json(formatMeeting(fresh))
   } catch (err) { next(err) }

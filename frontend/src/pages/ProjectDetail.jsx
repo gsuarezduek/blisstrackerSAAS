@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -66,12 +66,7 @@ export default function ProjectDetail() {
   const [linkForm, setLinkForm] = useState(null) // null = oculto, { label, url } = visible
   const [linkSaving, setLinkSaving] = useState(false)
   const [commentTask, setCommentTask] = useState(null)
-  const [infoTab, setInfoTab] = useState(searchParams.get('infoTab') || 'situacion')
-  const [teamTaskModal, setTeamTaskModal] = useState(false)
-  const [teamTaskDesc, setTeamTaskDesc] = useState('')
-  const [teamTaskSending, setTeamTaskSending] = useState(false)
-  const [teamTaskResult, setTeamTaskResult] = useState(null) // { ok, errors }
-  const teamTaskRef = useRef(null)
+  const [infoTab, setInfoTab] = useState(searchParams.get('infoTab') || 'tareas')
 
   const [projectList, setProjectList] = useState([])
 
@@ -154,33 +149,6 @@ export default function ProjectDetail() {
     const { data: res } = await api.get(`/projects/${encodedId}/tasks`)
     setData(res)
     setShowAddTask(false)
-  }
-
-  async function handleAddTeamTask(e) {
-    e.preventDefault()
-    if (!teamTaskDesc.trim()) return
-    const members = data?.project?.members ?? []
-    if (members.length === 0) return
-    setTeamTaskSending(true)
-    setTeamTaskResult(null)
-    const results = await Promise.allSettled(
-      members.map(pm =>
-        api.post('/tasks', {
-          description: teamTaskDesc.trim(),
-          projectId: data.project.id,
-          targetUserId: pm.user.id,
-        })
-      )
-    )
-    const errors = results
-      .map((r, i) => r.status === 'rejected' ? members[i].user.name : null)
-      .filter(Boolean)
-    setTeamTaskResult({ ok: results.length - errors.length, errors })
-    setTeamTaskDesc('')
-    setTeamTaskSending(false)
-    // Reload tasks
-    const { data: res } = await api.get(`/projects/${encodedId}/tasks`)
-    setData(res)
   }
 
   function handleCommentAdded(taskId, newCount) {
@@ -370,7 +338,7 @@ export default function ProjectDetail() {
               </div>
             </div>
 
-            {/* Info tabs: Situación / Links / Personas / Servicios */}
+            {/* Info tabs: Tareas / Info / Briefs / Reuniones / Reportes */}
             <div className="mb-6">
               {/* Tab bar — mobile select */}
               <div className="mb-3">
@@ -379,8 +347,7 @@ export default function ProjectDetail() {
                   value={infoTab}
                   onChange={e => setInfoTab(e.target.value)}
                 >
-                  {data.project.situationEnabled !== false && <option value="situacion">Situación</option>}
-                  {data.project.linksEnabled !== false && <option value="links">Links/Accesos</option>}
+                  <option value="tareas">Tareas</option>
                   <option value="info">Info</option>
                   {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
                   <option value="reuniones">Reuniones</option>
@@ -388,22 +355,12 @@ export default function ProjectDetail() {
                 </select>
                 {/* Desktop */}
                 <div className="hidden sm:flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
-                  {data.project.situationEnabled !== false && (
-                    <button
-                      onClick={() => setInfoTab('situacion')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'situacion' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                    >
-                      Situación
-                    </button>
-                  )}
-                  {data.project.linksEnabled !== false && (
-                    <button
-                      onClick={() => setInfoTab('links')}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'links' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                    >
-                      Links/Accesos
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setInfoTab('tareas')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'tareas' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                  >
+                    Tareas
+                  </button>
                   <button
                     onClick={() => setInfoTab('info')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'info' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
@@ -433,105 +390,317 @@ export default function ProjectDetail() {
                 </div>
               </div>
 
-              {/* Tab: Situación */}
-              {infoTab === 'situacion' && data.project.situationEnabled !== false && (
-                <ProjectSituation
-                  encodedProjectId={encodedId}
-                  initialContent={data.project.situation || ''}
-                />
-              )}
+              {/* Tab: Tareas — situación de la cuenta + tablero de tareas del proyecto */}
+              {infoTab === 'tareas' && (
+                <div className="space-y-4">
+                  {data.project.situationEnabled !== false && (
+                    <ProjectSituation
+                      encodedProjectId={encodedId}
+                      initialContent={data.project.situation || ''}
+                    />
+                  )}
+                  {/* Empty state for pending */}
+                  {totalPending === 0 && (
+                    <div className="text-center py-10 text-gray-400">
+                      <p className="text-4xl mb-3">🐝</p>
+                      <p className="font-medium">Todo al día</p>
+                      <p className="text-sm mt-1">No hay tareas pendientes en este proyecto</p>
+                    </div>
+                  )}
 
-              {/* Tab: Links útiles */}
-              {infoTab === 'links' && data.project.linksEnabled !== false && (
-               <div className="space-y-4">
-                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Links</p>
-                    {!linkForm && (
+                  {/* Tareas activas por usuario */}
+                  {data?.activeCount > data?.activeLimit && (
+                    <div className="px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl text-xs text-amber-700 dark:text-amber-400">
+                      Mostrando las primeras {data.activeLimit} tareas activas de {data.activeCount} totales. Completá o mové tareas al backlog para ver el resto.
+                    </div>
+                  )}
+
+                  {totalPending > 0 && (
+                    <div className="space-y-4">
+                      {data.byUser
+                        .slice()
+                        .sort((a, b) => {
+                          const aMin = Math.min(...a.tasks.map(t => STATUS_ORDER[t.status]))
+                          const bMin = Math.min(...b.tasks.map(t => STATUS_ORDER[t.status]))
+                          return aMin - bMin || a.user.name.localeCompare(b.user.name)
+                        })
+                        .map(({ user, tasks }) => (
+                          <div key={user.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <button
+                              className="w-full text-left flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
+                              onClick={() => navigate(`/users/${user.id}`)}
+                              title="Ver perfil de esta persona"
+                            >
+                              <Avatar user={user} />
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-900 dark:text-white text-sm leading-tight">{user.name}</p>
+                                <RoleBadge role={user.role} userId={user.id} className="inline-block mt-0.5" />
+                              </div>
+                              <span className="ml-auto text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">
+                                {tasks.length} tarea{tasks.length !== 1 ? 's' : ''}
+                              </span>
+                            </button>
+                            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                              {tasks
+                                .slice()
+                                .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
+                                .map(task => (
+                                  <div key={task.id} className={`flex flex-col gap-1.5 px-4 py-3 ${task.status === 'BLOCKED' ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
+                                    <div className="flex items-start gap-3">
+                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${STATUS_CLASS[task.status]}`}>
+                                        {STATUS_LABEL[task.status]}
+                                      </span>
+                                      <div className="flex-1 min-w-0">
+                                        <p
+                                          onClick={() => setCommentTask(task)}
+                                          className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                                        >{linkify(task.description)}</p>
+                                        {task.createdBy && (
+                                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                                            Creada por {task.createdBy.name.split(' ')[0]}
+                                          </p>
+                                        )}
+                                        <div className="mt-1">
+                                          {(task._count?.comments ?? 0) > 0 ? (
+                                            <button
+                                              onClick={() => setCommentTask(task)}
+                                              className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                                            >
+                                              💬 {task._count.comments} comentario{task._count.comments !== 1 ? 's' : ''}
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={() => setCommentTask(task)}
+                                              title="Agregar comentario"
+                                              className="text-xs text-gray-300 dark:text-gray-600 hover:text-primary-500 dark:hover:text-primary-400 transition-colors"
+                                            >
+                                              💬 Comentar
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {task.status === 'BLOCKED' && task.blockedReason && (
+                                      <div className="ml-0 flex items-start gap-1.5 pl-2 border-l-2 border-red-300 dark:border-red-700">
+                                        <p className="text-xs text-red-600 dark:text-red-400">{task.blockedReason}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        ))}
+
+                    </div>
+                  )}
+
+                  {/* Completadas esta semana */}
+                  {data.completedThisWeek?.length > 0 && (() => {
+                    const totalMins = data.completedThisWeek.reduce((acc, t) => {
+                      if (!t.startedAt || !t.completedAt) return acc
+                      return acc + Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
+                    }, 0)
+                    return (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Completadas esta semana</span>
+                          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">
+                            {data.completedThisWeek.length}
+                          </span>
+                          {totalMins > 0 && (
+                            <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
+                              ⏱ {fmtMins(totalMins)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+                          {data.completedThisWeek.map(task => {
+                            const dur = completedDuration(task)
+                            return (
+                              <div key={task.id} className="flex items-start gap-3 px-4 py-3">
+                                <Avatar user={task.user} size="sm" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
+                                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                    <span>{task.user.name}</span>
+                                    <RoleBadge userId={task.user.id} />
+                                    <span>· {fmtDate(task.completedAt, data?.project?.timezone)}</span>
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                                  <button
+                                    onClick={() => setCommentTask(task)}
+                                    title="Ver comentarios"
+                                    className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                                  >
+                                    💬{(task._count?.comments ?? 0) > 0 ? ` ${task._count.comments}` : ''}
+                                  </button>
+                                  {dur && (
+                                    <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{dur}</span>
+                                  )}
+                                  <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-semibold">✓</span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Archivo histórico */}
+                  <div>
+                    {!archiveOpen ? (
                       <button
-                        onClick={() => setLinkForm({ label: '', url: '' })}
-                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+                        onClick={handleOpenArchive}
+                        className="w-full flex items-center justify-center gap-2 py-3 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
                       >
-                        + Agregar
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                          <path d="M2 3a1 1 0 00-1 1v1a1 1 0 001 1h16a1 1 0 001-1V4a1 1 0 00-1-1H2zM2 7.5h16l-1.573 7.868A2 2 0 0114.465 17H5.535a2 2 0 01-1.962-1.632L2 7.5z" />
+                        </svg>
+                        Ver archivo de tareas completadas
                       </button>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Archivo</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500">todas las tareas completadas</span>
+                        </div>
+                        {archive.length === 0 && !archiveLoading && (
+                          <p className="text-sm text-gray-400 text-center py-8">No hay tareas completadas todavía</p>
+                        )}
+                        {archive.length > 0 && (
+                          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+                            {archive.map(task => (
+                              <div key={task.id} className="flex items-start gap-3 px-4 py-3">
+                                <Avatar user={task.user} size="sm" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
+                                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                    <span>{task.user.name}</span>
+                                    <RoleBadge userId={task.user.id} />
+                                    <span>· {fmtDate(task.completedAt, data?.project?.timezone)}</span>
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => setCommentTask(task)}
+                                  title="Ver comentarios"
+                                  className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex-shrink-0 mt-0.5"
+                                >
+                                  💬{(task._count?.comments ?? 0) > 0 ? ` ${task._count.comments}` : ''}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {archiveLoading && (
+                          <p className="text-sm text-gray-400 text-center py-4">Cargando...</p>
+                        )}
+                        {!archiveLoading && hasMore && (
+                          <button
+                            onClick={() => loadArchive(archiveSkip)}
+                            className="w-full mt-3 py-2.5 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
+                          >
+                            Cargar más
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
-
-                  {(data.project.links ?? []).length === 0 && !linkForm && (
-                    <p className="text-sm text-gray-400 dark:text-gray-500">Sin links por el momento.</p>
-                  )}
-
-                  {(data.project.links ?? []).length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {data.project.links.map(link => (
-                        <div key={link.id} className="flex items-center gap-1 group">
-                          <a
-                            href={link.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-sm text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 border border-primary-100 dark:border-primary-800 rounded-lg px-3 py-1.5 transition-colors"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 flex-shrink-0">
-                              <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z" />
-                              <path d="M11.603 7.963a.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 105.656 5.656l3-3a4 4 0 00-.225-5.865z" />
-                            </svg>
-                            {link.label}
-                          </a>
-                          <button
-                            onClick={() => handleDeleteLink(link.id)}
-                            className="opacity-0 group-hover:opacity-100 ml-0.5 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-all rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
-                            title="Eliminar link"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {linkForm && (
-                    <div className="mt-2 flex flex-wrap gap-2 items-end">
-                      <input
-                        type="text"
-                        placeholder="Nombre"
-                        value={linkForm.label}
-                        onChange={e => setLinkForm(p => ({ ...p, label: e.target.value }))}
-                        className="flex-1 min-w-[120px] text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
-                      />
-                      <input
-                        type="url"
-                        placeholder="https://..."
-                        value={linkForm.url}
-                        onChange={e => setLinkForm(p => ({ ...p, url: e.target.value }))}
-                        onKeyDown={e => e.key === 'Enter' && handleAddLink()}
-                        className="flex-[2] min-w-[180px] text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
-                      />
-                      <button
-                        onClick={handleAddLink}
-                        disabled={linkSaving || !linkForm.label.trim() || !linkForm.url.trim()}
-                        className="text-sm px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
-                      >
-                        {linkSaving ? '...' : 'Guardar'}
-                      </button>
-                      <button
-                        onClick={() => setLinkForm(null)}
-                        className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  )}
                 </div>
-
-                <ProjectAccesos projectId={encodedId} />
-               </div>
               )}
 
-              {/* Tab: Info — incluye Servicios, Equipo e Info del proyecto */}
+              {/* Tab: Info — incluye Links/Accesos, Servicios, Equipo e Info del proyecto */}
               {infoTab === 'info' && (
                 <div className="space-y-4">
+
+                  {/* Links + Accesos */}
+                  {data.project.linksEnabled !== false && (
+                    <>
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Links</p>
+                          {!linkForm && (
+                            <button
+                              onClick={() => setLinkForm({ label: '', url: '' })}
+                              className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
+                            >
+                              + Agregar
+                            </button>
+                          )}
+                        </div>
+
+                        {(data.project.links ?? []).length === 0 && !linkForm && (
+                          <p className="text-sm text-gray-400 dark:text-gray-500">Sin links por el momento.</p>
+                        )}
+
+                        {(data.project.links ?? []).length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {data.project.links.map(link => (
+                              <div key={link.id} className="flex items-center gap-1 group">
+                                <a
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 text-sm text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/40 border border-primary-100 dark:border-primary-800 rounded-lg px-3 py-1.5 transition-colors"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 flex-shrink-0">
+                                    <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z" />
+                                    <path d="M11.603 7.963a.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 105.656 5.656l3-3a4 4 0 00-.225-5.865z" />
+                                  </svg>
+                                  {link.label}
+                                </a>
+                                <button
+                                  onClick={() => handleDeleteLink(link.id)}
+                                  className="opacity-0 group-hover:opacity-100 ml-0.5 w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-all rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  title="Eliminar link"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                                    <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {linkForm && (
+                          <div className="mt-2 flex flex-wrap gap-2 items-end">
+                            <input
+                              type="text"
+                              placeholder="Nombre"
+                              value={linkForm.label}
+                              onChange={e => setLinkForm(p => ({ ...p, label: e.target.value }))}
+                              className="flex-1 min-w-[120px] text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                            />
+                            <input
+                              type="url"
+                              placeholder="https://..."
+                              value={linkForm.url}
+                              onChange={e => setLinkForm(p => ({ ...p, url: e.target.value }))}
+                              onKeyDown={e => e.key === 'Enter' && handleAddLink()}
+                              className="flex-[2] min-w-[180px] text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                            />
+                            <button
+                              onClick={handleAddLink}
+                              disabled={linkSaving || !linkForm.label.trim() || !linkForm.url.trim()}
+                              className="text-sm px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+                            >
+                              {linkSaving ? '...' : 'Guardar'}
+                            </button>
+                            <button
+                              onClick={() => setLinkForm(null)}
+                              className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <ProjectAccesos projectId={encodedId} />
+                    </>
+                  )}
 
                   {/* Servicios */}
                   {(data.project.services?.length > 0 || authUser?.isAdmin) && (
@@ -672,285 +841,6 @@ export default function ProjectDetail() {
               {/* Tab: Reportes — horas y tareas completadas por mes, histórico */}
               {infoTab === 'reportes' && (
                 <ProjectReports projectId={data.project.id} />
-              )}
-            </div>
-
-            {/* Empty state for pending */}
-            {totalPending === 0 && (
-              <div className="text-center py-10 text-gray-400">
-                <p className="text-4xl mb-3">🐝</p>
-                <p className="font-medium">Todo al día</p>
-                <p className="text-sm mt-1">No hay tareas pendientes en este proyecto</p>
-              </div>
-            )}
-
-            {/* Tareas activas por usuario */}
-            {data?.activeCount > data?.activeLimit && (
-              <div className="mb-4 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl text-xs text-amber-700 dark:text-amber-400">
-                Mostrando las primeras {data.activeLimit} tareas activas de {data.activeCount} totales. Completá o mové tareas al backlog para ver el resto.
-              </div>
-            )}
-
-            {/* Agregar tarea a todo el equipo — solo admins, siempre visible */}
-            {authUser?.isAdmin && (
-              <div className="mb-4 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600 overflow-hidden">
-                <button
-                  className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                  onClick={() => { setTeamTaskModal(v => !v); setTeamTaskResult(null); setTeamTaskDesc('') }}
-                >
-                  <div className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 dark:text-gray-500">
-                      <path d="M11 5a3 3 0 11-6 0 3 3 0 016 0zM2.615 16.428a1.224 1.224 0 01-.569-1.175 6.002 6.002 0 0111.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 018 18a9.953 9.953 0 01-5.385-1.572zM16.25 5.75a.75.75 0 00-1.5 0v2h-2a.75.75 0 000 1.5h2v2a.75.75 0 001.5 0v-2h2a.75.75 0 000-1.5h-2v-2z" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Agregar tarea a todo el equipo</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">{data?.project?.members?.length ?? 0} personas</p>
-                  </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                    className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${teamTaskModal ? 'rotate-180' : ''}`}
-                  >
-                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                  </svg>
-                </button>
-                {teamTaskModal && (
-                  <div className="px-4 pb-4 pt-1 border-t border-gray-100 dark:border-gray-700">
-                    <form onSubmit={handleAddTeamTask} className="space-y-3">
-                      <textarea
-                        ref={teamTaskRef}
-                        autoFocus
-                        rows={2}
-                        value={teamTaskDesc}
-                        onChange={e => setTeamTaskDesc(e.target.value)}
-                        placeholder="Descripción de la tarea..."
-                        className="w-full border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
-                      />
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="submit"
-                          disabled={teamTaskSending || !teamTaskDesc.trim()}
-                          className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl px-4 py-2 transition-colors disabled:opacity-50"
-                        >
-                          {teamTaskSending ? (
-                            <>
-                              <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                              </svg>
-                              Enviando...
-                            </>
-                          ) : `Asignar a ${data?.project?.members?.length ?? 0} personas`}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setTeamTaskModal(false); setTeamTaskResult(null) }}
-                          className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                      {teamTaskResult && (
-                        <div className={`text-xs rounded-lg px-3 py-2 ${teamTaskResult.errors.length > 0 ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400' : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'}`}>
-                          {teamTaskResult.ok > 0 && <span>✓ Tarea asignada a {teamTaskResult.ok} persona{teamTaskResult.ok !== 1 ? 's' : ''}.</span>}
-                          {teamTaskResult.errors.length > 0 && <span> Error en: {teamTaskResult.errors.join(', ')}.</span>}
-                        </div>
-                      )}
-                    </form>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {totalPending > 0 && (
-              <div className="space-y-4 mb-8">
-                {data.byUser
-                  .slice()
-                  .sort((a, b) => {
-                    const aMin = Math.min(...a.tasks.map(t => STATUS_ORDER[t.status]))
-                    const bMin = Math.min(...b.tasks.map(t => STATUS_ORDER[t.status]))
-                    return aMin - bMin || a.user.name.localeCompare(b.user.name)
-                  })
-                  .map(({ user, tasks }) => (
-                    <div key={user.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                      <button
-                        className="w-full text-left flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
-                        onClick={() => navigate(`/users/${user.id}`)}
-                        title="Ver perfil de esta persona"
-                      >
-                        <Avatar user={user} />
-                        <div className="min-w-0">
-                          <p className="font-semibold text-gray-900 dark:text-white text-sm leading-tight">{user.name}</p>
-                          <RoleBadge role={user.role} userId={user.id} className="inline-block mt-0.5" />
-                        </div>
-                        <span className="ml-auto text-xs font-medium text-gray-500 dark:text-gray-400 flex-shrink-0">
-                          {tasks.length} tarea{tasks.length !== 1 ? 's' : ''}
-                        </span>
-                      </button>
-                      <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {tasks
-                          .slice()
-                          .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
-                          .map(task => (
-                            <div key={task.id} className={`flex flex-col gap-1.5 px-4 py-3 ${task.status === 'BLOCKED' ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
-                              <div className="flex items-start gap-3">
-                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${STATUS_CLASS[task.status]}`}>
-                                  {STATUS_LABEL[task.status]}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                  <p
-                                    onClick={() => setCommentTask(task)}
-                                    className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                                  >{linkify(task.description)}</p>
-                                  {task.createdBy && (
-                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                                      Creada por {task.createdBy.name.split(' ')[0]}
-                                    </p>
-                                  )}
-                                  <div className="mt-1">
-                                    {(task._count?.comments ?? 0) > 0 ? (
-                                      <button
-                                        onClick={() => setCommentTask(task)}
-                                        className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                                      >
-                                        💬 {task._count.comments} comentario{task._count.comments !== 1 ? 's' : ''}
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => setCommentTask(task)}
-                                        title="Agregar comentario"
-                                        className="text-xs text-gray-300 dark:text-gray-600 hover:text-primary-500 dark:hover:text-primary-400 transition-colors"
-                                      >
-                                        💬 Comentar
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              {task.status === 'BLOCKED' && task.blockedReason && (
-                                <div className="ml-0 flex items-start gap-1.5 pl-2 border-l-2 border-red-300 dark:border-red-700">
-                                  <p className="text-xs text-red-600 dark:text-red-400">{task.blockedReason}</p>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  ))}
-
-              </div>
-            )}
-
-            {/* Completadas esta semana */}
-            {data.completedThisWeek?.length > 0 && (() => {
-              const totalMins = data.completedThisWeek.reduce((acc, t) => {
-                if (!t.startedAt || !t.completedAt) return acc
-                return acc + Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
-              }, 0)
-              return (
-                <div className="mb-8">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Completadas esta semana</span>
-                    <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">
-                      {data.completedThisWeek.length}
-                    </span>
-                    {totalMins > 0 && (
-                      <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
-                        ⏱ {fmtMins(totalMins)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
-                    {data.completedThisWeek.map(task => {
-                      const dur = completedDuration(task)
-                      return (
-                        <div key={task.id} className="flex items-start gap-3 px-4 py-3">
-                          <Avatar user={task.user} size="sm" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                              <span>{task.user.name}</span>
-                              <RoleBadge userId={task.user.id} />
-                              <span>· {fmtDate(task.completedAt, data?.project?.timezone)}</span>
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-                            <button
-                              onClick={() => setCommentTask(task)}
-                              title="Ver comentarios"
-                              className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                            >
-                              💬{(task._count?.comments ?? 0) > 0 ? ` ${task._count.comments}` : ''}
-                            </button>
-                            {dur && (
-                              <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{dur}</span>
-                            )}
-                            <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-semibold">✓</span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Archivo histórico */}
-            <div className="mb-8">
-              {!archiveOpen ? (
-                <button
-                  onClick={handleOpenArchive}
-                  className="w-full flex items-center justify-center gap-2 py-3 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                    <path d="M2 3a1 1 0 00-1 1v1a1 1 0 001 1h16a1 1 0 001-1V4a1 1 0 00-1-1H2zM2 7.5h16l-1.573 7.868A2 2 0 0114.465 17H5.535a2 2 0 01-1.962-1.632L2 7.5z" />
-                  </svg>
-                  Ver archivo de tareas completadas
-                </button>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Archivo</span>
-                    <span className="text-xs text-gray-400 dark:text-gray-500">todas las tareas completadas</span>
-                  </div>
-                  {archive.length === 0 && !archiveLoading && (
-                    <p className="text-sm text-gray-400 text-center py-8">No hay tareas completadas todavía</p>
-                  )}
-                  {archive.length > 0 && (
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
-                      {archive.map(task => (
-                        <div key={task.id} className="flex items-start gap-3 px-4 py-3">
-                          <Avatar user={task.user} size="sm" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                              <span>{task.user.name}</span>
-                              <RoleBadge userId={task.user.id} />
-                              <span>· {fmtDate(task.completedAt, data?.project?.timezone)}</span>
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => setCommentTask(task)}
-                            title="Ver comentarios"
-                            className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex-shrink-0 mt-0.5"
-                          >
-                            💬{(task._count?.comments ?? 0) > 0 ? ` ${task._count.comments}` : ''}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {archiveLoading && (
-                    <p className="text-sm text-gray-400 text-center py-4">Cargando...</p>
-                  )}
-                  {!archiveLoading && hasMore && (
-                    <button
-                      onClick={() => loadArchive(archiveSkip)}
-                      className="w-full mt-3 py-2.5 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
-                    >
-                      Cargar más
-                    </button>
-                  )}
-                </>
               )}
             </div>
 

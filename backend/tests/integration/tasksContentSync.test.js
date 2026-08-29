@@ -8,6 +8,7 @@ jest.mock('../../src/lib/prisma', () => ({
   taskFollow:         { findMany: jest.fn() },
   eOSTodo:            { updateMany: jest.fn() },
   projectMeetingTodo: { updateMany: jest.fn() },
+  projectMeetingParticipant: { findUnique: jest.fn() },
   leadAction:         { updateMany: jest.fn(), findUnique: jest.fn() },
   contentPiece:       { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
   contentStatusEvent: { create: jest.fn() },

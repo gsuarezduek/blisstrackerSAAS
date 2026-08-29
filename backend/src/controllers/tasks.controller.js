@@ -7,6 +7,7 @@ const { isAdmin } = require('../lib/projectAccess')
 const { resolveMentions } = require('../lib/mentions')
 const { emitTo } = require('../lib/socket')
 const { nextOnTaskDone } = require('../lib/contentCatalog')
+const { maybeAutoFinishMeeting } = require('../lib/projectMeetingLifecycle')
 const { statusSideEffects, logEvent, loadPiece, formatPiece } = require('./content.controller')
 
 // Resuelve @menciones de un texto contra los miembros activos del workspace (cualquiera
@@ -389,6 +390,15 @@ async function completeTask(req, res, next) {
     // Si la tarea está vinculada a un To-Do (L10 o reunión de proyecto), tildarlo (sync un sentido: tarea → To-Do).
     await prisma.eOSTodo.updateMany({ where: { taskId: task.id }, data: { done: true, completedAt: now } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId: task.id }, data: { done: true, completedAt: now } })
+
+    // Si la tarea es la de un participante de una reunión de proyecto, la reunión se
+    // cierra sola en cuanto TODOS los participantes hayan completado la suya —
+    // nadie tiene que entrar a la pestaña de Reuniones a apretar "Finalizar".
+    const meetingParticipant = await prisma.projectMeetingParticipant.findUnique({
+      where:  { taskId: task.id },
+      select: { meetingId: true },
+    })
+    if (meetingParticipant) await maybeAutoFinishMeeting(meetingParticipant.meetingId)
 
     // Si viene de una pieza de Contenido, avanzarla — a diferencia de los to-dos de
     // arriba esto NO es un updateMany ciego: hace falta leer el estado ACTUAL de la
