@@ -233,6 +233,7 @@ export default function Dashboard() {
   const [dismissing, setDismissing] = useState(false)
   const [seguimientoSeen, setSeguimientoSeen] = useState(() => loadSeguimientoSeen(user?.id))
   const [backlogOpen,       setBacklogOpen]       = useState(false)
+  const [backlogOpenProjects, setBacklogOpenProjects] = useState(() => new Set())
   const [completedOpen,     setCompletedOpen]     = useState(false)
   const [completedHistory,  setCompletedHistory]  = useState([])
   const [completedSkip,     setCompletedSkip]     = useState(0)
@@ -453,6 +454,26 @@ export default function Dashboard() {
     [...tasks.filter(t => t.isBacklog), ...carryOverPending].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
     [tasks, carryOverPending]
   )
+
+  // Backlog agrupado por proyecto (mismo criterio que seguimientoByProject: el orden de los
+  // grupos sigue el de la primera aparición en allBacklog, que ya viene newest-first).
+  const backlogByProject = useMemo(() => {
+    const map = {}
+    for (const t of allBacklog) {
+      const pid = t.project.id
+      if (!map[pid]) map[pid] = { project: t.project, tasks: [] }
+      map[pid].tasks.push(t)
+    }
+    return Object.values(map)
+  }, [allBacklog])
+
+  function toggleBacklogProject(pid) {
+    setBacklogOpenProjects(prev => {
+      const next = new Set(prev)
+      if (next.has(pid)) next.delete(pid); else next.add(pid)
+      return next
+    })
+  }
 
   const activeTask = useMemo(() => focusTasks.find(t => t.status === 'IN_PROGRESS') ?? null, [focusTasks])
 
@@ -910,19 +931,50 @@ export default function Dashboard() {
             </button>
 
             {backlogOpen && (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 mt-2">
-                {allBacklog.map(t => (
-                  <TaskCard
-                    key={t.id}
-                    task={t}
-                    onUpdate={handleUpdateTask}
-                    onDelete={handleDeleteTask}
-                    hasActiveTask={hasActiveTask}
-                    backlog
-                    onAddToToday={handleAddToToday}
-                    onOpenComments={setCommentTask}
-                  />
-                ))}
+              <div className="space-y-1 mt-2">
+                {backlogByProject.map(({ project, tasks: projectTasks }) => {
+                  const isOpen = backlogOpenProjects.has(project.id)
+                  return (
+                    <div key={project.id}>
+                      <button
+                        onClick={() => toggleBacklogProject(project.id)}
+                        className="w-full flex items-center justify-between py-2 px-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
+                          >
+                            <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clipRule="evenodd" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{project.name}</span>
+                        </div>
+                        <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
+                          {projectTasks.length}
+                        </span>
+                      </button>
+
+                      {isOpen && (
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 mt-1 mb-2 pl-2">
+                          {projectTasks.map(t => (
+                            <TaskCard
+                              key={t.id}
+                              task={t}
+                              onUpdate={handleUpdateTask}
+                              onDelete={handleDeleteTask}
+                              hasActiveTask={hasActiveTask}
+                              backlog
+                              onAddToToday={handleAddToToday}
+                              onOpenComments={setCommentTask}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </section>
