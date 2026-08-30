@@ -733,6 +733,70 @@ async function sendProductivityDigestEmail(emails, workspaceName, digest, appUrl
   }
 }
 
+// Aviso semanal de Prioridades (Marketing) a admins/owners: proyectos con pendientes.
+// digest = { projects: [{ projectId, projectName, total, high }] }
+async function sendMarketingDigestEmail(emails, workspaceName, digest, appUrl, workspaceId, { isTest = false } = {}) {
+  const from = await getEmailFrom(workspaceId)
+  const n = digest.projects.length
+  const testTag = isTest ? '[prueba] ' : ''
+  const subject = n === 0
+    ? `${testTag}🎯 Prioridades de Marketing: todo al día en ${workspaceName}`
+    : `${testTag}🎯 Prioridades de Marketing: ${n} ${n === 1 ? 'proyecto tiene' : 'proyectos tienen'} pendientes en ${workspaceName}`
+
+  const rows = digest.projects.map(p => `
+    <tr>
+      <td style="padding:10px 0;border-top:1px solid #f1f5f9;">
+        <span style="color:#1e293b;font-size:14px;font-weight:600;">${escHtml(p.projectName)}</span>
+      </td>
+      <td style="padding:10px 0;border-top:1px solid #f1f5f9;text-align:right;white-space:nowrap;vertical-align:top;">
+        ${p.high > 0 ? `<span style="display:inline-block;background:#dc26261a;color:#dc2626;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;">${p.high} alta${p.high === 1 ? '' : 's'}</span>` : ''}
+        <br><span style="color:#94a3b8;font-size:12px;">${p.total} pendiente${p.total === 1 ? '' : 's'}</span>
+      </td>
+    </tr>`).join('')
+
+  const testNote = isTest
+    ? `<p style="color:#94a3b8;font-size:12px;margin:0 0 16px;text-align:center;background:#f8fafc;border-radius:8px;padding:8px;">Este es un envío de prueba que pediste desde Preferencias. El aviso automático se manda los lunes y solo cuando hay pendientes.</p>`
+    : ''
+
+  const inner = n === 0
+    ? `
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 6px;font-size:20px;">🎯 Prioridades de Marketing</h2>
+          ${testNote}
+          <p style="color:#475569;margin:0 0 20px;font-size:14px;">✅ No hay pendientes de alta prioridad en ningún proyecto de <strong>${escHtml(workspaceName)}</strong> ahora mismo.</p>
+          <div style="text-align:center;margin-top:8px;">
+            <a href="${appUrl}" style="display:inline-block;background:#F7931A;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 22px;border-radius:8px;">Ver Prioridades</a>
+          </div>
+        </div>`
+    : `
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 6px;font-size:20px;">🎯 Prioridades de Marketing</h2>
+          ${testNote}
+          <p style="color:#475569;margin:0 0 20px;font-size:14px;">
+            <strong>${n}</strong> ${n === 1 ? 'proyecto tiene' : 'proyectos tienen'} recomendaciones pendientes en <strong>${escHtml(workspaceName)}</strong>.
+          </p>
+          <table style="width:100%;border-collapse:collapse;">${rows}</table>
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${appUrl}" style="display:inline-block;background:#F7931A;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 22px;border-radius:8px;">Ver Prioridades</a>
+          </div>
+          <p style="color:#94a3b8;font-size:12px;margin:20px 0 0;text-align:center;">Solo te avisamos cuando hay pendientes de alta prioridad. Podés desactivar este aviso en Preferencias → Globales.</p>
+        </div>`
+
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: emails,
+      subject,
+      html: emailShell(inner),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'marketingDigest', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: emails.join(','), subject, type: 'marketingDigest', status: 'failed', errorMsg: err.message })
+    throw err
+  }
+}
+
 // Recordatorio diario de Ventas: próximas acciones para hoy + vencidas del responsable.
 async function sendSalesReminderEmail(email, { name, workspaceName, today = [], overdue = [], appUrl, tz = 'America/Argentina/Buenos_Aires' }, workspaceId) {
   const from = await getEmailFrom(workspaceId)
@@ -1024,6 +1088,7 @@ module.exports = {
   sendVerificationEmail,
   sendLateNotificationEmail,
   sendProductivityDigestEmail,
+  sendMarketingDigestEmail,
   sendSalesReminderEmail,
   sendWeeklySummaryEmail,
   sendInvitationEmail,

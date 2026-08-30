@@ -3,6 +3,8 @@ const { todayString, DEFAULT_TZ} = require('../utils/dates')
 const { DEFAULT_LATE_TEMPLATE } = require('../services/lateNotification.service')
 const { createProject } = require('../services/projects.service')
 const { canWrite } = require('../lib/projectAccess')
+const { MARKETING_SECTION_IDS } = require('../lib/marketingSections')
+const { sendTestDigest: sendMarketingDigestTest } = require('../services/marketingDigest.service')
 
 function weekMondayStr(tz) {
   const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : DEFAULT_TZ
@@ -416,6 +418,9 @@ async function getGlobalSettings(req, res, next) {
       productivityEnabled: workspace.productivityEnabled ?? true,
       productivityDigestEnabled: workspace.productivityDigestEnabled ?? true,
       adsAdvisorAutoEnabled: workspace.adsAdvisorAutoEnabled ?? true,
+      marketingDisabledSections: JSON.parse(workspace.marketingDisabledSections || '[]'),
+      marketingDigestEnabled: workspace.marketingDigestEnabled ?? true,
+      seoAlertsEnabled: workspace.seoAlertsEnabled ?? true,
       lateToleranceMins: workspace.lateToleranceMins ?? 0,
       lateNotifyEnabled: workspace.lateNotifyEnabled ?? false,
       lateNotifyThreshold: workspace.lateNotifyThreshold ?? 3,
@@ -484,7 +489,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, marketingDisabledSections, marketingDigestEnabled, seoAlertsEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -497,6 +502,18 @@ async function saveGlobalSettings(req, res, next) {
     if (productivityEnabled !== undefined) workspaceData.productivityEnabled = Boolean(productivityEnabled)
     if (productivityDigestEnabled !== undefined) workspaceData.productivityDigestEnabled = Boolean(productivityDigestEnabled)
     if (adsAdvisorAutoEnabled !== undefined) workspaceData.adsAdvisorAutoEnabled = Boolean(adsAdvisorAutoEnabled)
+    if (marketingDigestEnabled !== undefined) workspaceData.marketingDigestEnabled = Boolean(marketingDigestEnabled)
+    if (seoAlertsEnabled !== undefined) workspaceData.seoAlertsEnabled = Boolean(seoAlertsEnabled)
+    if (marketingDisabledSections !== undefined) {
+      if (!Array.isArray(marketingDisabledSections) || marketingDisabledSections.some(id => !MARKETING_SECTION_IDS.includes(id))) {
+        return res.status(400).json({ error: 'marketingDisabledSections inválido' })
+      }
+      const unique = [...new Set(marketingDisabledSections)]
+      if (unique.length >= MARKETING_SECTION_IDS.length) {
+        return res.status(400).json({ error: 'Debe quedar al menos una sección de Marketing habilitada' })
+      }
+      workspaceData.marketingDisabledSections = JSON.stringify(unique)
+    }
     if (lateToleranceMins !== undefined) {
       const t = Number(lateToleranceMins)
       if (!Number.isInteger(t) || t < 0 || t > 120) {
@@ -574,6 +591,14 @@ async function testLateNotification(req, res, next) {
       : (req.workspace.lateNotifyTemplate || DEFAULT_LATE_TEMPLATE)
     await sendLateNotificationEmail(user.email, user.name, req.workspace.name, tpl, req.workspace.id)
     res.json({ ok: true, sentTo: user.email })
+  } catch (err) { next(err) }
+}
+
+// Envía el digest semanal de Prioridades (Marketing) al admin actual, como vista previa.
+async function testMarketingDigest(req, res, next) {
+  try {
+    const r = await sendMarketingDigestTest(req.workspace, req.user.email)
+    res.json(r)
   } catch (err) { next(err) }
 }
 
@@ -737,4 +762,4 @@ async function deleteAccess(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, testLateNotification, getAiUsage, getMembers, toggleStar, listAccesses, addAccess, revealAccess, deleteAccess }
+module.exports = { list, listAll, create, update, projectTasks, projectCompletedHistory, saveLinks, saveSituation, saveInfo, getGlobalSettings, saveGlobalSettings, testLateNotification, testMarketingDigest, getAiUsage, getMembers, toggleStar, listAccesses, addAccess, revealAccess, deleteAccess }

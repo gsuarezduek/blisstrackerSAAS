@@ -217,7 +217,7 @@ Respondé SOLO con un JSON válido, sin markdown ni texto adicional:
     generatedAt: new Date().toISOString(),
   }
 
-  // Cachea el último resultado para que el panel "Hoy" (marketingPending.service.js)
+  // Cachea el último resultado para que el panel "Prioridades" (marketingPending.service.js)
   // pueda leerlo sin volver a pegarle a Claude. Best-effort: un fallo acá no debe
   // romper la respuesta que el usuario ya está esperando.
   await prisma.adsAdvisorResult.upsert({

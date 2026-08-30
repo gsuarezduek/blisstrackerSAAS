@@ -95,6 +95,7 @@ const { runWeeklyAdsAdvisor }             = require('./services/adsAdvisor.servi
 const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnapshot.service')
 const { saveAllPreviousMonthSnapshots: saveAllPrevRrhhMetrics } = require('./services/rrhhMetricSnapshot.service')
 const { sendAllProductivityDigests } = require('./services/productivityDigest.service')
+const { sendAllMarketingDigests }    = require('./services/marketingDigest.service')
 
 // La exclusión mutua (dentro del proceso y ENTRE instancias/réplicas) la maneja
 // `runCron(name, ttlMs, fn)` vía una lease en DB (ver lib/cronLock.js). El TTL de
@@ -283,6 +284,13 @@ cron.schedule('0 8 * * 1', () => runCron('productivityDigest', 30 * 60 * 1000, a
   console.log('[ProductivityDigest] Iniciando aviso semanal...')
   try { await sendAllProductivityDigests() }
   catch (err) { console.error('[ProductivityDigest] Error en cron semanal:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
+// Cron: aviso semanal de Prioridades (Marketing) a admins/owners — lunes 08:15 ART
+cron.schedule('15 8 * * 1', () => runCron('marketingDigest', 30 * 60 * 1000, async () => {
+  console.log('[MarketingDigest] Iniciando aviso semanal...')
+  try { await sendAllMarketingDigests() }
+  catch (err) { console.error('[MarketingDigest] Error en cron semanal:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
 // Cron: recordatorios de Ventas (próximas acciones para hoy / vencidas) — diario 08:00 ART

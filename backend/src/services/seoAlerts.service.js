@@ -87,7 +87,7 @@ async function checkAndSendAllSeoAlerts() {
   const prevMonth = prevMonthStr(month)
 
   const workspaces = await prisma.workspace.findMany({
-    where:  { status: { notIn: ['suspended', 'cancelled'] } },
+    where:  { status: { notIn: ['suspended', 'cancelled'] }, seoAlertsEnabled: true },
     select: { id: true, name: true, slug: true },
   })
 

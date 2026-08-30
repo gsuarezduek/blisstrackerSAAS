@@ -3,11 +3,11 @@ const {
   dismissFinding, listDismissedFindings, undismissFinding,
 } = require('../services/marketingPending.service')
 
-const VALID_SOURCES = new Set(['geo', 'cannibal', 'pagespeed', 'keywords', 'objective', 'content', 'ads_advisor'])
+const VALID_SOURCES = new Set(['geo', 'cannibal', 'pagespeed', 'keywords', 'objective', 'content', 'ads_advisor', 'report'])
 
 /**
  * GET /api/marketing/projects/:id/pending
- * Backlog único de pendientes accionables del proyecto (panel "Hoy").
+ * Backlog único de pendientes accionables del proyecto (panel "Prioridades").
  */
 async function getProjectPending(req, res, next) {
   try {
@@ -21,7 +21,7 @@ async function getProjectPending(req, res, next) {
 
 /**
  * GET /api/marketing/summary/pending
- * Vista cross-proyecto: proyectos activos con pendientes, para el panel "Hoy" sin
+ * Vista cross-proyecto: proyectos activos con pendientes, para el panel "Prioridades" sin
  * proyecto seleccionado.
  */
 async function getWorkspacePending(req, res, next) {
@@ -34,7 +34,7 @@ async function getWorkspacePending(req, res, next) {
 
 /**
  * POST /api/marketing/projects/:id/pending/dismiss
- * body: { source, title } — ignora un hallazgo del panel "Hoy".
+ * body: { source, title } — ignora un hallazgo del panel "Prioridades".
  */
 async function dismiss(req, res, next) {
   try {

@@ -25,6 +25,7 @@ export default function Preferences() {
   const [globalSettingsError, setGlobalSettingsError] = useState(false)
   const [lateTest,            setLateTest]            = useState({ sending: false, msg: '', error: false })
   const [digestTest,          setDigestTest]          = useState({ sending: false, msg: '', error: false })
+  const [marketingDigestTest, setMarketingDigestTest] = useState({ sending: false, msg: '', error: false })
   const [aiUsage,             setAiUsage]             = useState(null)
   const [aiUsageError,        setAiUsageError]        = useState(false)
   const [wsFeatures,          setWsFeatures]          = useState(null)
@@ -228,6 +229,20 @@ export default function Preferences() {
       setDigestTest({ sending: false, msg: err.response?.data?.error || 'No se pudo enviar el aviso de prueba.', error: true })
     }
     setTimeout(() => setDigestTest(s => ({ ...s, msg: '' })), 6000)
+  }
+
+  async function handleSendMarketingDigestNow() {
+    setMarketingDigestTest({ sending: true, msg: '', error: false })
+    try {
+      const { data } = await api.post('/projects/settings/marketing-digest/test')
+      const detail = data.count > 0
+        ? `${data.count} proyecto${data.count === 1 ? '' : 's'} con pendientes`
+        : 'todo al día, sin pendientes'
+      setMarketingDigestTest({ sending: false, msg: `Enviado a ${data.to} · ${detail}`, error: false })
+    } catch (err) {
+      setMarketingDigestTest({ sending: false, msg: err.response?.data?.error || 'No se pudo enviar el aviso de prueba.', error: true })
+    }
+    setTimeout(() => setMarketingDigestTest(s => ({ ...s, msg: '' })), 6000)
   }
 
   async function handleToggleWeekly() {
@@ -562,12 +577,46 @@ export default function Preferences() {
                 </p>
 
                 <div className="space-y-5">
-                  <div className="flex items-start justify-between gap-4 py-4">
+                  <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Análisis automático de Ads (IA)</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las cuentas de Meta Ads / Google Ads conectadas de todos los proyectos y guarda el diagnóstico para el panel "Hoy" — no hace falta apretar "Analizar" a mano. Solo corre en proyectos con una cuenta de ads conectada.</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las cuentas de Meta Ads / Google Ads conectadas de todos los proyectos y guarda el diagnóstico para el panel "Prioridades" — no hace falta apretar "Analizar" a mano. Solo corre en proyectos con una cuenta de ads conectada.</p>
                     </div>
                     <Toggle on={globalSettings.adsAdvisorAutoEnabled !== false} onToggle={() => handleGlobalSetting({ adsAdvisorAutoEnabled: !(globalSettings.adsAdvisorAutoEnabled !== false) })} />
+                  </div>
+
+                  <div className="py-4 border-b dark:border-gray-700">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Aviso semanal de Prioridades por email</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Todos los lunes, si hay proyectos con recomendaciones de alta prioridad pendientes en Marketing (SEO/GEO, objetivos, RRSS, Ads, informes), se manda un resumen a los admins/owners.</p>
+                      </div>
+                      <Toggle on={globalSettings.marketingDigestEnabled !== false} onToggle={() => handleGlobalSetting({ marketingDigestEnabled: !(globalSettings.marketingDigestEnabled !== false) })} />
+                    </div>
+                    {globalSettings.marketingDigestEnabled !== false && (
+                      <div className="mt-4 ml-1 pl-4 border-l-2 border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <button
+                            onClick={handleSendMarketingDigestNow}
+                            disabled={marketingDigestTest.sending}
+                            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                          >
+                            {marketingDigestTest.sending ? 'Enviando…' : '✉️ Enviar ahora a mi correo'}
+                          </button>
+                          {marketingDigestTest.msg && (
+                            <span className={`text-xs ${marketingDigestTest.error ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{marketingDigestTest.msg}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-start justify-between gap-4 py-4">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Alertas SEO automáticas</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Compara Search Console del mes cerrado vs. el anterior y avisa por email a los admins si hay caídas relevantes (clicks, posición, Domain Rating, keywords fuera del top 10). Corre el 1° de cada mes.</p>
+                    </div>
+                    <Toggle on={globalSettings.seoAlertsEnabled !== false} onToggle={() => handleGlobalSetting({ seoAlertsEnabled: !(globalSettings.seoAlertsEnabled !== false) })} />
                   </div>
                 </div>
               </div>

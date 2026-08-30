@@ -3,9 +3,32 @@ const { todayString, DEFAULT_TZ } = require('../utils/dates')
 const { createTtlCache } = require('../lib/ttlCache')
 const { computeSeoActionItems, PRIORITY_WEIGHT } = require('./seoActionPlan.service')
 const { computeObjectives } = require('./marketingObjectives.service')
+const { prevMonthStr, monthLabel } = require('../lib/monthUtils')
+const { MARKETING_SECTION_IDS } = require('../lib/marketingSections')
 
 const ADS_PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads' }
 const ADS_PLATFORM_SUB   = { meta_ads: 'meta-ads', google_ads: 'google-ads' }
+
+// Bucket de "Prioridades" (id de NAV de Marketing) al que pertenece cada item, para
+// agrupar y limitar a top-3 por sección. `content` no mapea a ninguna de las 6
+// secciones toggleables — vive en su propio bucket "contenido", siempre visible.
+const SECTION_BY_SOURCE = {
+  geo: 'geo-seo', cannibal: 'geo-seo', keywords: 'geo-seo',
+  pagespeed: 'web',
+  ads_advisor: 'anuncios',
+  report: 'informes',
+}
+const SECTION_BY_OBJ_CATEGORY = { web: 'web', seo: 'geo-seo', rrss: 'rrss', ads: 'anuncios' }
+const SECTION_LABELS = {
+  'geo-seo': '🤖 GEO / SEO', web: '🌐 Web', rrss: '📱 RRSS', anuncios: '📣 Anuncios', informes: '📊 Informes',
+}
+const CONTENIDO_LABEL = '🗓️ Contenido'
+
+function sectionOf(it) {
+  if (it.source === 'content') return 'contenido'
+  if (it.source === 'objective') return SECTION_BY_OBJ_CATEGORY[it.objCategory] ?? 'informes'
+  return SECTION_BY_SOURCE[it.source] ?? 'informes'
+}
 
 // Identidad de un hallazgo para "ignorar": título normalizado. Para fuentes
 // determinísticas (cannibal/pagespeed/keywords/content/objective) el título embebe un
@@ -28,13 +51,34 @@ async function objectiveItems({ projectId, workspaceId, tz }) {
   return results
     .filter(o => o.status === 'fail' || o.status === 'partial')
     .map(o => ({
-      source: 'objective', category: 'Objetivos',
+      source: 'objective', category: 'Objetivos', objCategory: o.category,
       title:  `${o.label}: ${o.actual ?? '—'}${o.unit} vs. meta ${o.target}${o.unit}`,
       detail: `${o.periodLabel} · ${o.pct != null ? `${o.pct}%` : 'sin dato'}`,
       priority: o.status === 'fail' ? 'high' : 'medium',
       taskPrefix: 'Objetivos',
       link: { tab: 'informes' },
     }))
+}
+
+// El informe del mes calendario anterior todavía no fue generado → recordatorio para
+// el bucket "Informes" de Prioridades (única fuente hoy para esa sección).
+async function reportItems({ projectId, workspaceId, tz }) {
+  const month = todayString(tz).slice(0, 7)
+  const prevMonth = prevMonthStr(month)
+  const report = await prisma.monthlyReport.findUnique({
+    where:  { projectId_month: { projectId, month: prevMonth } },
+    select: { enabledSections: true, dataCache: true, analysis: true },
+  })
+  const isGenerated = !!report && (report.enabledSections != null || report.dataCache != null || report.analysis != null)
+  if (isGenerated) return []
+  return [{
+    source: 'report', category: 'Informes',
+    title:  `Generar el informe de ${monthLabel(prevMonth)}`,
+    detail: 'El informe del mes anterior todavía no fue generado — el cliente no tiene visibilidad de los resultados recientes.',
+    priority: 'medium',
+    taskPrefix: 'Informes',
+    link: { tab: 'informes' },
+  }]
 }
 
 // Piezas de Contenido que requieren atención del equipo (cambios pedidos) o
@@ -89,32 +133,54 @@ async function adsItems({ projectId, workspaceId }) {
 
 /**
  * Backlog único de pendientes accionables de un proyecto: SEO/GEO (Plan de acción ya
- * existente), objetivos atrasados, contenido que requiere atención del equipo, y el
- * último diagnóstico de Ads Advisor guardado (prioridad alta). Todo lectura de datos
- * ya calculados/guardados — sin llamadas a IA ni a APIs externas.
+ * existente), objetivos atrasados, contenido que requiere atención del equipo, el
+ * último diagnóstico de Ads Advisor guardado (prioridad alta), e informe del mes
+ * anterior sin generar. Todo lectura de datos ya calculados/guardados — sin llamadas
+ * a IA ni a APIs externas. Además de la lista plana `items` (para seleccionar/crear
+ * tareas en masa e ignorar), devuelve `groups`: los mismos items agrupados por
+ * sección de NAV y recortados a top-3, para el panel "Prioridades". Los items cuya
+ * sección esté deshabilitada (`Workspace.marketingDisabledSections`) se excluyen por
+ * completo (excepto Contenido, que no es una de las 6 secciones toggleables).
  */
 async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT_TZ }) {
-  const [seo, objectives, content, ads, dismissed] = await Promise.all([
+  const [seo, objectives, content, ads, reports, dismissed, workspace] = await Promise.all([
     computeSeoActionItems({ projectId, workspaceId }).catch(() => null),
     objectiveItems({ projectId, workspaceId, tz }).catch(() => []),
     contentItems({ projectId, workspaceId }).catch(() => []),
     adsItems({ projectId, workspaceId }).catch(() => []),
+    reportItems({ projectId, workspaceId, tz }).catch(() => []),
     prisma.dismissedFinding.findMany({ where: { projectId, workspaceId }, select: { source: true, signature: true } }),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { marketingDisabledSections: true } }),
   ])
   if (!seo) return null
 
+  const disabledSections = JSON.parse(workspace?.marketingDisabledSections || '[]')
   const dismissedSet = new Set(dismissed.map(d => `${d.source}:${d.signature}`))
 
   const seoItems = seo.items.map(it => ({ ...it, taskPrefix: 'SEO', link: { tab: 'geo-seo', sub: 'plan' } }))
-  const allItems = [...seoItems, ...objectives, ...content, ...ads]
+  const allItems = [...seoItems, ...objectives, ...content, ...ads, ...reports].map(it => ({ ...it, section: sectionOf(it) }))
+
   const items = allItems
+    .filter(it => it.section === 'contenido' || !disabledSections.includes(it.section))
     .filter(it => !dismissedSet.has(`${it.source}:${normalizeTitle(it.title)}`))
     .sort((a, b) => PRIORITY_WEIGHT[b.priority] - PRIORITY_WEIGHT[a.priority])
     .map(({ key, ...rest }, i) => ({ key: `p-${i}`, ...rest }))
 
+  const groups = MARKETING_SECTION_IDS
+    .filter(id => id !== 'hoy' && !disabledSections.includes(id))
+    .map(id => {
+      const all = items.filter(it => it.section === id)
+      return { id, label: SECTION_LABELS[id], items: all.slice(0, 3), moreCount: Math.max(0, all.length - 3), total: all.length }
+    })
+  const contenidoAll = items.filter(it => it.section === 'contenido')
+  if (contenidoAll.length > 0) {
+    groups.push({ id: 'contenido', label: CONTENIDO_LABEL, items: contenidoAll.slice(0, 3), moreCount: Math.max(0, contenidoAll.length - 3), total: contenidoAll.length })
+  }
+
   return {
     projectName: seo.projectName,
     items,
+    groups,
     counts: { total: items.length, high: items.filter(i => i.priority === 'high').length },
     dismissedCount: dismissed.length,
   }
@@ -124,7 +190,7 @@ const pendingCache = createTtlCache({ ttlMs: 5 * 60 * 1000, max: 200 })
 
 /**
  * Vista cross-proyecto: cuántos pendientes tiene cada proyecto activo del workspace,
- * para el panel "Hoy" sin proyecto seleccionado. Cacheado 5 min (mismo criterio que
+ * para el panel "Prioridades" sin proyecto seleccionado. Cacheado 5 min (mismo criterio que
  * health-score) porque recorre todos los proyectos del workspace en cada carga.
  */
 async function computeWorkspacePendingSummary({ workspaceId, tz = DEFAULT_TZ }) {
@@ -149,7 +215,7 @@ function invalidateWorkspacePending(workspaceId) {
 }
 
 /**
- * Ignora un hallazgo del panel "Hoy" (por proyecto+fuente+título normalizado).
+ * Ignora un hallazgo del panel "Prioridades" (por proyecto+fuente+título normalizado).
  * Idempotente: ignorarlo dos veces no falla ni duplica fila.
  */
 async function dismissFinding({ workspaceId, projectId, source, title, userId }) {

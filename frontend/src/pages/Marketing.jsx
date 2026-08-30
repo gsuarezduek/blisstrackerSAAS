@@ -3,7 +3,9 @@ import { useSearchParams, Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import HowToButton from '../components/HowToButton'
-import HoyTab      from '../components/marketing/HoyTab'
+import PrioridadesTab from '../components/marketing/PrioridadesTab'
+import MarketingSectionsModal from '../components/marketing/MarketingSectionsModal'
+import { NAV, LEGACY_MAP, VALID_TABS } from '../components/marketing/marketingNav'
 import GeoTab      from '../components/marketing/GeoTab'
 import WebTab      from '../components/marketing/WebTab'
 import SeoTab      from '../components/marketing/SeoTab'
@@ -26,76 +28,9 @@ import GoogleAdsTab  from '../components/marketing/GoogleAdsTab'
 import ProjectSearchSelect from '../components/marketing/ProjectSearchSelect'
 import SocialIcon from '../components/marketing/SocialIcon'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import { useAuth } from '../context/AuthContext'
+import { useWorkspace } from '../context/WorkspaceContext'
 import api from '../api/client'
-
-const NAV = [
-  {
-    id: 'hoy',
-    label: '✅ Hoy',
-    subs: [],
-  },
-  {
-    id: 'geo-seo',
-    label: '🤖 GEO / SEO',
-    subs: [
-      { id: 'geo',            label: '🤖 GEO' },
-      { id: 'seo',            label: '🔍 SEO' },
-      { id: 'onpage',         label: '🔬 On-Page' },
-      { id: 'keywords',       label: '🔑 Keywords' },
-      { id: 'contenido',      label: '✍️ Content Brief' },
-      { id: 'content-gap',    label: '🆚 Content Gap' },
-      { id: 'plan',           label: '📋 Plan de acción' },
-      { id: 'canibalizacion', label: '⚠️ Canibalización' },
-    ],
-  },
-  {
-    id: 'web',
-    label: '🌐 Web',
-    subs: [
-      { id: 'analytics',   label: '📊 Analytics' },
-      { id: 'performance', label: '⚡ Performance' },
-    ],
-  },
-  {
-    id: 'rrss',
-    label: '📱 RRSS',
-    subs: [
-      { id: 'instagram',    label: 'Instagram', network: 'instagram' },
-      { id: 'tiktok',       label: 'TikTok',    network: 'tiktok' },
-      { id: 'linkedin',     label: 'LinkedIn',  network: 'linkedin' },
-      { id: 'facebook',     label: 'Facebook',  network: 'facebook' },
-      { id: 'youtube',      label: 'YouTube',   network: 'youtube' },
-      { id: 'competidores', label: '🏁 Competidores' },
-    ],
-  },
-  {
-    id: 'anuncios',
-    label: '📣 Anuncios',
-    subs: [
-      { id: 'meta-ads',     label: '📘 Meta Ads' },
-      { id: 'google-ads',   label: '🔍 Google Ads' },
-      { id: 'linkedin-ads', label: '💼 LinkedIn Ads', soon: true },
-      { id: 'tiktok-ads',   label: '🎵 TikTok Ads',   soon: true },
-    ],
-  },
-  {
-    id: 'informes',
-    label: '📊 Informes',
-    subs: [],
-  },
-]
-
-// Compatibilidad con URLs antiguas (?tab=geo, ?tab=web, etc.)
-const LEGACY_MAP = {
-  geo:        { tab: 'geo-seo',  sub: 'geo' },
-  seo:        { tab: 'geo-seo',  sub: 'seo' },
-  web:        { tab: 'web',      sub: 'analytics' },
-  anuncios:   { tab: 'anuncios', sub: 'google-ads' },
-  contenidos: { tab: 'rrss',     sub: 'instagram' },
-  informes:   { tab: 'informes', sub: 'salud' },
-}
-
-const VALID_TABS = new Set(NAV.map(n => n.id))
 
 function ComingSoon({ label }) {
   return (
@@ -113,13 +48,19 @@ function ComingSoon({ label }) {
 
 export default function Marketing() {
   const { enabled, loading: flagLoading } = useFeatureFlag('marketing')
+  const { user } = useAuth()
+  const { workspace, refreshWorkspace } = useWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects,   setProjects]   = useState([])
   const [projectId,  setProjectId]  = useState(searchParams.get('projectId') ?? '')
+  const [showSectionsModal, setShowSectionsModal] = useState(false)
 
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
   }, [])
+
+  const disabledSections = workspace?.marketingDisabledSections || []
+  const visibleNav = NAV.filter(n => !disabledSections.includes(n.id))
 
   function resolveNav() {
     const rawTab = searchParams.get('tab')
@@ -130,7 +71,8 @@ export default function Marketing() {
       return LEGACY_MAP[rawTab]
     }
 
-    const tab     = VALID_TABS.has(rawTab) ? rawTab : 'hoy'
+    let tab = VALID_TABS.has(rawTab) ? rawTab : 'hoy'
+    if (disabledSections.includes(tab)) tab = visibleNav[0]?.id ?? tab
     const navItem = NAV.find(n => n.id === tab)
     const validSubs = new Set(navItem?.subs.map(s => s.id) ?? [])
     const sub = validSubs.has(rawSub) ? rawSub : (navItem?.subs[0]?.id ?? '')
@@ -164,8 +106,8 @@ export default function Marketing() {
     }, { replace: true })
   }
 
-  // Navega a una sub-pestaña puntual (usado por el panel "Hoy" para llevar a cada
-  // hallazgo a su pestaña de origen), conservando el proyecto seleccionado.
+  // Navega a una sub-pestaña puntual (usado por el panel "Prioridades" para llevar a
+  // cada hallazgo a su pestaña de origen), conservando el proyecto seleccionado.
   function handleNavigateTo({ tab: destTab, sub: destSub }) {
     const params = { tab: destTab }
     if (destSub) params.sub = destSub
@@ -177,7 +119,7 @@ export default function Marketing() {
   const activeSub = activeNav.subs.find(s => s.id === sub) ?? activeNav.subs[0]
 
   function renderContent() {
-    if (tab === 'hoy')      return <HoyTab      projectId={projectId} onSelectProject={handleProjectChange} onNavigate={handleNavigateTo} />
+    if (tab === 'hoy')      return <PrioridadesTab projectId={projectId} onSelectProject={handleProjectChange} onNavigate={handleNavigateTo} />
     if (tab === 'informes') return <InformesTab projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
 
     if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />
@@ -214,7 +156,18 @@ export default function Marketing() {
         {/* Header */}
         <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Marketing</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Marketing</h1>
+              {user?.isAdmin && (
+                <button
+                  onClick={() => setShowSectionsModal(true)}
+                  title="Configurar secciones de Marketing"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  ⚙️
+                </button>
+              )}
+            </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Herramientas de optimización y análisis para tus proyectos
             </p>
@@ -262,7 +215,7 @@ export default function Marketing() {
           <>
             {/* ── Tabs principales — desktop ── */}
             <div className="hidden sm:flex gap-1 mb-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1">
-              {NAV.map(n => (
+              {visibleNav.map(n => (
                 <button
                   key={n.id}
                   onClick={() => setTab(n.id)}
@@ -318,7 +271,7 @@ export default function Marketing() {
                 onChange={e => setTab(e.target.value)}
                 className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                {NAV.map(n => (
+                {visibleNav.map(n => (
                   <option key={n.id} value={n.id}>{n.label}{n.soon ? ' (próximamente)' : ''}</option>
                 ))}
               </select>
@@ -340,6 +293,14 @@ export default function Marketing() {
           </>
         )}
       </main>
+
+      {showSectionsModal && (
+        <MarketingSectionsModal
+          disabledSections={disabledSections}
+          onClose={() => setShowSectionsModal(false)}
+          onSaved={refreshWorkspace}
+        />
+      )}
     </div>
   )
 }

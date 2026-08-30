@@ -10,22 +10,23 @@ const PRIORITY = {
 }
 const CATEGORY_ICON = {
   GEO: '🤖', 'Canibalización': '⚠️', Performance: '⚡', Keywords: '🔑',
-  Objetivos: '🎯', Contenido: '🗓️', 'Meta Ads': '📣', 'Google Ads': '📣',
+  Objetivos: '🎯', Contenido: '🗓️', 'Meta Ads': '📣', 'Google Ads': '📣', Informes: '📊',
 }
 // `source` (clave interna, ej. 'geo'/'ads_advisor') → label legible, para la lista de
 // ignorados (que solo guarda `source`, no la `category` de display del item original).
 const SOURCE_LABEL = {
   geo: 'GEO', cannibal: 'Canibalización', pagespeed: 'Performance', keywords: 'Keywords',
-  objective: 'Objetivos', content: 'Contenido', ads_advisor: 'Ads',
+  objective: 'Objetivos', content: 'Contenido', ads_advisor: 'Ads', report: 'Informes',
 }
 
 /**
- * Panel único "Hoy": agrega los pendientes accionables de todas las áreas de
- * Marketing (SEO/GEO, Objetivos, Contenido, Ads Advisor) en un solo backlog, con el
- * mismo patrón de selección múltiple + creación de tareas en masa que ya prueba
- * ActionPlanTab.jsx.
+ * Panel único "Prioridades": agrega los pendientes accionables de todas las áreas de
+ * Marketing habilitadas (SEO/GEO, Objetivos, RRSS, Ads, Informes, Contenido) en un
+ * backlog agrupado por sección con tope de 3 por grupo (`data.groups`, calculado en
+ * marketingPending.service.js), con el mismo patrón de selección múltiple + creación
+ * de tareas en masa que ya prueba ActionPlanTab.jsx.
  */
-export default function HoyTab({ projectId, onSelectProject, onNavigate }) {
+export default function PrioridadesTab({ projectId, onSelectProject, onNavigate }) {
   if (!projectId) return <WorkspacePending onSelectProject={onSelectProject} />
   return <ProjectPending projectId={projectId} onNavigate={onNavigate} />
 }
@@ -53,7 +54,7 @@ function WorkspacePending({ onSelectProject }) {
       <div className="text-4xl mb-3">🎉</div>
       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1">Todo al día</h3>
       <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
-        No hay pendientes de SEO, objetivos, contenido ni Ads en ningún proyecto activo.
+        No hay pendientes de SEO, GEO, objetivos, RRSS, Ads, informes ni contenido en ningún proyecto activo.
       </p>
     </div>
   )
@@ -81,6 +82,34 @@ function WorkspacePending({ onSelectProject }) {
   )
 }
 
+function PendingItemRow({ it, selected, onToggle, onDismiss, onNavigate }) {
+  return (
+    <div className={`flex items-start gap-3 px-5 py-3.5 ${selected ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
+      <input type="checkbox" checked={selected} onChange={onToggle}
+        className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500 flex-shrink-0 cursor-pointer" />
+      <div className="min-w-0 flex-1 cursor-pointer" onClick={onToggle}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${PRIORITY[it.priority].cls}`}>{PRIORITY[it.priority].label}</span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">{CATEGORY_ICON[it.category] ?? ''} {it.category}</span>
+        </div>
+        <p className="text-sm text-gray-800 dark:text-gray-200 mt-1">{it.title}</p>
+        {it.detail && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{it.detail}</p>}
+      </div>
+      <div className="flex-shrink-0 flex items-center gap-3">
+        {it.href ? (
+          <Link to={it.href} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">Ir →</Link>
+        ) : it.link ? (
+          <button onClick={() => onNavigate?.(it.link)} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">Ir →</button>
+        ) : null}
+        <button onClick={onDismiss} title="Ignorar esta recomendación"
+          className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400">
+          ✕ Ignorar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function ProjectPending({ projectId, onNavigate }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(false)
@@ -99,6 +128,13 @@ function ProjectPending({ projectId, onNavigate }) {
       .then(r => setData(r.data))
       .catch(e => setErr(e.response?.data?.error || 'Error al cargar los pendientes'))
       .finally(() => setLoading(false))
+  }, [])
+
+  // Recarga sin mostrar el spinner de página completa (usada tras ignorar/restaurar
+  // un hallazgo, donde ya hay datos en pantalla y solo hace falta refrescar los grupos).
+  const silentReload = useCallback((pid) => {
+    if (!pid) return
+    api.get(`/marketing/projects/${pid}/pending`).then(r => setData(r.data)).catch(() => {})
   }, [])
 
   useEffect(() => { load(projectId) }, [projectId, load])
@@ -130,12 +166,8 @@ function ProjectPending({ projectId, onNavigate }) {
   async function dismiss(it) {
     try {
       await api.post(`/marketing/projects/${projectId}/pending/dismiss`, { source: it.source, title: it.title })
-      setData(prev => ({
-        ...prev,
-        items: prev.items.filter(i => i.key !== it.key),
-        dismissedCount: (prev.dismissedCount ?? 0) + 1,
-      }))
       setSelected(prev => { const n = new Set(prev); n.delete(it.key); return n })
+      silentReload(projectId)
     } catch {}
   }
 
@@ -153,7 +185,7 @@ function ProjectPending({ projectId, onNavigate }) {
     try {
       await api.delete(`/marketing/projects/${projectId}/pending/dismissed/${id}`)
       setDismissedList(prev => prev.filter(d => d.id !== id))
-      load(projectId) // el item ignorado puede volver a la lista principal
+      silentReload(projectId) // el item ignorado puede volver a la lista principal
     } catch {}
   }
 
@@ -166,7 +198,7 @@ function ProjectPending({ projectId, onNavigate }) {
   )
   if (!data) return null
 
-  const { items, dismissedCount } = data
+  const { items, groups, dismissedCount } = data
 
   return (
     <div className="space-y-5">
@@ -174,7 +206,7 @@ function ProjectPending({ projectId, onNavigate }) {
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
           <div className="text-3xl mb-2">✅</div>
           <p className="text-sm text-gray-600 dark:text-gray-300">No hay pendientes en este proyecto ahora mismo.</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">SEO/GEO, objetivos, contenido y Ads se revisan automáticamente acá.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">SEO/GEO, objetivos, RRSS, Ads, informes y contenido se revisan automáticamente acá.</p>
         </div>
       ) : (
         <>
@@ -194,31 +226,38 @@ function ProjectPending({ projectId, onNavigate }) {
             </div>
           </div>
 
-          {/* Lista */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
-            {items.map(it => (
-              <div key={it.key} className={`flex items-start gap-3 px-5 py-3.5 ${selected.has(it.key) ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
-                <input type="checkbox" checked={selected.has(it.key)} onChange={() => toggle(it.key)}
-                  className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500 flex-shrink-0 cursor-pointer" />
-                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => toggle(it.key)}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${PRIORITY[it.priority].cls}`}>{PRIORITY[it.priority].label}</span>
-                    <span className="text-[11px] text-gray-400 dark:text-gray-500">{CATEGORY_ICON[it.category] ?? ''} {it.category}</span>
+          {/* Grupos por sección */}
+          <div className="space-y-4">
+            {groups.map(g => (
+              <div key={g.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{g.label}</h3>
+                  {g.total > 0 && <span className="text-xs text-gray-400 dark:text-gray-500">{g.total} pendiente{g.total === 1 ? '' : 's'}</span>}
+                </div>
+                {g.items.length === 0 ? (
+                  <p className="px-5 py-3.5 text-sm text-gray-400 dark:text-gray-500">✅ Sin pendientes en esta sección.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {g.items.map(it => (
+                      <PendingItemRow
+                        key={it.key}
+                        it={it}
+                        selected={selected.has(it.key)}
+                        onToggle={() => toggle(it.key)}
+                        onDismiss={() => dismiss(it)}
+                        onNavigate={onNavigate}
+                      />
+                    ))}
                   </div>
-                  <p className="text-sm text-gray-800 dark:text-gray-200 mt-1">{it.title}</p>
-                  {it.detail && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{it.detail}</p>}
-                </div>
-                <div className="flex-shrink-0 flex items-center gap-3">
-                  {it.href ? (
-                    <Link to={it.href} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">Ir →</Link>
-                  ) : it.link ? (
-                    <button onClick={() => onNavigate?.(it.link)} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">Ir →</button>
-                  ) : null}
-                  <button onClick={() => dismiss(it)} title="Ignorar esta recomendación"
-                    className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400">
-                    ✕ Ignorar
+                )}
+                {g.moreCount > 0 && (
+                  <button
+                    onClick={() => onNavigate?.({ tab: g.id })}
+                    className="w-full text-left px-5 py-2.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline border-t border-gray-100 dark:border-gray-700"
+                  >
+                    Ver los {g.moreCount} restantes en {g.label} →
                   </button>
-                </div>
+                )}
               </div>
             ))}
           </div>

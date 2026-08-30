@@ -89,6 +89,7 @@ async function getCurrent(req, res, next) {
       subscription: sub,
       brandColors: JSON.parse(workspace.brandColors || '[]'),
       brandFonts:  JSON.parse(workspace.brandFonts  || '[]'),
+      marketingDisabledSections: JSON.parse(workspace.marketingDisabledSections || '[]'),
     })
   } catch (err) { next(err) }
 }
@@ -728,11 +729,14 @@ async function getInfo(req, res, next) {
 
     const workspace = await prisma.workspace.findUnique({
       where: { slug },
-      select: { id: true, name: true, slug: true, status: true, timezone: true, attendanceTrackingEnabled: true, productivityEnabled: true, lateToleranceMins: true, onboardingCompletedAt: true },
+      select: { id: true, name: true, slug: true, status: true, timezone: true, attendanceTrackingEnabled: true, productivityEnabled: true, lateToleranceMins: true, onboardingCompletedAt: true, marketingDisabledSections: true },
     })
     if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
 
-    res.json(workspace)
+    res.json({
+      ...workspace,
+      marketingDisabledSections: JSON.parse(workspace.marketingDisabledSections || '[]'),
+    })
   } catch (err) { next(err) }
 }
 
