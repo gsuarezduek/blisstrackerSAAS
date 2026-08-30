@@ -418,6 +418,7 @@ async function getGlobalSettings(req, res, next) {
       productivityEnabled: workspace.productivityEnabled ?? true,
       productivityDigestEnabled: workspace.productivityDigestEnabled ?? true,
       adsAdvisorAutoEnabled: workspace.adsAdvisorAutoEnabled ?? true,
+      rrssAdvisorAutoEnabled: workspace.rrssAdvisorAutoEnabled ?? true,
       marketingDisabledSections: JSON.parse(workspace.marketingDisabledSections || '[]'),
       marketingDigestEnabled: workspace.marketingDigestEnabled ?? true,
       seoAlertsEnabled: workspace.seoAlertsEnabled ?? true,
@@ -489,7 +490,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, marketingDisabledSections, marketingDigestEnabled, seoAlertsEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, rrssAdvisorAutoEnabled, marketingDisabledSections, marketingDigestEnabled, seoAlertsEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -502,6 +503,7 @@ async function saveGlobalSettings(req, res, next) {
     if (productivityEnabled !== undefined) workspaceData.productivityEnabled = Boolean(productivityEnabled)
     if (productivityDigestEnabled !== undefined) workspaceData.productivityDigestEnabled = Boolean(productivityDigestEnabled)
     if (adsAdvisorAutoEnabled !== undefined) workspaceData.adsAdvisorAutoEnabled = Boolean(adsAdvisorAutoEnabled)
+    if (rrssAdvisorAutoEnabled !== undefined) workspaceData.rrssAdvisorAutoEnabled = Boolean(rrssAdvisorAutoEnabled)
     if (marketingDigestEnabled !== undefined) workspaceData.marketingDigestEnabled = Boolean(marketingDigestEnabled)
     if (seoAlertsEnabled !== undefined) workspaceData.seoAlertsEnabled = Boolean(seoAlertsEnabled)
     if (marketingDisabledSections !== undefined) {

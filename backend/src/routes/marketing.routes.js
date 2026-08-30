@@ -33,6 +33,7 @@ const contentBrief      = require('../controllers/contentBrief.controller')
 const onPageAudit       = require('../controllers/onPageAudit.controller')
 const contentGap        = require('../controllers/contentGap.controller')
 const adsAdvisor        = require('../controllers/adsAdvisor.controller')
+const rrssAdvisor       = require('../controllers/rrssAdvisor.controller')
 const marketingPending  = require('../controllers/marketingPending.controller')
 
 // ─── SIN AUTH — Los callbacks OAuth no llevan Authorization header ────────────
@@ -140,6 +141,9 @@ router.post('/projects/:id/facebook/scrape/refresh',     facebook.refreshScrape)
 router.get('/projects/:id/facebook/scrape-debug',        facebook.scrapeDebug)
 router.get('/projects/:id/facebook/insights-debug',      facebook.insightsDebug)
 router.get('/projects/:id/facebook',                     facebook.getMetrics)
+
+// RRSS Advisor (IA) — una ruta parametrizada para las 5 redes (instagram/tiktok/linkedin/facebook/youtube)
+router.post('/projects/:id/rrss/:platform/advisor',      rrssAdvisor.run)
 
 // Snapshots mensuales + Insights IA
 router.get('/projects/:id/snapshots',             analyticsSnapshot.getSnapshot)

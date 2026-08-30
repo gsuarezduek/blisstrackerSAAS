@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import SocialIcon from './SocialIcon'
+import RrssAdvisorPanel from './RrssAdvisorPanel'
 
 const FB_BLUE = '#1877F2'
 
@@ -522,7 +523,7 @@ function CrossProjectFacebookPanel({ onSelectProject }) {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
-export default function FacebookTab({ projectId, onSelectProject }) {
+export default function FacebookTab({ projectId, onSelectProject, projects = [] }) {
   const currentMonth = todayAR().slice(0, 7)
 
   const [integration,         setIntegration]     = useState(null)
@@ -817,6 +818,13 @@ export default function FacebookTab({ projectId, onSelectProject }) {
           />
         </div>
       )}
+
+      {/* Análisis con IA: diagnóstico vs. mes anterior, competencia, objetivos y brief orgánico */}
+      <RrssAdvisorPanel
+        projectId={projectId}
+        projectName={projects.find(p => String(p.id) === String(projectId))?.name}
+        platform="facebook"
+      />
 
       {isCurrentMonth && metrics?.topPosts?.length > 0 && <TopPosts posts={metrics.topPosts} />}
       {!isCurrentMonth && Array.isArray(displayData?.topPosts) && displayData.topPosts.length > 0 && <TopPosts posts={displayData.topPosts} />}

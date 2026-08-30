@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import SocialIcon from './SocialIcon'
+import RrssAdvisorPanel from './RrssAdvisorPanel'
 
 const LI_BLUE = '#0A66C2'
 
@@ -542,7 +543,7 @@ function CrossProjectLinkedinPanel({ onSelectProject }) {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
-export default function LinkedinTab({ projectId, onSelectProject }) {
+export default function LinkedinTab({ projectId, onSelectProject, projects = [] }) {
   const currentMonth = todayAR().slice(0, 7)
 
   const [integration,         setIntegration]     = useState(null)
@@ -781,6 +782,13 @@ export default function LinkedinTab({ projectId, onSelectProject }) {
           />
         </div>
       )}
+
+      {/* Análisis con IA: diagnóstico vs. mes anterior, competencia, objetivos y brief orgánico */}
+      <RrssAdvisorPanel
+        projectId={projectId}
+        projectName={projects.find(p => String(p.id) === String(projectId))?.name}
+        platform="linkedin"
+      />
 
       {isCurrentMonth && metrics?.topPosts?.length > 0 && <TopPosts posts={metrics.topPosts} />}
       {!isCurrentMonth && Array.isArray(displayData?.topPosts) && displayData.topPosts.length > 0 && <TopPosts posts={displayData.topPosts} />}

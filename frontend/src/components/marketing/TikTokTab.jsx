@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
+import RrssAdvisorPanel from './RrssAdvisorPanel'
 import CrossProjectRRSSPanel from './CrossProjectRRSSPanel'
 import SocialIcon from './SocialIcon'
 
@@ -390,7 +391,7 @@ function CrossProjectTikTokPanel({ onSelectProject }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function TikTokTab({ projectId, onSelectProject }) {
+export default function TikTokTab({ projectId, onSelectProject, projects = [] }) {
   const currentMonth = todayAR().slice(0, 7)
 
   const [integration,     setIntegration]    = useState(null)
@@ -564,6 +565,13 @@ export default function TikTokTab({ projectId, onSelectProject }) {
 
       {/* Objetivos de TikTok del período (seguidores / interacción) con barra de progreso */}
       <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de TikTok" />
+
+      {/* Análisis con IA: diagnóstico vs. mes anterior, objetivos y brief orgánico */}
+      <RrssAdvisorPanel
+        projectId={projectId}
+        projectName={projects.find(p => String(p.id) === String(projectId))?.name}
+        platform="tiktok"
+      />
 
       {isCurrentMonth && metrics?.topOfMonth && <TopOfMonth topOfMonth={metrics.topOfMonth} />}
 

@@ -134,11 +134,11 @@ export default function Marketing() {
     if (tab === 'geo-seo' && sub === 'plan')           return <ActionPlanTab     projectId={projectId} projects={projects} />
     if (tab === 'geo-seo' && sub === 'canibalizacion') return <CanibalizacionTab projectId={projectId} />
     if (tab === 'web')                           return <WebTab subtab={sub} projectId={projectId} projects={projects} onSelectProject={handleProjectChange} />
-    if (tab === 'rrss'     && sub === 'instagram') return <InstagramTab projectId={projectId} onSelectProject={handleProjectChange} />
-    if (tab === 'rrss'     && sub === 'tiktok')    return <TikTokTab    projectId={projectId} onSelectProject={handleProjectChange} />
-    if (tab === 'rrss'     && sub === 'youtube')   return <YouTubeTab   projectId={projectId} onSelectProject={handleProjectChange} />
-    if (tab === 'rrss'     && sub === 'linkedin')  return <LinkedinTab  projectId={projectId} onSelectProject={handleProjectChange} />
-    if (tab === 'rrss'     && sub === 'facebook')  return <FacebookTab  projectId={projectId} onSelectProject={handleProjectChange} />
+    if (tab === 'rrss'     && sub === 'instagram') return <InstagramTab projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
+    if (tab === 'rrss'     && sub === 'tiktok')    return <TikTokTab    projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
+    if (tab === 'rrss'     && sub === 'youtube')   return <YouTubeTab   projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
+    if (tab === 'rrss'     && sub === 'linkedin')  return <LinkedinTab  projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
+    if (tab === 'rrss'     && sub === 'facebook')  return <FacebookTab  projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
     if (tab === 'rrss'     && sub === 'competidores') return <CompetitorsTab projectId={projectId} onSelectProject={handleProjectChange} />
     if (tab === 'anuncios' && sub === 'meta-ads')    return <MetaAdsTab    projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
     if (tab === 'anuncios' && sub === 'google-ads')  return <GoogleAdsTab  projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />

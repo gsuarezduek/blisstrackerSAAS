@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import ObjectiveProgressBars from './ObjectiveProgressBars'
+import RrssAdvisorPanel from './RrssAdvisorPanel'
 import SocialIcon from './SocialIcon'
 import CrossProjectRRSSPanel from './CrossProjectRRSSPanel'
 
@@ -951,7 +952,7 @@ function StoryKpi({ label, value }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function InstagramTab({ projectId, onSelectProject }) {
+export default function InstagramTab({ projectId, onSelectProject, projects = [] }) {
   const currentMonth = todayAR().slice(0, 7)
 
   const [integration,    setIntegration]    = useState(null)
@@ -1296,6 +1297,13 @@ export default function InstagramTab({ projectId, onSelectProject }) {
 
       {/* Objetivos de Instagram del período (seguidores / interacción) con barra de progreso */}
       <ObjectiveProgressBars objectives={objectives} title="🎯 Objetivos de Instagram" />
+
+      {/* Análisis con IA: diagnóstico vs. mes anterior, competencia, objetivos y brief orgánico */}
+      <RrssAdvisorPanel
+        projectId={projectId}
+        projectName={projects.find(p => String(p.id) === String(projectId))?.name}
+        platform="instagram"
+      />
 
       {/* Insights: breakdown por tipo + mejor horario — solo mes actual (datos en vivo) */}
       {isCurrentMonth && metrics && <ContentInsights byType={metrics.byType} bestHour={metrics.bestHour} />}

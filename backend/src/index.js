@@ -92,6 +92,7 @@ const { refreshAllDomainRatings }         = require('./services/ahrefs.service')
 const { checkAndSendAllSeoAlerts }        = require('./services/seoAlerts.service')
 const { saveAllAdsSnapshots }             = require('./services/adsSnapshot.service')
 const { runWeeklyAdsAdvisor }             = require('./services/adsAdvisor.service')
+const { runWeeklyRrssAdvisor }            = require('./services/rrssAdvisor.service')
 const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnapshot.service')
 const { saveAllPreviousMonthSnapshots: saveAllPrevRrhhMetrics } = require('./services/rrhhMetricSnapshot.service')
 const { sendAllProductivityDigests } = require('./services/productivityDigest.service')
@@ -147,6 +148,15 @@ cron.schedule('0 9 * * 1', () => runCron('adsAdvisorWeekly', 30 * 60 * 1000, asy
   console.log('[AdsAdvisorWeekly] Iniciando análisis semanal de Ads Advisor...')
   try { await runWeeklyAdsAdvisor() }
   catch (err) { console.error('[AdsAdvisorWeekly] Error:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
+// Cron: análisis automático de RRSS Advisor (IA) — lunes 09:20 ART. Corre
+// generateRrssAdvisor() para todo proyecto con alguna red social conectada, en
+// workspaces con Marketing habilitado y el toggle rrssAdvisorAutoEnabled prendido.
+cron.schedule('20 9 * * 1', () => runCron('rrssAdvisorWeekly', 30 * 60 * 1000, async () => {
+  console.log('[RrssAdvisorWeekly] Iniciando análisis semanal de RRSS Advisor...')
+  try { await runWeeklyRrssAdvisor() }
+  catch (err) { console.error('[RrssAdvisorWeekly] Error:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
 // Cron: limpieza semanal de tablas de crecimiento ilimitado — domingos 03:00 hora Buenos Aires

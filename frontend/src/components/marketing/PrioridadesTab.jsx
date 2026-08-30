@@ -59,26 +59,62 @@ function WorkspacePending({ onSelectProject }) {
     </div>
   )
 
+  const starred = projects.filter(p => p.starred)
+  const rest    = projects.filter(p => !p.starred)
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
-      {projects.map(p => (
-        <button
-          key={p.projectId}
-          onClick={() => onSelectProject?.(String(p.projectId))}
-          className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
-        >
-          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{p.projectName}</span>
-          <span className="flex items-center gap-2 flex-shrink-0">
-            {p.high > 0 && (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
-                {p.high} alta{p.high === 1 ? '' : 's'}
-              </span>
-            )}
-            <span className="text-xs text-gray-400 dark:text-gray-500">{p.total} pendiente{p.total === 1 ? '' : 's'}</span>
-          </span>
-        </button>
-      ))}
+    <div className="space-y-8">
+      {starred.length > 0 && (
+        <section>
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-yellow-400">
+              <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L10 18.354 5.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.005z" clipRule="evenodd" />
+            </svg>
+            Proyectos destacados
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {starred.map(p => <ProjectPendingCard key={p.projectId} p={p} onSelectProject={onSelectProject} />)}
+          </div>
+        </section>
+      )}
+
+      {rest.length > 0 && (
+        <section>
+          {starred.length > 0 && (
+            <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+              Resto de los proyectos
+            </h3>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {rest.map(p => <ProjectPendingCard key={p.projectId} p={p} onSelectProject={onSelectProject} />)}
+          </div>
+        </section>
+      )}
     </div>
+  )
+}
+
+function ProjectPendingCard({ p, onSelectProject }) {
+  return (
+    <button
+      onClick={() => onSelectProject?.(String(p.projectId))}
+      className="text-left bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 flex flex-col gap-3 hover:shadow-md hover:border-primary-300 dark:hover:border-primary-700 transition-all"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-bold text-gray-900 dark:text-white text-base leading-tight truncate">{p.projectName}</h4>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 flex-shrink-0">
+          <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+        </svg>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {p.high > 0 && (
+          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+            {p.high} alta{p.high === 1 ? '' : 's'}
+          </span>
+        )}
+        <span className="text-xs text-gray-400 dark:text-gray-500">{p.total} pendiente{p.total === 1 ? '' : 's'}</span>
+      </div>
+    </button>
   )
 }
 

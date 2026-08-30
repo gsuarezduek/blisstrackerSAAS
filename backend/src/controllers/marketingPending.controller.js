@@ -1,9 +1,10 @@
+const prisma = require('../lib/prisma')
 const {
   computeProjectPendingItems, computeWorkspacePendingSummary,
   dismissFinding, listDismissedFindings, undismissFinding,
 } = require('../services/marketingPending.service')
 
-const VALID_SOURCES = new Set(['geo', 'cannibal', 'pagespeed', 'keywords', 'objective', 'content', 'ads_advisor', 'report'])
+const VALID_SOURCES = new Set(['geo', 'cannibal', 'pagespeed', 'keywords', 'objective', 'content', 'ads_advisor', 'rrss_advisor', 'report'])
 
 /**
  * GET /api/marketing/projects/:id/pending
@@ -22,13 +23,19 @@ async function getProjectPending(req, res, next) {
 /**
  * GET /api/marketing/summary/pending
  * Vista cross-proyecto: proyectos activos con pendientes, para el panel "Prioridades" sin
- * proyecto seleccionado.
+ * proyecto seleccionado. Marca `starred` (preferencia personal, mismo criterio que "Mis
+ * Proyectos") para que el front pueda mostrar los destacados primero.
  */
 async function getWorkspacePending(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const projects = await computeWorkspacePendingSummary({ workspaceId, tz: req.workspace.timezone })
-    res.json({ projects })
+    const stars = await prisma.projectStar.findMany({
+      where:  { userId: req.user.userId, projectId: { in: projects.map(p => p.projectId) } },
+      select: { projectId: true },
+    })
+    const starredSet = new Set(stars.map(s => s.projectId))
+    res.json({ projects: projects.map(p => ({ ...p, starred: starredSet.has(p.projectId) })) })
   } catch (err) { next(err) }
 }
 

@@ -8,6 +8,7 @@ const { MARKETING_SECTION_IDS } = require('../lib/marketingSections')
 
 const ADS_PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads' }
 const ADS_PLATFORM_SUB   = { meta_ads: 'meta-ads', google_ads: 'google-ads' }
+const RRSS_PLATFORM_LABEL = { instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn', facebook: 'Facebook', youtube: 'YouTube' }
 
 // Bucket de "Prioridades" (id de NAV de Marketing) al que pertenece cada item, para
 // agrupar y limitar a top-3 por sección. `content` no mapea a ninguna de las 6
@@ -16,6 +17,7 @@ const SECTION_BY_SOURCE = {
   geo: 'geo-seo', cannibal: 'geo-seo', keywords: 'geo-seo',
   pagespeed: 'web',
   ads_advisor: 'anuncios',
+  rrss_advisor: 'rrss',
   report: 'informes',
 }
 const SECTION_BY_OBJ_CATEGORY = { web: 'web', seo: 'geo-seo', rrss: 'rrss', ads: 'anuncios' }
@@ -131,23 +133,47 @@ async function adsItems({ projectId, workspaceId }) {
   return items
 }
 
+// Último diagnóstico guardado del RRSS Advisor (solo prioridad alta) por red social.
+async function rrssItems({ projectId, workspaceId }) {
+  const rows = await prisma.rrssAdvisorResult.findMany({ where: { projectId, workspaceId } })
+  const items = []
+  for (const row of rows) {
+    let diagnostico = []
+    try { diagnostico = JSON.parse(row.diagnostico) } catch {}
+    const label = RRSS_PLATFORM_LABEL[row.platform] ?? row.platform
+    diagnostico
+      .filter(d => d.prioridad === 'alta')
+      .forEach(d => items.push({
+        source: 'rrss_advisor', category: label,
+        title:  d.titulo,
+        detail: d.detalle,
+        priority: 'high',
+        taskPrefix: label,
+        link: { tab: 'rrss', sub: row.platform },
+      }))
+  }
+  return items
+}
+
 /**
  * Backlog único de pendientes accionables de un proyecto: SEO/GEO (Plan de acción ya
  * existente), objetivos atrasados, contenido que requiere atención del equipo, el
- * último diagnóstico de Ads Advisor guardado (prioridad alta), e informe del mes
- * anterior sin generar. Todo lectura de datos ya calculados/guardados — sin llamadas
- * a IA ni a APIs externas. Además de la lista plana `items` (para seleccionar/crear
- * tareas en masa e ignorar), devuelve `groups`: los mismos items agrupados por
- * sección de NAV y recortados a top-3, para el panel "Prioridades". Los items cuya
- * sección esté deshabilitada (`Workspace.marketingDisabledSections`) se excluyen por
- * completo (excepto Contenido, que no es una de las 6 secciones toggleables).
+ * último diagnóstico de Ads Advisor y de RRSS Advisor guardados (prioridad alta), e
+ * informe del mes anterior sin generar. Todo lectura de datos ya calculados/guardados
+ * — sin llamadas a IA ni a APIs externas en el momento. Además de la lista plana
+ * `items` (para seleccionar/crear tareas en masa e ignorar), devuelve `groups`: los
+ * mismos items agrupados por sección de NAV y recortados a top-3, para el panel
+ * "Prioridades". Los items cuya sección esté deshabilitada
+ * (`Workspace.marketingDisabledSections`) se excluyen por completo (excepto
+ * Contenido, que no es una de las 6 secciones toggleables).
  */
 async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT_TZ }) {
-  const [seo, objectives, content, ads, reports, dismissed, workspace] = await Promise.all([
+  const [seo, objectives, content, ads, rrss, reports, dismissed, workspace] = await Promise.all([
     computeSeoActionItems({ projectId, workspaceId }).catch(() => null),
     objectiveItems({ projectId, workspaceId, tz }).catch(() => []),
     contentItems({ projectId, workspaceId }).catch(() => []),
     adsItems({ projectId, workspaceId }).catch(() => []),
+    rrssItems({ projectId, workspaceId }).catch(() => []),
     reportItems({ projectId, workspaceId, tz }).catch(() => []),
     prisma.dismissedFinding.findMany({ where: { projectId, workspaceId }, select: { source: true, signature: true } }),
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { marketingDisabledSections: true } }),
@@ -158,7 +184,7 @@ async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT
   const dismissedSet = new Set(dismissed.map(d => `${d.source}:${d.signature}`))
 
   const seoItems = seo.items.map(it => ({ ...it, taskPrefix: 'SEO', link: { tab: 'geo-seo', sub: 'plan' } }))
-  const allItems = [...seoItems, ...objectives, ...content, ...ads, ...reports].map(it => ({ ...it, section: sectionOf(it) }))
+  const allItems = [...seoItems, ...objectives, ...content, ...ads, ...rrss, ...reports].map(it => ({ ...it, section: sectionOf(it) }))
 
   const items = allItems
     .filter(it => it.section === 'contenido' || !disabledSections.includes(it.section))

@@ -585,6 +585,14 @@ export default function Preferences() {
                     <Toggle on={globalSettings.adsAdvisorAutoEnabled !== false} onToggle={() => handleGlobalSetting({ adsAdvisorAutoEnabled: !(globalSettings.adsAdvisorAutoEnabled !== false) })} />
                   </div>
 
+                  <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Análisis automático de RRSS (IA)</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las redes sociales conectadas de todos los proyectos (tendencia vs. el mes anterior, competencia, objetivos y brief de contenido orgánico) y guarda el diagnóstico para el panel "Prioridades". Solo corre en proyectos con alguna red social conectada.</p>
+                    </div>
+                    <Toggle on={globalSettings.rrssAdvisorAutoEnabled !== false} onToggle={() => handleGlobalSetting({ rrssAdvisorAutoEnabled: !(globalSettings.rrssAdvisorAutoEnabled !== false) })} />
+                  </div>
+
                   <div className="py-4 border-b dark:border-gray-700">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">

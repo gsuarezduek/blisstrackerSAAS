@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import CrossProjectRRSSPanel from './CrossProjectRRSSPanel'
 import SocialIcon from './SocialIcon'
+import RrssAdvisorPanel from './RrssAdvisorPanel'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -387,7 +388,7 @@ function CrossProjectYouTubePanel({ onSelectProject }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function YouTubeTab({ projectId, onSelectProject }) {
+export default function YouTubeTab({ projectId, onSelectProject, projects = [] }) {
   const currentMonth = todayAR().slice(0, 7)
 
   const [integration,     setIntegration]    = useState(null)
@@ -550,6 +551,13 @@ export default function YouTubeTab({ projectId, onSelectProject }) {
           />
         </div>
       )}
+
+      {/* Análisis con IA: diagnóstico vs. mes anterior, objetivos y brief orgánico */}
+      <RrssAdvisorPanel
+        projectId={projectId}
+        projectName={projects.find(p => String(p.id) === String(projectId))?.name}
+        platform="youtube"
+      />
 
       {isCurrentMonth && metrics?.topOfMonth && <TopOfMonth topOfMonth={metrics.topOfMonth} />}
 

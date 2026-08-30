@@ -43,6 +43,7 @@ model Workspace {
   productivityEnabled       Boolean @default(true) // Muestra la sección de Productividad (nav + página) para los admins
   productivityDigestEnabled Boolean @default(true) // Aviso semanal por mail a admins/owners con las personas en alerta de Productividad
   adsAdvisorAutoEnabled     Boolean @default(true) // Corre el Ads Advisor (IA) automáticamente cada lunes para proyectos con Meta/Google Ads conectado
+  rrssAdvisorAutoEnabled    Boolean @default(true) // Corre el RRSS Advisor (IA) automáticamente cada lunes para proyectos con alguna red social conectada
   marketingDisabledSections String  @default("[]") // Secciones de Marketing ocultas para este workspace (ids de NAV: hoy/geo-seo/web/rrss/anuncios/informes). Mismo patrón que disabledFeatureKeys
   marketingDigestEnabled    Boolean @default(true) // Aviso semanal por mail a admins/owners con los pendientes de alta prioridad de Prioridades (Marketing)
   seoAlertsEnabled          Boolean @default(true) // Alertas SEO mensuales automáticas (caídas de tráfico/posición/DR/keywords). OFF = no se envían
@@ -119,6 +120,7 @@ model Workspace {
   cannibalReports        CannibalReport[]
   adsSnapshots           AdsSnapshot[]
   adsAdvisorResults      AdsAdvisorResult[]
+  rrssAdvisorResults     RrssAdvisorResult[]
   dismissedFindings      DismissedFinding[]
   socialImages           SocialImage[]
   eosData                EOSData?
@@ -504,6 +506,7 @@ model Project {
   cannibalReports        CannibalReport[]
   adsSnapshots           AdsSnapshot[]
   adsAdvisorResults      AdsAdvisorResult[]
+  rrssAdvisorResults     RrssAdvisorResult[]
   dismissedFindings      DismissedFinding[]
   competitors            CompetitorAccount[]
   marketingObjectives    MarketingObjective[]
@@ -1843,6 +1846,25 @@ model AdsAdvisorResult {
 
   diagnostico String // JSON: [{ ambito, referencia, tipo, prioridad, titulo, detalle }]
   nuevosCopys String // JSON: [{ angulo, headline, texto, motivo }]
+  generatedAt DateTime
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, platform])
+  @@index([workspaceId])
+}
+
+// Cache del último diagnóstico del RRSS Advisor (IA), análogo a AdsAdvisorResult pero
+// para Instagram/TikTok/LinkedIn/Facebook/YouTube. Sin `nuevosCopys` — v1 solo genera
+// diagnóstico, no ideas de contenido nuevo (ver rrssAdvisor.service.js).
+model RrssAdvisorResult {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  projectId   Int
+  platform    String // "instagram" | "tiktok" | "linkedin" | "facebook" | "youtube"
+
+  diagnostico String // JSON: [{ tipo, prioridad, titulo, detalle }]
   generatedAt DateTime
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
