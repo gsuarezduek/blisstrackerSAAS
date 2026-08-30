@@ -96,6 +96,14 @@ const PLATFORM_SETTINGS = [
     help:    'Tiempo mínimo entre regeneraciones de insights diarios y análisis SEO. Aplica a insights del Dashboard y al análisis SEO de Search Console.',
   },
   {
+    key:     'dailyInsightGloballyEnabled',
+    type:    'boolean',
+    default: true,
+    group:   'operational',
+    label:   'Insight diario del Dashboard (kill switch global)',
+    help:    'Apaga la generación del insight diario de IA para TODOS los workspaces de la plataforma, sin importar la preferencia individual de cada persona (WorkspaceMember.dailyInsightEnabled). Pensado para un incidente o costo de IA inesperado — no reemplaza el toggle por usuario de SuperAdmin → Usuarios, que sigue funcionando igual cuando esto está prendido.',
+  },
+  {
     key:     'tokenWarningPct',
     type:    'integer',
     default: 90,

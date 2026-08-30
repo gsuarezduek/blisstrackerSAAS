@@ -370,7 +370,7 @@ async function getDailyInsight(req, res, next) {
     const tz = workspace.timezone
     const date = todayString(tz)
 
-    if (member?.dailyInsightEnabled === false) {
+    if (member?.dailyInsightEnabled === false || !(await getSetting('dailyInsightGloballyEnabled'))) {
       return res.status(403).json({ error: 'El insight diario está deshabilitado', code: 'DAILY_INSIGHT_DISABLED' })
     }
 
@@ -415,7 +415,7 @@ async function refreshDailyInsight(req, res, next) {
     const tz = workspace.timezone
     const date = todayString(tz)
 
-    if (member?.dailyInsightEnabled === false) {
+    if (member?.dailyInsightEnabled === false || !(await getSetting('dailyInsightGloballyEnabled'))) {
       return res.status(403).json({ error: 'El insight diario está deshabilitado', code: 'DAILY_INSIGHT_DISABLED' })
     }
 
