@@ -76,7 +76,6 @@ const Login2           = lazyWithReload(() => import('./pages/Login2'))
 const Register         = lazyWithReload(() => import('./pages/Register'))
 const Dashboard        = lazyWithReload(() => import('./pages/Dashboard'))
 const Admin            = lazyWithReload(() => import('./pages/Admin'))
-const Productivity     = lazyWithReload(() => import('./pages/Productivity'))
 const RRHH             = lazyWithReload(() => import('./pages/RRHH'))
 const RealTime         = lazyWithReload(() => import('./pages/RealTime'))
 const Reports          = lazyWithReload(() => import('./pages/Reports'))
@@ -116,6 +115,18 @@ function AdminRoute({ children }) {
   if (workspaceSuspended) return <WorkspaceSuspendedScreen />
   if (!user) return <Navigate to="/login" replace />
   if (!user.isAdmin) return <Navigate to="/" replace />
+  return children
+}
+
+// Módulos con acceso por rol configurable desde Preferencias (rrhh/gamification/eos):
+// pasan admins y quienes tengan el módulo habilitado vía user.moduleAccess (ver
+// backend/src/lib/moduleAccess.js — el bypass de admin ya viene resuelto ahí).
+function ModuleRoute({ moduleKey, children }) {
+  const { user, loading, workspaceSuspended } = useAuth()
+  if (loading) return <LoadingSpinner size="lg" fullPage />
+  if (workspaceSuspended) return <WorkspaceSuspendedScreen />
+  if (!user) return <Navigate to="/login" replace />
+  if (!user.moduleAccess?.[moduleKey]) return <Navigate to="/" replace />
   return children
 }
 
@@ -187,10 +198,9 @@ export default function App() {
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
           <Route path="/superadmin" element={<SuperAdminRoute><SuperAdmin /></SuperAdminRoute>} />
           <Route path="/admin"              element={<AdminRoute><Admin        /></AdminRoute>} />
-          <Route path="/admin/productivity" element={<AdminRoute><Productivity /></AdminRoute>} />
-          <Route path="/admin/rrhh"         element={<AdminRoute><RRHH        /></AdminRoute>} />
-          <Route path="/admin/eos"          element={<AdminRoute><EOS         /></AdminRoute>} />
-          <Route path="/admin/gamification" element={<AdminRoute><Gamification /></AdminRoute>} />
+          <Route path="/admin/rrhh"         element={<ModuleRoute moduleKey="rrhh"><RRHH /></ModuleRoute>} />
+          <Route path="/admin/eos"          element={<ModuleRoute moduleKey="eos"><EOS /></ModuleRoute>} />
+          <Route path="/admin/gamification" element={<ModuleRoute moduleKey="gamification"><Gamification /></ModuleRoute>} />
           <Route path="/ventas"       element={<SalesRoute><Ventas /></SalesRoute>} />
           <Route path="/admin/ventas" element={<AdminRoute><Ventas /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />

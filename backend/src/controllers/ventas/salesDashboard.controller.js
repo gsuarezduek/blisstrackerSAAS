@@ -1,5 +1,6 @@
 const prisma = require('../../lib/prisma')
 const { todayString } = require('../../utils/dates')
+const { resolveModuleAccess } = require('../../lib/moduleAccess')
 
 // Rango [inicio, finExclusivo) del mes en curso, anclado al mes local del workspace.
 // Usa límites UTC del mes (skew de horas en el borde, irrelevante para tarjetas de dashboard).
@@ -68,12 +69,12 @@ async function getDashboard(req, res, next) {
 }
 
 // GET /api/ventas/team
-// Responsables comerciales asignables: miembros activos admin/owner o con teamRole en salesRoleNames.
+// Responsables comerciales asignables: miembros activos admin/owner o con teamRole
+// habilitado para el módulo ventas (ver lib/moduleAccess).
 async function getTeam(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const raw = req.workspace.salesRoleNames
-    const salesRoles = Array.isArray(raw) ? raw : (() => { try { return JSON.parse(raw || '[]') } catch { return [] } })()
+    const salesRoles = resolveModuleAccess(req.workspace, 'ventas').roles
 
     const members = await prisma.workspaceMember.findMany({
       where: { workspaceId, active: true },

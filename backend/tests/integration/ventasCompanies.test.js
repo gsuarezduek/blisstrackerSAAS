@@ -29,7 +29,7 @@ function makeToken(userId = 1, role = 'admin') {
 function mockWorkspace(role = 'admin', teamRole = null) {
   prisma.workspace.findUnique.mockResolvedValue({
     id: WORKSPACE_ID, slug: WORKSPACE_SLUG, status: 'active', name: 'Bliss Marketing',
-    timezone: 'America/Argentina/Buenos_Aires', salesRoleNames: '[]', disabledFeatureKeys: '[]',
+    timezone: 'America/Argentina/Buenos_Aires', moduleAccess: {}, disabledFeatureKeys: '[]',
     members: [{ workspaceId: WORKSPACE_ID, userId: 1, role, teamRole, active: true }],
   })
   prisma.featureFlag.findUnique.mockResolvedValue({ key: 'ventas', enabledGlobally: true, enabledWorkspaceIds: '[]' })
@@ -60,7 +60,7 @@ describe('POST /api/ventas/companies', () => {
   })
 
   it('rechaza usuarios sin acceso al equipo comercial', async () => {
-    mockWorkspace('member', null) // ni admin/owner ni teamRole en salesRoleNames
+    mockWorkspace('member', null) // ni admin/owner ni teamRole habilitado en moduleAccess
     const res = await req('post', '/api/ventas/companies').send({ name: 'Acme' })
     expect(res.status).toBe(403)
   })

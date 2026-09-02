@@ -38,6 +38,7 @@ function monthBoundsOf(month) {
 export default function Contenido() {
   const { enabled, loading: flagLoading } = useFeatureFlag('contenido')
   const { user } = useAuth()
+  const moduleAllowed = enabled && !!user?.moduleAccess?.contenido
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects,  setProjects]  = useState([])
   const [projectId, setProjectId] = useState(searchParams.get('projectId') ?? '')
@@ -252,12 +253,14 @@ export default function Contenido() {
           </div>
         </div>
 
-        {!enabled ? (
+        {!moduleAllowed ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
             <div className="text-4xl mb-4">🔒</div>
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Sección no disponible</h3>
             <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
-              Esta sección está siendo activada gradualmente. Si querés acceso anticipado, contactá al equipo de BlissTracker.
+              {enabled
+                ? 'No tenés acceso a esta sección. Consultá con un administrador.'
+                : 'Esta sección está siendo activada gradualmente. Si querés acceso anticipado, contactá al equipo de BlissTracker.'}
             </p>
           </div>
         ) : (

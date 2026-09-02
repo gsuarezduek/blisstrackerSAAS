@@ -57,7 +57,7 @@ async function sendWorkspaceDigest(workspace) {
   const emails = [...new Set(admins.map(a => a.user.email).filter(Boolean))]
   if (emails.length === 0) return { sent: false, reason: 'sin admins' }
 
-  const appUrl = `https://${workspace.slug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/admin/productivity`
+  const appUrl = `https://${workspace.slug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/admin/rrhh?tab=productividad`
   await sendProductivityDigestEmail(emails, workspace.name, digest, appUrl, workspace.id)
   return { sent: true, count: digest.flagged.length, recipients: emails.length }
 }
@@ -66,7 +66,7 @@ async function sendWorkspaceDigest(workspace) {
 // con la variante "todo en orden"), para que el admin pueda ver cómo queda el mail.
 async function sendTestDigest(workspace, email) {
   const digest = await buildWorkspaceDigest(workspace)
-  const appUrl = `https://${workspace.slug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/admin/productivity`
+  const appUrl = `https://${workspace.slug}.${process.env.APP_DOMAIN || 'blisstracker.app'}/admin/rrhh?tab=productividad`
   await sendProductivityDigestEmail([email], workspace.name, digest, appUrl, workspace.id, { isTest: true })
   return { sent: true, to: email, count: digest.flagged.length }
 }

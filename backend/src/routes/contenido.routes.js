@@ -3,6 +3,7 @@ const multer  = require('multer')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
+const { moduleAccessGuard } = require('../lib/moduleAccess')
 
 // Fallback multipart (solo imagen, sin R2 configurado) — memoryStorage, nunca
 // disco, mismo patrón que avatares/logo/banner. El límite de tamaño real de
@@ -11,16 +12,19 @@ const { requireFeatureFlag } = require('../lib/featureFlags')
 const uploadFallback = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } })
 
 // Todo el módulo Contenido requiere: autenticación + workspace + que el feature
-// flag `contenido` esté habilitado para el workspace.
+// flag `contenido` esté habilitado para el workspace + acceso al módulo (por
+// default abierto a todo el workspace, configurable por rol desde Preferencias
+// — ver backend/src/lib/moduleAccess.js).
 //
 // El permiso de escritura NO se resuelve acá sino dentro de cada handler, con
 // canWrite(req, projectId) de lib/projectAccess.js: la lectura queda abierta a
-// cualquier miembro activo del workspace (criterio "equipo = etiqueta, no
+// cualquier miembro con acceso al módulo (criterio "equipo = etiqueta, no
 // barrera" que ya usan proyectos, reuniones y chat), y solo las mutaciones
-// exigen ser admin/owner o miembro del proyecto.
+// exigen además ser admin/owner o miembro del proyecto.
 router.use(auth)
 router.use(resolveWorkspace)
 router.use(requireFeatureFlag('contenido'))
+router.use(moduleAccessGuard('contenido'))
 
 const content  = require('../controllers/content.controller')
 const assets   = require('../controllers/contentAssets.controller')

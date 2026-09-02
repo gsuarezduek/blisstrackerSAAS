@@ -5,6 +5,7 @@ const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 const c  = require('../controllers/workspace.controller')
 const ff = require('../controllers/featureFlags.controller')
+const ma = require('../controllers/moduleAccess.controller')
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -53,6 +54,10 @@ router.delete('/current/banner', workspaceAdminOnly, c.deleteBanner)
 // Feature flags: gestión de opt-out por parte del workspace admin
 router.get('/current/features',          workspaceAdminOnly, ff.listWorkspaceFeatures)
 router.patch('/current/features/:key',   workspaceAdminOnly, ff.toggleWorkspaceFeature)
+
+// Acceso por rol a los módulos (rrhh/gamification/ventas/marketing/contenido/eos)
+router.get('/current/module-access',        workspaceAdminOnly, ma.list)
+router.patch('/current/module-access/:key', workspaceAdminOnly, ma.update)
 
 // Token budget: presupuesto mensual de IA (requiere auth, cualquier miembro)
 router.get('/current/token-budget', c.getTokenBudgetStatus)

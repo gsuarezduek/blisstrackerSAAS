@@ -59,9 +59,11 @@ model Workspace {
   // Identidad de marca
   brandColors         String    @default("[]") // JSON: [{ hex, name? }]
   brandFonts          String    @default("[]") // JSON: [{ name, role }] role: heading|body|accent
-  // Módulo Ventas (CRM): teamRoles (UserRole.name) que cuentan como "equipo comercial".
-  // Un miembro es "de ventas" si su teamRole está en esta lista. Los admins/owners siempre acceden.
-  salesRoleNames      Json      @default("[]")
+  // Acceso por rol a los módulos del dropdown "Módulos" (rrhh/gamification/ventas/marketing/
+  // contenido/eos): JSON { [moduleKey]: { allMembers: bool, roles: string[] } }. Una clave
+  // ausente cae al default del catálogo (backend/src/lib/moduleAccess.js). Los admins/owners
+  // siempre acceden sin importar esta config. Configurable desde Preferencias.
+  moduleAccess        Json      @default("{}")
   // Indicaciones persistentes que la IA tiene en cuenta al generar propuestas (tono, estructura, qué incluir/evitar).
   salesProposalGuidelines String?
   // Firmas / datos de contacto que pueden cerrar la propuesta en el PDF. JSON: [{ id, label, closing, name, role, email, phone, note, showLogo }]
@@ -3444,7 +3446,7 @@ model WhatsappBotConfig {
   // que el bot NUNCA debe usar en su respuesta (verificado después de generar, no
   // solo pedido por prompt); `escalationWords` son palabras/frases del CLIENTE que
   // disparan traspaso automático a un humano sin llamar a la IA. Ambas Json arrays
-  // de strings, mismo patrón que Workspace.salesRoleNames/disabledFeatureKeys.
+  // de strings, mismo patrón que Workspace.moduleAccess/disabledFeatureKeys.
   // `handoffMessage` es el aviso neutro que se manda al escalar (por baja confianza
   // del modelo o por escalationWords) — null usa un default embebido en código.
   blockedWords    Json    @default("[]")

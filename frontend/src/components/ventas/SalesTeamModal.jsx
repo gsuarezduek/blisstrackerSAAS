@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
-import useRoles from '../../hooks/useRoles'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
@@ -8,14 +7,13 @@ const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
 function newSignature() { return { id: crypto.randomUUID(), label: '', closing: '', name: '', role: '', email: '', phone: '', note: '', showLogo: false } }
 
 // Admin: configuración del módulo Ventas.
-//  1. Equipo comercial — roles (teamRole) que acceden sin ser admin (Workspace.salesRoleNames).
+//  1. Proyecto para tareas futuras de próximas acciones (Workspace.salesTasksProjectId).
 //  2. Indicaciones para propuestas — guía persistente que la IA respeta (Workspace.salesProposalGuidelines).
 //  3. Firmas — una o más, datos de contacto que cierran el PDF de la propuesta (Workspace.salesSignatures).
 //     Se elige cuál usar al generar/editar cada propuesta (Proposal.signatureId).
+// Quién puede usar el módulo (antes "Equipo comercial" acá) ahora se configura desde
+// Preferencias → Módulos adicionales, junto con el resto de los módulos.
 export default function SalesTeamModal({ onClose, onSaved }) {
-  const { roles, labelFor } = useRoles()
-  const [selected, setSelected] = useState([])
-  const [adding, setAdding] = useState(false)
   const [guidelines, setGuidelines] = useState('')
   const [signatures, setSignatures] = useState([])
   const [tasksProjectId, setTasksProjectId] = useState('')
@@ -26,7 +24,6 @@ export default function SalesTeamModal({ onClose, onSaved }) {
   useEffect(() => {
     api.get('/workspaces/current')
       .then(({ data }) => {
-        setSelected(Array.isArray(data.salesRoleNames) ? data.salesRoleNames : [])
         setGuidelines(data.salesProposalGuidelines || '')
         setSignatures(Array.isArray(data.salesSignatures) ? data.salesSignatures : [])
         setTasksProjectId(data.salesTasksProjectId || '')
@@ -35,10 +32,6 @@ export default function SalesTeamModal({ onClose, onSaved }) {
     api.get('/projects').then(({ data }) => setProjects(data || [])).catch(() => {})
   }, [])
 
-  const remaining = roles.filter(r => !selected.includes(r.name))
-
-  function addRole(name) { if (name) setSelected(s => [...s, name]); setAdding(false) }
-  function removeRole(name) { setSelected(s => s.filter(x => x !== name)) }
   function addSignature() { setSignatures(s => [...s, newSignature()]) }
   function removeSignature(id) { setSignatures(s => s.filter(x => x.id !== id)) }
   function setSigField(id, k, v) { setSignatures(s => s.map(x => x.id === id ? { ...x, [k]: v } : x)) }
@@ -47,7 +40,7 @@ export default function SalesTeamModal({ onClose, onSaved }) {
     setSaving(true); setError('')
     try {
       await api.patch('/workspaces/current', {
-        salesRoleNames: selected, salesProposalGuidelines: guidelines, salesSignatures: signatures,
+        salesProposalGuidelines: guidelines, salesSignatures: signatures,
         salesTasksProjectId: tasksProjectId ? Number(tasksProjectId) : null,
       })
       onSaved?.()
@@ -62,34 +55,7 @@ export default function SalesTeamModal({ onClose, onSaved }) {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full p-6 my-auto">
         <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Configuración de Ventas</h2>
 
-        {/* 1. Equipo comercial */}
-        <div className="mb-5">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">Equipo comercial</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            Roles cuyos integrantes pueden usar el módulo. Los administradores siempre acceden.
-          </p>
-          <div className="flex flex-wrap gap-2 items-center">
-            {selected.map(name => (
-              <span key={name} className="inline-flex items-center gap-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full pl-3 pr-2 py-1 text-xs font-medium">
-                {labelFor(name)}
-                <button onClick={() => removeRole(name)} className="hover:text-primary-900 dark:hover:text-white text-sm leading-none">×</button>
-              </span>
-            ))}
-            {selected.length === 0 && !adding && <span className="text-xs text-gray-400">Sin roles asignados.</span>}
-            {adding ? (
-              <select autoFocus className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1 text-xs" defaultValue="" onChange={e => addRole(e.target.value)} onBlur={() => setAdding(false)}>
-                <option value="" disabled>Elegir rol…</option>
-                {remaining.map(r => <option key={r.name} value={r.name}>{r.label}</option>)}
-              </select>
-            ) : (
-              remaining.length > 0 && (
-                <button onClick={() => setAdding(true)} className="text-xs font-medium text-primary-600 hover:text-primary-700 border border-dashed border-primary-300 dark:border-primary-700 rounded-full px-3 py-1">+ Agregar rol</button>
-              )
-            )}
-          </div>
-        </div>
-
-        {/* 1b. Proyecto para tareas futuras de próximas acciones */}
+        {/* 1. Proyecto para tareas futuras de próximas acciones */}
         <div className="mb-5">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">Proyecto para tareas de Ventas</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">

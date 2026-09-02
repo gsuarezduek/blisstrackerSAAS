@@ -36,7 +36,7 @@ function makeToken(userId = 1, role = 'admin') {
 function mockWorkspace(role = 'admin') {
   prisma.workspace.findUnique.mockResolvedValue({
     id: WORKSPACE_ID, slug: WORKSPACE_SLUG, status: 'active', name: 'Bliss Marketing', companyName: 'Bliss',
-    timezone: 'America/Argentina/Buenos_Aires', salesRoleNames: '[]', disabledFeatureKeys: '[]',
+    timezone: 'America/Argentina/Buenos_Aires', moduleAccess: {}, disabledFeatureKeys: '[]',
     logoData: null, brandColors: '[]', salesSignatures: [],
     members: [{ workspaceId: WORKSPACE_ID, userId: 1, role, teamRole: null, active: true }],
   })

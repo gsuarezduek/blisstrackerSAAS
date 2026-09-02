@@ -5,6 +5,7 @@ const { sendPasswordReset, sendEmailChangedNotice } = require('../services/email
 const { triggerLateCheck } = require('../services/lateNotification.service')
 const { OAuth2Client } = require('google-auth-library')
 const { isSalesUser } = require('../middleware/workspace')
+const { getAllModuleAccess } = require('../lib/moduleAccess')
 const prisma = require('../lib/prisma')
 const { validatePassword } = require('../lib/passwordPolicy')
 const { createAndSendVerificationEmail, RESEND_COOLDOWN_MS } = require('../lib/emailVerification')
@@ -134,7 +135,8 @@ async function me(req, res, next) {
       ...user,
       role: member?.teamRole ?? '',
       isAdmin: member?.role === 'admin' || member?.role === 'owner',
-      isSales: isSalesUser(req), // módulo Ventas: admin o teamRole en Workspace.salesRoleNames
+      isSales: isSalesUser(req), // módulo Ventas: admin o teamRole habilitado (ver moduleAccess)
+      moduleAccess: getAllModuleAccess(req), // { rrhh, gamification, ventas, marketing, contenido, eos }
       dailyInsightEnabled: member?.dailyInsightEnabled ?? true,
       notesBoardEnabled: member?.notesBoardEnabled ?? true,
     })

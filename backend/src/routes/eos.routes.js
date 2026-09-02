@@ -25,13 +25,14 @@ const {
   getAssessment, startRound, submitResponse, closeRound,
 } = require('../controllers/orgAssessment.controller')
 const { auth } = require('../middleware/auth')
-const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
+const { resolveWorkspace } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
+const { moduleAccessGuard } = require('../lib/moduleAccess')
 
 router.use(auth)
 router.use(resolveWorkspace)
 router.use(requireFeatureFlag('eos'))
-router.use(workspaceAdminOnly)
+router.use(moduleAccessGuard('eos'))
 
 // Visión
 router.get('/',   getEOS)

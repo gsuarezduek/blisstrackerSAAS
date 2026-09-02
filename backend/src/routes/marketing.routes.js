@@ -3,6 +3,7 @@ const router  = express.Router()
 const { auth }             = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
+const { moduleAccessGuard } = require('../lib/moduleAccess')
 
 const geo               = require('../controllers/geo.controller')
 const integrations      = require('../controllers/integrations.controller')
@@ -47,6 +48,7 @@ router.get('/integrations/facebook/callback',  metaIntegrations.handleFacebookCa
 // ─── CON AUTH — todo lo demás requiere usuario autenticado y workspace ─────────
 router.use(auth, resolveWorkspace)
 router.use(requireFeatureFlag('marketing'))
+router.use(moduleAccessGuard('marketing'))
 
 // GEO
 router.post('/geo/audit',                    geo.runAudit)

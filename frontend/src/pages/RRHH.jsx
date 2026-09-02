@@ -3,29 +3,39 @@ import { useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import api from '../api/client'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import { useWorkspace } from '../context/WorkspaceContext'
 import { computePeopleScore, peopleColumnKeys } from '../utils/peopleScore'
 import { MiniDashboard } from './rrhh/dashboard'
 import { TabIngresos } from './rrhh/ingresos'
 import { TabLegajos } from './rrhh/legajos'
 import { TabVacaciones } from './rrhh/vacaciones'
+import ProductivityTab from '../components/admin/ProductivityTab'
 
 // ─── Shell del panel RRHH. Los tabs/modales viven en ./rrhh/*.jsx ───
-const TABS = [
-  { id: 'ingresos',   label: '🕐 Ingresos'              },
-  { id: 'legajos',    label: '📋 Legajos'              },
-  { id: 'vacaciones', label: '🏖️ Vacaciones y Licencias' },
+// "Dashboard" es lo primero que se ve (las cards que antes estaban siempre
+// arriba); "Productividad" absorbe la sección que antes vivía en /admin/productivity
+// (Administración) y solo aparece si el workspace no la desactivó.
+const BASE_TABS = [
+  { id: 'dashboard',   label: '🏠 Dashboard' },
+  { id: 'ingresos',    label: '🕐 Ingresos' },
+  { id: 'legajos',     label: '📋 Legajos' },
+  { id: 'vacaciones',  label: '🏖️ Vacaciones y Licencias' },
 ]
-const VALID_TABS = new Set(TABS.map(t => t.id))
+const PRODUCTIVIDAD_TAB = { id: 'productividad', label: '📊 Productividad' }
+const VALID_TABS = new Set([...BASE_TABS, PRODUCTIVIDAD_TAB].map(t => t.id))
 
 export default function RRHH() {
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab')
-  const [tab, setTab]           = useState(VALID_TABS.has(initialTab) ? initialTab : 'ingresos')
+  const [tab, setTab]           = useState(VALID_TABS.has(initialTab) ? initialTab : 'dashboard')
   const [users, setUsers]       = useState([])
   const [lastLoginsMap, setLastLoginsMap] = useState({})
   const [dashStats, setDashStats] = useState({ projectsPerPerson: 0 })
   const [peopleScore, setPeopleScore] = useState(null)
   const { enabled: eosEnabled } = useFeatureFlag('eos')
+  const { workspace } = useWorkspace()
+  const productivityEnabled = workspace?.productivityEnabled !== false
+  const TABS = productivityEnabled ? [...BASE_TABS, PRODUCTIVIDAD_TAB] : BASE_TABS
 
   useEffect(() => {
     api.get('/users').then(r => setUsers(r.data)).catch(() => {})
@@ -60,9 +70,6 @@ export default function RRHH() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">RRHH</h1>
 
-        {/* Mini dashboard — siempre visible */}
-        {users.length > 0 && <MiniDashboard users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} peopleScore={peopleScore} />}
-
         {/* Tabs */}
         <div className="mb-4">
           <select className="sm:hidden w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -83,9 +90,13 @@ export default function RRHH() {
           </div>
         </div>
 
-        {tab === 'legajos'    && <TabLegajos    users={users.filter(u => u.active)} onVacationUpdate={updated => setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, vacationDays: updated.vacationDays } : u))} />}
-        {tab === 'vacaciones' && <TabVacaciones />}
-        {tab === 'ingresos'   && <TabIngresos   users={users.filter(u => u.active)} />}
+        {tab === 'dashboard' && users.length > 0 && (
+          <MiniDashboard users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} peopleScore={peopleScore} />
+        )}
+        {tab === 'legajos'      && <TabLegajos    users={users.filter(u => u.active)} onVacationUpdate={updated => setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, vacationDays: updated.vacationDays } : u))} />}
+        {tab === 'vacaciones'   && <TabVacaciones />}
+        {tab === 'ingresos'     && <TabIngresos   users={users.filter(u => u.active)} />}
+        {tab === 'productividad' && productivityEnabled && <ProductivityTab />}
       </main>
     </div>
   )

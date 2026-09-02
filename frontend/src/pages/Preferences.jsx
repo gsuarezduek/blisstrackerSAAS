@@ -7,6 +7,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ConfirmModal from '../components/ConfirmModal'
 import { moduleMeta } from '../lib/moduleCatalog'
+import ModuleAccessEditor from '../components/ModuleAccessEditor'
 
 export default function Preferences() {
   const { user, updateUser } = useAuth()
@@ -30,6 +31,8 @@ export default function Preferences() {
   const [aiUsageError,        setAiUsageError]        = useState(false)
   const [wsFeatures,          setWsFeatures]          = useState(null)
   const [togglingFeature,     setTogglingFeature]     = useState(null)
+  const [moduleAccess,        setModuleAccess]        = useState(null)
+  const [savingModuleAccess,  setSavingModuleAccess]  = useState(null)
   // EOS: proyecto asociado para tareas y reuniones
   const [projects,            setProjects]            = useState([])
   const [eosMeetingProjectId, setEosMeetingProjectId] = useState('')
@@ -86,6 +89,9 @@ export default function Preferences() {
     api.get('/workspaces/current/features')
       .then(({ data }) => setWsFeatures(data))
       .catch(() => setWsFeatures([]))
+    api.get('/workspaces/current/module-access')
+      .then(({ data }) => setModuleAccess(data))
+      .catch(() => setModuleAccess({}))
   }, [user?.isAdmin])
 
   // EOS habilitado → cargar proyectos + el proyecto asociado a tareas/reuniones
@@ -190,6 +196,19 @@ export default function Preferences() {
       setWsFeatures(prev => prev.map(f => f.key === key ? { ...f, disabled: next } : f))
     } catch (_) {}
     finally { setTogglingFeature(null) }
+  }
+
+  async function handleChangeModuleAccess(key, nextConfig) {
+    const prev = moduleAccess?.[key]
+    setModuleAccess(m => ({ ...m, [key]: nextConfig }))
+    setSavingModuleAccess(key)
+    try {
+      await api.patch(`/workspaces/current/module-access/${key}`, nextConfig)
+    } catch (_) {
+      setModuleAccess(m => ({ ...m, [key]: prev }))
+    } finally {
+      setSavingModuleAccess(null)
+    }
   }
 
   async function handleGlobalSetting(patch) {
@@ -763,20 +782,20 @@ export default function Preferences() {
             )}
 
             {/* ── Módulos adicionales ── */}
-            {wsFeatures && wsFeatures.length > 0 && (
+            {moduleAccess && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
                 <div className="flex items-center gap-2 mb-1">
                   <h2 className="text-base font-semibold text-gray-900 dark:text-white">Módulos adicionales</h2>
                 </div>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
-                  Funcionalidades opcionales habilitadas para tu workspace. Podés desactivar las que no uses.
+                  Funcionalidades opcionales de tu workspace. Podés desactivar las que no uses y elegir qué roles del equipo ven cada una (los administradores siempre acceden).
                 </p>
                 <div className="space-y-0">
-                  {wsFeatures.map((feat, idx) => {
+                  {(wsFeatures ?? []).map((feat) => {
                     const meta = moduleMeta(feat.key, feat.description)
-                    const isLast = idx === wsFeatures.length - 1
                     return (
-                      <div key={feat.key} className={`py-4 ${isLast ? '' : 'border-b dark:border-gray-700'}`}>
+                      // Siempre lleva separador: la fila de RRHH (sin feature flag) va última.
+                      <div key={feat.key} className="py-4 border-b dark:border-gray-700">
                         <div className="flex items-start gap-4">
                           <span className="text-2xl flex-shrink-0 mt-0.5">{meta.icon}</span>
                           <div className="flex-1 min-w-0">
@@ -794,6 +813,14 @@ export default function Preferences() {
                             disabled={togglingFeature === feat.key}
                           />
                         </div>
+
+                        {!feat.disabled && (
+                          <ModuleAccessEditor
+                            config={moduleAccess[feat.key]}
+                            onChange={next => handleChangeModuleAccess(feat.key, next)}
+                            disabled={savingModuleAccess === feat.key}
+                          />
+                        )}
 
                         {/* EOS habilitado → proyecto asociado a tareas y reuniones */}
                         {feat.key === 'eos' && !feat.disabled && (
@@ -824,6 +851,28 @@ export default function Preferences() {
                       </div>
                     )
                   })}
+
+                  {/* RRHH: sin feature flag (siempre disponible), solo el picker de roles */}
+                  {(() => {
+                    const meta = moduleMeta('rrhh')
+                    return (
+                      <div className="py-4">
+                        <div className="flex items-start gap-4">
+                          <span className="text-2xl flex-shrink-0 mt-0.5">{meta.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{meta.label}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">{meta.detail}</p>
+                          </div>
+                          <span className="text-xs text-gray-400 dark:text-gray-500 self-center whitespace-nowrap">Siempre disponible</span>
+                        </div>
+                        <ModuleAccessEditor
+                          config={moduleAccess.rrhh}
+                          onChange={next => handleChangeModuleAccess('rrhh', next)}
+                          disabled={savingModuleAccess === 'rrhh'}
+                        />
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             )}

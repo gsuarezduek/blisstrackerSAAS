@@ -88,8 +88,7 @@ function IcoEye() {
 
 export default function Navbar() {
   const { user, logout, switchWorkspace, realIsAdmin, viewAsMember, toggleViewAsMember } = useAuth()
-  const { slug: currentSlug, workspace } = useWorkspace()
-  const productivityEnabled = workspace?.productivityEnabled !== false
+  const { slug: currentSlug } = useWorkspace()
   const [otherWorkspaces, setOtherWorkspaces] = useState([])
   const [switchLoading, setSwitchLoading]     = useState(null)
   const navigate  = useNavigate()
@@ -106,8 +105,9 @@ export default function Navbar() {
   const adminRef   = useRef(null)
   const modulesRef = useRef(null)
 
-  const isAdminRoute   = !!useMatch('/admin') || !!useMatch('/admin/productivity') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification') || !!useMatch('/reports')
+  const isAdminRoute   = !!useMatch('/admin') || !!useMatch('/reports')
   const isModulesRoute = !!useMatch('/marketing') || !!useMatch('/contenido') || !!useMatch('/ventas') || !!useMatch('/admin/ventas')
+    || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification')
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -162,26 +162,31 @@ export default function Navbar() {
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
   // Siempre agrupados bajo "Módulos" (nunca se aplanan al nivel superior aunque
   // solo haya uno activo) — la posición de cada módulo en el menú es estable sin
-  // importar qué otros estén prendidos en el workspace. Mismo criterio de acceso a
-  // Ventas que ya usan NotificationBell/SetupChecklist: admin → /admin/ventas,
-  // equipo comercial no-admin → /ventas.
+  // importar qué otros estén prendidos en el workspace. Cada módulo combina el
+  // feature flag (¿SuperAdmin lo habilitó para el workspace?) con el acceso por
+  // rol configurado en Preferencias (user.moduleAccess, ver backend/src/lib/
+  // moduleAccess.js) — admins siempre pasan ese segundo chequeo. RRHH no tiene
+  // feature flag propio (siempre disponible), Ventas mantiene su criterio actual
+  // (admin → /admin/ventas, equipo comercial no-admin → /ventas), que ya equivale
+  // a moduleAccess.ventas.
   const moduleSublinks = [
-    ...(marketingEnabled ? [{ to: '/marketing', label: '🎯 Marketing' }] : []),
-    ...(contenidoEnabled ? [{ to: '/contenido', label: '📅 Contenido' }] : []),
+    ...(user?.moduleAccess?.rrhh ? [{ to: '/admin/rrhh', label: '👥 RRHH' }] : []),
+    ...(gamificationEnabled && user?.moduleAccess?.gamification ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
     ...(ventasEnabled && (isAdmin || user?.isSales)
       ? [{ to: isAdmin ? '/admin/ventas' : '/ventas', label: '💰 Ventas' }]
       : []),
+    ...(marketingEnabled && user?.moduleAccess?.marketing ? [{ to: '/marketing', label: '🎯 Marketing' }] : []),
+    ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ to: '/contenido', label: '📅 Contenido' }] : []),
+    ...(eosEnabled && user?.moduleAccess?.eos ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
+  // Productividad/RRHH/EOS/Gamification se mudaron a "Módulos" (arriba); acá solo
+  // queda lo que sigue siendo estrictamente admin sin acceso configurable por rol.
   const adminSublinks = [
-    ...(productivityEnabled ? [{ to: '/admin/productivity', label: '📊 Productividad' }] : []),
-    { to: '/reports',            label: '📈 Reportes' },
-    { to: '/admin/rrhh',         label: '👥 RRHH' },
-    ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
-    ...(gamificationEnabled ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
-    { to: '/admin',              label: '⚙️ Panel' },
+    { to: '/reports', label: '📈 Reportes' },
+    { to: '/admin',   label: '⚙️ Panel' },
   ]
 
   // ── Secciones del menú de perfil ──────────────────────────────────────────

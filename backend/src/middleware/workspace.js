@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma')
+const { hasModuleAccess } = require('../lib/moduleAccess')
 
 // Métodos HTTP de solo lectura — nunca se bloquean por billing.
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
@@ -100,18 +101,13 @@ function workspaceAdminOnly(req, res, next) {
 }
 
 /**
- * Módulo Ventas (CRM): true si el usuario puede operar el CRM.
- * Acceden admins/owners/super admins y los miembros cuyo teamRole está en
- * Workspace.salesRoleNames (el "equipo comercial" configurable por el admin).
- * Debe usarse después de resolveWorkspace.
+ * Módulo Ventas (CRM): true si el usuario puede operar el CRM. Acceden admins/
+ * owners y los miembros cuyo teamRole está configurado para el módulo `ventas`
+ * (ver backend/src/lib/moduleAccess.js — mismo mecanismo que RRHH/EOS/Gamification/
+ * Marketing/Contenido). Debe usarse después de resolveWorkspace.
  */
 function isSalesUser(req) {
-  const m = req.workspaceMember
-  if (m?.role === 'admin' || m?.role === 'owner') return true
-  if (!m?.teamRole) return false
-  const raw = req.workspace?.salesRoleNames
-  const roles = Array.isArray(raw) ? raw : (() => { try { return JSON.parse(raw || '[]') } catch { return [] } })()
-  return roles.includes(m.teamRole)
+  return hasModuleAccess(req, 'ventas')
 }
 
 /**
