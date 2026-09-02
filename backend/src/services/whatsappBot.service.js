@@ -86,7 +86,7 @@ async function buildServicesBlock(workspaceId) {
 
 function buildTranscript(history) {
   return history
-    .map(m => `${m.direction === 'in' ? 'Cliente' : (m.senderType === 'bot' ? 'Asistente' : 'Equipo')}: ${m.content || '[adjunto]'}`)
+    .map(m => `${m.direction === 'in' ? 'Cliente' : (m.senderType === 'bot' ? 'Asistente' : 'Equipo')}: ${m.reactionEmoji ? `(reaccionó con ${m.reactionEmoji})` : (m.content || '[adjunto]')}`)
     .join('\n')
 }
 
@@ -335,7 +335,7 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
     where: { conversationId: conversation.id },
     orderBy: { id: 'desc' },
     take: HISTORY_LIMIT,
-    select: { direction: true, content: true, senderType: true },
+    select: { direction: true, content: true, senderType: true, reactionEmoji: true },
   })
   history.reverse()
   if (history.length === 0) return

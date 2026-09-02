@@ -5,6 +5,7 @@ const MEDIA_PREVIEW = { image: '📷 Foto', sticker: '🩹 Sticker', audio: '�
 function previewText(lastMessage) {
   if (!lastMessage) return 'Sin mensajes'
   const prefix = lastMessage.direction === 'out' ? 'Vos: ' : ''
+  if (lastMessage.reactionEmoji) return `Reaccionó ${lastMessage.reactionEmoji}`
   if (lastMessage.content) return prefix + lastMessage.content
   if (lastMessage.mediaKind) return prefix + (MEDIA_PREVIEW[lastMessage.mediaKind] || '📎 Adjunto')
   return prefix

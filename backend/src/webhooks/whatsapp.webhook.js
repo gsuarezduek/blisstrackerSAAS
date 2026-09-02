@@ -29,6 +29,11 @@ async function findMatchingContact(workspaceId, phoneE164) {
 async function handleInboundMessage(account, event) {
   if (!event.waMessageId || !event.from) return
 
+  const isReaction = event.type === 'reaction'
+  // Sacar una reacción que había puesto (emoji vacío) no tiene nada que
+  // mostrar — se ignora en silencio, no genera fila ni notificación.
+  if (isReaction && !event.reactionEmoji) return
+
   // Dedup: Meta/Chakra reintentan el webhook agresivamente si no hay 200 rápido.
   const existing = await prisma.whatsappMessage.findUnique({ where: { waMessageId: event.waMessageId } })
   if (existing) return
@@ -58,6 +63,15 @@ async function handleInboundMessage(account, event) {
     },
   })
 
+  // A qué mensaje nuestro reaccionó, si lo tenemos guardado (puede no
+  // resolver si quedó fuera de nuestro historial) — solo aplica a reacciones.
+  const reactionTarget = isReaction && event.reactionToWaMessageId
+    ? await prisma.whatsappMessage.findFirst({
+        where: { waMessageId: event.reactionToWaMessageId, workspaceId: account.workspaceId },
+        select: { id: true },
+      })
+    : null
+
   const message = await prisma.whatsappMessage.create({
     data: {
       workspaceId: account.workspaceId,
@@ -65,17 +79,21 @@ async function handleInboundMessage(account, event) {
       direction: 'in',
       // Para media, `text` viene null y el caption (si vino) es lo que se
       // muestra como contenido del mensaje — mismo campo que un texto plano.
-      content: event.mediaId ? (event.mediaCaption || null) : event.text,
+      // Para una reacción, content queda null (no es texto real, ver campos
+      // reactionEmoji/reactionToId más abajo).
+      content: isReaction ? null : (event.mediaId ? (event.mediaCaption || null) : event.text),
       waMessageId: event.waMessageId,
       senderType: 'contact',
       status: 'delivered',
+      ...(isReaction ? { reactionEmoji: event.reactionEmoji, reactionToId: reactionTarget?.id ?? null } : {}),
     },
-    include: { media: true },
+    include: { media: true, reactionTo: { select: { id: true, content: true, direction: true } } },
   })
 
   // Adjunto (Fase 3 del plan) — best-effort: si falla la descarga, el mensaje
   // ya está guardado (con su caption si tenía), solo queda sin el archivo.
-  if (event.mediaId) {
+  // No aplica a reacciones (nunca traen mediaId).
+  if (!isReaction && event.mediaId) {
     const media = await downloadInboundMedia({
       account, mediaId: event.mediaId, kind: event.type, mimeType: event.mediaMimeType,
     })
@@ -91,22 +109,30 @@ async function handleInboundMessage(account, event) {
     }
   }
 
-  const fullMessage = event.mediaId
-    ? await prisma.whatsappMessage.findUnique({ where: { id: message.id }, include: { media: true } })
+  const fullMessage = !isReaction && event.mediaId
+    ? await prisma.whatsappMessage.findUnique({
+        where: { id: message.id },
+        include: { media: true, reactionTo: { select: { id: true, content: true, direction: true } } },
+      })
     : message
 
   emitTo(`workspace:${account.workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message: fullMessage })
 
   if (contact) await notifyLeadOfMessage({ workspaceId: account.workspaceId, contact, conversation, event })
 
-  // Bot (Fase 4 del plan) — fire-and-forget: la llamada a Claude tarda
-  // segundos y no debe demorar el 200 al webhook (Meta/Chakra reintenta
-  // agresivamente si tarda). maybeRespondWithBot ya maneja sus propios errores.
-  setImmediate(() => {
-    maybeRespondWithBot({ account, conversation, contact }).catch(err => {
-      console.error('[WhatsApp Bot] Error inesperado:', err.message)
+  // Bot (Fase 4 del plan) — una reacción no es una consulta que responder
+  // (generaría respuestas raras tipo "¡gracias por tu 👍!" sin que el
+  // cliente haya pedido nada), así que no dispara al bot. Fire-and-forget: la
+  // llamada a Claude tarda segundos y no debe demorar el 200 al webhook
+  // (Meta/Chakra reintenta agresivamente si tarda). maybeRespondWithBot ya
+  // maneja sus propios errores.
+  if (!isReaction) {
+    setImmediate(() => {
+      maybeRespondWithBot({ account, conversation, contact }).catch(err => {
+        console.error('[WhatsApp Bot] Error inesperado:', err.message)
+      })
     })
-  })
+  }
 }
 
 /**
@@ -128,27 +154,33 @@ async function notifyLeadOfMessage({ workspaceId, contact, conversation, event }
     if (!lead) return
 
     const contactLabel = contact.name || event.contactName || conversation.phoneE164
-    const snippet = (event.text || '[mensaje]').slice(0, 120)
+    const isReaction = event.type === 'reaction'
+    const logContent = isReaction
+      ? `registró una reacción de ${contactLabel} por WhatsApp: ${event.reactionEmoji}`
+      : `registró un mensaje de WhatsApp de ${contactLabel}: "${(event.text || '[mensaje]').slice(0, 120)}"`
 
     // userId: null → el timeline lo muestra con prefijo "Sistema" (nadie del
     // equipo actuó acá), por eso el texto sigue en minúscula como el resto de
     // los eventos ("Sistema registró...", igual que "Fulano creó el lead").
     await logLeadEvent({
       workspaceId, leadId: lead.id, userId: null, type: 'whatsapp_message',
-      content: `registró un mensaje de WhatsApp de ${contactLabel}: "${snippet}"`,
+      content: logContent,
     })
 
     const targetUserId = conversation.assignedToId || lead.ownerId
     if (!targetUserId) return
     // Sin actorId: quien escribió es el contacto (no un User) — mismo criterio
     // que CONTENT_APPROVED, mensaje autocontenido con el nombre incluido.
+    const notifMessage = isReaction
+      ? `${contactLabel} reaccionó con ${event.reactionEmoji} a tu mensaje por WhatsApp`
+      : `${contactLabel} te escribió por WhatsApp: "${(event.text || '[mensaje]').slice(0, 120)}"`
     await prisma.notification.create({
       data: {
         userId: targetUserId,
         workspaceId,
         leadId: lead.id,
         type: 'WHATSAPP_MESSAGE',
-        message: `${contactLabel} te escribió por WhatsApp: "${snippet}"`,
+        message: notifMessage,
       },
     })
     emitTo(`user:${targetUserId}`, 'notification:new', { type: 'WHATSAPP_MESSAGE', leadId: lead.id })
@@ -171,6 +203,11 @@ async function handleOutboundEcho(account, event) {
   // "revoke"/"edit" (el remitente borró o editó un mensaje ya ecoado) — no
   // soportado en v1, se ignora en silencio; el mensaje original queda como está.
   if (event.type === 'revoke' || event.type === 'edit') return
+
+  const isReaction = event.type === 'reaction'
+  // Sacar una reacción que había puesto (emoji vacío) no tiene nada que
+  // mostrar — se ignora en silencio, igual que en handleInboundMessage.
+  if (isReaction && !event.reactionEmoji) return
 
   const existing = await prisma.whatsappMessage.findUnique({ where: { waMessageId: event.waMessageId } })
   if (existing) return
@@ -196,23 +233,36 @@ async function handleOutboundEcho(account, event) {
     },
   })
 
+  // Alguien del equipo reaccionó, desde la app nativa, a un mensaje ENTRANTE
+  // del cliente — a diferencia de handleInboundMessage, acá el mensaje
+  // reaccionado suele ser `direction: 'in'`, pero se busca sin filtrar por
+  // dirección: también puede reaccionar a algo que mandamos nosotros.
+  const reactionTarget = isReaction && event.reactionToWaMessageId
+    ? await prisma.whatsappMessage.findFirst({
+        where: { waMessageId: event.reactionToWaMessageId, workspaceId: account.workspaceId },
+        select: { id: true },
+      })
+    : null
+
   const message = await prisma.whatsappMessage.create({
     data: {
       workspaceId: account.workspaceId,
       conversationId: conversation.id,
       direction: 'out',
-      content: event.mediaId ? (event.mediaCaption || null) : event.text,
+      content: isReaction ? null : (event.mediaId ? (event.mediaCaption || null) : event.text),
       waMessageId: event.waMessageId,
       senderType: 'app_echo', // ninguno de nuestros usuarios — Meta no dice qué persona lo mandó desde la app
       status: 'sent',
+      ...(isReaction ? { reactionEmoji: event.reactionEmoji, reactionToId: reactionTarget?.id ?? null } : {}),
     },
-    include: { media: true },
+    include: { media: true, reactionTo: { select: { id: true, content: true, direction: true } } },
   })
 
   // Mismo mecanismo de descarga que un adjunto entrante (downloadInboundMedia
   // solo baja bytes por mediaId contra la API de Meta — el nombre es histórico,
-  // funciona igual sin importar la dirección del mensaje).
-  if (event.mediaId) {
+  // funciona igual sin importar la dirección del mensaje). No aplica a
+  // reacciones (nunca traen mediaId).
+  if (!isReaction && event.mediaId) {
     const media = await downloadInboundMedia({
       account, mediaId: event.mediaId, kind: event.type, mimeType: event.mediaMimeType,
     })
@@ -228,8 +278,11 @@ async function handleOutboundEcho(account, event) {
     }
   }
 
-  const fullMessage = event.mediaId
-    ? await prisma.whatsappMessage.findUnique({ where: { id: message.id }, include: { media: true } })
+  const fullMessage = !isReaction && event.mediaId
+    ? await prisma.whatsappMessage.findUnique({
+        where: { id: message.id },
+        include: { media: true, reactionTo: { select: { id: true, content: true, direction: true } } },
+      })
     : message
 
   emitTo(`workspace:${account.workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message: fullMessage })

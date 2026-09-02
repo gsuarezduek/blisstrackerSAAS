@@ -3376,11 +3376,23 @@ model WhatsappMessage {
   // no confundir volumen de mensajes con volumen facturable.
   viaTemplate Boolean @default(false)
 
+  // Reacción del cliente a un mensaje nuestro (evento "reaction" de la Cloud
+  // API de Meta, ej. 👍 a un mensaje saliente) — no es un mensaje de texto
+  // real, `content` queda null. Sin emoji (el cliente SACÓ una reacción que
+  // había puesto) no se persiste en absoluto, ver whatsapp.webhook.js.
+  reactionEmoji String?
+  // A qué mensaje reaccionó, si lo pudimos resolver por waMessageId (puede no
+  // resolver si el mensaje original quedó fuera de nuestro historial).
+  reactionToId Int?
+  reactionTo   WhatsappMessage?  @relation("WhatsappMessageReaction", fields: [reactionToId], references: [id], onDelete: SetNull)
+  reactions    WhatsappMessage[] @relation("WhatsappMessageReaction")
+
   media WhatsappMedia?
 
   @@index([conversationId, createdAt])
   @@index([workspaceId])
   @@index([workspaceId, createdAt])
+  @@index([reactionToId])
 }
 
 // Adjunto multimedia de un mensaje (Fase 3 del plan) — 1:1 con WhatsappMessage,

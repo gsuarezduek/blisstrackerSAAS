@@ -177,7 +177,13 @@ async function listConversations(req, res, next) {
         lastMessageAt: c.lastMessageAt,
         lastInboundAt: c.lastInboundAt,
         lastMessage: lastMessage
-          ? { content: lastMessage.content, direction: lastMessage.direction, createdAt: lastMessage.createdAt, mediaKind: lastMessage.media?.kind || null }
+          ? {
+              content: lastMessage.content,
+              direction: lastMessage.direction,
+              createdAt: lastMessage.createdAt,
+              mediaKind: lastMessage.media?.kind || null,
+              reactionEmoji: lastMessage.reactionEmoji || null,
+            }
           : null,
         unread: Boolean(lastMessage && lastMessage.id > lastRead),
       }
@@ -214,7 +220,11 @@ async function getMessages(req, res, next) {
       where: { conversationId: conversation.id, ...(before ? { id: { lt: before } } : {}) },
       orderBy: { id: 'desc' },
       take: limit,
-      include: { senderUser: { select: { id: true, name: true, avatar: true } }, media: true },
+      include: {
+        senderUser: { select: { id: true, name: true, avatar: true } },
+        media: true,
+        reactionTo: { select: { id: true, content: true, direction: true } },
+      },
     })
     messages.reverse()
 

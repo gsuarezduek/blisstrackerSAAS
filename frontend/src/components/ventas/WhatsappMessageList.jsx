@@ -154,8 +154,19 @@ export default function WhatsappMessageList({ messages, loading, loadingMore, ha
                 {out && m.senderType === 'app_echo' && (
                   <span className="block text-[10px] font-semibold uppercase tracking-wide opacity-75 mb-0.5" title="Enviado a mano desde la app/WhatsApp Web del número, no desde BlissTracker">📱 WhatsApp</span>
                 )}
-                {m.media && <MediaContent media={m.media} />}
-                {m.content && <p className="whitespace-pre-wrap break-words leading-snug">{m.content}</p>}
+                {m.reactionEmoji ? (
+                  <p className="whitespace-pre-wrap break-words leading-snug">
+                    <span className="text-base align-middle mr-1">{m.reactionEmoji}</span>
+                    <span className={out ? 'text-primary-100' : 'text-gray-500 dark:text-gray-400'}>
+                      Reaccionó{m.reactionTo?.content ? ` a: "${m.reactionTo.content.slice(0, 80)}"` : ' a un mensaje'}
+                    </span>
+                  </p>
+                ) : (
+                  <>
+                    {m.media && <MediaContent media={m.media} />}
+                    {m.content && <p className="whitespace-pre-wrap break-words leading-snug">{m.content}</p>}
+                  </>
+                )}
                 <div className={`flex items-center gap-1 justify-end mt-1 text-[10px] ${out ? 'text-primary-100' : 'text-gray-400 dark:text-gray-500'}`}>
                   <span>{timeLabel(m.createdAt)}</span>
                   {out && <StatusTicks status={m.status} />}

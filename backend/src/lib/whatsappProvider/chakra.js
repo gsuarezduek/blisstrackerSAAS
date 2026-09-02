@@ -241,6 +241,11 @@ function parseChakraFormat(payload) {
       mediaMimeType: media?.mime_type ? String(media.mime_type).split(';')[0].trim() : null,
       mediaCaption: media?.caption || null,
       mediaFileName: media?.filename || null,
+      // Reacción del cliente a un mensaje nuestro (👍 etc., ver
+      // parseMetaRawFormat para el shape completo). emoji: '' = sacó una
+      // reacción que había puesto — el caller lo ignora.
+      reactionEmoji: msg.type === 'reaction' ? (msg.reaction?.emoji ?? '') : null,
+      reactionToWaMessageId: msg.type === 'reaction' ? (msg.reaction?.message_id || null) : null,
       timestamp: msg.timestamp || p.timestamp,
     }
   }
@@ -279,6 +284,13 @@ function parseChakraFormat(payload) {
  * Web del número, no vía esta API — shape (mismo `entry`/`changes`, otro
  * `value`): { messaging_product, metadata, message_echoes: [{ from, to, id,
  * timestamp, type, text?: { body } }] }. Ver parseMetaRawFormat.
+ *
+ * Reacciones (el cliente reacciona con 👍 etc. a un mensaje nuestro) llegan
+ * como un item más de `messages[]` con `type: "reaction"` y sin `text`:
+ * { from, id, timestamp, type: "reaction", reaction: { message_id, emoji } }
+ * — `emoji` viene vacío ("") si el cliente SACÓ una reacción que había
+ * puesto, `reaction.message_id` es el wamid del mensaje reaccionado (no el
+ * id de este evento). Documentado por Meta en la misma URL de arriba.
  */
 function parseMetaRawFormat(payload) {
   const entry = payload?.entry?.[0]
@@ -303,6 +315,11 @@ function parseMetaRawFormat(payload) {
       mediaMimeType: media?.mime_type ? String(media.mime_type).split(';')[0].trim() : null,
       mediaCaption: media?.caption || null,
       mediaFileName: media?.filename || null,
+      // Reacción del cliente a un mensaje nuestro — shape documentado por
+      // Meta: { type: "reaction", reaction: { message_id, emoji } }. emoji
+      // vacío ("") = sacó una reacción que había puesto; el caller lo ignora.
+      reactionEmoji: message.type === 'reaction' ? (message.reaction?.emoji ?? '') : null,
+      reactionToWaMessageId: message.type === 'reaction' ? (message.reaction?.message_id || null) : null,
       timestamp: message.timestamp,
     }
   }
@@ -341,6 +358,10 @@ function parseMetaRawFormat(payload) {
       mediaMimeType: media?.mime_type ? String(media.mime_type).split(';')[0].trim() : null,
       mediaCaption: media?.caption || null,
       mediaFileName: media?.filename || null,
+      // Alguien del equipo reaccionó a un mensaje del cliente desde la app
+      // nativa (mismo shape que una reacción entrante, ver arriba).
+      reactionEmoji: echo.type === 'reaction' ? (echo.reaction?.emoji ?? '') : null,
+      reactionToWaMessageId: echo.type === 'reaction' ? (echo.reaction?.message_id || null) : null,
       timestamp: echo.timestamp,
     }
   }
