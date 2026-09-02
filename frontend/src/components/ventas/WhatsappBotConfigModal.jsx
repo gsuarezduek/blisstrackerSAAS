@@ -380,7 +380,7 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
             <span className="text-sm text-gray-700 dark:text-gray-300">
               Solo en conversaciones nuevas
               <span className="block text-xs text-gray-400 dark:text-gray-500 font-normal">
-                El bot responde una sola vez por conversación; en cuanto alguien (humano o el bot) ya contestó, deja de responder solo ahí.
+                El bot sigue respondiendo todas las veces que haga falta mientras nadie del equipo intervino; en cuanto alguien del equipo contesta a mano, deja de responder solo en esa conversación.
               </span>
             </span>
           </label>

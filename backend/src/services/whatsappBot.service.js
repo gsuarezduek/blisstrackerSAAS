@@ -286,6 +286,15 @@ async function notifyEscalation({ workspaceId, contact, conversation, reason }) 
   }
 }
 
+// true si algún miembro del equipo (senderType:'user', no el bot) ya mandó
+// un mensaje en esta conversación — humano intervino, no historial completo.
+async function humanAlreadyReplied(conversationId) {
+  const count = await prisma.whatsappMessage.count({
+    where: { conversationId, senderType: 'user' },
+  })
+  return count > 0
+}
+
 /**
  * Genera y manda la respuesta del bot a un mensaje entrante, si corresponde.
  * Se llama fire-and-forget desde el webhook (setImmediate) — nunca debe romper
@@ -294,8 +303,13 @@ async function notifyEscalation({ workspaceId, contact, conversation, reason }) 
  * Condiciones para responder (todas):
  *  - El workspace tiene WhatsappBotConfig.enabled = true (interruptor maestro).
  *  - La conversación puntual no fue tomada por un humano (botEnabled = true).
- *  - Si WhatsappBotConfig.onlyNewConversations = true, todavía no salió
- *    ningún mensaje (ni de un humano ni del bot) en esa conversación.
+ *  - Si WhatsappBotConfig.onlyNewConversations = true, ningún humano del
+ *    equipo (senderType:'user') mandó nunca un mensaje en esa conversación —
+ *    los mensajes del bot mismo NO cuentan, así puede seguir respondiendo
+ *    tantas idas y vueltas como haga falta mientras nadie del equipo
+ *    intervino; apenas un humano manda uno, deja de responder ahí para
+ *    siempre (se re-evalúa en cada mensaje entrante, no hace falta apagar
+ *    botEnabled a mano).
  *  - Hay presupuesto de tokens de IA disponible (createMessage lo valida y
  *    lanza si no — se captura acá, el bot simplemente no responde ese mensaje).
  *
@@ -315,12 +329,7 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
   })
   if (!fresh?.botEnabled) return
 
-  if (config.onlyNewConversations) {
-    const alreadyReplied = await prisma.whatsappMessage.count({
-      where: { conversationId: conversation.id, direction: 'out' },
-    })
-    if (alreadyReplied > 0) return
-  }
+  if (config.onlyNewConversations && await humanAlreadyReplied(conversation.id)) return
 
   const history = await prisma.whatsappMessage.findMany({
     where: { conversationId: conversation.id },
@@ -342,6 +351,7 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
   // se generaba esta respuesta.
   const stillHandled = await prisma.whatsappConversation.findUnique({ where: { id: conversation.id }, select: { botEnabled: true } })
   if (!stillHandled?.botEnabled) return
+  if (config.onlyNewConversations && await humanAlreadyReplied(conversation.id)) return
 
   const provider = getProvider(account.provider)
   const decrypted = decryptAccount(account)
