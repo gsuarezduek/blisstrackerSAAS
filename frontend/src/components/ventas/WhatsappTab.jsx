@@ -188,34 +188,40 @@ export default function WhatsappTab({ onOpenLead }) {
             </span>
           )}
         </span>
-        {user?.isAdmin && (
-          <div className="flex items-center gap-3">
-            <button onClick={() => setShowBotConfig(true)} className={`text-xs ${botConfig?.enabled ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 hover:text-primary-600 dark:hover:text-primary-400'}`}>
-              🤖 Bot{botConfig?.enabled ? ' (activo)' : ''}
-            </button>
-            <button onClick={() => setShowTemplates(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
-              📄 Plantillas
-            </button>
-            <button onClick={() => setShowAutomation(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
-              ⚙️ Automatizaciones
-            </button>
-            <button onClick={() => setShowConnectForm(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
-              Editar
-            </button>
-            <button
-              onClick={async () => {
-                if (!window.confirm('¿Desconectar este WhatsApp? Se borran también las conversaciones guardadas.')) return
-                await api.delete('/whatsapp/account')
-                setAccount(null)
-                setConversations([])
-                setActiveId(null)
-              }}
-              className="text-xs text-gray-400 hover:text-red-600 dark:hover:text-red-400"
-            >
-              Desconectar
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {(user?.isAdmin || user?.isSales) && (
+            <>
+              <button onClick={() => setShowBotConfig(true)} className={`text-xs ${botConfig?.enabled ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 hover:text-primary-600 dark:hover:text-primary-400'}`}>
+                🤖 Bot{botConfig?.enabled ? ' (activo)' : ''}
+              </button>
+              <button onClick={() => setShowTemplates(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
+                📄 Plantillas
+              </button>
+              <button onClick={() => setShowAutomation(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
+                ⚙️ Automatizaciones
+              </button>
+            </>
+          )}
+          {user?.isAdmin && (
+            <>
+              <button onClick={() => setShowConnectForm(true)} className="text-xs text-gray-400 hover:text-primary-600 dark:hover:text-primary-400">
+                Editar
+              </button>
+              <button
+                onClick={async () => {
+                  if (!window.confirm('¿Desconectar este WhatsApp? Se borran también las conversaciones guardadas.')) return
+                  await api.delete('/whatsapp/account')
+                  setAccount(null)
+                  setConversations([])
+                  setActiveId(null)
+                }}
+                className="text-xs text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+              >
+                Desconectar
+              </button>
+            </>
+          )}
+        </div>
       </div>
       {showConnectForm && (
         <WhatsappConnectForm

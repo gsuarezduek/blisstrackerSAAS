@@ -54,38 +54,39 @@ router.patch('/conversations/:id/bot',       whatsapp.toggleConversationBot)
 router.post('/conversations/:id/reopen',     whatsapp.reopenConversation)
 
 // Bot (Fase 4): la config es workspace-wide y tiene costo operativo real
-// (tokens de IA por cada mensaje entrante) — solo admin/owner la edita, igual
-// que conectar/desconectar la cuenta.
+// (tokens de IA por cada mensaje entrante), pero es una herramienta operativa
+// del día a día del equipo comercial — abierta a cualquiera con salesGuard
+// (admin/owner o equipo comercial), no solo admin/owner. Lo que sigue
+// admin-only es conectar/desconectar la cuenta (credenciales del BSP).
 router.get('/bot',  whatsapp.getBotConfig)
-router.put('/bot',  workspaceAdminOnly, whatsapp.saveBotConfig)
-router.post('/bot/test', workspaceAdminOnly, whatsapp.testBotConfig)
+router.put('/bot',  whatsapp.saveBotConfig)
+router.post('/bot/test', whatsapp.testBotConfig)
 
-// Base de conocimiento del bot (documentos de contexto) — mismo criterio de
-// permisos que el resto de la config del bot: solo admin/owner.
-router.get('/bot/documents',       workspaceAdminOnly, whatsapp.listBotDocuments)
-router.post('/bot/documents',      workspaceAdminOnly, uploadFile, whatsapp.uploadBotDocument)
-router.delete('/bot/documents/:id', workspaceAdminOnly, whatsapp.deleteBotDocument)
+// Base de conocimiento del bot (documentos de contexto) — mismo criterio que
+// el resto de la config del bot: abierto al equipo comercial.
+router.get('/bot/documents',       whatsapp.listBotDocuments)
+router.post('/bot/documents',      uploadFile, whatsapp.uploadBotDocument)
+router.delete('/bot/documents/:id', whatsapp.deleteBotDocument)
 
 // Panel de calidad: casos donde el bot escaló a un humano.
-router.get('/bot/escalations', workspaceAdminOnly, whatsapp.listBotEscalations)
+router.get('/bot/escalations', whatsapp.listBotEscalations)
 
-// Plantillas (Fase 5): catálogo de solo lectura de nuestro lado — sincronizar
-// desde Chakra (con costo/aprobación real de Meta detrás) queda para admin,
-// leerlas para elegir una y reabrir es operativo del día a día.
+// Plantillas (Fase 5): catálogo de solo lectura de nuestro lado. Sincronizar
+// desde Chakra tiene costo/aprobación real de Meta detrás, pero sigue siendo
+// una acción operativa del equipo comercial (no una credencial sensible como
+// conectar la cuenta), así que queda abierta con salesGuard igual que el bot.
 router.get('/templates',       whatsapp.listTemplates)
-router.post('/templates',      workspaceAdminOnly, whatsapp.createTemplate)
-router.post('/templates/sync', workspaceAdminOnly, whatsapp.syncTemplates)
-router.delete('/templates/:id', workspaceAdminOnly, whatsapp.deleteTemplate)
+router.post('/templates',      whatsapp.createTemplate)
+router.post('/templates/sync', whatsapp.syncTemplates)
+router.delete('/templates/:id', whatsapp.deleteTemplate)
 
 // Motor de reglas de reactivación (extiende Fase 5): criterios configurables
-// que reabren conversaciones vencidas solas, vía cron diario — admin-only,
-// mismo criterio que conectar la cuenta o configurar el bot (define un
-// comportamiento automático con costo/riesgo real, no una acción operativa
-// del día a día).
-router.get('/automation-rules',              workspaceAdminOnly, automation.listRules)
-router.post('/automation-rules',             workspaceAdminOnly, automation.createRule)
-router.patch('/automation-rules/:id',        workspaceAdminOnly, automation.updateRule)
-router.delete('/automation-rules/:id',       workspaceAdminOnly, automation.deleteRule)
-router.post('/automation-rules/:id/run-now', workspaceAdminOnly, automation.runRuleNow)
+// que reabren conversaciones vencidas solas, vía cron diario — mismo criterio
+// que el bot/plantillas: abierto al equipo comercial, no solo admin/owner.
+router.get('/automation-rules',              automation.listRules)
+router.post('/automation-rules',             automation.createRule)
+router.patch('/automation-rules/:id',        automation.updateRule)
+router.delete('/automation-rules/:id',       automation.deleteRule)
+router.post('/automation-rules/:id/run-now', automation.runRuleNow)
 
 module.exports = router

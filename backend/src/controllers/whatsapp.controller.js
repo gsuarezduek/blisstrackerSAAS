@@ -599,8 +599,10 @@ function sanitizeExamples(input) {
 
 /**
  * PUT /api/whatsapp/bot  { enabled, onlyNewConversations?, prompt, blockedWords?, escalationWords?, examples?, handoffMessage? }
- * Solo admin/owner (ver whatsapp.routes.js) — es un interruptor con costo
- * operativo real (tokens de IA por cada mensaje entrante mientras esté on).
+ * Abierto a cualquier miembro del equipo comercial (ver whatsapp.routes.js,
+ * salesGuard) — es un interruptor con costo operativo real (tokens de IA por
+ * cada mensaje entrante mientras esté on), pero configurarlo es operativo del
+ * día a día, no una credencial sensible como conectar la cuenta.
  */
 async function saveBotConfig(req, res, next) {
   try {
@@ -749,9 +751,9 @@ async function listTemplates(req, res, next) {
 
 /**
  * POST /api/whatsapp/templates/sync
- * Solo admin/owner — trae el catálogo real desde Chakra y lo cachea. Nunca
- * crea/edita plantillas (eso se sigue haciendo desde el dashboard del BSP,
- * ver "Abierto" de la Fase 5 del plan).
+ * Abierto al equipo comercial (salesGuard) — trae el catálogo real desde
+ * Chakra y lo cachea. Nunca crea/edita plantillas (eso se sigue haciendo
+ * desde el dashboard del BSP, ver "Abierto" de la Fase 5 del plan).
  */
 async function syncTemplates(req, res, next) {
   try {
@@ -775,9 +777,10 @@ async function syncTemplates(req, res, next) {
 
 /**
  * POST /api/whatsapp/templates  { name, language, category, bodyText, bodyExamples? }
- * Crea una plantilla nueva y la manda a revisión de Meta — solo admin/owner
- * (mismo criterio que sync: tiene implicancias de aprobación/costo reales).
- * Queda en PENDING hasta que Meta la revise (de minutos a ~1 día);
+ * Crea una plantilla nueva y la manda a revisión de Meta — abierto al equipo
+ * comercial (mismo criterio que sync: es operativo, aunque tenga
+ * implicancias de aprobación/costo reales detrás). Queda en PENDING hasta
+ * que Meta la revise (de minutos a ~1 día);
  * "Sincronizar" trae el estado actualizado más adelante.
  */
 async function createTemplate(req, res, next) {
@@ -801,10 +804,11 @@ async function createTemplate(req, res, next) {
 }
 
 /**
- * DELETE /api/whatsapp/templates/:id — solo admin/owner (mismo criterio que
- * crear/sincronizar). Meta no permite editar una plantilla rechazada in situ
- * (name+language es su identidad inmutable) — borrar y crear de nuevo es el
- * único camino, así que esto es lo que le falta al flujo para no dejar
+ * DELETE /api/whatsapp/templates/:id — abierto al equipo comercial (mismo
+ * criterio que crear/sincronizar). Meta no permite editar una plantilla
+ * rechazada in situ (name+language es su identidad inmutable) — borrar y
+ * crear de nuevo es el único camino, así que esto es lo que le falta al
+ * flujo para no dejar
  * plantillas rechazadas atascadas para siempre en la lista.
  */
 async function deleteTemplate(req, res, next) {
