@@ -3441,6 +3441,14 @@ model WhatsappBotConfig {
   enabled Boolean @default(false)
   prompt  String? @db.Text
 
+  // Si está en true, el bot solo responde mientras la conversación sigue
+  // "nueva" — todavía no salió ningún mensaje (ni de un humano ni del bot
+  // mismo) en ella. Apenas hay una primera respuesta saliente, deja de
+  // responder solo ahí (aunque WhatsappConversation.botEnabled siga true),
+  // sin apagar el interruptor de esa conversación — es una condición extra
+  // sobre `enabled`, no un reemplazo del takeover manual.
+  onlyNewConversations Boolean @default(false)
+
   // Entrenamiento del bot (mejora de precisión + reglas de seguridad, ver
   // whatsappBot.service.js `generateBotReply`): `blockedWords` son palabras/frases
   // que el bot NUNCA debe usar en su respuesta (verificado después de generar, no

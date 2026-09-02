@@ -564,7 +564,7 @@ async function markRead(req, res, next) {
 async function getBotConfig(req, res, next) {
   try {
     const config = await prisma.whatsappBotConfig.findUnique({ where: { workspaceId: req.workspace.id } })
-    res.json(config || { enabled: false, prompt: DEFAULT_PROMPT, blockedWords: [], escalationWords: [], examples: [], handoffMessage: DEFAULT_HANDOFF_MESSAGE })
+    res.json(config || { enabled: false, onlyNewConversations: false, prompt: DEFAULT_PROMPT, blockedWords: [], escalationWords: [], examples: [], handoffMessage: DEFAULT_HANDOFF_MESSAGE })
   } catch (err) { next(err) }
 }
 
@@ -598,15 +598,16 @@ function sanitizeExamples(input) {
 }
 
 /**
- * PUT /api/whatsapp/bot  { enabled, prompt, blockedWords?, escalationWords?, examples?, handoffMessage? }
+ * PUT /api/whatsapp/bot  { enabled, onlyNewConversations?, prompt, blockedWords?, escalationWords?, examples?, handoffMessage? }
  * Solo admin/owner (ver whatsapp.routes.js) — es un interruptor con costo
  * operativo real (tokens de IA por cada mensaje entrante mientras esté on).
  */
 async function saveBotConfig(req, res, next) {
   try {
-    const { enabled, prompt, blockedWords, escalationWords, examples, handoffMessage } = req.body
+    const { enabled, onlyNewConversations, prompt, blockedWords, escalationWords, examples, handoffMessage } = req.body
     const data = {
       enabled: Boolean(enabled),
+      onlyNewConversations: Boolean(onlyNewConversations),
       prompt: prompt?.trim() || null,
       blockedWords: sanitizeWordList(blockedWords),
       escalationWords: sanitizeWordList(escalationWords),

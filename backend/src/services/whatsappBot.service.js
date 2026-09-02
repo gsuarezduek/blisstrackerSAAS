@@ -294,6 +294,8 @@ async function notifyEscalation({ workspaceId, contact, conversation, reason }) 
  * Condiciones para responder (todas):
  *  - El workspace tiene WhatsappBotConfig.enabled = true (interruptor maestro).
  *  - La conversación puntual no fue tomada por un humano (botEnabled = true).
+ *  - Si WhatsappBotConfig.onlyNewConversations = true, todavía no salió
+ *    ningún mensaje (ni de un humano ni del bot) en esa conversación.
  *  - Hay presupuesto de tokens de IA disponible (createMessage lo valida y
  *    lanza si no — se captura acá, el bot simplemente no responde ese mensaje).
  *
@@ -312,6 +314,13 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
     select: { botEnabled: true, phoneE164: true, assignedToId: true },
   })
   if (!fresh?.botEnabled) return
+
+  if (config.onlyNewConversations) {
+    const alreadyReplied = await prisma.whatsappMessage.count({
+      where: { conversationId: conversation.id, direction: 'out' },
+    })
+    if (alreadyReplied > 0) return
+  }
 
   const history = await prisma.whatsappMessage.findMany({
     where: { conversationId: conversation.id },

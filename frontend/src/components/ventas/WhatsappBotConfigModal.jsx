@@ -258,6 +258,7 @@ function TestPanel({ messages, input, setInput, loading, error, onSend }) {
 export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
   const [tab, setTab] = useState('personalidad')
   const [enabled, setEnabled] = useState(Boolean(config?.enabled))
+  const [onlyNewConversations, setOnlyNewConversations] = useState(Boolean(config?.onlyNewConversations))
   const [prompt, setPrompt] = useState(config?.prompt || '')
   const [blockedWords, setBlockedWords] = useState(config?.blockedWords || [])
   const [escalationWords, setEscalationWords] = useState(config?.escalationWords || [])
@@ -305,7 +306,7 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
     setSaving(true)
     setError(null)
     try {
-      const { data } = await api.put('/whatsapp/bot', { enabled, prompt, blockedWords, escalationWords, examples, handoffMessage })
+      const { data } = await api.put('/whatsapp/bot', { enabled, onlyNewConversations, prompt, blockedWords, escalationWords, examples, handoffMessage })
       onSaved(data)
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo guardar la configuración')
@@ -370,9 +371,18 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">🤖 Bot de WhatsApp</h2>
             <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">✕</button>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer mb-3">
+          <label className="flex items-center gap-2 cursor-pointer mb-2">
             <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} className="w-4 h-4 rounded" />
             <span className="text-sm font-medium text-gray-800 dark:text-gray-200">Bot activo</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer mb-3">
+            <input type="checkbox" checked={onlyNewConversations} onChange={e => setOnlyNewConversations(e.target.checked)} className="w-4 h-4 rounded" />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Solo en conversaciones nuevas
+              <span className="block text-xs text-gray-400 dark:text-gray-500 font-normal">
+                El bot responde una sola vez por conversación; en cuanto alguien (humano o el bot) ya contestó, deja de responder solo ahí.
+              </span>
+            </span>
           </label>
 
           <div className="flex gap-1 -mb-px overflow-x-auto">
