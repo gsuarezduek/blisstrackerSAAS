@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { assertActiveMember } = require('../lib/assertActiveMember')
+const { buildRecurrenceParams, firstScheduledDate, spawnInstance } = require('../services/recurrence.service')
 
 const VALID_ROCK_STATUS = ['not_started', 'on_track', 'off_track', 'complete']
 const VALID_MEETING_TYPE = ['weekly', 'quarterly', 'annual']
@@ -62,7 +63,15 @@ function formatTodo(t) {
     createdAt:   t.createdAt,
     // Tarea del dashboard vinculada (null si no se envió).
     taskId:      t.taskId ?? null,
-    task:        t.task ? { id: t.task.id, status: t.task.status, description: t.task.description } : null,
+    task:        t.task ? {
+      id:           t.task.id,
+      status:       t.task.status,
+      description:  t.task.description,
+      // Solo la instancia recién creada refleja esto — si el responsable la completa y se
+      // materializa una próxima ocurrencia, esa nueva instancia no queda vinculada al To-Do.
+      scheduledFor: t.task.scheduledFor ?? null,
+      recurrenceId: t.task.recurrenceId ?? null,
+    } : null,
   }
 }
 
@@ -245,7 +254,7 @@ async function getWeek(req, res, next) {
       prisma.eOSTodo.findMany({
         where:   { workspaceId, week },
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-        include: { task: { select: { id: true, status: true, description: true } } },
+        include: { task: { select: { id: true, status: true, description: true, scheduledFor: true, recurrenceId: true } } },
       }),
       prisma.eOSMeeting.findFirst({ where: { workspaceId, week }, include: MEETING_INCLUDE }),
     ])
@@ -334,15 +343,19 @@ async function deleteTodo(req, res, next) {
 }
 
 // POST /api/eos/traction/todos/:id/send-to-dashboard
-// body: { projectId? } — crea una tarea en el dashboard del responsable del To-Do
-// y la vincula (taskId). Si no se pasa projectId, usa el proyecto de EOS configurado
-// (EOSData.meetingProjectId). Al completar esa tarea, el To-Do se tilda solo.
+// body: { projectId?, scheduledFor?, recurrence? } — crea una tarea en el dashboard del
+// responsable del To-Do y la vincula (taskId). Si no se pasa projectId, usa el proyecto de
+// EOS configurado (EOSData.meetingProjectId). Al completar esa tarea, el To-Do se tilda solo.
+// scheduledFor/recurrence son mutuamente excluyentes (mismo contrato que POST /api/tasks) y
+// convierten la tarea creada en una tarea futura o en la primera instancia de una serie
+// recurrente en vez de una tarea normal de hoy.
 async function sendTodoToDashboard(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const tz          = req.workspace.timezone
     const requesterId = req.user.userId
     const id          = Number(req.params.id)
+    const today       = todayString(tz)
 
     // projectId explícito o, si no viene, el proyecto de EOS configurado.
     let projectId = req.body.projectId ? Number(req.body.projectId) : null
@@ -352,6 +365,42 @@ async function sendTodoToDashboard(req, res, next) {
     }
     if (!projectId) {
       return res.status(400).json({ error: 'Configurá el proyecto de EOS en Preferencias → Módulos adicionales', code: 'NO_MEETING_PROJECT' })
+    }
+
+    // ── Validación de opciones de tarea futura / recurrente (mismo criterio que POST /api/tasks) ──
+    const isYMD = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+    const recurrence = req.body.recurrence || null
+    let scheduledFor = req.body.scheduledFor || null
+
+    if (scheduledFor && !isYMD(scheduledFor)) {
+      return res.status(400).json({ error: 'Fecha inválida (formato YYYY-MM-DD)' })
+    }
+    // Una fecha futura igual o anterior a hoy es una tarea normal.
+    if (scheduledFor && scheduledFor <= today) scheduledFor = null
+
+    if (recurrence) {
+      const FREQ = ['daily', 'weekly', 'monthly', 'annual']
+      if (!FREQ.includes(recurrence.frequency)) {
+        return res.status(400).json({ error: 'Tipo de recurrencia inválido' })
+      }
+      if (recurrence.endDate && !isYMD(recurrence.endDate)) {
+        return res.status(400).json({ error: 'Fecha de finalización inválida' })
+      }
+      if (recurrence.endDate && recurrence.endDate < today) {
+        return res.status(400).json({ error: 'La fecha de finalización no puede ser anterior a hoy' })
+      }
+      if ((recurrence.frequency === 'monthly' || recurrence.frequency === 'annual') && recurrence.dayOfMonth != null) {
+        const dom = Number(recurrence.dayOfMonth)
+        if (!Number.isInteger(dom) || dom < 1 || dom > 31) {
+          return res.status(400).json({ error: 'Día del mes inválido (1-31)' })
+        }
+      }
+      if (recurrence.frequency === 'annual' && recurrence.month != null) {
+        const mo = Number(recurrence.month)
+        if (!Number.isInteger(mo) || mo < 1 || mo > 12) {
+          return res.status(400).json({ error: 'Mes inválido (1-12)' })
+        }
+      }
     }
 
     const todo = await prisma.eOSTodo.findFirst({ where: { id, workspaceId } })
@@ -370,37 +419,65 @@ async function sendTodoToDashboard(req, res, next) {
     if (!member || !member.active) return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
 
     // WorkDay de hoy del responsable (crear si falta — mismo patrón que tasks.create).
-    const today = todayString(tz)
-    const wdKey = { userId_workspaceId_date: { userId: todo.ownerId, workspaceId, date: today } }
-    let workDay = await prisma.workDay.findUnique({ where: wdKey })
-    if (!workDay) {
-      try {
-        workDay = await prisma.workDay.create({ data: { userId: todo.ownerId, workspaceId, date: today } })
-      } catch (e) {
-        if (e.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
-        else throw e
-      }
-    }
+    const workDay = await ensureWorkDay(todo.ownerId, workspaceId, today)
     if (!workDay) return res.status(500).json({ error: 'No se pudo obtener la jornada del responsable' })
 
-    const task = await prisma.task.create({
-      data: {
-        description: todo.title,
-        projectId,
-        userId:      todo.ownerId,
-        workDayId:   workDay.id,
-        createdById: todo.ownerId !== requesterId ? requesterId : null,
-      },
-    })
+    let task
+    if (recurrence) {
+      // Tarea recurrente: crear la plantilla + materializar la primera ocurrencia (igual
+      // que POST /api/tasks). Solo esta primera instancia queda vinculada al To-Do.
+      const params = buildRecurrenceParams({
+        frequency:  recurrence.frequency,
+        weekdays:   recurrence.weekdays,
+        dayOfMonth: recurrence.dayOfMonth,
+        month:      recurrence.month,
+        startDate:  today,
+      })
+      const rec = await prisma.taskRecurrence.create({
+        data: {
+          workspaceId,
+          userId:      todo.ownerId,
+          createdById: todo.ownerId !== requesterId ? requesterId : null,
+          projectId,
+          description: todo.title,
+          frequency:   recurrence.frequency,
+          weekdays:    params.weekdays,
+          dayOfMonth:  params.dayOfMonth,
+          month:       params.month,
+          startDate:   today,
+          endDate:     recurrence.endDate || null,
+        },
+      })
+      const first = firstScheduledDate(rec)
+      if (!first) {
+        await prisma.taskRecurrence.update({ where: { id: rec.id }, data: { active: false } })
+        return res.status(400).json({ error: 'La recurrencia no genera ninguna fecha válida' })
+      }
+      task = await spawnInstance(prisma, rec, first, workDay.id)
+    } else {
+      // Tarea normal o futura (one-off).
+      task = await prisma.task.create({
+        data: {
+          description: todo.title,
+          projectId,
+          userId:      todo.ownerId,
+          workDayId:   workDay.id,
+          createdById: todo.ownerId !== requesterId ? requesterId : null,
+          scheduledFor: scheduledFor || null,
+        },
+      })
+    }
 
     const updated = await prisma.eOSTodo.update({
       where:   { id },
       data:    { taskId: task.id },
-      include: { task: { select: { id: true, status: true, description: true } } },
+      include: { task: { select: { id: true, status: true, description: true, scheduledFor: true, recurrenceId: true } } },
     })
 
-    // Avisar al responsable (si no es quien lo envió).
-    if (todo.ownerId !== requesterId) {
+    // Avisar al responsable (si no es quien lo envió) — salvo que la tarea sea futura/
+    // recurrente-a-futuro: todavía no es visible en su dashboard (queda excluida hasta
+    // scheduledFor, igual que POST /api/tasks).
+    if (todo.ownerId !== requesterId && !task.scheduledFor) {
       const desc = todo.title.length > 60 ? todo.title.slice(0, 57) + '...' : todo.title
       await prisma.notification.create({
         data: {

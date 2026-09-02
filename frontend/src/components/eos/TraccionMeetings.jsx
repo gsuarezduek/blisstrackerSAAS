@@ -175,24 +175,59 @@ export function MeetingTimer({ meeting, onStart, onFinish }) {
   )
 }
 
-// ─── RockCard ─────────────────────────────────────────────────────────────────
+// ─── TodoDashboardLink ──────────────────────────────────────────────────────────
+// Envía un To-Do de L10 al dashboard del responsable como tarea normal (hoy), futura
+// (aparece en una fecha elegida) o recurrente (se repite) — mismas opciones que el
+// modal de "Agregar tarea" del dashboard.
+
+const SEND_FREQ_OPTIONS = [['daily', 'Diaria'], ['weekly', 'Semanal'], ['monthly', 'Mensual'], ['annual', 'Anual']]
+const SEND_WEEKDAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 export function TodoDashboardLink({ todo, meetingProjectReady, onSend }) {
+  const [open, setOpen]         = useState(false)
   const [sending, setSending]   = useState(false)
+  const [mode, setMode]         = useState('now') // now | future | recurring
+  const [scheduledDate, setScheduledDate] = useState('')
+  const [frequency, setFrequency]         = useState('weekly')
+  const [weekdays, setWeekdays]           = useState([])
+  const [recurDate, setRecurDate]         = useState(() => new Date().toLocaleDateString('en-CA'))
+  const [endMode, setEndMode]             = useState('never')
+  const [endDate, setEndDate]             = useState('')
+  const [err, setErr]                     = useState('')
+  const boxRef = useRef(null)
+
+  const todayStr = new Date().toLocaleDateString('en-CA')
+  const toggleWeekday = d => setWeekdays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b))
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e) { if (!boxRef.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
 
   // Ya vinculado → badge de estado (verde si la tarea ya se completó).
   if (todo.taskId) {
     const done = todo.task?.status === 'COMPLETED'
+    const recurring = !done && todo.task?.recurrenceId
+    const future    = !done && !recurring && todo.task?.scheduledFor
+    const icon  = done ? '📋' : recurring ? '🔁' : future ? '📅' : '📋'
+    const label = done ? 'Hecha' : recurring ? 'Recurrente' : future ? 'Programada' : 'En dashboard'
+    const title = done
+      ? 'Tarea completada en el dashboard'
+      : recurring ? 'Se convirtió en una tarea recurrente del responsable'
+      : future    ? `Tarea futura del responsable — aparece el ${todo.task.scheduledFor}`
+      : 'Enviada al dashboard del responsable'
     return (
       <span
-        title={done ? 'Tarea completada en el dashboard' : 'Enviada al dashboard del responsable'}
+        title={title}
         className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${
           done
             ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
             : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
         }`}
       >
-        📋 {done ? 'Hecha' : 'En dashboard'}
+        {icon} {label}
       </span>
     )
   }
@@ -221,21 +256,166 @@ export function TodoDashboardLink({ todo, meetingProjectReady, onSend }) {
     )
   }
 
+  function validate() {
+    if (mode === 'future') {
+      if (!scheduledDate) return 'Elegí la fecha en que debe aparecer la tarea.'
+      if (scheduledDate <= todayStr) return 'La fecha debe ser posterior a hoy.'
+    }
+    if (mode === 'recurring') {
+      if (frequency === 'weekly' && weekdays.length === 0) return 'Elegí al menos un día de la semana.'
+      if ((frequency === 'monthly' || frequency === 'annual') && !recurDate) return 'Elegí desde el calendario el día en que se repite.'
+      if (endMode === 'custom' && !endDate) return 'Elegí la fecha de finalización o seleccioná "Nunca".'
+      if (endMode === 'custom' && endDate && endDate < todayStr) return 'La fecha de finalización no puede ser anterior a hoy.'
+    }
+    return ''
+  }
+
   async function submit() {
+    const validationErr = validate()
+    if (validationErr) { setErr(validationErr); return }
+    setErr('')
+    const opts = {}
+    if (mode === 'future') {
+      opts.scheduledFor = scheduledDate
+    } else if (mode === 'recurring') {
+      opts.recurrence = {
+        frequency,
+        ...(frequency === 'weekly' ? { weekdays } : {}),
+        ...(frequency === 'monthly' ? { dayOfMonth: Number(recurDate.slice(8, 10)) } : {}),
+        ...(frequency === 'annual' ? { dayOfMonth: Number(recurDate.slice(8, 10)), month: Number(recurDate.slice(5, 7)) } : {}),
+        ...(endMode === 'custom' && endDate ? { endDate } : {}),
+      }
+    }
     setSending(true)
-    await onSend(todo.id)   // sin projectId: el backend usa el proyecto de EOS configurado
+    const ok = await onSend(todo.id, opts)   // sin projectId: el backend usa el proyecto de EOS configurado
     setSending(false)
+    if (ok !== false) setOpen(false)
   }
 
   return (
-    <button
-      onClick={submit}
-      disabled={sending}
-      title="Enviar al dashboard del responsable"
-      className="shrink-0 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-primary-500 text-sm transition-all px-1 disabled:opacity-50"
-    >
-      📋
-    </button>
+    <div ref={boxRef} className="relative shrink-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        disabled={sending}
+        title="Enviar al dashboard del responsable"
+        className={`opacity-0 group-hover:opacity-100 text-gray-400 hover:text-primary-500 text-sm transition-all px-1 disabled:opacity-50 ${open ? 'opacity-100 text-primary-500' : ''}`}
+      >
+        📋
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg w-64 p-3 space-y-2.5 text-left">
+          <div className="flex gap-1">
+            {[['now', 'Ahora'], ['future', '📅 Futura'], ['recurring', '🔁 Recurrente']].map(([val, lbl]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => { setMode(val); setErr('') }}
+                className={`flex-1 rounded-md py-1 text-[11px] font-medium border transition-colors ${
+                  mode === val
+                    ? 'bg-primary-600 border-primary-600 text-white'
+                    : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                }`}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          {mode === 'future' && (
+            <div>
+              <input
+                type="date"
+                min={todayStr}
+                value={scheduledDate}
+                onChange={e => setScheduledDate(e.target.value)}
+                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">Aparece en el dashboard del responsable ese día.</p>
+            </div>
+          )}
+
+          {mode === 'recurring' && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-4 gap-1">
+                {SEND_FREQ_OPTIONS.map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setFrequency(val)}
+                    className={`rounded-md py-1 text-[10px] font-medium border transition-colors ${
+                      frequency === val
+                        ? 'bg-primary-600 border-primary-600 text-white'
+                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                    }`}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+
+              {frequency === 'weekly' && (
+                <div className="flex gap-1">
+                  {SEND_WEEKDAY_LABELS.map((lbl, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => toggleWeekday(idx)}
+                      className={`flex-1 rounded-md py-1 text-[9px] font-medium border transition-colors ${
+                        weekdays.includes(idx)
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                      }`}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {(frequency === 'monthly' || frequency === 'annual') && (
+                <input
+                  type="date"
+                  value={recurDate}
+                  onChange={e => setRecurDate(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              )}
+
+              <div className="flex gap-1.5 items-center">
+                <select
+                  value={endMode}
+                  onChange={e => setEndMode(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-1.5 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="never">Nunca termina</option>
+                  <option value="custom">Hasta...</option>
+                </select>
+                {endMode === 'custom' && (
+                  <input
+                    type="date"
+                    min={todayStr}
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-1.5 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {err && <p className="text-[10px] text-red-500">{err}</p>}
+
+          <button
+            type="button"
+            onClick={submit}
+            disabled={sending}
+            className="w-full rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-medium py-1.5 transition-colors disabled:opacity-60"
+          >
+            {sending ? 'Enviando…' : 'Enviar al dashboard'}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -728,10 +908,11 @@ export function MeetingSection() {
   }
 
   // Envía el To-Do al dashboard del responsable (crea + vincula la tarea) usando el
-  // proyecto de EOS configurado en Preferencias (el backend lo resuelve solo).
-  async function handleSendToDashboard(id) {
+  // proyecto de EOS configurado en Preferencias (el backend lo resuelve solo). `opts`
+  // puede traer `scheduledFor` (tarea futura) o `recurrence` (tarea recurrente).
+  async function handleSendToDashboard(id, opts = {}) {
     try {
-      const { data } = await api.post(`/eos/traction/todos/${id}/send-to-dashboard`, {})
+      const { data } = await api.post(`/eos/traction/todos/${id}/send-to-dashboard`, opts)
       setTodos(prev => prev.map(t => t.id === id ? data : t))
       return true
     } catch (err) {
