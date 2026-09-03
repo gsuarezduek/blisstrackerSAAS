@@ -814,8 +814,9 @@ export default function Preferences() {
                           />
                         </div>
 
-                        {/* EOS queda estrictamente admin-only (datos sensibles), sin acceso configurable por rol. */}
-                        {!feat.disabled && feat.key !== 'eos' && (
+                        {/* EOS y Gamification quedan estrictamente admin-only, sin acceso configurable por
+                            rol — moduleAccess[feat.key] no viene para esas claves (ver lib/moduleAccess.js). */}
+                        {!feat.disabled && moduleAccess[feat.key] && (
                           <ModuleAccessEditor
                             config={moduleAccess[feat.key]}
                             onChange={next => handleChangeModuleAccess(feat.key, next)}

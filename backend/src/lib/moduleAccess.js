@@ -1,24 +1,25 @@
 /**
  * Único punto de la lógica "¿este usuario puede ver el módulo X del workspace?".
- * Generaliza a 4 módulos (gamification/ventas/marketing/contenido) el mecanismo
- * que antes era exclusivo de Ventas (Workspace.salesRoleNames): un miembro accede
- * si es admin/owner, o si el módulo está abierto a todo el workspace
- * (`allMembers`), o si su teamRole está en la lista configurada.
+ * Generaliza a 3 módulos (ventas/marketing/contenido) el mecanismo que antes era
+ * exclusivo de Ventas (Workspace.salesRoleNames): un miembro accede si es
+ * admin/owner, o si el módulo está abierto a todo el workspace (`allMembers`),
+ * o si su teamRole está en la lista configurada.
  * Independiente del feature-flag catalog (backend/src/lib/featureFlags.js) —
  * ese decide si SuperAdmin habilitó el módulo para el workspace; esto decide
  * quién DENTRO del workspace lo ve. Configurable desde Preferencias.
  *
- * RRHH y EOS NO usan este mecanismo — quedan estrictamente admin-only
- * (`workspaceAdminOnly`/`AdminRoute`, sin acceso configurable por rol), decisión
- * explícita: son datos sensibles (legajos, horarios, evaluaciones de personas)
- * que no deben poder abrirse a otros roles por error de configuración.
+ * RRHH, EOS y Gamification NO usan este mecanismo — quedan estrictamente
+ * admin-only (`workspaceAdminOnly`/`AdminRoute`, sin acceso configurable por
+ * rol), decisión explícita: datos sensibles (RRHH/EOS: legajos, horarios,
+ * evaluaciones de personas) o funciones de gestión (Gamification: crear/editar
+ * juegos y puntajes del equipo) que no deben poder abrirse a otros roles por
+ * error de configuración.
  */
 
-const MODULE_KEYS = ['gamification', 'ventas', 'marketing', 'contenido']
+const MODULE_KEYS = ['ventas', 'marketing', 'contenido']
 
 // allMembers por defecto de cada módulo cuando el workspace no configuró nada.
 const MODULE_ACCESS_DEFAULTS = {
-  gamification: { allMembers: false },
   ventas:       { allMembers: false },
   marketing:    { allMembers: true },
   contenido:    { allMembers: true },
@@ -71,8 +72,8 @@ function moduleAccessGuard(key) {
 }
 
 /**
- * Mapa { gamification: bool, ventas: bool, ... } con el acceso del usuario actual
- * a los 4 módulos configurables — para exponer en GET /auth/me.
+ * Mapa { ventas: bool, marketing: bool, contenido: bool } con el acceso del
+ * usuario actual a los 3 módulos configurables — para exponer en GET /auth/me.
  * @param {import('express').Request} req
  */
 function getAllModuleAccess(req) {

@@ -105,9 +105,8 @@ export default function Navbar() {
   const adminRef   = useRef(null)
   const modulesRef = useRef(null)
 
-  const isAdminRoute   = !!useMatch('/admin') || !!useMatch('/reports') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos')
+  const isAdminRoute   = !!useMatch('/admin') || !!useMatch('/reports') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification')
   const isModulesRoute = !!useMatch('/marketing') || !!useMatch('/contenido') || !!useMatch('/ventas') || !!useMatch('/admin/ventas')
-    || !!useMatch('/admin/gamification')
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -167,11 +166,10 @@ export default function Navbar() {
   // rol configurado en Preferencias (user.moduleAccess, ver backend/src/lib/
   // moduleAccess.js) — admins siempre pasan ese segundo chequeo. Ventas mantiene
   // su criterio actual (admin → /admin/ventas, equipo comercial no-admin →
-  // /ventas), que ya equivale a moduleAccess.ventas. RRHH y EOS NO viven acá —
-  // son estrictamente admin-only, sin acceso configurable por rol (datos
-  // sensibles), y su link vive en `adminSublinks`.
+  // /ventas), que ya equivale a moduleAccess.ventas. RRHH, EOS y Gamification NO
+  // viven acá — son estrictamente admin-only, sin acceso configurable por rol
+  // (datos sensibles o funciones de gestión), y su link vive en `adminSublinks`.
   const moduleSublinks = [
-    ...(gamificationEnabled && user?.moduleAccess?.gamification ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
     ...(ventasEnabled && (isAdmin || user?.isSales)
       ? [{ to: isAdmin ? '/admin/ventas' : '/ventas', label: '💰 Ventas' }]
       : []),
@@ -181,12 +179,13 @@ export default function Navbar() {
 
   // ── Sublinks de Administración ────────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
-  // Ventas/Marketing/Contenido/Gamification se mudaron a "Módulos" (arriba, con
-  // acceso configurable por rol). RRHH y EOS quedan acá, estrictamente admin-only.
+  // Ventas/Marketing/Contenido se mudaron a "Módulos" (arriba, con acceso
+  // configurable por rol). RRHH, EOS y Gamification quedan acá, estrictamente admin-only.
   const adminSublinks = [
     { to: '/reports',    label: '📈 Reportes' },
     { to: '/admin/rrhh', label: '👥 RRHH' },
     ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
+    ...(gamificationEnabled ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
     { to: '/admin',      label: '⚙️ Panel' },
   ]
 
