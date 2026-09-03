@@ -10,6 +10,7 @@ import MessageInput from './MessageInput'
 import ChannelFormModal from './ChannelFormModal'
 import PinnedBar from './PinnedBar'
 import ChatSoundToggle from './ChatSoundToggle'
+import FeedbackModal from '../FeedbackModal'
 
 // Chat interno como ícono flotante (no una página/sección aparte): mismo botón y
 // posición que antes ocupaba FeedbackButton — Feedback queda en standby por ahora
@@ -33,6 +34,7 @@ export default function ChatWidget() {
   const [hasMore, setHasMore] = useState(false)
   const [firstUnreadMessageId, setFirstUnreadMessageId] = useState(null)
   const [channelForm, setChannelForm] = useState(null) // null | true (crear) | channel (editar)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [pinnedMessages, setPinnedMessages] = useState([])
   const [replyingTo, setReplyingTo] = useState(null)
   const activeChannelIdRef = useRef(null)
@@ -260,6 +262,7 @@ export default function ChatWidget() {
                         onSelect={handleSelectChannel}
                         isAdmin={!!user?.isAdmin}
                         onCreateChannel={() => { setSwitcherOpen(false); setChannelForm(true) }}
+                        onFeedback={() => { setSwitcherOpen(false); setFeedbackOpen(true) }}
                       />
                     )}
                   </div>
@@ -336,6 +339,8 @@ export default function ChatWidget() {
           onDeleted={handleChannelDeleted}
         />
       )}
+
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>
   )
 }

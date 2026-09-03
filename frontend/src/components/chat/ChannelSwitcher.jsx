@@ -39,7 +39,7 @@ const byName = (a, b) => norm(a.name).localeCompare(norm(b.name), 'es', { sensit
 // Switch "Todos"/"No leídos": filtra a solo los canales con `unreadCount`/`mentionCount`
 // > 0. La búsqueda por texto SIEMPRE ignora este switch (corre sobre todos los canales) —
 // mientras hay una búsqueda activa el switch queda visualmente atenuado y sin efecto.
-export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel }) {
+export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel, onFeedback }) {
   const [query, setQuery] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
   const hasQuery = norm(query).trim().length > 0
@@ -139,14 +139,22 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
         })}
       </div>
 
-      {isAdmin && (
+      <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-700">
+        {isAdmin && (
+          <button
+            onClick={onCreateChannel}
+            className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+          >
+            <span className="text-base leading-none">+</span> Crear canal
+          </button>
+        )}
         <button
-          onClick={onCreateChannel}
-          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors border-t border-gray-100 dark:border-gray-700"
+          onClick={onFeedback}
+          className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
         >
-          <span className="text-base leading-none">+</span> Crear canal
+          <span className="text-base leading-none">📝</span> Feedback
         </button>
-      )}
+      </div>
     </div>
   )
 }
