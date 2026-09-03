@@ -198,8 +198,8 @@ export default function App() {
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
           <Route path="/superadmin" element={<SuperAdminRoute><SuperAdmin /></SuperAdminRoute>} />
           <Route path="/admin"              element={<AdminRoute><Admin        /></AdminRoute>} />
-          <Route path="/admin/rrhh"         element={<ModuleRoute moduleKey="rrhh"><RRHH /></ModuleRoute>} />
-          <Route path="/admin/eos"          element={<ModuleRoute moduleKey="eos"><EOS /></ModuleRoute>} />
+          <Route path="/admin/rrhh"         element={<AdminRoute><RRHH /></AdminRoute>} />
+          <Route path="/admin/eos"          element={<AdminRoute><EOS /></AdminRoute>} />
           <Route path="/admin/gamification" element={<ModuleRoute moduleKey="gamification"><Gamification /></ModuleRoute>} />
           <Route path="/ventas"       element={<SalesRoute><Ventas /></SalesRoute>} />
           <Route path="/admin/ventas" element={<AdminRoute><Ventas /></AdminRoute>} />

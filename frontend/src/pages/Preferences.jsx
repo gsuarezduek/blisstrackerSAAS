@@ -782,7 +782,7 @@ export default function Preferences() {
             )}
 
             {/* ── Módulos adicionales ── */}
-            {moduleAccess && (
+            {moduleAccess && wsFeatures && wsFeatures.length > 0 && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
                 <div className="flex items-center gap-2 mb-1">
                   <h2 className="text-base font-semibold text-gray-900 dark:text-white">Módulos adicionales</h2>
@@ -791,11 +791,11 @@ export default function Preferences() {
                   Funcionalidades opcionales de tu workspace. Podés desactivar las que no uses y elegir qué roles del equipo ven cada una (los administradores siempre acceden).
                 </p>
                 <div className="space-y-0">
-                  {(wsFeatures ?? []).map((feat) => {
+                  {(wsFeatures ?? []).map((feat, idx) => {
                     const meta = moduleMeta(feat.key, feat.description)
+                    const isLast = idx === (wsFeatures?.length ?? 0) - 1
                     return (
-                      // Siempre lleva separador: la fila de RRHH (sin feature flag) va última.
-                      <div key={feat.key} className="py-4 border-b dark:border-gray-700">
+                      <div key={feat.key} className={`py-4 ${isLast ? '' : 'border-b dark:border-gray-700'}`}>
                         <div className="flex items-start gap-4">
                           <span className="text-2xl flex-shrink-0 mt-0.5">{meta.icon}</span>
                           <div className="flex-1 min-w-0">
@@ -814,7 +814,8 @@ export default function Preferences() {
                           />
                         </div>
 
-                        {!feat.disabled && (
+                        {/* EOS queda estrictamente admin-only (datos sensibles), sin acceso configurable por rol. */}
+                        {!feat.disabled && feat.key !== 'eos' && (
                           <ModuleAccessEditor
                             config={moduleAccess[feat.key]}
                             onChange={next => handleChangeModuleAccess(feat.key, next)}
@@ -851,28 +852,6 @@ export default function Preferences() {
                       </div>
                     )
                   })}
-
-                  {/* RRHH: sin feature flag (siempre disponible), solo el picker de roles */}
-                  {(() => {
-                    const meta = moduleMeta('rrhh')
-                    return (
-                      <div className="py-4">
-                        <div className="flex items-start gap-4">
-                          <span className="text-2xl flex-shrink-0 mt-0.5">{meta.icon}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{meta.label}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">{meta.detail}</p>
-                          </div>
-                          <span className="text-xs text-gray-400 dark:text-gray-500 self-center whitespace-nowrap">Siempre disponible</span>
-                        </div>
-                        <ModuleAccessEditor
-                          config={moduleAccess.rrhh}
-                          onChange={next => handleChangeModuleAccess('rrhh', next)}
-                          disabled={savingModuleAccess === 'rrhh'}
-                        />
-                      </div>
-                    )
-                  })()}
                 </div>
               </div>
             )}

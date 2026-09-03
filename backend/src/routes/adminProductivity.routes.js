@@ -1,13 +1,12 @@
 const router = require('express').Router()
 const { auth } = require('../middleware/auth')
-const { resolveWorkspace } = require('../middleware/workspace')
-const { moduleAccessGuard } = require('../lib/moduleAccess')
+const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 const { listProductivity, userOverview, userBreakdown, refreshProductivity, sendDigestNow } = require('../controllers/adminProductivity.controller')
 
 router.use(auth)
 router.use(resolveWorkspace)
-// Productividad ahora vive como tab dentro de RRHH: mismo acceso que ese módulo.
-router.use(moduleAccessGuard('rrhh'))
+// Productividad vive como tab dentro de RRHH: mismo acceso que ese módulo (admin-only).
+router.use(workspaceAdminOnly)
 router.use((req, res, next) => {
   if (req.workspace?.productivityEnabled === false) {
     return res.status(403).json({ error: 'La sección de Productividad está deshabilitada para este workspace' })

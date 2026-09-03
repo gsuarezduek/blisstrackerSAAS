@@ -105,9 +105,9 @@ export default function Navbar() {
   const adminRef   = useRef(null)
   const modulesRef = useRef(null)
 
-  const isAdminRoute   = !!useMatch('/admin') || !!useMatch('/reports')
+  const isAdminRoute   = !!useMatch('/admin') || !!useMatch('/reports') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos')
   const isModulesRoute = !!useMatch('/marketing') || !!useMatch('/contenido') || !!useMatch('/ventas') || !!useMatch('/admin/ventas')
-    || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification')
+    || !!useMatch('/admin/gamification')
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -165,28 +165,29 @@ export default function Navbar() {
   // importar qué otros estén prendidos en el workspace. Cada módulo combina el
   // feature flag (¿SuperAdmin lo habilitó para el workspace?) con el acceso por
   // rol configurado en Preferencias (user.moduleAccess, ver backend/src/lib/
-  // moduleAccess.js) — admins siempre pasan ese segundo chequeo. RRHH no tiene
-  // feature flag propio (siempre disponible), Ventas mantiene su criterio actual
-  // (admin → /admin/ventas, equipo comercial no-admin → /ventas), que ya equivale
-  // a moduleAccess.ventas.
+  // moduleAccess.js) — admins siempre pasan ese segundo chequeo. Ventas mantiene
+  // su criterio actual (admin → /admin/ventas, equipo comercial no-admin →
+  // /ventas), que ya equivale a moduleAccess.ventas. RRHH y EOS NO viven acá —
+  // son estrictamente admin-only, sin acceso configurable por rol (datos
+  // sensibles), y su link vive en `adminSublinks`.
   const moduleSublinks = [
-    ...(user?.moduleAccess?.rrhh ? [{ to: '/admin/rrhh', label: '👥 RRHH' }] : []),
     ...(gamificationEnabled && user?.moduleAccess?.gamification ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
     ...(ventasEnabled && (isAdmin || user?.isSales)
       ? [{ to: isAdmin ? '/admin/ventas' : '/ventas', label: '💰 Ventas' }]
       : []),
     ...(marketingEnabled && user?.moduleAccess?.marketing ? [{ to: '/marketing', label: '🎯 Marketing' }] : []),
     ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ to: '/contenido', label: '📅 Contenido' }] : []),
-    ...(eosEnabled && user?.moduleAccess?.eos ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
-  // Productividad/RRHH/EOS/Gamification se mudaron a "Módulos" (arriba); acá solo
-  // queda lo que sigue siendo estrictamente admin sin acceso configurable por rol.
+  // Ventas/Marketing/Contenido/Gamification se mudaron a "Módulos" (arriba, con
+  // acceso configurable por rol). RRHH y EOS quedan acá, estrictamente admin-only.
   const adminSublinks = [
-    { to: '/reports', label: '📈 Reportes' },
-    { to: '/admin',   label: '⚙️ Panel' },
+    { to: '/reports',    label: '📈 Reportes' },
+    { to: '/admin/rrhh', label: '👥 RRHH' },
+    ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
+    { to: '/admin',      label: '⚙️ Panel' },
   ]
 
   // ── Secciones del menú de perfil ──────────────────────────────────────────

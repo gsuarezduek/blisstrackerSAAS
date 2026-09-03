@@ -11,8 +11,8 @@ describe('resolveModuleAccess (defaults del catálogo)', () => {
     expect(resolveModuleAccess({ moduleAccess: {} }, 'marketing')).toEqual({ allMembers: true, roles: [] })
     expect(resolveModuleAccess({ moduleAccess: {} }, 'contenido')).toEqual({ allMembers: true, roles: [] })
   })
-  test('rrhh/gamification/ventas/eos: default allMembers false sin config guardada', () => {
-    for (const key of ['rrhh', 'gamification', 'ventas', 'eos']) {
+  test('gamification/ventas: default allMembers false sin config guardada', () => {
+    for (const key of ['gamification', 'ventas']) {
       expect(resolveModuleAccess({ moduleAccess: {} }, key)).toEqual({ allMembers: false, roles: [] })
     }
   })
@@ -21,20 +21,24 @@ describe('resolveModuleAccess (defaults del catálogo)', () => {
     expect(resolveModuleAccess(ws, 'marketing')).toEqual({ allMembers: false, roles: ['DESIGNER'] })
   })
   test('workspace sin moduleAccess (undefined) no rompe', () => {
-    expect(resolveModuleAccess({}, 'eos')).toEqual({ allMembers: false, roles: [] })
-    expect(resolveModuleAccess(null, 'eos')).toEqual({ allMembers: false, roles: [] })
+    expect(resolveModuleAccess({}, 'gamification')).toEqual({ allMembers: false, roles: [] })
+    expect(resolveModuleAccess(null, 'gamification')).toEqual({ allMembers: false, roles: [] })
+  })
+  test('rrhh/eos no son módulos configurables (quedaron admin-only, fuera de este mecanismo)', () => {
+    expect(MODULE_KEYS).not.toContain('rrhh')
+    expect(MODULE_KEYS).not.toContain('eos')
   })
 })
 
 describe('hasModuleAccess', () => {
   test('admin/owner siempre pasa, sin importar la config', () => {
-    expect(hasModuleAccess(req({ role: 'admin' }), 'eos')).toBe(true)
-    expect(hasModuleAccess(req({ role: 'owner' }), 'rrhh')).toBe(true)
+    expect(hasModuleAccess(req({ role: 'admin' }), 'gamification')).toBe(true)
+    expect(hasModuleAccess(req({ role: 'owner' }), 'ventas')).toBe(true)
   })
   test('member sin teamRole: pasa solo si allMembers', () => {
     const noRole = req({ role: 'member', teamRole: null })
-    expect(hasModuleAccess(noRole, 'marketing')).toBe(true)  // default allMembers:true
-    expect(hasModuleAccess(noRole, 'eos')).toBe(false)       // default allMembers:false
+    expect(hasModuleAccess(noRole, 'marketing')).toBe(true)      // default allMembers:true
+    expect(hasModuleAccess(noRole, 'gamification')).toBe(false)  // default allMembers:false
   })
   test('member con teamRole incluido en la lista configurada: pasa', () => {
     const r = req({ role: 'member', teamRole: 'SALES', moduleAccess: { ventas: { allMembers: false, roles: ['SALES'] } } })
@@ -68,14 +72,14 @@ describe('moduleAccessGuard', () => {
   test('devuelve 403 cuando no hay acceso', () => {
     const res = mockRes()
     const next = jest.fn()
-    moduleAccessGuard('eos')(req({ role: 'member', teamRole: null }), res, next)
+    moduleAccessGuard('gamification')(req({ role: 'member', teamRole: null }), res, next)
     expect(next).not.toHaveBeenCalled()
     expect(res.status).toHaveBeenCalledWith(403)
   })
 })
 
 describe('getAllModuleAccess', () => {
-  test('devuelve un booleano por cada uno de los 6 módulos', () => {
+  test('devuelve un booleano por cada uno de los módulos configurables', () => {
     const result = getAllModuleAccess(req({ role: 'admin' }))
     expect(Object.keys(result).sort()).toEqual([...MODULE_KEYS].sort())
     expect(Object.values(result).every(v => v === true)).toBe(true)

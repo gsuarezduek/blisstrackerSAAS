@@ -37,12 +37,6 @@ export const MODULE_CATALOG = {
     detail: 'Calendario de contenido para redes sociales: piezas por proyecto, vistas Calendario/Tabla/Kanban, comentarios internos y aprobación del cliente desde el portal.',
     tourBody: 'En "Contenido" armás el calendario de piezas de RRSS por proyecto y pedís aprobación al cliente sin que tenga que loguearse.',
   },
-  rrhh: {
-    icon: '👥',
-    label: 'RRHH',
-    detail: 'Dashboard del equipo, ingresos y puntualidad, legajos, vacaciones y licencias, y Productividad (métricas de rendimiento por persona y por proyecto).',
-    tourBody: 'En "RRHH" tenés el dashboard del equipo, ingresos, legajos, vacaciones y Productividad, todo en un solo lugar.',
-  },
 }
 
 export function moduleMeta(key, fallbackName) {
