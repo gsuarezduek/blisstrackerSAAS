@@ -5,6 +5,7 @@ const { createProject } = require('../services/projects.service')
 const { canWrite } = require('../lib/projectAccess')
 const { MARKETING_SECTION_IDS } = require('../lib/marketingSections')
 const { sendTestDigest: sendMarketingDigestTest } = require('../services/marketingDigest.service')
+const { buildCompletedAtWhere } = require('../lib/timeMetrics')
 
 function weekMondayStr(tz) {
   const safeZone = (tz && typeof tz === 'string' && tz.trim()) ? tz : DEFAULT_TZ
@@ -277,14 +278,13 @@ async function projectTasks(req, res, next) {
     })
     if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
-    const monday = weekMondayStr(tz)
     const ACTIVE_LIMIT = 200
 
     const today = todayString(tz)
     // Excluir tareas futuras programadas (scheduledFor posterior a hoy)
     const notFuture = { OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }] }
 
-    const [activeTasks, completedThisWeek, activeCount] = await Promise.all([
+    const [activeTasks, activeCount] = await Promise.all([
       prisma.task.findMany({
         where: { projectId, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] }, ...notFuture },
         include: {
@@ -295,15 +295,6 @@ async function projectTasks(req, res, next) {
         },
         orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
         take: ACTIVE_LIMIT,
-      }),
-      prisma.task.findMany({
-        where: { projectId, status: 'COMPLETED', workDay: { date: { gte: monday } } },
-        include: {
-          user: { select: { id: true, name: true, avatar: true } },
-          _count: { select: { comments: true } },
-        },
-        orderBy: { completedAt: 'desc' },
-        take: 100,
       }),
       prisma.task.count({
         where: { projectId, status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] }, ...notFuture },
@@ -326,27 +317,31 @@ async function projectTasks(req, res, next) {
     res.json({
       project,
       byUser: Object.values(byUser),
-      completedThisWeek: completedThisWeek.map(t => ({
-        id: t.id, description: t.description, completedAt: t.completedAt, user: t.user,
-        startedAt: t.startedAt, pausedMinutes: t.pausedMinutes,
-      })),
       activeCount,
       activeLimit: ACTIVE_LIMIT,
     })
   } catch (err) { next(err) }
 }
 
+// GET /projects/:id/completed?skip=&from=&to=&userId= — historial de tareas
+// completadas, con filtro opcional de rango de fechas (por completedAt, tz del
+// workspace) y de persona. Lectura abierta a cualquier miembro del workspace.
 async function projectCompletedHistory(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
     const projectId = await resolveProjectId(req.params.id, workspaceId)
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
     const skip = Math.max(0, Number(req.query.skip ?? 0))
     const TAKE = 20
+    const { from, to, userId } = req.query
 
-    // Lectura abierta a cualquier integrante del workspace (proyecto scopeado por workspaceId).
+    const where = { projectId, status: 'COMPLETED' }
+    if (from || to) where.completedAt = buildCompletedAtWhere(from, to, tz)
+    if (userId) where.userId = Number(userId)
+
     const tasks = await prisma.task.findMany({
-      where: { projectId, status: 'COMPLETED' },
+      where,
       include: {
         user: { select: { id: true, name: true, avatar: true } },
         _count: { select: { comments: true } },
@@ -360,6 +355,8 @@ async function projectCompletedHistory(req, res, next) {
     res.json({
       tasks: tasks.slice(0, TAKE).map(t => ({
         id: t.id, description: t.description, completedAt: t.completedAt, user: t.user,
+        startedAt: t.startedAt, pausedMinutes: t.pausedMinutes, minutesOverride: t.minutesOverride,
+        _count: t._count,
       })),
       hasMore,
     })

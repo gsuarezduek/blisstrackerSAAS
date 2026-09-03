@@ -62,7 +62,7 @@ function getPresets() {
   ]
 }
 
-export default function DateRangeFilter({ from, to, onFromChange, onToChange, onSearch, loading, compact = false }) {
+export default function DateRangeFilter({ from, to, onFromChange, onToChange, onSearch, loading, compact = false, searchLabel = 'Ver reporte' }) {
   const allPresets = getPresets()
   // En modo compacto: solo Hoy / Esta semana / Este mes / Mes pasado (sin "Semana pasada")
   const presets = compact ? allPresets.filter(p => p.label !== 'Semana pasada') : allPresets
@@ -181,7 +181,7 @@ export default function DateRangeFilter({ from, to, onFromChange, onToChange, on
           disabled={loading}
           className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
         >
-          {loading ? 'Cargando...' : 'Ver reporte'}
+          {loading ? 'Cargando...' : searchLabel}
         </button>
       </div>
     </div>

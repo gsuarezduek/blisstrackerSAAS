@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { linkify } from '../utils/linkify'
-import { fmtMins, completedDuration } from '../utils/format'
+import { completedDuration } from '../utils/format'
 import api from '../api/client'
 import AddTaskModal from '../components/AddTaskModal'
 import UserLink from '../components/UserLink'
@@ -15,9 +15,11 @@ import ProjectMeetings from '../components/meetings/ProjectMeetings'
 import ProjectReports from '../components/ProjectReports'
 import ClientPortalConfig from '../components/ClientPortalConfig'
 import ProjectAccesos from '../components/ProjectAccesos'
+import DateRangeFilter from '../components/DateRangeFilter'
 import { useAuth } from '../context/AuthContext'
 import { avatarUrl } from '../utils/avatarUrl'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import useMembers from '../hooks/useMembers'
 import RoleBadge from '../components/RoleBadge'
 
 const STATUS_LABEL = {
@@ -52,6 +54,17 @@ function fmtDate(iso, tz = 'America/Argentina/Buenos_Aires') {
   return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz })
 }
 
+// Lunes de esta semana → hoy, en ART — mismo default que usa Reports.jsx.
+function defaultArchiveFrom() {
+  const tz = 'America/Argentina/Buenos_Aires'
+  const now = new Date(); const day = now.getDay() || 7
+  const mon = new Date(now); mon.setDate(now.getDate() - day + 1)
+  return mon.toLocaleDateString('en-CA', { timeZone: tz })
+}
+function defaultArchiveTo() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -59,6 +72,7 @@ export default function ProjectDetail() {
   const { user: authUser } = useAuth()
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
   const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
+  const { members: workspaceMembers } = useMembers()
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
@@ -82,12 +96,14 @@ export default function ProjectDetail() {
   const [allServices,     setAllServices]     = useState(null)
   const [servicesSaving,  setServicesSaving]  = useState(false)
 
-  // Archive state
+  // Archive state — filtros de fecha (default: esta semana) y persona
   const [archive,      setArchive]      = useState([])
   const [archiveSkip,  setArchiveSkip]  = useState(0)
   const [hasMore,      setHasMore]      = useState(false)
   const [archiveLoading, setArchiveLoading] = useState(false)
-  const [archiveOpen,  setArchiveOpen]  = useState(false)
+  const [archiveFrom,  setArchiveFrom]  = useState(defaultArchiveFrom)
+  const [archiveTo,    setArchiveTo]    = useState(defaultArchiveTo)
+  const [archiveUserId, setArchiveUserId] = useState('')
 
   const encodedId = encodeURIComponent(id)
 
@@ -122,25 +138,39 @@ export default function ProjectDetail() {
       found = u.tasks.find(t => t.id === taskId)
       if (found) break
     }
-    if (!found) found = data.completedThisWeek?.find(t => t.id === taskId)
     if (found) setCommentTask(found)
   }, [data, searchParams])
 
-  const loadArchive = useCallback(async (skip = 0) => {
+  const loadArchive = useCallback(async (skip = 0, filters = {}) => {
+    const { from = archiveFrom, to = archiveTo, userId = archiveUserId } = filters
     setArchiveLoading(true)
     try {
-      const { data: res } = await api.get(`/projects/${encodedId}/completed?skip=${skip}`)
+      const params = new URLSearchParams({ skip })
+      if (from) params.set('from', from)
+      if (to) params.set('to', to)
+      if (userId) params.set('userId', userId)
+      const { data: res } = await api.get(`/projects/${encodedId}/completed?${params}`)
       setArchive(prev => skip === 0 ? res.tasks : [...prev, ...res.tasks])
       setHasMore(res.hasMore)
       setArchiveSkip(skip + res.tasks.length)
     } finally {
       setArchiveLoading(false)
     }
-  }, [encodedId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encodedId, archiveFrom, archiveTo, archiveUserId])
 
-  function handleOpenArchive() {
-    setArchiveOpen(true)
-    if (archive.length === 0) loadArchive(0)
+  useEffect(() => { loadArchive(0) }, [encodedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleArchiveDateSearch(from, to) {
+    setArchiveFrom(from)
+    setArchiveTo(to)
+    loadArchive(0, { from, to, userId: archiveUserId })
+  }
+
+  function handleArchiveUserChange(e) {
+    const userId = e.target.value
+    setArchiveUserId(userId)
+    loadArchive(0, { from: archiveFrom, to: archiveTo, userId })
   }
 
   const totalPending = data?.byUser.reduce((s, u) => s + u.tasks.length, 0) ?? 0
@@ -156,7 +186,6 @@ export default function ProjectDetail() {
     setData(prev => ({
       ...prev,
       byUser: prev.byUser.map(u => ({ ...u, tasks: u.tasks.map(bump) })),
-      completedThisWeek: prev.completedThisWeek?.map(bump),
     }))
     setArchive(prev => prev.map(bump))
   }
@@ -494,117 +523,77 @@ export default function ProjectDetail() {
                     </div>
                   )}
 
-                  {/* Completadas esta semana */}
-                  {data.completedThisWeek?.length > 0 && (() => {
-                    const totalMins = data.completedThisWeek.reduce((acc, t) => {
-                      if (!t.startedAt || !t.completedAt) return acc
-                      return acc + Math.max(0, Math.round((new Date(t.completedAt) - new Date(t.startedAt)) / 60000) - (t.pausedMinutes || 0))
-                    }, 0)
-                    return (
-                      <div>
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Completadas esta semana</span>
-                          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-medium">
-                            {data.completedThisWeek.length}
-                          </span>
-                          {totalMins > 0 && (
-                            <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
-                              ⏱ {fmtMins(totalMins)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
-                          {data.completedThisWeek.map(task => {
-                            const dur = completedDuration(task)
-                            return (
-                              <div key={task.id} className="flex items-start gap-3 px-4 py-3">
-                                <Avatar user={task.user} size="sm" />
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
-                                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                                    <span>{task.user.name}</span>
-                                    <RoleBadge userId={task.user.id} />
-                                    <span>· {fmtDate(task.completedAt, data?.project?.timezone)}</span>
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-                                  <button
-                                    onClick={() => setCommentTask(task)}
-                                    title="Ver comentarios"
-                                    className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                                  >
-                                    💬{(task._count?.comments ?? 0) > 0 ? ` ${task._count.comments}` : ''}
-                                  </button>
-                                  {dur && (
-                                    <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{dur}</span>
-                                  )}
-                                  <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5 font-semibold">✓</span>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Archivo histórico */}
+                  {/* Tareas completadas — persona + tarea + fecha + duración, con filtro de fecha y persona */}
                   <div>
-                    {!archiveOpen ? (
-                      <button
-                        onClick={handleOpenArchive}
-                        className="w-full flex items-center justify-center gap-2 py-3 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-2xl bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+                    <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Tareas completadas</span>
+                      <select
+                        value={archiveUserId}
+                        onChange={handleArchiveUserChange}
+                        className="text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                          <path d="M2 3a1 1 0 00-1 1v1a1 1 0 001 1h16a1 1 0 001-1V4a1 1 0 00-1-1H2zM2 7.5h16l-1.573 7.868A2 2 0 0114.465 17H5.535a2 2 0 01-1.962-1.632L2 7.5z" />
-                        </svg>
-                        Ver archivo de tareas completadas
-                      </button>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Archivo</span>
-                          <span className="text-xs text-gray-400 dark:text-gray-500">todas las tareas completadas</span>
-                        </div>
-                        {archive.length === 0 && !archiveLoading && (
-                          <p className="text-sm text-gray-400 text-center py-8">No hay tareas completadas todavía</p>
-                        )}
-                        {archive.length > 0 && (
-                          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
-                            {archive.map(task => (
-                              <div key={task.id} className="flex items-start gap-3 px-4 py-3">
-                                <Avatar user={task.user} size="sm" />
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
-                                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                                    <span>{task.user.name}</span>
-                                    <RoleBadge userId={task.user.id} />
-                                    <span>· {fmtDate(task.completedAt, data?.project?.timezone)}</span>
-                                  </p>
-                                </div>
+                        <option value="">Todas las personas</option>
+                        {workspaceMembers.map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <DateRangeFilter
+                      from={archiveFrom} to={archiveTo}
+                      onFromChange={setArchiveFrom} onToChange={setArchiveTo}
+                      onSearch={handleArchiveDateSearch} loading={archiveLoading}
+                      searchLabel="Filtrar"
+                    />
+
+                    {archive.length === 0 && !archiveLoading && (
+                      <p className="text-sm text-gray-400 text-center py-8">No hay tareas completadas en este período</p>
+                    )}
+                    {archive.length > 0 && (
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 overflow-hidden">
+                        {archive.map(task => {
+                          const dur = completedDuration(task)
+                          return (
+                            <div key={task.id} className="flex items-start gap-3 px-4 py-3">
+                              <Avatar user={task.user} size="sm" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">{linkify(task.description)}</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                  <span>{task.user.name}</span>
+                                  <RoleBadge userId={task.user.id} />
+                                  <span>· {fmtDate(task.completedAt, data?.project?.timezone)}</span>
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
                                 <button
                                   onClick={() => setCommentTask(task)}
                                   title="Ver comentarios"
-                                  className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex-shrink-0 mt-0.5"
+                                  className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
                                 >
                                   💬{(task._count?.comments ?? 0) > 0 ? ` ${task._count.comments}` : ''}
                                 </button>
+                                {dur && (
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 font-medium flex items-center gap-1">
+                                    {task.minutesOverride != null && <span className="text-amber-500" title="Duración editada manualmente">✎</span>}
+                                    {dur}
+                                  </span>
+                                )}
                               </div>
-                            ))}
-                          </div>
-                        )}
-                        {archiveLoading && (
-                          <p className="text-sm text-gray-400 text-center py-4">Cargando...</p>
-                        )}
-                        {!archiveLoading && hasMore && (
-                          <button
-                            onClick={() => loadArchive(archiveSkip)}
-                            className="w-full mt-3 py-2.5 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
-                          >
-                            Cargar más
-                          </button>
-                        )}
-                      </>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {archiveLoading && archive.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-4">Cargando...</p>
+                    )}
+                    {!archiveLoading && hasMore && (
+                      <button
+                        onClick={() => loadArchive(archiveSkip)}
+                        className="w-full mt-3 py-2.5 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
+                      >
+                        Cargar más
+                      </button>
                     )}
                   </div>
                 </div>
