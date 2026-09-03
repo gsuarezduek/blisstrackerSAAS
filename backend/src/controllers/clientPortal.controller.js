@@ -794,6 +794,7 @@ async function computeLiveData(portal) {
   delete data._dataCacheIsNew
   delete data.analysis
   delete data.analysisError
+  delete data.dataWarnings
   return data
 }
 

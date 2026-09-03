@@ -117,6 +117,7 @@ model Workspace {
   facebookFollowerLogs   FacebookFollowerLog[]
   monthlyReports         MonthlyReport[]
   reportFeedback         ReportFeedback[]
+  reportGenerationLogs   ReportGenerationLog[]
   searchConsoleSnapshots SearchConsoleSnapshot[]
   seoAiInsights          SeoAiInsight[]
   cannibalReports        CannibalReport[]
@@ -320,6 +321,7 @@ model User {
   eosMeetingParticipations  EOSMeetingParticipant[]     @relation("EOSMeetingParticipant")
   orgAssessmentResponses    OrgAssessmentResponse[]
   generatedReports          MonthlyReport[]            @relation("ReportGeneratedBy")
+  reportGenerationLogs      ReportGenerationLog[]
   platformSettingChanges    PlatformSettingLog[]       @relation("SettingChangedBy")
   accessRevealLogs          ProjectAccessLog[]
   ownedLeads                Lead[]                     @relation("LeadOwner")
@@ -503,6 +505,7 @@ model Project {
   facebookSnapshots      FacebookSnapshot[]
   facebookFollowerLogs   FacebookFollowerLog[]
   monthlyReports         MonthlyReport[]
+  reportGenerationLogs   ReportGenerationLog[]
   searchConsoleSnapshots SearchConsoleSnapshot[]
   seoAiInsights          SeoAiInsight[]
   cannibalReports        CannibalReport[]
@@ -1921,10 +1924,11 @@ model MonthlyReport {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  generatedBy User?     @relation("ReportGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
-  feedback    ReportFeedback[]
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  generatedBy    User?     @relation("ReportGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
+  feedback       ReportFeedback[]
+  generationLogs ReportGenerationLog[]
 
   @@unique([projectId, month])
   @@index([workspaceId])
@@ -1944,6 +1948,30 @@ model ReportFeedback {
 
   report    MonthlyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
   workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([workspaceId])
+}
+
+// ─── LOG DE INTENTOS DE GENERACIÓN DE INFORME ──────────────────────────────────
+// Cada "Generar informe"/"Regenerar" pisa `analysis`/`dataCache` del MonthlyReport
+// sin dejar rastro de los intentos previos. Este log liviano registra cada intento
+// de regeneración (quién, cuándo, qué warnings de datos y de análisis IA tuvo) para
+// poder auditar qué venía saliendo mal sin necesidad de versionar el informe entero.
+model ReportGenerationLog {
+  id            Int      @id @default(autoincrement())
+  workspaceId   Int
+  projectId     Int
+  reportId      Int
+  userId        Int? // null si lo disparó un proceso automático
+  warnings      String? // JSON: dataWarnings del intento (fetch en vivo fallidos por sección). null = ninguno
+  analysisError String? // motivo de falla del análisis IA en este intento. null = ok
+  createdAt     DateTime @default(now())
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  report    MonthlyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([reportId])
   @@index([workspaceId])

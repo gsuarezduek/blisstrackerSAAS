@@ -166,6 +166,7 @@ router.patch('/projects/:id/report-sections-config',                           m
 router.get('/projects/:id/reports/:month',                                     monthlyReport.getReport)
 router.patch('/projects/:id/reports/:month',                                   monthlyReport.updateReport)
 router.post('/projects/:id/reports/:month/regenerate',                         monthlyReport.regenerateReport)
+router.get('/projects/:id/reports/:month/generation-log',                      monthlyReport.getGenerationLog)
 router.patch('/projects/:id/reports/:month/status',                            monthlyReport.setReportStatus)
 router.post('/projects/:id/reports/:month/notify',                             monthlyReport.notifyReportPublished)
 router.patch('/projects/:id/reports/:month/sections',                          monthlyReport.removeReportSections)

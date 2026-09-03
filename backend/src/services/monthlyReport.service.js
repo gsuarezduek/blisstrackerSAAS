@@ -141,6 +141,16 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   // Ignorar análisis cacheado sin resumen válido (ej: guardado vacío tras un error de Claude)
   const validCachedAnalysis = cachedAnalysis?.resumen ? cachedAnalysis : null
 
+  // Warnings de datos: fetch en vivo fallidos (token vencido, rate limit, timeout) que
+  // antes se tragaban con un console.warn y dejaban la sección en null sin aviso — ahora
+  // se juntan acá para mostrarse en el informe y para que el intento NO se cachee como
+  // definitivo (ver `_dataCacheIsNew` más abajo), así un próximo request reintenta solo.
+  const dataWarnings = []
+  const warn = (section, label, err) => {
+    dataWarnings.push({ section, label, message: err?.message || 'error desconocido' })
+    console.warn(`[MonthlyReport] ${label} fetch en vivo fallido (ignorado):`, err?.message)
+  }
+
   // Secciones habilitadas para este informe. null = todas (compatibilidad con informes legacy).
   // `evolution` se rige por `analytics` (es la serie histórica del mismo dato).
   const enabledSet = Array.isArray(enabledSections) ? new Set(enabledSections) : null
@@ -167,6 +177,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       objectives:     objectivesResults,
       analysis:       validCachedAnalysis,
       analysisError:  null,
+      dataWarnings:   [], // un dataCache persistido nunca tiene warnings (ver `_dataCacheIsNew` más abajo)
       _analysisIsNew:  false,
       _dataCacheIsNew: false,
     }
@@ -416,7 +427,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
   const [googleAdsRaw, metaAdsRaw] = await Promise.all([
     wants('googleAds') && gadsIntegration && gadsIntegration.customerId && process.env.GOOGLE_ADS_DEVELOPER_TOKEN
       ? fetchGoogleAdsData(gadsIntegration, 'this_month', dateRange).catch(err => {
-          console.warn('[MonthlyReport] Google Ads fetch fallido (ignorado):', err.message)
+          warn('googleAds', 'Google Ads', err)
           return null
         })
       : Promise.resolve(null),
@@ -424,7 +435,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
       ? getValidFbToken(metaIntegration)
           .then(token => fetchMetaAdsData(metaIntegration.propertyId, token, 'this_month', dateRange))
           .catch(err => {
-            console.warn('[MonthlyReport] Meta Ads fetch fallido (ignorado):', err.message)
+            warn('metaAds', 'Meta Ads', err)
             return null
           })
       : Promise.resolve(null),
@@ -615,7 +626,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
             _fallbackMonth:  'live',
           }
         } catch (err) {
-          console.warn('[MonthlyReport] Instagram live fallback fallido:', err.message)
+          warn('instagram', 'Instagram', err)
         }
       }
     }
@@ -713,7 +724,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
             _fallbackMonth:  'live',
           }
         } catch (err) {
-          console.warn('[MonthlyReport] TikTok live fallback fallido:', err.message)
+          warn('tiktok', 'TikTok', err)
         }
       }
     }
@@ -786,7 +797,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
             _fallbackMonth:   'live',
           }
         } catch (err) {
-          console.warn('[MonthlyReport] YouTube live fallback fallido:', err.message)
+          warn('youtube', 'YouTube', err)
         }
       }
     }
@@ -878,7 +889,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
             _fallbackMonth:  'live',
           }
         } catch (err) {
-          console.warn('[MonthlyReport] LinkedIn live fallback fallido:', err.message)
+          warn('linkedin', 'LinkedIn', err)
         }
       }
     }
@@ -966,7 +977,7 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
             _fallbackMonth:  'live',
           }
         } catch (err) {
-          console.warn('[MonthlyReport] Facebook live fallback fallido:', err.message)
+          warn('facebook', 'Facebook', err)
         }
       }
     }
@@ -1093,9 +1104,13 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
     objectives: objectivesResults,
     analysis,
     analysisError:  analysis?._error ?? null,
+    dataWarnings,
     _analysisIsNew:  !validCachedAnalysis && !!analysis?.resumen,
-    // No cachear si estamos usando datos en vivo (cambian a diario)
-    _dataCacheIsNew: instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live' && youtube?._fallbackMonth !== 'live' && linkedin?._fallbackMonth !== 'live' && facebook?._fallbackMonth !== 'live',
+    // No cachear si hubo algún warning (fetch en vivo fallido — un próximo request debe
+    // reintentar solo, sin depender de que alguien apriete "Regenerar") ni si estamos
+    // usando datos en vivo exitosos (cambian a diario, no son un snapshot congelable).
+    _dataCacheIsNew: dataWarnings.length === 0 &&
+      instagram?._fallbackMonth !== 'live' && tiktok?._fallbackMonth !== 'live' && youtube?._fallbackMonth !== 'live' && linkedin?._fallbackMonth !== 'live' && facebook?._fallbackMonth !== 'live',
   }
 }
 
@@ -1284,7 +1299,7 @@ Respondé SOLO con un JSON con esta estructura exacta:
   try {
     const message = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
+      max_tokens: 2500,
       messages:   [{ role: 'user', content: prompt }],
     })
 

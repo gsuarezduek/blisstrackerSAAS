@@ -934,6 +934,70 @@ function ClientFeedbackPanel({ feedback }) {
   )
 }
 
+// ─── Historial de intentos de generación (para auditar qué venía saliendo mal) ─
+// Cada "Generar"/"Regenerar" pisa analysis/dataCache del informe sin dejar rastro
+// de los intentos previos — este panel lee el log liviano aparte (ReportGenerationLog)
+// para poder comparar qué pasó en cada intento sin tener que adivinar.
+function GenerationLogPanel({ projectId, month }) {
+  const [open,     setOpen]     = useState(false)
+  const [loading,  setLoading]  = useState(false)
+  const [attempts, setAttempts] = useState(null)
+
+  useEffect(() => { setAttempts(null); setOpen(false) }, [projectId, month])
+
+  useEffect(() => {
+    if (!open || attempts !== null) return
+    setLoading(true)
+    api.get(`/marketing/projects/${projectId}/reports/${month}/generation-log`)
+      .then(res => setAttempts(res.data.attempts || []))
+      .catch(() => setAttempts([]))
+      .finally(() => setLoading(false))
+  }, [open, projectId, month, attempts])
+
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3">
+        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">🕘 Intentos de generación anteriores</span>
+        <span className="text-gray-400 text-xs shrink-0">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+          {loading && <p className="text-xs text-gray-400">Cargando…</p>}
+          {!loading && attempts?.length === 0 && (
+            <p className="text-xs text-gray-400">Sin intentos registrados todavía — el log arranca a partir de este cambio.</p>
+          )}
+          {!loading && attempts && attempts.length > 0 && (
+            <ul className="space-y-2.5">
+              {attempts.map(a => {
+                const clean = !a.analysisError && a.warnings.length === 0
+                return (
+                  <li key={a.id} className={`text-xs border-l-2 pl-2.5 ${clean ? 'border-green-400' : 'border-amber-400'}`}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-gray-700 dark:text-gray-200">{a.userName}</span>
+                      <span className="text-gray-400">
+                        {new Date(a.createdAt).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {clean
+                        ? <span className="text-green-600 dark:text-green-400">✓ sin problemas</span>
+                        : <span className="text-amber-600 dark:text-amber-400">⚠ con problemas</span>}
+                    </div>
+                    {a.analysisError && (
+                      <p className="text-amber-700 dark:text-amber-400 mt-0.5">Análisis IA: {a.analysisError}</p>
+                    )}
+                    {a.warnings.map((w, i) => (
+                      <p key={i} className="text-amber-700 dark:text-amber-400 mt-0.5">{w.label}: {w.message}</p>
+                    ))}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Popup tras publicar: ofrece avisar al cliente por email ──────────────────
 // Se abre solo al pasar de borrador a publicado (nunca al despublicar). El envío
 // requiere portal de cliente activo con contactos — mismo criterio que "Pedir
@@ -1242,8 +1306,9 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
         </div>
       </div>
 
-      {/* ── Feedback del cliente ── */}
+      {/* ── Feedback del cliente + historial de intentos ── */}
       {isGenerated && <ClientFeedbackPanel feedback={reportMeta?.feedback} />}
+      {isGenerated && <GenerationLogPanel projectId={projectId} month={month} />}
 
       {/* ── Contenido ── */}
       {loading && (
@@ -1268,6 +1333,32 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
             </p>
             <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
               {reportData.analysisError}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowGenModal(true)}
+            disabled={generating}
+            className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            🔄 Regenerar
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && reportData?.dataWarnings?.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
+          <span className="text-lg leading-none mt-0.5">⚠️</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              Algunas secciones no se pudieron traer en vivo
+            </p>
+            <ul className="text-sm text-amber-700 dark:text-amber-400 mt-0.5 space-y-0.5">
+              {reportData.dataWarnings.map((w, i) => (
+                <li key={i}>• {w.label}: {w.message}</li>
+              ))}
+            </ul>
+            <p className="text-xs text-amber-600 dark:text-amber-500 mt-1.5">
+              Esas secciones no se guardaron como definitivas — volvé a entrar en unos minutos (probablemente se resuelva solo) o regenerá para reintentar ahora.
             </p>
           </div>
           <button

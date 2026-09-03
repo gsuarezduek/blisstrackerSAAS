@@ -543,6 +543,16 @@ async function regenerateReport(req, res, next) {
       periodStart: report.periodStart, periodEnd: report.periodEnd, briefs,
     })
 
+    // Log del intento (no bloquea la respuesta si falla) — permite auditar qué venía
+    // saliendo mal cuando alguien tuvo que regenerar el informe varias veces seguidas.
+    prisma.reportGenerationLog.create({
+      data: {
+        workspaceId, projectId, reportId: report.id, userId,
+        warnings:      data.dataWarnings?.length ? JSON.stringify(data.dataWarnings) : null,
+        analysisError: data.analysisError || null,
+      },
+    }).catch(err => console.error('[MonthlyReport] Error al registrar el intento de generación:', err.message))
+
     // Guardar nuevo análisis y caché de datos en DB
     const regenUpdate = {}
     if (data.analysis?.resumen) regenUpdate.analysis  = JSON.stringify(data.analysis)
@@ -587,6 +597,45 @@ async function regenerateReport(req, res, next) {
         isGenerated:     updatedReport.enabledSections != null,
       },
       data,
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/**
+ * GET /api/marketing/projects/:id/reports/:month/generation-log
+ * Historial de intentos de generación/regeneración del informe (quién, cuándo,
+ * qué warnings de datos y de análisis IA tuvo cada intento). Últimos 20.
+ */
+async function getGenerationLog(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.params
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
+    }
+
+    const report = await prisma.monthlyReport.findFirst({ where: { projectId, workspaceId, month }, select: { id: true } })
+    if (!report) return res.json({ attempts: [] })
+
+    const rows = await prisma.reportGenerationLog.findMany({
+      where:   { reportId: report.id },
+      orderBy: { createdAt: 'desc' },
+      take:    20,
+      select:  { id: true, warnings: true, analysisError: true, createdAt: true, user: { select: { name: true } } },
+    })
+
+    res.json({
+      attempts: rows.map(r => ({
+        id:            r.id,
+        createdAt:     r.createdAt,
+        userName:      r.user?.name || 'Sistema',
+        warnings:      r.warnings ? safeParseArr(r.warnings) : [],
+        analysisError: r.analysisError,
+      })),
     })
   } catch (err) {
     next(err)
@@ -819,4 +868,4 @@ async function notifyReportFeedback(report, feedback) {
   }, workspaceId)
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, removeReportSections, setReportStatus, notifyReportPublished, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE, buildPublicReportPayload }
+module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, getGenerationLog, removeReportSections, setReportStatus, notifyReportPublished, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE, buildPublicReportPayload }
