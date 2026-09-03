@@ -74,22 +74,25 @@ export default function MessageList({
     setEditValue('')
   }
 
-  // Al entrar al canal: ir siempre al final (últimos mensajes), sin importar si hay no
-  // leídos — el divisor rojo "No leídos" se sigue mostrando en su lugar (más arriba en
-  // el scroll) como referencia, pero ya no salta ahí automáticamente.
+  // Al entrar al canal: si hay no leídos, saltar directo ahí (el divisor rojo "No
+  // leídos" queda arriba de la vista) para poder leerlos bajando de corrido, en vez de
+  // arrancar en el final y tener que subir a buscarlos y volver a bajar. Sin no leídos,
+  // va al final como siempre.
   // Se re-arma cada vez que arranca una carga nueva (loading=true): al reabrir el panel
   // o cambiar de canal, este componente puede montar/renderizar un instante con el
   // `messages`/`loading` que ChatWidget todavía no actualizó (quedan del canal anterior)
   // antes de que dispare la recarga real — sin el re-arme, ese render transitorio
-  // consumía el flag y el scroll-al-final ya no se repetía cuando llegaban los mensajes
-  // correctos, dejando la vista al principio del canal en vez de al final.
+  // consumía el flag y el scroll inicial ya no se repetía cuando llegaban los mensajes
+  // correctos, dejando la vista al principio del canal en vez de donde corresponde.
   useEffect(() => {
     if (loading) {
       setDidInitialScroll(false)
       return
     }
     if (didInitialScroll) return
-    bottomRef.current?.scrollIntoView()
+    const unreadEl = firstUnreadMessageId ? document.getElementById(`chat-msg-${firstUnreadMessageId}`) : null
+    if (unreadEl) unreadEl.scrollIntoView({ block: 'start' })
+    else bottomRef.current?.scrollIntoView()
     setDidInitialScroll(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
