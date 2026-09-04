@@ -1,11 +1,18 @@
 const { randomUUID }           = require('crypto')
 const prisma                   = require('../lib/prisma')
-const { aggregateReportData, getAvailableSections }  = require('../services/monthlyReport.service')
+const { aggregateReportData, getAvailableSections, resolveReportPeriod }  = require('../services/monthlyReport.service')
 const { sendReportFeedbackEmail, sendReportPublishedEmail } = require('../services/email.service')
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
-const { monthLabel, prevMonthStr, monthBounds, rangeLabel } = require('../lib/monthUtils')
+const { monthLabel, prevMonthStr, monthBounds, rangeLabel, monthsInRange } = require('../lib/monthUtils')
 const { DEFAULT_TZ } = require('../utils/dates')
 const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
+const { saveInstagramSnapshot } = require('../services/instagramSnapshot.service')
+const { saveTikTokSnapshot }    = require('../services/tiktokSnapshot.service')
+const { saveYouTubeSnapshot }   = require('../services/youtubeSnapshot.service')
+const { saveLinkedinSnapshot }  = require('../services/linkedinSnapshot.service')
+const { saveFacebookSnapshot }  = require('../services/facebookSnapshot.service')
+const { fetchGoogleAdsData }               = require('../services/googleAds.service')
+const { fetchMetaAdsData, getValidFbToken } = require('../services/metaAds.service')
 
 // Filtro Prisma para informes "generados" (no placeholders vacíos)
 const GENERATED_WHERE = {
@@ -486,6 +493,121 @@ function safeParseObj(str) {
   try { return JSON.parse(str || '{}') } catch { return {} }
 }
 
+// ─── Chequeo de disponibilidad de datos (antes de generar) ────────────────────
+// El informe ya no intenta traer RRSS en vivo durante la generación (ver
+// monthlyReport.service.js) — en su lugar, este chequeo se corre desde el modal
+// "Generar Informe" y deja el snapshot del mes ancla actualizado si hace falta,
+// para que la generación en sí solo lea datos ya guardados. Ads sigue siendo en
+// vivo (es range-native, no calza con un snapshot mensual fijo), así que acá se
+// hace un "ping" con el rango real para fallar rápido antes de comprometerse a
+// generar, en vez de descubrirlo recién en el warning post-generación.
+const RRSS_SAVERS = {
+  instagram: { save: saveInstagramSnapshot, model: 'instagramSnapshot', integrationType: 'instagram',        label: 'Instagram' },
+  tiktok:    { save: saveTikTokSnapshot,    model: 'tikTokSnapshot',    integrationType: 'tiktok',           label: 'TikTok' },
+  youtube:   { save: saveYouTubeSnapshot,   model: 'youTubeSnapshot',   integrationType: 'google_youtube',   label: 'YouTube' },
+  linkedin:  { save: saveLinkedinSnapshot,  model: 'linkedinSnapshot',  integrationType: 'linkedin',         label: 'LinkedIn' },
+  facebook:  { save: saveFacebookSnapshot,  model: 'facebookSnapshot', integrationType: 'facebook',          label: 'Facebook' },
+}
+
+// Si ya hay snapshot del mes ancla, no hace falta pegarle a la API de nuevo.
+// Si no hay, intenta traerlo y guardarlo — de ahí en más la generación lo lee como
+// un snapshot normal, sin ningún camino en vivo dentro de aggregateReportData.
+async function checkRrssSection(key, cfg, projectId, workspaceId, dataMonth) {
+  const existing = await prisma[cfg.model].findFirst({
+    where:  { projectId, workspaceId, month: dataMonth },
+    select: { id: true },
+  })
+  if (existing) return { section: key, label: cfg.label, ok: true, refreshed: false }
+  try {
+    await cfg.save(projectId, workspaceId, dataMonth)
+    return { section: key, label: cfg.label, ok: true, refreshed: true }
+  } catch (err) {
+    return { section: key, label: cfg.label, ok: false, message: err.message }
+  }
+}
+
+async function checkAdsSection(type, integration, dateRange) {
+  const label = type === 'googleAds' ? 'Google Ads' : 'Meta Ads'
+  try {
+    if (type === 'googleAds') {
+      await fetchGoogleAdsData(integration, 'this_month', dateRange)
+    } else {
+      const token = await getValidFbToken(integration)
+      await fetchMetaAdsData(integration.propertyId, token, 'this_month', dateRange)
+    }
+    return { section: type, label, ok: true }
+  } catch (err) {
+    return { section: type, label, ok: false, message: err.message }
+  }
+}
+
+/**
+ * POST /api/marketing/projects/:id/reports/:month/check-readiness
+ * Se corre desde el modal "Generar Informe", ANTES de generar. Por cada sección
+ * de RRSS con integración conectada, asegura que el snapshot del mes ancla exista
+ * (lo trae y guarda si falta). Por cada sección de Ads conectada, hace una llamada
+ * de prueba con el rango real del informe. No persiste nada del informe en sí —
+ * solo actualiza snapshots de RRSS como efecto colateral (ver `saveXSnapshot`).
+ */
+async function getGenerationReadiness(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { month }   = req.params
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'Formato de mes inválido (esperado YYYY-MM)' })
+    }
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { id: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const periodParse = parsePeriodInput(req.body)
+    if (!periodParse.ok) return res.status(400).json({ error: periodParse.error })
+
+    const existingReport = await prisma.monthlyReport.findFirst({
+      where:  { projectId, workspaceId, month },
+      select: { periodStart: true, periodEnd: true },
+    })
+    const periodStart = periodParse.value?.periodStart ?? existingReport?.periodStart ?? null
+    const periodEnd   = periodParse.value?.periodEnd   ?? existingReport?.periodEnd   ?? null
+    const period        = resolveReportPeriod(month, periodStart, periodEnd)
+    const monthsCovered = monthsInRange(period.start, period.end)
+    const dataMonth      = monthsCovered[monthsCovered.length - 1]
+
+    const sectionSet = new Set(sanitizeSections(req.body?.enabledSections) ?? SECTION_KEYS)
+
+    const integrations = await prisma.projectIntegration.findMany({
+      where:  { projectId, status: 'active' },
+      select: { type: true, propertyId: true, customerId: true, accessToken: true, refreshToken: true, expiresAt: true, scopes: true },
+    })
+    const byType = (t) => integrations.find(i => i.type === t)
+
+    const checks = []
+
+    for (const [key, cfg] of Object.entries(RRSS_SAVERS)) {
+      if (!sectionSet.has(key)) continue
+      if (!byType(cfg.integrationType)) continue // sin integración conectada: nada que chequear
+      checks.push(checkRrssSection(key, cfg, projectId, workspaceId, dataMonth))
+    }
+
+    const dateRange = { startDate: period.start, endDate: period.end }
+    const gadsIntegration = byType('google_ads')
+    if (sectionSet.has('googleAds') && gadsIntegration && gadsIntegration.customerId && process.env.GOOGLE_ADS_DEVELOPER_TOKEN) {
+      checks.push(checkAdsSection('googleAds', gadsIntegration, dateRange))
+    }
+    const metaIntegration = byType('meta_ads')
+    if (sectionSet.has('metaAds') && metaIntegration && metaIntegration.propertyId) {
+      checks.push(checkAdsSection('metaAds', metaIntegration, dateRange))
+    }
+
+    const results = await Promise.all(checks)
+    res.json({ dataMonth, results })
+  } catch (err) {
+    next(err)
+  }
+}
+
 /**
  * POST /api/marketing/projects/:id/reports/:month/regenerate
  * Limpia el análisis IA cacheado y vuelve a agregar todos los datos frescos.
@@ -868,4 +990,4 @@ async function notifyReportFeedback(report, feedback) {
   }, workspaceId)
 }
 
-module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, regenerateReport, getGenerationLog, removeReportSections, setReportStatus, notifyReportPublished, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE, buildPublicReportPayload }
+module.exports = { listReports, getReport, getSectionsStatus, getReportSectionsConfig, updateReportSectionsConfig, updateReport, getPublicReport, getPublicReportMeta, getGenerationReadiness, regenerateReport, getGenerationLog, removeReportSections, setReportStatus, notifyReportPublished, submitReportFeedback, SECTION_KEYS, sanitizeSections, currentMonthStr, GENERATED_WHERE, buildPublicReportPayload }

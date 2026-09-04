@@ -146,6 +146,45 @@ function GenerateModal({ projectId, month, availableSections: initialAvailable, 
   // Secciones seleccionadas cuya integración está caída → aviso para reconectar
   const expiredSelected = offered.filter(s => selected.has(s.key) && available?.[s.key]?.integration === 'expired')
 
+  // ── Chequeo de disponibilidad antes de generar ──
+  // Antes de generar de verdad, corre un chequeo en vivo (RRSS: asegura el snapshot
+  // del mes; Ads: ping con el rango real) — así una integración caída se descubre acá,
+  // con un mensaje claro y la chance de reintentar, en vez de colarse en el informe.
+  const [checking,     setChecking]     = useState(false)
+  const [checkResults, setCheckResults] = useState(null) // null = sin chequear todavía (o hay que rechequear)
+  const selectedKey = [...selected].sort().join(',')
+  useEffect(() => { setCheckResults(null) }, [selectedKey, period.start, period.end])
+
+  async function runCheck() {
+    setChecking(true)
+    let results = []
+    try {
+      const res = await api.post(`/marketing/projects/${projectId}/reports/${month}/check-readiness`, {
+        enabledSections: [...selected], periodStart: period.start, periodEnd: period.end,
+      })
+      results = res.data.results || []
+    } catch { /* si el chequeo en sí falla, no bloqueamos — se genera igual */ }
+    setChecking(false)
+    return results
+  }
+
+  async function handlePrimaryClick() {
+    if (checkResults?.some(r => !r.ok)) {
+      // ya se chequeó y hay fallas: este click es "generar igual"
+      onGenerate([...selected], { periodStart: period.start, periodEnd: period.end })
+      return
+    }
+    const results = await runCheck()
+    const failed = results.filter(r => !r.ok)
+    if (failed.length === 0) {
+      onGenerate([...selected], { periodStart: period.start, periodEnd: period.end })
+    } else {
+      setCheckResults(results)
+    }
+  }
+
+  const failedChecks = checkResults?.filter(r => !r.ok) ?? []
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] flex flex-col">
@@ -257,16 +296,31 @@ function GenerateModal({ projectId, month, availableSections: initialAvailable, 
           </>
         )}
 
+        {failedChecks.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            <p className="font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠️ No se pudo confirmar {failedChecks.length === 1 ? 'esta sección' : 'estas secciones'} ahora mismo:</p>
+            <ul className="space-y-0.5 mb-1.5">
+              {failedChecks.map(r => <li key={r.section}>• <strong>{r.label}</strong>: {r.message}</li>)}
+            </ul>
+            <p>Podés generar igual (esas secciones quedarán con datos anteriores o vacías) o reintentar el chequeo.</p>
+            <button onClick={runCheck} disabled={checking} className="mt-1.5 font-medium underline disabled:opacity-50">
+              {checking ? 'Verificando…' : '🔄 Reintentar chequeo'}
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-2 mt-6">
           <button onClick={onClose} className="flex-1 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
             Cancelar
           </button>
           <button
-            onClick={() => onGenerate([...selected], { periodStart: period.start, periodEnd: period.end })}
-            disabled={generating || selected.size === 0 || periodInvalid}
-            className="flex-1 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
+            onClick={handlePrimaryClick}
+            disabled={generating || checking || selected.size === 0 || periodInvalid}
+            className={`flex-1 py-2 text-sm text-white rounded-xl font-medium transition-colors disabled:opacity-50 ${
+              failedChecks.length > 0 ? 'bg-amber-600 hover:bg-amber-700' : 'bg-primary-600 hover:bg-primary-700'
+            }`}
           >
-            {generating ? 'Generando…' : 'Generar informe'}
+            {generating ? 'Generando…' : checking ? 'Verificando datos…' : failedChecks.length > 0 ? 'Generar igual' : 'Generar informe'}
           </button>
         </div>
       </div>

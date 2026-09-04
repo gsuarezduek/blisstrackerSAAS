@@ -2,17 +2,7 @@ const prisma    = require('../lib/prisma')
 const { logTokens } = require('../lib/logTokens')
 const { fetchGoogleAdsData }             = require('./googleAds.service')
 const { fetchMetaAdsData, getValidFbToken } = require('./metaAds.service')
-const { getValidMetaToken }              = require('./metaTokenRefresh.service')
-const { fetchInstagramMetrics }          = require('./instagram.service')
 const { getStoriesSummary }              = require('./instagramStories.service')
-const { getValidTikTokToken }            = require('./tiktokTokenRefresh.service')
-const { fetchTikTokMetrics }             = require('./tiktok.service')
-const { getValidAccessToken }            = require('./tokenRefresh.service')
-const { fetchYouTubeMetrics }            = require('./youtube.service')
-const { getValidLinkedinToken }          = require('./linkedinTokenRefresh.service')
-const { fetchLinkedinMetrics }           = require('./linkedin.service')
-const { getValidFacebookToken }          = require('./metaTokenRefresh.service')
-const { fetchFacebookMetrics }           = require('./facebook.service')
 const { computeObjectives }              = require('./marketingObjectives.service')
 const { cacheImagesInArray }             = require('./socialImageCache.service')
 const { monthBounds, prevMonthStr, prevMonthsArr, monthsInRange, rangeLabel, rangeDataLabel } = require('../lib/monthUtils')
@@ -596,40 +586,9 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         deltaReach:      prevIg?.reach != null && recentIg.reach != null ? pct(recentIg.reach, prevIg.reach) : null,
         _fallbackMonth:  recentIg.month,
       }
-    } else {
-      // Fallback 2: datos en vivo de la API
-      const igIntegration = integrations.find(i => i.type === 'instagram')
-      if (igIntegration && wants('instagram')) {
-        try {
-          const token      = await getValidMetaToken(igIntegration)
-          const useFbGraph = igIntegration.scopes?.startsWith('fb_graph')
-          const live       = await fetchInstagramMetrics(igIntegration.propertyId, token, null, useFbGraph)
-          // Cacheamos las imágenes (las URLs del CDN vencen y el informe se persiste en dataCache).
-          const liveTopPosts = await cacheImagesInArray(live.topPosts ?? [], 'imgSrc', workspaceId)
-          instagram = {
-            followersCount:  live.followersCount,
-            engagementRate:  live.engagementRate,
-            avgLikes:        live.avgLikes,
-            avgComments:     live.avgComments,
-            postsCount:      live.postsThisMonth,
-            topPosts:        liveTopPosts,
-            bestPost:        liveTopPosts[0] ?? null,
-            reach:           live.reachThisMonth ?? null,
-            views:           live.viewsThisMonth ?? null,
-            totalSaved:      live.totalSaved     ?? null,
-            totalShares:     live.totalShares    ?? null,
-            avgReach:        live.avgReach        ?? null,
-            bestByReach:     bestPostByReach(liveTopPosts),
-            deltaFollowers:  null,
-            deltaEngagement: null,
-            deltaReach:      null,
-            _fallbackMonth:  'live',
-          }
-        } catch (err) {
-          warn('instagram', 'Instagram', err)
-        }
-      }
     }
+    // Ya no hay fallback en vivo acá — ver "check-readiness" (se corre antes de
+    // generar, desde el modal, y deja el snapshot del mes guardado si hace falta).
   }
 
   // Stories del mes (efímeras, capturadas a diario por el cron → persistidas en
@@ -703,31 +662,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         deltaEngagement: prevTk ? pct(recentTk.engagementRate ?? 0, prevTk.engagementRate) : null,
         _fallbackMonth:  recentTk.month,
       }
-    } else {
-      // Fallback 2: datos en vivo de la API
-      const tkIntegration = integrations.find(i => i.type === 'tiktok')
-      if (tkIntegration && wants('tiktok')) {
-        try {
-          const token = await getValidTikTokToken(tkIntegration)
-          const live  = await fetchTikTokMetrics(token, null)
-          tiktok = {
-            followersCount:  live.followersCount,
-            engagementRate:  live.engagementRate,
-            avgViews:        live.avgViews,
-            avgLikes:        live.avgLikes,
-            postsThisMonth:  live.postsThisMonth,
-            likesCount:      live.likesCount,
-            topVideos:       live.topVideos ?? [],
-            bestVideo:       live.bestVideo ?? null,
-            deltaFollowers:  null,
-            deltaEngagement: null,
-            _fallbackMonth:  'live',
-          }
-        } catch (err) {
-          warn('tiktok', 'TikTok', err)
-        }
-      }
     }
+    // Ya no hay fallback en vivo acá — ver "check-readiness".
   }
 
   // ── YouTube (con fallback a snapshot más reciente o datos en vivo) ────────────
@@ -775,32 +711,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         select: { subscriberCount: true, viewCountTotal: true },
       })
       youtube = buildYt(recentYt, prevYt, recentYt.month)
-    } else {
-      // Fallback 2: datos en vivo de la API
-      const ytIntegration = integrations.find(i => i.type === 'google_youtube')
-      if (ytIntegration && wants('youtube')) {
-        try {
-          const token = await getValidAccessToken(ytIntegration)
-          const live  = await fetchYouTubeMetrics(token, null, ytIntegration.propertyId || null)
-          youtube = {
-            subscriberCount:  live.subscriberCount,
-            engagementRate:   live.engagementRate,
-            avgViews:         live.avgViews,
-            monthViews:       live.monthViews,
-            videosThisMonth:  live.videosThisMonth,
-            shortsThisMonth:  live.shortsThisMonth,
-            longsThisMonth:   live.longsThisMonth,
-            topVideos:        live.topVideos ?? [],
-            bestVideo:        live.bestVideo ?? null,
-            deltaSubscribers: null,
-            deltaViews:       null,
-            _fallbackMonth:   'live',
-          }
-        } catch (err) {
-          warn('youtube', 'YouTube', err)
-        }
-      }
     }
+    // Ya no hay fallback en vivo acá — ver "check-readiness".
   }
 
   // ── LinkedIn (con fallback a snapshot más reciente o datos en vivo) ──────────
@@ -864,35 +776,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         deltaImpressions: prevLi ? pct(s.impressions ?? 0, prevLi.impressions) : null,
         _fallbackMonth:  s.month,
       }
-    } else {
-      // Fallback 2: datos en vivo
-      const liIntegration = integrations.find(i => i.type === 'linkedin' && i.propertyId)
-      if (liIntegration && wants('linkedin')) {
-        try {
-          const token = await getValidLinkedinToken(liIntegration)
-          const live  = await fetchLinkedinMetrics(liIntegration.propertyId, token, null)
-          linkedin = {
-            followersCount:  live.followersCount,
-            engagementRate:  live.engagementRate,
-            impressions:     live.impressions,
-            clicks:          live.clicks,
-            ctr:             live.ctr,
-            totalLikes:      live.totalLikes,
-            totalComments:   live.totalComments,
-            totalShares:     live.totalShares,
-            postsThisMonth:  live.postsThisMonth,
-            topPosts:        live.topPosts,
-            demographics:    live.demographics,
-            deltaFollowers:  null,
-            deltaEngagement: null,
-            deltaImpressions: null,
-            _fallbackMonth:  'live',
-          }
-        } catch (err) {
-          warn('linkedin', 'LinkedIn', err)
-        }
-      }
     }
+    // Ya no hay fallback en vivo acá — ver "check-readiness".
   }
 
   // ── Facebook (con fallback a snapshot más reciente o datos en vivo) ──────────
@@ -953,34 +838,8 @@ async function aggregateReportData(projectId, workspaceId, month, cachedAnalysis
         deltaReach:      prevFb ? pct(s.reach ?? 0, prevFb.reach) : null,
         _fallbackMonth:  s.month,
       }
-    } else {
-      // Fallback 2: datos en vivo (solo integración oficial/token, no scrape)
-      const fbIntegration = integrations.find(i => i.type === 'facebook' && i.propertyId && i.scopes !== 'scrape')
-      if (fbIntegration && wants('facebook')) {
-        try {
-          const token = getValidFacebookToken(fbIntegration)
-          const live  = await fetchFacebookMetrics(fbIntegration.propertyId, token, null)
-          facebook = {
-            followersCount:  live.followersCount,
-            fanCount:        live.fanCount,
-            engagementRate:  live.engagementRate,
-            reach:           live.reach,
-            impressions:     live.impressions,
-            totalLikes:      live.totalLikes,
-            totalComments:   live.totalComments,
-            totalShares:     live.totalShares,
-            postsThisMonth:  live.postsThisMonth,
-            topPosts:        live.topPosts,
-            deltaFollowers:  null,
-            deltaEngagement: null,
-            deltaReach:      null,
-            _fallbackMonth:  'live',
-          }
-        } catch (err) {
-          warn('facebook', 'Facebook', err)
-        }
-      }
     }
+    // Ya no hay fallback en vivo acá — ver "check-readiness".
   }
 
   // ── PageSpeed ─────────────────────────────────────────────────────────────────
@@ -1439,4 +1298,4 @@ async function getAvailableSections(projectId, workspaceId) {
   return sections
 }
 
-module.exports = { aggregateReportData, getAvailableSections }
+module.exports = { aggregateReportData, getAvailableSections, resolveReportPeriod }
