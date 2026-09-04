@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { trackEvent } from '../lib/analytics'
+import { useAuth } from '../context/AuthContext'
 
 function SlugPreview({ slug }) {
   const domain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
@@ -23,6 +24,11 @@ const SLUG_STATUS = {
 }
 
 export default function Register() {
+  const { user } = useAuth()
+  // Usuario ya logueado: está creando un workspace ADICIONAL, no una cuenta nueva —
+  // no le volvemos a pedir nombre/email/contraseña, el backend reutiliza su sesión.
+  const isAddingWorkspace = !!user
+
   const [workspaceName,  setWorkspaceName]  = useState('')
   const [slug,           setSlug]           = useState('')
   const [ownerName,      setOwnerName]      = useState('')
@@ -35,9 +41,9 @@ export default function Register() {
   const [slugStatus,     setSlugStatus]     = useState(SLUG_STATUS.idle)
   const navigate = useNavigate()
 
-  // Track inicio del signup flow (mount)
+  // Track inicio del signup flow (mount) — solo para el registro público
   useEffect(() => {
-    trackEvent('signup_started')
+    if (!isAddingWorkspace) trackEvent('signup_started')
   }, [])
 
   // Verificar disponibilidad de slug (con debounce)
@@ -59,9 +65,9 @@ export default function Register() {
     return () => clearTimeout(t)
   }, [slug])
 
-  // Verificar si el email ya tiene cuenta (con debounce)
+  // Verificar si el email ya tiene cuenta (con debounce) — no aplica si ya estamos logueados
   useEffect(() => {
-    if (!ownerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) {
+    if (isAddingWorkspace || !ownerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) {
       setEmailExists(false)
       return
     }
@@ -71,7 +77,7 @@ export default function Register() {
         .catch(() => setEmailExists(false))
     }, 400)
     return () => clearTimeout(t)
-  }, [ownerEmail])
+  }, [ownerEmail, isAddingWorkspace])
 
   // Auto-generar slug desde el nombre del workspace
   function handleWorkspaceNameChange(val) {
@@ -92,21 +98,29 @@ export default function Register() {
       setError('El subdominio ya está en uso. Elegí otro.')
       return
     }
-    if (emailExists) return // el botón queda deshabilitado, pero por si acaso
+    if (!isAddingWorkspace && emailExists) return // el botón queda deshabilitado, pero por si acaso
     setError('')
     setLoading(true)
     try {
-      const { data } = await api.post('/workspaces', { workspaceName, slug, ownerName, ownerEmail, ownerPassword })
+      // Logueado: el backend reutiliza la cuenta de la sesión (via el JWT que ya manda
+      // el cliente axios) — no hace falta re-mandar nombre/email/contraseña.
+      const body = isAddingWorkspace
+        ? { workspaceName, slug }
+        : { workspaceName, slug, ownerName, ownerEmail, ownerPassword }
+      const { data } = await api.post('/workspaces', body)
 
-      // Conversión GA4 + backend (ConversionEvent)
-      trackEvent('signup_completed', { method: 'email', workspace_slug: slug })
-      if (typeof window.gtag === 'function') {
-        window.gtag('event', 'sign_up', { method: 'email', workspace_slug: slug })
+      if (!isAddingWorkspace) {
+        // Conversión GA4 + backend (ConversionEvent) — solo cuenta nueva
+        trackEvent('signup_completed', { method: 'email', workspace_slug: slug })
+        if (typeof window.gtag === 'function') {
+          window.gtag('event', 'sign_up', { method: 'email', workspace_slug: slug })
+        }
       }
 
-      // Auto-login: ya tiene contraseña definida (la tipeó arriba), así que entra directo
-      // a su workspace nuevo en vez de pasar por la pantalla de login (mismo mecanismo que
-      // usa el login normal: AuthCallback en /auth?token= guarda el JWT y redirige al Dashboard).
+      // Auto-login: el owner ya tiene sesión (workspace adicional) o definió su contraseña
+      // arriba (cuenta nueva), así que entra directo a su workspace nuevo en vez de pasar
+      // por la pantalla de login (mismo mecanismo que usa el login normal: AuthCallback en
+      // /auth?token= guarda el JWT y redirige al Dashboard).
       const domain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
       const isLocal = !window.location.hostname.match(new RegExp(`\\.${domain.replace(/\./g, '\\.')}$`))
       if (isLocal) {
@@ -142,7 +156,7 @@ export default function Register() {
     return null
   }
 
-  const canSubmit = !loading && acceptedTerms && !emailExists
+  const canSubmit = !loading && (isAddingWorkspace || (acceptedTerms && !emailExists))
     && slugStatus !== SLUG_STATUS.taken
     && slugStatus !== SLUG_STATUS.checking
     && slugStatus !== SLUG_STATUS.invalid
@@ -156,9 +170,13 @@ export default function Register() {
           <span className="text-xl font-bold text-gray-900 dark:text-white">BlissTracker</span>
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Crear workspace</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+          {isAddingWorkspace ? 'Crear un nuevo workspace' : 'Crear workspace'}
+        </h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">
-          14 días de prueba gratis. Sin tarjeta de crédito.
+          {isAddingWorkspace
+            ? <>Se va a crear con tu cuenta ({user.email}). Vas a poder cambiar entre workspaces desde tu perfil.</>
+            : '14 días de prueba gratis. Sin tarjeta de crédito.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -198,96 +216,102 @@ export default function Register() {
             {slugStatus !== SLUG_STATUS.taken && <SlugPreview slug={slug} />}
           </div>
 
-          <hr className="border-gray-200 dark:border-gray-700" />
+          {/* Nombre, email y contraseña del owner solo en el registro público —
+              con sesión activa el backend reutiliza la cuenta ya logueada. */}
+          {!isAddingWorkspace && (
+            <>
+              <hr className="border-gray-200 dark:border-gray-700" />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-              Tu nombre
-            </label>
-            <input
-              type="text"
-              required
-              value={ownerName}
-              onChange={e => setOwnerName(e.target.value)}
-              placeholder="Ana García"
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-              Email
-            </label>
-            <input
-              type="email"
-              required
-              value={ownerEmail}
-              onChange={e => setOwnerEmail(e.target.value)}
-              placeholder="ana@mi-empresa.com"
-              className={`w-full border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:border-transparent transition-shadow dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 ${
-                emailExists
-                  ? 'border-amber-400 focus:ring-amber-400'
-                  : 'border-gray-300 dark:border-gray-600 focus:ring-primary-500'
-              }`}
-            />
-            {/* Si el email ya tiene cuenta → redirigir a login */}
-            {emailExists && (
-              <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
-                <p className="text-xs text-amber-700 dark:text-amber-300 font-medium mb-1">
-                  Este email ya tiene una cuenta en BlissTracker.
-                </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Iniciá sesión en tu workspace y creá uno nuevo desde el selector de workspaces.
-                </p>
-                <Link
-                  to="/login"
-                  className="inline-block mt-2 text-xs font-semibold text-primary-600 hover:text-primary-700 underline underline-offset-2"
-                >
-                  Ir a iniciar sesión →
-                </Link>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Tu nombre
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={ownerName}
+                  onChange={e => setOwnerName(e.target.value)}
+                  placeholder="Ana García"
+                  className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
+                />
               </div>
-            )}
-          </div>
 
-          {/* Contraseña solo si el email NO existe */}
-          {!emailExists && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Contraseña
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={ownerEmail}
+                  onChange={e => setOwnerEmail(e.target.value)}
+                  placeholder="ana@mi-empresa.com"
+                  className={`w-full border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:border-transparent transition-shadow dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 ${
+                    emailExists
+                      ? 'border-amber-400 focus:ring-amber-400'
+                      : 'border-gray-300 dark:border-gray-600 focus:ring-primary-500'
+                  }`}
+                />
+                {/* Si el email ya tiene cuenta → redirigir a login */}
+                {emailExists && (
+                  <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
+                    <p className="text-xs text-amber-700 dark:text-amber-300 font-medium mb-1">
+                      Este email ya tiene una cuenta en BlissTracker.
+                    </p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Iniciá sesión en tu workspace y creá uno nuevo desde el selector de workspaces.
+                    </p>
+                    <Link
+                      to="/login"
+                      className="inline-block mt-2 text-xs font-semibold text-primary-600 hover:text-primary-700 underline underline-offset-2"
+                    >
+                      Ir a iniciar sesión →
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              {/* Contraseña solo si el email NO existe */}
+              {!emailExists && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Contraseña
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={ownerPassword}
+                    onChange={e => setOwnerPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
+                  />
+                </div>
+              )}
+
+              {/* Aceptar términos */}
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={e => setAcceptedTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer flex-shrink-0"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Acepto las{' '}
+                  <a href="/condiciones" target="_blank" rel="noopener noreferrer"
+                    className="text-primary-600 hover:text-primary-700 underline underline-offset-2">
+                    condiciones de uso
+                  </a>
+                  {' '}y la{' '}
+                  <a href="/privacidad" target="_blank" rel="noopener noreferrer"
+                    className="text-primary-600 hover:text-primary-700 underline underline-offset-2">
+                    política de privacidad
+                  </a>
+                </span>
               </label>
-              <input
-                type="password"
-                required
-                minLength={8}
-                value={ownerPassword}
-                onChange={e => setOwnerPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
-              />
-            </div>
+            </>
           )}
-
-          {/* Aceptar términos */}
-          <label className="flex items-start gap-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={acceptedTerms}
-              onChange={e => setAcceptedTerms(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer flex-shrink-0"
-            />
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              Acepto las{' '}
-              <a href="/condiciones" target="_blank" rel="noopener noreferrer"
-                className="text-primary-600 hover:text-primary-700 underline underline-offset-2">
-                condiciones de uso
-              </a>
-              {' '}y la{' '}
-              <a href="/privacidad" target="_blank" rel="noopener noreferrer"
-                className="text-primary-600 hover:text-primary-700 underline underline-offset-2">
-                política de privacidad
-              </a>
-            </span>
-          </label>
 
           {error && (
             <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-xl px-4 py-3">
@@ -295,7 +319,7 @@ export default function Register() {
             </div>
           )}
 
-          {!emailExists && (
+          {(isAddingWorkspace || !emailExists) && (
             <button
               type="submit"
               disabled={!canSubmit}
@@ -307,12 +331,20 @@ export default function Register() {
 
         </form>
 
-        <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
-          ¿Ya tenés cuenta?{' '}
-          <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium transition-colors">
-            Iniciá sesión
-          </Link>
-        </p>
+        {isAddingWorkspace ? (
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
+            <Link to="/" className="text-primary-600 hover:text-primary-700 font-medium transition-colors">
+              ← Volver a mi workspace
+            </Link>
+          </p>
+        ) : (
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
+            ¿Ya tenés cuenta?{' '}
+            <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium transition-colors">
+              Iniciá sesión
+            </Link>
+          </p>
+        )}
 
       </div>
     </div>

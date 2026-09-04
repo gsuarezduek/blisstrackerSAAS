@@ -1,7 +1,7 @@
 const express = require('express')
 const router  = require('express').Router()
 const multer  = require('multer')
-const { auth } = require('../middleware/auth')
+const { auth, optionalAuth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 const c  = require('../controllers/workspace.controller')
 const ff = require('../controllers/featureFlags.controller')
@@ -12,8 +12,9 @@ const upload = multer({
   limits:  { fileSize: 5 * 1024 * 1024 }, // 5 MB máximo
 })
 
-// Rutas públicas (sin auth)
-router.post('/',          c.createWorkspace)
+// Rutas públicas (sin auth) — createWorkspace usa optionalAuth: si quien pega ya
+// tiene sesión, crea un workspace ADICIONAL para ese usuario sin pedirle contraseña.
+router.post('/',          optionalAuth, c.createWorkspace)
 router.get('/check-slug', c.checkSlug)
 router.get('/info',       c.getInfo)
 

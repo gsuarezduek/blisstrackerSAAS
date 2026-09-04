@@ -535,13 +535,22 @@ async function toggleMemberActive(req, res, next) {
 
 /**
  * POST /api/workspaces
- * Crear un nuevo workspace (registro público).
- * Body: { workspaceName, slug, ownerName, ownerEmail, ownerPassword }
+ * Crear un nuevo workspace. Dos casos, mismo endpoint (usa `optionalAuth`):
+ *  - Registro público (sin sesión): Body { workspaceName, slug, ownerName, ownerEmail, ownerPassword }
+ *  - Usuario ya logueado crea un workspace ADICIONAL (req.user presente): Body { workspaceName, slug }
+ *    — reutiliza la cuenta de la sesión, sin pedir contraseña de nuevo.
  */
 async function createWorkspace(req, res, next) {
   try {
-    const { workspaceName, slug, ownerName, ownerEmail, ownerPassword } = req.body
-    if (!workspaceName || !slug || !ownerName || !ownerEmail || !ownerPassword) {
+    const { workspaceName, slug } = req.body
+    const authedUserId = req.user?.userId ?? null
+
+    let ownerName, ownerEmail, ownerPassword
+    if (!authedUserId) {
+      ;({ ownerName, ownerEmail, ownerPassword } = req.body)
+    }
+
+    if (!workspaceName || !slug || (!authedUserId && (!ownerName || !ownerEmail || !ownerPassword))) {
       return res.status(400).json({ error: 'Todos los campos son requeridos' })
     }
 
@@ -557,20 +566,30 @@ async function createWorkspace(req, res, next) {
     const trialEndsAt = new Date()
     trialEndsAt.setDate(trialEndsAt.getDate() + trialDays)
 
-    // Si el email ya tiene cuenta, verificar que la contraseña sea correcta (autenticación,
-    // no alta — no se le aplica la política de largo mínimo de una contraseña nueva).
-    const existingOwner = await prisma.user.findUnique({ where: { email: ownerEmail } })
-    if (existingOwner) {
-      const valid = await bcrypt.compare(ownerPassword, existingOwner.password)
-      if (!valid) {
-        return res.status(401).json({ error: 'Ya existe una cuenta con ese email. La contraseña ingresada es incorrecta.' })
+    let existingOwner = null
+    let hashed = null
+
+    if (authedUserId) {
+      // Usuario ya logueado: reutilizamos su cuenta tal cual, sin volver a pedir contraseña.
+      existingOwner = await prisma.user.findUnique({ where: { id: authedUserId } })
+      if (!existingOwner) {
+        return res.status(401).json({ error: 'Tu sesión no es válida. Volvé a iniciar sesión.' })
       }
     } else {
-      const pwErr = validatePassword(ownerPassword)
-      if (pwErr) return res.status(400).json({ error: pwErr })
+      // Registro público: si el email ya tiene cuenta, verificar que la contraseña sea correcta
+      // (autenticación, no alta — no se le aplica la política de largo mínimo de una contraseña nueva).
+      existingOwner = await prisma.user.findUnique({ where: { email: ownerEmail } })
+      if (existingOwner) {
+        const valid = await bcrypt.compare(ownerPassword, existingOwner.password)
+        if (!valid) {
+          return res.status(401).json({ error: 'Ya existe una cuenta con ese email. La contraseña ingresada es incorrecta.' })
+        }
+      } else {
+        const pwErr = validatePassword(ownerPassword)
+        if (pwErr) return res.status(400).json({ error: pwErr })
+        hashed = await bcrypt.hash(ownerPassword, 10)
+      }
     }
-
-    const hashed = await bcrypt.hash(ownerPassword, 10)
 
     const result = await prisma.$transaction(async (tx) => {
       // Crear workspace
@@ -578,8 +597,9 @@ async function createWorkspace(req, res, next) {
         data: { name: workspaceName, slug, status: 'trialing', trialEndsAt, monthlyTokenLimit: defaultTokenLimit },
       })
 
-      // Upsert owner (puede ya tener cuenta global en otro workspace)
-      let owner = await tx.user.findUnique({ where: { email: ownerEmail } })
+      // Reutiliza al owner ya resuelto arriba (sesión activa, o email con cuenta existente);
+      // si es una cuenta nueva, la crea ahora.
+      let owner = existingOwner
       if (!owner) {
         owner = await tx.user.create({
           data: { name: ownerName, email: ownerEmail, password: hashed, emailVerified: false },
@@ -628,7 +648,7 @@ async function createWorkspace(req, res, next) {
     // pedimos confirmar el email. Solo si aún no está verificado (owner nuevo,
     // o una cuenta existente que nunca lo confirmó) — evita reenviar de más.
     if (!result.owner.emailVerified) {
-      createAndSendVerificationEmail(result.owner.id, ownerEmail, ownerName, {
+      createAndSendVerificationEmail(result.owner.id, result.owner.email, result.owner.name, {
         slug: result.workspace.slug,
         workspaceId: result.workspace.id,
       }).catch(err => console.error('[Workspace] Error enviando email de verificación:', err.message))
@@ -641,7 +661,7 @@ async function createWorkspace(req, res, next) {
       bodyHtml: platformCard('🚀 Nuevo workspace registrado', [
         ['Workspace', result.workspace.name],
         ['Slug',      `${result.workspace.slug}.${process.env.APP_DOMAIN || 'blisstracker.app'}`],
-        ['Owner',     `${ownerName} (${ownerEmail})`],
+        ['Owner',     `${result.owner.name} (${result.owner.email})${authedUserId ? ' — workspace adicional' : ''}`],
         ['Estado',    'Trial'],
       ], '#16a34a'),
     })
@@ -650,7 +670,7 @@ async function createWorkspace(req, res, next) {
     if (stripe) {
       stripe.customers.create({
         name:  workspaceName,
-        email: ownerEmail,
+        email: result.owner.email,
         metadata: { workspaceId: String(result.workspace.id), slug },
       }).then(customer =>
         prisma.workspace.update({
@@ -660,9 +680,11 @@ async function createWorkspace(req, res, next) {
       ).catch(err => console.error('[Stripe] Error creando customer:', err.message))
     }
 
-    // Auto-login: el owner ya definió su contraseña en el formulario, así que lo logueamos
-    // directo en su workspace recién creado (el frontend navega a /auth?token=... con esto,
-    // el mismo mecanismo que usa el login normal) en vez de mandarlo a una pantalla de login.
+    // Auto-login: el owner ya tiene una sesión válida (usuario existente que creó un
+    // workspace adicional) o definió su contraseña en el formulario (usuario nuevo), así
+    // que lo logueamos directo en su workspace recién creado (el frontend navega a
+    // /auth?token=... con esto, el mismo mecanismo que usa el login normal) en vez de
+    // mandarlo a una pantalla de login.
     const jwt = require('jsonwebtoken')
     const token = jwt.sign(
       {
