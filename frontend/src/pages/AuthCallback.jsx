@@ -27,10 +27,13 @@ export default function AuthCallback() {
 
     localStorage.setItem('token', token)
 
-    // Obtener datos frescos del usuario y registrar el ingreso
+    // Obtener datos frescos del usuario y registrar el ingreso.
+    // IMPORTANTE: esperar a que loginWithToken termine (setUser) antes de navegar —
+    // si no, PrivateRoute puede renderizar con user=null (loading ya resuelto en falso
+    // desde el mount inicial, sin token) y rebotar a /login antes de que la sesión esté lista.
     api.get('/auth/me')
-      .then(r => {
-        loginWithToken(token, r.data)
+      .then(async r => {
+        await loginWithToken(token, r.data)
         api.post('/auth/record-login').catch(() => {})
         navigate('/', { replace: true })
       })
