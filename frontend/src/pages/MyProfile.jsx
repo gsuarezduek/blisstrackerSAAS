@@ -8,6 +8,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import useLegajoFields from '../hooks/useLegajoFields'
 import LegajoFormFields from '../components/legajo/LegajoFormFields'
 import RoleBadge from '../components/RoleBadge'
+import PasswordInput from '../components/PasswordInput'
 import { avatarUrl } from '../utils/avatarUrl'
 
 function Field({ label, children }) {
@@ -697,8 +698,7 @@ export default function MyProfile() {
           <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Cambiar contraseña</h2>
           <form onSubmit={handleChangePassword} className="space-y-3">
             <Field label="Contraseña actual">
-              <input
-                type="password"
+              <PasswordInput
                 required
                 value={pwForm.currentPassword}
                 onChange={e => setPwForm(p => ({ ...p, currentPassword: e.target.value }))}
@@ -708,8 +708,7 @@ export default function MyProfile() {
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Nueva contraseña">
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={8}
                   value={pwForm.newPassword}
@@ -719,8 +718,7 @@ export default function MyProfile() {
                 />
               </Field>
               <Field label="Confirmar contraseña">
-                <input
-                  type="password"
+                <PasswordInput
                   required
                   value={pwForm.confirmPassword}
                   onChange={e => setPwForm(p => ({ ...p, confirmPassword: e.target.value }))}
@@ -770,8 +768,7 @@ export default function MyProfile() {
               />
             </Field>
             <Field label="Contraseña actual">
-              <input
-                type="password"
+              <PasswordInput
                 required
                 value={emailForm.password}
                 onChange={e => setEmailForm(f => ({ ...f, password: e.target.value }))}

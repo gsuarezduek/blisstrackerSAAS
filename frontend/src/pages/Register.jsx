@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { trackEvent } from '../lib/analytics'
 import { useAuth } from '../context/AuthContext'
+import PasswordInput from '../components/PasswordInput'
 
 function SlugPreview({ slug }) {
   const domain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
@@ -277,8 +278,7 @@ export default function Register() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     Contraseña
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     required
                     minLength={8}
                     value={ownerPassword}

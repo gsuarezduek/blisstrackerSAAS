@@ -4,6 +4,7 @@ import { fmtTokens, fmtCost } from './shared'
 import { TokenBar } from './aiTokens'
 import { SectionSettings } from './settings'
 import ConfirmModal from '../../components/ConfirmModal'
+import PasswordInput from '../../components/PasswordInput'
 
 const ACTION_LABELS = {
   connect:                     'Conexión',
@@ -210,8 +211,7 @@ function TokensPanel({ tokens, loading, onChanged }) {
                 )}
                 {changeId === t.id ? (
                   <div className="flex items-center gap-2 mt-1.5">
-                    <input
-                      type="password"
+                    <PasswordInput
                       value={changeVal}
                       onChange={e => setChangeVal(e.target.value)}
                       placeholder="Nuevo valor del token"
@@ -259,8 +259,7 @@ function TokensPanel({ tokens, loading, onChanged }) {
                 autoFocus
                 className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
-              <input
-                type="password"
+              <PasswordInput
                 value={newToken}
                 onChange={e => setNewToken(e.target.value)}
                 placeholder="Token de Apify"

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import PasswordInput from '../components/PasswordInput'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 const APP_DOMAIN = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
@@ -153,8 +154,7 @@ export default function JoinWorkspace() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Contraseña
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="Mínimo 8 caracteres"
@@ -167,8 +167,7 @@ export default function JoinWorkspace() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Confirmar contraseña
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={confirm}
                   onChange={e => setConfirm(e.target.value)}
                   placeholder="Repetir contraseña"

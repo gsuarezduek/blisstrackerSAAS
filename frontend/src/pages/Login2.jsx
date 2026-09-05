@@ -5,6 +5,7 @@ import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import BlissLogo from '../components/BlissLogo'
+import PasswordInput from '../components/PasswordInput'
 import { isWorkspaceSubdomain } from '../utils/domain'
 
 // ── Selector de workspace post-login ──────────────────────────────────────────
@@ -134,8 +135,8 @@ function RootLogin() {
             placeholder="tu@empresa.com"
             className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
           />
-          <input
-            type="password" required value={password}
+          <PasswordInput
+            required value={password}
             onChange={e => setPassword(e.target.value)}
             placeholder="Contraseña"
             className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-shadow"
