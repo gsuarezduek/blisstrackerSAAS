@@ -6,6 +6,7 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 import ConfirmModal from '../../components/ConfirmModal'
 import { moduleMeta } from '../../lib/moduleCatalog'
 import ModuleAccessEditor from '../../components/ModuleAccessEditor'
+import { invalidateFeatureFlag } from '../../hooks/useFeatureFlag'
 import { Toggle } from './shared'
 
 const TIMEZONES = [
@@ -174,6 +175,7 @@ export default function GlobalTab({ loaded }) {
     try {
       await api.patch(`/workspaces/current/features/${key}`, { disabled: next })
       setWsFeatures(prev => prev.map(f => f.key === key ? { ...f, disabled: next } : f))
+      invalidateFeatureFlag(key)
     } catch (_) {}
     finally { setTogglingFeature(null) }
   }

@@ -7,6 +7,12 @@ import api from '../api/client'
 const cache = {}
 const TTL_MS = 5 * 60 * 1000
 
+// Cualquier hook montado que use la key invalidada refetchea al toque, en vez de
+// esperar el TTL — necesario para el propio admin que togglea un módulo (desde
+// Preferencias o el wizard de onboarding) y espera ver el efecto ya mismo, no
+// hasta 5 minutos después (ver invalidateFeatureFlag más abajo).
+const listeners = new Set()
+
 function isFresh(entry) {
   return !!entry && (Date.now() - entry.ts) < TTL_MS
 }
@@ -22,13 +28,48 @@ export function useFeatureFlag(key) {
 
   useEffect(() => {
     if (!key) return
-    if (isFresh(cache[key])) { setEnabled(cache[key].value); setLoading(false); return }
+    let cancelled = false
 
-    api.get(`/feature-flags/${key}`)
-      .then(r => { cache[key] = { value: r.data.enabled, ts: Date.now() }; setEnabled(r.data.enabled) })
-      .catch(() => { cache[key] = { value: false, ts: Date.now() }; setEnabled(false) })
-      .finally(() => setLoading(false))
+    function load() {
+      setLoading(true)
+      api.get(`/feature-flags/${key}`)
+        .then(r => {
+          cache[key] = { value: r.data.enabled, ts: Date.now() }
+          if (!cancelled) setEnabled(r.data.enabled)
+        })
+        .catch(() => {
+          cache[key] = { value: false, ts: Date.now() }
+          if (!cancelled) setEnabled(false)
+        })
+        .finally(() => { if (!cancelled) setLoading(false) })
+    }
+
+    if (isFresh(cache[key])) {
+      setEnabled(cache[key].value)
+      setLoading(false)
+    } else {
+      load()
+    }
+
+    const onInvalidate = (changedKey) => {
+      if (!changedKey || changedKey === key) load()
+    }
+    listeners.add(onInvalidate)
+    return () => { cancelled = true; listeners.delete(onInvalidate) }
   }, [key])
 
   return { enabled, loading }
+}
+
+/**
+ * Invalida la caché de un flag (o de todos, sin argumento) y hace que todo
+ * `useFeatureFlag` montado ahora mismo refetchee al instante. Llamar después de
+ * un PATCH /workspaces/current/features/:key exitoso (Preferencias, wizard de
+ * onboarding) — sin esto, el propio admin que togglea un módulo sigue viendo el
+ * estado viejo (ej. el link de Ventas en el Navbar) hasta que expire el TTL.
+ */
+export function invalidateFeatureFlag(key) {
+  if (key) delete cache[key]
+  else Object.keys(cache).forEach(k => delete cache[k])
+  listeners.forEach(fn => fn(key))
 }

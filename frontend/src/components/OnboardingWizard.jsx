@@ -26,6 +26,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import api from '../api/client'
 import { trackEvent } from '../lib/analytics'
 import { moduleMeta } from '../lib/moduleCatalog'
+import { invalidateFeatureFlag } from '../hooks/useFeatureFlag'
 
 const INTRO_STEPS = [
   {
@@ -77,8 +78,11 @@ export default function OnboardingWizard() {
       .then(({ data }) => {
         if (!data.length) { setPhase('tour'); return } // nada para elegir → directo al tour
         setFeatures(data)
+        // Opt-in: arranca todo destildado — el admin activa explícitamente lo que
+        // quiere usar, en vez de tener que acordarse de destildar lo que no quiere
+        // (con todo tildado por defecto, era fácil dejar activo un módulo sin querer).
         const initial = {}
-        data.forEach(f => { initial[f.key] = !f.disabled })
+        data.forEach(f => { initial[f.key] = false })
         setSelected(initial)
       })
       .catch(() => setPhase('tour'))
@@ -101,6 +105,7 @@ export default function OnboardingWizard() {
         api.patch(`/workspaces/current/features/${f.key}`, { disabled: !selected[f.key] }).catch(() => {})
       )
     )
+    invalidateFeatureFlag()
     setSaving(false)
     setPhase('tour')
     setStep(0)
