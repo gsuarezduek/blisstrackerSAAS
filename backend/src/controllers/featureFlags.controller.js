@@ -152,21 +152,28 @@ async function toggleWorkspaceFeature(req, res, next) {
       return res.status(403).json({ error: 'Este módulo no está habilitado para el workspace' })
     }
 
-    const workspace = await prisma.workspace.findUnique({
-      where:  { id: workspaceId },
-      select: { disabledFeatureKeys: true },
-    })
-    let disabledKeys = JSON.parse(workspace?.disabledFeatureKeys ?? '[]')
+    // `SELECT ... FOR UPDATE` + update dentro de una transacción: el wizard de
+    // onboarding dispara un PATCH por módulo en paralelo (Promise.all), y un
+    // read-modify-write sin lock acá es una carrera clásica de "lost update" —
+    // cada request lee el mismo array viejo y el que termina de escribir último
+    // pisa los cambios de los demás (bug real: EOS quedaba afuera de
+    // disabledFeatureKeys porque su PATCH se resolvía antes que el de otro
+    // módulo, cuya escritura no lo incluía). El lock de fila serializa las
+    // escrituras concurrentes sobre el mismo workspace en vez de perderlas.
+    await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw`SELECT "disabledFeatureKeys" FROM "Workspace" WHERE id = ${workspaceId} FOR UPDATE`
+      let disabledKeys = JSON.parse(rows[0]?.disabledFeatureKeys ?? '[]')
 
-    if (disabled) {
-      if (!disabledKeys.includes(key)) disabledKeys.push(key)
-    } else {
-      disabledKeys = disabledKeys.filter(k => k !== key)
-    }
+      if (disabled) {
+        if (!disabledKeys.includes(key)) disabledKeys.push(key)
+      } else {
+        disabledKeys = disabledKeys.filter(k => k !== key)
+      }
 
-    await prisma.workspace.update({
-      where: { id: workspaceId },
-      data:  { disabledFeatureKeys: JSON.stringify(disabledKeys) },
+      await tx.workspace.update({
+        where: { id: workspaceId },
+        data:  { disabledFeatureKeys: JSON.stringify(disabledKeys) },
+      })
     })
 
     res.json({ key, disabled })
