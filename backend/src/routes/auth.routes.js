@@ -3,6 +3,7 @@ const { login, me, forgotPassword, resetPassword, verifyEmailChange, verifyEmail
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const prisma = require('../lib/prisma')
+const { normalizeEmail } = require('../lib/normalizeEmail')
 
 router.post('/login',             login)
 router.post('/google',            googleLogin)
@@ -18,7 +19,7 @@ router.post('/switch-workspace',  auth, switchWorkspace)
 router.get('/check-email', async (req, res) => {
   const { email } = req.query
   if (!email) return res.status(400).json({ error: 'Email requerido' })
-  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } })
+  const user = await prisma.user.findFirst({ where: { email: { equals: normalizeEmail(email), mode: 'insensitive' } }, select: { id: true } })
   res.json({ exists: !!user })
 })
 

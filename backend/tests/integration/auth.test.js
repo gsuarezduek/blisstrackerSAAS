@@ -1,5 +1,5 @@
 jest.mock('../../src/lib/prisma', () => ({
-  user:             { findUnique: jest.fn() },
+  user:             { findUnique: jest.fn(), findFirst: jest.fn() },
   workspace:        { findUnique: jest.fn() },
   workspaceMember:  { findUnique: jest.fn(), findMany: jest.fn() },
   userLogin:        { create: jest.fn() },
@@ -38,7 +38,7 @@ describe('POST /api/auth/login', () => {
   beforeEach(() => jest.clearAllMocks())
 
   it('devuelve 200 + token con credenciales válidas (con X-Workspace)', async () => {
-    prisma.user.findUnique.mockResolvedValue(mockUser)
+    prisma.user.findFirst.mockResolvedValue(mockUser)
     bcrypt.compare.mockResolvedValue(true)
     prisma.workspace.findUnique.mockResolvedValue(mockWorkspace)
     prisma.workspaceMember.findUnique.mockResolvedValue(mockMember)
@@ -56,7 +56,7 @@ describe('POST /api/auth/login', () => {
   })
 
   it('devuelve lista de workspaces cuando no hay X-Workspace', async () => {
-    prisma.user.findUnique.mockResolvedValue(mockUser)
+    prisma.user.findFirst.mockResolvedValue(mockUser)
     bcrypt.compare.mockResolvedValue(true)
     prisma.workspaceMember.findMany.mockResolvedValue([
       { ...mockMember, workspace: mockWorkspace },
@@ -73,7 +73,7 @@ describe('POST /api/auth/login', () => {
   })
 
   it('devuelve 401 si la contraseña es incorrecta', async () => {
-    prisma.user.findUnique.mockResolvedValue(mockUser)
+    prisma.user.findFirst.mockResolvedValue(mockUser)
     bcrypt.compare.mockResolvedValue(false)
 
     const res = await request(app)
@@ -84,7 +84,7 @@ describe('POST /api/auth/login', () => {
   })
 
   it('devuelve 401 si el email no existe', async () => {
-    prisma.user.findUnique.mockResolvedValue(null)
+    prisma.user.findFirst.mockResolvedValue(null)
 
     const res = await request(app)
       .post('/api/auth/login')

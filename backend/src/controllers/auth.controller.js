@@ -9,6 +9,7 @@ const { getAllModuleAccess } = require('../lib/moduleAccess')
 const prisma = require('../lib/prisma')
 const { validatePassword } = require('../lib/passwordPolicy')
 const { createAndSendVerificationEmail, RESEND_COOLDOWN_MS } = require('../lib/emailVerification')
+const { normalizeEmail } = require('../lib/normalizeEmail')
 
 /**
  * Genera un JWT con el contexto workspace.
@@ -76,7 +77,7 @@ async function login(req, res, next) {
       return res.status(400).json({ error: 'Email y contraseña requeridos' })
     }
 
-    const user = await prisma.user.findUnique({ where: { email } })
+    const user = await prisma.user.findFirst({ where: { email: { equals: normalizeEmail(email), mode: 'insensitive' } } })
     if (!user) return res.status(401).json({ error: 'Credenciales inválidas' })
 
     const valid = await bcrypt.compare(password, user.password)
@@ -151,7 +152,7 @@ async function forgotPassword(req, res, next) {
     const { email } = req.body
     if (!email) return res.status(400).json({ error: 'Email requerido' })
 
-    const user = await prisma.user.findUnique({ where: { email } })
+    const user = await prisma.user.findFirst({ where: { email: { equals: normalizeEmail(email), mode: 'insensitive' } } })
     if (!user) {
       return res.json({ message: 'Si el email existe, recibirás un correo en breve.' })
     }
@@ -368,7 +369,7 @@ async function googleLogin(req, res, next) {
     // funciona aunque el email de Google difiera del primario). Si no hay vínculo,
     // caemos al match por email (cuentas que entran con Google sin haberlo conectado).
     let user = await prisma.user.findUnique({ where: { googleId: payload.sub } })
-    if (!user) user = await prisma.user.findUnique({ where: { email: payload.email } })
+    if (!user) user = await prisma.user.findFirst({ where: { email: { equals: normalizeEmail(payload.email), mode: 'insensitive' } } })
     if (!user) return res.status(404).json({ error: 'No existe una cuenta con ese email de Google' })
 
     if (slug) {

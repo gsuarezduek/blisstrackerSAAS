@@ -5,6 +5,7 @@ const { syncSeatsToStripe } = require('../billing.controller')
 const { reconcileWorkspaceTier } = require('../../services/billingTier.service')
 const { validatePassword } = require('../../lib/passwordPolicy')
 const { assertValidMemberRoleAssignment } = require('./_shared')
+const { normalizeEmail } = require('../../lib/normalizeEmail')
 
 const MEMBER_SELECT = {
   userId: true,
@@ -66,7 +67,8 @@ async function listMembers(req, res, next) {
  */
 async function addMember(req, res, next) {
   try {
-    const { name, email, password, teamRole = '', memberRole = 'member' } = req.body
+    const { name, password, teamRole = '', memberRole = 'member' } = req.body
+    const email = normalizeEmail(req.body.email)
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Nombre, email y contraseña son requeridos' })
     }
@@ -78,8 +80,9 @@ async function addMember(req, res, next) {
     const workspaceId = req.workspace.id
     const hashed = await bcrypt.hash(password, 10)
 
-    // Upsert del User global (puede ya existir en otro workspace)
-    let user = await prisma.user.findUnique({ where: { email } })
+    // Upsert del User global (puede ya existir en otro workspace) — case-insensitive
+    // (ver normalizeEmail: el email ya puede existir con otro casing).
+    let user = await prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } })
     if (!user) {
       user = await prisma.user.create({
         data: { name, email, password: hashed },

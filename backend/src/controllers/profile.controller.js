@@ -7,6 +7,7 @@ const { sendEmailChangeVerification } = require('../services/email.service')
 const { validatePassword } = require('../lib/passwordPolicy')
 const { validateImageUpload } = require('../lib/imageType')
 const objectStorage = require('../services/objectStorage.service')
+const { normalizeEmail } = require('../lib/normalizeEmail')
 
 // Mismo mapeo mime→extensión que objectStorage.service.js (no exportado ahí, así
 // que se replica acá para nombrar el archivo cuando cae al fallback de DB).
@@ -254,7 +255,7 @@ async function requestEmailChange(req, res, next) {
     if (!newEmail || !password) {
       return res.status(400).json({ error: 'Datos incompletos' })
     }
-    const email = newEmail.trim()
+    const email = normalizeEmail(newEmail)
     if (!EMAIL_RE.test(email)) {
       return res.status(400).json({ error: 'El email no es válido' })
     }

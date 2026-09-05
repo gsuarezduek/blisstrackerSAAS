@@ -7,6 +7,7 @@ const { syncSeatsToStripe } = require('../billing.controller')
 const { reconcileWorkspaceTier } = require('../../services/billingTier.service')
 const { validatePassword } = require('../../lib/passwordPolicy')
 const { assertValidMemberRoleAssignment } = require('./_shared')
+const { normalizeEmail } = require('../../lib/normalizeEmail')
 
 /**
  * POST /api/workspaces/current/invitations
@@ -15,7 +16,8 @@ const { assertValidMemberRoleAssignment } = require('./_shared')
  */
 async function inviteMember(req, res, next) {
   try {
-    const { email, memberRole = 'member', teamRole = '' } = req.body
+    const { memberRole = 'member', teamRole = '' } = req.body
+    const email = normalizeEmail(req.body.email)
     if (!email) return res.status(400).json({ error: 'Email requerido' })
     const roleErr = assertValidMemberRoleAssignment(req, memberRole)
     if (roleErr) return res.status(roleErr.status).json({ error: roleErr.error })
@@ -30,7 +32,7 @@ async function inviteMember(req, res, next) {
     })
 
     // Si el email ya tiene cuenta y ya es miembro activo → error
-    const existingUser = await prisma.user.findUnique({ where: { email } })
+    const existingUser = await prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } })
     if (existingUser) {
       const existingMember = await prisma.workspaceMember.findUnique({
         where: { workspaceId_userId: { workspaceId, userId: existingUser.id } },
@@ -84,7 +86,7 @@ async function getInvitation(req, res, next) {
     if (inv.expiresAt < new Date()) return res.status(410).json({ error: 'Esta invitación expiró' })
 
     // ¿El email ya tiene cuenta?
-    const existingUser = await prisma.user.findUnique({ where: { email: inv.email } })
+    const existingUser = await prisma.user.findFirst({ where: { email: { equals: inv.email, mode: 'insensitive' } } })
 
     res.json({
       email:         inv.email,
@@ -124,7 +126,7 @@ async function joinWorkspace(req, res, next) {
 
     const workspaceId = inv.workspaceId
 
-    let user = await prisma.user.findUnique({ where: { email: inv.email } })
+    let user = await prisma.user.findFirst({ where: { email: { equals: inv.email, mode: 'insensitive' } } })
 
     if (!user) {
       // Usuario nuevo — requiere nombre y contraseña
@@ -135,7 +137,7 @@ async function joinWorkspace(req, res, next) {
       if (pwErr) return res.status(400).json({ error: pwErr })
       const hashed = await bcrypt.hash(password, 10)
       user = await prisma.user.create({
-        data: { name, email: inv.email, password: hashed },
+        data: { name, email: normalizeEmail(inv.email), password: hashed },
       })
     }
 

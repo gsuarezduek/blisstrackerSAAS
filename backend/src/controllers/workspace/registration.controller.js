@@ -7,6 +7,7 @@ const { getSetting } = require('../../lib/platformSettings')
 const { seedWorkspace } = require('../../services/workspaceSeed.service')
 const { validatePassword } = require('../../lib/passwordPolicy')
 const { createAndSendVerificationEmail } = require('../../lib/emailVerification')
+const { normalizeEmail } = require('../../lib/normalizeEmail')
 
 /**
  * GET /api/workspaces/mine
@@ -42,6 +43,7 @@ async function createWorkspace(req, res, next) {
     let ownerName, ownerEmail, ownerPassword
     if (!authedUserId) {
       ;({ ownerName, ownerEmail, ownerPassword } = req.body)
+      ownerEmail = normalizeEmail(ownerEmail)
     }
 
     if (!workspaceName || !slug || (!authedUserId && (!ownerName || !ownerEmail || !ownerPassword))) {
@@ -72,7 +74,8 @@ async function createWorkspace(req, res, next) {
     } else {
       // Registro público: si el email ya tiene cuenta, verificar que la contraseña sea correcta
       // (autenticación, no alta — no se le aplica la política de largo mínimo de una contraseña nueva).
-      existingOwner = await prisma.user.findUnique({ where: { email: ownerEmail } })
+      // Case-insensitive: el email de una cuenta existente puede tener otro casing (ver normalizeEmail).
+      existingOwner = await prisma.user.findFirst({ where: { email: { equals: ownerEmail, mode: 'insensitive' } } })
       if (existingOwner) {
         const valid = await bcrypt.compare(ownerPassword, existingOwner.password)
         if (!valid) {
