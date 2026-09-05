@@ -8,8 +8,8 @@ const {
   sanitizeSections,
   currentMonthStr,
   GENERATED_WHERE,
-  buildPublicReportPayload,
-} = require('./monthlyReport.controller')
+} = require('./monthlyReport/_shared')
+const { buildPublicReportPayload } = require('./monthlyReport/reportPublic.controller')
 const { canWrite } = require('../lib/projectAccess')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 const { PORTAL_VISIBLE_STATUSES } = require('../lib/contentCatalog')

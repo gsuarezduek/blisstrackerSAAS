@@ -23,11 +23,20 @@ const linkedin             = require('../controllers/linkedin.controller')
 const facebook             = require('../controllers/facebook.controller')
 const metaAds           = require('../controllers/metaAds.controller')
 const googleAds         = require('../controllers/googleAds.controller')
-const monthlyReport     = require('../controllers/monthlyReport.controller')
+const monthlyReport = {
+  ...require('../controllers/monthlyReport/reportCrud.controller'),
+  ...require('../controllers/monthlyReport/reportGeneration.controller'),
+  ...require('../controllers/monthlyReport/reportPublishing.controller'),
+}
 const cannibalization   = require('../controllers/cannibalization.controller')
 const competitors       = require('../controllers/competitors.controller')
 const adsSnapshot       = require('../controllers/adsSnapshot.controller')
-const summary           = require('../controllers/marketingSummary.controller')
+const summary = {
+  ...require('../controllers/marketingSummary/webSummary.controller'),
+  ...require('../controllers/marketingSummary/rrssSummary.controller'),
+  ...require('../controllers/marketingSummary/adsSummary.controller'),
+  ...require('../controllers/marketingSummary/reportsSummary.controller'),
+}
 const objectives        = require('../controllers/marketingObjectives.controller')
 const seoOpportunities  = require('../controllers/seoOpportunities.controller')
 const contentBrief      = require('../controllers/contentBrief.controller')

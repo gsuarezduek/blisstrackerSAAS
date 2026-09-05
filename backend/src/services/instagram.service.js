@@ -192,7 +192,7 @@ async function fetchInstagramInsights(base, meId, accessToken, profile, media, t
 
 /**
  * Calcula el bloque de métricas a partir de un perfil + media ya normalizados.
- * Compartido entre la API oficial (fetchInstagramMetrics) y el scraping (socialScrape.service).
+ * Compartido entre la API oficial (fetchInstagramMetrics) y el scraping (socialScrape/instagram.js).
  * @param {object} profile     — { followers_count, media_count, name, username, profile_picture_url, biography, website }
  * @param {Array}  media       — [{ id, like_count, comments_count, timestamp, media_type, media_url, thumbnail_url, permalink, caption }]
  * @param {string} targetMonth — 'YYYY-MM' opcional; si null usa el mes actual ART

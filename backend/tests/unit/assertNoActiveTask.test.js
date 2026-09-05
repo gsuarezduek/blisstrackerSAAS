@@ -5,7 +5,7 @@ jest.mock('../../src/lib/prisma', () => ({
 }))
 
 const prisma = require('../../src/lib/prisma')
-const { assertNoActiveTask } = require('../../src/controllers/tasks.controller')
+const { assertNoActiveTask } = require('../../src/controllers/tasks/_shared')
 
 const WORKSPACE_ID = 1
 

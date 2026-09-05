@@ -4,7 +4,10 @@ const { auth } = require('../middleware/auth')
 const { resolveWorkspace, salesGuard, workspaceAdminOnly } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
 
-const whatsapp = require('../controllers/whatsapp.controller')
+const account = require('../controllers/whatsapp/account.controller')
+const conversations = require('../controllers/whatsapp/conversations.controller')
+const bot = require('../controllers/whatsapp/bot.controller')
+const templates = require('../controllers/whatsapp/templates.controller')
 const automation = require('../controllers/whatsappAutomation.controller')
 
 // MVP: 16MB cubre imagen/audio/video reales de WhatsApp; documentos grandes
@@ -38,47 +41,47 @@ router.use(requireFeatureFlag('whatsapp'))
 
 // Conectar/desconectar quedan solo para admin/owner: son credenciales sensibles
 // del BSP, no una acción operativa del día a día del equipo comercial.
-router.get('/account',    whatsapp.getAccount)
-router.post('/account',   workspaceAdminOnly, whatsapp.connectAccount)
-router.delete('/account', workspaceAdminOnly, whatsapp.disconnectAccount)
+router.get('/account',    account.getAccount)
+router.post('/account',   workspaceAdminOnly, account.connectAccount)
+router.delete('/account', workspaceAdminOnly, account.disconnectAccount)
 
-router.get('/conversations',                 whatsapp.listConversations)
-router.get('/conversations/:id/messages',    whatsapp.getMessages)
-router.post('/conversations/:id/messages',   whatsapp.sendMessage)
-router.post('/conversations/:id/media',      uploadFile, whatsapp.sendMedia)
-router.post('/conversations/:id/read',       whatsapp.markRead)
-router.patch('/conversations/:id/assign',    whatsapp.assignConversation)
-router.patch('/conversations/:id/contact',   whatsapp.linkContact)
-router.post('/conversations/:id/contact',    whatsapp.createContactFromConversation)
-router.patch('/conversations/:id/bot',       whatsapp.toggleConversationBot)
-router.post('/conversations/:id/reopen',     whatsapp.reopenConversation)
+router.get('/conversations',                 conversations.listConversations)
+router.get('/conversations/:id/messages',    conversations.getMessages)
+router.post('/conversations/:id/messages',   conversations.sendMessage)
+router.post('/conversations/:id/media',      uploadFile, conversations.sendMedia)
+router.post('/conversations/:id/read',       conversations.markRead)
+router.patch('/conversations/:id/assign',    conversations.assignConversation)
+router.patch('/conversations/:id/contact',   conversations.linkContact)
+router.post('/conversations/:id/contact',    conversations.createContactFromConversation)
+router.patch('/conversations/:id/bot',       conversations.toggleConversationBot)
+router.post('/conversations/:id/reopen',     templates.reopenConversation)
 
 // Bot (Fase 4): la config es workspace-wide y tiene costo operativo real
 // (tokens de IA por cada mensaje entrante), pero es una herramienta operativa
 // del día a día del equipo comercial — abierta a cualquiera con salesGuard
 // (admin/owner o equipo comercial), no solo admin/owner. Lo que sigue
 // admin-only es conectar/desconectar la cuenta (credenciales del BSP).
-router.get('/bot',  whatsapp.getBotConfig)
-router.put('/bot',  whatsapp.saveBotConfig)
-router.post('/bot/test', whatsapp.testBotConfig)
+router.get('/bot',  bot.getBotConfig)
+router.put('/bot',  bot.saveBotConfig)
+router.post('/bot/test', bot.testBotConfig)
 
 // Base de conocimiento del bot (documentos de contexto) — mismo criterio que
 // el resto de la config del bot: abierto al equipo comercial.
-router.get('/bot/documents',       whatsapp.listBotDocuments)
-router.post('/bot/documents',      uploadFile, whatsapp.uploadBotDocument)
-router.delete('/bot/documents/:id', whatsapp.deleteBotDocument)
+router.get('/bot/documents',       bot.listBotDocuments)
+router.post('/bot/documents',      uploadFile, bot.uploadBotDocument)
+router.delete('/bot/documents/:id', bot.deleteBotDocument)
 
 // Panel de calidad: casos donde el bot escaló a un humano.
-router.get('/bot/escalations', whatsapp.listBotEscalations)
+router.get('/bot/escalations', bot.listBotEscalations)
 
 // Plantillas (Fase 5): catálogo de solo lectura de nuestro lado. Sincronizar
 // desde Chakra tiene costo/aprobación real de Meta detrás, pero sigue siendo
 // una acción operativa del equipo comercial (no una credencial sensible como
 // conectar la cuenta), así que queda abierta con salesGuard igual que el bot.
-router.get('/templates',       whatsapp.listTemplates)
-router.post('/templates',      whatsapp.createTemplate)
-router.post('/templates/sync', whatsapp.syncTemplates)
-router.delete('/templates/:id', whatsapp.deleteTemplate)
+router.get('/templates',       templates.listTemplates)
+router.post('/templates',      templates.createTemplate)
+router.post('/templates/sync', templates.syncTemplates)
+router.delete('/templates/:id', templates.deleteTemplate)
 
 // Motor de reglas de reactivación (extiende Fase 5): criterios configurables
 // que reabren conversaciones vencidas solas, vía cron diario — mismo criterio

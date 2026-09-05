@@ -320,7 +320,7 @@ cron.schedule('5 8 * * *', () => runCron('whatsappAutomation', 30 * 60 * 1000, a
 // Cron: eliminar workspaces vencidos — cada 15 minutos
 cron.schedule('*/15 * * * *', () => runCron('workspaceDeletion', 10 * 60 * 1000, async () => {
   const prisma = require('./lib/prisma')
-  const { executeWorkspaceDeletion } = require('./controllers/workspace.controller')
+  const { executeWorkspaceDeletion } = require('./controllers/workspace/deletion.controller')
   const expired = await prisma.workspaceDeletionRequest.findMany({
     where: {
       scheduledAt: { lte: new Date() },

@@ -381,7 +381,7 @@ async function connectScrape(req, res, next) {
 /**
  * Refresca el scrape de una integración puntual de Instagram (cooldown 30 min).
  * Reutilizado por el refresh individual (HTTP) y el refresh batch cross-proyecto
- * (marketingSummary.controller.js). No responde HTTP — devuelve un resultado tipado.
+ * (marketingSummary/rrssSummary.controller.js). No responde HTTP — devuelve un resultado tipado.
  * @returns {Promise<{status:'ok', metrics:object} | {status:'cooldown', waitMins:number} | {status:'error', message:string, code?:string, httpStatus:number}>}
  */
 async function refreshScrapeForIntegration(integration, projectId, workspaceId) {

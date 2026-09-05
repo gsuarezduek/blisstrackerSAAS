@@ -8,7 +8,7 @@ import { useFeatureFlag } from '../hooks/useFeatureFlag'
 const API = import.meta.env.VITE_API_URL || ''
 
 // Mismas claves que SECTION_KEYS en backend/src/controllers/monthlyReport.controller.js
-// (labels/iconos espejo de SECTION_CATALOG en marketing/InformesTab.jsx).
+// (labels/iconos espejo de SECTION_CATALOG en marketing/InformesTabParts.jsx).
 const LIVE_SECTIONS = [
   { key: 'objectives',  label: 'Objetivos',                              icon: '🎯' },
   { key: 'analytics',   label: 'Analítica web (GA4)',                    icon: '📊' },
