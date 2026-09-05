@@ -30,6 +30,16 @@ async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
   })
   if (!ws || ws.demoSeeded) return null
 
+  // El owner puede ya tener una tarea IN_PROGRESS en OTRO workspace — la constraint
+  // `one_active_task_per_user` es global (una sola tarea activa por persona, no por
+  // workspace, ver CLAUDE.md). Si le metemos igual una tarea demo IN_PROGRESS, la
+  // creación viola esa constraint (P2002) y rompe todo el seed. Caso típico: una
+  // cuenta ya existente que crea un workspace adicional.
+  const hasActiveTaskElsewhere = !!(await tx.task.findFirst({
+    where: { userId: ownerId, status: 'IN_PROGRESS' },
+    select: { id: true },
+  }))
+
   // 1. Service por defecto
   const service = await tx.service.create({
     data: { workspaceId, name: 'Marketing Digital', active: true },
@@ -67,9 +77,11 @@ async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
   const tasksData = [
     {
       description: 'Revisar el avance del mes de Cliente Demo y preparar 3 puntos para la próxima reunión de status.',
-      status:      'IN_PROGRESS',
+      // PENDING en vez de IN_PROGRESS si el owner ya tiene una tarea activa en otro
+      // workspace (ver constraint `one_active_task_per_user` más arriba).
+      status:      hasActiveTaskElsewhere ? 'PENDING' : 'IN_PROGRESS',
       starred:     2,                  // amarillo — importante
-      startedAt:   new Date(Date.now() - 30 * 60 * 1000), // hace 30 min
+      startedAt:   hasActiveTaskElsewhere ? undefined : new Date(Date.now() - 30 * 60 * 1000), // hace 30 min
     },
     {
       description: 'Preparar informe mensual para Cliente Demo. Generar PDF + URL pública con dashboard. Incluir comparativa vs mes anterior y 3 next steps.',

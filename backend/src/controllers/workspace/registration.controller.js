@@ -131,13 +131,19 @@ async function createWorkspace(req, res, next) {
         },
       })
 
-      // Seed: proyecto "Demo — Aprendé BlissTracker" con 8 tareas variadas para que el primer login
-      // no sea un dashboard vacío. Si falla, no rompe el registro (proyecto principal ya creado).
-      await seedWorkspace(workspace.id, owner.id, tx).catch(err => {
-        console.error('[Workspace] Error en seed demo:', err.message)
-      })
-
       return { workspace, owner }
+    })
+
+    // Seed: proyecto "Demo — Aprendé BlissTracker" con 8 tareas variadas para que el primer login
+    // no sea un dashboard vacío. Corre DESPUÉS de commitear la transacción principal (con el
+    // cliente normal, no `tx`) para que un fallo acá nunca pueda hacer rollback del workspace/owner
+    // ya creados. Antes vivía dentro de la misma transacción: si el owner ya tenía una tarea
+    // IN_PROGRESS en otro workspace (ej. cuenta existente agregando un workspace adicional), la
+    // tarea demo IN_PROGRESS violaba la constraint `one_active_task_per_user` (global, no por
+    // workspace) y silenciosamente hacía rollback de TODO el registro — mientras el código seguía
+    // como si hubiera funcionado (mandaba el aviso a admin y el token de auto-login).
+    seedWorkspace(result.workspace.id, result.owner.id).catch(err => {
+      console.error('[Workspace] Error en seed demo:', err.message)
     })
 
     // El owner ya queda logueado automáticamente (ver token más abajo), así que
