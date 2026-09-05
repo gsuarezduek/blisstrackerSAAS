@@ -4,9 +4,6 @@ import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ConfirmModal from '../../components/ConfirmModal'
-import { moduleMeta } from '../../lib/moduleCatalog'
-import ModuleAccessEditor from '../../components/ModuleAccessEditor'
-import { invalidateFeatureFlag } from '../../hooks/useFeatureFlag'
 import { Toggle } from './shared'
 
 const TIMEZONES = [
@@ -31,17 +28,8 @@ export default function GlobalTab({ loaded }) {
   const [globalSettingsError, setGlobalSettingsError] = useState(false)
   const [lateTest,            setLateTest]            = useState({ sending: false, msg: '', error: false })
   const [digestTest,          setDigestTest]          = useState({ sending: false, msg: '', error: false })
-  const [marketingDigestTest, setMarketingDigestTest] = useState({ sending: false, msg: '', error: false })
   const [aiUsage,             setAiUsage]             = useState(null)
   const [aiUsageError,        setAiUsageError]        = useState(false)
-  const [wsFeatures,          setWsFeatures]          = useState(null)
-  const [togglingFeature,     setTogglingFeature]     = useState(null)
-  const [moduleAccess,        setModuleAccess]        = useState(null)
-  const [savingModuleAccess,  setSavingModuleAccess]  = useState(null)
-  // EOS: proyecto asociado para tareas y reuniones
-  const [projects,            setProjects]            = useState([])
-  const [eosMeetingProjectId, setEosMeetingProjectId] = useState('')
-  const [savingEosProject,    setSavingEosProject]    = useState(false)
 
   // Detalle de consumo de IA (desplegable)
   const [showAiDetail,   setShowAiDetail]   = useState(false)
@@ -67,35 +55,7 @@ export default function GlobalTab({ loaded }) {
     api.get('/projects/settings/ai-usage')
       .then(({ data }) => setAiUsage(data))
       .catch(() => setAiUsageError(true))
-    api.get('/workspaces/current/features')
-      .then(({ data }) => setWsFeatures(data))
-      .catch(() => setWsFeatures([]))
-    api.get('/workspaces/current/module-access')
-      .then(({ data }) => setModuleAccess(data))
-      .catch(() => setModuleAccess({}))
   }, [user?.isAdmin])
-
-  // EOS habilitado → cargar proyectos + el proyecto asociado a tareas/reuniones
-  const eosEnabled = !!wsFeatures?.some(f => f.key === 'eos' && !f.disabled)
-  useEffect(() => {
-    if (!user?.isAdmin || !eosEnabled) return
-    api.get('/projects').then(({ data }) => setProjects(data || [])).catch(() => {})
-    api.get('/eos').then(({ data }) => setEosMeetingProjectId(data?.meetingProjectId ?? '')).catch(() => {})
-  }, [user?.isAdmin, eosEnabled])
-
-  async function handleSaveEosProject(value) {
-    const pid = value ? Number(value) : null
-    const prev = eosMeetingProjectId
-    setEosMeetingProjectId(value ? Number(value) : '')
-    setSavingEosProject(true)
-    try {
-      await api.patch('/eos', { meetingProjectId: pid })
-    } catch {
-      setEosMeetingProjectId(prev)   // revertir si falla
-    } finally {
-      setSavingEosProject(false)
-    }
-  }
 
   useEffect(() => {
     if (!showAiDetail || !user?.isAdmin) return
@@ -169,30 +129,6 @@ export default function GlobalTab({ loaded }) {
     }
   }
 
-  async function handleToggleFeature(key, currentlyDisabled) {
-    const next = !currentlyDisabled
-    setTogglingFeature(key)
-    try {
-      await api.patch(`/workspaces/current/features/${key}`, { disabled: next })
-      setWsFeatures(prev => prev.map(f => f.key === key ? { ...f, disabled: next } : f))
-      invalidateFeatureFlag(key)
-    } catch (_) {}
-    finally { setTogglingFeature(null) }
-  }
-
-  async function handleChangeModuleAccess(key, nextConfig) {
-    const prev = moduleAccess?.[key]
-    setModuleAccess(m => ({ ...m, [key]: nextConfig }))
-    setSavingModuleAccess(key)
-    try {
-      await api.patch(`/workspaces/current/module-access/${key}`, nextConfig)
-    } catch (_) {
-      setModuleAccess(m => ({ ...m, [key]: prev }))
-    } finally {
-      setSavingModuleAccess(null)
-    }
-  }
-
   async function handleGlobalSetting(patch) {
     setGlobalSettings(prev => ({ ...prev, ...patch }))
     try {
@@ -230,20 +166,6 @@ export default function GlobalTab({ loaded }) {
       setDigestTest({ sending: false, msg: err.response?.data?.error || 'No se pudo enviar el aviso de prueba.', error: true })
     }
     setTimeout(() => setDigestTest(s => ({ ...s, msg: '' })), 6000)
-  }
-
-  async function handleSendMarketingDigestNow() {
-    setMarketingDigestTest({ sending: true, msg: '', error: false })
-    try {
-      const { data } = await api.post('/projects/settings/marketing-digest/test')
-      const detail = data.count > 0
-        ? `${data.count} proyecto${data.count === 1 ? '' : 's'} con pendientes`
-        : 'todo al día, sin pendientes'
-      setMarketingDigestTest({ sending: false, msg: `Enviado a ${data.to} · ${detail}`, error: false })
-    } catch (err) {
-      setMarketingDigestTest({ sending: false, msg: err.response?.data?.error || 'No se pudo enviar el aviso de prueba.', error: true })
-    }
-    setTimeout(() => setMarketingDigestTest(s => ({ ...s, msg: '' })), 6000)
   }
 
   return (
@@ -463,66 +385,6 @@ export default function GlobalTab({ loaded }) {
           </div>
         </div>
 
-        {/* Marketing */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Marketing</h2>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
-            Configuración global compartida por todos los admins.
-          </p>
-
-          <div className="space-y-5">
-            <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Análisis automático de Ads (IA)</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las cuentas de Meta Ads / Google Ads conectadas de todos los proyectos y guarda el diagnóstico para el panel "Prioridades" — no hace falta apretar "Analizar" a mano. Solo corre en proyectos con una cuenta de ads conectada.</p>
-              </div>
-              <Toggle on={globalSettings.adsAdvisorAutoEnabled !== false} onToggle={() => handleGlobalSetting({ adsAdvisorAutoEnabled: !(globalSettings.adsAdvisorAutoEnabled !== false) })} disabled={!loaded} />
-            </div>
-
-            <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Análisis automático de RRSS (IA)</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Cada lunes analiza con IA las redes sociales conectadas de todos los proyectos (tendencia vs. el mes anterior, competencia, objetivos y brief de contenido orgánico) y guarda el diagnóstico para el panel "Prioridades". Solo corre en proyectos con alguna red social conectada.</p>
-              </div>
-              <Toggle on={globalSettings.rrssAdvisorAutoEnabled !== false} onToggle={() => handleGlobalSetting({ rrssAdvisorAutoEnabled: !(globalSettings.rrssAdvisorAutoEnabled !== false) })} disabled={!loaded} />
-            </div>
-
-            <div className="py-4 border-b dark:border-gray-700">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Aviso semanal de Prioridades por email</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Todos los lunes, si hay proyectos con recomendaciones de alta prioridad pendientes en Marketing (SEO/GEO, objetivos, RRSS, Ads, informes), se manda un resumen a los admins/owners.</p>
-                </div>
-                <Toggle on={globalSettings.marketingDigestEnabled !== false} onToggle={() => handleGlobalSetting({ marketingDigestEnabled: !(globalSettings.marketingDigestEnabled !== false) })} disabled={!loaded} />
-              </div>
-              {globalSettings.marketingDigestEnabled !== false && (
-                <div className="mt-4 ml-1 pl-4 border-l-2 border-gray-100 dark:border-gray-700">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <button
-                      onClick={handleSendMarketingDigestNow}
-                      disabled={marketingDigestTest.sending}
-                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
-                    >
-                      {marketingDigestTest.sending ? 'Enviando…' : '✉️ Enviar ahora a mi correo'}
-                    </button>
-                    {marketingDigestTest.msg && (
-                      <span className={`text-xs ${marketingDigestTest.error ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{marketingDigestTest.msg}</span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-start justify-between gap-4 py-4">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Alertas SEO automáticas</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Compara Search Console del mes cerrado vs. el anterior y avisa por email a los admins si hay caídas relevantes (clicks, posición, Domain Rating, keywords fuera del top 10). Corre el 1° de cada mes.</p>
-              </div>
-              <Toggle on={globalSettings.seoAlertsEnabled !== false} onToggle={() => handleGlobalSetting({ seoAlertsEnabled: !(globalSettings.seoAlertsEnabled !== false) })} disabled={!loaded} />
-            </div>
-          </div>
-        </div>
-
         {/* Administración */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
           <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Administración</h2>
@@ -654,82 +516,6 @@ export default function GlobalTab({ loaded }) {
           </div>
         </div>
         </>
-      )}
-
-      {/* ── Módulos adicionales ── */}
-      {moduleAccess && wsFeatures && wsFeatures.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
-          <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Módulos adicionales</h2>
-          </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
-            Funcionalidades opcionales de tu workspace. Podés desactivar las que no uses y elegir qué roles del equipo ven cada una (los administradores siempre acceden).
-          </p>
-          <div className="space-y-0">
-            {(wsFeatures ?? []).map((feat, idx) => {
-              const meta = moduleMeta(feat.key, feat.description)
-              const isLast = idx === (wsFeatures?.length ?? 0) - 1
-              return (
-                <div key={feat.key} className={`py-4 ${isLast ? '' : 'border-b dark:border-gray-700'}`}>
-                  <div className="flex items-start gap-4">
-                    <span className="text-2xl flex-shrink-0 mt-0.5">{meta.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{feat.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">{meta.detail}</p>
-                      {feat.disabled && (
-                        <span className="inline-block mt-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5">
-                          Desactivado en este workspace
-                        </span>
-                      )}
-                    </div>
-                    <Toggle
-                      on={!feat.disabled}
-                      onToggle={() => handleToggleFeature(feat.key, feat.disabled)}
-                      disabled={togglingFeature === feat.key || !loaded}
-                    />
-                  </div>
-
-                  {/* EOS y Gamification quedan estrictamente admin-only, sin acceso configurable por
-                      rol — moduleAccess[feat.key] no viene para esas claves (ver lib/moduleAccess.js). */}
-                  {!feat.disabled && moduleAccess[feat.key] && (
-                    <ModuleAccessEditor
-                      config={moduleAccess[feat.key]}
-                      onChange={next => handleChangeModuleAccess(feat.key, next)}
-                      disabled={savingModuleAccess === feat.key}
-                    />
-                  )}
-
-                  {/* EOS habilitado → proyecto asociado a tareas y reuniones */}
-                  {feat.key === 'eos' && !feat.disabled && (
-                    <div className="mt-3 ml-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 p-3">
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Proyecto para tareas y reuniones de EOS
-                      </label>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2 leading-snug">
-                        El tiempo de las reuniones L10 y las tareas enviadas al dashboard se registran en este proyecto.
-                        Las reuniones también traen automáticamente a su equipo.
-                      </p>
-                      <select
-                        value={eosMeetingProjectId || ''}
-                        onChange={e => handleSaveEosProject(e.target.value)}
-                        disabled={savingEosProject}
-                        className="w-full sm:w-80 text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400 disabled:opacity-60"
-                      >
-                        <option value="">— Elegir proyecto —</option>
-                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                      {!eosMeetingProjectId && (
-                        <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5">
-                          Asociá un proyecto para poder iniciar reuniones y enviar To-Dos al dashboard.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
       )}
 
       {/* ── Zona de peligro / banner de eliminación ── */}

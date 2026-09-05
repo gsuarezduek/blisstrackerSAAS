@@ -198,7 +198,7 @@ export default function InformesTab({ projectId, onSelectProject, projects = [] 
             title="Elegí qué secciones de Marketing están disponibles para este proyecto"
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
-            ⚙️
+            Secciones
           </button>
           {isGenerated && (
             <button

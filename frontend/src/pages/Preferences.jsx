@@ -4,6 +4,7 @@ import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import GlobalTab from './preferences/global'
 import PersonalTab from './preferences/personal'
+import ModulesTab from './preferences/modules'
 
 export default function Preferences() {
   const { user } = useAuth()
@@ -41,10 +42,11 @@ export default function Preferences() {
               onChange={e => setPrefTab(e.target.value)}
             >
               <option value="global">Globales</option>
+              <option value="modules">Módulos</option>
               <option value="personal">Personales</option>
             </select>
             <div className="hidden sm:flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 w-fit">
-              {[{ id: 'global', label: 'Globales' }, { id: 'personal', label: 'Personales' }].map(t => (
+              {[{ id: 'global', label: 'Globales' }, { id: 'modules', label: 'Módulos' }, { id: 'personal', label: 'Personales' }].map(t => (
                 <button
                   key={t.id}
                   onClick={() => setPrefTab(t.id)}
@@ -63,6 +65,9 @@ export default function Preferences() {
 
         {/* ── Tab: Globales (solo admins) ─────────────────────── */}
         {user?.isAdmin && prefTab === 'global' && <GlobalTab loaded={loaded} />}
+
+        {/* ── Tab: Módulos (solo admins) ───────────────────────── */}
+        {user?.isAdmin && prefTab === 'modules' && <ModulesTab loaded={loaded} />}
 
         {/* ── Tab: Personales (no-admins siempre, admins si prefTab=personal) ── */}
         {(!user?.isAdmin || prefTab === 'personal') && (

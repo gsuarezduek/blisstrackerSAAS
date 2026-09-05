@@ -4,7 +4,6 @@ import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import HowToButton from '../components/HowToButton'
 import PrioridadesTab from '../components/marketing/PrioridadesTab'
-import MarketingSectionsModal from '../components/marketing/MarketingSectionsModal'
 import { NAV, LEGACY_MAP, VALID_TABS } from '../components/marketing/marketingNav'
 import GeoTab      from '../components/marketing/GeoTab'
 import WebTab      from '../components/marketing/WebTab'
@@ -50,11 +49,10 @@ export default function Marketing() {
   const { enabled, loading: flagLoading } = useFeatureFlag('marketing')
   const { user } = useAuth()
   const moduleAllowed = enabled && !!user?.moduleAccess?.marketing
-  const { workspace, refreshWorkspace } = useWorkspace()
+  const { workspace } = useWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects,   setProjects]   = useState([])
   const [projectId,  setProjectId]  = useState(searchParams.get('projectId') ?? '')
-  const [showSectionsModal, setShowSectionsModal] = useState(false)
 
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
@@ -159,15 +157,6 @@ export default function Marketing() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Marketing</h1>
-              {user?.isAdmin && (
-                <button
-                  onClick={() => setShowSectionsModal(true)}
-                  title="Configurar secciones de Marketing"
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  ⚙️
-                </button>
-              )}
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Herramientas de optimización y análisis para tus proyectos
@@ -296,14 +285,6 @@ export default function Marketing() {
           </>
         )}
       </main>
-
-      {showSectionsModal && (
-        <MarketingSectionsModal
-          disabledSections={disabledSections}
-          onClose={() => setShowSectionsModal(false)}
-          onSaved={refreshWorkspace}
-        />
-      )}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 // Fuente única de la navegación de Marketing: array de grupos + compat de URLs
 // viejas. La usan Marketing.jsx (nav principal), PrioridadesTab.jsx (labels de los
-// grupos en "Prioridades") y MarketingSectionsModal.jsx (checkboxes de la rueda de
-// configuración).
+// grupos en "Prioridades") y preferences/modules.jsx (checkboxes de "Pestañas
+// visibles", Preferencias → Módulos → Marketing).
 export const NAV = [
   {
     id: 'hoy',
@@ -59,8 +59,8 @@ export const NAV = [
   },
 ]
 
-// Descripción corta de qué contiene cada grupo, para la rueda de configuración
-// (MarketingSectionsModal.jsx).
+// Descripción corta de qué contiene cada grupo, para el selector de "Pestañas
+// visibles" en Preferencias → Módulos → Marketing.
 export const SECTION_DESCRIPTIONS = {
   hoy:        'Recomendaciones top del workspace: objetivos atrasados, hallazgos de SEO/GEO, performance, anuncios e informes pendientes.',
   'geo-seo':  'Auditoría GEO, SEO on-page, keywords, content briefs, canibalización.',

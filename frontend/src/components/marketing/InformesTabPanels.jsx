@@ -319,9 +319,9 @@ export function ReportsHistoryPanel({ onSelectProject, projects }) {
     <button
       onClick={() => setShowConfig(true)}
       title="Configurar qué secciones de Marketing están disponibles por proyecto"
-      className="flex-shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+      className="flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
     >
-      ⚙️
+      Secciones
     </button>
   )
 
