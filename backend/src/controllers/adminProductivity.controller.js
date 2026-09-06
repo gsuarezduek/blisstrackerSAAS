@@ -236,6 +236,24 @@ async function userBreakdown(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// GET /api/admin/productivity/users/:userId/hours-history?back=N
+// Historial de horas por día de un solo usuario, corrido `back` bloques de 60 días hacia
+// atrás (navegación a meses anteriores del gráfico de la fila expandida). Liviano y sin
+// caché: no recalcula stats/asistencia, solo el historial — igual que el drill-down de
+// `userBreakdown`, se pide bajo demanda al navegar, no en el fetch inicial de la tabla.
+async function userHoursHistory(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const userId = Number(req.params.userId)
+    const back = Math.max(0, Number(req.query.back) || 0)
+    const tz = req.workspace.timezone
+
+    const hist = await getHoursHistory(workspaceId, tz, { granularity: 'daily', days: 60, back })
+    const history = hist.history.get(userId) || hist.labels.map(v => ({ [hist.key]: v, hours: 0 }))
+    res.json({ history, key: hist.key })
+  } catch (err) { next(err) }
+}
+
 async function refreshProductivity(req, res, next) {
   try {
     const userId = Number(req.params.userId)
@@ -271,4 +289,4 @@ async function sendDigestNow(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listProductivity, userOverview, userBreakdown, refreshProductivity, sendDigestNow }
+module.exports = { listProductivity, userOverview, userBreakdown, userHoursHistory, refreshProductivity, sendDigestNow }

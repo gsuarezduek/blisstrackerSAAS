@@ -359,21 +359,33 @@ async function getAttendanceStats(workspaceId, tz, period) {
 
 // Historial de horas activas (de tareas completadas), últimas `weeks` semanas o últimos `days`
 // días según `granularity`. INDEPENDIENTE del período seleccionado — sirve como contexto de
-// tendencia en la vista expandida. Devuelve { history: Map<userId, [{[key]: label, hours}]>,
+// tendencia en la vista expandida. `back` (bloques enteros ≥0) corre toda la ventana hacia
+// atrás para poder navegar a meses anteriores: back=0 es la ventana actual (hasta hoy),
+// back=1 es el bloque completo inmediatamente anterior, etc. (sin superposición entre bloques).
+// Devuelve { history: Map<userId, [{[key]: label, hours}]>,
 // labels: [label,...], key: 'weekStart'|'date' } — `key` le dice al caller cómo armar el
 // fallback de historial vacío para un usuario sin tareas en el rango.
-async function getHoursHistory(workspaceId, tz, { weeks = 12, granularity = 'weekly', days = 60 } = {}) {
+async function getHoursHistory(workspaceId, tz, { weeks = 12, granularity = 'weekly', days = 60, back = 0 } = {}) {
   const daily = granularity === 'daily'
-  const offset = tzOffsetStr(tz)
+  const tzOff = tzOffsetStr(tz)
   const today  = todayString(tz)
-  // lunes de hace (weeks-1) semanas → cubre `weeks` semanas incl. la actual; en diario, hace (days-1) días → cubre `days` días incl. hoy.
-  const startDate = daily ? addDays(today, -(days - 1)) : getNWeeksAgoMonday(weeks - 1, tz)
   const buckets = daily ? days : weeks
+
+  let startDate, endDate
+  if (daily) {
+    endDate   = addDays(today, -back * days)
+    startDate = addDays(endDate, -(days - 1))
+  } else {
+    // Lunes de esta semana, retrocedido `back` bloques completos de `weeks` semanas.
+    const currentMonday = getNWeeksAgoMonday(0, tz)
+    startDate = addDays(currentMonday, -(weeks - 1 + back * weeks) * 7)
+    endDate   = addDays(startDate, weeks * 7 - 1)
+  }
 
   const tasks = await prisma.task.findMany({
     where: {
       status: 'COMPLETED',
-      completedAt: { gte: new Date(startDate + 'T00:00:00' + offset), lte: new Date(today + 'T23:59:59' + offset) },
+      completedAt: { gte: new Date(startDate + 'T00:00:00' + tzOff), lte: new Date(endDate + 'T23:59:59' + tzOff) },
       workDay: { workspaceId },
     },
     select: { userId: true, startedAt: true, completedAt: true, pausedMinutes: true, minutesOverride: true },

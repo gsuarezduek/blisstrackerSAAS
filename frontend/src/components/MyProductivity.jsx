@@ -66,6 +66,71 @@ function Sparkline({ history }) {
   )
 }
 
+// Envuelve el Sparkline con navegación a bloques de 12 semanas anteriores + el rango de
+// fechas cubierto. Arranca con el historial ya incluido en `/reports/mine/productivity`
+// (back=0); navegar hacia atrás pide el bloque siguiente bajo demanda, sin recalcular el
+// resto de las métricas.
+function HoursHistorySection({ initialHistory }) {
+  const [back, setBack] = useState(0)
+  const [history, setHistory] = useState(initialHistory)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setHistory(initialHistory)
+    setBack(0)
+  }, [initialHistory])
+
+  async function goTo(next) {
+    if (next < 0 || next === back || loading) return
+    setLoading(true)
+    try {
+      if (next === 0) {
+        setHistory(initialHistory)
+      } else {
+        const { data } = await api.get('/reports/mine/hours-history', { params: { back: next } })
+        setHistory(data.history)
+      }
+      setBack(next)
+    } catch {
+      // se queda con el historial que ya tenía cargado
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const rangeLabel = history?.length
+    ? `${weekLabel(history[0].weekStart)} – ${weekLabel(history[history.length - 1].weekStart)}`
+    : ''
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Horas por semana · últimas 12</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => goTo(back + 1)}
+            disabled={loading}
+            className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-400"
+          >
+            ← antes
+          </button>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{rangeLabel}</span>
+          <button
+            type="button"
+            onClick={() => goTo(back - 1)}
+            disabled={loading || back === 0}
+            className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-400"
+          >
+            después →
+          </button>
+        </div>
+      </div>
+      <Sparkline history={history} />
+    </div>
+  )
+}
+
 // Métrica con comparación opcional contra la mediana del equipo (anónima).
 function Metric({ label, value, team, hint }) {
   return (
@@ -134,10 +199,7 @@ export default function MyProductivity() {
           </div>
 
           {s.hoursHistory?.some(w => w.hours > 0) && (
-            <div className="mb-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">Horas por semana · últimas 12</p>
-              <Sparkline history={s.hoursHistory} />
-            </div>
+            <HoursHistorySection initialHistory={s.hoursHistory} />
           )}
 
           {note && <p className={`text-sm leading-snug ${note.cls} ${ins ? 'mb-4' : ''}`}>{note.text}</p>}

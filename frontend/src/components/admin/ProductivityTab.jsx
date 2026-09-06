@@ -271,6 +271,70 @@ function HoursLineChart({ history }) {
   )
 }
 
+// Envuelve HoursLineChart con navegación a bloques de 60 días anteriores + el rango de
+// fechas cubierto arriba del gráfico. Arranca con el historial ya incluido en el payload
+// de la tabla (back=0); navegar hacia atrás pide el bloque siguiente bajo demanda (lazy,
+// mismo patrón que el drill-down de ProjectBars) sin invalidar la caché de la tabla completa.
+function HoursHistorySection({ userId, initialHistory }) {
+  const [back, setBack] = useState(0)
+  const [history, setHistory] = useState(initialHistory)
+  const [loading, setLoading] = useState(false)
+
+  // Si se recarga el payload del padre (ej. cambio de modo current/closed en el panel de
+  // usuario), volver a la ventana actual en vez de quedar "atascado" en un período viejo.
+  useEffect(() => {
+    setHistory(initialHistory)
+    setBack(0)
+  }, [initialHistory])
+
+  async function goTo(next) {
+    if (next < 0 || next === back || loading) return
+    setLoading(true)
+    try {
+      if (next === 0) {
+        setHistory(initialHistory)
+      } else {
+        const { data } = await api.get(`/admin/productivity/users/${userId}/hours-history`, { params: { back: next } })
+        setHistory(data.history)
+      }
+      setBack(next)
+    } catch {
+      // se queda con el historial que ya tenía cargado
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const rangeLabel = history?.length
+    ? `${fmtChartDate(history[0].date)} – ${fmtChartDate(history[history.length - 1].date)}`
+    : ''
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <button
+          type="button"
+          onClick={() => goTo(back + 1)}
+          disabled={loading}
+          className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-400"
+        >
+          ← 60 días antes
+        </button>
+        <span className="text-[11px] text-gray-400 dark:text-gray-500 tabular-nums">{rangeLabel}</span>
+        <button
+          type="button"
+          onClick={() => goTo(back - 1)}
+          disabled={loading || back === 0}
+          className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-400"
+        >
+          60 días después →
+        </button>
+      </div>
+      <HoursLineChart history={history} />
+    </div>
+  )
+}
+
 // Barras horizontales de tiempo por proyecto. Cada proyecto se expande para ver el
 // drill-down de tareas completadas (lazy: trae el breakdown del período al primer click).
 function ProjectBars({ porProyecto, userId, mode }) {
@@ -384,12 +448,12 @@ export function PersonProductivityDetail({ m, benchmark, mode, onRefresh, refres
   const s = m.stats
   return (
     <div className="space-y-6">
-      {/* Gráfico de horas — últimas 12 semanas (a todo el ancho, contexto de tendencia) */}
+      {/* Gráfico de horas — ventana de 60 días navegable a meses anteriores (contexto de tendencia, no depende del período) */}
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">
-          Horas registradas por día <span className="normal-case font-normal text-gray-400 dark:text-gray-500">· últimos 60 días (contexto, no depende del período)</span>
+          Horas registradas por día <span className="normal-case font-normal text-gray-400 dark:text-gray-500">· ventana de 60 días (contexto, no depende del período)</span>
         </p>
-        <HoursLineChart history={s.hoursHistory} />
+        <HoursHistorySection userId={m.id} initialHistory={s.hoursHistory} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

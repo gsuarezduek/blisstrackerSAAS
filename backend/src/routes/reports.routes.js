@@ -1,5 +1,5 @@
 const router = require('express').Router()
-const { byProject, byUser, mine, mineProductivity } = require('../controllers/reports.controller')
+const { byProject, byUser, mine, mineProductivity, mineHoursHistory } = require('../controllers/reports.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
 
@@ -8,6 +8,7 @@ router.use(resolveWorkspace)
 
 router.get('/mine',              mine)
 router.get('/mine/productivity', mineProductivity)
+router.get('/mine/hours-history', mineHoursHistory)
 router.get('/by-project',        workspaceAdminOnly, byProject)
 router.get('/by-user',           workspaceAdminOnly, byUser)
 

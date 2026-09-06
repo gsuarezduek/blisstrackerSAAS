@@ -236,4 +236,23 @@ async function mineProductivity(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { byProject, byUser, mine, mineProductivity }
+// GET /api/reports/mine/hours-history?back=N
+// Historial semanal propio, corrido `back` bloques de 12 semanas hacia atrás (navegación
+// a meses anteriores del sparkline de Mis Reportes). Liviano: no recalcula stats/asistencia.
+async function mineHoursHistory(req, res, next) {
+  try {
+    if (req.workspace?.productivityEnabled === false) {
+      return res.status(403).json({ error: 'La sección de Productividad está deshabilitada para este workspace' })
+    }
+    const userId = req.user.userId
+    const workspaceId = req.workspace.id
+    const back = Math.max(0, Number(req.query.back) || 0)
+    const tz = req.workspace.timezone
+
+    const hist = await getHoursHistory(workspaceId, tz, { weeks: 12, back })
+    const history = hist.history.get(userId) || hist.labels.map(w => ({ weekStart: w, hours: 0 }))
+    res.json({ history })
+  } catch (err) { next(err) }
+}
+
+module.exports = { byProject, byUser, mine, mineProductivity, mineHoursHistory }
