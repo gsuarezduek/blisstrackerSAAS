@@ -8,7 +8,7 @@ import { isWorkspaceSubdomain } from '../utils/domain'
 const PUBLIC_PATH_PREFIXES = [
   '/report/', '/login', '/register', '/pricing', '/join', '/oauth', '/auth',
   '/oauth-result', '/condiciones', '/privacidad', '/forgot-password',
-  '/reset-password', '/verify-email-change', '/soluciones/',
+  '/reset-password', '/verify-email-change', '/soluciones/', '/blog',
 ]
 
 function isPublicPagePath(pathname = window.location.pathname) {

@@ -4,6 +4,7 @@
 User-agent: *
 Allow: /
 Allow: /pricing
+Allow: /blog
 Allow: /condiciones
 Allow: /privacidad
 

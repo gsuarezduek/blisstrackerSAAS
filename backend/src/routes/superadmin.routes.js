@@ -12,6 +12,7 @@ const ps    = require('../controllers/platformSettings.controller')
 const st    = require('../controllers/storage.controller')
 const land  = require('../controllers/landing.controller')
 const apt   = require('../controllers/apifyTokens.controller')
+const blog  = require('../controllers/blog.controller')
 
 const AVATAR_MAX_MB = 2
 const upload = multer({
@@ -105,6 +106,12 @@ router.delete('/feature-flags/:id',  ff.remove)
 // Documentos legales
 router.get('/legal/:key',  legal.getDocument)
 router.put('/legal/:key',  legal.upsertDocument)
+
+// Blog público
+router.get('/blog',          blog.listAll)
+router.post('/blog',         uploadAvatar, blog.create)
+router.patch('/blog/:id',    uploadAvatar, blog.update)
+router.delete('/blog/:id',   blog.remove)
 
 // Avatares
 router.get('/avatars',                      av.listAll)

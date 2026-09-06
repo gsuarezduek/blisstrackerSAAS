@@ -365,6 +365,12 @@ export default function Landing() {
               Pricing
             </Link>
             <Link
+              to="/blog"
+              className="text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors hidden sm:block"
+            >
+              Blog
+            </Link>
+            <Link
               to="/login"
               className="text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors hidden sm:block"
             >
@@ -767,6 +773,7 @@ export default function Landing() {
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-3">Producto</p>
               <ul className="space-y-2 text-sm">
                 <li><Link to="/pricing"     className="hover:text-white transition-colors">Pricing</Link></li>
+                <li><Link to="/blog"        className="hover:text-white transition-colors">Blog</Link></li>
                 <li><a   href="#demo"       className="hover:text-white transition-colors">Ver demo</a></li>
                 <li><a   href="#testimonios" className="hover:text-white transition-colors">Testimonios</a></li>
                 <li><a   href="#faq"         className="hover:text-white transition-colors">FAQ</a></li>

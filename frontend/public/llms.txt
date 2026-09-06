@@ -30,6 +30,7 @@ Trial: 14 días sin tarjeta.
 
 - Landing: https://blisstracker.app/
 - Pricing: https://blisstracker.app/pricing
+- Blog: https://blisstracker.app/blog
 - Registro: https://blisstracker.app/register
 - Login: https://blisstracker.app/login
 - Términos: https://blisstracker.app/condiciones

@@ -1307,6 +1307,27 @@ model LegalDocument {
   createdAt DateTime @default(now())
 }
 
+// ─── BLOG PÚBLICO (editable desde SuperAdmin → Blog) ──────────────────────────
+
+model BlogPost {
+  id                 Int       @id @default(autoincrement())
+  slug               String    @unique // URL pública: /blog/:slug
+  title              String
+  excerpt            String    @default("") // resumen para la card de listado + fallback de metaDescription
+  contentHtml        String    @default("") // HTML de RichTextEditor (Tiptap); se sanitiza con DOMPurify al renderizar
+  coverImageData     Bytes?
+  coverImageMimeType String?
+  status             String    @default("draft") // "draft" | "published" — mismo criterio que MonthlyReport.status
+  publishedAt        DateTime? // se fija la primera vez que pasa a "published"; no se pisa en ediciones posteriores
+  metaTitle          String?
+  metaDescription    String?
+  authorName         String    @default("Equipo BlissTracker") // texto libre, no FK a User: son posts institucionales
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status, publishedAt])
+}
+
 // ─── ANALYTICS SNAPSHOTS ──────────────────────────────────────────────────────
 
 model AnalyticsSnapshot {

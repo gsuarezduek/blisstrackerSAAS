@@ -11,9 +11,9 @@ import { SectionSettings } from './superadmin/settings'
 import { SectionStorage } from './superadmin/storage'
 import { SectionAnnouncements } from './superadmin/announcements'
 import { SectionLegales } from './superadmin/legal'
-import { SectionBrandManual } from './superadmin/brand'
 import { SectionAvatars } from './superadmin/avatars'
 import { SectionLanding } from './superadmin/landing'
+import { SectionBlog } from './superadmin/blog'
 import { SectionBilling } from './superadmin/billing'
 import { SectionFeatureFlags } from './superadmin/featureFlags'
 import { SectionAiTokens } from './superadmin/aiTokens'
@@ -217,12 +217,13 @@ const NAV_GROUPS = [
         ),
       },
       {
-        id: 'brand',
-        label: 'Manual de Marca',
+        id: 'blog',
+        label: 'Blog',
         implemented: true,
+        description: 'Crear y publicar artículos del blog público (blisstracker.app/blog) con editor WYSIWYG, sin necesidad de deploy.',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2H4zm3.5 4.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM5 12.5l2.5-3 2 2.5 2.5-3.5L15 13H5z" clipRule="evenodd" />
+            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h5.172a2 2 0 011.414.586l2.828 2.828A2 2 0 0116 6.828V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm3 8a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm1-4a1 1 0 100 2h2a1 1 0 100-2H8z" clipRule="evenodd" />
           </svg>
         ),
       },
@@ -320,7 +321,7 @@ export default function SuperAdmin() {
     if (section === 'whatsapp-usage') return <SectionWhatsappUsage />
     if (section === 'scraping')      return <SectionScraping />
     if (section === 'legal')         return <SectionLegales />
-    if (section === 'brand')         return <SectionBrandManual />
+    if (section === 'blog')          return <SectionBlog />
     if (section === 'landing')       return <SectionLanding />
 
     // Not yet implemented

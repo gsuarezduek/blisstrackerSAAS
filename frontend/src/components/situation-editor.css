@@ -67,6 +67,10 @@
 .dark .situation-editor .tiptap th {
   background-color: #374151;
 }
+.situation-editor .tiptap a {
+  color: #f97316;
+  text-decoration: underline;
+}
 
 /* Vista de solo lectura */
 .situation-content h2 {
@@ -133,4 +137,8 @@
 }
 .dark .situation-content th {
   background-color: #374151;
+}
+.situation-content a {
+  color: #f97316;
+  text-decoration: underline;
 }

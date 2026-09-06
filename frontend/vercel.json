@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/report/:token", "destination": "/api/report-og?token=:token" },
+    { "source": "/blog/:slug", "destination": "/api/blog-og?slug=:slug" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
