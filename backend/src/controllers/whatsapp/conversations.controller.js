@@ -39,18 +39,34 @@ async function resolveLeadByContact(workspaceId, contactIds) {
 }
 
 /**
- * GET /api/whatsapp/conversations
+ * GET /api/whatsapp/conversations  ?q=<texto>
  * Lista conversaciones del workspace, más reciente primero, con el último
  * mensaje y no-leídos por usuario (mismo cálculo que listChannels del chat
  * interno: solo cuenta si hay mensajes más nuevos que el último leído).
  * Suma el nombre de la empresa del contacto vinculado y el `leadId` al que
  * saltar (si existe) — así la vista de WhatsApp puede mostrar "de qué
  * empresa/oportunidad es" y abrir el lead con un clic.
+ *
+ * `q` filtra por nombre/teléfono/empresa del contacto O por el contenido de
+ * CUALQUIER mensaje de la conversación (no solo el último) — así una
+ * búsqueda encuentra el chat aunque la palabra no esté en el nombre.
  */
 async function listConversations(req, res, next) {
   try {
+    const q = (req.query.q || '').trim()
     const conversations = await prisma.whatsappConversation.findMany({
-      where: { workspaceId: req.workspace.id },
+      where: {
+        workspaceId: req.workspace.id,
+        ...(q ? {
+          OR: [
+            { contactName: { contains: q, mode: 'insensitive' } },
+            { phoneE164: { contains: q, mode: 'insensitive' } },
+            { contact: { name: { contains: q, mode: 'insensitive' } } },
+            { contact: { company: { name: { contains: q, mode: 'insensitive' } } } },
+            { messages: { some: { content: { contains: q, mode: 'insensitive' } } } },
+          ],
+        } : {}),
+      },
       orderBy: { lastMessageAt: 'desc' },
       include: {
         contact: { select: { id: true, name: true, companyId: true, company: { select: { name: true } } } },

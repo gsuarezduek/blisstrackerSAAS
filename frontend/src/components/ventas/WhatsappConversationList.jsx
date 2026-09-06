@@ -27,12 +27,14 @@ function timeLabel(iso) {
 // — el matching automático por teléfono no cubre todos los casos). Si el
 // contacto está vinculado, además muestra su empresa y un atajo para abrir el
 // lead asociado (resuelto server-side en listConversations).
-export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact, onOpenLead }) {
+export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact, onOpenLead, search }) {
   if (conversations.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
         <p className="text-sm text-gray-400 dark:text-gray-500 text-center">
-          Todavía no llegó ningún mensaje. En cuanto un lead escriba al número conectado, aparece acá.
+          {search
+            ? `No encontramos chats que coincidan con "${search}".`
+            : 'Todavía no llegó ningún mensaje. En cuanto un lead escriba al número conectado, aparece acá.'}
         </p>
       </div>
     )

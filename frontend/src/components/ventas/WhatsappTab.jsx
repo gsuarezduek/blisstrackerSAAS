@@ -42,9 +42,12 @@ export default function WhatsappTab({ onOpenLead }) {
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
+  const [search, setSearch] = useState('')
 
   const activeIdRef = useRef(null)
   activeIdRef.current = activeId
+  const searchRef = useRef('')
+  searchRef.current = search
 
   const loadAccount = useCallback(async () => {
     setLoadingAccount(true)
@@ -56,10 +59,15 @@ export default function WhatsappTab({ onOpenLead }) {
     }
   }, [])
 
+  // Busca por nombre/teléfono/empresa del contacto O por cualquier palabra
+  // dentro de los mensajes de la conversación (resuelto server-side, ver
+  // conversations.controller.js) — mantiene el filtro vigente (searchRef) en
+  // cada refresco disparado por otros eventos (enviar mensaje, socket, etc).
   const loadConversations = useCallback(async () => {
     setLoadingConversations(true)
     try {
-      const { data } = await api.get('/whatsapp/conversations')
+      const q = searchRef.current.trim()
+      const { data } = await api.get('/whatsapp/conversations', { params: q ? { q } : {} })
       setConversations(data)
     } finally {
       setLoadingConversations(false)
@@ -69,9 +77,15 @@ export default function WhatsappTab({ onOpenLead }) {
   useEffect(() => { loadAccount() }, [loadAccount])
   useEffect(() => {
     if (!account) return
-    loadConversations()
     api.get('/whatsapp/bot').then(({ data }) => setBotConfig(data)).catch(() => {})
-  }, [account, loadConversations])
+  }, [account])
+  // Debounce de la búsqueda (300ms) — la carga inicial (search vacío al
+  // conectar la cuenta) dispara sin esperar.
+  useEffect(() => {
+    if (!account) return
+    const t = setTimeout(loadConversations, search ? 300 : 0)
+    return () => clearTimeout(t)
+  }, [account, search, loadConversations])
 
   const openConversation = useCallback(async (id) => {
     setActiveId(id)
@@ -242,10 +256,31 @@ export default function WhatsappTab({ onOpenLead }) {
 
       <div className="flex h-[70vh]">
         <div className="w-72 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col">
+          <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+            <div className="relative">
+              <span className="absolute inset-y-0 left-2.5 flex items-center text-gray-400 text-sm pointer-events-none">🔍</span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar en los chats..."
+                className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs"
+                  title="Limpiar búsqueda"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
           {loadingConversations && conversations.length === 0 ? (
             <LoadingSpinner size="sm" className="flex-1 py-10" />
           ) : (
-            <WhatsappConversationList conversations={conversations} activeId={activeId} onSelect={openConversation} onLinkContact={setLinkingConversation} onOpenLead={onOpenLead} />
+            <WhatsappConversationList conversations={conversations} activeId={activeId} onSelect={openConversation} onLinkContact={setLinkingConversation} onOpenLead={onOpenLead} search={search} />
           )}
         </div>
 
