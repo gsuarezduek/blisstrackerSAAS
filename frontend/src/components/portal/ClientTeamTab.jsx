@@ -8,9 +8,10 @@ import '../situation-editor.css'
 // cada una condicional a su propio toggle (showTeam / showMeetings):
 // quién trabaja en el proyecto (ProjectMember: foto/nombre/rol, sin
 // email/teléfono) y el historial completo de reuniones con el cliente
-// (fecha/título y, si el equipo tomó notas, las notas — son reuniones
-// type:'client', el cliente ya estuvo presente). Se gatea a nivel
-// ClientPortal.jsx (no se monta si ambas están vacías).
+// (fecha/título, notas si el equipo tomó, y los to-dos con su estado y
+// responsable — son reuniones type:'client', el cliente ya estuvo
+// presente). Se gatea a nivel ClientPortal.jsx (no se monta si ambas
+// están vacías).
 
 function formatDate(dateStr) {
   const [y, m, d] = dateStr.split('-')
@@ -40,25 +41,42 @@ function TeamMemberCard({ member }) {
 function MeetingRow({ meeting }) {
   const [open, setOpen] = useState(false)
   const hasNotes = !!(meeting.notes && meeting.notes.trim())
+  const todos = meeting.todos || []
+  const hasDetails = hasNotes || todos.length > 0
 
   return (
     <div className="py-2 px-3">
       <button
         type="button"
-        onClick={() => hasNotes && setOpen(v => !v)}
-        className={`w-full flex items-baseline gap-2 rounded-lg px-0 py-1 text-left ${hasNotes ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'}`}
+        onClick={() => hasDetails && setOpen(v => !v)}
+        className={`w-full flex items-baseline gap-2 rounded-lg px-0 py-1 text-left ${hasDetails ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'}`}
       >
         <span className="text-sm font-medium text-gray-700 shrink-0">{formatDate(meeting.date)}</span>
         {meeting.title && <span className="text-sm text-gray-500 truncate">{meeting.title}</span>}
-        {hasNotes && (
-          <span className="ml-auto text-xs font-medium text-primary-600 shrink-0">{open ? 'Ocultar notas ▲' : 'Ver notas ▾'}</span>
+        {hasDetails && (
+          <span className="ml-auto text-xs font-medium text-primary-600 shrink-0">{open ? 'Ocultar detalle ▲' : 'Ver detalle ▾'}</span>
         )}
       </button>
-      {hasNotes && open && (
-        <div
-          className="situation-content text-sm text-gray-600 mt-2 mb-1 px-3 py-2 bg-gray-50 rounded-lg"
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(meeting.notes) }}
-        />
+      {hasDetails && open && (
+        <div className="mt-2 mb-1 px-3 py-2 bg-gray-50 rounded-lg space-y-3">
+          {hasNotes && (
+            <div
+              className="situation-content text-sm text-gray-600"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(meeting.notes) }}
+            />
+          )}
+          {todos.length > 0 && (
+            <ul className="space-y-1">
+              {todos.map(t => (
+                <li key={t.id} className="flex items-start gap-2 text-sm">
+                  <span className={t.done ? 'text-green-600' : 'text-gray-300'}>{t.done ? '✓' : '○'}</span>
+                  <span className={t.done ? 'text-gray-400 line-through' : 'text-gray-700'}>{t.title}</span>
+                  {t.ownerName && <span className="text-gray-400 text-xs shrink-0">— {t.ownerName}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   )

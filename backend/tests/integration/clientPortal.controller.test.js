@@ -673,13 +673,16 @@ describe('Portal de cliente — meta completa (requiere token)', () => {
     }))
   })
 
-  it('meetings trae el historial completo CON notas (son reuniones type:client, el cliente ya estuvo) + today para clasificar próximas/anteriores en el front', async () => {
+  it('meetings trae el historial completo CON notas y to-dos (son reuniones type:client, el cliente ya estuvo) + today para clasificar próximas/anteriores en el front', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ showMeetings: true }))
     mockBaseData()
     prisma.projectMeeting.findFirst.mockResolvedValue(null)
     prisma.projectMeeting.findMany.mockResolvedValue([
-      { date: '2026-09-01', title: 'Revisión mensual', notes: '<p>Quedamos en subir el presupuesto</p>' },
-      { date: '2026-07-01', title: 'Kickoff', notes: null },
+      {
+        date: '2026-09-01', title: 'Revisión mensual', notes: '<p>Quedamos en subir el presupuesto</p>',
+        todos: [{ id: 1, title: 'Mandar propuesta actualizada', done: false, owner: { name: 'Gastón' } }],
+      },
+      { date: '2026-07-01', title: 'Kickoff', notes: null, todos: [] },
     ])
 
     const res = await request(app)
@@ -688,12 +691,20 @@ describe('Portal de cliente — meta completa (requiere token)', () => {
 
     expect(res.status).toBe(200)
     expect(res.body.meetings).toEqual([
-      { date: '2026-09-01', title: 'Revisión mensual', notes: '<p>Quedamos en subir el presupuesto</p>' },
-      { date: '2026-07-01', title: 'Kickoff', notes: null },
+      {
+        date: '2026-09-01', title: 'Revisión mensual', notes: '<p>Quedamos en subir el presupuesto</p>',
+        todos: [{ id: 1, title: 'Mandar propuesta actualizada', done: false, ownerName: 'Gastón' }],
+      },
+      { date: '2026-07-01', title: 'Kickoff', notes: null, todos: [] },
     ])
     expect(prisma.projectMeeting.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where:  expect.objectContaining({ type: 'client' }),
-      select: { date: true, title: true, notes: true },
+      select: expect.objectContaining({
+        date: true, title: true, notes: true,
+        todos: expect.objectContaining({
+          select: { id: true, title: true, done: true, owner: { select: { name: true } } },
+        }),
+      }),
     }))
     expect(typeof res.body.today).toBe('string')
     expect(res.body.today).toMatch(/^\d{4}-\d{2}-\d{2}$/)

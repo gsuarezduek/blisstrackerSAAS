@@ -448,14 +448,24 @@ async function getPortalData(req, res, next) {
           })
         : Promise.resolve(null),
       // Historial completo (pasadas + futuras) para la pestaña "Tu equipo",
-      // con notas — a diferencia de nextMeeting, acá sí se muestran: son
-      // reuniones type:'client' (el cliente ya estuvo presente), y el cliente
-      // pidió poder ver qué se anotó.
+      // con notas y to-dos — a diferencia de nextMeeting, acá sí se muestran:
+      // son reuniones type:'client' (el cliente ya estuvo presente), y el
+      // cliente pidió poder ver qué se anotó y qué quedó pendiente. Los
+      // to-dos solo exponen título/hecho/responsable (nombre) — nunca
+      // taskId/ownerId crudo ni datos de la Task interna vinculada.
       portal.showMeetings
         ? prisma.projectMeeting.findMany({
             where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, type: 'client' },
             orderBy: { date: 'desc' },
-            select:  { date: true, title: true, notes: true },
+            select:  {
+              date:  true,
+              title: true,
+              notes: true,
+              todos: {
+                orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+                select:  { id: true, title: true, done: true, owner: { select: { name: true } } },
+              },
+            },
           })
         : Promise.resolve([]),
     ])
@@ -554,7 +564,12 @@ async function getPortalData(req, res, next) {
       pendingPreview,
       latestReportSummary: latestReport ? { token: latestReport.token, month: latestReport.month, resumen: resumenSnippet(latestReport.analysis) } : null,
       nextMeeting: nextMeeting ? { date: nextMeeting.date, title: nextMeeting.title } : null,
-      meetings: allMeetings.map(m => ({ date: m.date, title: m.title, notes: m.notes || null })),
+      meetings: allMeetings.map(m => ({
+        date:  m.date,
+        title: m.title,
+        notes: m.notes || null,
+        todos: m.todos.map(t => ({ id: t.id, title: t.title, done: t.done, ownerName: t.owner?.name || null })),
+      })),
       today: todayString(),
       showTeam: portal.showTeam,
       team,
