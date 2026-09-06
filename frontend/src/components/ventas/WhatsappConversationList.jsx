@@ -41,7 +41,12 @@ function ConversationRow({ c, active, onSelect, onLinkContact, onOpenLead, onTog
           <button
             onClick={(e) => { e.stopPropagation(); onTogglePin(c) }}
             title={pinned ? 'Desfijar chat' : 'Fijar chat'}
-            className={`text-xs leading-none ${pinned ? 'text-amber-500' : 'text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500'}`}
+            className={`text-xs leading-none transition-all ${
+              // El emoji 📌 es un glyph a color: las clases de texto (text-*) no lo
+              // tiñen, siempre se ve con su color nativo. Para distinguir
+              // pinneado/no pinneado hay que desaturarlo con un filtro CSS, no con color.
+              pinned ? 'grayscale-0 opacity-100' : 'grayscale opacity-40 hover:opacity-70'
+            }`}
           >
             📌
           </button>
