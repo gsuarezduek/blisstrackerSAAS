@@ -1,50 +1,54 @@
-<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BlissTracker logo — honeycomb">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Capa_1" xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1080 1080">
   <defs>
-    <linearGradient id="centerHexB" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFB366"/>
-      <stop offset="100%" stop-color="#FF8C2E"/>
+    <style>
+      .st0 {
+        fill: url(#Degradado_sin_nombre_632);
+      }
+
+      .st1 {
+        fill: url(#Degradado_sin_nombre_63);
+      }
+
+      .st2 {
+        fill: url(#Degradado_sin_nombre_635);
+      }
+
+      .st3 {
+        fill: url(#Degradado_sin_nombre_634);
+      }
+
+      .st4 {
+        fill: #fcf9e6;
+      }
+
+      .st5 {
+        fill: url(#Degradado_sin_nombre_636);
+      }
+
+      .st6 {
+        fill: url(#Degradado_sin_nombre_631);
+      }
+
+      .st7 {
+        fill: url(#Degradado_sin_nombre_633);
+      }
+    </style>
+    <linearGradient id="Degradado_sin_nombre_63" data-name="Degradado sin nombre 63" x1="600.31" y1="540.24" x2="881.09" y2="540.24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f39200"/>
+      <stop offset="1" stop-color="#f35a00"/>
     </linearGradient>
-    <linearGradient id="outerHexB" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#C46F29"/>
-      <stop offset="100%" stop-color="#8A4E1C"/>
-    </linearGradient>
-    <filter id="glowB" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="10" result="glow"/>
-      <feMerge>
-        <feMergeNode in="glow"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
+    <linearGradient id="Degradado_sin_nombre_631" data-name="Degradado sin nombre 63" x1="198.91" y1="554.81" x2="497.09" y2="554.81" xlink:href="#Degradado_sin_nombre_63"/>
+    <linearGradient id="Degradado_sin_nombre_632" data-name="Degradado sin nombre 63" x1="408.72" y1="711.84" x2="682.72" y2="711.84" xlink:href="#Degradado_sin_nombre_63"/>
+    <linearGradient id="Degradado_sin_nombre_633" data-name="Degradado sin nombre 63" x1="408.74" y1="368.24" x2="682.69" y2="368.24" xlink:href="#Degradado_sin_nombre_63"/>
+    <linearGradient id="Degradado_sin_nombre_634" data-name="Degradado sin nombre 63" x1="1121.43" y1="540" x2="2220" y2="540" xlink:href="#Degradado_sin_nombre_63"/>
+    <linearGradient id="Degradado_sin_nombre_635" data-name="Degradado sin nombre 63" x1="2241.32" y1="80.48" x2="2241.32" y2="80.48" xlink:href="#Degradado_sin_nombre_63"/>
+    <linearGradient id="Degradado_sin_nombre_636" data-name="Degradado sin nombre 63" x1="309.71" y1="-409.3" x2="309.71" y2="-409.3" xlink:href="#Degradado_sin_nombre_63"/>
   </defs>
-
-  <!-- Hexágonos exteriores (atenuados, tono medio para funcionar en claro/oscuro) -->
   <g>
-    <!-- Arriba -->
-    <polygon points="176,117.44 216,48.16 296,48.16 336,117.44 296,186.72 216,186.72" fill="url(#outerHexB)"/>
-    <!-- Arriba-derecha -->
-    <polygon points="296,186.72 336,117.44 416,117.44 456,186.72 416,256 336,256" fill="url(#outerHexB)"/>
-    <!-- Abajo-derecha -->
-    <polygon points="296,325.28 336,256 416,256 456,325.28 416,394.56 336,394.56" fill="url(#outerHexB)"/>
-    <!-- Abajo -->
-    <polygon points="176,394.56 216,325.28 296,325.28 336,394.56 296,463.84 216,463.84" fill="url(#outerHexB)"/>
-    <!-- Abajo-izquierda -->
-    <polygon points="56,325.28 96,256 176,256 216,325.28 176,394.56 96,394.56" fill="url(#outerHexB)"/>
-    <!-- Arriba-izquierda -->
-    <polygon points="56,186.72 96,117.44 176,117.44 216,186.72 176,256 96,256" fill="url(#outerHexB)"/>
+    <path class="st1" d="M875.67,430.25l-146.03-84.12c-7.19-4.14-16.18,1.04-16.19,9.34l-.12,103.43c0,3.86-2.07,7.42-5.41,9.34l-102.21,58.86c-3.36,1.93-5.42,5.52-5.41,9.4l.03,7.08c.02,3.84,2.07,7.39,5.4,9.31l102.24,58.98c3.34,1.93,5.4,5.49,5.4,9.34l.09,103.78c0,8.3,8.99,13.49,16.19,9.35l146.03-84.13c3.35-1.93,5.41-5.49,5.41-9.36l-.02-201.26c0-3.86-2.06-7.43-5.41-9.35Z"/>
+    <path class="st6" d="M491.69,530.65l-108.47-62.54c-3.34-1.93-5.4-5.49-5.4-9.35v-95.21c0-8.31-8.98-13.5-16.18-9.36l-157.32,90.66c-3.35,1.93-5.41,5.49-5.41,9.35v201.28c0,3.86,2.07,7.43,5.41,9.36l157.29,90.58c7.2,4.14,16.18-1.05,16.19-9.35l.08-124.91c0-3.86,2.06-7.42,5.41-9.35l108.41-62.45c7.21-4.15,7.21-14.55,0-18.71Z"/>
+    <path class="st0" d="M677.3,629.75l-124.53-71.78-1.97-1.06c-3.16-1.7-6.95-1.72-10.12-.06l-1.97,1.03-124.58,71.8c-3.35,1.93-5.41,5.5-5.41,9.36l.04,145.58c0,3.86,2.06,7.43,5.41,9.35l126.18,72.65c3.34,1.92,7.45,1.92,10.78,0l126.19-72.79c3.34-1.93,5.4-5.49,5.4-9.35l-.02-145.37c0-3.86-2.06-7.43-5.4-9.35Z"/>
+    <path class="st7" d="M414.16,450.4l126.18,72.7c3.34,1.92,7.45,1.92,10.79,0l126.15-72.82c3.34-1.93,5.4-5.49,5.4-9.35v-145.4c0-3.86-2.06-7.42-5.4-9.35l-126.15-72.79c-3.34-1.93-7.45-1.93-10.79,0l-126.2,72.74c-3.34,1.93-5.41,5.49-5.41,9.36l.02,145.56c0,3.86,2.06,7.43,5.41,9.35Z"/>
   </g>
-
-  <!-- Hexágono central (brillante) -->
-  <polygon
-    points="176,256 216,186.72 296,186.72 336,256 296,325.28 216,325.28"
-    fill="url(#centerHexB)"
-    filter="url(#glowB)"/>
-
-  <!-- Check grueso y redondeado -->
-  <path
-    d="M 205 258 L 240 295 L 305 222"
-    fill="none"
-    stroke="#FFFFFF"
-    stroke-width="22"
-    stroke-linecap="round"
-    stroke-linejoin="round"/>
 </svg>

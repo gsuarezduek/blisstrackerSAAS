@@ -28,8 +28,8 @@ function emailShell(bodyHtml) {
 
   <!-- Logo header -->
   <div style="text-align:center;padding:24px 0 8px;">
-    <img src="${LOCKUP_URL}" alt="BlissTracker" width="220" height="34"
-         style="display:inline-block;width:220px;height:34px;" />
+    <img src="${LOCKUP_URL}" alt="BlissTracker" width="220" height="33"
+         style="display:inline-block;width:220px;height:33px;" />
   </div>
 
   <!-- Contenido -->
