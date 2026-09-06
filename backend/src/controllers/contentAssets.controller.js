@@ -22,6 +22,17 @@ const ALLOWED_MIME = {
   image: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
   video: ['video/mp4', 'video/quicktime', 'video/webm'],
 }
+// Extensión de respaldo para el nombre de descarga cuando el asset no tiene
+// fileName propio (ej. subido antes de que se guardara, o el poster generado).
+const DOWNLOAD_EXT_BY_MIME = {
+  'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif',
+  'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm',
+}
+function downloadFileName(fileName, mimeType) {
+  if (fileName && fileName.trim()) return fileName.trim().replace(/"/g, "'")
+  return `archivo.${DOWNLOAD_EXT_BY_MIME[mimeType] || 'bin'}`
+}
+
 const MAX_READY_ASSETS_PER_PIECE = 8
 const MAX_PENDING_ASSETS_PER_PIECE = 3
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000 // 1h — pendings más viejos no cuentan para el límite (los barre el cron)
@@ -381,7 +392,7 @@ async function serveContentAsset(req, res, next) {
   try {
     const asset = await prisma.contentAsset.findUnique({
       where:  { publicId: req.params.publicId },
-      select: { imageData: true, mimeType: true, objectKey: true, posterKey: true, status: true },
+      select: { imageData: true, mimeType: true, objectKey: true, posterKey: true, status: true, fileName: true },
     })
     if (!asset || asset.status !== 'ready') return res.status(404).send('Not found')
 
@@ -391,7 +402,19 @@ async function serveContentAsset(req, res, next) {
       return res.redirect(302, objectStorage.publicUrl(asset.posterKey))
     }
 
+    // `?download=1` — botón "Descargar" explícito (interno y portal del cliente).
+    // Fuerza `Content-Disposition: attachment` para que cualquier navegador (mobile
+    // incluido) ofrezca guardar el archivo en vez de reproducirlo/mostrarlo inline;
+    // el `download` del <a> no alcanza porque la respuesta final viene de R2, un
+    // origen distinto al nuestro.
+    const wantsDownload = req.query.download === '1'
+    const downloadName = downloadFileName(asset.fileName, asset.mimeType)
+
     if (asset.objectKey) {
+      if (wantsDownload) {
+        const url = await objectStorage.presignGet(asset.objectKey, { expiresIn: 300, filename: downloadName })
+        return res.redirect(302, url)
+      }
       // 1 día, NO inmutable — permite re-apuntar R2_PUBLIC_BASE sin quedar clavado.
       res.set('Cache-Control', 'public, max-age=86400')
       return res.redirect(302, objectStorage.publicUrl(asset.objectKey))
@@ -400,7 +423,12 @@ async function serveContentAsset(req, res, next) {
     if (!asset.imageData) return res.status(404).send('Not found')
     res.set('Content-Type', asset.mimeType)
     res.set('X-Content-Type-Options', 'nosniff')
-    res.set('Cache-Control', 'public, max-age=31536000, immutable')
+    if (wantsDownload) {
+      res.set('Content-Disposition', `attachment; filename="${downloadName}"`)
+      res.set('Cache-Control', 'no-store')
+    } else {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable')
+    }
     res.send(Buffer.from(asset.imageData))
   } catch (err) { next(err) }
 }

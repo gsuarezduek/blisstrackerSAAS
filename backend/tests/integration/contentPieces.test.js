@@ -55,7 +55,7 @@ function mockBase({ workspaceRole = 'member', flagOn = true } = {}) {
 
 const dbPiece = (over = {}) => ({
   id: 10, projectId: PROJECT_ID, workspaceId: WORKSPACE_ID,
-  title: 'Reel de lanzamiento', status: 'idea', type: 'reel',
+  title: 'Reel de lanzamiento', status: 'idea', types: '["reel"]',
   networks: '["instagram"]', designDetails: null, copy: null, hashtags: null, internalNotes: null,
   scheduledAt: null, scheduledDate: null, publishedAt: null, publishedUrl: null,
   order: 0, ownerId: null, taskId: null,
@@ -146,6 +146,44 @@ describe('GET /pieces', () => {
 
     expect(prisma.contentPiece.findMany.mock.calls[0][0].take).toBe(200)
   })
+
+  it('noDate=1 filtra las piezas sin fecha, ignorando from/to', async () => {
+    mockBase()
+    prisma.contentPiece.count.mockResolvedValue(0)
+    prisma.contentPiece.findMany.mockResolvedValue([])
+
+    await req('get', `${BASE}?noDate=1&from=2026-08-01&to=2026-08-31`)
+
+    const { where } = prisma.contentPiece.findMany.mock.calls[0][0]
+    expect(where.scheduledDate).toBeNull()
+  })
+})
+
+describe('GET /pieces/months', () => {
+  it('devuelve los meses (YYYY-MM) con piezas y si hay alguna sin fecha', async () => {
+    mockBase()
+    prisma.contentPiece.findMany.mockResolvedValue([
+      { scheduledDate: '2026-09-05' },
+      { scheduledDate: '2026-09-20' },
+      { scheduledDate: '2026-07-01' },
+      { scheduledDate: null },
+    ])
+
+    const res = await req('get', `${BASE}/months`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.months).toEqual(['2026-07', '2026-09'])
+    expect(res.body.hasUnscheduled).toBe(true)
+  })
+
+  it('hasUnscheduled en false si todas las piezas tienen fecha', async () => {
+    mockBase()
+    prisma.contentPiece.findMany.mockResolvedValue([{ scheduledDate: '2026-09-05' }])
+
+    const res = await req('get', `${BASE}/months`)
+
+    expect(res.body.hasUnscheduled).toBe(false)
+  })
 })
 
 describe('POST /pieces', () => {
@@ -154,7 +192,7 @@ describe('POST /pieces', () => {
     prisma.contentPiece.create.mockResolvedValue(dbPiece())
     prisma.contentPiece.findFirst.mockResolvedValue(dbPiece())
 
-    const res = await req('post', BASE).send({ title: 'Reel de lanzamiento', type: 'reel', networks: ['instagram'] })
+    const res = await req('post', BASE).send({ title: 'Reel de lanzamiento', types: ['reel'], networks: ['instagram'] })
 
     expect(res.status).toBe(201)
     expect(prisma.contentStatusEvent.create).toHaveBeenCalledWith(
@@ -184,15 +222,25 @@ describe('POST /pieces', () => {
 
   it('400 sin título', async () => {
     mockBase({ workspaceRole: 'admin' })
-    const res = await req('post', BASE).send({ type: 'reel' })
+    const res = await req('post', BASE).send({ types: ['reel'] })
     expect(res.status).toBe(400)
     expect(prisma.contentPiece.create).not.toHaveBeenCalled()
   })
 
   it('400 con tipo inválido', async () => {
     mockBase({ workspaceRole: 'admin' })
-    const res = await req('post', BASE).send({ title: 'X', type: 'tiktok-dance' })
+    const res = await req('post', BASE).send({ title: 'X', types: ['tiktok-dance'] })
     expect(res.status).toBe(400)
+  })
+
+  it('acepta más de un tipo para la misma pieza (ej. Historia + Post)', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.create.mockResolvedValue(dbPiece())
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece())
+
+    await req('post', BASE).send({ title: 'X', types: ['story', 'post', 'story'] })
+
+    expect(prisma.contentPiece.create.mock.calls[0][0].data.types).toBe('["story","post"]')
   })
 
   it('descarta redes inválidas y deduplica', async () => {

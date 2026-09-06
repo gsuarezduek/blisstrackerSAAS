@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react'
+import api from '../../api/client'
 import { CONTENT_STATUSES, CONTENT_NETWORKS } from './contentCatalog'
+import { monthLabel } from './dateHelpers'
 
 const SELECT = 'px-2.5 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200'
 
 /**
  * Barra de filtros compartida por las tres vistas.
  * `value` es el objeto de filtros y `onChange` recibe el objeto completo ya
- * mergeado — el componente no guarda estado propio salvo el debounce del texto.
+ * mergeado — el componente no guarda estado propio salvo el debounce del texto
+ * y la lista de meses disponibles.
  */
-export default function ContentFilters({ value, onChange, members = [], total = 0 }) {
+export default function ContentFilters({ projectId, value, onChange, members = [], total = 0 }) {
   const [q, setQ] = useState(value.q ?? '')
+  const [months, setMonths] = useState([])
+  const [hasUnscheduled, setHasUnscheduled] = useState(false)
 
   // Debounce de la búsqueda: cada tecla dispararía un request al backend.
   useEffect(() => {
@@ -22,13 +27,24 @@ export default function ContentFilters({ value, onChange, members = [], total = 
   // Si los filtros se resetean desde afuera, el input acompaña.
   useEffect(() => { setQ(value.q ?? '') }, [value.q])
 
-  const set = (patch) => onChange({ ...value, ...patch })
-  const hasFilters = Boolean(value.status || value.network || value.ownerId || value.q || value.from || value.to)
+  // Meses con contenido, para el selector — deliberadamente independiente de
+  // `pieces` (que ya viene filtrado por mes): si se derivara de ahí, elegir un
+  // mes dejaría al selector con una sola opción.
+  useEffect(() => {
+    if (!projectId) { setMonths([]); setHasUnscheduled(false); return }
+    let cancelled = false
+    api.get(`/contenido/projects/${projectId}/pieces/months`)
+      .then(r => {
+        if (cancelled) return
+        setMonths(r.data.months ?? [])
+        setHasUnscheduled(Boolean(r.data.hasUnscheduled))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [projectId])
 
-  // Un solo selector de fecha exacta: pide al backend from === to === la fecha
-  // elegida (listPieces ya soporta el rango, ver content.controller.js).
-  const exactDate = (value.from && value.from === value.to) ? value.from : ''
-  const setExactDate = (date) => set({ from: date, to: date })
+  const set = (patch) => onChange({ ...value, ...patch })
+  const hasFilters = Boolean(value.status || value.network || value.ownerId || value.q || value.scheduledMonth)
 
   return (
     <div className="flex items-center gap-2 flex-wrap mb-3">
@@ -59,28 +75,20 @@ export default function ContentFilters({ value, onChange, members = [], total = 
         </optgroup>
       </select>
 
-      <div className="flex items-center gap-1">
-        <input
-          type="date"
-          value={exactDate}
-          onChange={e => setExactDate(e.target.value)}
-          title="Publicaciones en una fecha determinada"
-          className={SELECT}
-        />
-        {exactDate && (
-          <button
-            onClick={() => setExactDate('')}
-            title="Quitar filtro de fecha"
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm px-1"
-          >
-            ✕
-          </button>
-        )}
-      </div>
+      <select
+        value={value.scheduledMonth ?? ''}
+        onChange={e => set({ scheduledMonth: e.target.value })}
+        title="Filtrar por mes de publicación"
+        className={SELECT}
+      >
+        <option value="">Todos los meses</option>
+        {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+        {hasUnscheduled && <option value="none">Sin fecha</option>}
+      </select>
 
       {hasFilters && (
         <button
-          onClick={() => onChange({ ...value, status: '', network: '', ownerId: '', q: '', from: '', to: '' })}
+          onClick={() => onChange({ ...value, status: '', network: '', ownerId: '', q: '', scheduledMonth: '' })}
           className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-2 py-1.5"
         >
           Limpiar filtros

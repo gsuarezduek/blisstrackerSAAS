@@ -42,7 +42,7 @@ export default function Contenido() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects,  setProjects]  = useState([])
   const [projectId, setProjectId] = useState(searchParams.get('projectId') ?? '')
-  const [filters,   setFilters]   = useState({ status: '', network: '', ownerId: '', q: '', from: '', to: '' })
+  const [filters,   setFilters]   = useState({ status: '', network: '', ownerId: '', q: '', scheduledMonth: '' })
   const [summary,   setSummary]   = useState(null) // { byStatus, total, awaitingClient } — GET /summary
   const [requestingApproval, setRequestingApproval] = useState(false)
   const [approvalMsg, setApprovalMsg] = useState(null) // { type: 'success'|'error', text }
@@ -59,12 +59,24 @@ export default function Contenido() {
 
   const pieceId = searchParams.get('piece')
 
-  // El Calendario acota el fetch al mes visible; las otras vistas usan los
-  // filtros generales tal cual (la Tabla y el Kanban no están paginados por mes).
-  const effectiveFilters = useMemo(
-    () => (view === 'calendario' ? { ...filters, ...monthBoundsOf(month) } : filters),
-    [view, month, filters]
-  )
+  // Traduce el filtro de mes de la Tabla/Kanban (`scheduledMonth`) a los query
+  // params que ya entiende el backend: un mes concreto → rango from/to; "none" →
+  // noDate=1 (piezas sin fecha, ej. todavía en Idea); vacío → sin filtrar.
+  function scheduledMonthParams(scheduledMonth) {
+    if (!scheduledMonth) return {}
+    if (scheduledMonth === 'none') return { noDate: '1' }
+    return monthBoundsOf(scheduledMonth)
+  }
+
+  // El Calendario acota el fetch al mes navegado (ignora `scheduledMonth`: ahí
+  // la navegación de mes ya cumple ese rol); la Tabla y el Kanban usan el filtro
+  // de mes elegido, si hay uno.
+  const effectiveFilters = useMemo(() => {
+    const { scheduledMonth, ...rest } = filters
+    return view === 'calendario'
+      ? { ...rest, ...monthBoundsOf(month) }
+      : { ...rest, ...scheduledMonthParams(scheduledMonth) }
+  }, [view, month, filters])
 
   const { pieces, members, total, loading, error, setError, reload, create, update, move, remove } =
     useContentPieces(projectId, effectiveFilters)
@@ -160,7 +172,7 @@ export default function Contenido() {
     return (
       <>
         {view !== 'calendario' && (
-          <ContentFilters value={filters} onChange={setFilters} members={members} total={total} />
+          <ContentFilters projectId={projectId} value={filters} onChange={setFilters} members={members} total={total} />
         )}
 
         {error && (

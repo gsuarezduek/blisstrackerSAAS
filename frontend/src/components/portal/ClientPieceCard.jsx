@@ -145,7 +145,17 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
           {!detailLoading && !detailError && (
             <>
               {activeAsset && (
-                <div className="rounded-lg overflow-hidden bg-black mt-3 flex items-center justify-center" style={{ maxHeight: 420 }}>
+                <div className="relative rounded-lg overflow-hidden bg-black mt-3 flex items-center justify-center" style={{ maxHeight: 420 }}>
+                  {activeAsset.kind !== 'link' && (
+                    <a
+                      href={activeAsset.downloadUrl}
+                      download={activeAsset.fileName || undefined}
+                      title="Descargar archivo"
+                      className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-black/60 hover:bg-black/80 text-white transition-colors"
+                    >
+                      ⬇️ Descargar
+                    </a>
+                  )}
                   {activeAsset.kind === 'video' ? (
                     <video src={activeAsset.url} poster={activeAsset.posterUrl || undefined} controls className="max-h-[420px] w-auto max-w-full" />
                   ) : activeAsset.kind === 'link' ? (

@@ -21,6 +21,7 @@ jest.mock('../../src/services/objectStorage.service', () => ({
   deleteObject:  jest.fn(),
   deleteObjects: jest.fn(),
   publicUrl:     jest.fn(key => `https://cdn.example.com/${key}`),
+  presignGet:    jest.fn(),
 }))
 
 jest.mock('../../src/lib/platformSettings', () => ({
@@ -529,5 +530,43 @@ describe('GET /api/public/content-asset/:publicId (sin auth)', () => {
     prisma.contentAsset.findUnique.mockResolvedValue({ imageData: null, mimeType: 'image/png', objectKey: 'k', posterKey: null, status: 'pending' })
     res = await request(app).get('/api/public/content-asset/abc-123')
     expect(res.status).toBe(404)
+  })
+
+  describe('?download=1', () => {
+    it('con objectKey, redirige a una URL firmada con Content-Disposition attachment', async () => {
+      prisma.contentAsset.findUnique.mockResolvedValue({
+        imageData: null, mimeType: 'image/png', objectKey: 'content/1/a.png', posterKey: null, status: 'ready', fileName: 'foto final.png',
+      })
+      objectStorage.presignGet.mockResolvedValue('https://r2.example.com/signed-download-url')
+
+      const res = await request(app).get('/api/public/content-asset/abc-123?download=1')
+
+      expect(res.status).toBe(302)
+      expect(res.headers.location).toBe('https://r2.example.com/signed-download-url')
+      expect(objectStorage.presignGet).toHaveBeenCalledWith('content/1/a.png', expect.objectContaining({ filename: 'foto final.png' }))
+    })
+
+    it('sin fileName, usa un nombre por defecto según el mimeType', async () => {
+      prisma.contentAsset.findUnique.mockResolvedValue({
+        imageData: null, mimeType: 'video/mp4', objectKey: 'content/1/v.mp4', posterKey: null, status: 'ready', fileName: null,
+      })
+      objectStorage.presignGet.mockResolvedValue('https://r2.example.com/signed-download-url')
+
+      await request(app).get('/api/public/content-asset/abc-123?download=1')
+
+      expect(objectStorage.presignGet).toHaveBeenCalledWith('content/1/v.mp4', expect.objectContaining({ filename: 'archivo.mp4' }))
+    })
+
+    it('sin objectKey (legacy), setea el header Content-Disposition directo sobre los bytes', async () => {
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+      prisma.contentAsset.findUnique.mockResolvedValue({
+        imageData: bytes, mimeType: 'image/png', objectKey: null, posterKey: null, status: 'ready', fileName: 'legacy.png',
+      })
+
+      const res = await request(app).get('/api/public/content-asset/abc-123?download=1')
+
+      expect(res.status).toBe(200)
+      expect(res.headers['content-disposition']).toBe('attachment; filename="legacy.png"')
+    })
   })
 })

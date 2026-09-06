@@ -64,7 +64,7 @@ function mockAccessGranted() {
 
 const dbPiece = (over = {}) => ({
   id: PIECE_ID, projectId: PROJECT_ID, workspaceId: WORKSPACE_ID,
-  title: 'Post de lanzamiento', status: 'aprobacion', type: 'post', networks: '["instagram"]',
+  title: 'Post de lanzamiento', status: 'aprobacion', types: '["post"]', networks: '["instagram"]',
   copy: 'Copy final', hashtags: '#launch',
   designDetails: '<p>usar el logo isotipo, fondo violeta de marca</p>', // interno, NUNCA debe llegar al portal
   internalNotes: 'ojo con el cliente, es picky', // NUNCA debe llegar al portal

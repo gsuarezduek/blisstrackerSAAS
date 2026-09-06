@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { statusDotClass } from './contentCatalog'
+import { monthLabel } from './dateHelpers'
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const MAX_CHIPS_PER_DAY = 4
@@ -13,11 +14,6 @@ function shiftMonth(month, delta) {
 function currentMonthStr() {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
-function monthLabel(month) {
-  const [y, m] = month.split('-').map(Number)
-  return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 }
 
 // Celdas del grid: null = relleno fuera de mes (Lun-primero), string = "YYYY-MM-DD".

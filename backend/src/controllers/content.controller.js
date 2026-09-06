@@ -8,6 +8,7 @@ const {
   isValidStatus,
   isValidType,
   sanitizeNetworks,
+  sanitizeTypes,
   statusMeta,
   CONTENT_NETWORKS,
 } = require('../lib/contentCatalog')
@@ -91,9 +92,13 @@ const PIECE_INCLUDE = {
 // URL pública del asset. SIEMPRE apunta a nuestro endpoint, nunca al dominio del
 // bucket: así las URLs no quedan atadas a R2_PUBLIC_BASE (mismo criterio que
 // socialImageCache.service.js).
-function assetUrl(publicId, poster = false) {
+function assetUrl(publicId, { poster = false, download = false } = {}) {
   const base = (process.env.BACKEND_URL || '').replace(/\/$/, '')
-  return `${base}/api/public/content-asset/${publicId}${poster ? '?poster=1' : ''}`
+  const params = new URLSearchParams()
+  if (poster) params.set('poster', '1')
+  if (download) params.set('download', '1')
+  const qs = params.toString()
+  return `${base}/api/public/content-asset/${publicId}${qs ? `?${qs}` : ''}`
 }
 
 function formatAsset(a) {
@@ -102,7 +107,11 @@ function formatAsset(a) {
     kind:        a.kind,
     mimeType:    a.mimeType,
     url:         a.kind === 'link' ? a.sourceUrl : assetUrl(a.publicId),
-    posterUrl:   a.posterKey ? assetUrl(a.publicId, true) : null,
+    // Fuerza `Content-Disposition: attachment` en el servidor — no depende del
+    // atributo `download` del navegador, que no se respeta tras un redirect
+    // cross-origin (el caso normal cuando el asset vive en R2). Ver serveContentAsset.
+    downloadUrl: a.kind === 'link' ? null : assetUrl(a.publicId, { download: true }),
+    posterUrl:   a.posterKey ? assetUrl(a.publicId, { poster: true }) : null,
     width:       a.width,
     height:      a.height,
     durationSec: a.durationSec,
@@ -122,7 +131,7 @@ function formatPiece(p) {
     title:         p.title,
     status:        p.status,
     statusLabel:   statusMeta(p.status)?.label ?? p.status,
-    type:          p.type,
+    types:         safeParseArr(p.types),
     networks:      safeParseArr(p.networks),
     designDetails: p.designDetails,
     copy:          p.copy,
@@ -204,9 +213,10 @@ function buildPieceData(body, timezone, { isCreate = false } = {}) {
     data.title = title.slice(0, MAX_TITLE)
   }
 
-  if (body.type !== undefined) {
-    if (!isValidType(body.type)) return { error: 'Tipo de pieza inválido' }
-    data.type = body.type
+  if (body.types !== undefined) {
+    if (!Array.isArray(body.types)) return { error: 'types debe ser un array' }
+    if (body.types.some(t => !isValidType(t))) return { error: 'Tipo de pieza inválido' }
+    data.types = JSON.stringify(sanitizeTypes(body.types))
   }
 
   if (body.networks !== undefined) {
@@ -277,11 +287,18 @@ async function listPieces(req, res, next) {
     if (!ctx) return
     const { workspaceId, projectId } = ctx
 
-    const { from, to, status, network, ownerId, q } = req.query
+    const { from, to, status, network, ownerId, q, noDate } = req.query
     const where = { projectId, workspaceId }
 
-    if (from && DATE_RE.test(from)) where.scheduledDate = { ...where.scheduledDate, gte: from }
-    if (to   && DATE_RE.test(to))   where.scheduledDate = { ...where.scheduledDate, lte: to }
+    // `noDate=1` filtra las piezas sin fecha asignada (ej. todavía en Idea) — se
+    // usa desde el filtro "Sin fecha" del mes en la Tabla/Kanban, mutuamente
+    // excluyente con from/to (elegir un mes concreto no tiene sentido a la vez).
+    if (noDate === '1') {
+      where.scheduledDate = null
+    } else {
+      if (from && DATE_RE.test(from)) where.scheduledDate = { ...where.scheduledDate, gte: from }
+      if (to   && DATE_RE.test(to))   where.scheduledDate = { ...where.scheduledDate, lte: to }
+    }
     if (status) {
       const list = String(status).split(',').filter(isValidStatus)
       if (list.length) where.status = { in: list }
@@ -528,6 +545,34 @@ async function getHistory(req, res, next) {
 }
 
 /**
+ * GET /api/contenido/projects/:id/pieces/months
+ * Meses (YYYY-MM, sobre scheduledDate) que tienen al menos una pieza, más si hay
+ * alguna sin fecha asignada — alimenta el selector de mes de ContentFilters.
+ * Deliberadamente independiente de `listPieces`: si se derivara del listado ya
+ * filtrado por mes, elegir un mes dejaría al selector con una sola opción.
+ */
+async function listMonths(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res)
+    if (!ctx) return
+
+    const rows = await prisma.contentPiece.findMany({
+      where:  { projectId: ctx.projectId, workspaceId: ctx.workspaceId },
+      select: { scheduledDate: true },
+    })
+
+    const months = new Set()
+    let hasUnscheduled = false
+    for (const r of rows) {
+      if (r.scheduledDate) months.add(r.scheduledDate.slice(0, 7))
+      else hasUnscheduled = true
+    }
+
+    res.json({ months: [...months].sort(), hasUnscheduled })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/contenido/projects/:id/summary
  * Conteo por estado + cuántas esperan al cliente (para badges de nav).
  */
@@ -704,6 +749,7 @@ async function requestApproval(req, res, next) {
 
 module.exports = {
   listPieces,
+  listMonths,
   createPiece,
   getPiece,
   updatePiece,

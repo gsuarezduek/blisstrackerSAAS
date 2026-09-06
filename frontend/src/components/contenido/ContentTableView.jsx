@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import ConfirmModal from '../ConfirmModal'
 import ContentStatusBadge from './ContentStatusBadge'
 import ContentNetworkChips from './ContentNetworkChips'
-import { CONTENT_STATUSES, CONTENT_TYPES, statusMeta } from './contentCatalog'
+import ContentTypeChips from './ContentTypeChips'
+import { CONTENT_STATUSES, statusMeta, typeLabel } from './contentCatalog'
 import { toLocalInput, formatDateTime as formatDate } from './dateHelpers'
 
 const CELL   = 'px-3 py-2 text-sm align-middle'
@@ -125,7 +126,8 @@ export default function ContentTableView({ pieces, members, loading, canEdit, on
         case 'scheduledAt': return p.scheduledAt ? new Date(p.scheduledAt).getTime() : null
         case 'title':       return p.title?.toLowerCase() ?? ''
         case 'status':      return statusMeta(p.status).order ?? 0
-        case 'type':        return p.type ?? ''
+        // Ordena por las etiquetas de los tipos (ya no hay un único valor).
+        case 'type':        return (p.types || []).map(typeLabel).join(', ')
         case 'owner':       return p.owner?.name?.toLowerCase() ?? ''
         default:            return 0
       }
@@ -229,19 +231,9 @@ export default function ContentTableView({ pieces, members, loading, canEdit, on
                   )}
                 </td>
 
-                {/* Tipo */}
+                {/* Tipo — igual que Redes, se edita desde el detalle de la pieza (multi-selección) */}
                 <td className={`${CELL} w-32`}>
-                  {canEdit ? (
-                    <select
-                      value={p.type}
-                      onChange={e => onUpdate(p.id, { type: e.target.value })}
-                      className={`${INLINE} w-full`}
-                    >
-                      {CONTENT_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-                    </select>
-                  ) : (
-                    <span className="text-sm text-gray-600 dark:text-gray-400">{p.type}</span>
-                  )}
+                  <ContentTypeChips types={p.types} />
                 </td>
 
                 {/* Redes */}

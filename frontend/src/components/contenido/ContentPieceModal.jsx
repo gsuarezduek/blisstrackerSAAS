@@ -132,6 +132,13 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
     onUpdate(piece.id, { networks: next })
   }
 
+  function toggleType(key) {
+    const next = piece.types.includes(key)
+      ? piece.types.filter(t => t !== key)
+      : [...piece.types, key]
+    onUpdate(piece.id, { types: next })
+  }
+
   async function handleConfirmDelete() {
     setDeleting(true)
     try {
@@ -226,7 +233,17 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
               {/* Visor + galería + uploader */}
               <div className="sm:col-span-2 space-y-2">
                 {activeAsset ? (
-                  <div className="aspect-video rounded-xl bg-black/90 overflow-hidden flex items-center justify-center">
+                  <div className="relative aspect-video rounded-xl bg-black/90 overflow-hidden flex items-center justify-center">
+                    {activeAsset.kind !== 'link' && (
+                      <a
+                        href={activeAsset.downloadUrl}
+                        download={activeAsset.fileName || undefined}
+                        title="Descargar archivo"
+                        className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-black/60 hover:bg-black/80 text-white transition-colors"
+                      >
+                        ⬇️ Descargar
+                      </a>
+                    )}
                     {activeAsset.kind === 'video' ? (
                       <video
                         key={activeAsset.id}
@@ -294,18 +311,6 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
               </div>
 
               <div>
-                <label className={LABEL}>Tipo</label>
-                <select
-                  value={piece.type}
-                  onChange={e => onUpdate(piece.id, { type: e.target.value })}
-                  disabled={!canEdit}
-                  className={INPUT}
-                >
-                  {CONTENT_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-                </select>
-              </div>
-
-              <div>
                 <label className={LABEL}>Fecha de publicación</label>
                 <input
                   type="datetime-local"
@@ -344,6 +349,26 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
                   </span>
                 </div>
               )}
+
+              <div className="sm:col-span-2">
+                <label className={LABEL}>Tipo <span className="italic text-gray-400">(podés elegir más de uno, ej. Historia + Post)</span></label>
+                <div className="flex flex-wrap gap-1.5">
+                  {CONTENT_TYPES.map(t => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      disabled={!canEdit}
+                      onClick={() => toggleType(t.key)}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-colors disabled:cursor-not-allowed ${
+                        piece.types.includes(t.key)
+                          ? 'bg-primary-50 dark:bg-primary-900/30 border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-400'
+                          : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div className="sm:col-span-2">
                 <label className={LABEL}>Redes</label>

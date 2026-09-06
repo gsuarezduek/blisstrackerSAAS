@@ -18,3 +18,10 @@ export function formatDateTime(iso) {
   if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
+
+// "YYYY-MM" → "septiembre 2026". Compartido por el Calendario y el filtro de
+// mes de la Tabla/Kanban (ContentFilters).
+export function monthLabel(month) {
+  const [y, m] = month.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+}

@@ -3177,7 +3177,7 @@ model ContentPiece {
   project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title         String
   status        String    @default("idea") // clave de CONTENT_STATUSES
-  type          String    @default("post") // clave de CONTENT_TYPES
+  types         String    @default("[]") // JSON array de claves de CONTENT_TYPES (multi-selección, mismo patrón que networks)
   networks      String    @default("[]") // JSON array de claves de CONTENT_NETWORKS (una pieza puede salir a varias)
   // Brief de diseño (WYSIWYG, HTML) — interno, NUNCA viaja al portal del cliente (mismo
   // criterio que internalNotes). Hasta la migración `add_content_piece_design_details`

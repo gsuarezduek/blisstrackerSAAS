@@ -93,6 +93,12 @@ function sanitizeNetworks(input) {
   return [...new Set(input.filter(isValidNetwork))]
 }
 
+/** Filtra un array de tipos dejando solo los válidos, sin duplicados (mismo criterio que sanitizeNetworks). */
+function sanitizeTypes(input) {
+  if (!Array.isArray(input)) return []
+  return [...new Set(input.filter(isValidType))]
+}
+
 module.exports = {
   CONTENT_STATUSES,
   CONTENT_TYPES,
@@ -114,4 +120,5 @@ module.exports = {
   awaitsClient,
   nextOnTaskDone,
   sanitizeNetworks,
+  sanitizeTypes,
 }

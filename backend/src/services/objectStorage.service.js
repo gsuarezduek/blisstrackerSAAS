@@ -172,6 +172,23 @@ async function presignPut(key, mimeType, { expiresIn = 600 } = {}) {
 }
 
 /**
+ * URL firmada de GET que fuerza descarga: `ResponseContentDisposition` le pide a
+ * R2 que la ponga en la respuesta como header propio. A diferencia de la URL
+ * pública (`publicUrl`), esto SÍ dispara un "Guardar archivo" en cualquier
+ * navegador/dispositivo — el atributo `download` de un <a> no alcanza cuando la
+ * respuesta final viene de un dominio distinto al de la página (nuestro caso:
+ * la página pega a nuestro backend, que redirige al bucket).
+ */
+async function presignGet(key, { expiresIn = 300, filename } = {}) {
+  const cmd = new GetObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: key,
+    ...(filename ? { ResponseContentDisposition: `attachment; filename="${filename.replace(/"/g, "'")}"` } : {}),
+  })
+  return getSignedUrl(getClient(), cmd, { expiresIn })
+}
+
+/**
  * Metadata real del objeto ya subido (tamaño y content-type que R2 registró).
  * Devuelve null si el objeto no existe (upload nunca confirmado/abandonado).
  */
@@ -198,5 +215,5 @@ async function getObjectHead(key, bytes = 32) {
 
 module.exports = {
   isConfigured, putObject, deleteObjects, deleteObject, publicUrl, isPublicUrl,
-  buildKey, presignPut, headObject, getObjectHead,
+  buildKey, presignPut, presignGet, headObject, getObjectHead,
 }
