@@ -2,16 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Proyectos
+## Proyecto
 
-| | Proyecto individual | Proyecto SaaS |
-|---|---|---|
-| **URL** | https://team.blissmkt.ar | https://blisstracker.app |
-| **GitHub** | https://github.com/gsuarezduek/blisstracker | https://github.com/gsuarezduek/blisstrackerSAAS |
-| **Vercel** | Proyecto separado | Proyecto separado (Pro, wildcard `*.blisstracker.app`) |
-| **Railway** | Proyecto separado | Proyecto separado (DB + backend nuevos) |
+| | Proyecto SaaS |
+|---|---|
+| **URL** | https://blisstracker.app (subdominios `slug.blisstracker.app`) |
+| **GitHub** | https://github.com/gsuarezduek/blisstrackerSAAS |
+| **Vercel** | Pro, wildcard `*.blisstracker.app` |
+| **Railway** | DB PostgreSQL + backend |
 
-Este repositorio (`team-tracker`) corresponde al **Proyecto SaaS** (`blisstrackerSAAS`).
+Este repositorio (`team-tracker`) corresponde al **Proyecto SaaS** (`blisstrackerSAAS`) — es el único proyecto vigente. Hubo un proyecto individual anterior (`team.blissmkt.ar`, repo `gsuarezduek/blisstracker`) del cual el SaaS nació como reescritura multi-tenant, pero fue discontinuado y ya no existe.
 
 ## Development commands
 
