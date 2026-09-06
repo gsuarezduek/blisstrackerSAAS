@@ -54,21 +54,28 @@ function daysBetweenInclusive(fromStr, toStr) {
 }
 
 // Período de comparación de productividad, en la timezone dada.
-//   'current'  → mes en curso (1 → hoy) vs los MISMOS días del mes anterior (ventanas de igual largo,
-//                para que los números absolutos sean comparables y no parezca que "trabajó menos" por
-//                estar el mes a medias). Ej: hoy 13/jun → 1–13/jun vs 1–13/may.
+//   'current'  → mes en curso (1 → AYER) vs los MISMOS días del mes anterior (ventanas de igual
+//                largo, para que los números absolutos sean comparables y no parezca que "trabajó
+//                menos" por estar el mes a medias). Ej: hoy 13/jun → 1–12/jun vs 1–12/may.
 //   'previous' → mes anterior completo vs ante-anterior completo.
 //   'custom'   → rango libre `{ from, to }` (YYYY-MM-DD, validado por el caller), comparado
 //                contra el período inmediatamente anterior de igual duración. Cubre tanto "un
 //                mes específico de hace tiempo" como rangos de varios meses (trimestre, etc.).
+// El día de HOY nunca se incluye en 'current' ni en 'custom' (se recorta a ayer): mientras el día
+// está en curso, "horas disponibles" ya contaría la jornada completa pero "horas registradas" solo
+// tareas ya completadas, dando una comparación engañosa que se corrige sola de un día para el otro
+// en vez de tener que ir subiendo en tiempo real. Único caso límite: si no hay ningún día cerrado
+// en el rango (el 1° del mes, o un rango de un solo día que es hoy), se acepta ese día tal cual.
 // Devuelve fechas YYYY-MM-DD: { mode, curStart, curEnd, prevStart, prevEnd, lengthMatched }.
 // El rango de consulta es [prevStart, curEnd]; el bucketing usa las dos ventanas explícitas.
 function getProductivityPeriod(mode, tz, opts = {}) {
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
+  const yesterday = addDays(todayStr, -1)
   const curMonth = todayStr.slice(0, 7) // YYYY-MM
 
   if (mode === 'custom') {
-    const { from, to } = opts
+    const { from } = opts
+    const to = opts.to > yesterday ? (yesterday < from ? from : yesterday) : opts.to
     const days = daysBetweenInclusive(from, to)
     const prevEnd   = addDays(from, -1)
     const prevStart = addDays(prevEnd, -(days - 1))
@@ -86,12 +93,14 @@ function getProductivityPeriod(mode, tz, opts = {}) {
   const prevMonth = prevMonthStr(curMonth)
   const cur  = monthBounds(curMonth)
   const prev = monthBounds(prevMonth)
+  // curEnd = ayer, salvo el 1° del mes (no hay "ayer" dentro del mismo mes → se acepta ese día).
+  const curEnd = yesterday >= cur.startDate ? yesterday : cur.startDate
   // Ventana previa del mismo largo: 1° → mismo día del mes anterior (clamp al último día del mes previo).
-  const dayOfMonth  = Number(todayStr.slice(8, 10))
+  const dayOfMonth  = Number(curEnd.slice(8, 10))
   const prevLastDay = Number(prev.endDate.slice(8, 10))
   const clampedDay  = Math.min(dayOfMonth, prevLastDay)
   const prevEnd     = `${prevMonth}-${String(clampedDay).padStart(2, '0')}`
-  return { mode: 'current', curStart: cur.startDate, curEnd: todayStr, prevStart: prev.startDate, prevEnd, lengthMatched: true }
+  return { mode: 'current', curStart: cur.startDate, curEnd, prevStart: prev.startDate, prevEnd, lengthMatched: true }
 }
 
 // Fecha (YYYY-MM-DD) de hace n días, en la timezone dada.
