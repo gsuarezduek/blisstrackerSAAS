@@ -6,25 +6,83 @@ import { linkify } from '../../utils/linkify'
 import ProductivityPeriodLabel from './ProductivityPeriodLabel'
 import RoleBadge from '../RoleBadge'
 import UserLink from '../UserLink'
+import DateRangeFilter from '../DateRangeFilter'
 
-// Selector de modo de período (aplica a ambas vistas).
-export function ModeToggle({ mode, onChange }) {
-  const opts = [['current', 'Mes en curso'], ['closed', 'Mes cerrado']]
+// Arma los query params de período para cualquier request de Productividad, a partir del
+// modo elegido en PeriodSelector. `customRange` solo importa cuando mode === 'custom'.
+export function periodParams(mode, customRange) {
+  return mode === 'custom' && customRange
+    ? { mode: 'custom', from: customRange.from, to: customRange.to }
+    : { mode }
+}
+
+// Selector de período (aplica a ambas vistas): mes actual / mes anterior / rango
+// personalizado (un mes específico del pasado, un trimestre, o cualquier rango libre).
+// onChange(mode, customRange) — customRange es { from, to } o null.
+export function PeriodSelector({ mode, customRange, onChange, loading }) {
+  const [showCustom, setShowCustom] = useState(mode === 'custom')
+  const [from, setFrom] = useState(customRange?.from || '')
+  const [to, setTo] = useState(customRange?.to || '')
+
+  const opts = [['current', 'Mes actual'], ['previous', 'Mes anterior']]
+
+  function selectFixed(key) {
+    setShowCustom(false)
+    onChange(key, null)
+  }
+
+  function toggleCustom() {
+    const next = !showCustom
+    setShowCustom(next)
+    // Reabrir con un rango ya elegido antes lo reaplica sin forzar a tocar "Aplicar" de nuevo.
+    if (next && from && to) onChange('custom', { from, to })
+  }
+
+  function applyCustom(f, t) {
+    setFrom(f); setTo(t)
+    onChange('custom', { from: f, to: t })
+  }
+
   return (
-    <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50 dark:bg-gray-800">
-      {opts.map(([key, label]) => (
+    <div>
+      <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50 dark:bg-gray-800">
+        {opts.map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => selectFixed(key)}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+              mode === key
+                ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
         <button
-          key={key}
-          onClick={() => onChange(key)}
+          onClick={toggleCustom}
           className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-            mode === key
+            mode === 'custom'
               ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
           }`}
         >
-          {label}
+          Personalizado
         </button>
-      ))}
+      </div>
+      {showCustom && (
+        <div className="mt-2">
+          <DateRangeFilter
+            from={from}
+            to={to}
+            onFromChange={setFrom}
+            onToChange={setTo}
+            onSearch={applyCustom}
+            loading={loading}
+            searchLabel="Aplicar"
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -337,7 +395,7 @@ function HoursHistorySection({ userId, initialHistory }) {
 
 // Barras horizontales de tiempo por proyecto. Cada proyecto se expande para ver el
 // drill-down de tareas completadas (lazy: trae el breakdown del período al primer click).
-function ProjectBars({ porProyecto, userId, mode }) {
+function ProjectBars({ porProyecto, userId, mode, customRange }) {
   const [expandedPid, setExpandedPid] = useState(null)
   const [breakdown, setBreakdown] = useState(null) // { [projectId]: taskList }
   const [loading, setLoading] = useState(false)
@@ -348,7 +406,7 @@ function ProjectBars({ porProyecto, userId, mode }) {
     if (!breakdown) {
       setLoading(true)
       try {
-        const { data } = await api.get(`/admin/productivity/users/${userId}/breakdown`, { params: { mode } })
+        const { data } = await api.get(`/admin/productivity/users/${userId}/breakdown`, { params: periodParams(mode, customRange) })
         const map = {}
         for (const p of data.byProject || []) map[p.project.id] = p.taskList
         setBreakdown(map)
@@ -444,7 +502,7 @@ function TeamCompare({ stats, benchmark }) {
 // asistencia, comparación con el equipo y análisis IA. Exportado para reuso fuera de la
 // tabla (ver el panel de administración del perfil de usuario, que muestra esto para una
 // sola persona sin la tabla completa alrededor).
-export function PersonProductivityDetail({ m, benchmark, mode, onRefresh, refreshing }) {
+export function PersonProductivityDetail({ m, benchmark, mode, customRange, onRefresh, refreshing }) {
   const s = m.stats
   return (
     <div className="space-y-6">
@@ -460,7 +518,7 @@ export function PersonProductivityDetail({ m, benchmark, mode, onRefresh, refres
         {/* Col 1: Tiempo por proyecto (expandible a tareas) */}
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Tiempo por proyecto</p>
-          <ProjectBars porProyecto={s.porProyecto} userId={m.id} mode={mode} />
+          <ProjectBars porProyecto={s.porProyecto} userId={m.id} mode={mode} customRange={customRange} />
         </div>
 
         {/* Col 2: Horas y Asistencia */}
@@ -519,7 +577,7 @@ export function PersonProductivityDetail({ m, benchmark, mode, onRefresh, refres
   )
 }
 
-function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mode }) {
+function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mode, customRange }) {
   const st = STATUS[m.status] || STATUS.ok
   const s = m.stats
   return (
@@ -560,7 +618,7 @@ function PersonRow({ m, benchmark, expanded, onToggle, onRefresh, refreshing, mo
       {expanded && (
         <tr className="bg-gray-50 dark:bg-gray-800/60">
           <td colSpan={7} className="px-4 py-5">
-            <PersonProductivityDetail m={m} benchmark={benchmark} mode={mode} onRefresh={onRefresh} refreshing={refreshing} />
+            <PersonProductivityDetail m={m} benchmark={benchmark} mode={mode} customRange={customRange} onRefresh={onRefresh} refreshing={refreshing} />
           </td>
         </tr>
       )}
@@ -688,7 +746,7 @@ function SummaryBar({ members, filter, onFilter }) {
   )
 }
 
-function ByPersonView({ data, loading, setData, mode }) {
+function ByPersonView({ data, loading, setData, mode, customRange }) {
   const [expandedId, setExpandedId] = useState(null)
   const [refreshing, setRefreshing] = useState({})
   const [sortBy, setSortBy]   = useState('status')
@@ -795,6 +853,7 @@ function ByPersonView({ data, loading, setData, mode }) {
                 onRefresh={handleRefresh}
                 refreshing={!!refreshing[m.id]}
                 mode={mode}
+                customRange={customRange}
               />
             ))}
             {sorted.length === 0 && (
@@ -825,18 +884,26 @@ function ByPersonView({ data, loading, setData, mode }) {
 
 export default function ProductivityTab() {
   const [mode, setMode] = useState('current')
+  const [customRange, setCustomRange] = useState(null)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  function handlePeriodChange(newMode, range) {
+    setMode(newMode)
+    setCustomRange(range)
+  }
+
   const fetchData = useCallback(async () => {
+    // En modo personalizado, esperar a que el usuario elija y aplique un rango.
+    if (mode === 'custom' && !customRange) return
     setLoading(true)
     try {
-      const { data } = await api.get('/admin/productivity', { params: { mode } })
+      const { data } = await api.get('/admin/productivity', { params: periodParams(mode, customRange) })
       setData(data)
     } finally {
       setLoading(false)
     }
-  }, [mode])
+  }, [mode, customRange])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -847,10 +914,10 @@ export default function ProductivityTab() {
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Productividad del equipo</h2>
           <TeamHoursHeadline teamHours={data?.teamHours} loading={loading} />
         </div>
-        <ModeToggle mode={mode} onChange={setMode} />
+        <PeriodSelector mode={mode} customRange={customRange} onChange={handlePeriodChange} loading={loading} />
       </div>
 
-      <ByPersonView data={data} loading={loading} setData={setData} mode={mode} />
+      <ByPersonView data={data} loading={loading} setData={setData} mode={mode} customRange={customRange} />
     </div>
   )
 }

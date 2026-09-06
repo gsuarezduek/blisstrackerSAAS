@@ -48,23 +48,39 @@ function businessDaysBetween(startStr, endStr) {
   return count
 }
 
-// Período de comparación de productividad por mes calendario, en la timezone dada.
-//   'current' → mes en curso (1 → hoy) vs los MISMOS días del mes anterior (ventanas de igual largo,
-//               para que los números absolutos sean comparables y no parezca que "trabajó menos" por
-//               estar el mes a medias). Ej: hoy 13/jun → 1–13/jun vs 1–13/may.
-//   'closed'  → mes anterior completo vs ante-anterior completo.
+// Cantidad de días entre dos fechas YYYY-MM-DD, ambas inclusive.
+function daysBetweenInclusive(fromStr, toStr) {
+  return Math.round((new Date(toStr + 'T00:00:00Z') - new Date(fromStr + 'T00:00:00Z')) / 86400000) + 1
+}
+
+// Período de comparación de productividad, en la timezone dada.
+//   'current'  → mes en curso (1 → hoy) vs los MISMOS días del mes anterior (ventanas de igual largo,
+//                para que los números absolutos sean comparables y no parezca que "trabajó menos" por
+//                estar el mes a medias). Ej: hoy 13/jun → 1–13/jun vs 1–13/may.
+//   'previous' → mes anterior completo vs ante-anterior completo.
+//   'custom'   → rango libre `{ from, to }` (YYYY-MM-DD, validado por el caller), comparado
+//                contra el período inmediatamente anterior de igual duración. Cubre tanto "un
+//                mes específico de hace tiempo" como rangos de varios meses (trimestre, etc.).
 // Devuelve fechas YYYY-MM-DD: { mode, curStart, curEnd, prevStart, prevEnd, lengthMatched }.
 // El rango de consulta es [prevStart, curEnd]; el bucketing usa las dos ventanas explícitas.
-function getProductivityPeriod(mode, tz) {
+function getProductivityPeriod(mode, tz, opts = {}) {
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const curMonth = todayStr.slice(0, 7) // YYYY-MM
 
-  if (mode === 'closed') {
+  if (mode === 'custom') {
+    const { from, to } = opts
+    const days = daysBetweenInclusive(from, to)
+    const prevEnd   = addDays(from, -1)
+    const prevStart = addDays(prevEnd, -(days - 1))
+    return { mode: 'custom', curStart: from, curEnd: to, prevStart, prevEnd, lengthMatched: true }
+  }
+
+  if (mode === 'previous') {
     const analyzed = prevMonthStr(curMonth)        // mes "actual" del análisis = mes anterior completo
     const prior    = prevMonthStr(analyzed)
     const cur  = monthBounds(analyzed)
     const prev = monthBounds(prior)
-    return { mode: 'closed', curStart: cur.startDate, curEnd: cur.endDate, prevStart: prev.startDate, prevEnd: prev.endDate, lengthMatched: false }
+    return { mode: 'previous', curStart: cur.startDate, curEnd: cur.endDate, prevStart: prev.startDate, prevEnd: prev.endDate, lengthMatched: false }
   }
 
   const prevMonth = prevMonthStr(curMonth)
@@ -127,5 +143,5 @@ function fmtMins(m) {
 
 module.exports = {
   tzOffsetStr, getNWeeksAgoMonday, getProductivityPeriod, daysAgo, taskMins, fmtMins,
-  addDays, businessDaysBetween, buildCompletedAtWhere, monthStringInTz,
+  addDays, businessDaysBetween, buildCompletedAtWhere, monthStringInTz, daysBetweenInclusive,
 }

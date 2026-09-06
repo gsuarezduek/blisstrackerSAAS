@@ -37,6 +37,13 @@ function createTtlCache({ ttlMs, max = 500 } = {}) {
   function del(key) { store.delete(key) }
   function clear() { store.clear() }
 
+  // Borra todas las claves que empiecen con `prefix` — útil cuando una sola clave lógica
+  // (ej. workspaceId) se expande en varias entradas dinámicas (un rango de fechas distinto
+  // por consulta) que no se pueden enumerar de antemano.
+  function delPrefix(prefix) {
+    for (const key of store.keys()) if (key.startsWith(prefix)) store.delete(key)
+  }
+
   /**
    * Read-through: devuelve el valor cacheado o ejecuta `fn`, cachea SÓLO si resuelve OK
    * (los errores no se cachean) y lo devuelve.
@@ -49,7 +56,7 @@ function createTtlCache({ ttlMs, max = 500 } = {}) {
     return value
   }
 
-  return { get, set, del, clear, through }
+  return { get, set, del, delPrefix, clear, through }
 }
 
 module.exports = { createTtlCache }

@@ -7,7 +7,7 @@ import { fieldValue, displayValue } from '../legajo/legajoUtils'
 import { Field, VacationEditModal, LoginDaysModal } from '../../pages/rrhh/legajos'
 import { REQUEST_STATUS, LEAVE_TYPE_LABELS } from '../../pages/rrhh/vacaciones'
 import { leaveDayCount, leaveRangeLabel } from '../../pages/rrhh/shared'
-import { ModeToggle, PersonProductivityDetail } from '../admin/ProductivityTab'
+import { PeriodSelector, periodParams, PersonProductivityDetail } from '../admin/ProductivityTab'
 
 // Panel de administración del perfil de usuario: unifica en un solo lugar la info que hoy
 // vive dispersa en /admin/productivity, /admin/rrhh (Ingresos/Legajos) y /admin/eos → Personas.
@@ -89,17 +89,24 @@ export default function AdminUserPanel({ userId, userName }) {
 
 function ProductividadSection({ userId }) {
   const [mode, setMode] = useState('current')
+  const [customRange, setCustomRange] = useState(null)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
+  function handlePeriodChange(newMode, range) {
+    setMode(newMode)
+    setCustomRange(range)
+  }
+
   const load = useCallback(() => {
+    if (mode === 'custom' && !customRange) return
     setLoading(true)
-    api.get(`/admin/productivity/users/${userId}/overview`, { params: { mode } })
+    api.get(`/admin/productivity/users/${userId}/overview`, { params: periodParams(mode, customRange) })
       .then(r => setData(r.data))
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [userId, mode])
+  }, [userId, mode, customRange])
 
   useEffect(() => { load() }, [load])
 
@@ -117,12 +124,12 @@ function ProductividadSection({ userId }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <ModeToggle mode={mode} onChange={setMode} />
+        <PeriodSelector mode={mode} customRange={customRange} onChange={handlePeriodChange} loading={loading} />
         {!data.member.stats.hasData && (
           <span className="text-xs text-gray-400 dark:text-gray-500">Sin actividad en este período.</span>
         )}
       </div>
-      <PersonProductivityDetail m={data.member} benchmark={data.benchmark} mode={mode} onRefresh={handleRefresh} refreshing={refreshing} />
+      <PersonProductivityDetail m={data.member} benchmark={data.benchmark} mode={mode} customRange={customRange} onRefresh={handleRefresh} refreshing={refreshing} />
     </div>
   )
 }

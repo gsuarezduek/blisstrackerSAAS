@@ -2,18 +2,45 @@ const prisma    = require('../lib/prisma')
 const { generateMemoryForUser } = require('../services/insightMemory.service')
 const { getWorkspaceStats, getAttendanceStats, getHoursHistory, computeBenchmark, memberStatus, median } = require('../services/productivityStats.service')
 const { sendTestDigest } = require('../services/productivityDigest.service')
-const { getProductivityPeriod, businessDaysBetween, tzOffsetStr, taskMins } = require('../lib/timeMetrics')
+const { getProductivityPeriod, businessDaysBetween, tzOffsetStr, taskMins, daysBetweenInclusive } = require('../lib/timeMetrics')
 const { createTtlCache } = require('../lib/ttlCache')
 
 // La tabla de productividad hace bucketing pesado de logins + tareas + asistencia sobre
 // todo el equipo en cada request. TTL 60s: para una vista analítica de admin el desfase
 // es aceptable, y un "Actualizar" manual invalida la entrada (ver refreshProductivity).
-// Clave por workspace+modo (current|closed).
+// Clave por workspace+modo (current|previous|custom:from:to).
 const prodCache = createTtlCache({ ttlMs: 60 * 1000, max: 200 })
 
-// Modo de período: 'current' (mes en curso vs anterior, default) o 'closed' (mes anterior vs ante-anterior).
-function periodMode(req) {
-  return req.query.mode === 'closed' ? 'closed' : 'current'
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const MAX_CUSTOM_RANGE_DAYS = 366
+
+// Lee y valida los parámetros de período de la query string.
+// mode: 'current' (mes en curso, default) | 'previous' (mes anterior completo) |
+// 'custom' (rango libre `from`/`to`, YYYY-MM-DD — cubre un mes específico del pasado o
+// varios meses como un trimestre; tope de MAX_CUSTOM_RANGE_DAYS para no traer volúmenes
+// de datos desmedidos). Devuelve { mode, from?, to? }; lanza 400 si custom viene inválido.
+function resolvePeriodParams(req) {
+  if (req.query.mode === 'custom') {
+    const { from, to } = req.query
+    if (!DATE_RE.test(from || '') || !DATE_RE.test(to || '') || from > to) {
+      const err = new Error('Rango de fechas inválido')
+      err.status = 400
+      throw err
+    }
+    if (daysBetweenInclusive(from, to) > MAX_CUSTOM_RANGE_DAYS) {
+      const err = new Error(`El rango no puede superar ${MAX_CUSTOM_RANGE_DAYS} días`)
+      err.status = 400
+      throw err
+    }
+    return { mode: 'custom', from, to }
+  }
+  return { mode: req.query.mode === 'previous' ? 'previous' : 'current' }
+}
+
+function cacheKeyFor(workspaceId, params) {
+  return params.mode === 'custom'
+    ? `prod:${workspaceId}:custom:${params.from}:${params.to}`
+    : `prod:${workspaceId}:${params.mode}`
 }
 
 const EMPTY_STATS = { current: { totalCompleted: 0, totalMinutes: 0, daysWorked: 0, tasaCompletado: 0 },
@@ -65,14 +92,14 @@ function shapeMember(m, statsMap, attendanceMap, hist) {
 async function listProductivity(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const mode = periodMode(req)
+    const params = resolvePeriodParams(req)
 
-    const cacheKey = `prod:${workspaceId}:${mode}`
+    const cacheKey = cacheKeyFor(workspaceId, params)
     const cached = prodCache.get(cacheKey)
     if (cached) return res.json(cached)
 
     const tz = req.workspace.timezone
-    const period = getProductivityPeriod(mode, tz)
+    const period = getProductivityPeriod(params.mode, tz, params)
 
     const [members, statsMap, attendanceMap, hist] = await Promise.all([
       prisma.workspaceMember.findMany({
@@ -136,10 +163,10 @@ async function userOverview(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const userId = Number(req.params.userId)
-    const mode = periodMode(req)
+    const params = resolvePeriodParams(req)
     const tz = req.workspace.timezone
 
-    const cached = prodCache.get(`prod:${workspaceId}:${mode}`)
+    const cached = prodCache.get(cacheKeyFor(workspaceId, params))
     if (cached) {
       const found = cached.members.find(m => m.id === userId)
       if (found) return res.json({ member: found, benchmark: cached.benchmark, period: cached.period })
@@ -163,7 +190,7 @@ async function userOverview(req, res, next) {
     })
     if (!member) return res.status(404).json({ error: 'Usuario no encontrado en este workspace' })
 
-    const period = getProductivityPeriod(mode, tz)
+    const period = getProductivityPeriod(params.mode, tz, params)
     const [statsMap, attendanceMap, hist] = await Promise.all([
       getWorkspaceStats(workspaceId, tz, period),
       getAttendanceStats(workspaceId, tz, period),
@@ -194,7 +221,8 @@ async function userBreakdown(req, res, next) {
     const userId = Number(req.params.userId)
     const workspaceId = req.workspace.id
     const tz = req.workspace.timezone
-    const period = getProductivityPeriod(periodMode(req), tz)
+    const params = resolvePeriodParams(req)
+    const period = getProductivityPeriod(params.mode, tz, params)
     const offset = tzOffsetStr(tz)
 
     const tasks = await prisma.task.findMany({
@@ -266,9 +294,9 @@ async function refreshProductivity(req, res, next) {
 
     await generateMemoryForUser(userId, workspace)
     // Se regeneró la memoria IA de un miembro → la tabla cacheada quedó desactualizada.
-    // Invalidamos ambos modos del workspace para que el cambio se vea en el próximo fetch.
-    prodCache.del(`prod:${workspace.id}:current`)
-    prodCache.del(`prod:${workspace.id}:closed`)
+    // Invalidamos todo lo cacheado de este workspace (current/previous/cualquier rango
+    // custom en caché) para que el cambio se vea en el próximo fetch, sea cual sea el modo.
+    prodCache.delPrefix(`prod:${workspace.id}:`)
     const memory = await prisma.userInsightMemory.findFirst({
       where: { userId, workspaceId: workspace.id },
       orderBy: { weekStart: 'desc' },
