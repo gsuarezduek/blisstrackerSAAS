@@ -2,23 +2,29 @@
  * Wizard de onboarding: reemplaza al viejo `OnboardingTour` (modal de 5 pasos fijos que
  * mencionaba "Marketing toolkit" a cualquier workspace, tuviera o no el flag habilitado).
  *
- * Dos fases:
- *  A) Selector de módulos — lista los feature flags habilitados para el workspace
+ * Tres fases:
+ *  A) Datos de ejemplo — ¿arrancar vacío o cargar el proyecto demo ("Demo — Aprendé
+ *     BlissTracker", 8 tareas en distintos estados)? Antes este proyecto se creaba
+ *     SIEMPRE al registrarse (workspace/registration.controller.js), sin que el owner
+ *     lo pidiera; ahora es 100% opt-in, disparado acá con POST /workspaces/current/demo-project
+ *     (mismo `seedWorkspace` idempotente de siempre — ver workspaceSeed.service.js). El
+ *     admin puede borrarlo después desde Preferencias sin pasar por acá.
+ *  B) Selector de módulos — lista los feature flags habilitados para el workspace
  *     (GET /workspaces/current/features, mismo endpoint que usa Preferencias → Módulos
  *     adicionales) con todos tildados por defecto. Al continuar, persiste el opt-out de
  *     los que quedaron destildados vía PATCH .../features/:key (mismo request que
  *     Preferencias). Si el workspace no tiene ningún módulo habilitado, se saltea directo
- *     a la fase B.
- *  B) Tour adaptativo — mismo estilo visual que el tour anterior, pero el array de pasos
+ *     a la fase C.
+ *  C) Tour adaptativo — mismo estilo visual que el tour anterior, pero el array de pasos
  *     se arma en memoria: 3 pasos "spine" (siempre aplican) + 1 paso por cada módulo que
- *     quedó activo en la fase A + el paso final de invitar al equipo.
+ *     quedó activo en la fase B + el paso final de invitar al equipo.
  *
  * Gate de aparición: server-side vía `Workspace.onboardingCompletedAt` (no localStorage
  * por browser/usuario) — solo lo ve el admin/owner, y no vuelve a aparecer una vez
  * completado o saltado, en ningún dispositivo.
  *
- * Eventos: tour_started, onboarding_modules_selected, tour_step_completed (con step),
- * tour_skipped, tour_completed.
+ * Eventos: tour_started, onboarding_demo_choice, onboarding_modules_selected,
+ * tour_step_completed (con step), tour_skipped, tour_completed.
  */
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
@@ -64,11 +70,13 @@ export default function OnboardingWizard() {
   const shouldShow = !!user?.isAdmin && !!workspace && !workspace.onboardingCompletedAt
 
   const [visible, setVisible]   = useState(false)
-  const [phase, setPhase]       = useState('modules') // 'modules' | 'tour'
-  const [features, setFeatures] = useState(null)       // [{key,name,description,disabled}]
+  const [phase, setPhase]       = useState('demo') // 'demo' | 'modules' | 'tour'
+  const [features, setFeatures] = useState(null)       // null = cargando; [] = ninguno; [{key,name,description,disabled}]
   const [selected, setSelected] = useState({})          // key -> bool (true = mantener activo)
   const [saving, setSaving]     = useState(false)
   const [step, setStep]         = useState(0)
+  const [demoChoice, setDemoChoice] = useState(null)    // null (sin elegir) | 'demo' | 'empty'
+  const [demoBusy, setDemoBusy]     = useState(false)
 
   useEffect(() => {
     if (!shouldShow) return
@@ -76,7 +84,6 @@ export default function OnboardingWizard() {
     trackEvent('tour_started')
     api.get('/workspaces/current/features')
       .then(({ data }) => {
-        if (!data.length) { setPhase('tour'); return } // nada para elegir → directo al tour
         setFeatures(data)
         // Opt-in: arranca todo destildado — el admin activa explícitamente lo que
         // quiere usar, en vez de tener que acordarse de destildar lo que no quiere
@@ -85,10 +92,28 @@ export default function OnboardingWizard() {
         data.forEach(f => { initial[f.key] = false })
         setSelected(initial)
       })
-      .catch(() => setPhase('tour'))
+      .catch(() => setFeatures([]))
     // Solo debe correr una vez, cuando el gate pasa de false a true.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldShow])
+
+  // Avanza de la fase "demo" a "modules" (o directo a "tour" si no hay nada para elegir)
+  // recién cuando el admin ya eligió Y terminó de resolverse esa elección — tanto el POST
+  // de crear el demo (si lo pidió) como el fetch de features (por si todavía no llegó).
+  useEffect(() => {
+    if (demoChoice === null || demoBusy || features === null) return
+    setPhase(features.length ? 'modules' : 'tour')
+  }, [demoChoice, demoBusy, features])
+
+  async function chooseDemo(loadDemo) {
+    trackEvent('onboarding_demo_choice', { loadDemo })
+    setDemoChoice(loadDemo ? 'demo' : 'empty')
+    if (loadDemo) {
+      setDemoBusy(true)
+      try { await api.post('/workspaces/current/demo-project') } catch (_) {}
+      setDemoBusy(false)
+    }
+  }
 
   async function finish(reason) {
     setVisible(false)
@@ -138,7 +163,58 @@ export default function OnboardingWizard() {
         aria-labelledby="onboarding-title"
         className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-7"
       >
-        {phase === 'modules' ? (
+        {phase === 'demo' ? (
+          <>
+            <div className="text-5xl mb-4 text-center">🚀</div>
+            <h2 id="onboarding-title" className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
+              ¿Cómo querés arrancar?
+            </h2>
+            <p className="text-gray-600 dark:text-gray-300 text-center text-sm mb-5 leading-relaxed">
+              Podés cargar un proyecto de ejemplo para explorar la app, o ir directo a tu trabajo real.
+              Lo podés borrar después cuando quieras, desde Preferencias.
+            </p>
+
+            {demoChoice ? (
+              <div className="py-10 text-center text-sm text-gray-400">Preparando tu espacio de trabajo…</div>
+            ) : (
+              <div className="space-y-2.5 mb-2">
+                <button
+                  onClick={() => chooseDemo(true)}
+                  className="w-full flex items-start gap-3 text-left rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3.5 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+                >
+                  <span className="text-2xl flex-shrink-0">🧪</span>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Cargar proyecto de ejemplo</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">
+                      Un proyecto con 8 tareas en distintos estados para explorar la app antes de cargar lo tuyo.
+                    </p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => chooseDemo(false)}
+                  className="w-full flex items-start gap-3 text-left rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3.5 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
+                >
+                  <span className="text-2xl flex-shrink-0">🌱</span>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Empezar vacío</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">
+                      Arrancás directo con el dashboard limpio, listo para tus proyectos reales.
+                    </p>
+                  </div>
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center justify-start mt-3">
+              <button
+                onClick={() => finish('skipped')}
+                className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                Saltar
+              </button>
+            </div>
+          </>
+        ) : phase === 'modules' ? (
           <>
             <div className="text-5xl mb-4 text-center">🧩</div>
             <h2 id="onboarding-title" className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">

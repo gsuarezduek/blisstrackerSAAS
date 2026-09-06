@@ -4,7 +4,7 @@ const prisma = require('../../lib/prisma')
 const stripe  = require('../../lib/stripe')
 const { sendPlatformNotification, platformCard } = require('../../services/email.service')
 const { getSetting } = require('../../lib/platformSettings')
-const { seedWorkspace } = require('../../services/workspaceSeed.service')
+const { seedDefaults } = require('../../services/workspaceSeed.service')
 const { validatePassword } = require('../../lib/passwordPolicy')
 const { createAndSendVerificationEmail } = require('../../lib/emailVerification')
 const { normalizeEmail } = require('../../lib/normalizeEmail')
@@ -131,20 +131,26 @@ async function createWorkspace(req, res, next) {
         },
       })
 
+      // Catálogo base (Service "Marketing Digital" + Rol "Project Manager") — a
+      // diferencia del proyecto demo (ver más abajo), esto no tiene huella visible en
+      // el Dashboard, así que se crea siempre, elija lo que elija el admin en el
+      // wizard de onboarding.
+      await seedDefaults(workspace.id, tx)
+
       return { workspace, owner }
     })
 
-    // Seed: proyecto "Demo — Aprendé BlissTracker" con 8 tareas variadas para que el primer login
-    // no sea un dashboard vacío. Corre DESPUÉS de commitear la transacción principal (con el
-    // cliente normal, no `tx`) para que un fallo acá nunca pueda hacer rollback del workspace/owner
-    // ya creados. Antes vivía dentro de la misma transacción: si el owner ya tenía una tarea
-    // IN_PROGRESS en otro workspace (ej. cuenta existente agregando un workspace adicional), la
-    // tarea demo IN_PROGRESS violaba la constraint `one_active_task_per_user` (global, no por
-    // workspace) y silenciosamente hacía rollback de TODO el registro — mientras el código seguía
-    // como si hubiera funcionado (mandaba el aviso a admin y el token de auto-login).
-    seedWorkspace(result.workspace.id, result.owner.id).catch(err => {
-      console.error('[Workspace] Error en seed demo:', err.message)
-    })
+    // El proyecto "Demo — Aprendé BlissTracker" con 8 tareas variadas ya NO se crea acá
+    // automáticamente — el wizard de onboarding (primer login) le pregunta al owner si
+    // quiere arrancar vacío o cargar el ejemplo, y en ese caso dispara
+    // POST /workspaces/current/demo-project (ver `deleteDemoProject`/`seedWorkspace` en
+    // workspace/deletion.controller.js). Si se corre, sigue haciéndolo con el cliente
+    // normal (no `tx`) y DESPUÉS de esta transacción — mismo motivo de siempre: un fallo
+    // ahí nunca debe poder hacer rollback del workspace/owner ya creados, y antes de
+    // separarlo de la transacción principal, una tarea demo IN_PROGRESS podía violar la
+    // constraint `one_active_task_per_user` (global, no por workspace — típico en una
+    // cuenta existente creando un workspace adicional) y tirar abajo TODO el registro en
+    // silencio.
 
     // El owner ya queda logueado automáticamente (ver token más abajo), así que
     // no hace falta un email que lo mande a un login manual: en su lugar le

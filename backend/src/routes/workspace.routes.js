@@ -67,7 +67,8 @@ router.patch('/current/module-access/:key', workspaceAdminOnly, ma.update)
 // Token budget: presupuesto mensual de IA (requiere auth, cualquier miembro)
 router.get('/current/token-budget', settings.getTokenBudgetStatus)
 
-// Eliminar proyecto demo (admin u owner)
+// Proyecto demo: crear a pedido (wizard de onboarding) / eliminar (admin u owner)
+router.post('/current/demo-project',   workspaceAdminOnly, deletion.createDemoProject)
 router.delete('/current/demo-project', deletion.deleteDemoProject)
 
 // Onboarding: marcar completado/saltado el wizard (selector de módulos + tour)

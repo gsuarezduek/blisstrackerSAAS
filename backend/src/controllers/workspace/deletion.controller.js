@@ -1,6 +1,6 @@
 const prisma = require('../../lib/prisma')
 const { sendWorkspaceDeletionWarning, sendPlatformNotification, platformCard } = require('../../services/email.service')
-const { removeDemoProject } = require('../../services/workspaceSeed.service')
+const { seedWorkspace, removeDemoProject } = require('../../services/workspaceSeed.service')
 const { DEFAULT_TZ } = require('../../utils/dates')
 
 /**
@@ -205,7 +205,22 @@ async function deleteDemoProject(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * POST /api/workspaces/current/demo-project
+ * Crea el proyecto "Demo — Aprendé BlissTracker" + sus 8 tareas de ejemplo, a pedido
+ * (ya no se genera solo al registrarse — ver wizard de onboarding, fase "demo"). Usa
+ * el mismo `seedWorkspace` idempotente que corría automático antes: si el workspace
+ * ya tiene `demoSeeded = true` (lo haya cargado antes, o lo haya borrado), no hace nada.
+ */
+async function createDemoProject(req, res, next) {
+  try {
+    const result = await seedWorkspace(req.workspace.id, req.user.userId)
+    res.json({ ok: true, seeded: !!result })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   getDeletionRequest, scheduleDeletion, cancelDeletion, executeWorkspaceDeletion,
+  createDemoProject,
   deleteDemoProject,
 }

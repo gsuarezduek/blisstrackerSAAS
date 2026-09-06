@@ -1,12 +1,19 @@
 /**
  * Seed data al crear un workspace nuevo.
  *
- * Crea un proyecto "Demo — Aprendé BlissTracker" con 8 tareas en distintos estados,
- * 1 Service y 1 UserRole. Le da al usuario nuevo algo visible y explorable en el
- * primer login en vez del Dashboard vacío.
+ * Dos piezas independientes:
+ *  - `seedDefaults` — catálogo base (1 Service "Marketing Digital" + 1 UserRole
+ *    "PROJECT_MANAGER"). Sin huella visible en el Dashboard, así que se crea SIEMPRE
+ *    al registrarse, elija lo que elija el admin en el wizard de onboarding.
+ *  - `seedWorkspace` — proyecto "Demo — Aprendé BlissTracker" con 8 tareas en
+ *    distintos estados. Esto SÍ es visible (ocupa el Dashboard), por eso es 100%
+ *    opt-in: solo corre si el admin lo pide explícitamente desde el wizard de
+ *    onboarding (fase "demo") o más tarde desde Preferencias. Antes ambas piezas
+ *    vivían juntas y corrían siempre — se separaron para no perder el catálogo base
+ *    al volver opcional el proyecto demo.
  *
- * Llamado desde workspace.controller.js justo después de crear el workspace + owner.
- * Idempotente: si `Workspace.demoSeeded === true` no hace nada.
+ * Idempotentes: `seedDefaults` no duplica el Service/UserRole si ya existen;
+ * `seedWorkspace` no hace nada si `Workspace.demoSeeded === true`.
  *
  * El usuario puede eliminar el proyecto demo en cualquier momento (Preferencias →
  * "Eliminar proyecto demo") — al hacerlo se cascadean las tareas y se mantiene el
@@ -21,6 +28,27 @@ function daysAgo(d) {
 function todayString() {
   // YYYY-MM-DD en Buenos Aires (UTC-3)
   return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+/**
+ * Catálogo base de un workspace nuevo (Service + UserRole por defecto). Se llama
+ * desde el registro, siempre — independiente de si el admin termina cargando el
+ * proyecto demo o no.
+ */
+async function seedDefaults(workspaceId, tx = prisma) {
+  const existingService = await tx.service.findFirst({
+    where: { workspaceId, name: 'Marketing Digital' },
+    select: { id: true },
+  })
+  if (!existingService) {
+    await tx.service.create({ data: { workspaceId, name: 'Marketing Digital', active: true } })
+  }
+
+  await tx.userRole.upsert({
+    where:  { workspaceId_name: { workspaceId, name: 'PROJECT_MANAGER' } },
+    create: { workspaceId, name: 'PROJECT_MANAGER', label: 'Project Manager' },
+    update: {},
+  }).catch(() => {}) // si no existe el unique compuesto, ignorar
 }
 
 async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
@@ -40,26 +68,22 @@ async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
     select: { id: true },
   }))
 
-  // 1. Service por defecto
-  const service = await tx.service.create({
-    data: { workspaceId, name: 'Marketing Digital', active: true },
-  })
+  // Service "Marketing Digital" — normalmente ya lo creó `seedDefaults` al registrar
+  // el workspace; se re-crea acá solo como fallback si por lo que sea no está más
+  // (ej. lo borraron a mano desde Admin antes de tocar "Cargar proyecto de ejemplo").
+  let service = await tx.service.findFirst({ where: { workspaceId, name: 'Marketing Digital' } })
+  if (!service) {
+    service = await tx.service.create({ data: { workspaceId, name: 'Marketing Digital', active: true } })
+  }
 
-  // 2. UserRole por defecto (idempotente — workspace ya puede tener algunos)
-  await tx.userRole.upsert({
-    where:  { workspaceId_name: { workspaceId, name: 'PROJECT_MANAGER' } },
-    create: { workspaceId, name: 'PROJECT_MANAGER', label: 'Project Manager' },
-    update: {},
-  }).catch(() => {}) // si no existe el unique compuesto, ignorar
-
-  // 3. WorkDay del día (necesario para las tareas)
+  // WorkDay del día (necesario para las tareas)
   const workDay = await tx.workDay.upsert({
     where:  { userId_workspaceId_date: { userId: ownerId, workspaceId, date: todayString() } },
     create: { userId: ownerId, workspaceId, date: todayString() },
     update: {},
   })
 
-  // 4. Proyecto demo
+  // Proyecto demo
   const project = await tx.project.create({
     data: {
       workspaceId,
@@ -70,10 +94,11 @@ async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
     },
   })
 
-  // 5. 8 tareas variadas — mezcla genérica de agencia (no asume qué módulos va a activar
-  // el workspace: el seed corre al crear el workspace, antes de que el wizard de onboarding
-  // le pregunte qué módulos usar). Se deja 1 sabor marketing/ads como ejemplo de color, sin
-  // apoyarse en jerga de un módulo específico (GEO/Search Console/etc.) que puede no tener activado.
+  // 8 tareas variadas — mezcla genérica de agencia (no asume qué módulos tiene activos
+  // el workspace: esto corre a pedido desde el wizard de onboarding, en la misma fase
+  // donde todavía no se eligieron los módulos). Se deja 1 sabor marketing/ads como
+  // ejemplo de color, sin apoyarse en jerga de un módulo específico (GEO/Search
+  // Console/etc.) que puede no tener activado.
   const tasksData = [
     {
       description: 'Revisar el avance del mes de Cliente Demo y preparar 3 puntos para la próxima reunión de status.',
@@ -147,7 +172,7 @@ async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
     })
   }
 
-  // 6. Marcar workspace como demo-seeded
+  // Marcar workspace como demo-seeded
   await tx.workspace.update({
     where: { id: workspaceId },
     data:  { demoSeeded: true },
@@ -181,4 +206,4 @@ async function removeDemoProject(workspaceId) {
   return { removed: 1, projectId: project.id }
 }
 
-module.exports = { seedWorkspace, removeDemoProject }
+module.exports = { seedDefaults, seedWorkspace, removeDemoProject }
