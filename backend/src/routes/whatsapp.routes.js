@@ -54,6 +54,7 @@ router.patch('/conversations/:id/assign',    conversations.assignConversation)
 router.patch('/conversations/:id/contact',   conversations.linkContact)
 router.post('/conversations/:id/contact',    conversations.createContactFromConversation)
 router.patch('/conversations/:id/bot',       conversations.toggleConversationBot)
+router.patch('/conversations/:id/pin',       conversations.togglePin)
 router.post('/conversations/:id/reopen',     templates.reopenConversation)
 
 // Bot (Fase 4): la config es workspace-wide y tiene costo operativo real

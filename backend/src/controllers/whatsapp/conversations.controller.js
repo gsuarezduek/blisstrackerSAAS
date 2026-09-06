@@ -50,6 +50,9 @@ async function resolveLeadByContact(workspaceId, contactIds) {
  * `q` filtra por nombre/teléfono/empresa del contacto O por el contenido de
  * CUALQUIER mensaje de la conversación (no solo el último) — así una
  * búsqueda encuentra el chat aunque la palabra no esté en el nombre.
+ *
+ * Los chats fijados (`pinnedAt`, pin compartido — ver togglePin) van siempre
+ * primero, ordenados por fecha de fijado desc; el resto sigue por actividad.
  */
 async function listConversations(req, res, next) {
   try {
@@ -67,11 +70,12 @@ async function listConversations(req, res, next) {
           ],
         } : {}),
       },
-      orderBy: { lastMessageAt: 'desc' },
+      orderBy: [{ pinnedAt: { sort: 'desc', nulls: 'last' } }, { lastMessageAt: 'desc' }],
       include: {
         contact: { select: { id: true, name: true, companyId: true, company: { select: { name: true } } } },
         messages: { orderBy: { id: 'desc' }, take: 1, include: { media: { select: { kind: true } } } },
         reads: { where: { userId: req.user.userId }, take: 1 },
+        pinnedBy: { select: { id: true, name: true } },
       },
     })
 
@@ -89,6 +93,8 @@ async function listConversations(req, res, next) {
         leadId: (c.contactId && leadByContact.get(c.contactId)?.id) || null,
         lastMessageAt: c.lastMessageAt,
         lastInboundAt: c.lastInboundAt,
+        pinnedAt: c.pinnedAt,
+        pinnedBy: c.pinnedBy,
         lastMessage: lastMessage
           ? {
               content: lastMessage.content,
@@ -484,7 +490,29 @@ async function toggleConversationBot(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * PATCH /api/whatsapp/conversations/:id/pin  { pinned }
+ * Pin compartido — cualquier miembro con acceso a Ventas puede fijar/desfijar
+ * (mismo criterio de acceso que el resto del módulo, ver salesGuard); afecta
+ * lo que ve todo el equipo, no es una preferencia personal. Un chat fijado
+ * queda siempre arriba de la lista (listConversations ordena por pinnedAt).
+ */
+async function togglePin(req, res, next) {
+  try {
+    const conversation = await assertConversation(req)
+    const pinned = Boolean(req.body.pinned)
+    const updated = await prisma.whatsappConversation.update({
+      where: { id: conversation.id },
+      data: pinned
+        ? { pinnedAt: new Date(), pinnedById: req.user.userId }
+        : { pinnedAt: null, pinnedById: null },
+      include: { pinnedBy: { select: { id: true, name: true } } },
+    })
+    res.json({ id: updated.id, pinnedAt: updated.pinnedAt, pinnedBy: updated.pinnedBy })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   listConversations, getMessages, sendMessage, sendMedia, linkContact,
-  createContactFromConversation, assignConversation, markRead, toggleConversationBot,
+  createContactFromConversation, assignConversation, markRead, toggleConversationBot, togglePin,
 }

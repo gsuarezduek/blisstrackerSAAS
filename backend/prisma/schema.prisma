@@ -347,6 +347,7 @@ model User {
   whatsappMessagesSent      WhatsappMessage[]
   whatsappConversationReads WhatsappConversationRead[]
   whatsappConversationsAssigned WhatsappConversation[] @relation("WhatsappConversationAssignee")
+  whatsappConversationsPinned WhatsappConversation[] @relation("WhatsappConversationPinnedBy")
   whatsappAutomationRulesCreated WhatsappAutomationRule[]
   whatsappBotDocumentsUploaded WhatsappBotDocument[] @relation("WhatsappBotDocumentUploadedBy")
   dismissedFindings         DismissedFinding[]
@@ -3383,6 +3384,13 @@ model WhatsappConversation {
   // conversaciones existentes quedan bot-handled sin necesitar un backfill.
   botEnabled Boolean @default(true)
 
+  // Pin compartido — cualquier miembro con acceso a Ventas puede fijar/desfijar
+  // (afecta lo que ve todo el equipo, no es una preferencia personal), mismo
+  // criterio que los mensajes fijados del Chat interno. pinnedAt null = no fijado.
+  pinnedAt   DateTime?
+  pinnedById Int?
+  pinnedBy   User?     @relation("WhatsappConversationPinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -3392,6 +3400,7 @@ model WhatsappConversation {
 
   @@unique([workspaceId, phoneE164])
   @@index([workspaceId, lastMessageAt])
+  @@index([workspaceId, pinnedAt])
   @@index([contactId])
 }
 

@@ -132,6 +132,14 @@ export default function WhatsappTab({ onOpenLead }) {
     loadConversations()
   }, [activeId, loadConversations])
 
+  // Pin compartido (cualquiera con acceso a Ventas lo ve) — la conversación
+  // se refleja en el orden en cuanto recarga la lista (backend ya ordena
+  // fijados primero, ver listConversations).
+  const handleTogglePin = useCallback(async (conversation) => {
+    await api.patch(`/whatsapp/conversations/${conversation.id}/pin`, { pinned: !conversation.pinnedAt })
+    loadConversations()
+  }, [loadConversations])
+
   // Reabrir con plantilla (Fase 5 del plan) — único envío posible con la
   // ventana de 24hs vencida.
   const handleReopen = useCallback(async (templateId, variables) => {
@@ -280,7 +288,7 @@ export default function WhatsappTab({ onOpenLead }) {
           {loadingConversations && conversations.length === 0 ? (
             <LoadingSpinner size="sm" className="flex-1 py-10" />
           ) : (
-            <WhatsappConversationList conversations={conversations} activeId={activeId} onSelect={openConversation} onLinkContact={setLinkingConversation} onOpenLead={onOpenLead} search={search} />
+            <WhatsappConversationList conversations={conversations} activeId={activeId} onSelect={openConversation} onLinkContact={setLinkingConversation} onOpenLead={onOpenLead} onTogglePin={handleTogglePin} search={search} />
           )}
         </div>
 
