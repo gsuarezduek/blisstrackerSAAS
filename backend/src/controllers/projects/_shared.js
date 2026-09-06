@@ -22,6 +22,12 @@ const includeDetails = {
     select: { type: true },
   },
   chatChannel: { select: { slug: true } },
+  // Tareas no completadas — usado por el modal de confirmación al desactivar
+  // un proyecto (Admin → Proyectos), para avisar cuántas van a dejar de verse
+  // en los dashboards mientras el proyecto esté inactivo.
+  _count: {
+    select: { tasks: { where: { status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] } } } },
+  },
 }
 
 module.exports = { resolveProjectId, includeDetails }

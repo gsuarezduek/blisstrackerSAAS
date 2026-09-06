@@ -246,6 +246,116 @@ function HoursModal({ project, onClose, onUpdate }) {
   )
 }
 
+// ── Deactivate confirm modal ─────────────────────────────────────────────────
+
+function DeactivateModal({ project, onClose, onConfirm }) {
+  const [saving, setSaving] = useState(false)
+  const taskCount = project._count?.tasks ?? 0
+
+  async function handleConfirm() {
+    setSaving(true)
+    try {
+      await onConfirm()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-5">
+        <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">¿Desactivar "{project.name}"?</h2>
+        {taskCount > 0 ? (
+          <p className="text-sm text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+            Tiene <strong>{taskCount} tarea{taskCount !== 1 ? 's' : ''}</strong> pendiente{taskCount !== 1 ? 's' : ''}, en curso, pausada{taskCount !== 1 ? 's' : ''} o bloqueada{taskCount !== 1 ? 's' : ''}.
+            Van a dejar de verse en el dashboard de cada persona mientras el proyecto esté inactivo — no se borran ni se pierde el trabajo,
+            y vuelven a aparecer tal cual quedaron si reactivás el proyecto.
+          </p>
+        ) : (
+          <p className="text-sm text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+            No tiene tareas activas en este momento. El proyecto pasa al Archivo y podés reactivarlo cuando quieras.
+          </p>
+        )}
+        <div className="flex items-center gap-2 mt-5">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl py-2.5 text-sm transition-colors disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={saving}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl py-2.5 text-sm transition-colors disabled:opacity-60"
+          >
+            {saving ? 'Desactivando...' : 'Desactivar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Permanent delete modal (type-to-confirm) ─────────────────────────────────
+
+function DeleteProjectModal({ project, onClose, onConfirm }) {
+  const [confirmText, setConfirmText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const matches = confirmText.trim() === project.name
+
+  async function handleConfirm() {
+    if (!matches) return
+    setSaving(true)
+    setError('')
+    try {
+      await onConfirm()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al eliminar el proyecto.')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-5">
+        <h2 className="text-base font-bold text-red-600 dark:text-red-400 mb-1">Eliminar "{project.name}" definitivamente</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-300 mt-3 leading-relaxed">
+          Esta acción es <strong>irreversible</strong>: se borran todas sus tareas, links, accesos, informes, briefs, reuniones y
+          el resto de los datos del proyecto. No hay forma de deshacerla.
+        </p>
+        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mt-4 mb-1.5">
+          Escribí <strong>{project.name}</strong> para confirmar
+        </label>
+        <input
+          value={confirmText}
+          onChange={e => setConfirmText(e.target.value)}
+          autoFocus
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+        />
+        {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
+        <div className="flex items-center gap-2 mt-5">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl py-2.5 text-sm transition-colors disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={saving || !matches}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl py-2.5 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Eliminando...' : 'Eliminar definitivamente'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Services checkbox (still used in create/edit) ──────────────────────────────
 
 function ServiceCheckboxList({ allServices, selectedIds, onChange }) {
@@ -287,6 +397,8 @@ export default function ProjectsTab() {
   const [hoursProject, setHoursProject] = useState(null)
   const [hoursEnabled, setHoursEnabled] = useState(false)
   const [search,      setSearch]      = useState('')
+  const [deactivateProject, setDeactivateProject] = useState(null)
+  const [deleteProject, setDeleteProject] = useState(null)
 
   useEffect(() => {
     Promise.all([
@@ -319,9 +431,21 @@ export default function ProjectsTab() {
     }
   }
 
-  async function toggleActive(project) {
-    const { data } = await api.put(`/projects/${project.id}`, { active: !project.active })
+  async function reactivate(project) {
+    const { data } = await api.put(`/projects/${project.id}`, { active: true })
     setProjects(prev => prev.map(p => p.id === data.id ? data : p))
+  }
+
+  async function confirmDeactivate() {
+    const { data } = await api.put(`/projects/${deactivateProject.id}`, { active: false })
+    setProjects(prev => prev.map(p => p.id === data.id ? data : p))
+    setDeactivateProject(null)
+  }
+
+  async function confirmDelete() {
+    await api.delete(`/projects/${deleteProject.id}`)
+    setProjects(prev => prev.filter(p => p.id !== deleteProject.id))
+    setDeleteProject(null)
   }
 
   function startEdit(project) {
@@ -477,7 +601,7 @@ export default function ProjectsTab() {
                             Editar
                           </button>
                           <button
-                            onClick={() => toggleActive(p)}
+                            onClick={() => setDeactivateProject(p)}
                             className="text-xs px-3 py-1.5 rounded-lg font-medium bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
                           >
                             Desactivar
@@ -532,12 +656,20 @@ export default function ProjectsTab() {
                           <span className="w-2 h-2 rounded-full flex-shrink-0 bg-gray-300 dark:bg-gray-500" />
                           <span className="text-sm font-medium text-gray-600 dark:text-gray-400 truncate">{p.name}</span>
                         </div>
-                        <button
-                          onClick={() => toggleActive(p)}
-                          className="text-xs px-3 py-1.5 rounded-lg font-medium bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors flex-shrink-0"
-                        >
-                          Reactivar
-                        </button>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => reactivate(p)}
+                            className="text-xs px-3 py-1.5 rounded-lg font-medium bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                          >
+                            Reactivar
+                          </button>
+                          <button
+                            onClick={() => setDeleteProject(p)}
+                            className="text-xs px-3 py-1.5 rounded-lg font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                          >
+                            Eliminar definitivamente
+                          </button>
+                        </div>
                       </div>
                       {p.services.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2.5 ml-5">
@@ -571,6 +703,24 @@ export default function ProjectsTab() {
           project={hoursProject}
           onClose={() => setHoursProject(null)}
           onUpdate={handleHoursUpdate}
+        />
+      )}
+
+      {/* Deactivate confirm modal */}
+      {deactivateProject && (
+        <DeactivateModal
+          project={deactivateProject}
+          onClose={() => setDeactivateProject(null)}
+          onConfirm={confirmDeactivate}
+        />
+      )}
+
+      {/* Permanent delete modal */}
+      {deleteProject && (
+        <DeleteProjectModal
+          project={deleteProject}
+          onClose={() => setDeleteProject(null)}
+          onConfirm={confirmDelete}
         />
       )}
     </div>

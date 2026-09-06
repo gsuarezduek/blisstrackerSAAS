@@ -216,4 +216,54 @@ async function update(req, res, next) {
   }
 }
 
-module.exports = { list, listAll, create, update, getMembers, toggleStar }
+/**
+ * DELETE /api/projects/:id
+ * Borrado definitivo — solo permitido sobre un proyecto ya desactivado (extra
+ * salvaguarda: primero hay que "Desactivar" desde la lista, después "Eliminar
+ * definitivamente" aparece en el Archivo). Irreversible.
+ *
+ * La mayoría de las ~40 relaciones a Project tienen onDelete: Cascade en el schema
+ * y las resuelve Postgres solas al borrar la fila. Un puñado NO cascadea (quedaría
+ * un 23503 de FK) y hay que resolverlo a mano antes: Task (RESTRICT — sus propios
+ * hijos como comments/sessions sí cascadean desde Task), ProjectService y
+ * ProjectMember (join tables RESTRICT), y Notification/ApifyUsageLog (FK opcional
+ * sin onDelete — se pisan a null en vez de borrar, para no perder el texto de
+ * notificaciones ya autocontenidas ni el histórico de uso de Apify).
+ */
+async function remove(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const projectId = await resolveProjectId(req.params.id, workspaceId)
+    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { active: true, name: true } })
+    if (!project) return res.status(404).json({ error: 'Proyecto no encontrado' })
+    if (project.active) {
+      return res.status(400).json({ error: 'Desactivá el proyecto antes de eliminarlo definitivamente', code: 'PROJECT_ACTIVE' })
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const tasks = await tx.task.findMany({ where: { projectId }, select: { id: true } })
+      const taskIds = tasks.map(t => t.id)
+
+      if (taskIds.length > 0) {
+        await tx.notification.updateMany({ where: { taskId: { in: taskIds } }, data: { taskId: null } })
+      }
+      await tx.notification.updateMany({ where: { projectId }, data: { projectId: null } })
+      await tx.apifyUsageLog.updateMany({ where: { projectId }, data: { projectId: null } })
+
+      await tx.projectService.deleteMany({ where: { projectId } })
+      await tx.projectMember.deleteMany({ where: { projectId } })
+      await tx.task.deleteMany({ where: { projectId } })
+
+      await tx.project.delete({ where: { id: projectId } })
+    })
+
+    res.json({ ok: true })
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Proyecto no encontrado' })
+    next(err)
+  }
+}
+
+module.exports = { list, listAll, create, update, remove, getMembers, toggleStar }

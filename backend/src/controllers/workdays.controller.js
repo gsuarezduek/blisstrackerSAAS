@@ -16,6 +16,10 @@ const taskInclude = {
 // posterior a hoy se ocultan del foco/backlog/carry-over hasta que llega su fecha.
 const liveWhere = (today) => ({ OR: [{ scheduledFor: null }, { scheduledFor: { lte: today } }] })
 
+// Las tareas de un proyecto desactivado dejan de verse en el dashboard (no se borran ni se
+// tocan — reactivar el proyecto las vuelve a mostrar tal cual quedaron).
+const activeProjectWhere = { project: { active: true } }
+
 async function getOrCreateToday(req, res, next) {
   try {
     const userId = req.user.userId
@@ -55,20 +59,21 @@ async function getOrCreateToday(req, res, next) {
       console.error('[Recurrence] Error materializando tareas:', matErr.message)
     }
 
-    // Tareas de hoy (excluye futuras programadas)
+    // Tareas de hoy (excluye futuras programadas y proyectos desactivados)
     const tasks = await prisma.task.findMany({
-      where: { workDayId: workDay.id, ...liveWhere(date) },
+      where: { workDayId: workDay.id, ...liveWhere(date), ...activeProjectWhere },
       include: taskInclude,
       orderBy: { createdAt: 'desc' },
     })
 
-    // Tareas de días anteriores aún activas en este workspace (excluye futuras)
+    // Tareas de días anteriores aún activas en este workspace (excluye futuras y proyectos desactivados)
     const carryOverTasks = await prisma.task.findMany({
       where: {
         userId,
         status: { in: ['PENDING', 'IN_PROGRESS', 'PAUSED', 'BLOCKED'] },
         workDay: { date: { lt: date }, workspaceId },
         ...liveWhere(date),
+        ...activeProjectWhere,
       },
       include: taskInclude,
       orderBy: { createdAt: 'desc' },
@@ -81,6 +86,7 @@ async function getOrCreateToday(req, res, next) {
         status: { not: 'COMPLETED' },
         scheduledFor: { gt: date },
         workDay: { workspaceId },
+        ...activeProjectWhere,
       },
       include: taskInclude,
       orderBy: { scheduledFor: 'asc' },
