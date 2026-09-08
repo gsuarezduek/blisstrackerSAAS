@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { appEvents, EVENTS } from '../lib/events'
 import LoginScreen from '../screens/LoginScreen'
 import WorkspaceSelectScreen from '../screens/WorkspaceSelectScreen'
+import LockScreen from '../screens/LockScreen'
 import DashboardScreen from '../screens/DashboardScreen'
 import NotificationsScreen from '../screens/NotificationsScreen'
 import ChannelListScreen from '../screens/ChannelListScreen'
@@ -15,7 +16,7 @@ import ChatScreen from '../screens/ChatScreen'
 const Stack = createNativeStackNavigator()
 
 export default function RootNavigator() {
-  const { user, loading, pendingWorkspaces } = useAuth()
+  const { user, loading, locked, pendingWorkspaces } = useAuth()
   const navRef = useNavigationContainerRef()
 
   // Tocar una notificación push (app en background o cerrada) navega a
@@ -52,7 +53,9 @@ export default function RootNavigator() {
   return (
     <NavigationContainer ref={navRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {user ? (
+        {locked ? (
+          <Stack.Screen name="Lock" component={LockScreen} />
+        ) : user ? (
           <>
             <Stack.Screen name="Dashboard" component={DashboardScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />

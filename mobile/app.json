@@ -7,15 +7,21 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "app.blisstracker.mobile"
     },
     "android": {
+      "package": "app.blisstracker.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F7931A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -27,7 +33,18 @@
         {
           "color": "#F7931A"
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Usá Face ID para entrar más rápido a BlissTracker."
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "20f1f814-c156-4818-87e4-0a45757d78d9"
+      }
+    }
   }
 }

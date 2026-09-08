@@ -79,8 +79,9 @@ src/
     push.js          # permisos + Expo Push Token de este dispositivo
     events.js        # pub-sub mínimo propio (RN no tiene `window` ni el módulo `events` de Node)
     socket.js         # conexión Socket.IO única para toda la app (JWT en el handshake)
+    biometrics.js     # disponibilidad + prompt de Face ID/huella
   context/
-    AuthContext.jsx  # login, selección de workspace, logout, sesión persistida, registro/baja de push, conexión del socket
+    AuthContext.jsx  # login, selección de workspace, logout, sesión persistida, registro/baja de push, conexión del socket, gate biométrico
   components/
     TaskCard.jsx           # tarjeta de tarea con botones de acción según status
     AddTaskModal.jsx       # modal para crear tarea (descripción + chips de proyecto)
@@ -88,6 +89,7 @@ src/
   screens/
     LoginScreen.jsx
     WorkspaceSelectScreen.jsx
+    LockScreen.jsx            # gate biométrico al restaurar una sesión guardada
     DashboardScreen.jsx       # tareas de hoy agrupadas por status, pull-to-refresh
     NotificationsScreen.jsx   # centro de notificaciones in-app
     ChannelListScreen.jsx     # lista de canales de chat, no-leídos/menciones en vivo
@@ -242,6 +244,118 @@ canales privados (el filtrado del backend ya los excluye del listado para
 no-admins, así que tampoco hay nada que mostrar). Se evalúan agregar si el
 uso real de la app lo pide.
 
+### Biometría + pulido + build (Fase 5)
+
+**Login biométrico** (`expo-local-authentication`):
+- `src/lib/biometrics.js` — `isBiometricAvailable()` (hardware + al menos una
+  huella/cara ya enrolada en el OS, no solo hardware presente) y
+  `authenticateAsync()` (con `disableDeviceFallback: false`, así el PIN/patrón
+  del OS sirve de respaldo si la biometría falla).
+- **La preferencia (`bliss_biometric_enabled` en SecureStore) vive separada de
+  la sesión** (`src/api/session.js`) — `clearSession()` (logout) no la toca a
+  propósito: es una preferencia del dispositivo, no de la cuenta. Si alguien
+  cierra sesión y vuelve a entrar en el mismo teléfono, tiene sentido que
+  siga pidiendo Face ID.
+- **Gate solo al restaurar una sesión guardada**, nunca en un login fresco con
+  contraseña (`AuthContext`, estado `locked`): si `biometricEnabled` es true,
+  la restauración de sesión no llama a `finishEnter()` directo — pone
+  `locked=true` y `RootNavigator` muestra `LockScreen` en vez de `Dashboard`.
+  `LockScreen` dispara el prompt biométrico apenas se monta (no hace falta
+  tocar un botón primero) y ofrece reintentar.
+- **Se ofrece activar** (`maybePromptBiometric`, `Alert.alert` nativo) justo
+  después de un login/selección de workspace fresco, solo si el dispositivo
+  la soporta y todavía no se preguntó una vez (`bliss_biometric_prompted`).
+- **Salida si la biometría deja de andar** (dedo/cara distinta, hardware
+  roto): `forgetBiometricAndLogout()` — apaga la preferencia y cierra sesión,
+  así el próximo login pide contraseña de nuevo en vez de dejar a alguien
+  trabado en `LockScreen` para siempre. Botón "No puedo desbloquear — entrar
+  con contraseña" en la propia pantalla de bloqueo.
+- **iOS**: plugin `expo-local-authentication` en `app.json` con
+  `faceIDPermission` (texto de `NSFaceIDUsageDescription`, obligatorio en
+  iOS o el build de EAS falla la validación de App Store). Android no
+  necesita configuración — el plugin agrega los permisos solo.
+
+**Pulido — errores de red** (`src/api/client.js`): `timeout: 15000` en la
+instancia de axios (antes no tenía, un request colgado podía esperar
+indefinidamente) y el interceptor de respuesta ahora sintetiza
+`err.response.data.error` con un mensaje legible cuando `!err.response`
+(nunca llegó al servidor: sin conexión, DNS, timeout) — distingue timeout
+("La conexión tardó demasiado") de sin conexión. Como las 15+ pantallas ya
+leen `err.response?.data?.error || '<fallback propio>'`, este único cambio
+centralizado hace que todas muestren "sin conexión" en vez de su fallback
+genérico, sin tocar cada una.
+
+**Ícono y splash de marca**: generados con Python/Pillow (`sips`/ImageMagick/
+`rsvg-convert` no estaban disponibles en el entorno — ver
+`gen_icon.py`, script de un solo uso, no forma parte del repo), no diseño
+manual: fondo naranja de marca `#F7931A` + un checkmark blanco de trazo
+grueso (comunica "tareas" de forma simple y legible incluso achicado).
+`android-icon-foreground.png`/`monochrome.png` tienen el símbolo achicado al
+~42% del canvas porque Android recorta el foreground del adaptive icon con
+máscaras (círculo/squircle/etc.) distintas según el launcher — un símbolo a
+pantalla completa se corta. Reemplazable en cualquier momento por un logo
+real sin tocar código, sólo los PNG en `assets/`.
+
+**Build con EAS** (`eas.json`, 3 perfiles):
+- `development` — dev client, APK interno (no para distribuir).
+- `preview` — **APK interno instalable directo en un dispositivo**, sin pasar
+  por Google Play. Es el que hay que usar para probar la app de verdad por
+  primera vez fuera de Expo Go.
+- `production` — AAB (`autoIncrement: true`, así no hay que subir
+  `versionCode` a mano en cada build), el formato que exige Google Play para
+  apps nuevas.
+
+`app.json` suma `android.package` / `ios.bundleIdentifier`
+(`app.blisstracker.mobile`, reverse-domain del dominio real del producto) —
+Google Play exige un `package` único y estable; una vez publicado **no se
+puede cambiar**, así que se fijó ahora aunque el primer build sea solo de
+prueba. El primer `eas build` real también completó solo `extra.eas.projectId`
+en `app.json` (resuelve el `eas init` pendiente — no hizo falta correrlo
+aparte, `eas build` lo hace la primera vez) y agregó
+`android.permissions: [USE_BIOMETRIC, USE_FINGERPRINT]` (el plugin de
+`expo-local-authentication` los inyecta al generar el proyecto nativo).
+
+**`mobile/.env` no llega a los builds de EAS — hay que declarar
+`EXPO_PUBLIC_API_URL` en `eas.json`.** Encontrado en el primer build real: la
+app compilaba y se instalaba bien, pero el login fallaba con "Sin conexión"
+— no era un problema de red, `EXPO_PUBLIC_API_URL` quedó `undefined` en el
+bundle. Causa: `.env` está en `.gitignore` a propósito (no se sube al repo),
+y `eas build` empaqueta el proyecto para el servidor de build en la nube
+respetando ese `.gitignore` — el archivo simplemente nunca viaja. Esto solo
+afecta a `preview`/`production` (bundles "release", el JS y sus env vars
+quedan fijos en build-time); `development` no lo necesita porque un dev
+client sigue leyendo el `.env` local en caliente vía Metro. Fix: `eas.json`
+declara `env.EXPO_PUBLIC_API_URL` directamente en cada perfil release —
+**apuntando al backend de Railway en producción**
+(`https://blisstrackersaas-production.up.railway.app`), no a `localhost` ni a
+una IP de LAN (ver charla con el usuario: se optó por Railway para que el APK
+de prueba funcione desde cualquier red, sabiendo que pega contra la base de
+datos real del workspace `bliss`, no un entorno aislado de prueba). Sin
+problema de CORS/Socket.IO al pegarle a Railway desde la app nativa:
+`backend/src/lib/corsOrigins.js` deja pasar cualquier request sin header
+`Origin` (`if (!origin) return true`), que es como llegan las apps nativas
+(a diferencia de un browser).
+
+**Paso pendiente, requiere la cuenta de Expo del usuario — no lo puede hacer
+un agente** (mismo motivo que `eas init` en la Fase 3, ver arriba). **Ojo:**
+`npx eas ...` (sin más) puede fallar con `npm error could not determine
+executable to run` — el paquete se llama `eas-cli`, no `eas`, y `npx` no
+siempre resuelve solo esa asignación package→binario. Instalar `eas-cli`
+explícito evita el problema:
+```bash
+npm install -g eas-cli
+eas login   # o npx eas-cli@latest login si preferís no instalar global
+cd mobile
+eas build --platform android --profile preview     # primer APK de prueba
+eas build --platform android --profile production  # AAB para subir a Play Console
+```
+El AAB de `production` se sube a Google Play Console a mano (o con
+`eas submit`, que ya está declarado en `eas.json` pero requiere un service
+account JSON de Google Play — otro paso manual, no cubierto acá).
+Recordar la política de Google: cuentas de developer nuevas necesitan un
+testing cerrado con ≥20 testers durante 14 días corridos antes de habilitar
+producción.
+
 ## Roadmap (alcance v1)
 
 Incluye: tareas de hoy (ver/iniciar/pausar/completar/bloquear/destacar),
@@ -255,7 +369,7 @@ biométrico. Google Sign-In queda para v2.
 | 2 | Comentarios y @menciones en tareas | ✅ |
 | 3 | Push (backend: `DeviceToken` + servicio de Expo Push; frontend: permisos, registro de token, deep-link, centro de notificaciones) | ✅ (código completo — falta `eas init`, ver arriba) |
 | 4 | Chat interno (canales, mensajes, Socket.IO) | ✅ |
-| 5 | Biometría (`expo-local-authentication`) + pulido (manejo de errores de red, ícono/splash, build de prueba) | pendiente |
+| 5 | Biometría (`expo-local-authentication`) + pulido (manejo de errores de red, ícono/splash, build de prueba) | ✅ (código completo — falta correr `eas build`, ver arriba) |
 
 No hay modo offline en la v1 (se evalúa si se vuelve un problema real de uso
 en campo con mala señal).

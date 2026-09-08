@@ -8,6 +8,7 @@ import { getToken, getWorkspaceSlug, clearSession } from './session'
 // — el backend responde con la lista de workspaces del usuario en ese caso.
 const api = axios.create({
   baseURL: `${process.env.EXPO_PUBLIC_API_URL}/api`,
+  timeout: 15000,
 })
 
 api.interceptors.request.use(async config => {
@@ -30,6 +31,21 @@ api.interceptors.response.use(
     if (err.response?.status === 401) {
       await clearSession()
       onUnauthorized?.()
+    }
+    // Sin `response` = nunca llegó al servidor (sin conexión, DNS, timeout).
+    // Todas las pantallas ya leen `err.response?.data?.error || '<fallback
+    // propio>'` — sintetizar esto acá, en un solo lugar, hace que las 15+
+    // pantallas muestren "sin conexión" en vez de su fallback genérico
+    // ("no pudimos cargar tus tareas"), sin tener que tocar cada una.
+    if (!err.response) {
+      const timedOut = err.code === 'ECONNABORTED'
+      err.response = {
+        data: {
+          error: timedOut
+            ? 'La conexión tardó demasiado. Probá de nuevo.'
+            : 'Sin conexión. Revisá tu internet e intentá de nuevo.',
+        },
+      }
     }
     return Promise.reject(err)
   }

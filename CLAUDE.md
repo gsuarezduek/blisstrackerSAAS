@@ -38,11 +38,12 @@ npm run test:coverage
 
 ### Mobile (`cd mobile`)
 ```bash
-npm start            # Metro bundler / Expo Dev Tools
-npm run ios          # simulador de iOS
-npm run android      # emulador de Android
+npm start                                          # Metro bundler / Expo Dev Tools
+npm run ios                                        # simulador de iOS
+npm run android                                    # emulador de Android
+eas build --platform android --profile preview     # APK de prueba (requiere `npm install -g eas-cli` + login a una cuenta de Expo)
 ```
-App React Native (Expo) para usuarios no-admin, en desarrollo — ver `mobile/CLAUDE.md` para arquitectura, auth sin subdominio y roadmap de fases.
+App React Native (Expo) para usuarios no-admin, en desarrollo — ver `mobile/CLAUDE.md` para arquitectura, auth sin subdominio, push/chat/biometría y el detalle de los perfiles de `eas.json`.
 
 ### Environment variables
 
