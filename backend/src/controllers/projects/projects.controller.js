@@ -1,5 +1,6 @@
 const prisma = require('../../lib/prisma')
 const { DEFAULT_TZ } = require('../../utils/dates')
+const { monthStringInTz } = require('../../lib/timeMetrics')
 const { createProject } = require('../../services/projects.service')
 const { resolveProjectId, includeDetails } = require('./_shared')
 
@@ -152,10 +153,17 @@ async function update(req, res, next) {
     const { name, active, serviceIds, memberIds, websiteUrl, connections, monthlyHours } = req.body
     const data = {}
     if (name        !== undefined) data.name       = name
+
+    // Un único fetch del estado actual, reusado por `active` (transición de lostAt)
+    // y por `monthlyHours` (para saber si cambió y desde qué timezone historizarlo).
+    const needsCurrent = active !== undefined || monthlyHours !== undefined
+    const cur = needsCurrent
+      ? await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { active: true, monthlyHours: true, timezone: true } })
+      : null
+
     if (active      !== undefined) {
       data.active = active
       // Marca/limpia la fecha de baja solo en la transición (no pisa la original si se re-guarda inactivo).
-      const cur = await prisma.project.findFirst({ where: { id: projectId, workspaceId }, select: { active: true } })
       if (cur) {
         if (cur.active && active === false)      data.lostAt = new Date()
         else if (!cur.active && active === true) data.lostAt = null
@@ -163,6 +171,11 @@ async function update(req, res, next) {
     }
     if (websiteUrl  !== undefined) data.websiteUrl = websiteUrl || null
     if (connections !== undefined) data.connections = typeof connections === 'string' ? connections : JSON.stringify(connections)
+
+    // Historiza el cambio: el valor nuevo aplica desde el mes calendario en curso
+    // (timezone del proyecto) en adelante; los meses ya cerrados conservan el
+    // valor que estaba vigente entonces (ver ProjectMonthlyHoursLog).
+    let monthlyHoursLogWrite = null
     if (monthlyHours !== undefined) {
       if (monthlyHours === null || monthlyHours === '') {
         data.monthlyHours = null
@@ -170,6 +183,14 @@ async function update(req, res, next) {
         const h = Number(monthlyHours)
         if (!Number.isInteger(h) || h < 0) return res.status(400).json({ error: 'monthlyHours debe ser un entero positivo' })
         data.monthlyHours = h
+      }
+      if (cur && cur.monthlyHours !== data.monthlyHours) {
+        const effectiveFrom = monthStringInTz(new Date(), cur.timezone)
+        monthlyHoursLogWrite = prisma.projectMonthlyHoursLog.upsert({
+          where: { projectId_effectiveFrom: { projectId, effectiveFrom } },
+          update: { monthlyHours: data.monthlyHours },
+          create: { projectId, effectiveFrom, monthlyHours: data.monthlyHours },
+        })
       }
     }
 
@@ -190,11 +211,14 @@ async function update(req, res, next) {
       data.members = { create: memberIds.map(userId => ({ userId: Number(userId) })) }
     }
 
-    const project = await prisma.project.update({
+    const projectUpdate = prisma.project.update({
       where: { id: projectId },
       data,
       include: includeDetails,
     })
+    const project = monthlyHoursLogWrite
+      ? (await prisma.$transaction([projectUpdate, monthlyHoursLogWrite]))[0]
+      : await projectUpdate
 
     if (newMemberIds.length > 0) {
       await prisma.notification.createMany({

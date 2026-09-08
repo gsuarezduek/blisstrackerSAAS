@@ -6,17 +6,18 @@ import { linkify } from '../utils/linkify'
 import { fmtMins } from '../utils/format'
 
 // Misma clasificación de estado que Reports.jsx (deriveProjectStatus), acá aplicada
-// mes a mes contra el presupuesto ACTUAL del proyecto (no versionamos monthlyHours
-// por mes: el histórico compara siempre contra el valor vigente hoy).
+// mes a mes contra las horas contratadas VIGENTES EN ESE MES (m.monthlyHours, que ya
+// viene historizado desde el backend — ver ProjectMonthlyHoursLog): si el proyecto
+// pasó de 10h a 20h en julio, junio sigue comparándose contra 10h.
 const STATUS_META = {
   over: { label: 'Sobre presupuesto', cls: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800' },
   near: { label: 'Cerca del límite',  cls: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800' },
 }
 
 function deriveMonthStatus(m, project) {
-  const useBudget = project.hoursEnabled && project.monthlyHours != null
-  const noBudget  = project.hoursEnabled && project.monthlyHours == null
-  const budgetMins = useBudget ? project.monthlyHours * 60 : 0
+  const useBudget = project.hoursEnabled && m.monthlyHours != null
+  const noBudget  = project.hoursEnabled && m.monthlyHours == null
+  const budgetMins = useBudget ? m.monthlyHours * 60 : 0
   const pctRaw = useBudget ? (budgetMins > 0 ? (m.totalMinutes / budgetMins) * 100 : 0) : null
 
   let status = 'untracked'
@@ -29,6 +30,38 @@ function deriveMonthStatus(m, project) {
   }
 
   return { ...m, useBudget, noBudget, pctRaw, status }
+}
+
+// "YYYY-MM" del día de hoy en una timezone dada.
+function currentMonthStr(tz) {
+  return new Date().toLocaleDateString('en-CA', { timeZone: tz }).slice(0, 7)
+}
+
+// Progreso del mes en curso: día de hoy / días totales del mes, en una timezone dada.
+function monthProgress(tz) {
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
+  const [y, m, d] = todayStr.split('-').map(Number)
+  const daysInMonth = new Date(y, m, 0).getDate()
+  return { day: d, daysInMonth, pct: Math.min(100, (d / daysInMonth) * 100) }
+}
+
+function fmtTaskDate(iso) {
+  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+}
+
+// Tarjeta chica de stat, mismo lenguaje visual que las de RRHH → Dashboard (icono +
+// valor grande + label + sub opcional).
+function ReportStatCard({ icon, label, value, sub, valueClassName }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4">
+      <span className="text-2xl flex-shrink-0">{icon}</span>
+      <div className="min-w-0">
+        <p className={`text-2xl font-bold leading-none ${valueClassName || 'text-gray-900 dark:text-white'}`}>{value}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+        {sub && <p className="text-xs text-primary-600 dark:text-primary-400 mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  )
 }
 
 // ─── Gráfico de líneas: horas por mes ──────────────────────────────────────────
@@ -57,6 +90,55 @@ function fmtHours(h) {
   return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`
 }
 
+// ── Helpers de "step chart" (para la línea/banda de presupuesto histórico) ─────
+// Las horas contratadas pueden cambiar de un mes a otro (ver ProjectMonthlyHoursLog),
+// así que en vez de una única línea de referencia horizontal se dibuja un escalón:
+// el segmento hasta el mes X se mantiene en el valor vigente ANTES del cambio, y
+// salta al nuevo valor justo en el mes X (que es desde donde aplica). `values[i]`
+// puede ser `null` (mes sin presupuesto) — cada tramo continuo de valores no-null
+// se dibuja como un sub-path separado (huecos donde no hay dato).
+
+function stepVertices(run, values, xFn, yFn) {
+  const verts = [[xFn(run[0]), yFn(values[run[0]])]]
+  let prevIdx = run[0]
+  for (let k = 1; k < run.length; k++) {
+    const i = run[k]
+    verts.push([xFn(i), yFn(values[prevIdx])]) // horizontal al valor viejo hasta el nuevo mes
+    verts.push([xFn(i), yFn(values[i])])       // salto vertical al valor nuevo, justo ahí
+    prevIdx = i
+  }
+  return verts
+}
+
+function contiguousRuns(values) {
+  const runs = []
+  let run = null
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] == null) { run = null; continue }
+    if (!run) { run = []; runs.push(run) }
+    run.push(i)
+  }
+  return runs.filter(r => r.length > 0)
+}
+
+function vertsToPath(verts) {
+  return verts.map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${pt[0].toFixed(1)} ${pt[1].toFixed(1)}`).join(' ')
+}
+
+// Un sub-path escalonado por tramo continuo (para la línea punteada de referencia).
+function stepLinePaths(values, xFn, yFn) {
+  return contiguousRuns(values).map(run => vertsToPath(stepVertices(run, values, xFn, yFn)))
+}
+
+// Un polígono cerrado por tramo continuo, entre el borde superior e inferior de la banda.
+function stepBandPath(values, xFn, yUpperFn, yLowerFn) {
+  return contiguousRuns(values).map(run => {
+    const upper = stepVertices(run, values, xFn, yUpperFn)
+    const lower = stepVertices(run, values, xFn, yLowerFn).reverse()
+    return `${vertsToPath([...upper, ...lower])} Z`
+  }).join(' ')
+}
+
 const CHART_W = 640
 const CHART_H = 220
 const MARGIN = { top: 20, right: 16, bottom: 26, left: 34 }
@@ -64,23 +146,29 @@ const PLOT_W = CHART_W - MARGIN.left - MARGIN.right
 const PLOT_H = CHART_H - MARGIN.top - MARGIN.bottom
 
 // Horas por mes de UN proyecto — línea única (job: tendencia en el tiempo), sin
-// necesidad de leyenda (un solo color). Línea de referencia punteada para el
-// presupuesto mensual cuando está configurado. Hover/foco muestran un tooltip
-// nativo en SVG; la lista de meses de abajo ya funciona como la vista de tabla.
-function HoursLineChart({ points, project }) {
+// necesidad de leyenda (un solo color). Referencia escalonada de horas contratadas
+// (línea + banda ±20%) cuando hay presupuesto, reflejando el valor histórico
+// vigente en cada mes (ver ProjectMonthlyHoursLog) — no siempre el de hoy. Hover/foco
+// muestran un tooltip nativo en SVG; la lista de meses de abajo ya funciona como la
+// vista de tabla.
+function HoursLineChart({ points }) {
   const [activeIdx, setActiveIdx] = useState(null)
   const svgRef = useRef(null)
 
   const n = points.length
   const hoursByMonth = points.map(p => p.totalMinutes / 60)
-  const useBudget = project?.hoursEnabled && project?.monthlyHours != null
-  const budgetHours = useBudget ? project.monthlyHours : null
-  const maxVal = niceMax(Math.max(...hoursByMonth, budgetHours || 0))
+  // null en los meses sin presupuesto (hoursEnabled apagado o sin monthlyHours ese mes).
+  const budgetSeries = points.map(p => (p.useBudget ? p.monthlyHours : null))
+  const hasAnyBudget = budgetSeries.some(v => v != null)
+  const bandUppers = budgetSeries.map(v => (v != null ? v * 1.2 : null)).filter(v => v != null)
+  const maxVal = niceMax(Math.max(...hoursByMonth, ...bandUppers, 0))
 
   const x = i => n === 1 ? MARGIN.left + PLOT_W / 2 : MARGIN.left + (i / (n - 1)) * PLOT_W
   const y = h => MARGIN.top + PLOT_H - (h / maxVal) * PLOT_H
 
   const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(hoursByMonth[i]).toFixed(1)}`).join(' ')
+  const budgetLinePaths = stepLinePaths(budgetSeries, x, y)
+  const bandPath = stepBandPath(budgetSeries, x, v => y(v * 1.2), v => y(v * 0.8))
   const yTicks = [0, maxVal / 2, maxVal]
   const labelStep = n <= 6 ? 1 : Math.ceil(n / 6)
 
@@ -108,13 +196,23 @@ function HoursLineChart({ points, project }) {
   const active = activeIdx != null ? points[activeIdx] : null
 
   // Tooltip: caja angosta anclada al punto activo, recortada para no salirse del viewBox.
-  const tooltipW = 92
+  const tooltipW = 100
+  const tooltipHasBudget = active && budgetSeries[activeIdx] != null
+  const tooltipH = tooltipHasBudget ? 54 : 40
   const tooltipX = active ? Math.min(Math.max(x(activeIdx) - tooltipW / 2, MARGIN.left), CHART_W - MARGIN.right - tooltipW) : 0
-  const tooltipY = active ? Math.max(y(hoursByMonth[activeIdx]) - 52, MARGIN.top) : 0
+  const tooltipY = active ? Math.max(y(hoursByMonth[activeIdx]) - tooltipH - 12, MARGIN.top) : 0
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
-      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">Horas por mes</p>
+      <div className="flex items-baseline justify-between gap-2 mb-2 flex-wrap">
+        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Horas por mes</p>
+        {hasAnyBudget && (
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-300/60 dark:bg-gray-500/40 align-middle mr-1" />
+            Banda: rango aceptable (±20% de las horas contratadas de cada mes)
+          </p>
+        )}
+      </div>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${CHART_W} ${CHART_H}`}
@@ -138,17 +236,19 @@ function HoursLineChart({ points, project }) {
           </g>
         ))}
 
-        {/* Referencia de presupuesto mensual (punteada — a propósito distinta de las gridlines sólidas) */}
-        {useBudget && budgetHours <= maxVal && (
-          <g>
-            <line
-              x1={MARGIN.left} x2={CHART_W - MARGIN.right} y1={y(budgetHours)} y2={y(budgetHours)}
-              className="stroke-gray-400 dark:stroke-gray-500" strokeWidth={1} strokeDasharray="4 3"
-            />
-            <text x={CHART_W - MARGIN.right} y={y(budgetHours) - 4} textAnchor="end" className="fill-gray-400 dark:fill-gray-500" fontSize={10}>
-              {budgetHours}h contratadas
-            </text>
-          </g>
+        {/* Banda ±20% de las horas contratadas (rango aceptable, detrás de todo lo demás) */}
+        {hasAnyBudget && (
+          <path d={bandPath} className="fill-gray-300/30 dark:fill-gray-500/20" stroke="none" />
+        )}
+
+        {/* Referencia escalonada de horas contratadas (punteada, con salto en el mes del cambio) */}
+        {hasAnyBudget && budgetLinePaths.map((d, i) => (
+          <path key={i} d={d} fill="none" className="stroke-gray-400 dark:stroke-gray-500" strokeWidth={1} strokeDasharray="4 3" />
+        ))}
+        {hasAnyBudget && budgetSeries[lastIdx] != null && (
+          <text x={CHART_W - MARGIN.right} y={y(budgetSeries[lastIdx]) - 4} textAnchor="end" className="fill-gray-400 dark:fill-gray-500" fontSize={10}>
+            {budgetSeries[lastIdx]}h contratadas
+          </text>
         )}
 
         {/* Etiquetas del eje X */}
@@ -181,11 +281,16 @@ function HoursLineChart({ points, project }) {
             <circle cx={x(activeIdx)} cy={y(hoursByMonth[activeIdx])} r={4} className="fill-primary-600 dark:fill-primary-400" />
 
             <g transform={`translate(${tooltipX}, ${tooltipY})`}>
-              <rect width={tooltipW} height={40} rx={6} className="fill-gray-800 dark:fill-gray-900" opacity={0.95} />
+              <rect width={tooltipW} height={tooltipH} rx={6} className="fill-gray-800 dark:fill-gray-900" opacity={0.95} />
               <text x={8} y={16} className="fill-white font-semibold" fontSize={12}>{fmtHours(Number(hoursByMonth[activeIdx].toFixed(1)))}</text>
               <text x={8} y={30} className="fill-gray-300" fontSize={9}>
                 {active.label} · {active.taskCount} tarea{active.taskCount !== 1 ? 's' : ''}
               </text>
+              {tooltipHasBudget && (
+                <text x={8} y={44} className="fill-gray-400" fontSize={9}>
+                  Presupuesto: {budgetSeries[activeIdx]}h
+                </text>
+              )}
             </g>
           </g>
         )}
@@ -211,13 +316,29 @@ export default function ProjectReports({ projectId }) {
   }, [projectId])
 
   const enriched = useMemo(() => project ? months.map(m => deriveMonthStatus(m, project)) : [], [months, project])
-  const totals = useMemo(() => enriched.reduce((acc, m) => ({
-    minutes: acc.minutes + m.totalMinutes,
-    tasks: acc.tasks + m.taskCount,
-  }), { minutes: 0, tasks: 0 }), [enriched])
   // El backend devuelve los meses más reciente primero; el gráfico los quiere en
   // orden cronológico (más viejo → más nuevo, izquierda a derecha).
   const chartPoints = useMemo(() => [...enriched].reverse(), [enriched])
+
+  const tz = project?.timezone || 'America/Argentina/Buenos_Aires'
+  const currentMonth = useMemo(() => currentMonthStr(tz), [tz])
+  const progress = useMemo(() => monthProgress(tz), [tz])
+
+  // Promedio de uso de los meses CERRADOS con presupuesto configurado (incluye meses
+  // en 0%, que también son señal real de sub-uso; excluye sin presupuesto). El mes en
+  // curso queda afuera a propósito: recién arrancado va a estar siempre bajo y
+  // distorsiona el promedio hacia abajo sin ser un dato comparable.
+  const avgUtilization = useMemo(() => {
+    const withBudget = enriched.filter(m => m.useBudget && m.month !== currentMonth)
+    if (withBudget.length === 0) return null
+    return withBudget.reduce((s, m) => s + m.pctRaw, 0) / withBudget.length
+  }, [enriched, currentMonth])
+
+  // Horas contratadas que quedan por usar este mes (puede ser negativo = excedido).
+  const currentMonthEntry = enriched.find(m => m.month === currentMonth)
+  const remainingHours = currentMonthEntry?.useBudget
+    ? currentMonthEntry.monthlyHours - currentMonthEntry.totalMinutes / 60
+    : null
 
   function toggleMonth(key) {
     setExpandedMonth(expandedMonth === key ? null : key)
@@ -231,22 +352,39 @@ export default function ProjectReports({ projectId }) {
 
   return (
     <div className="space-y-4">
-      {chartPoints.length >= 2 && <HoursLineChart points={chartPoints} project={project} />}
+      {chartPoints.length >= 2 && <HoursLineChart points={chartPoints} />}
 
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        Horas registradas y tareas completadas de este proyecto, mes a mes.
-        {project?.hoursEnabled && project?.monthlyHours != null && (
-          <> Comparado contra las {project.monthlyHours}h contratadas actuales (no se versiona el presupuesto por mes).</>
-        )}
+        Horas registradas y tareas completadas de este proyecto, mes a mes, comparadas
+        contra las horas contratadas vigentes en cada mes.
       </p>
 
-      {enriched.length > 0 && (
-        <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-sm text-primary-700 dark:text-primary-300 font-medium">Total últimos {enriched.length} meses</span>
-          <div className="flex items-center gap-4">
-            <span className="text-xl font-bold text-primary-700 dark:text-primary-300">{fmtMins(totals.minutes)}</span>
-            <span className="text-sm text-primary-600 dark:text-primary-400">{totals.tasks} tarea{totals.tasks !== 1 ? 's' : ''}</span>
-          </div>
+      {project?.hoursEnabled && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <ReportStatCard
+            icon="📝"
+            label="Horas contratadas"
+            value={project.monthlyHours != null ? `${project.monthlyHours}h/mes` : 'Sin configurar'}
+          />
+          {avgUtilization != null && (
+            <ReportStatCard
+              icon="📊"
+              label="Promedio de uso"
+              value={`${Math.round(avgUtilization)}%`}
+              sub="meses cerrados, sin contar el actual"
+            />
+          )}
+          {remainingHours != null && (
+            <ReportStatCard
+              icon="⏳"
+              label="Horas disponibles este mes"
+              value={`${remainingHours < 0 ? '−' : ''}${Math.abs(Math.round(remainingHours * 10) / 10)}h`}
+              valueClassName={remainingHours < 0 ? 'text-red-600 dark:text-red-400' : undefined}
+              sub={remainingHours < 0
+                ? `Superaste las ${currentMonthEntry.monthlyHours}h contratadas`
+                : `de ${currentMonthEntry.monthlyHours}h contratadas`}
+            />
+          )}
         </div>
       )}
 
@@ -257,6 +395,7 @@ export default function ProjectReports({ projectId }) {
           const pct = pctRaw != null ? Math.min(100, pctRaw) : (m.totalMinutes / maxMinutes) * 100
           const barColor = status === 'over' ? 'bg-red-500' : status === 'near' ? 'bg-yellow-500' : 'bg-primary-500'
           const statusBadge = STATUS_META[status]
+          const isCurrentMonth = m.month === currentMonth
           return (
             <div key={m.month} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl overflow-hidden">
               <button
@@ -265,6 +404,11 @@ export default function ProjectReports({ projectId }) {
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-medium text-gray-800 dark:text-gray-200 capitalize truncate">{m.label}</span>
+                  {isCurrentMonth && (
+                    <span className="text-xs rounded px-2 py-0.5 shrink-0 border bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:border-primary-800">
+                      En curso
+                    </span>
+                  )}
                   <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded px-2 py-0.5 shrink-0">
                     {m.taskCount} tarea{m.taskCount !== 1 ? 's' : ''}
                   </span>
@@ -275,7 +419,7 @@ export default function ProjectReports({ projectId }) {
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                   <span className="font-bold text-primary-600">{fmtMins(m.totalMinutes)}</span>
                   {useBudget && (
-                    <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">/ {project.monthlyHours}h contratadas</span>
+                    <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">/ {m.monthlyHours}h contratadas</span>
                   )}
                   <span className="text-gray-400 dark:text-gray-500 text-sm">{expandedMonth === m.month ? '▲' : '▼'}</span>
                 </div>
@@ -289,12 +433,20 @@ export default function ProjectReports({ projectId }) {
                   </div>
                 ) : (
                   <>
-                    <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                    <div className="relative w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
                       <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                      {isCurrentMonth && useBudget && (
+                        <div
+                          className="absolute top-0 h-1.5 w-0.5 bg-gray-600/80 dark:bg-gray-200/80 -translate-x-1/2"
+                          style={{ left: `${progress.pct}%` }}
+                          title={`Día ${progress.day} de ${progress.daysInMonth}`}
+                        />
+                      )}
                     </div>
                     {useBudget && (
                       <div className={`text-xs text-right mt-1 ${status === 'noActivity' ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'}`}>
                         {status === 'noActivity' ? 'Sin actividad este mes' : `${Math.round(pctRaw)}% de las horas contratadas`}
+                        {isCurrentMonth && ` · día ${progress.day}/${progress.daysInMonth} del mes (${Math.round(progress.pct)}%)`}
                       </div>
                     )}
                   </>
@@ -337,6 +489,7 @@ export default function ProjectReports({ projectId }) {
                                 </div>
                                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
                                   {task.isOverride && <span className="text-amber-500 text-xs">✎</span>}
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">{fmtTaskDate(task.completedAt)}</span>
                                   <span className="text-gray-500 dark:text-gray-400">{fmtMins(task.minutes)}</span>
                                 </div>
                               </div>
