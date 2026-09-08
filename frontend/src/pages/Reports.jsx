@@ -66,7 +66,7 @@ function exportCsv(rows) {
 
 // ── By Project View ────────────────────────────────────────────────────────────
 
-function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask }) {
+function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask, isCurrentMonth, monthProgress }) {
   const [expandedProject, setExpandedProject] = useState(null)
   const [expandedUser, setExpandedUser] = useState(null)
 
@@ -159,15 +159,23 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
                 </div>
               ) : (
                 <>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
+                  <div className="relative w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
                     <div
                       className={`h-1.5 rounded-full ${barColor}`}
                       style={{ width: `${pct}%` }}
                     />
+                    {isCurrentMonth && useBudget && (
+                      <div
+                        className="absolute top-0 h-1.5 w-0.5 bg-gray-600/80 dark:bg-gray-200/80 -translate-x-1/2"
+                        style={{ left: `${monthProgress.pct}%` }}
+                        title={`Día ${monthProgress.day} de ${monthProgress.daysInMonth}`}
+                      />
+                    )}
                   </div>
                   {useBudget && (
                     <div className={`text-xs text-right mt-1 ${status === 'noActivity' ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'}`}>
                       {status === 'noActivity' ? 'Sin actividad en este período' : `${Math.round(pctRaw)}% de las horas contratadas`}
+                      {isCurrentMonth && ` · día ${monthProgress.day}/${monthProgress.daysInMonth} del mes (${Math.round(monthProgress.pct)}%)`}
                     </div>
                   )}
                 </>
@@ -289,6 +297,22 @@ export default function Reports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, sortBy, statusFilter, from, to])
 
+  // El indicador de "día X del mes" solo tiene sentido cuando el rango elegido es
+  // exactamente el preset "Este mes" (1ro del mes → hoy) de DateRangeFilter — con un
+  // rango libre no hay un "mes" al que referenciar el progreso.
+  const isCurrentMonth = useMemo(() => {
+    const now = new Date()
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('en-CA')
+    const todayStr = now.toLocaleDateString('en-CA')
+    return from === firstOfMonth && to === todayStr
+  }, [from, to])
+  const monthProgress = useMemo(() => {
+    const now = new Date()
+    const day = now.getDate()
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    return { day, daysInMonth, pct: Math.min(100, (day / daysInMonth) * 100) }
+  }, [])
+
   const enriched = useMemo(() => projectData.map(deriveProjectStatus), [projectData])
   const hasBudgetTracking = enriched.some(d => d.project.hoursEnabled)
   const counts = useMemo(() => {
@@ -371,7 +395,10 @@ export default function Reports() {
           </div>
         )}
 
-        <ByProjectView data={enriched} sortBy={sortBy} search={search} statusFilter={statusFilter} loading={loading} onEditTask={setEditingTask} />
+        <ByProjectView
+          data={enriched} sortBy={sortBy} search={search} statusFilter={statusFilter} loading={loading} onEditTask={setEditingTask}
+          isCurrentMonth={isCurrentMonth} monthProgress={monthProgress}
+        />
       </main>
 
       {editingTask && (

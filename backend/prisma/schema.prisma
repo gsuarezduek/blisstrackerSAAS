@@ -529,9 +529,25 @@ model Project {
   salesTasksWorkspaces   Workspace[]             @relation("WorkspaceSalesTasksProject")
   chatChannel            ChatChannel?
   contentPieces          ContentPiece[]
+  monthlyHoursLogs       ProjectMonthlyHoursLog[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
+}
+
+// Historial de horas contratadas por mes — permite que el % de uso de un mes
+// pasado se compare siempre contra el valor vigente ENTONCES, no contra el
+// valor actual del proyecto (ver "Reportes → Proyectos" en CLAUDE.md).
+model ProjectMonthlyHoursLog {
+  id            Int      @id @default(autoincrement())
+  projectId     Int
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  monthlyHours  Int?     // horas contratadas vigentes desde effectiveFrom; null = sin presupuesto desde ese mes
+  effectiveFrom String   // "YYYY-MM", mes calendario (en Project.timezone) desde el cual aplica
+  createdAt     DateTime @default(now())
+
+  @@unique([projectId, effectiveFrom])
+  @@index([projectId, effectiveFrom])
 }
 
 model Service {

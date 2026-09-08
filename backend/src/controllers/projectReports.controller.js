@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { taskMins, buildCompletedAtWhere, monthStringInTz } = require('../lib/timeMetrics')
 const { monthBounds, prevMonthsArr, monthLabel } = require('../lib/monthUtils')
+const { resolveMonthlyHoursByMonth } = require('../lib/monthlyHoursHistory')
 
 // Resuelve :id (numérico o name) a un projectId del workspace actual.
 async function resolveProjectId(param, workspaceId) {
@@ -29,7 +30,7 @@ async function hoursHistory(req, res, next) {
     const months = Math.min(24, Math.max(1, Number(req.query.months) || 12))
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, name: true, hoursEnabled: true, monthlyHours: true },
+      select: { id: true, name: true, hoursEnabled: true, monthlyHours: true, timezone: true },
     })
 
     const currentMonth = monthStringInTz(new Date(), tz)
@@ -40,24 +41,31 @@ async function hoursHistory(req, res, next) {
       tz,
     )
 
-    const tasks = await prisma.task.findMany({
-      where: {
-        projectId,
-        status: 'COMPLETED',
-        startedAt: { not: null },
-        completedAt: { not: null, ...completedAtRange },
-      },
-      select: {
-        id: true, description: true, startedAt: true, completedAt: true,
-        pausedMinutes: true, minutesOverride: true,
-        user: { select: { id: true, name: true, avatar: true } },
-      },
-      orderBy: { completedAt: 'desc' },
-    })
+    const [tasks, monthlyHoursLogs] = await Promise.all([
+      prisma.task.findMany({
+        where: {
+          projectId,
+          status: 'COMPLETED',
+          startedAt: { not: null },
+          completedAt: { not: null, ...completedAtRange },
+        },
+        select: {
+          id: true, description: true, startedAt: true, completedAt: true,
+          pausedMinutes: true, minutesOverride: true,
+          user: { select: { id: true, name: true, avatar: true } },
+        },
+        orderBy: { completedAt: 'desc' },
+      }),
+      prisma.projectMonthlyHoursLog.findMany({
+        where: { projectId },
+        select: { monthlyHours: true, effectiveFrom: true },
+      }),
+    ])
+    const monthlyHoursByMonth = resolveMonthlyHoursByMonth(monthlyHoursLogs, monthKeys)
 
     const bucket = {}
     for (const m of monthKeys) {
-      bucket[m] = { month: m, label: monthLabel(m), totalMinutes: 0, taskCount: 0, byUser: {} }
+      bucket[m] = { month: m, label: monthLabel(m), totalMinutes: 0, taskCount: 0, byUser: {}, monthlyHours: monthlyHoursByMonth[m] }
     }
     for (const t of tasks) {
       const key = monthStringInTz(t.completedAt, tz)
