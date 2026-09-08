@@ -13,7 +13,7 @@
     "android": {
       "package": "app.blisstracker.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#F7931A",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -38,6 +38,15 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Usá Face ID para entrar más rápido a BlissTracker."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
         }
       ]
     ],

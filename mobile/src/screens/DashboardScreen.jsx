@@ -1,11 +1,12 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
-import { View, Text, SectionList, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native'
+import { View, Text, SectionList, Pressable, StyleSheet, RefreshControl } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { getToday } from '../api/tasks'
 import TaskCard from '../components/TaskCard'
 import AddTaskModal from '../components/AddTaskModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
+import BlissLoader from '../components/BlissLoader'
 import { appEvents, EVENTS } from '../lib/events'
 
 function todayLabel() {
@@ -101,7 +102,7 @@ export default function DashboardScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#F7931A" />
+        <BlissLoader size={72} />
       </View>
     )
   }

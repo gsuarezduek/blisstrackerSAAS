@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react'
-import { View, ActivityIndicator } from 'react-native'
+import { useEffect } from 'react'
+import { View } from 'react-native'
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import * as Notifications from 'expo-notifications'
 import { useAuth } from '../context/AuthContext'
 import { appEvents, EVENTS } from '../lib/events'
+import BlissLoader from '../components/BlissLoader'
 import LoginScreen from '../screens/LoginScreen'
 import WorkspaceSelectScreen from '../screens/WorkspaceSelectScreen'
 import LockScreen from '../screens/LockScreen'
@@ -44,8 +45,8 @@ export default function RootNavigator() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#F7931A" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <BlissLoader size={96} />
       </View>
     )
   }

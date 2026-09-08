@@ -356,6 +356,62 @@ Recordar la política de Google: cuentas de developer nuevas necesitan un
 testing cerrado con ≥20 testers durante 14 días corridos antes de habilitar
 producción.
 
+### Identidad de marca real (ícono, splash, loader animado)
+
+Los assets de placeholder de la Fase 5 (checkmark genérico generado con
+Python/Pillow) se reemplazaron por el **isotipo real de BlissTracker** —
+4 facetas hexagonales tipo "molinillo" en gradiente naranja (`#f39200` →
+`#f35a00`), el mismo que ya se usa en la web como favicon/PWA icon
+(`frontend/public/blisstracker_logo.svg`, `logo-192.png`, `logo-512.png`) y
+como loader animado (`frontend/public/logo-loading.svg`, consumido por
+`LoadingSpinner.jsx`). Los 4 `<path>` y sus gradientes están **hardcodeados
+en dos lugares** de `mobile/` (`gen.js` de un solo uso para los PNG — no
+forma parte del repo — y `src/components/BlissLoader.jsx`) porque no hay
+forma directa de compartir el SVG fuente con `frontend/`: son dos apps
+totalmente separadas, sin paquete compartido. Si el isotipo cambia alguna
+vez, hay que actualizar el path data en ambos lugares a mano.
+
+- **Ícono de la app** (`assets/icon.png`, `android-icon-*.png`,
+  `favicon.png`) — rasterizados con `sharp` (Node) desde el SVG fuente
+  exacto, no con Pillow como el placeholder anterior (Pillow no rasteriza
+  SVG). Fondo blanco en `icon.png`/`android-icon-background.png` (antes
+  naranja de marca — con el isotipo ya llevando su propio gradiente naranja,
+  blanco da mejor contraste, mismo criterio que `logo-512.png` en la web).
+  `android-icon-foreground.png`/`monochrome.png` con el símbolo achicado al
+  ~45% del canvas (safe zone de adaptive icons).
+- **Splash nativo** (`expo-splash-screen`, plugin en `app.json` — `image`,
+  `imageWidth: 220`, `backgroundColor: "#ffffff"`): el isotipo estático
+  sobre blanco. Es una limitación de plataforma real, no una decisión de
+  diseño — el splash nativo se renderiza antes de que cualquier JS corra,
+  así que **no puede animarse**.
+- **`src/components/BlissLoader.jsx`** — acá sí, réplica animada exacta del
+  loader web con `react-native-svg` + `Animated` de React Native: mismos 4
+  `<Path>`/gradientes, mismo timing (1.8s, `cubic-bezier(0.65, 0, 0.35, 1)`,
+  keyframes 0%/50%/100% → rotate 0°/180°/360° + scale 1/0.88/1). Un solo
+  `Animated.Value` (`progress`, 0→1 en loop) interpola un **string de
+  transform SVG completo** (`"rotate(<a> 540 540) scale(<b>)"`) en vez de
+  animar rotate/scale por separado — así ambos quedan derivados del mismo
+  progreso ya easeado, preservando el timing relativo exacto del CSS
+  original. `useNativeDriver: false` a propósito: el native driver no
+  soporta animar un prop `transform` de string arbitrario en
+  `react-native-svg`.
+- **`App.js`** llama `SplashScreen.preventAutoHideAsync()` (antes del primer
+  render) + `SplashScreen.hideAsync()` (en un `useEffect` al montar) — el
+  splash nativo estático se oculta apenas React Native toma control,
+  revelando el `BlissLoader` animado de `RootNavigator` sobre el mismo fondo
+  blanco. Sin esto habría un flash en blanco entre el splash nativo y la
+  primera pantalla JS.
+- **`BlissLoader` reemplaza el spinner genérico solo en los dos momentos de
+  "pantalla completa" del arranque** (`RootNavigator` mientras se resuelve
+  la sesión guardada, `DashboardScreen` en su primera carga) — no se tocaron
+  los `ActivityIndicator` chicos dentro de botones (enviar comentario, crear
+  tarea, etc.), donde un ícono de marca grande no encaja bien: ahí el
+  spinner nativo del sistema sigue siendo lo apropiado.
+
+**Requiere rebuild para verse** — a diferencia de cambios de JS puro (que
+Metro puede hot-reload), el ícono y el splash nativo están "horneados" en el
+binario compilado. Hace falta correr `eas build` de nuevo para verlos.
+
 ## Roadmap (alcance v1)
 
 Incluye: tareas de hoy (ver/iniciar/pausar/completar/bloquear/destacar),

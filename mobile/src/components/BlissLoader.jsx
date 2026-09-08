@@ -1,0 +1,65 @@
+import { useEffect, useRef } from 'react'
+import { Animated, Easing } from 'react-native'
+import Svg, { Defs, LinearGradient, Stop, G, Path } from 'react-native-svg'
+
+// Réplica exacta (mismos paths/gradientes/keyframes) del loader animado de
+// BlissTracker en la web (frontend/public/logo-loading.svg, componente
+// LoadingSpinner.jsx) — 4 facetas hexagonales que rotan 360° en 1.8s con un
+// "dip" de escala al 88% a mitad de camino (mismo efecto rotate+pulso que en
+// CSS, portado con Animated de React Native ya que react-native-svg no
+// interpreta <style>/@keyframes embebidos en un SVG importado como imagen).
+const PATHS = [
+  { d: 'M875.67,430.25l-146.03-84.12c-7.19-4.14-16.18,1.04-16.19,9.34l-.12,103.43c0,3.86-2.07,7.42-5.41,9.34l-102.21,58.86c-3.36,1.93-5.42,5.52-5.41,9.4l.03,7.08c.02,3.84,2.07,7.39,5.4,9.31l102.24,58.98c3.34,1.93,5.4,5.49,5.4,9.34l.09,103.78c0,8.3,8.99,13.49,16.19,9.35l146.03-84.13c3.35-1.93,5.41-5.49,5.41-9.36l-.02-201.26c0-3.86-2.06-7.43-5.41-9.35Z', grad: [600.31, 540.24, 881.09, 540.24] },
+  { d: 'M491.69,530.65l-108.47-62.54c-3.34-1.93-5.4-5.49-5.4-9.35v-95.21c0-8.31-8.98-13.5-16.18-9.36l-157.32,90.66c-3.35,1.93-5.41,5.49-5.41,9.35v201.28c0,3.86,2.07,7.43,5.41,9.36l157.29,90.58c7.2,4.14,16.18-1.05,16.19-9.35l.08-124.91c0-3.86,2.06-7.42,5.41-9.35l108.41-62.45c7.21-4.15,7.21-14.55,0-18.71Z', grad: [198.91, 554.81, 497.09, 554.81] },
+  { d: 'M677.3,629.75l-124.53-71.78-1.97-1.06c-3.16-1.7-6.95-1.72-10.12-.06l-1.97,1.03-124.58,71.8c-3.35,1.93-5.41,5.5-5.41,9.36l.04,145.58c0,3.86,2.06,7.43,5.41,9.35l126.18,72.65c3.34,1.92,7.45,1.92,10.78,0l126.19-72.79c3.34-1.93,5.4-5.49,5.4-9.35l-.02-145.37c0-3.86-2.06-7.43-5.4-9.35Z', grad: [408.72, 711.84, 682.72, 711.84] },
+  { d: 'M414.16,450.4l126.18,72.7c3.34,1.92,7.45,1.92,10.79,0l126.15-72.82c3.34-1.93,5.4-5.49,5.4-9.35v-145.4c0-3.86-2.06-7.42-5.4-9.35l-126.15-72.79c-3.34-1.93-7.45-1.93-10.79,0l-126.2,72.74c-3.34,1.93-5.41,5.49-5.41,9.36l.02,145.56c0,3.86,2.06,7.43,5.41,9.35Z', grad: [408.74, 368.24, 682.69, 368.24] },
+]
+
+const AnimatedG = Animated.createAnimatedComponent(G)
+
+export default function BlissLoader({ size = 64 }) {
+  const progress = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 1800,
+        easing: Easing.bezier(0.65, 0, 0.35, 1),
+        useNativeDriver: false, // anima un prop `transform` string de SVG, no soportado por el native driver
+      })
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [progress])
+
+  // Mismos 3 keyframes que `.bliss-spin` en CSS: 0%/50%/100% → rotate
+  // 0/180/360deg, scale 1/0.88/1. El easing ya aplicado al `progress` (arriba)
+  // reproduce la misma curva de aceleración que el cubic-bezier original.
+  const transform = progress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [
+      'rotate(0 540 540) scale(1)',
+      'rotate(180 540 540) scale(0.88)',
+      'rotate(360 540 540) scale(1)',
+    ],
+  })
+
+  return (
+    <Svg width={size} height={size} viewBox="0 0 1080 1080">
+      <Defs>
+        {PATHS.map((p, i) => (
+          <LinearGradient key={i} id={`bliss-g${i}`} x1={p.grad[0]} y1={p.grad[1]} x2={p.grad[2]} y2={p.grad[3]} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor="#f39200" />
+            <Stop offset="1" stopColor="#f35a00" />
+          </LinearGradient>
+        ))}
+      </Defs>
+      <AnimatedG transform={transform}>
+        {PATHS.map((p, i) => (
+          <Path key={i} fill={`url(#bliss-g${i})`} d={p.d} />
+        ))}
+      </AnimatedG>
+    </Svg>
+  )
+}
