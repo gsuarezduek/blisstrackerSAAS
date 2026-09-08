@@ -9,6 +9,10 @@ import RoleBadge from '../components/RoleBadge'
 import api from '../api/client'
 import { fmtMins } from '../utils/format'
 
+function fmtTaskDate(iso) {
+  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+}
+
 // ── Estado de presupuesto por proyecto ─────────────────────────────────────────
 // Deriva, a partir de hoursEnabled/monthlyHours/totalMinutes, una única categoría
 // por proyecto. Se usa tanto para los chips de resumen como para el filtro y el
@@ -219,6 +223,7 @@ function ByProjectView({ data, sortBy, search, statusFilter, loading, onEditTask
                               </div>
                               <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
                                 {task.isOverride && <span className="text-amber-500 text-xs">✎</span>}
+                                <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">{fmtTaskDate(task.completedAt)}</span>
                                 <span className="text-gray-500 dark:text-gray-400">{fmtMins(task.minutes)}</span>
                               </div>
                             </button>

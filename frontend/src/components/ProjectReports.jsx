@@ -45,6 +45,25 @@ function monthProgress(tz) {
   return { day: d, daysInMonth, pct: Math.min(100, (d / daysInMonth) * 100) }
 }
 
+function fmtTaskDate(iso) {
+  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+}
+
+// Tarjeta chica de stat, mismo lenguaje visual que las de RRHH → Dashboard (icono +
+// valor grande + label + sub opcional).
+function ReportStatCard({ icon, label, value, sub, valueClassName }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4">
+      <span className="text-2xl flex-shrink-0">{icon}</span>
+      <div className="min-w-0">
+        <p className={`text-2xl font-bold leading-none ${valueClassName || 'text-gray-900 dark:text-white'}`}>{value}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+        {sub && <p className="text-xs text-primary-600 dark:text-primary-400 mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  )
+}
+
 // ─── Gráfico de líneas: horas por mes ──────────────────────────────────────────
 
 const MONTH_ABBR = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -297,10 +316,6 @@ export default function ProjectReports({ projectId }) {
   }, [projectId])
 
   const enriched = useMemo(() => project ? months.map(m => deriveMonthStatus(m, project)) : [], [months, project])
-  const totals = useMemo(() => enriched.reduce((acc, m) => ({
-    minutes: acc.minutes + m.totalMinutes,
-    tasks: acc.tasks + m.taskCount,
-  }), { minutes: 0, tasks: 0 }), [enriched])
   // El backend devuelve los meses más reciente primero; el gráfico los quiere en
   // orden cronológico (más viejo → más nuevo, izquierda a derecha).
   const chartPoints = useMemo(() => [...enriched].reverse(), [enriched])
@@ -309,13 +324,21 @@ export default function ProjectReports({ projectId }) {
   const currentMonth = useMemo(() => currentMonthStr(tz), [tz])
   const progress = useMemo(() => monthProgress(tz), [tz])
 
-  // Promedio de uso de los meses con presupuesto configurado (incluye meses en 0%,
-  // que también son señal real de sub-uso; excluye los meses sin presupuesto).
+  // Promedio de uso de los meses CERRADOS con presupuesto configurado (incluye meses
+  // en 0%, que también son señal real de sub-uso; excluye sin presupuesto). El mes en
+  // curso queda afuera a propósito: recién arrancado va a estar siempre bajo y
+  // distorsiona el promedio hacia abajo sin ser un dato comparable.
   const avgUtilization = useMemo(() => {
-    const withBudget = enriched.filter(m => m.useBudget)
+    const withBudget = enriched.filter(m => m.useBudget && m.month !== currentMonth)
     if (withBudget.length === 0) return null
     return withBudget.reduce((s, m) => s + m.pctRaw, 0) / withBudget.length
-  }, [enriched])
+  }, [enriched, currentMonth])
+
+  // Horas contratadas que quedan por usar este mes (puede ser negativo = excedido).
+  const currentMonthEntry = enriched.find(m => m.month === currentMonth)
+  const remainingHours = currentMonthEntry?.useBudget
+    ? currentMonthEntry.monthlyHours - currentMonthEntry.totalMinutes / 60
+    : null
 
   function toggleMonth(key) {
     setExpandedMonth(expandedMonth === key ? null : key)
@@ -336,28 +359,31 @@ export default function ProjectReports({ projectId }) {
         contra las horas contratadas vigentes en cada mes.
       </p>
 
-      {enriched.length > 0 && (
-        <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl px-4 py-3 flex items-center gap-x-6 gap-y-2 flex-wrap">
-          <div>
-            <span className="text-sm text-primary-700 dark:text-primary-300 font-medium block">Total últimos {enriched.length} meses</span>
-            <div className="flex items-center gap-2">
-              <span className="text-xl font-bold text-primary-700 dark:text-primary-300">{fmtMins(totals.minutes)}</span>
-              <span className="text-sm text-primary-600 dark:text-primary-400">{totals.tasks} tarea{totals.tasks !== 1 ? 's' : ''}</span>
-            </div>
-          </div>
-          {project?.hoursEnabled && (
-            <div>
-              <span className="text-sm text-primary-700 dark:text-primary-300 font-medium block">Horas contratadas</span>
-              <span className="text-xl font-bold text-primary-700 dark:text-primary-300">
-                {project.monthlyHours != null ? `${project.monthlyHours}h/mes` : 'Sin configurar'}
-              </span>
-            </div>
-          )}
+      {project?.hoursEnabled && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <ReportStatCard
+            icon="📝"
+            label="Horas contratadas"
+            value={project.monthlyHours != null ? `${project.monthlyHours}h/mes` : 'Sin configurar'}
+          />
           {avgUtilization != null && (
-            <div>
-              <span className="text-sm text-primary-700 dark:text-primary-300 font-medium block">Promedio de uso</span>
-              <span className="text-xl font-bold text-primary-700 dark:text-primary-300">{Math.round(avgUtilization)}%</span>
-            </div>
+            <ReportStatCard
+              icon="📊"
+              label="Promedio de uso"
+              value={`${Math.round(avgUtilization)}%`}
+              sub="meses cerrados, sin contar el actual"
+            />
+          )}
+          {remainingHours != null && (
+            <ReportStatCard
+              icon="⏳"
+              label="Horas disponibles este mes"
+              value={`${remainingHours < 0 ? '−' : ''}${Math.abs(Math.round(remainingHours * 10) / 10)}h`}
+              valueClassName={remainingHours < 0 ? 'text-red-600 dark:text-red-400' : undefined}
+              sub={remainingHours < 0
+                ? `Superaste las ${currentMonthEntry.monthlyHours}h contratadas`
+                : `de ${currentMonthEntry.monthlyHours}h contratadas`}
+            />
           )}
         </div>
       )}
@@ -463,6 +489,7 @@ export default function ProjectReports({ projectId }) {
                                 </div>
                                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
                                   {task.isOverride && <span className="text-amber-500 text-xs">✎</span>}
+                                  <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">{fmtTaskDate(task.completedAt)}</span>
                                   <span className="text-gray-500 dark:text-gray-400">{fmtMins(task.minutes)}</span>
                                 </div>
                               </div>
