@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma')
 const { isAdmin } = require('../lib/projectAccess')
 const { resolveMentions } = require('../lib/mentions')
+const { sendPushToUser } = require('../services/pushNotification.service')
 
 async function getTaskWithAccess(taskId, userId, admin, workspaceId) {
   // Scopear por workspace: evita que un admin lea/comente tareas de otros workspaces vía ID.
@@ -72,6 +73,7 @@ async function addComment(req, res, next) {
     }
 
     if (mentionedUserIds.size > 0) {
+      const mentionMessage = `te mencionó en "${desc}"`
       await prisma.notification.createMany({
         data: Array.from(mentionedUserIds).map(uid => ({
           userId:      uid,
@@ -80,9 +82,12 @@ async function addComment(req, res, next) {
           projectId:   task.projectId,
           workspaceId,
           type:        'TASK_MENTION',
-          message:     `te mencionó en "${desc}"`,
+          message:     mentionMessage,
         })),
       })
+      for (const uid of mentionedUserIds) {
+        sendPushToUser({ userId: uid, workspaceId, type: 'TASK_MENTION', taskId: task.id, message: `${req.user.name} ${mentionMessage}` }).catch(() => {})
+      }
     }
 
     const prevCommenters = await prisma.taskComment.findMany({
@@ -107,6 +112,7 @@ async function addComment(req, res, next) {
     }
 
     if (toNotify.size > 0) {
+      const commentMessage = `comentó en "${desc}"`
       await prisma.notification.createMany({
         data: Array.from(toNotify).map(uid => ({
           userId:      uid,
@@ -115,9 +121,12 @@ async function addComment(req, res, next) {
           projectId:   task.projectId,
           workspaceId,
           type:        'TASK_COMMENT',
-          message:     `comentó en "${desc}"`,
+          message:     commentMessage,
         })),
       })
+      for (const uid of toNotify) {
+        sendPushToUser({ userId: uid, workspaceId, type: 'TASK_COMMENT', taskId: task.id, message: `${req.user.name} ${commentMessage}` }).catch(() => {})
+      }
     }
 
     res.status(201).json(comment)

@@ -10,6 +10,7 @@ const { nextOnTaskDone } = require('../../lib/contentCatalog')
 const { maybeAutoFinishMeeting } = require('../../lib/projectMeetingLifecycle')
 const { statusSideEffects, logEvent, loadPiece, formatPiece } = require('../content.controller')
 const { taskInclude, assertNoActiveTask, handleActiveTaskConflict } = require('./_shared')
+const { sendPushToUser } = require('../../services/pushNotification.service')
 
 // Resuelve @menciones de un texto contra los miembros activos del workspace (cualquiera
 // puede ser mencionado en una tarea, sea o no su responsable — la etiqueta de proyecto/
@@ -182,6 +183,7 @@ async function create(req, res, next) {
       const desc = description.length > 60 ? description.slice(0, 57) + '...' : description
 
       if (userId !== requesterId) {
+        const message = `te asignó una tarea: "${desc}"`
         await prisma.notification.create({
           data: {
             userId,
@@ -190,9 +192,10 @@ async function create(req, res, next) {
             projectId:  Number(projectId),
             workspaceId,
             type:       'TASK_MENTION',
-            message:    `te asignó una tarea: "${desc}"`,
+            message,
           },
         })
+        sendPushToUser({ userId, workspaceId, type: 'TASK_MENTION', taskId: task.id, message: `${req.user.name} ${message}` }).catch(() => {})
       }
 
       // @menciones en la descripción: notifican aunque la tarea sea para uno mismo
@@ -201,6 +204,7 @@ async function create(req, res, next) {
       const mentioned = await resolveTaskMentions(description, workspaceId, requesterId)
       mentioned.delete(userId)
       if (mentioned.size > 0) {
+        const mentionMessage = `te mencionó en una tarea: "${desc}"`
         await prisma.notification.createMany({
           data: Array.from(mentioned).map(uid => ({
             userId:      uid,
@@ -209,9 +213,12 @@ async function create(req, res, next) {
             projectId:   Number(projectId),
             workspaceId,
             type:        'TASK_MENTION',
-            message:     `te mencionó en una tarea: "${desc}"`,
+            message:     mentionMessage,
           })),
         })
+        for (const uid of mentioned) {
+          sendPushToUser({ userId: uid, workspaceId, type: 'TASK_MENTION', taskId: task.id, message: `${req.user.name} ${mentionMessage}` }).catch(() => {})
+        }
       }
     }
 
@@ -338,6 +345,7 @@ async function completeTask(req, res, next) {
     const recipients = await taskLifecycleRecipients(task, userId)
     if (recipients.size > 0) {
       const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
+      const message = `completó "${desc}"`
       await prisma.notification.createMany({
         data: Array.from(recipients).map(uid => ({
           userId:      uid,
@@ -346,9 +354,12 @@ async function completeTask(req, res, next) {
           projectId:   task.projectId,
           workspaceId,
           type:        'COMPLETED',
-          message:     `completó "${desc}"`,
+          message,
         })),
       })
+      for (const uid of recipients) {
+        sendPushToUser({ userId: uid, workspaceId, type: 'COMPLETED', taskId: task.id, message: `${req.user.name} ${message}` }).catch(() => {})
+      }
     }
 
     // Si la tarea está vinculada a un To-Do (L10 o reunión de proyecto), tildarlo (sync un sentido: tarea → To-Do).
@@ -437,6 +448,7 @@ async function blockTask(req, res, next) {
     const recipients = await taskLifecycleRecipients(task, userId)
     if (recipients.size > 0) {
       const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
+      const message = `bloqueó "${desc}": ${reason.trim()}`
       await prisma.notification.createMany({
         data: Array.from(recipients).map(uid => ({
           userId:      uid,
@@ -445,9 +457,12 @@ async function blockTask(req, res, next) {
           projectId:   task.projectId,
           workspaceId,
           type:        'BLOCKED',
-          message:     `bloqueó "${desc}": ${reason.trim()}`,
+          message,
         })),
       })
+      for (const uid of recipients) {
+        sendPushToUser({ userId: uid, workspaceId, type: 'BLOCKED', taskId: task.id, message: `${req.user.name} ${message}` }).catch(() => {})
+      }
     }
 
     res.json(task)
@@ -488,6 +503,7 @@ async function unblockTask(req, res, next) {
     const recipients = await taskLifecycleRecipients(task, userId)
     if (recipients.size > 0) {
       const desc = task.description.length > 60 ? task.description.slice(0, 57) + '...' : task.description
+      const message = `desbloqueó "${desc}"`
       await prisma.notification.createMany({
         data: Array.from(recipients).map(uid => ({
           userId:      uid,
@@ -496,9 +512,12 @@ async function unblockTask(req, res, next) {
           projectId:   task.projectId,
           workspaceId,
           type:        'UNBLOCKED',
-          message:     `desbloqueó "${desc}"`,
+          message,
         })),
       })
+      for (const uid of recipients) {
+        sendPushToUser({ userId: uid, workspaceId, type: 'UNBLOCKED', taskId: task.id, message: `${req.user.name} ${message}` }).catch(() => {})
+      }
     }
 
     res.json(task)

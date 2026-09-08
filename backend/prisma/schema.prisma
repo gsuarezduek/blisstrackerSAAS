@@ -183,6 +183,7 @@ model Workspace {
   whatsappAutomationLogs    WhatsappAutomationLog[]
   whatsappBotDocuments      WhatsappBotDocument[]
   whatsappBotEscalations    WhatsappBotEscalation[]
+  deviceTokens              DeviceToken[]
 
   @@index([slug])
 }
@@ -351,6 +352,7 @@ model User {
   whatsappAutomationRulesCreated WhatsappAutomationRule[]
   whatsappBotDocumentsUploaded WhatsappBotDocument[] @relation("WhatsappBotDocumentUploadedBy")
   dismissedFindings         DismissedFinding[]
+  deviceTokens              DeviceToken[]
 }
 
 model UserLogin {
@@ -3697,4 +3699,24 @@ model WhatsappAutomationLog {
 
   @@index([ruleId, leadId, createdAt])
   @@index([workspaceId, createdAt])
+}
+
+// Token push (Expo/FCM) de una instalación de la app mobile, para notificaciones
+// push a usuarios no-admin. `token` es único por instalación (no por usuario —
+// reinstalar la app o loguearse en otro dispositivo genera un token nuevo); un
+// mismo usuario puede tener varios tokens activos (varios dispositivos). Ver
+// "Push notifications (mobile)" en mobile/CLAUDE.md.
+model DeviceToken {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  workspaceId Int
+  token       String   @unique
+  platform    String   // 'ios' | 'android'
+  createdAt   DateTime @default(now())
+  lastUsedAt  DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, workspaceId])
 }

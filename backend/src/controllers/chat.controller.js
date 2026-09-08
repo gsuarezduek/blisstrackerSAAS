@@ -5,6 +5,7 @@ const { slugify } = require('../lib/slugify')
 const { emitTo } = require('../lib/socket')
 const { channelLabel, uniqueSlug, materializeChannels } = require('../lib/chatChannels')
 const { MESSAGE_INCLUDE } = require('../lib/chatMessageInclude')
+const { sendPushToUser } = require('../services/pushNotification.service')
 
 const MESSAGE_PAGE_SIZE = 50
 
@@ -281,13 +282,17 @@ async function sendMessage(req, res, next) {
           message: notifMessage,
         })),
       })
-      for (const uid of mentionedUserIds) emitTo(`user:${uid}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
+      for (const uid of mentionedUserIds) {
+        emitTo(`user:${uid}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
+        sendPushToUser({ userId: uid, workspaceId, type: 'CHAT_MENTION', channelId, message: `${req.user.name} ${notifMessage}` }).catch(() => {})
+      }
     }
 
     // Responder equivale a una mención: notifica al autor del mensaje original (si tiene
     // uno — no a un mensaje de sistema, ni a uno mismo, ni si ya se lo notificó arriba
     // por @mención, para no duplicar).
     if (replyTarget?.authorId && replyTarget.authorId !== userId && !mentionedUserIds.has(replyTarget.authorId)) {
+      const replyMessage = `te respondió en #${channelLabel(channel)}`
       await prisma.notification.create({
         data: {
           userId: replyTarget.authorId,
@@ -296,10 +301,11 @@ async function sendMessage(req, res, next) {
           channelId,
           chatMessageId: message.id,
           type: 'CHAT_MENTION',
-          message: `te respondió en #${channelLabel(channel)}`,
+          message: replyMessage,
         },
       })
       emitTo(`user:${replyTarget.authorId}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
+      sendPushToUser({ userId: replyTarget.authorId, workspaceId, type: 'CHAT_MENTION', channelId, message: `${req.user.name} ${replyMessage}` }).catch(() => {})
     }
 
     emitTo(`channel:${channelId}`, 'chat:message', message)
