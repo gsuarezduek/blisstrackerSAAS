@@ -128,7 +128,7 @@ const COLUMNS = [
   { key: 'owner',       label: 'Responsable', sortable: true },
 ]
 
-export default function ContentTableView({ pieces, members, loading, canEdit, onCreate, onUpdate, onDelete, onOpen }) {
+export default function ContentTableView({ pieces, members, clientContacts = [], loading, canEdit, onCreate, onUpdate, onDelete, onOpen }) {
   // Por defecto, fecha más próxima arriba (no última edición) — mismo criterio
   // que el orderBy del backend (content.controller.js listPieces).
   const [sort, setSort] = useState({ key: 'scheduledAt', dir: 'asc' })
@@ -250,24 +250,37 @@ export default function ContentTableView({ pieces, members, loading, canEdit, on
                   <ContentNetworkChips networks={p.networks} />
                 </td>
 
-                {/* Responsable */}
+                {/* Responsable — puede ser el equipo (ownerId) o el cliente (ownerContactId),
+                    mutuamente excluyentes; "c-"/"u-" distinguen el id en el mismo <select>. */}
                 <td className={`${CELL} w-44`}>
                   {canEdit ? (
                     <select
-                      value={p.owner?.id ?? ''}
-                      onChange={e => onUpdate(p.id, { ownerId: e.target.value || null })}
+                      value={p.ownerContact ? `c-${p.ownerContact.id}` : p.owner ? `u-${p.owner.id}` : ''}
+                      onChange={e => {
+                        const v = e.target.value
+                        if (!v) onUpdate(p.id, { ownerId: null, ownerContactId: null })
+                        else if (v.startsWith('c-')) onUpdate(p.id, { ownerContactId: Number(v.slice(2)), ownerId: null })
+                        else onUpdate(p.id, { ownerId: Number(v.slice(2)), ownerContactId: null })
+                      }}
                       className={`${INLINE} w-full`}
                     >
                       <option value="">Sin asignar</option>
+                      {clientContacts.length > 0 && (
+                        <optgroup label="Cliente">
+                          {clientContacts.map(c => <option key={`c-${c.id}`} value={`c-${c.id}`}>{c.name}</option>)}
+                        </optgroup>
+                      )}
                       <optgroup label="Equipo del proyecto">
-                        {members.filter(m => m.inTeam).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {members.filter(m => m.inTeam).map(m => <option key={`u-${m.id}`} value={`u-${m.id}`}>{m.name}</option>)}
                       </optgroup>
                       <optgroup label="Otros del workspace">
-                        {members.filter(m => !m.inTeam).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {members.filter(m => !m.inTeam).map(m => <option key={`u-${m.id}`} value={`u-${m.id}`}>{m.name}</option>)}
                       </optgroup>
                     </select>
                   ) : (
-                    <span className="text-sm text-gray-600 dark:text-gray-400">{p.owner?.name ?? '—'}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      {p.ownerContact ? `🤝 ${p.ownerContact.name}` : p.owner?.name ?? '—'}
+                    </span>
                   )}
                 </td>
 

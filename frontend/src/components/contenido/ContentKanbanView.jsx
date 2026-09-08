@@ -90,9 +90,12 @@ export default function ContentKanbanView({ pieces, canEdit, onMove, onOpen }) {
                     <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{p.title}</div>
                     <div className="flex items-center justify-between mt-2 gap-2">
                       <ContentNetworkChips networks={p.networks} size="w-3.5 h-3.5" />
-                      {p.owner && (
-                        <span className="text-[11px] text-gray-400 truncate max-w-[90px] shrink-0" title={p.owner.name}>
-                          {p.owner.name}
+                      {(p.owner || p.ownerContact) && (
+                        <span
+                          className="text-[11px] text-gray-400 truncate max-w-[90px] shrink-0"
+                          title={p.ownerContact ? `Cliente: ${p.ownerContact.name}` : p.owner.name}
+                        >
+                          {p.ownerContact ? `🤝 ${p.ownerContact.name}` : p.owner.name}
                         </span>
                       )}
                     </div>

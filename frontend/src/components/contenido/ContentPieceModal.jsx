@@ -54,7 +54,7 @@ function useDebouncedCommit(value, onCommit, delay = 600) {
  * El hilo con el cliente ('client') llega en F7, cuando el portal pueda
  * escribirlo — ContentCommentThread ya está armado para reusarse ahí.
  */
-export default function ContentPieceModal({ piece, members = [], canEdit, currentUserId, isAdmin, onUpdate, onDelete, onPieceChanged, onClose }) {
+export default function ContentPieceModal({ piece, members = [], clientContacts = [], canEdit, currentUserId, isAdmin, onUpdate, onDelete, onPieceChanged, onClose }) {
   const [tab, setTab] = useState('detalles')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -324,17 +324,27 @@ export default function ContentPieceModal({ piece, members = [], canEdit, curren
               <div>
                 <label className={LABEL}>Responsable</label>
                 <select
-                  value={piece.owner?.id ?? ''}
-                  onChange={e => onUpdate(piece.id, { ownerId: e.target.value || null })}
+                  value={piece.ownerContact ? `c-${piece.ownerContact.id}` : piece.owner ? `u-${piece.owner.id}` : ''}
+                  onChange={e => {
+                    const v = e.target.value
+                    if (!v) onUpdate(piece.id, { ownerId: null, ownerContactId: null })
+                    else if (v.startsWith('c-')) onUpdate(piece.id, { ownerContactId: Number(v.slice(2)), ownerId: null })
+                    else onUpdate(piece.id, { ownerId: Number(v.slice(2)), ownerContactId: null })
+                  }}
                   disabled={!canEdit}
                   className={INPUT}
                 >
                   <option value="">Sin asignar</option>
+                  {clientContacts.length > 0 && (
+                    <optgroup label="Cliente">
+                      {clientContacts.map(c => <option key={`c-${c.id}`} value={`c-${c.id}`}>{c.name}</option>)}
+                    </optgroup>
+                  )}
                   <optgroup label="Equipo del proyecto">
-                    {members.filter(m => m.inTeam).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    {members.filter(m => m.inTeam).map(m => <option key={`u-${m.id}`} value={`u-${m.id}`}>{m.name}</option>)}
                   </optgroup>
                   <optgroup label="Otros del workspace">
-                    {members.filter(m => !m.inTeam).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    {members.filter(m => !m.inTeam).map(m => <option key={`u-${m.id}`} value={`u-${m.id}`}>{m.name}</option>)}
                   </optgroup>
                 </select>
               </div>

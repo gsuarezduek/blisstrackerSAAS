@@ -76,17 +76,35 @@ async function getMembers(workspaceId, projectId) {
   }))
 }
 
+// Contactos activos del portal del cliente del proyecto — se agregan como
+// opción de "Responsable" (antes del equipo interno) para marcar que la pelota
+// está del lado del cliente. [] si el proyecto no tiene portal o no está activo.
+async function getClientContacts(projectId) {
+  const portal = await prisma.projectClientPortal.findUnique({
+    where:  { projectId },
+    select: { id: true, active: true },
+  })
+  if (!portal || !portal.active) return []
+  const contacts = await prisma.clientPortalContact.findMany({
+    where:  { portalId: portal.id, active: true },
+    orderBy:{ name: 'asc' },
+    select: { id: true, name: true, email: true },
+  })
+  return contacts.map(c => ({ id: c.id, name: c.name || c.email }))
+}
+
 function safeParseArr(str) {
   try { const v = JSON.parse(str); return Array.isArray(v) ? v : [] } catch { return [] }
 }
 
 const PIECE_INCLUDE = {
-  owner:     { select: { id: true, name: true, avatar: true } },
-  createdBy: { select: { id: true, name: true, avatar: true } },
-  task:      { select: { id: true, status: true } },
-  approvedBy:{ select: { id: true, name: true, email: true } },
-  assets:    { where: { status: 'ready' }, orderBy: { order: 'asc' } },
-  _count:    { select: { comments: true } },
+  owner:       { select: { id: true, name: true, avatar: true } },
+  ownerContact:{ select: { id: true, name: true, email: true } },
+  createdBy:   { select: { id: true, name: true, avatar: true } },
+  task:        { select: { id: true, status: true } },
+  approvedBy:  { select: { id: true, name: true, email: true } },
+  assets:      { where: { status: 'ready' }, orderBy: { order: 'asc' } },
+  _count:      { select: { comments: true } },
 }
 
 // URL pública del asset. SIEMPRE apunta a nuestro endpoint, nunca al dominio del
@@ -143,6 +161,10 @@ function formatPiece(p) {
     publishedUrl:  p.publishedUrl,
     order:         p.order,
     owner:         p.owner ? { id: p.owner.id, name: p.owner.name, avatar: p.owner.avatar } : null,
+    // El responsable puede ser el cliente en vez del equipo — mutuamente
+    // excluyente con `owner` (ver buildPieceData). El frontend hace
+    // owner?.name ?? ownerContact?.name para mostrar uno u otro.
+    ownerContact:  p.ownerContact ? { id: p.ownerContact.id, name: p.ownerContact.name || p.ownerContact.email } : null,
     createdBy:     p.createdBy ? { id: p.createdBy.id, name: p.createdBy.name, avatar: p.createdBy.avatar } : null,
     taskId:        p.taskId ?? null,
     task:          p.task ? { id: p.task.id, status: p.task.status } : null,
@@ -242,12 +264,26 @@ function buildPieceData(body, timezone, { isCreate = false } = {}) {
     }
   }
 
+  // ownerId (equipo interno) y ownerContactId (contacto del cliente) son
+  // mutuamente excluyentes: el frontend siempre manda los dos juntos al
+  // cambiar el responsable (uno con el id elegido, el otro en null).
   if (body.ownerId !== undefined) {
     if (body.ownerId === null || body.ownerId === '') data.ownerId = null
     else {
       const n = Number(body.ownerId)
       if (!Number.isInteger(n) || n <= 0) return { error: 'ownerId inválido' }
       data.ownerId = n
+      data.ownerContactId = null
+    }
+  }
+
+  if (body.ownerContactId !== undefined) {
+    if (body.ownerContactId === null || body.ownerContactId === '') data.ownerContactId = null
+    else {
+      const n = Number(body.ownerContactId)
+      if (!Number.isInteger(n) || n <= 0) return { error: 'ownerContactId inválido' }
+      data.ownerContactId = n
+      data.ownerId = null
     }
   }
 
@@ -322,8 +358,9 @@ async function listPieces(req, res, next) {
     const skip = Math.max(parseInt(req.query.skip, 10) || 0, 0)
     const take = Math.min(Math.max(parseInt(req.query.take, 10) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
 
-    const [members, total, pieces] = await Promise.all([
+    const [members, clientContacts, total, pieces] = await Promise.all([
       getMembers(workspaceId, projectId),
+      getClientContacts(projectId),
       prisma.contentPiece.count({ where }),
       prisma.contentPiece.findMany({
         where,
@@ -337,7 +374,7 @@ async function listPieces(req, res, next) {
       }),
     ])
 
-    res.json({ members, pieces: pieces.map(formatPiece), total })
+    res.json({ members, clientContacts, pieces: pieces.map(formatPiece), total })
   } catch (err) { next(err) }
 }
 
@@ -677,7 +714,14 @@ async function sendToDashboard(req, res, next) {
 
     const piece = await loadPiece(req.params.pid, projectId, workspaceId)
     if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
-    if (!piece.ownerId) return res.status(400).json({ error: 'Asigná un responsable a la pieza primero' })
+    if (!piece.ownerId) {
+      // ownerId null puede ser "sin asignar" o "asignado al cliente" — el
+      // cliente no es un User, no se le puede crear una Task interna.
+      const msg = piece.ownerContactId
+        ? 'El responsable es un contacto del cliente — no se le puede asignar una tarea interna'
+        : 'Asigná un responsable a la pieza primero'
+      return res.status(400).json({ error: msg })
+    }
     if (piece.taskId)   return res.status(409).json({ error: 'Esta pieza ya tiene una tarea vinculada' })
 
     const member = await prisma.workspaceMember.findUnique({

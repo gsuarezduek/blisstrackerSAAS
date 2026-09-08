@@ -2074,7 +2074,8 @@ model ClientPortalContact {
   updatedAt   DateTime            @updatedAt
 
   loginCodes     ClientPortalLoginCode[]
-  approvedPieces ContentPiece[]
+  approvedPieces ContentPiece[] @relation("ContentPieceApprovedBy")
+  ownedPieces    ContentPiece[] @relation("ContentPieceOwnerContact")
   comments       ContentComment[]
   statusEvents   ContentStatusEvent[]
 
@@ -3215,6 +3216,11 @@ model ContentPiece {
   publishedUrl  String?
   ownerId       Int? // responsable interno
   owner         User?     @relation("ContentPieceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  // Responsable = el cliente (ej. "está en su cancha, esperando su aprobación").
+  // Mutuamente excluyente con ownerId — se aplica en buildPieceData, no acá:
+  // no hay CHECK de DB, mismo criterio liviano que el resto de los campos.
+  ownerContactId Int?
+  ownerContact   ClientPortalContact? @relation("ContentPieceOwnerContact", fields: [ownerContactId], references: [id], onDelete: SetNull)
   order         Int       @default(0) // orden dentro de la columna del Kanban
   // Tarea del dashboard vinculada ("enviar al dashboard"). Completarla avanza la
   // pieza según ADVANCE_ON_TASK_DONE. SetNull: borrar la tarea no borra la pieza.
@@ -3226,7 +3232,7 @@ model ContentPiece {
   submittedAt         DateTime?
   approvedAt          DateTime?
   approvedByContactId Int?
-  approvedBy          ClientPortalContact? @relation(fields: [approvedByContactId], references: [id], onDelete: SetNull)
+  approvedBy          ClientPortalContact? @relation("ContentPieceApprovedBy", fields: [approvedByContactId], references: [id], onDelete: SetNull)
   changesRequestedAt  DateTime?
 
   createdById Int?

@@ -80,7 +80,7 @@ export default function Contenido() {
       : { ...rest, ...scheduledMonthParams(scheduledMonth) }
   }, [view, month, filters])
 
-  const { pieces, members, total, loading, error, setError, reload, create, update, move, remove } =
+  const { pieces, members, clientContacts, total, loading, error, setError, reload, create, update, move, remove } =
     useContentPieces(projectId, effectiveFilters)
 
   // Cualquier pieza creada/editada/movida/borrada por otra persona (u otra
@@ -190,6 +190,7 @@ export default function Contenido() {
           <ContentTableView
             pieces={pieces}
             members={members}
+            clientContacts={clientContacts}
             loading={loading}
             canEdit={canEdit}
             onCreate={create}
@@ -345,6 +346,7 @@ export default function Contenido() {
         <ContentPieceModal
           piece={openPiece}
           members={members}
+          clientContacts={clientContacts}
           canEdit={canEdit}
           currentUserId={user?.id}
           isAdmin={user?.isAdmin}

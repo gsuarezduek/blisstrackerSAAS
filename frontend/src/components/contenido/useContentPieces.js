@@ -14,6 +14,7 @@ import api from '../../api/client'
 export function useContentPieces(projectId, filters = {}) {
   const [pieces,  setPieces]  = useState([])
   const [members, setMembers] = useState([])
+  const [clientContacts, setClientContacts] = useState([]) // contactos del portal, para el selector de Responsable
   const [total,   setTotal]   = useState(0)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
@@ -26,7 +27,7 @@ export function useContentPieces(projectId, filters = {}) {
 
   const reload = useCallback(() => {
     if (!projectId) {
-      setPieces([]); setMembers([]); setTotal(0)
+      setPieces([]); setMembers([]); setClientContacts([]); setTotal(0)
       return
     }
     const reqId = ++reqIdRef.current
@@ -43,6 +44,7 @@ export function useContentPieces(projectId, filters = {}) {
         if (reqId !== reqIdRef.current) return
         setPieces(r.data.pieces ?? [])
         setMembers(r.data.members ?? [])
+        setClientContacts(r.data.clientContacts ?? [])
         setTotal(r.data.total ?? 0)
       })
       .catch(err => {
@@ -129,7 +131,7 @@ export function useContentPieces(projectId, filters = {}) {
     }
   }, [projectId])
 
-  return { pieces, members, total, loading, error, setError, reload, create, update, move, remove }
+  return { pieces, members, clientContacts, total, loading, error, setError, reload, create, update, move, remove }
 }
 
 /**

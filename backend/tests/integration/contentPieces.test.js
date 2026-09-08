@@ -6,6 +6,8 @@ jest.mock('../../src/lib/prisma', () => ({
   featureFlag:        { findUnique: jest.fn() },
   contentPiece:       { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), groupBy: jest.fn() },
   contentStatusEvent: { create: jest.fn(), findMany: jest.fn() },
+  projectClientPortal:  { findUnique: jest.fn() },
+  clientPortalContact:  { findMany: jest.fn() },
   workDay:            { findUnique: jest.fn(), create: jest.fn() },
   task:               { create: jest.fn() },
   notification:       { create: jest.fn() },
@@ -51,6 +53,9 @@ function mockBase({ workspaceRole = 'member', flagOn = true } = {}) {
   prisma.project.findFirst.mockResolvedValue({ id: PROJECT_ID, timezone: 'America/Argentina/Buenos_Aires' })
   prisma.workspaceMember.findMany.mockResolvedValue([])
   prisma.projectMember.findMany.mockResolvedValue([])
+  // Sin portal de cliente por default — getClientContacts devuelve [] sin pegarle
+  // a clientPortalContact.findMany. Los tests que sí necesitan contactos lo pisan.
+  prisma.projectClientPortal.findUnique.mockResolvedValue(null)
 }
 
 const dbPiece = (over = {}) => ({
@@ -110,6 +115,40 @@ describe('GET /pieces', () => {
     // networks se deserializa; statusLabel sale del catálogo
     expect(res.body.pieces[0].networks).toEqual(['instagram'])
     expect(res.body.pieces[0].statusLabel).toBe('Idea')
+  })
+
+  it('expone clientContacts del portal activo del proyecto (para el selector de Responsable)', async () => {
+    mockBase()
+    prisma.contentPiece.count.mockResolvedValue(0)
+    prisma.contentPiece.findMany.mockResolvedValue([])
+    prisma.projectClientPortal.findUnique.mockResolvedValue({ id: 55, active: true })
+    prisma.clientPortalContact.findMany.mockResolvedValue([
+      { id: 1, name: 'María Cliente', email: 'maria@cliente.com' },
+      { id: 2, name: null, email: 'sinnombre@cliente.com' },
+    ])
+
+    const res = await req('get', BASE)
+
+    expect(res.status).toBe(200)
+    expect(res.body.clientContacts).toEqual([
+      { id: 1, name: 'María Cliente' },
+      { id: 2, name: 'sinnombre@cliente.com' }, // sin name, cae al email
+    ])
+    expect(prisma.clientPortalContact.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { portalId: 55, active: true },
+    }))
+  })
+
+  it('clientContacts vacío si el proyecto no tiene portal (o está inactivo)', async () => {
+    mockBase()
+    prisma.contentPiece.count.mockResolvedValue(0)
+    prisma.contentPiece.findMany.mockResolvedValue([])
+    prisma.projectClientPortal.findUnique.mockResolvedValue({ id: 55, active: false })
+
+    const res = await req('get', BASE)
+
+    expect(res.body.clientContacts).toEqual([])
+    expect(prisma.clientPortalContact.findMany).not.toHaveBeenCalled()
   })
 
   it('filtra por rango de fechas, estado y red', async () => {
@@ -275,6 +314,39 @@ describe('PATCH /pieces/:pid', () => {
 
     expect(res.status).toBe(200)
     expect(prisma.contentStatusEvent.create).not.toHaveBeenCalled()
+  })
+
+  it('asignar un contacto del cliente como responsable limpia ownerId', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ ownerId: 5 }))
+    prisma.contentPiece.update.mockResolvedValue(dbPiece())
+
+    await req('patch', `${BASE}/10`).send({ ownerContactId: 9, ownerId: null })
+
+    expect(prisma.contentPiece.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ ownerContactId: 9, ownerId: null }) })
+    )
+  })
+
+  it('asignar a un miembro del equipo limpia ownerContactId', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ ownerContactId: 9 }))
+    prisma.contentPiece.update.mockResolvedValue(dbPiece())
+
+    await req('patch', `${BASE}/10`).send({ ownerId: 5, ownerContactId: null })
+
+    expect(prisma.contentPiece.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ ownerId: 5, ownerContactId: null }) })
+    )
+  })
+
+  it('400 con ownerContactId inválido', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece())
+
+    const res = await req('patch', `${BASE}/10`).send({ ownerContactId: -1 })
+    expect(res.status).toBe(400)
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
   })
 
   it('acepta designDetails (HTML del WYSIWYG) por separado de copy', async () => {
@@ -656,6 +728,18 @@ describe('POST /pieces/:pid/send-to-dashboard', () => {
     const res = await req('post', `${BASE}/10/send-to-dashboard`)
 
     expect(res.status).toBe(400)
+    expect(res.body.error).toBe('Asigná un responsable a la pieza primero')
+    expect(prisma.task.create).not.toHaveBeenCalled()
+  })
+
+  it('400 con mensaje distinto si el responsable es un contacto del cliente (no un User)', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: null, ownerContactId: 9, taskId: null }))
+
+    const res = await req('post', `${BASE}/10/send-to-dashboard`)
+
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/contacto del cliente/)
     expect(prisma.task.create).not.toHaveBeenCalled()
   })
 
