@@ -159,7 +159,7 @@ function formatPiece(p) {
 
 async function loadPiece(pid, projectId, workspaceId) {
   return prisma.contentPiece.findFirst({
-    where:   { id: Number(pid), projectId, workspaceId },
+    where:   { id: Number(pid), projectId, workspaceId, deletedAt: null },
     include: PIECE_INCLUDE,
   })
 }
@@ -288,7 +288,7 @@ async function listPieces(req, res, next) {
     const { workspaceId, projectId } = ctx
 
     const { from, to, status, network, ownerId, q, noDate } = req.query
-    const where = { projectId, workspaceId }
+    const where = { projectId, workspaceId, deletedAt: null }
 
     // `noDate=1` filtra las piezas sin fecha asignada (ej. todavía en Idea) — se
     // usa desde el filtro "Sin fecha" del mes en la Tabla/Kanban, mutuamente
@@ -430,8 +430,10 @@ async function updatePiece(req, res, next) {
 
 /**
  * DELETE /api/contenido/projects/:id/pieces/:pid
- * Los assets caen en cascada por FK. Los objetos en R2 se borran en F3, cuando
- * exista el storage — hasta entonces no hay nada que limpiar.
+ * Soft-delete: manda la pieza a la papelera (deletedAt), recuperable desde ahí
+ * (GET .../pieces/trash + POST .../pieces/:pid/restore). La limpieza semanal
+ * (cleanup.service.js) la borra en duro —R2 incluido— pasados
+ * `contentPieceTrashRetentionDays` (default 30) desde este momento.
  */
 async function deletePiece(req, res, next) {
   try {
@@ -441,9 +443,70 @@ async function deletePiece(req, res, next) {
     const existing = await loadPiece(req.params.pid, ctx.projectId, ctx.workspaceId)
     if (!existing) return res.status(404).json({ error: 'Pieza no encontrada' })
 
-    await prisma.contentPiece.delete({ where: { id: existing.id } })
+    await prisma.contentPiece.update({
+      where: { id: existing.id },
+      data:  { deletedAt: new Date(), deletedById: req.user.userId },
+    })
     emitTo(`workspace:${ctx.workspaceId}`, 'content:piece:deleted', { projectId: ctx.projectId, id: existing.id })
     res.json({ deleted: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/contenido/projects/:id/pieces/trash
+ * Piezas en la papelera (deletedAt no nulo), más recientes primero, con quién
+ * las borró y hace cuánto. Mismo criterio de permiso que borrar: requiere
+ * canWrite (no es una lectura abierta a cualquier miembro del workspace).
+ */
+async function listTrash(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+
+    const pieces = await prisma.contentPiece.findMany({
+      where:   { projectId: ctx.projectId, workspaceId: ctx.workspaceId, deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+      include: { deletedBy: { select: { id: true, name: true } } },
+    })
+
+    res.json({
+      pieces: pieces.map(p => ({
+        id:          p.id,
+        title:       p.title,
+        status:      p.status,
+        statusLabel: statusMeta(p.status)?.label ?? p.status,
+        deletedAt:   p.deletedAt,
+        deletedBy:   p.deletedBy ? { id: p.deletedBy.id, name: p.deletedBy.name } : null,
+      })),
+    })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/contenido/projects/:id/pieces/:pid/restore
+ * Saca la pieza de la papelera. 404 si no existe o no está borrada — evita
+ * "restaurar" algo que nunca se eliminó.
+ */
+async function restorePiece(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+    const { workspaceId, projectId } = ctx
+
+    const existing = await prisma.contentPiece.findFirst({
+      where: { id: Number(req.params.pid), projectId, workspaceId, deletedAt: { not: null } },
+    })
+    if (!existing) return res.status(404).json({ error: 'Pieza no encontrada en la papelera' })
+
+    await prisma.contentPiece.update({
+      where: { id: existing.id },
+      data:  { deletedAt: null, deletedById: null },
+    })
+
+    const fresh = await loadPiece(existing.id, projectId, workspaceId)
+    const formatted = formatPiece(fresh)
+    emitPieceUpdated(workspaceId, projectId, formatted)
+    res.json(formatted)
   } catch (err) { next(err) }
 }
 
@@ -476,7 +539,7 @@ async function movePiece(req, res, next) {
     const statusChanged = status !== existing.status
 
     const siblings = await prisma.contentPiece.findMany({
-      where:   { projectId, workspaceId, status, id: { not: existing.id } },
+      where:   { projectId, workspaceId, status, deletedAt: null, id: { not: existing.id } },
       orderBy: [{ order: 'asc' }, { updatedAt: 'asc' }],
       select:  { id: true },
     })
@@ -557,7 +620,7 @@ async function listMonths(req, res, next) {
     if (!ctx) return
 
     const rows = await prisma.contentPiece.findMany({
-      where:  { projectId: ctx.projectId, workspaceId: ctx.workspaceId },
+      where:  { projectId: ctx.projectId, workspaceId: ctx.workspaceId, deletedAt: null },
       select: { scheduledDate: true },
     })
 
@@ -583,7 +646,7 @@ async function getSummary(req, res, next) {
 
     const rows = await prisma.contentPiece.groupBy({
       by:    ['status'],
-      where: { projectId: ctx.projectId, workspaceId: ctx.workspaceId },
+      where: { projectId: ctx.projectId, workspaceId: ctx.workspaceId, deletedAt: null },
       _count: { _all: true },
     })
 
@@ -692,7 +755,7 @@ async function requestApproval(req, res, next) {
     if (!ctx) return
     const { workspaceId, projectId } = ctx
 
-    const where = { projectId, workspaceId, status: 'aprobacion' }
+    const where = { projectId, workspaceId, status: 'aprobacion', deletedAt: null }
     const rawIds = Array.isArray(req.body?.pieceIds)
       ? req.body.pieceIds.map(Number).filter(n => Number.isInteger(n) && n > 0)
       : null
@@ -754,6 +817,8 @@ module.exports = {
   getPiece,
   updatePiece,
   deletePiece,
+  listTrash,
+  restorePiece,
   movePiece,
   getHistory,
   getSummary,

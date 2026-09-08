@@ -341,6 +341,7 @@ model User {
   taskCommentReactions      TaskCommentReaction[]
   contentPiecesOwned        ContentPiece[]             @relation("ContentPieceOwner")
   contentPiecesCreated      ContentPiece[]             @relation("ContentPieceCreator")
+  contentPiecesDeleted      ContentPiece[]             @relation("ContentPieceDeletedBy")
   contentAssetsUploaded     ContentAsset[]             @relation("ContentAssetUploader")
   contentComments           ContentComment[]           @relation("ContentCommentAuthor")
   contentStatusEvents       ContentStatusEvent[]        @relation("ContentEventActor")
@@ -3233,6 +3234,14 @@ model ContentPiece {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Papelera: "eliminar" una pieza es soft-delete (no dispara el Cascade de
+  // assets/comments/statusEvents, así queda todo intacto para poder restaurar).
+  // La limpieza semanal (cleanup.service.js) borra en duro, R2 incluido, pasados
+  // `contentPieceTrashRetentionDays` (default 30) desde `deletedAt`.
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("ContentPieceDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
   assets        ContentAsset[]
   comments      ContentComment[]
   statusEvents  ContentStatusEvent[]
@@ -3242,6 +3251,7 @@ model ContentPiece {
   @@index([projectId, scheduledDate]) // vista Calendario (rango de mes)
   @@index([projectId, status, order]) // vista Kanban
   @@index([projectId, updatedAt]) // tiebreak legacy / futuras vistas por última edición
+  @@index([projectId, deletedAt]) // vista Papelera + limpieza semanal
 }
 
 // Asset de una pieza. Ciclo de vida en dos pasos por el flujo de presigned URL:

@@ -47,7 +47,7 @@ function hoursAgo(h) {
  * Cuenta cuántas filas se borrarían con los retention actuales (preview).
  * @param {string[]} tables — subset de ['notifications', 'aiTokenLog', 'userLogin',
  *   'dailyInsight', 'emailLog', 'socialImages', 'serpSnapshots', 'followerLogs',
- *   'conversionEvents', 'accessLogs', 'contentAssetsPending']
+ *   'conversionEvents', 'accessLogs', 'contentAssetsPending', 'contentPiecesTrash']
  */
 async function previewWeeklyCleanup(tables = null) {
   const s = await getSettings(RETENTION_KEYS)
@@ -115,6 +115,14 @@ async function previewWeeklyCleanup(tables = null) {
     const hours = await getSetting('contentAssetPendingRetentionHours')
     result.contentAssetsPending = await prisma.contentAsset.count({
       where: { status: 'pending', createdAt: { lt: hoursAgo(hours) } },
+    })
+  }
+  if (!tables || tables.includes('contentPiecesTrash')) {
+    // Filtra por deletedAt (no createdAt) — no entra en RETENTION_KEYS. Ver
+    // contentPieceTrashRetentionDays.
+    const days = await getSetting('contentPieceTrashRetentionDays')
+    result.contentPiecesTrash = await prisma.contentPiece.count({
+      where: { deletedAt: { lt: daysAgo(days) } },
     })
   }
   return result
@@ -211,6 +219,18 @@ async function runWeeklyCleanup(tables = null) {
     await objectStorage.deleteObjects(stale.flatMap(a => [a.objectKey, a.posterKey].filter(Boolean)))
     const { count } = await prisma.contentAsset.deleteMany({ where: { id: { in: stale.map(a => a.id) } } })
     result.contentAssetsPending = count
+  }
+  if (!tables || tables.includes('contentPiecesTrash')) {
+    const days = await getSetting('contentPieceTrashRetentionDays')
+    const pieces = await prisma.contentPiece.findMany({
+      where:  { deletedAt: { lt: daysAgo(days) } },
+      select: { id: true, assets: { select: { objectKey: true, posterKey: true } } },
+    })
+    // R2 primero, después las filas — el DELETE de ContentPiece cascadea
+    // ContentAsset/ContentComment/ContentStatusEvent en la propia DB.
+    await objectStorage.deleteObjects(pieces.flatMap(p => p.assets.flatMap(a => [a.objectKey, a.posterKey].filter(Boolean))))
+    const { count } = await prisma.contentPiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
+    result.contentPiecesTrash = count
   }
 
   return result

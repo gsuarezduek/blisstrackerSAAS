@@ -264,6 +264,16 @@ const PLATFORM_SETTINGS = [
     help:    'Un asset queda en estado "pending" entre pedir la URL firmada de subida y confirmarla (POST .../assets/:id/confirm). Si el usuario abandona la subida (cierra la pestaña, corta la conexión) el asset queda huérfano; la limpieza semanal lo borra —primero del bucket R2, después de la DB— pasadas estas horas. NO usa el mismo mecanismo de "días" del resto de los retention: es horas porque un upload abandonado se detecta rápido, no en semanas.',
   },
   {
+    key:     'contentPieceTrashRetentionDays',
+    type:    'integer',
+    default: 30,
+    min:     1,
+    max:     180,
+    group:   'operational',
+    label:   'Papelera de Contenido (días)',
+    help:    'Borrar una pieza de Contenido la manda a la papelera (soft-delete), recuperable desde ahí. Pasados estos días desde el borrado, la limpieza semanal la elimina en duro —primero sus archivos de R2, después las filas— sin posibilidad de restaurarla. No entra en el mecanismo genérico de RETENTION_KEYS (filtra por deletedAt, no por createdAt, y necesita limpiar R2 antes de borrar la fila).',
+  },
+  {
     key:     'whatsappBotDocumentMaxMb',
     type:    'integer',
     default: 10,

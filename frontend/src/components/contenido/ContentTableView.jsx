@@ -3,13 +3,28 @@ import ConfirmModal from '../ConfirmModal'
 import ContentStatusBadge from './ContentStatusBadge'
 import ContentNetworkChips from './ContentNetworkChips'
 import ContentTypeChips from './ContentTypeChips'
-import { CONTENT_STATUSES, statusMeta, typeLabel } from './contentCatalog'
+import { CONTENT_STATUSES, statusMeta, statusBadgeClass, typeLabel } from './contentCatalog'
 import { toLocalInput, formatDateTime as formatDate } from './dateHelpers'
 
 const CELL   = 'px-3 py-2 text-sm align-middle'
 const HEAD   = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 select-none'
 const INPUT  = 'w-full px-2 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100'
 const INLINE = 'text-sm bg-transparent border border-transparent hover:border-gray-200 dark:hover:border-gray-600 rounded px-1.5 py-0.5 cursor-pointer text-gray-700 dark:text-gray-300'
+
+// Select con el look del badge de estado (mismo patrón que StatusSelect en
+// ventas/DashboardTab.jsx) — así se puede identificar el estado de un vistazo
+// también en la fila editable, no solo en la de solo lectura.
+function StatusSelect({ status, onChange }) {
+  return (
+    <select
+      value={status}
+      onChange={e => onChange(e.target.value)}
+      className={`text-xs font-semibold rounded-full pl-2.5 pr-1 py-0.5 border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 ${statusBadgeClass(status)}`}
+    >
+      {CONTENT_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+    </select>
+  )
+}
 
 // ── Celda de título editable ────────────────────────────────────────────────
 function TitleCell({ piece, canEdit, onSave, onOpen }) {
@@ -219,13 +234,7 @@ export default function ContentTableView({ pieces, members, loading, canEdit, on
                 {/* Estado */}
                 <td className={`${CELL} w-44`}>
                   {canEdit ? (
-                    <select
-                      value={p.status}
-                      onChange={e => onUpdate(p.id, { status: e.target.value })}
-                      className={`${INLINE} w-full`}
-                    >
-                      {CONTENT_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                    </select>
+                    <StatusSelect status={p.status} onChange={status => onUpdate(p.id, { status })} />
                   ) : (
                     <ContentStatusBadge status={p.status} />
                   )}

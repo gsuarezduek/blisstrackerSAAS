@@ -9,6 +9,7 @@ import ContentTableView from '../components/contenido/ContentTableView'
 import ContentKanbanView from '../components/contenido/ContentKanbanView'
 import ContentCalendarView, { currentMonthStr } from '../components/contenido/ContentCalendarView'
 import ContentPieceModal from '../components/contenido/ContentPieceModal'
+import ContentTrashModal from '../components/contenido/ContentTrashModal'
 import useContentPieces from '../components/contenido/useContentPieces'
 import useContentSocket from '../components/contenido/useContentSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -46,6 +47,7 @@ export default function Contenido() {
   const [summary,   setSummary]   = useState(null) // { byStatus, total, awaitingClient } — GET /summary
   const [requestingApproval, setRequestingApproval] = useState(false)
   const [approvalMsg, setApprovalMsg] = useState(null) // { type: 'success'|'error', text }
+  const [trashOpen, setTrashOpen] = useState(false)
 
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
@@ -324,6 +326,13 @@ export default function Contenido() {
                     {approvalMsg.text}
                   </span>
                 )}
+                <button
+                  onClick={() => setTrashOpen(true)}
+                  title="Piezas eliminadas, recuperables durante 30 días"
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors inline-flex items-center gap-1.5"
+                >
+                  🗑 Papelera
+                </button>
               </div>
             )}
 
@@ -343,6 +352,14 @@ export default function Contenido() {
           onDelete={handleDelete}
           onPieceChanged={reload}
           onClose={() => patchParams({ piece: '' })}
+        />
+      )}
+
+      {trashOpen && (
+        <ContentTrashModal
+          projectId={projectId}
+          onClose={() => setTrashOpen(false)}
+          onRestored={reload}
         />
       )}
     </div>

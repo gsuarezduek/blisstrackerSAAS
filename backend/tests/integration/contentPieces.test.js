@@ -342,16 +342,20 @@ describe('PATCH /pieces/:pid', () => {
 })
 
 describe('DELETE /pieces/:pid', () => {
-  it('borra una pieza del proyecto', async () => {
+  it('manda la pieza a la papelera (soft-delete) en vez de borrarla', async () => {
     mockBase({ workspaceRole: 'admin' })
     prisma.contentPiece.findFirst.mockResolvedValue(dbPiece())
-    prisma.contentPiece.delete.mockResolvedValue(dbPiece())
+    prisma.contentPiece.update.mockResolvedValue(dbPiece())
 
     const res = await req('delete', `${BASE}/10`)
 
     expect(res.status).toBe(200)
     expect(res.body.deleted).toBe(true)
-    expect(prisma.contentPiece.delete).toHaveBeenCalledWith({ where: { id: 10 } })
+    expect(prisma.contentPiece.delete).not.toHaveBeenCalled()
+    expect(prisma.contentPiece.update).toHaveBeenCalledWith({
+      where: { id: 10 },
+      data:  expect.objectContaining({ deletedAt: expect.any(Date), deletedById: 1 }),
+    })
   })
 
   it('403 si no puede escribir', async () => {
@@ -360,7 +364,76 @@ describe('DELETE /pieces/:pid', () => {
 
     const res = await req('delete', `${BASE}/10`)
     expect(res.status).toBe(403)
-    expect(prisma.contentPiece.delete).not.toHaveBeenCalled()
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
+  })
+
+  it('404 si la pieza ya está en la papelera (loadPiece la excluye)', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(null) // loadPiece filtra deletedAt: null
+
+    const res = await req('delete', `${BASE}/10`)
+    expect(res.status).toBe(404)
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /pieces/trash', () => {
+  it('lista las piezas borradas, más recientes primero, con quién las borró', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findMany.mockResolvedValue([
+      dbPiece({ id: 10, deletedAt: new Date('2026-09-05'), deletedBy: { id: 1, name: 'Ana' } }),
+    ])
+
+    const res = await req('get', `${BASE}/trash`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.pieces).toHaveLength(1)
+    expect(res.body.pieces[0]).toMatchObject({ id: 10, statusLabel: 'Idea', deletedBy: { id: 1, name: 'Ana' } })
+    expect(prisma.contentPiece.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { projectId: PROJECT_ID, workspaceId: WORKSPACE_ID, deletedAt: { not: null } },
+    }))
+  })
+
+  it('403 si no puede escribir (mismo criterio que borrar)', async () => {
+    mockBase({ workspaceRole: 'member' })
+    prisma.projectMember.findUnique.mockResolvedValue(null)
+
+    const res = await req('get', `${BASE}/trash`)
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('POST /pieces/:pid/restore', () => {
+  it('saca la pieza de la papelera', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst
+      .mockResolvedValueOnce(dbPiece({ id: 10, deletedAt: new Date() })) // findFirst de restorePiece
+      .mockResolvedValueOnce(dbPiece({ id: 10, deletedAt: null }))       // loadPiece del reload
+
+    const res = await req('post', `${BASE}/10/restore`)
+
+    expect(res.status).toBe(200)
+    expect(prisma.contentPiece.update).toHaveBeenCalledWith({
+      where: { id: 10 },
+      data:  { deletedAt: null, deletedById: null },
+    })
+  })
+
+  it('404 si la pieza no está en la papelera', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(null)
+
+    const res = await req('post', `${BASE}/10/restore`)
+    expect(res.status).toBe(404)
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
+  })
+
+  it('403 si no puede escribir', async () => {
+    mockBase({ workspaceRole: 'member' })
+    prisma.projectMember.findUnique.mockResolvedValue(null)
+
+    const res = await req('post', `${BASE}/10/restore`)
+    expect(res.status).toBe(403)
   })
 })
 

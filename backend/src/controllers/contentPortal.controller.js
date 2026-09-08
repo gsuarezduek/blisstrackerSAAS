@@ -168,7 +168,7 @@ async function listPortalPieces(req, res, next) {
     if (guard) return res.status(guard.status).json({ error: guard.error })
 
     const pieces = await prisma.contentPiece.findMany({
-      where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES } },
+      where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES }, deletedAt: null },
       select:  PUBLIC_PIECE_SELECT,
       orderBy: { updatedAt: 'desc' },
     })
@@ -188,7 +188,7 @@ async function getPortalPiece(req, res, next) {
     if (guard) return res.status(guard.status).json({ error: guard.error })
 
     const piece = await prisma.contentPiece.findFirst({
-      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES } },
+      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES }, deletedAt: null },
       select: PUBLIC_PIECE_SELECT,
     })
     if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
@@ -218,7 +218,7 @@ async function approvePiece(req, res, next) {
     if (!contact.canApprove) return res.status(403).json({ error: 'Tu usuario no puede aprobar piezas' })
 
     const piece = await prisma.contentPiece.findFirst({
-      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId },
+      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, deletedAt: null },
       select: { id: true, title: true, status: true },
     })
     if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
@@ -280,7 +280,7 @@ async function requestChanges(req, res, next) {
     if (comment.length > MAX_COMMENT) return res.status(400).json({ error: 'El comentario es demasiado largo' })
 
     const piece = await prisma.contentPiece.findFirst({
-      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId },
+      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, deletedAt: null },
       select: { id: true, title: true, status: true },
     })
     if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
@@ -336,7 +336,7 @@ async function addPortalComment(req, res, next) {
     if (!contact) return res.status(403).json({ error: 'Iniciá sesión de nuevo para comentar', code: 'CONTACT_REQUIRED' })
 
     const piece = await prisma.contentPiece.findFirst({
-      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES } },
+      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES }, deletedAt: null },
       select: { id: true },
     })
     if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })

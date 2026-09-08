@@ -34,11 +34,13 @@ const comments = require('../controllers/contentComments.controller')
 // validan canWrite() adentro del handler.
 router.get   ('/projects/:id/pieces',               content.listPieces)
 router.post  ('/projects/:id/pieces',               content.createPiece)
-// Antes de '/pieces/:pid': si no, ':pid' matchea "months" como si fuera un id.
+// Antes de '/pieces/:pid': si no, ':pid' matchea "months"/"trash" como si fueran un id.
 router.get   ('/projects/:id/pieces/months',         content.listMonths)
+router.get   ('/projects/:id/pieces/trash',          content.listTrash)
 router.get   ('/projects/:id/pieces/:pid',           content.getPiece)
 router.patch ('/projects/:id/pieces/:pid',           content.updatePiece)
 router.delete('/projects/:id/pieces/:pid',           content.deletePiece)
+router.post  ('/projects/:id/pieces/:pid/restore',   content.restorePiece)
 router.patch ('/projects/:id/pieces/:pid/position',  content.movePiece)
 router.get   ('/projects/:id/pieces/:pid/history',   content.getHistory)
 router.post  ('/projects/:id/pieces/:pid/send-to-dashboard', content.sendToDashboard)
