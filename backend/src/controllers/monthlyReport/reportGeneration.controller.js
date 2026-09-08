@@ -42,6 +42,18 @@ const RRSS_SAVERS = {
   facebook:  { save: saveFacebookSnapshot,  model: 'facebookSnapshot', integrationType: 'facebook',          label: 'Facebook' },
 }
 
+// Errores ya pensados para mostrarse tal cual al usuario (mensaje corto, en español,
+// accionable). Cualquier otra excepción (bug interno, error crudo de Prisma/axios, etc.)
+// se reemplaza por un mensaje genérico — nunca debe llegarle al cliente un stack técnico —
+// y se loguea completo server-side para poder diagnosticarla.
+const SAFE_ERROR_CODES = new Set(['TOKEN_EXPIRED'])
+
+function safeCheckMessage(err, label) {
+  if (err.code && SAFE_ERROR_CODES.has(err.code)) return err.message
+  console.error(`[ReportReadiness] Error inesperado al chequear "${label}":`, err)
+  return 'No se pudo verificar por un error interno. Podés generar igual o reintentar el chequeo.'
+}
+
 // Si ya hay snapshot del mes ancla, no hace falta pegarle a la API de nuevo.
 // Si no hay, intenta traerlo y guardarlo — de ahí en más la generación lo lee como
 // un snapshot normal, sin ningún camino en vivo dentro de aggregateReportData.
@@ -55,7 +67,7 @@ async function checkRrssSection(key, cfg, projectId, workspaceId, dataMonth) {
     await cfg.save(projectId, workspaceId, dataMonth)
     return { section: key, label: cfg.label, ok: true, refreshed: true }
   } catch (err) {
-    return { section: key, label: cfg.label, ok: false, message: err.message }
+    return { section: key, label: cfg.label, ok: false, message: safeCheckMessage(err, cfg.label) }
   }
 }
 
@@ -70,7 +82,7 @@ async function checkAdsSection(type, integration, dateRange) {
     }
     return { section: type, label, ok: true }
   } catch (err) {
-    return { section: type, label, ok: false, message: err.message }
+    return { section: type, label, ok: false, message: safeCheckMessage(err, label) }
   }
 }
 
@@ -112,7 +124,7 @@ async function getGenerationReadiness(req, res, next) {
 
     const integrations = await prisma.projectIntegration.findMany({
       where:  { projectId, status: 'active' },
-      select: { type: true, propertyId: true, customerId: true, accessToken: true, refreshToken: true, expiresAt: true, scopes: true },
+      select: { id: true, type: true, propertyId: true, customerId: true, accessToken: true, refreshToken: true, expiresAt: true, scopes: true },
     })
     const byType = (t) => integrations.find(i => i.type === t)
 

@@ -18,7 +18,9 @@ async function getValidFbToken(integration) {
   }
 
   if (expiresAt < now) {
-    throw new Error('El token de Meta Ads expiró. Reconectá la cuenta desde la configuración del proyecto.')
+    const e = new Error('El token de Meta Ads expiró. Reconectá la cuenta desde la configuración del proyecto.')
+    e.code = 'TOKEN_EXPIRED'
+    throw e
   }
 
   // Token vigente con más de 10 días — usar directamente
