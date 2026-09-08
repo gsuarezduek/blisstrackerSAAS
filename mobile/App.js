@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { AuthProvider } from './src/context/AuthContext'
 import RootNavigator from './src/navigation/RootNavigator'
+import AppAlertHost from './src/components/AppAlertHost'
 
 // Mantiene el splash nativo (imagen estática del isotipo, ver app.json →
 // expo-splash-screen) visible hasta que este módulo termina de evaluarse —
@@ -21,6 +22,7 @@ export default function App() {
     <AuthProvider>
       <StatusBar style="auto" />
       <RootNavigator />
+      <AppAlertHost />
     </AuthProvider>
   )
 }

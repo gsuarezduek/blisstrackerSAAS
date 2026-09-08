@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet, ActivityIndicator, Alert } from 'react-native'
+import { Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet, ActivityIndicator } from 'react-native'
 import { listProjects } from '../api/projects'
 import { createTask } from '../api/tasks'
+import { showAlert } from '../lib/alert'
 
 export default function AddTaskModal({ visible, onClose, onCreated }) {
   const [projects, setProjects] = useState([])
@@ -18,7 +19,7 @@ export default function AddTaskModal({ visible, onClose, onCreated }) {
         setProjects(data)
         setProjectId(prev => prev ?? data[0]?.id ?? null)
       })
-      .catch(() => Alert.alert('Error', 'No pudimos cargar los proyectos.'))
+      .catch(() => showAlert('Error', 'No pudimos cargar los proyectos.'))
       .finally(() => setLoadingProjects(false))
   }, [visible])
 
@@ -31,7 +32,7 @@ export default function AddTaskModal({ visible, onClose, onCreated }) {
       setDescription('')
       onClose()
     } catch (err) {
-      Alert.alert('No se pudo crear la tarea', err.response?.data?.error || 'Probá de nuevo.')
+      showAlert('No se pudo crear la tarea', err.response?.data?.error || 'Probá de nuevo.')
     } finally {
       setSubmitting(false)
     }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator, Alert } from 'react-native'
+import { View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator } from 'react-native'
 import { startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, starTask } from '../api/tasks'
+import { showAlert } from '../lib/alert'
 
 const STATUS_STYLE = {
   PENDING:     { bg: '#f3f4f6', color: '#4b5563', label: 'Pendiente' },
@@ -24,7 +25,7 @@ export default function TaskCard({ task, hasActiveTask, onUpdate, onOpenComments
       const updated = await action()
       onUpdate(updated)
     } catch (err) {
-      Alert.alert('No se pudo completar la acción', err.response?.data?.error || 'Probá de nuevo.')
+      showAlert('No se pudo completar la acción', err.response?.data?.error || 'Probá de nuevo.')
     } finally {
       setLoading(false)
     }
@@ -39,7 +40,7 @@ export default function TaskCard({ task, hasActiveTask, onUpdate, onOpenComments
       setShowBlockForm(false)
       setBlockReason('')
     } catch (err) {
-      Alert.alert('No se pudo bloquear', err.response?.data?.error || 'Probá de nuevo.')
+      showAlert('No se pudo bloquear', err.response?.data?.error || 'Probá de nuevo.')
     } finally {
       setLoading(false)
     }

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import { Platform, Alert } from 'react-native'
+import { Platform } from 'react-native'
 import api, { setUnauthorizedHandler } from '../api/client'
+import { showAlert } from '../lib/alert'
 import {
   getToken, getWorkspaceSlug, setSession, clearSession,
   getBiometricEnabled, setBiometricEnabled, getBiometricPrompted, setBiometricPrompted,
@@ -58,7 +59,7 @@ export function AuthProvider({ children }) {
       if (await getBiometricPrompted()) return
       if (!(await isBiometricAvailable())) return
       await setBiometricPrompted()
-      Alert.alert(
+      showAlert(
         'Entrar más rápido',
         '¿Querés usar Face ID / huella para entrar la próxima vez, en vez de escribir tu contraseña?',
         [

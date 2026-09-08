@@ -412,6 +412,65 @@ vez, hay que actualizar el path data en ambos lugares a mano.
 Metro puede hot-reload), el ícono y el splash nativo están "horneados" en el
 binario compilado. Hace falta correr `eas build` de nuevo para verlos.
 
+**⚠️ Bug real encontrado en el primer APK con `BlissLoader`: crasheaba al
+abrir la app.** `AnimatedG` animaba la prop `transform` con un **string** SVG
+armado a mano (`"rotate(180 540 540) scale(0.88)"`, portado literal del CSS
+web) — funciona en la arquitectura vieja de RN, pero con **Fabric** (Nueva
+Arquitectura, default desde Expo SDK 53) el `transform` de `<G>` está tipado
+del lado nativo como `ReadableArray` (matriz numérica), no string libre.
+Pasarle un string tira `ClassCastException: String cannot be cast to
+ReadableArray` en `RNSVGGroupManagerDelegate` apenas se monta el primer
+frame — `FATAL EXCEPTION` que mata la Activity al toque, siempre (no es un
+caso raro/intermitente). **Diagnosticado con el log real** vía `adb logcat`
+(instalado con `brew install android-platform-tools`, celular conectado por
+USB con Depuración USB activada) — la app no mostraba ningún error en
+pantalla porque es un build "release", que no tiene la red screen de
+desarrollo. **Fix**: usar las props numéricas propias de `react-native-svg`
+(`rotation`, `scaleX`, `scaleY`, `originX`, `originY`) en vez de `transform`
+— son `NumberProp`, compatibles con Fabric, y se pueden animar con
+interpolación numérica estándar de `Animated` sin tocar nada del lado
+nativo. **Lección para el futuro**: si se anima algún otro componente de
+`react-native-svg`, evitar el prop `transform` con string — preferir las
+props numéricas individuales que exponga el componente.
+
+### Sistema de alertas propio (reemplaza `Alert.alert`)
+
+**Distinción importante que motivó este cambio**: el prompt biométrico real
+(el que pide la huella/cara) es del sistema operativo por diseño de
+seguridad — ninguna app puede re-skinnearlo, es la garantía de que
+efectivamente es el SO pidiendo la biometría y no la app falsificando el
+diálogo. Lo que SÍ se podía mejorar era el `Alert.alert` que la propia app
+elegía mostrar (el "¿Querés activar Face ID?" antes de ese prompt, y varios
+mensajes de error dispersos) — esos se veían con el diálogo gris genérico
+del SO en vez de la estética de BlissTracker.
+
+- **`src/lib/alert.js`** — `showAlert(title, message, buttons)`, misma firma
+  que `Alert.alert` de React Native (mismo shape de `buttons`:
+  `{text, style: 'cancel'|'destructive'|undefined, onPress}`), para que el
+  reemplace de cada call site fuera mecánico. Patrón singleton (mismo que
+  `setUnauthorizedHandler` en `api/client.js`): un módulo plano que delega a
+  un handler registrado por el componente montado en `App.js` — evita tener
+  que pasar por `useContext` en cada componente que antes solo importaba
+  `Alert` de `react-native`.
+- **`src/components/AppAlertHost.jsx`** — el modal en sí (montado una vez en
+  `App.js`, junto a `RootNavigator`): card blanca centrada con sombra, título
+  + mensaje + fila de botones. Un solo botón (mensajes de error simples) se
+  centra solo; dos botones quedan lado a lado. Estilo de botón según
+  `button.style`: default = naranja de marca relleno, `'cancel'` = gris
+  claro, `'destructive'` = rojo — mismo criterio de color que ya usa el
+  resto de la app (`TaskCard`, `LockScreen`).
+- **Reemplazados los 8 usos existentes** de `Alert.alert`: el prompt de
+  activar biometría (`AuthContext`) y los mensajes de error de
+  `TaskCard`/`AddTaskModal`/`TaskCommentsModal`. Ningún componente nuevo
+  necesita nada especial para usarlo — `import { showAlert } from
+  '../lib/alert'` y listo, sin registrar nada ni envolver en un Provider.
+
+Como es JS puro (sin cambios nativos), **no requiere un rebuild para
+compilar** — pero como el APK del perfil `preview`/`production` es un
+bundle "release" con el JS embebido estáticamente (no conectado a Metro),
+sigue haciendo falta un `eas build` nuevo para verlo reflejado en el
+dispositivo, igual que cualquier otro cambio de JS en un build ya instalado.
+
 ## Roadmap (alcance v1)
 
 Incluye: tareas de hoy (ver/iniciar/pausar/completar/bloquear/destacar),

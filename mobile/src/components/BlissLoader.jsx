@@ -36,14 +36,16 @@ export default function BlissLoader({ size = 64 }) {
   // Mismos 3 keyframes que `.bliss-spin` en CSS: 0%/50%/100% → rotate
   // 0/180/360deg, scale 1/0.88/1. El easing ya aplicado al `progress` (arriba)
   // reproduce la misma curva de aceleración que el cubic-bezier original.
-  const transform = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [
-      'rotate(0 540 540) scale(1)',
-      'rotate(180 540 540) scale(0.88)',
-      'rotate(360 540 540) scale(1)',
-    ],
-  })
+  //
+  // `rotation`/`scaleX`/`scaleY`/`originX`/`originY` (props numéricas propias
+  // de react-native-svg), NO el prop `transform` con un string SVG armado a
+  // mano: con la Nueva Arquitectura (Fabric, default desde SDK 53) el
+  // `transform` de <G> espera un array de matriz numérica del lado nativo —
+  // pasarle un string interpolado crashea la app entera al montar
+  // (`ClassCastException: String cannot be cast to ReadableArray` en
+  // RNSVGGroupManagerDelegate, visto en logcat real en un dispositivo).
+  const rotate = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 360] })
+  const scale = progress.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.88, 1] })
 
   return (
     <Svg width={size} height={size} viewBox="0 0 1080 1080">
@@ -55,7 +57,7 @@ export default function BlissLoader({ size = 64 }) {
           </LinearGradient>
         ))}
       </Defs>
-      <AnimatedG transform={transform}>
+      <AnimatedG rotation={rotate} scaleX={scale} scaleY={scale} originX={540} originY={540}>
         {PATHS.map((p, i) => (
           <Path key={i} fill={`url(#bliss-g${i})`} d={p.d} />
         ))}

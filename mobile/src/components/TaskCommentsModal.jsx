@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet,
-  ActivityIndicator, KeyboardAvoidingView, Platform, Alert,
+  ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { listComments, addComment } from '../api/comments'
 import { listMembers } from '../api/members'
+import { showAlert } from '../lib/alert'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -42,7 +43,7 @@ export default function TaskCommentsModal({ visible, task, onClose, onCommentAdd
     setLoading(true)
     Promise.all([listComments(task.id), listMembers()])
       .then(([c, m]) => { setComments(c); setMembers(m) })
-      .catch(() => Alert.alert('Error', 'No pudimos cargar los comentarios.'))
+      .catch(() => showAlert('Error', 'No pudimos cargar los comentarios.'))
       .finally(() => setLoading(false))
   }, [visible, task])
 
@@ -65,7 +66,7 @@ export default function TaskCommentsModal({ visible, task, onClose, onCommentAdd
       setText('')
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50)
     } catch (err) {
-      Alert.alert('No se pudo enviar', err.response?.data?.error || 'Probá de nuevo.')
+      showAlert('No se pudo enviar', err.response?.data?.error || 'Probá de nuevo.')
     } finally {
       setSending(false)
     }
