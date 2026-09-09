@@ -75,6 +75,7 @@ src/
     devices.js       # POST/DELETE /api/devices/register (push)
     notifications.js # GET /api/notifications, POST /api/notifications/read-all
     chat.js          # helpers REST de /api/chat/channels[...]
+    workdays.js      # POST /api/workdays/finish
   lib/
     push.js          # permisos + Expo Push Token de este dispositivo
     events.js        # pub-sub mínimo propio (RN no tiene `window` ni el módulo `events` de Node)
@@ -96,6 +97,7 @@ src/
     ChatScreen.jsx            # mensajes de un canal + input, tiempo real vía socket
     ProjectListScreen.jsx     # proyectos agrupados (destacados/míos/otros)
     ProjectDetailScreen.jsx   # info/situación/links/equipo/tareas/completadas de un proyecto
+    ProfileScreen.jsx         # datos del usuario, toggles de biometría/push, logout
   navigation/
     RootNavigator.jsx     # decide pantalla según loading/pendingWorkspaces/user + listener global de push tocado
 ```
@@ -516,12 +518,44 @@ compleja como para ser su propia fase). Tampoco se muestran las redes
 sociales del proyecto (`Project.connections`) — solo `websiteUrl` — para no
 adivinar el formato de cada red sin haberlo verificado primero.
 
+### Housekeeping (Fase 7)
+
+- **"Finalizar jornada"** (`DashboardScreen`, junto al FAB de "+ Agregar
+  tarea", mismo patrón que la web: dos botones en fila) — `POST
+  /workdays/finish` + `logout()` inmediatamente después. **Mismo criterio
+  que la web**: cerrar la jornada cierra sesión, el `WorkDay` se reabre solo
+  al volver a loguearse y visitar el Dashboard (no hay forma de "cerrar la
+  jornada y seguir usando la app" — es una decisión del backend, no de esta
+  pantalla).
+- **`ProfileScreen`** — nombre/email/rol (de `user`, ya resuelto por
+  `AuthContext`, sin pegarle a un endpoint nuevo) + dos `Switch`:
+  - **Biometría**: reusa `getBiometricEnabled`/`setBiometricEnabled` de la
+    Fase 5. Activar pide confirmar con `authenticateAsync()` primero (mismo
+    criterio que el prompt post-login) — si falla o cancela, el `Switch`
+    quita `onValueChange` de la ecuación: como es controlado y el estado no
+    se actualiza hasta confirmar, vuelve solo a su valor anterior sin código
+    extra. Desactivar no pide nada.
+  - **Push**: **preferencia nueva** (`bliss_push_disabled` en SecureStore,
+    separada de la sesión por el mismo motivo que la biometría) — hasta
+    esta fase, `syncPushToken()` no tenía forma de "recordar" que el usuario
+    no quiere push, así que se lo pedía de nuevo en cada login/restauración
+    de sesión. `AuthContext` suma `togglePush(enabled)`: persiste la
+    preferencia y hace el registro/baja de `DeviceToken` al toque (no
+    espera al próximo login), reusando `syncPushToken`/`unregisterDevice`
+    ya existentes. `syncPushToken()` ahora chequea la preferencia antes de
+    intentar registrar.
+  - **Logout** vive acá, no en el header del Dashboard (donde estaba desde
+    la Fase 0) — se reemplazó por un ícono de perfil (👤); un logout directo
+    sin ningún contexto en el header principal era demasiado fácil de tocar
+    por error, ahora pide confirmación (`showAlert` con Cancelar/Cerrar
+    sesión) desde una pantalla dedicada.
+
 ## Roadmap (alcance v1 + extensiones)
 
 Alcance v1 original: tareas de hoy (ver/iniciar/pausar/completar/bloquear/
 destacar), comentarios y @menciones en tareas, chat interno, notificaciones
 push, login biométrico. Google Sign-In queda para v2. Extensiones agregadas
-después de validar la v1 en un dispositivo real: Proyectos.
+después de validar la v1 en un dispositivo real: Proyectos, Housekeeping.
 
 | Fase | Contenido | Estado |
 |---|---|---|
@@ -532,7 +566,7 @@ después de validar la v1 en un dispositivo real: Proyectos.
 | 4 | Chat interno (canales, mensajes, Socket.IO) | ✅ |
 | 5 | Biometría (`expo-local-authentication`) + pulido (manejo de errores de red, ícono/splash real, build de prueba) | ✅ — probado en dispositivo físico y emulador |
 | 6 | Proyectos: lista agrupada + detalle (info/situación/links/equipo/tareas/completadas) | ✅ |
-| 7 | Housekeeping: "Finalizar jornada" en el Dashboard + pantalla de Perfil (datos, apagar biometría/push, logout) | pendiente |
+| 7 | Housekeeping: "Finalizar jornada" en el Dashboard + pantalla de Perfil (datos, apagar biometría/push, logout) | ✅ |
 | 8 | Vacaciones y licencias (saldo, pedir, ver solicitudes propias) | pendiente |
 | 9 | A evaluar más adelante: Backlog, self-view de Productividad, Accesos del proyecto, Briefs | pendiente |
 

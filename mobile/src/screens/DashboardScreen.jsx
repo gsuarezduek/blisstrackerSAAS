@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
-import { View, Text, SectionList, Pressable, StyleSheet, RefreshControl } from 'react-native'
+import { View, Text, SectionList, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { getToday } from '../api/tasks'
 import TaskCard from '../components/TaskCard'
@@ -8,6 +8,8 @@ import AddTaskModal from '../components/AddTaskModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import BlissLoader from '../components/BlissLoader'
 import { appEvents, EVENTS } from '../lib/events'
+import { finishWorkday } from '../api/workdays'
+import { showAlert } from '../lib/alert'
 
 function todayLabel() {
   return new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -47,6 +49,7 @@ export default function DashboardScreen({ navigation }) {
   const [error, setError] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [commentTask, setCommentTask] = useState(null)
+  const [finishingDay, setFinishingDay] = useState(false)
   const tasksRef = useRef(tasks)
   useEffect(() => { tasksRef.current = tasks }, [tasks])
 
@@ -96,6 +99,28 @@ export default function DashboardScreen({ navigation }) {
     setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t)))
   }
 
+  // Mismo criterio que la web: finalizar la jornada cierra sesión — el
+  // WorkDay se reabre solo al volver a loguearse y visitar el Dashboard.
+  function handleFinishDay() {
+    showAlert('Finalizar jornada', '¿Cerramos tu jornada laboral? Se va a cerrar tu sesión.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Finalizar',
+        onPress: async () => {
+          setFinishingDay(true)
+          try {
+            await finishWorkday()
+            await logout()
+          } catch (err) {
+            showAlert('No se pudo finalizar', err.response?.data?.error || 'Probá de nuevo.')
+          } finally {
+            setFinishingDay(false)
+          }
+        },
+      },
+    ])
+  }
+
   const sections = useMemo(() => buildSections(tasks), [tasks])
   const hasActiveTask = tasks.some(t => t.status === 'IN_PROGRESS')
 
@@ -124,8 +149,8 @@ export default function DashboardScreen({ navigation }) {
           <Pressable onPress={() => navigation.navigate('Notifications')} hitSlop={8}>
             <Text style={styles.bell}>🔔</Text>
           </Pressable>
-          <Pressable onPress={logout} hitSlop={8}>
-            <Text style={styles.logout}>Salir</Text>
+          <Pressable onPress={() => navigation.navigate('Profile')} hitSlop={8}>
+            <Text style={styles.bell}>👤</Text>
           </Pressable>
         </View>
       </View>
@@ -155,9 +180,14 @@ export default function DashboardScreen({ navigation }) {
         stickySectionHeadersEnabled={false}
       />
 
-      <Pressable style={styles.fab} onPress={() => setShowAddModal(true)}>
-        <Text style={styles.fabText}>+ Agregar tarea</Text>
-      </Pressable>
+      <View style={styles.fabRow}>
+        <Pressable style={styles.fab} onPress={() => setShowAddModal(true)}>
+          <Text style={styles.fabText}>+ Agregar tarea</Text>
+        </Pressable>
+        <Pressable style={styles.finishButton} onPress={handleFinishDay} disabled={finishingDay}>
+          {finishingDay ? <ActivityIndicator size="small" color="#dc2626" /> : <Text style={styles.finishButtonText}>Finalizar jornada</Text>}
+        </Pressable>
+      </View>
 
       <AddTaskModal visible={showAddModal} onClose={() => setShowAddModal(false)} onCreated={handleCreated} />
 
@@ -182,7 +212,6 @@ const styles = StyleSheet.create({
   date: { fontSize: 13, color: '#9ca3af', marginTop: 2, textTransform: 'capitalize' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   bell: { fontSize: 20 },
-  logout: { color: '#dc2626', fontWeight: '600', fontSize: 14 },
   listContent: { paddingHorizontal: 16, paddingBottom: 100, flexGrow: 1 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', marginTop: 16, marginBottom: 8 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
@@ -191,10 +220,17 @@ const styles = StyleSheet.create({
   errorBox: { backgroundColor: '#fee2e2', marginHorizontal: 16, borderRadius: 10, padding: 12, marginBottom: 4 },
   errorText: { color: '#b91c1c', fontSize: 13 },
   retryText: { color: '#b91c1c', fontWeight: '600', fontSize: 13, marginTop: 4, textDecorationLine: 'underline' },
+  fabRow: {
+    position: 'absolute', bottom: 24, left: 20, right: 20, flexDirection: 'row', gap: 10,
+  },
   fab: {
-    position: 'absolute', bottom: 24, left: 20, right: 20,
-    backgroundColor: '#F7931A', borderRadius: 14, paddingVertical: 15, alignItems: 'center',
+    flex: 2, backgroundColor: '#F7931A', borderRadius: 14, paddingVertical: 15, alignItems: 'center',
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4,
   },
   fabText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  finishButton: {
+    flex: 1, borderWidth: 1, borderColor: '#dc2626', borderRadius: 14, paddingVertical: 15,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff',
+  },
+  finishButtonText: { color: '#dc2626', fontWeight: '700', fontSize: 13, textAlign: 'center' },
 })

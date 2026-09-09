@@ -9,6 +9,11 @@ const BIOMETRIC_ENABLED_KEY = 'bliss_biometric_enabled'
 // Para no volver a ofrecer "¿activar Face ID?" en cada login si ya contestó
 // que no una vez.
 const BIOMETRIC_PROMPTED_KEY = 'bliss_biometric_prompted'
+// Preferencia explícita de "no quiero push en este dispositivo" — separada
+// de la sesión por el mismo motivo que la biometría. Sin esto, syncPushToken
+// volvería a registrar el dispositivo en cada login aunque el usuario lo
+// haya apagado a mano desde Perfil.
+const PUSH_DISABLED_KEY = 'bliss_push_disabled'
 
 export async function getToken() {
   return SecureStore.getItemAsync(TOKEN_KEY)
@@ -42,4 +47,12 @@ export async function getBiometricPrompted() {
 
 export async function setBiometricPrompted() {
   await SecureStore.setItemAsync(BIOMETRIC_PROMPTED_KEY, 'true')
+}
+
+export async function getPushDisabled() {
+  return (await SecureStore.getItemAsync(PUSH_DISABLED_KEY)) === 'true'
+}
+
+export async function setPushDisabled(disabled) {
+  await SecureStore.setItemAsync(PUSH_DISABLED_KEY, disabled ? 'true' : 'false')
 }

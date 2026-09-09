@@ -5,6 +5,7 @@ import { showAlert } from '../lib/alert'
 import {
   getToken, getWorkspaceSlug, setSession, clearSession,
   getBiometricEnabled, setBiometricEnabled, getBiometricPrompted, setBiometricPrompted,
+  getPushDisabled, setPushDisabled,
 } from '../api/session'
 import { registerForPushNotificationsAsync } from '../lib/push'
 import { registerDevice, unregisterDevice } from '../api/devices'
@@ -30,8 +31,12 @@ export function AuthProvider({ children }) {
   // Best-effort: pedir permiso y registrar el token de push del dispositivo.
   // Nunca bloquea el login ni el arranque de la app si falla (sin proyecto
   // EAS, en un simulador, o con permiso denegado — ver src/lib/push.js).
+  // Respeta la preferencia explícita "apagué el push a mano" (Perfil) — sin
+  // este chequeo, cada login/restauración de sesión volvería a registrar el
+  // dispositivo aunque el usuario lo haya desactivado.
   const syncPushToken = useCallback(async () => {
     try {
+      if (await getPushDisabled()) return
       const token = await registerForPushNotificationsAsync()
       if (!token) return
       pushTokenRef.current = token
@@ -40,6 +45,20 @@ export function AuthProvider({ children }) {
       console.warn('[Push] No se pudo registrar el dispositivo:', err.message)
     }
   }, [])
+
+  // Toggle explícito desde Perfil — a diferencia de syncPushToken (silencioso,
+  // llamado automáticamente en login/restauración), este es el que el usuario
+  // dispara a mano, así que actualiza la preferencia persistida y hace el
+  // registro/baja del dispositivo de inmediato en vez de esperar al próximo login.
+  const togglePush = useCallback(async enabled => {
+    await setPushDisabled(!enabled)
+    if (enabled) {
+      await syncPushToken()
+    } else if (pushTokenRef.current) {
+      await unregisterDevice(pushTokenRef.current).catch(() => {})
+      pushTokenRef.current = null
+    }
+  }, [syncPushToken])
 
   // Termina de "entrar": trae el perfil, activa push y socket. Se llama tanto
   // al restaurar una sesión guardada (sin gate biométrico, o ya pasado) como
@@ -170,7 +189,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, loading, locked, pendingWorkspaces,
-      login, selectWorkspace, logout, unlock, forgetBiometricAndLogout,
+      login, selectWorkspace, logout, unlock, forgetBiometricAndLogout, togglePush,
     }}>
       {children}
     </AuthContext.Provider>
