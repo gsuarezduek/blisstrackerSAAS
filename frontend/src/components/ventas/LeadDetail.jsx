@@ -7,6 +7,8 @@ import ConfirmModal from '../ConfirmModal'
 import StatusBadge, { fmtMoney } from './StatusBadge'
 import ReasonModal from './ReasonModal'
 import LeadModal from './LeadModal'
+import CompanyModal from './CompanyModal'
+import ContactModal from './ContactModal'
 import ConvertToProjectModal from './ConvertToProjectModal'
 import ResearchPanel from './ResearchPanel'
 import ProposalsPanel from './ProposalsPanel'
@@ -37,6 +39,19 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// Marca un dato que el bot de WhatsApp completó solo (campo vacío) y todavía
+// no fue revisado por una persona — editarlo a mano lo saca de botFilledFields.
+function BotBadge() {
+  return (
+    <span
+      title="Completado automáticamente por el bot de WhatsApp — para revisar"
+      className="ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 align-middle whitespace-nowrap"
+    >
+      🤖 bot
+    </span>
+  )
+}
+
 export default function LeadDetail({ leadId, team, companies, onBack, onChanged }) {
   const { user } = useAuth()
   const [lead, setLead] = useState(null)
@@ -49,6 +64,8 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
   const [histOpen, setHistOpen] = useState(false)
   const [timelineOpen, setTimelineOpen] = useState(false)
   const [savingAction, setSavingAction] = useState(false)
+  const [companyEdit, setCompanyEdit] = useState(false)
+  const [contactEditModal, setContactEditModal] = useState(false)
   const [contactEdit, setContactEdit] = useState(false)
   const [ncMode, setNcMode] = useState(false) // sub-form "nuevo contacto"
   const [nc, setNc] = useState({ name: '', title: '', email: '', phone: '' })
@@ -267,11 +284,20 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
 
           {/* Empresa */}
           <div className={card}>
-            <h3 className={sectionTitle}>Empresa</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className={`${sectionTitle} mb-0`}>Empresa</h3>
+              {c && <button onClick={() => setCompanyEdit(true)} className="text-xs text-primary-600 hover:underline">Editar</button>}
+            </div>
             <dl className="space-y-2 text-sm">
               <Row label="Nombre">{c?.name}</Row>
-              <Row label="Sitio web">{c?.website ? <a href={c.website.startsWith('http') ? c.website : `https://${c.website}`} target="_blank" rel="noreferrer" className="text-primary-600 hover:underline">{c.website}</a> : '—'}</Row>
-              <Row label="Rubro">{c?.industry || '—'}</Row>
+              <Row label="Sitio web">
+                {c?.website ? <a href={c.website.startsWith('http') ? c.website : `https://${c.website}`} target="_blank" rel="noreferrer" className="text-primary-600 hover:underline">{c.website}</a> : '—'}
+                {c?.botFilledFields?.includes('website') && <BotBadge />}
+              </Row>
+              <Row label="Rubro">
+                {c?.industry || '—'}
+                {c?.botFilledFields?.includes('industry') && <BotBadge />}
+              </Row>
               {c?.notes && <Row label="Observaciones">{c.notes}</Row>}
             </dl>
           </div>
@@ -280,9 +306,12 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
           <div className={card}>
             <div className="flex items-center justify-between mb-3">
               <h3 className={`${sectionTitle} mb-0`}>Contacto principal</h3>
-              <button onClick={() => { setContactEdit(e => !e); setNcMode(false) }} className="text-xs text-primary-600 hover:underline">
-                {contactEdit ? 'Cerrar' : (ct ? 'Cambiar' : 'Asignar')}
-              </button>
+              <div className="flex items-center gap-3">
+                {ct && !contactEdit && <button onClick={() => setContactEditModal(true)} className="text-xs text-primary-600 hover:underline">Editar</button>}
+                <button onClick={() => { setContactEdit(e => !e); setNcMode(false) }} className="text-xs text-primary-600 hover:underline">
+                  {contactEdit ? 'Cerrar' : (ct ? 'Cambiar' : 'Asignar')}
+                </button>
+              </div>
             </div>
 
             {!contactEdit ? (
@@ -290,7 +319,10 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
                 <dl className="space-y-2 text-sm">
                   <Row label="Nombre">{ct.name}</Row>
                   <Row label="Cargo">{ct.title || '—'}</Row>
-                  <Row label="Email">{ct.email ? <a href={`mailto:${ct.email}`} className="text-primary-600 hover:underline">{ct.email}</a> : '—'}</Row>
+                  <Row label="Email">
+                    {ct.email ? <a href={`mailto:${ct.email}`} className="text-primary-600 hover:underline">{ct.email}</a> : '—'}
+                    {ct.botFilledFields?.includes('email') && <BotBadge />}
+                  </Row>
                   <Row label="Teléfono">{ct.phone || '—'}</Row>
                 </dl>
               ) : <p className="text-sm text-gray-400">Sin contacto principal.</p>
@@ -432,6 +464,8 @@ export default function LeadDetail({ leadId, team, companies, onBack, onChanged 
       </div>
 
       {showEdit && <LeadModal lead={lead} companies={companies} team={team} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load(); onChanged?.() }} />}
+      {companyEdit && <CompanyModal company={c} onClose={() => setCompanyEdit(false)} onSaved={() => { setCompanyEdit(false); load(); onChanged?.() }} />}
+      {contactEditModal && <ContactModal contact={ct} companyId={lead.companyId} onClose={() => setContactEditModal(false)} onSaved={() => { setContactEditModal(false); load(); onChanged?.() }} />}
       {showConvert && <ConvertToProjectModal lead={lead} onClose={() => setShowConvert(false)} onConverted={() => { setShowConvert(false); load(); onChanged?.() }} />}
       <ReasonModal open={!!lostPendingStatus} loading={lostSaving} onConfirm={confirmLost} onCancel={() => setLostPendingStatus(null)} />
       <ReasonModal

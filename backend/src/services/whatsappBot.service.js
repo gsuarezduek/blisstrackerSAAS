@@ -212,6 +212,16 @@ async function generateBotReply({ workspaceId, config, transcript, contact, last
   return result
 }
 
+// Nombre legible de cada campo autocompletable, para el log del timeline.
+const FIELD_LABELS = { industry: 'rubro', website: 'sitio web', email: 'email' }
+
+// Suma `field` a un array de nombres de campo sin duplicar (botFilledFields).
+function addBotField(current, field) {
+  const set = new Set(Array.isArray(current) ? current : [])
+  set.add(field)
+  return [...set]
+}
+
 /**
  * Aplica lo que el bot detectó en ESTE mensaje a la ficha del lead (pedido
  * explícito: "que el bot me actualice la ficha si capta algo relevante").
@@ -221,26 +231,58 @@ async function generateBotReply({ workspaceId, config, transcript, contact, last
  * afuera de esto (campo de plata, mejor que lo cargue un humano a partir del
  * summary) — solo se auto-completan industry/website/email. El `summary`
  * siempre es no-destructivo: es una entrada nueva en el timeline, no pisa nada.
+ *
+ * Cada campo completado se marca en `Company.botFilledFields`/
+ * `Contact.botFilledFields` (JSON array de nombres) para que el frontend
+ * pueda mostrar un badge "🤖 agregado por el bot" junto al dato en LeadDetail
+ * — se limpia cuando un humano edita ese campo a mano (ver updateCompany/
+ * updateContact). Además queda una entrada explícita en el timeline con qué
+ * campo se completó y con qué valor, separada del `summary` general.
+ *
  * Best-effort: nunca debe romper el flujo del bot si falla.
  */
 async function applyLeadInsights({ insights, contact, leadId, workspaceId }) {
   if (!insights || !contact) return
   try {
+    const filledLabels = []
+
     const industry = cleanInsightValue(insights.industry)
     const website = cleanInsightValue(insights.website)
     if (contact.companyId && (industry || website)) {
-      const company = await prisma.company.findUnique({ where: { id: contact.companyId }, select: { industry: true, website: true } })
+      const company = await prisma.company.findUnique({ where: { id: contact.companyId }, select: { industry: true, website: true, botFilledFields: true } })
       if (company) {
         const data = {}
-        if (industry && !company.industry) data.industry = industry.slice(0, 200)
-        if (website && !company.website) data.website = website.slice(0, 300)
-        if (Object.keys(data).length > 0) await prisma.company.update({ where: { id: contact.companyId }, data })
+        let botFields = Array.isArray(company.botFilledFields) ? company.botFilledFields : []
+        if (industry && !company.industry) {
+          data.industry = industry.slice(0, 200)
+          botFields = addBotField(botFields, 'industry')
+          filledLabels.push(`${FIELD_LABELS.industry} → ${data.industry}`)
+        }
+        if (website && !company.website) {
+          data.website = website.slice(0, 300)
+          botFields = addBotField(botFields, 'website')
+          filledLabels.push(`${FIELD_LABELS.website} → ${data.website}`)
+        }
+        if (Object.keys(data).length > 0) {
+          data.botFilledFields = botFields
+          await prisma.company.update({ where: { id: contact.companyId }, data })
+        }
       }
     }
 
     const contactEmail = cleanInsightValue(insights.contactEmail)
     if (contactEmail && !contact.email) {
-      await prisma.contact.update({ where: { id: contact.id }, data: { email: contactEmail.slice(0, 200) } })
+      const email = contactEmail.slice(0, 200)
+      const botFields = addBotField(contact.botFilledFields, 'email')
+      await prisma.contact.update({ where: { id: contact.id }, data: { email, botFilledFields: botFields } })
+      filledLabels.push(`${FIELD_LABELS.email} → ${email}`)
+    }
+
+    if (filledLabels.length > 0 && leadId) {
+      await logLeadEvent({
+        workspaceId, leadId, userId: null, type: 'whatsapp_insight',
+        content: `completó automáticamente por WhatsApp: ${filledLabels.join(', ')}`,
+      })
     }
 
     const summary = cleanInsightValue(insights.summary)

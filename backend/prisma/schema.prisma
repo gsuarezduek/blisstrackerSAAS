@@ -2881,6 +2881,7 @@ model Company {
   website     String? // sitio web
   industry    String? // rubro (opcional)
   notes       String? // observaciones
+  botFilledFields Json @default("[]") // nombres de campos (website/industry) completados por el bot de WhatsApp y aún no revisados por un humano — se limpia el nombre del array al editar ese campo a mano
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -2901,6 +2902,7 @@ model Contact {
   title       String? // cargo
   email       String?
   phone       String?
+  botFilledFields Json @default("[]") // nombres de campos (email) completados por el bot de WhatsApp y aún no revisados por un humano — se limpia el nombre del array al editar ese campo a mano
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

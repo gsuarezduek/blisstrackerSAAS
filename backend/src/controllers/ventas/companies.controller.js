@@ -56,7 +56,7 @@ async function updateCompany(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const id = Number(req.params.id)
-    const existing = await prisma.company.findFirst({ where: { id, workspaceId }, select: { id: true } })
+    const existing = await prisma.company.findFirst({ where: { id, workspaceId }, select: { id: true, botFilledFields: true } })
     if (!existing) return res.status(404).json({ error: 'Empresa no encontrada' })
 
     const { name, website, industry, notes } = req.body
@@ -65,6 +65,14 @@ async function updateCompany(req, res, next) {
     if (website  !== undefined) data.website  = website?.trim()  || null
     if (industry !== undefined) data.industry = industry?.trim() || null
     if (notes    !== undefined) data.notes    = notes?.trim()    || null
+
+    // Un humano editando el campo a mano confirma/corrige el dato — deja de
+    // estar marcado como "completado por el bot" (ver applyLeadInsights).
+    const botFields = Array.isArray(existing.botFilledFields) ? existing.botFilledFields : []
+    if (botFields.length) {
+      const touched = ['website', 'industry'].filter(f => data[f] !== undefined)
+      if (touched.length) data.botFilledFields = botFields.filter(f => !touched.includes(f))
+    }
 
     const company = await prisma.company.update({ where: { id }, data })
     res.json(company)

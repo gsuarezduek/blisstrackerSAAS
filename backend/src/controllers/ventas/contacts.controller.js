@@ -49,7 +49,7 @@ async function updateContact(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const id = Number(req.params.id)
-    const existing = await prisma.contact.findFirst({ where: { id, workspaceId }, select: { id: true } })
+    const existing = await prisma.contact.findFirst({ where: { id, workspaceId }, select: { id: true, botFilledFields: true } })
     if (!existing) return res.status(404).json({ error: 'Contacto no encontrado' })
 
     const { name, title, email, phone } = req.body
@@ -58,6 +58,13 @@ async function updateContact(req, res, next) {
     if (title !== undefined) data.title = title?.trim() || null
     if (email !== undefined) data.email = email?.trim() || null
     if (phone !== undefined) data.phone = normalizePhone(phone)
+
+    // Un humano editando el campo a mano confirma/corrige el dato — deja de
+    // estar marcado como "completado por el bot" (ver applyLeadInsights).
+    const botFields = Array.isArray(existing.botFilledFields) ? existing.botFilledFields : []
+    if (botFields.length && data.email !== undefined) {
+      data.botFilledFields = botFields.filter(f => f !== 'email')
+    }
 
     const contact = await prisma.contact.update({ where: { id }, data })
     res.json(contact)
