@@ -115,6 +115,9 @@ export default function DashboardScreen({ navigation }) {
           <Text style={styles.date}>{todayLabel()}</Text>
         </View>
         <View style={styles.headerActions}>
+          <Pressable onPress={() => navigation.navigate('Projects')} hitSlop={8}>
+            <Text style={styles.bell}>📁</Text>
+          </Pressable>
           <Pressable onPress={() => navigation.navigate('Channels')} hitSlop={8}>
             <Text style={styles.bell}>💬</Text>
           </Pressable>

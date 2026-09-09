@@ -69,7 +69,7 @@ src/
     session.js      # token + slug en SecureStore
     client.js        # instancia axios (baseURL, headers, manejo de 401)
     tasks.js         # helpers de /api/tasks + /api/workdays/today
-    projects.js      # helper de /api/projects (selector del modal de nueva tarea)
+    projects.js      # /api/projects: listar, detalle (endpoint "todo en uno"), star, completadas
     comments.js      # helpers de /api/tasks/:id/comments
     members.js       # GET /workspaces/current/members, filtrado a activos (autocomplete de @menciones)
     devices.js       # POST/DELETE /api/devices/register (push)
@@ -94,6 +94,8 @@ src/
     NotificationsScreen.jsx   # centro de notificaciones in-app
     ChannelListScreen.jsx     # lista de canales de chat, no-leídos/menciones en vivo
     ChatScreen.jsx            # mensajes de un canal + input, tiempo real vía socket
+    ProjectListScreen.jsx     # proyectos agrupados (destacados/míos/otros)
+    ProjectDetailScreen.jsx   # info/situación/links/equipo/tareas/completadas de un proyecto
   navigation/
     RootNavigator.jsx     # decide pantalla según loading/pendingWorkspaces/user + listener global de push tocado
 ```
@@ -471,20 +473,68 @@ bundle "release" con el JS embebido estáticamente (no conectado a Metro),
 sigue haciendo falta un `eas build` nuevo para verlo reflejado en el
 dispositivo, igual que cualquier otro cambio de JS en un build ya instalado.
 
-## Roadmap (alcance v1)
+### Proyectos (Fase 6)
 
-Incluye: tareas de hoy (ver/iniciar/pausar/completar/bloquear/destacar),
-comentarios y @menciones en tareas, chat interno, notificaciones push, login
-biométrico. Google Sign-In queda para v2.
+Primera fase que no estaba en el plan original de la v1 — arrancó a pedido
+del usuario tras validar las 6 fases base en un dispositivo real. Cubre
+navegar por proyecto, algo que hasta acá la app no tenía (solo "mis tareas de
+hoy" cruzando proyectos en el Dashboard).
+
+- **`ProjectListScreen`** — `GET /projects` (mismo endpoint que ya usaba
+  `AddTaskModal`, ahora también aquí), agrupado igual que "Mis Proyectos" en
+  la web: Destacados (`ProjectStar`) → Mis proyectos (soy del equipo,
+  `ProjectMember`) → Otros proyectos del workspace. Estrella tocable inline
+  (update optimista, revierte si falla) sin entrar al detalle. Punto rojo si
+  el proyecto tiene tareas bloqueadas (`taskCounts.BLOCKED`).
+- **`ProjectDetailScreen`** — un solo request cubre casi toda la pantalla:
+  `GET /projects/:id/tasks` (mismo endpoint que la web, pese al nombre) ya
+  devuelve `project` (info, situación, links, miembros, `chatChannel`) +
+  `byUser` (tareas activas agrupadas por persona) en una sola llamada. Se
+  aplana `byUser` a una lista simple en el cliente porque la respuesta de
+  cada acción de `TaskCard` (start/pause/complete/...) no trae `user` —
+  `userId`/`userName` se preservan a mano en `handleUpdate` para poder seguir
+  agrupando después de cada acción. Reusa `TaskCard`/`TaskCommentsModal` tal
+  cual (mismos componentes que el Dashboard).
+- **Botón "💬 Abrir chat del proyecto"** — el proyecto solo trae
+  `chatChannel: {slug}` (no el `id` numérico que `ChatScreen` necesita), así
+  que al tocar el botón se resuelve con `listChannels()` buscando el que
+  matchee ese `slug`, y recién ahí se navega a `Chat` con su `id`. Un paso
+  extra (una request más) en vez de duplicar lógica de resolución de canal
+  en el backend.
+- **Completadas** — sección colapsable al final, `GET /projects/:id/completed`
+  paginado (`skip`), carga bajo demanda al abrir (mismo patrón que "Cargar
+  más" del Dashboard web).
+- **Situación** (HTML en el modelo, WYSIWYG en la web) se muestra como
+  **texto plano** (`stripHtml()`, regex simple) — no se sumó una dependencia
+  de renderizado HTML por un campo de solo lectura en esta fase.
+
+**Deliberadamente fuera de esta fase** (no por desinterés, por sensibilidad o
+complejidad — quedan documentadas como candidatas para más adelante):
+**Accesos/credenciales** (dato sensible, necesita una UI de "revelar"
+cuidada) y **Reuniones** (cronómetro + participantes, suficientemente
+compleja como para ser su propia fase). Tampoco se muestran las redes
+sociales del proyecto (`Project.connections`) — solo `websiteUrl` — para no
+adivinar el formato de cada red sin haberlo verificado primero.
+
+## Roadmap (alcance v1 + extensiones)
+
+Alcance v1 original: tareas de hoy (ver/iniciar/pausar/completar/bloquear/
+destacar), comentarios y @menciones en tareas, chat interno, notificaciones
+push, login biométrico. Google Sign-In queda para v2. Extensiones agregadas
+después de validar la v1 en un dispositivo real: Proyectos.
 
 | Fase | Contenido | Estado |
 |---|---|---|
 | 0 | Setup Expo, navegación, auth (login + selector de workspace + secure storage) | ✅ |
 | 1 | Dashboard: tareas de hoy (listar/iniciar/pausar/completar/bloquear/destacar, carry-over, crear tarea) | ✅ |
 | 2 | Comentarios y @menciones en tareas | ✅ |
-| 3 | Push (backend: `DeviceToken` + servicio de Expo Push; frontend: permisos, registro de token, deep-link, centro de notificaciones) | ✅ (código completo — falta `eas init`, ver arriba) |
+| 3 | Push (backend: `DeviceToken` + servicio de Expo Push; frontend: permisos, registro de token, deep-link, centro de notificaciones) | ✅ |
 | 4 | Chat interno (canales, mensajes, Socket.IO) | ✅ |
-| 5 | Biometría (`expo-local-authentication`) + pulido (manejo de errores de red, ícono/splash, build de prueba) | ✅ (código completo — falta correr `eas build`, ver arriba) |
+| 5 | Biometría (`expo-local-authentication`) + pulido (manejo de errores de red, ícono/splash real, build de prueba) | ✅ — probado en dispositivo físico y emulador |
+| 6 | Proyectos: lista agrupada + detalle (info/situación/links/equipo/tareas/completadas) | ✅ |
+| 7 | Housekeeping: "Finalizar jornada" en el Dashboard + pantalla de Perfil (datos, apagar biometría/push, logout) | pendiente |
+| 8 | Vacaciones y licencias (saldo, pedir, ver solicitudes propias) | pendiente |
+| 9 | A evaluar más adelante: Backlog, self-view de Productividad, Accesos del proyecto, Briefs | pendiente |
 
 No hay modo offline en la v1 (se evalúa si se vuelve un problema real de uso
 en campo con mala señal).

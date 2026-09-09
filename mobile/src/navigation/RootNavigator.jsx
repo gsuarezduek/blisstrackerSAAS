@@ -13,6 +13,8 @@ import DashboardScreen from '../screens/DashboardScreen'
 import NotificationsScreen from '../screens/NotificationsScreen'
 import ChannelListScreen from '../screens/ChannelListScreen'
 import ChatScreen from '../screens/ChatScreen'
+import ProjectListScreen from '../screens/ProjectListScreen'
+import ProjectDetailScreen from '../screens/ProjectDetailScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -62,6 +64,8 @@ export default function RootNavigator() {
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
             <Stack.Screen name="Channels" component={ChannelListScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} options={{ headerShown: true }} />
+            <Stack.Screen name="Projects" component={ProjectListScreen} />
+            <Stack.Screen name="ProjectDetail" component={ProjectDetailScreen} options={{ headerShown: true }} />
           </>
         ) : pendingWorkspaces ? (
           <Stack.Screen name="WorkspaceSelect" component={WorkspaceSelectScreen} />
