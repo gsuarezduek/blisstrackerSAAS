@@ -125,6 +125,14 @@ async function previewWeeklyCleanup(tables = null) {
       where: { deletedAt: { lt: daysAgo(days) } },
     })
   }
+  if (!tables || tables.includes('projectFilesPending')) {
+    // Retention en HORAS, mismo criterio que contentAssetsPending — ver
+    // projectFilesPendingRetentionHours.
+    const hours = await getSetting('projectFilesPendingRetentionHours')
+    result.projectFilesPending = await prisma.projectFile.count({
+      where: { type: 'file', status: 'pending', createdAt: { lt: hoursAgo(hours) } },
+    })
+  }
   return result
 }
 
@@ -231,6 +239,16 @@ async function runWeeklyCleanup(tables = null) {
     await objectStorage.deleteObjects(pieces.flatMap(p => p.assets.flatMap(a => [a.objectKey, a.posterKey].filter(Boolean))))
     const { count } = await prisma.contentPiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
     result.contentPiecesTrash = count
+  }
+  if (!tables || tables.includes('projectFilesPending')) {
+    const hours = await getSetting('projectFilesPendingRetentionHours')
+    const stale = await prisma.projectFile.findMany({
+      where:  { type: 'file', status: 'pending', createdAt: { lt: hoursAgo(hours) } },
+      select: { id: true, objectKey: true, posterKey: true },
+    })
+    await objectStorage.deleteObjects(stale.flatMap(f => [f.objectKey, f.posterKey].filter(Boolean)))
+    const { count } = await prisma.projectFile.deleteMany({ where: { id: { in: stale.map(f => f.id) } } })
+    result.projectFilesPending = count
   }
 
   return result

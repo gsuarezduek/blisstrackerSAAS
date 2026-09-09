@@ -15,7 +15,7 @@ async function projectTasks(req, res, next) {
       where: { id: projectId },
       select: {
         id: true, name: true, createdAt: true, situation: true,
-        timezone: true, linksEnabled: true, situationEnabled: true, briefsEnabled: true,
+        timezone: true, linksEnabled: true, situationEnabled: true, briefsEnabled: true, filesEnabled: true,
         websiteUrl: true, connections: true,
         chatChannel: { select: { slug: true } },
         links:    { orderBy: { createdAt: 'asc' } },

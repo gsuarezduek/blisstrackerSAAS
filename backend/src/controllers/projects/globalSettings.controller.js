@@ -9,7 +9,7 @@ async function getGlobalSettings(req, res, next) {
     const workspace = req.workspace
     const first = await prisma.project.findFirst({
       where: { workspaceId: workspace.id },
-      select: { linksEnabled: true, situationEnabled: true, hoursEnabled: true, briefsEnabled: true, emailFrom: true, aiWeeklyTokenLimit: true },
+      select: { linksEnabled: true, situationEnabled: true, hoursEnabled: true, briefsEnabled: true, filesEnabled: true, emailFrom: true, aiWeeklyTokenLimit: true },
       orderBy: { id: 'asc' },
     })
     const effectiveEmailFrom = first?.emailFrom ?? process.env.EMAIL_FROM ?? null
@@ -19,6 +19,7 @@ async function getGlobalSettings(req, res, next) {
       situationEnabled: first?.situationEnabled ?? true,
       hoursEnabled: first?.hoursEnabled ?? false,
       briefsEnabled: first?.briefsEnabled ?? true,
+      filesEnabled: first?.filesEnabled ?? true,
       attendanceTrackingEnabled: workspace.attendanceTrackingEnabled ?? true,
       productivityEnabled: workspace.productivityEnabled ?? true,
       productivityDigestEnabled: workspace.productivityDigestEnabled ?? true,
@@ -98,7 +99,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, rrssAdvisorAutoEnabled, marketingDisabledSections, marketingDigestEnabled, seoAlertsEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, vacationAccrualEnabled, vacationAccrualDays, vacationAccrualIntervalMonths, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, filesEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, rrssAdvisorAutoEnabled, marketingDisabledSections, marketingDigestEnabled, seoAlertsEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, vacationAccrualEnabled, vacationAccrualDays, vacationAccrualIntervalMonths, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -177,6 +178,7 @@ async function saveGlobalSettings(req, res, next) {
     if (situationEnabled !== undefined) projectData.situationEnabled = Boolean(situationEnabled)
     if (hoursEnabled !== undefined)    projectData.hoursEnabled    = Boolean(hoursEnabled)
     if (briefsEnabled !== undefined)   projectData.briefsEnabled   = Boolean(briefsEnabled)
+    if (filesEnabled !== undefined)    projectData.filesEnabled    = Boolean(filesEnabled)
     if (aiWeeklyTokenLimit !== undefined) {
       const limit = Number(aiWeeklyTokenLimit)
       if (!Number.isInteger(limit) || limit < 0) {

@@ -181,6 +181,7 @@ model Workspace {
   contentAssets          ContentAsset[]
   contentComments        ContentComment[]
   contentStatusEvents    ContentStatusEvent[]
+  projectFiles           ProjectFile[]
   whatsappAccounts          WhatsappAccount[]
   whatsappConversations     WhatsappConversation[]
   whatsappMessages          WhatsappMessage[]
@@ -366,6 +367,7 @@ model User {
   contentPiecesCreated      ContentPiece[]             @relation("ContentPieceCreator")
   contentPiecesDeleted      ContentPiece[]             @relation("ContentPieceDeletedBy")
   contentAssetsUploaded     ContentAsset[]             @relation("ContentAssetUploader")
+  projectFilesUploaded      ProjectFile[]              @relation("ProjectFileUploader")
   contentComments           ContentComment[]           @relation("ContentCommentAuthor")
   contentStatusEvents       ContentStatusEvent[]        @relation("ContentEventActor")
   whatsappAccountsConnected WhatsappAccount[]
@@ -493,6 +495,7 @@ model Project {
   situationEnabled   Boolean   @default(true)
   hoursEnabled       Boolean   @default(false)
   briefsEnabled      Boolean   @default(true)
+  filesEnabled       Boolean   @default(true)
   monthlyHours       Int?
   emailFrom          String?
   aiWeeklyTokenLimit Int       @default(500000)
@@ -556,8 +559,43 @@ model Project {
   chatChannel            ChatChannel?
   contentPieces          ContentPiece[]
   monthlyHoursLogs       ProjectMonthlyHoursLog[]
+  files                  ProjectFile[]
 
   @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// Repositorio de archivos por proyecto (carpetas + archivos, tipo Drive) — alternativa
+// interna a pagar Google Workspace solo por almacenamiento compartido. Modelo único
+// polimórfico (type: "folder" | "file"), mismo criterio que ContentPiece (String, no
+// enum de Prisma). Los archivos van a Cloudflare R2 vía el mismo objectStorage.service.js
+// que usa Contenido; sin @@unique de nombre por carpeta a propósito — Drive tampoco
+// impide nombres duplicados en la misma carpeta.
+model ProjectFile {
+  id           Int      @id @default(autoincrement())
+  projectId    Int
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspaceId  Int
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentId     Int?
+  parent       ProjectFile?  @relation("ProjectFileChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     ProjectFile[] @relation("ProjectFileChildren")
+
+  type         String   // "folder" | "file"
+  name         String
+  status       String?  // solo type:"file" — "pending" | "ready" (mismo patrón que ContentAsset)
+  mimeType     String?
+  objectKey    String?  // key en R2, prefijo files/<workspaceId>/
+  posterKey    String?  // thumbnail del primer frame, solo videos
+  sizeBytes    Int?     // autoritativo: sale del HeadObject post-upload, no del cliente
+  width        Int?
+  height       Int?
+  uploadedById Int?
+  uploadedBy   User?    @relation("ProjectFileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  confirmedAt  DateTime?
+
+  @@index([projectId, parentId])
   @@index([workspaceId])
 }
 

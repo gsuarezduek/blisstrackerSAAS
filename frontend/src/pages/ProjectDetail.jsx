@@ -8,6 +8,7 @@ import TaskCommentsModal from '../components/TaskCommentsModal'
 import ProjectBriefs from '../components/briefs/ProjectBriefs'
 import ProjectMeetings from '../components/meetings/ProjectMeetings'
 import ProjectReports from '../components/ProjectReports'
+import ProjectFiles from '../components/ProjectFiles'
 import { useAuth } from '../context/AuthContext'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import useMembers from '../hooks/useMembers'
@@ -340,6 +341,7 @@ export default function ProjectDetail() {
                   <option value="info">Info</option>
                   {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
                   <option value="reuniones">Reuniones</option>
+                  {data.project.filesEnabled !== false && <option value="archivos">Archivos</option>}
                   <option value="reportes">Reportes</option>
                 </select>
                 {/* Desktop */}
@@ -370,6 +372,14 @@ export default function ProjectDetail() {
                   >
                     Reuniones
                   </button>
+                  {data.project.filesEnabled !== false && (
+                    <button
+                      onClick={() => setInfoTab('archivos')}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'archivos' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                    >
+                      Archivos
+                    </button>
+                  )}
                   <button
                     onClick={() => setInfoTab('reportes')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'reportes' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
@@ -441,6 +451,11 @@ export default function ProjectDetail() {
                   projectId={data.project.id}
                   canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
                 />
+              )}
+
+              {/* Tab: Archivos — repositorio de archivos tipo Drive (sobre R2) */}
+              {infoTab === 'archivos' && data.project.filesEnabled !== false && (
+                <ProjectFiles projectId={data.project.id} />
               )}
 
               {/* Tab: Reportes — horas y tareas completadas por mes, histórico */}
