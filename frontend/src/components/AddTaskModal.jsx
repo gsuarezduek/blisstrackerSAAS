@@ -125,10 +125,10 @@ function getGtdWarning(desc) {
   return null
 }
 
-export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultProject, alertaGTD }) {
+export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultProject, alertaGTD, defaultDescription }) {
   const { user } = useAuth()
   const { labelFor } = useRoles()
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState(defaultDescription || '')
   const [projectId, setProjectId] = useState(() => {
     const initial = lockedProject || defaultProject
     return initial ? String(initial.id) : ''

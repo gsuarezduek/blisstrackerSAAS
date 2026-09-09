@@ -46,8 +46,16 @@ function clampDim(v) {
 
 // width/height llegan del cliente (imagen decodificada en el browser antes de subir)
 // — nunca se confían para nada de seguridad, solo se acotan a rangos razonables.
+//
+// `url` solo se expone para imágenes de verdad (raster, renderizables en un
+// <img>) — es un link público sin auth a R2 (mismo criterio de "no-adivinable
+// = control de acceso" que SocialImage/ContentAsset), pensado para la
+// miniatura de la grilla. PDF/video/el resto NO tienen link público: se ven o
+// se descargan siempre vía el endpoint autenticado /download (proxied, no
+// redirect — ver objectStorage.getObjectStream), nunca directo contra R2.
 function shapeItem(f) {
-  const isPreviewable = f.mimeType && (f.mimeType.startsWith('image/') || f.mimeType === 'application/pdf')
+  const isImage = f.mimeType && f.mimeType.startsWith('image/')
+  const isPreviewInBrowser = f.mimeType && (isImage || f.mimeType.startsWith('video/') || f.mimeType === 'application/pdf')
   return {
     id: f.id,
     type: f.type,
@@ -57,8 +65,9 @@ function shapeItem(f) {
     sizeBytes: f.sizeBytes,
     width: f.width,
     height: f.height,
-    url: f.type === 'file' && f.status === 'ready' && f.objectKey && isPreviewable
+    url: f.type === 'file' && f.status === 'ready' && f.objectKey && isImage
       ? objectStorage.publicUrl(f.objectKey) : null,
+    previewable: Boolean(f.type === 'file' && f.status === 'ready' && isPreviewInBrowser),
     posterUrl: f.posterKey ? objectStorage.publicUrl(f.posterKey) : null,
     uploadedBy: f.uploadedBy ? { id: f.uploadedBy.id, name: f.uploadedBy.name } : null,
     createdAt: f.createdAt,
@@ -379,9 +388,19 @@ async function deleteItem(req, res, next) {
 }
 
 /**
- * GET /api/projects/:id/files/:fileId/download
+ * GET /api/projects/:id/files/:fileId/download[?inline=1]
  * Autenticado (a diferencia del serve público de Contenido, pensado para el
- * portal de cliente): 302 a una URL firmada de GET que fuerza descarga.
+ * portal de cliente) — por eso NO se puede resolver con un 302 a una URL
+ * firmada de R2: el frontend pega a esta ruta vía fetch/XHR con el header
+ * Authorization (no una navegación real de página), así que el redirect final
+ * cross-origin queda sujeto al CORS del bucket, que no está configurado para
+ * nuestro dominio. En cambio, hacemos *proxy* de los bytes: pedimos el stream
+ * a R2 y lo mandamos tal cual por nuestra propia respuesta (mismo origen que
+ * el resto de la API, ya con CORS resuelto). `?inline=1` sirve para que el
+ * frontend lo use como <video>/<iframe> (blob con Content-Type real) en vez
+ * de forzar "Guardar como" — en ambos casos el frontend lo pide como blob vía
+ * JS, nunca como navegación de página, así que el header Content-Disposition
+ * es solo informativo (no dispara nada por sí solo en ese flujo).
  */
 async function downloadFile(req, res, next) {
   try {
@@ -394,8 +413,38 @@ async function downloadFile(req, res, next) {
     })
     if (!file || !file.objectKey) return res.status(404).json({ error: 'Archivo no encontrado' })
 
-    const url = await objectStorage.presignGet(file.objectKey, { expiresIn: 300, filename: file.name })
-    res.redirect(302, url)
+    const { body, contentType, contentLength } = await objectStorage.getObjectStream(file.objectKey)
+    res.setHeader('Content-Type', contentType || file.mimeType || 'application/octet-stream')
+    if (contentLength != null) res.setHeader('Content-Length', contentLength)
+    const disposition = req.query.inline === '1' ? 'inline' : 'attachment'
+    res.setHeader('Content-Disposition', `${disposition}; filename="${file.name.replace(/"/g, "'")}"`)
+    body.on('error', next)
+    body.pipe(res)
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/projects/:id/files/:fileId/locate
+ * Para el deep-link "🔗 Copiar enlace" de un archivo (ej. pegado en la
+ * descripción de una tarea): dado solo el fileId, devuelve el archivo + el
+ * breadcrumb de su carpeta contenedora, para que el frontend pueda navegar
+ * directo a esa carpeta y abrirlo sin que quien pega el link tenga que saber
+ * la ruta.
+ */
+async function locateFile(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const file = await prisma.projectFile.findFirst({
+      where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'ready' },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+    })
+    if (!file) return res.status(404).json({ error: 'Archivo no encontrado' })
+
+    const path = file.parentId ? await buildPath(file.parentId, projectId) : []
+    res.json({ file: shapeItem(file), parentId: file.parentId, path })
   } catch (err) { next(err) }
 }
 
@@ -407,6 +456,7 @@ module.exports = {
   updateItem,
   deleteItem,
   downloadFile,
+  locateFile,
   // exportados para tests
   MAX_FILE_BYTES,
   DENIED_MIME,

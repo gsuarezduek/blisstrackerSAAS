@@ -179,6 +179,41 @@ function MoveModal({ projectId, item, onClose, onMoved }) {
   )
 }
 
+// "🔗 Copiar enlace" — deep-link para pegar en la descripción/comentario de una
+// tarea (linkify.jsx la vuelve clickeable). Al abrirlo, ProjectFiles resuelve
+// la carpeta contenedora y abre el archivo automáticamente (ver `locate`).
+function fileDeepLink(projectId, item) {
+  return `${window.location.origin}/my-projects/${projectId}?infoTab=archivos&fileId=${item.id}`
+}
+
+function CopyLinkModal({ projectId, item, onClose }) {
+  const [copied, setCopied] = useState(false)
+  const link = fileDeepLink(projectId, item)
+
+  async function handleCopy() {
+    try { await navigator.clipboard.writeText(link) } catch { /* fallback: seleccionar el input */ }
+    setCopied(true)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+        <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">🔗 Enlace a "{item.name}"</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Pegalo en la descripción o un comentario de una tarea — cualquiera del equipo lo abre directo en este archivo.</p>
+        <div className="flex items-center gap-2">
+          <input readOnly value={link} onFocus={e => e.target.select()} className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-xs" />
+          <button onClick={handleCopy} className="text-sm px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium shrink-0">
+            {copied ? '✓ Copiado' : 'Copiar'}
+          </button>
+        </div>
+        <div className="flex justify-end mt-4">
+          <button onClick={onClose} className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ConfirmDeleteModal({ item, onClose, onConfirm }) {
   const [saving, setSaving] = useState(false)
   const isFolder = item.type === 'folder'
@@ -210,8 +245,10 @@ function ConfirmDeleteModal({ item, onClose, onConfirm }) {
 
 // ─── Tarjeta de ítem (carpeta o archivo) con menú contextual ──────────────────
 
-function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload }) {
+function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onCreateTask }) {
   const isFolder = item.type === 'folder'
+  const isImage = !isFolder && item.mimeType?.startsWith('image/')
+  const isPreviewable = !isFolder && !isImage && item.previewable
   return (
     <div className="relative group">
       <button
@@ -220,7 +257,7 @@ function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDele
         title={item.name}
       >
         <div className="w-14 h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-900/40 overflow-hidden">
-          {!isFolder && item.url ? (
+          {isImage && item.url ? (
             <img src={item.url} alt="" className="w-full h-full object-cover" />
           ) : (
             <span className="text-3xl">{isFolder ? '📁' : iconFor(item.mimeType)}</span>
@@ -241,11 +278,20 @@ function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDele
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => onOpenMenu(null)} />
-          <div className="absolute top-7 right-1 z-50 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 text-sm">
+          <div className="absolute top-7 right-1 z-50 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 text-sm">
+            {isPreviewable && (
+              <button onClick={() => { onOpenMenu(null); onOpen(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">👁️ Ver</button>
+            )}
             <button onClick={() => { onOpenMenu(null); onRename(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">✏️ Renombrar</button>
             <button onClick={() => { onOpenMenu(null); onMove(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">📂 Mover</button>
             {!isFolder && (
-              <button onClick={() => { onOpenMenu(null); onDownload(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">⬇️ Descargar</button>
+              <>
+                <button onClick={() => { onOpenMenu(null); onDownload(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">⬇️ Descargar</button>
+                <button onClick={() => { onOpenMenu(null); onCopyLink(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">🔗 Copiar enlace</button>
+                {onCreateTask && (
+                  <button onClick={() => { onOpenMenu(null); onCreateTask(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">➕ Crear tarea</button>
+                )}
+              </>
             )}
             <button onClick={() => { onOpenMenu(null); onDelete(item) }} className="w-full text-left px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400">🗑️ Eliminar</button>
           </div>
@@ -257,7 +303,7 @@ function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDele
 
 // ─── Componente principal ──────────────────────────────────────────────────
 
-export default function ProjectFiles({ projectId }) {
+export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFromFile }) {
   const [folderId, setFolderId] = useState(null)
   const [path, setPath] = useState([])
   const [folders, setFolders] = useState([])
@@ -265,10 +311,13 @@ export default function ProjectFiles({ projectId }) {
   const [loading, setLoading] = useState(true)
   const [dragOver, setDragOver] = useState(false)
   const [menuOpenId, setMenuOpenId] = useState(null)
-  const [modal, setModal] = useState(null) // null | {type:'newFolder'|'rename'|'move'|'delete', item?}
+  const [modal, setModal] = useState(null) // null | {type:'newFolder'|'rename'|'move'|'delete'|'copyLink', item?}
   const [error, setError] = useState('')
   const [lightbox, setLightbox] = useState(null) // url de imagen a mostrar en grande
+  const [preview, setPreview] = useState(null) // null | { item, status:'loading'|'ready'|'error', blobUrl }
+  const [highlightId, setHighlightId] = useState(null) // resalta brevemente el ítem abierto por deep-link
   const inputRef = useRef(null)
+  const deepLinkConsumedRef = useRef(false)
 
   const reload = useCallback(async (fid) => {
     setLoading(true)
@@ -286,6 +335,29 @@ export default function ProjectFiles({ projectId }) {
 
   useEffect(() => { reload(folderId) }, [folderId, reload])
 
+  // Deep-link "🔗 Copiar enlace": ?fileId= resuelto una sola vez al montar —
+  // navega a la carpeta contenedora y abre el archivo (preview o lightbox).
+  useEffect(() => {
+    if (!deepLinkFileId || deepLinkConsumedRef.current) return
+    deepLinkConsumedRef.current = true
+    let active = true
+    ;(async () => {
+      try {
+        const { data } = await api.get(`/projects/${projectId}/files/${deepLinkFileId}/locate`)
+        if (!active) return
+        setFolderId(data.parentId ?? null)
+        setHighlightId(data.file.id)
+        setTimeout(() => setHighlightId(null), 2500)
+        if (data.file.mimeType?.startsWith('image/') && data.file.url) setLightbox(data.file.url)
+        else if (data.file.previewable) openPreview(data.file)
+      } catch {
+        setError('No se encontró el archivo del enlace (puede haber sido eliminado)')
+      }
+    })()
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkFileId, projectId])
+
   const { queue, handleFiles, cancel } = useProjectFileUpload({
     projectId,
     onUploaded: () => reload(folderId),
@@ -293,8 +365,26 @@ export default function ProjectFiles({ projectId }) {
 
   function openItem(item) {
     if (item.type === 'folder') { setFolderId(item.id); return }
-    if (item.mimeType?.startsWith('image/') && item.url) { setLightbox(item.url); return }
+    const isImage = item.mimeType?.startsWith('image/')
+    if (isImage && item.url) { setLightbox(item.url); return }
+    if (!isImage && item.previewable) { openPreview(item); return }
     handleDownload(item)
+  }
+
+  async function openPreview(item) {
+    setPreview({ item, status: 'loading', blobUrl: null })
+    try {
+      const res = await api.get(`/projects/${projectId}/files/${item.id}/download?inline=1`, { responseType: 'blob' })
+      const blobUrl = URL.createObjectURL(res.data)
+      setPreview({ item, status: 'ready', blobUrl })
+    } catch {
+      setPreview({ item, status: 'error', blobUrl: null })
+    }
+  }
+
+  function closePreview() {
+    if (preview?.blobUrl) URL.revokeObjectURL(preview.blobUrl)
+    setPreview(null)
   }
 
   async function handleDownload(item) {
@@ -408,17 +498,20 @@ export default function ProjectFiles({ projectId }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
           {[...folders, ...files].map(item => (
-            <ItemCard
-              key={`${item.type}-${item.id}`}
-              item={item}
-              menuOpen={menuOpenId === item.id}
-              onOpenMenu={setMenuOpenId}
-              onOpen={openItem}
-              onRename={it => setModal({ type: 'rename', item: it })}
-              onMove={it => setModal({ type: 'move', item: it })}
-              onDelete={it => setModal({ type: 'delete', item: it })}
-              onDownload={handleDownload}
-            />
+            <div key={`${item.type}-${item.id}`} className={highlightId === item.id ? 'rounded-xl ring-2 ring-primary-400 animate-pulse' : ''}>
+              <ItemCard
+                item={item}
+                menuOpen={menuOpenId === item.id}
+                onOpenMenu={setMenuOpenId}
+                onOpen={openItem}
+                onRename={it => setModal({ type: 'rename', item: it })}
+                onMove={it => setModal({ type: 'move', item: it })}
+                onDelete={it => setModal({ type: 'delete', item: it })}
+                onDownload={handleDownload}
+                onCopyLink={it => setModal({ type: 'copyLink', item: it })}
+                onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -454,12 +547,32 @@ export default function ProjectFiles({ projectId }) {
           onConfirm={() => handleDeleteConfirmed(modal.item)}
         />
       )}
+      {modal?.type === 'copyLink' && (
+        <CopyLinkModal projectId={projectId} item={modal.item} onClose={() => setModal(null)} />
+      )}
 
       {/* Lightbox de imagen */}
       {lightbox && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setLightbox(null)}>
           <img src={lightbox} alt="" className="max-w-full max-h-full rounded-lg" />
           <button onClick={() => setLightbox(null)} className="absolute top-4 right-4 text-white text-3xl leading-none">×</button>
+        </div>
+      )}
+
+      {/* Preview de video/PDF — se pide como blob autenticado (?inline=1), no un link directo a R2 */}
+      {preview && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={closePreview}>
+          <div className="w-full max-w-4xl max-h-[85vh] flex items-center justify-center" onClick={e => e.stopPropagation()}>
+            {preview.status === 'loading' && <LoadingSpinner size="lg" />}
+            {preview.status === 'error' && <p className="text-white text-sm">No se pudo cargar la vista previa.</p>}
+            {preview.status === 'ready' && preview.item.mimeType?.startsWith('video/') && (
+              <video src={preview.blobUrl} controls autoPlay className="max-w-full max-h-[85vh] rounded-lg" />
+            )}
+            {preview.status === 'ready' && preview.item.mimeType === 'application/pdf' && (
+              <iframe src={preview.blobUrl} title={preview.item.name} className="w-full h-[85vh] bg-white rounded-lg" />
+            )}
+          </div>
+          <button onClick={closePreview} className="absolute top-4 right-4 text-white text-3xl leading-none">×</button>
         </div>
       )}
     </div>

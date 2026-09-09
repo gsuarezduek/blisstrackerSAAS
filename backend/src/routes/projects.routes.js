@@ -77,6 +77,7 @@ router.post('/:id/files/folders',           projectFiles.createFolder)
 router.post('/:id/files/presign',           projectFiles.presignFile)
 router.post('/:id/files/:fileId/confirm',   projectFiles.confirmFile)
 router.get('/:id/files/:fileId/download',   projectFiles.downloadFile)
+router.get('/:id/files/:fileId/locate',     projectFiles.locateFile)
 router.patch('/:id/files/:itemId',          projectFiles.updateItem)
 router.delete('/:id/files/:itemId',         projectFiles.deleteItem)
 

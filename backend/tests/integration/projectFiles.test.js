@@ -9,15 +9,16 @@ jest.mock('../../src/lib/prisma', () => ({
 }))
 
 jest.mock('../../src/services/objectStorage.service', () => ({
-  isConfigured:  jest.fn(),
-  buildKey:      jest.fn(),
-  presignPut:    jest.fn(),
-  presignGet:    jest.fn(),
-  headObject:    jest.fn(),
-  getObjectHead: jest.fn(),
-  deleteObject:  jest.fn(),
-  deleteObjects: jest.fn(),
-  publicUrl:     jest.fn(key => `https://cdn.example.com/${key}`),
+  isConfigured:    jest.fn(),
+  buildKey:        jest.fn(),
+  presignPut:      jest.fn(),
+  presignGet:      jest.fn(),
+  headObject:      jest.fn(),
+  getObjectHead:   jest.fn(),
+  getObjectStream: jest.fn(),
+  deleteObject:    jest.fn(),
+  deleteObjects:   jest.fn(),
+  publicUrl:       jest.fn(key => `https://cdn.example.com/${key}`),
 }))
 
 jest.mock('../../src/lib/platformSettings', () => ({
@@ -361,22 +362,67 @@ describe('DELETE /files/:itemId', () => {
 })
 
 describe('GET /files/:fileId/download', () => {
-  it('302 a una URL firmada que fuerza descarga', async () => {
+  it('proxea los bytes del objeto (no un redirect — la ruta es autenticada)', async () => {
     mockBase()
     prisma.projectFile.findFirst.mockResolvedValue(dbItem({ objectKey: 'files/1/a.pdf', name: 'informe final.pdf' }))
-    objectStorage.presignGet.mockResolvedValue('https://r2.example.com/signed-download')
+    const { Readable } = require('stream')
+    objectStorage.getObjectStream.mockResolvedValue({
+      body: Readable.from([Buffer.from('contenido')]),
+      contentType: 'application/pdf',
+      contentLength: 9,
+    })
 
     const res = await req('get', `${BASE}/1/download`)
 
-    expect(res.status).toBe(302)
-    expect(res.headers.location).toBe('https://r2.example.com/signed-download')
-    expect(objectStorage.presignGet).toHaveBeenCalledWith('files/1/a.pdf', expect.objectContaining({ filename: 'informe final.pdf' }))
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toBe('application/pdf')
+    expect(res.headers['content-disposition']).toContain('attachment')
+    expect(res.headers['content-disposition']).toContain('informe final.pdf')
+    expect(Buffer.isBuffer(res.body) ? res.body.toString() : res.text).toBe('contenido')
+    expect(objectStorage.getObjectStream).toHaveBeenCalledWith('files/1/a.pdf')
+  })
+
+  it('?inline=1 pide Content-Disposition inline (para <video>/<iframe>)', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ objectKey: 'files/1/a.mp4', name: 'clip.mp4' }))
+    const { Readable } = require('stream')
+    objectStorage.getObjectStream.mockResolvedValue({
+      body: Readable.from([Buffer.from('bytes')]), contentType: 'video/mp4', contentLength: 5,
+    })
+
+    const res = await req('get', `${BASE}/1/download?inline=1`)
+
+    expect(res.status).toBe(200)
+    expect(res.headers['content-disposition']).toContain('inline')
   })
 
   it('404 si el archivo no existe o no está ready', async () => {
     mockBase()
     prisma.projectFile.findFirst.mockResolvedValue(null)
     const res = await req('get', `${BASE}/999/download`)
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /files/:fileId/locate', () => {
+  it('devuelve el archivo + breadcrumb de su carpeta contenedora', async () => {
+    mockBase()
+    prisma.projectFile.findFirst
+      .mockResolvedValueOnce(dbItem({ id: 3, parentId: 9, name: 'informe.pdf' })) // el archivo
+      .mockResolvedValueOnce({ id: 9, name: 'Reportes', parentId: null }) // buildPath: carpeta 9
+
+    const res = await req('get', `${BASE}/3/locate`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.file.name).toBe('informe.pdf')
+    expect(res.body.parentId).toBe(9)
+    expect(res.body.path).toEqual([{ id: 9, name: 'Reportes' }])
+  })
+
+  it('404 si el archivo no existe', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(null)
+    const res = await req('get', `${BASE}/999/locate`)
     expect(res.status).toBe(404)
   })
 })

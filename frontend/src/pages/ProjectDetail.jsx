@@ -38,6 +38,7 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
   const [showAddTask, setShowAddTask] = useState(false)
+  const [addTaskDefaultDescription, setAddTaskDefaultDescription] = useState('')
   const [linkForm, setLinkForm] = useState(null) // null = oculto, { label, url } = visible
   const [linkSaving, setLinkSaving] = useState(false)
   const [commentTask, setCommentTask] = useState(null)
@@ -455,7 +456,14 @@ export default function ProjectDetail() {
 
               {/* Tab: Archivos — repositorio de archivos tipo Drive (sobre R2) */}
               {infoTab === 'archivos' && data.project.filesEnabled !== false && (
-                <ProjectFiles projectId={data.project.id} />
+                <ProjectFiles
+                  projectId={data.project.id}
+                  deepLinkFileId={searchParams.get('fileId')}
+                  onCreateTaskFromFile={(file, link) => {
+                    setAddTaskDefaultDescription(`Archivo: ${file.name}\n${link}`)
+                    setShowAddTask(true)
+                  }}
+                />
               )}
 
               {/* Tab: Reportes — horas y tareas completadas por mes, histórico */}
@@ -471,8 +479,9 @@ export default function ProjectDetail() {
       {showAddTask && data && (
         <AddTaskModal
           lockedProject={data.project}
+          defaultDescription={addTaskDefaultDescription}
           onAdd={handleAddTask}
-          onClose={() => setShowAddTask(false)}
+          onClose={() => { setShowAddTask(false); setAddTaskDefaultDescription('') }}
         />
       )}
 

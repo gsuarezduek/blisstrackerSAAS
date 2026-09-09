@@ -189,6 +189,21 @@ async function presignGet(key, { expiresIn = 300, filename } = {}) {
 }
 
 /**
+ * Stream del objeto + su metadata, para servirlo *proxied* desde nuestro
+ * backend en vez de un redirect 302 a una URL firmada. Necesario para rutas
+ * AUTENTICADAS (ej. descarga/preview de Archivos): el frontend las pide vía
+ * fetch/XHR con header Authorization, así que el redirect final a R2 lo sigue
+ * el propio XHR (no una navegación real de página) y esa respuesta cross-origin
+ * queda sujeta a CORS — que el bucket no tiene configurado para nuestro dominio.
+ * Sirviendo los bytes nosotros mismos evitamos depender de la config de CORS
+ * del bucket (nuestro CORS ya está resuelto para *.blisstracker.app).
+ */
+async function getObjectStream(key) {
+  const res = await getClient().send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }))
+  return { body: res.Body, contentType: res.ContentType, contentLength: res.ContentLength }
+}
+
+/**
  * Metadata real del objeto ya subido (tamaño y content-type que R2 registró).
  * Devuelve null si el objeto no existe (upload nunca confirmado/abandonado).
  */
@@ -215,5 +230,5 @@ async function getObjectHead(key, bytes = 32) {
 
 module.exports = {
   isConfigured, putObject, deleteObjects, deleteObject, publicUrl, isPublicUrl,
-  buildKey, presignPut, presignGet, headObject, getObjectHead,
+  buildKey, presignPut, presignGet, headObject, getObjectHead, getObjectStream,
 }
