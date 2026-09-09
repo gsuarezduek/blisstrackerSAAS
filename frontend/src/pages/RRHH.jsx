@@ -8,18 +8,25 @@ import { computePeopleScore, peopleColumnKeys } from '../utils/peopleScore'
 import { MiniDashboard } from './rrhh/dashboard'
 import { TabIngresos } from './rrhh/ingresos'
 import { TabLegajos } from './rrhh/legajos'
-import { TabVacaciones } from './rrhh/vacaciones'
+import { TabLicencias } from './rrhh/licencias'
+import { TabVacaciones } from './rrhh/vacacionesBalance'
+import { TabBeneficios } from './rrhh/beneficios'
 import ProductivityTab from '../components/admin/ProductivityTab'
 
 // ─── Shell del panel RRHH. Los tabs/modales viven en ./rrhh/*.jsx ───
 // "Dashboard" es lo primero que se ve (las cards que antes estaban siempre
 // arriba); "Productividad" absorbe la sección que antes vivía en /admin/productivity
-// (Administración) y solo aparece si el workspace no la desactivó.
+// (Administración) y solo aparece si el workspace no la desactivó. La vieja pestaña
+// única "Vacaciones y Licencias" se separó en 3: Licencias (solicitudes, agrupadas
+// en Pendientes/Activas/Anteriores en una sola pantalla), Vacaciones (saldos +
+// acumulación automática) y Beneficios (horas libres / días home).
 const BASE_TABS = [
   { id: 'dashboard',   label: '🏠 Dashboard' },
   { id: 'ingresos',    label: '🕐 Ingresos' },
   { id: 'legajos',     label: '📋 Legajos' },
-  { id: 'vacaciones',  label: '🏖️ Vacaciones y Licencias' },
+  { id: 'licencias',   label: '📋 Licencias' },
+  { id: 'vacaciones',  label: '🏖️ Vacaciones' },
+  { id: 'beneficios',  label: '🎁 Beneficios' },
 ]
 const PRODUCTIVIDAD_TAB = { id: 'productividad', label: '📊 Productividad' }
 const VALID_TABS = new Set([...BASE_TABS, PRODUCTIVIDAD_TAB].map(t => t.id))
@@ -93,8 +100,10 @@ export default function RRHH() {
         {tab === 'dashboard' && users.length > 0 && (
           <MiniDashboard users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} peopleScore={peopleScore} />
         )}
-        {tab === 'legajos'      && <TabLegajos    users={users.filter(u => u.active)} onVacationUpdate={updated => setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, vacationDays: updated.vacationDays } : u))} />}
-        {tab === 'vacaciones'   && <TabVacaciones />}
+        {tab === 'legajos'      && <TabLegajos    users={users.filter(u => u.active)} />}
+        {tab === 'licencias'    && <TabLicencias />}
+        {tab === 'vacaciones'   && <TabVacaciones users={users.filter(u => u.active)} onVacationUpdate={updated => setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, vacationDays: updated.vacationDays } : u))} />}
+        {tab === 'beneficios'   && <TabBeneficios />}
         {tab === 'ingresos'     && <TabIngresos   users={users.filter(u => u.active)} />}
         {tab === 'productividad' && productivityEnabled && <ProductivityTab />}
       </main>

@@ -61,6 +61,29 @@ export const LEAVE_TYPE_LABELS = {
   otro:       'Otro',
 }
 
+// Mismo catálogo que LEAVE_TYPE_LABELS, con emoji — para selects (ej. el formulario
+// de "Solicitar días" de Mi Perfil). Única fuente: antes MyProfile.jsx mantenía su
+// propia copia divergente.
+export const LEAVE_TYPES = [
+  { value: 'vacaciones',  label: '🏖️ Vacaciones' },
+  { value: 'estudio',     label: '📚 Estudio / examen' },
+  { value: 'maternidad',  label: '🤱 Maternidad' },
+  { value: 'paternidad',  label: '👶 Paternidad' },
+  { value: 'enfermedad',  label: '🏥 Enfermedad / salud' },
+  { value: 'duelo',       label: '🕯️ Duelo familiar' },
+  { value: 'mudanza',     label: '📦 Mudanza' },
+  { value: 'otro',        label: '📝 Otro' },
+]
+
+// ─── Bancos de beneficios (horas libres / días home) ───────────────────────────
+// Espejo del catálogo backend (backend/src/lib/benefitBanks.js). No son licencias
+// legales — se otorgan a mano (premio de un juego, cobertura de un evento) y se
+// consumen por autoservicio con aprobación (ver concepto "Beneficios" en RRHH).
+export const BENEFIT_BANKS = {
+  horas_libres: { label: 'Horas libres', unit: 'horas', icon: '⏱️', balanceField: 'freeHoursBalance' },
+  dias_home:    { label: 'Días home',    unit: 'días',  icon: '🏠', balanceField: 'homeDaysBalance' },
+}
+
 // Cantidad de días de calendario que cubre una licencia (inclusivo de ambos extremos).
 export function leaveDayCount(start, end) {
   const a = new Date(start + 'T12:00:00'), b = new Date(end + 'T12:00:00')

@@ -53,6 +53,13 @@ model Workspace {
   lateNotifyTemplate  String?   // Cuerpo del email de tardanza (placeholders [Nombre] y [workspace]); null = texto por defecto
   legajoEnabled       Boolean   @default(true) // Muestra la tarjeta/hint de legajos en RRHH. OFF = no se nudge-ea completar el legajo
   legajoFields        Json      @default("[]") // Config del formulario de legajo (campos default + custom). [] = usa el catálogo default
+  // Acumulación automática de vacaciones: regla única global del workspace ("+N días cada M meses"),
+  // anclada al aniversario de ingreso de cada persona (WorkspaceMember.joinedAt). No retroactiva:
+  // vacationAccrualActivatedAt marca desde cuándo empieza a contar (ver vacationAccrual.service.js).
+  vacationAccrualEnabled       Boolean   @default(false)
+  vacationAccrualDays          Float     @default(1)
+  vacationAccrualIntervalMonths Int      @default(1)
+  vacationAccrualActivatedAt   DateTime?
   billingExempt       Boolean   @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.
   demoSeeded          Boolean   @default(false) // True si tiene proyecto "Demo — Aprendé BlissTracker"
   onboardingCompletedAt DateTime? // null = todavía no completó/saltó el wizard de onboarding (selector de módulos + tour)
@@ -97,6 +104,8 @@ model Workspace {
   emailLogs              EmailLog[]
   vacationAdjustments    VacationAdjustment[]
   vacationRequests       VacationRequest[]
+  benefitBankAdjustments BenefitBankAdjustment[]
+  benefitBankRequests    BenefitBankRequest[]
   geoAudits              GeoAudit[]
   integrations           ProjectIntegration[]
   analyticsSnapshots     AnalyticsSnapshot[]
@@ -198,6 +207,16 @@ model WorkspaceMember {
   teamRole     String  @default("") // ej: "DESIGNER", "CM" (referencia a UserRole.name)
   active       Boolean @default(true)
   vacationDays Int     @default(0)
+
+  // Acumulación automática de vacaciones (ver Workspace.vacationAccrual*): próxima fecha
+  // (aniversario de joinedAt) en que a esta persona le toca sumar días. null = todavía no
+  // calculada (se calcula la primera vez que corre el cron con la acumulación habilitada).
+  nextVacationAccrualAt DateTime?
+
+  // Bancos de beneficios (ver BenefitBankAdjustment/BenefitBankRequest): horas libres y días
+  // home ganados por juegos de Gamification, cobertura de eventos fuera de horario, etc.
+  freeHoursBalance Float @default(0)
+  homeDaysBalance  Int   @default(0)
 
   // Horario laboral (para cálculo de tardanzas vs hora de login). Formato "HH:MM" en la timezone del workspace. null = sin horario configurado.
   workStartTime String? // ej: "09:00"
@@ -307,6 +326,10 @@ model User {
   vacationAdjustmentsAdmin  VacationAdjustment[]       @relation("VacationAdjustmentAdmin")
   vacationRequests          VacationRequest[]          @relation("VacationRequestUser")
   vacationRequestsReviewed  VacationRequest[]          @relation("VacationRequestReviewer")
+  benefitBankAdjustments      BenefitBankAdjustment[]  @relation("BenefitBankAdjustmentUser")
+  benefitBankAdjustmentsAdmin BenefitBankAdjustment[]  @relation("BenefitBankAdjustmentAdmin")
+  benefitBankRequests         BenefitBankRequest[]     @relation("BenefitBankRequestUser")
+  benefitBankRequestsReviewed BenefitBankRequest[]     @relation("BenefitBankRequestReviewer")
   announcements             Announcement[]             @relation("AnnouncementCreatedBy")
   analyzerRatings           PeopleAnalyzerRating[]     @relation("AnalyzedPerson")
   eosStrikesReceived        EOSStrike[]                @relation("StrikedPerson")
@@ -850,6 +873,8 @@ enum NotificationType {
   CONTENT_MENTION
   PORTAL_CLIENT_LOGIN
   WHATSAPP_MESSAGE
+  BENEFIT_REQUEST
+  BENEFIT_REVIEWED
 }
 
 model Notification {
@@ -1051,8 +1076,9 @@ model VacationAdjustment {
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   userId      Int
   user        User      @relation("VacationAdjustmentUser", fields: [userId], references: [id])
-  adminId     Int
-  admin       User      @relation("VacationAdjustmentAdmin", fields: [adminId], references: [id])
+  // null = ajuste automático (acumulación por antigüedad vía cron), sin admin humano detrás.
+  adminId     Int?
+  admin       User?     @relation("VacationAdjustmentAdmin", fields: [adminId], references: [id])
   prevDays    Int
   newDays     Int
   description String
@@ -1080,6 +1106,50 @@ model VacationRequest {
   updatedAt    DateTime  @updatedAt
 
   @@index([workspaceId, userId])
+  @@index([workspaceId, status])
+}
+
+// Bancos de beneficios (no son licencias legales): "horas_libres" y "dias_home", otorgados a
+// mano por el admin (premio de un juego de Gamification, cobertura de un evento, etc.) y
+// consumidos por autoservicio con aprobación, mismo espíritu que VacationRequest/Adjustment
+// pero genérico por `bank` para no duplicar un par de tablas por cada banco.
+model BenefitBankAdjustment {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  userId      Int
+  user        User      @relation("BenefitBankAdjustmentUser", fields: [userId], references: [id])
+  bank        String // "horas_libres" | "dias_home"
+  // null = ajuste automático (descuento al aprobar un BenefitBankRequest sin admin puntual, no usado hoy —
+  // se deja nullable por simetría con VacationAdjustment.adminId y para futuros ajustes sistémicos).
+  adminId     Int?
+  admin       User?     @relation("BenefitBankAdjustmentAdmin", fields: [adminId], references: [id])
+  prevBalance Float
+  newBalance  Float
+  description String
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, userId, bank])
+}
+
+model BenefitBankRequest {
+  id           Int       @id @default(autoincrement())
+  workspaceId  Int
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+  userId       Int
+  user         User      @relation("BenefitBankRequestUser", fields: [userId], references: [id])
+  bank         String // "horas_libres" | "dias_home"
+  amount       Float // horas si bank="horas_libres", días si bank="dias_home"
+  date         String? // YYYY-MM-DD — día en que se usa
+  reason       String?
+  status       String    @default("pending") // "pending" | "approved" | "rejected"
+  reviewedById Int?
+  reviewedBy   User?     @relation("BenefitBankRequestReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime  @default(now())
+
+  @@index([workspaceId, userId, bank])
   @@index([workspaceId, status])
 }
 

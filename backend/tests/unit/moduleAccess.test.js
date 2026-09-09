@@ -14,6 +14,9 @@ describe('resolveModuleAccess (defaults del catálogo)', () => {
   test('ventas: default allMembers false sin config guardada', () => {
     expect(resolveModuleAccess({ moduleAccess: {} }, 'ventas')).toEqual({ allMembers: false, roles: [] })
   })
+  test('rrhh: default allMembers false sin config guardada (opt-in explícito, expone datos sensibles)', () => {
+    expect(resolveModuleAccess({ moduleAccess: {} }, 'rrhh')).toEqual({ allMembers: false, roles: [] })
+  })
   test('config guardada pisa el default', () => {
     const ws = { moduleAccess: { marketing: { allMembers: false, roles: ['DESIGNER'] } } }
     expect(resolveModuleAccess(ws, 'marketing')).toEqual({ allMembers: false, roles: ['DESIGNER'] })
@@ -22,10 +25,12 @@ describe('resolveModuleAccess (defaults del catálogo)', () => {
     expect(resolveModuleAccess({}, 'ventas')).toEqual({ allMembers: false, roles: [] })
     expect(resolveModuleAccess(null, 'ventas')).toEqual({ allMembers: false, roles: [] })
   })
-  test('rrhh/eos/gamification no son módulos configurables (quedaron admin-only, fuera de este mecanismo)', () => {
-    expect(MODULE_KEYS).not.toContain('rrhh')
+  test('eos/gamification no son módulos configurables (quedaron admin-only, fuera de este mecanismo)', () => {
     expect(MODULE_KEYS).not.toContain('eos')
     expect(MODULE_KEYS).not.toContain('gamification')
+  })
+  test('rrhh SÍ es un módulo configurable (decisión explícita, a diferencia de eos/gamification)', () => {
+    expect(MODULE_KEYS).toContain('rrhh')
   })
 })
 

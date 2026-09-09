@@ -1,6 +1,7 @@
 jest.mock('../../src/lib/prisma', () => {
   const prisma = {
     workspace: { findUnique: jest.fn() },
+    featureFlag: { findUnique: jest.fn() },
     workspaceMember: { findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
     vacationRequest: { create: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
     vacationAdjustment: { findMany: jest.fn(), create: jest.fn() },
@@ -53,6 +54,10 @@ function mockWorkspace(role = 'member') {
   prisma.workspaceMember.findUnique.mockResolvedValue({
     workspaceId: WORKSPACE_ID, userId: 1, role, active: true,
   })
+  // El router de vacation ahora exige el feature flag 'rrhh' (sembrado enabledGlobally:true
+  // en producción para no cortarle el acceso a workspaces existentes — ver migración
+  // 20260909_add_rrhh_module_and_benefit_banks). Acá lo mockeamos habilitado por default.
+  prisma.featureFlag.findUnique.mockResolvedValue({ key: 'rrhh', enabledGlobally: true, enabledWorkspaceIds: '[]' })
 }
 
 // ── POST /api/vacation/my/request ─────────────────────────────────────────────

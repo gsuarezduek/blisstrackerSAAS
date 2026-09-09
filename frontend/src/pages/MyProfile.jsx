@@ -10,6 +10,9 @@ import LegajoFormFields from '../components/legajo/LegajoFormFields'
 import RoleBadge from '../components/RoleBadge'
 import PasswordInput from '../components/PasswordInput'
 import { avatarUrl } from '../utils/avatarUrl'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import { LEAVE_TYPES, BENEFIT_BANKS } from './rrhh/shared'
+import { REQUEST_STATUS } from './rrhh/licencias'
 
 function Field({ label, children }) {
   return (
@@ -18,24 +21,6 @@ function Field({ label, children }) {
       {children}
     </div>
   )
-}
-
-const LEAVE_TYPES = [
-  { value: 'vacaciones',  label: '🏖️ Vacaciones' },
-  { value: 'estudio',     label: '📚 Estudio / examen' },
-  { value: 'maternidad',  label: '🤱 Maternidad' },
-  { value: 'paternidad',  label: '👶 Paternidad' },
-  { value: 'enfermedad',  label: '🏥 Enfermedad / salud' },
-  { value: 'duelo',       label: '🕯️ Duelo familiar' },
-  { value: 'mudanza',     label: '📦 Mudanza' },
-  { value: 'otro',        label: '📝 Otro' },
-]
-
-const STATUS_LABELS = { pending: 'Pendiente', approved: 'Aprobada', rejected: 'Rechazada' }
-const STATUS_COLORS = {
-  pending:  'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  approved: 'bg-green-100  text-green-700  dark:bg-green-900/30  dark:text-green-400',
-  rejected: 'bg-red-100    text-red-700    dark:bg-red-900/30    dark:text-red-400',
 }
 
 // Fecha mínima: 48 horas desde ahora (en formato YYYY-MM-DD), en la timezone del
@@ -152,8 +137,89 @@ function VacationRequestModal({ onClose, onCreated }) {
   )
 }
 
+// Solicitar el uso de horas libres / un día home — mismo patrón que VacationRequestModal,
+// pero sin la ventana de 48hs (no es una licencia legal) y con `bank` fijo por el botón
+// que la abrió.
+function BenefitRequestModal({ bank, onClose, onCreated }) {
+  const meta = BENEFIT_BANKS[bank]
+  const [form, setForm] = useState({ amount: '', date: '', reason: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState('')
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    const amount = Number(form.amount)
+    if (!amount || amount <= 0) { setError(`Ingresá una cantidad de ${meta.unit} > 0`); return }
+    if (!form.date) { setError('Seleccioná la fecha'); return }
+    setSaving(true); setError('')
+    try {
+      const { data } = await api.post('/benefits/my/request', { bank, amount, date: form.date, reason: form.reason })
+      onCreated(data)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al enviar la solicitud')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <p className="font-semibold text-gray-900 dark:text-white">{meta.icon} Solicitar {meta.label.toLowerCase()}</p>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
+                Cantidad ({meta.unit}) <span className="text-red-500">*</span>
+              </label>
+              <input type="number" required min="0.5" step="0.5" value={form.amount}
+                onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">
+                Fecha <span className="text-red-500">*</span>
+              </label>
+              <input type="date" required value={form.date}
+                onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400 block mb-1">Motivo (opcional)</label>
+            <textarea rows={3} value={form.reason}
+              onChange={e => setForm(p => ({ ...p, reason: e.target.value }))}
+              placeholder="Algún detalle adicional para el equipo…"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+
+          <div className="flex items-center justify-end gap-3 pt-1">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors">Cancelar</button>
+            <button type="submit" disabled={saving}
+              className="px-5 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Enviando…' : 'Enviar solicitud'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function MyProfile() {
   const { user, updateUser } = useAuth()
+  const { enabled: rrhhEnabled } = useFeatureFlag('rrhh')
 
   const { fields: legajoFields } = useLegajoFields()
   const [profile, setProfile] = useState(null)
@@ -189,6 +255,10 @@ export default function MyProfile() {
   const [vacHistoryOpen, setVacHistoryOpen] = useState(false)
   const [vacRequestOpen, setVacRequestOpen] = useState(false)
 
+  const [benefitsData, setBenefitsData]     = useState(null)  // { balances: {horas_libres, dias_home}, adjustments, requests }
+  const [benefitHistoryOpen, setBenefitHistoryOpen] = useState(false)
+  const [benefitRequestBank, setBenefitRequestBank] = useState(null) // bank key abierto en el modal, o null
+
   // Foto propia primero (si tiene) + catálogo — mismo orden que se muestra en el picker.
   const lightboxAvatars = [
     ...(profile?.customAvatar ? [{ file: profile.customAvatar.filename, label: profile.customAvatar.label }] : []),
@@ -205,8 +275,10 @@ export default function MyProfile() {
   }, [])
 
   useEffect(() => {
+    if (!rrhhEnabled) return
     api.get('/vacation/my').then(r => setVacData(r.data)).catch(() => {})
-  }, [])
+    api.get('/benefits/my').then(r => setBenefitsData(r.data)).catch(() => {})
+  }, [rrhhEnabled])
 
   useEffect(() => {
     api.get('/profile').then(({ data }) => {
@@ -595,6 +667,7 @@ export default function MyProfile() {
         </div>
 
         {/* Vacaciones */}
+        {rrhhEnabled && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-gray-900 dark:text-white">🏖️ Vacaciones</h2>
@@ -658,8 +731,8 @@ export default function MyProfile() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{typeLabel}</span>
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[req.status]}`}>
-                            {STATUS_LABELS[req.status]}
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${REQUEST_STATUS[req.status]?.color}`}>
+                            {REQUEST_STATUS[req.status]?.label}
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -682,6 +755,7 @@ export default function MyProfile() {
             </div>
           )}
         </div>
+        )}
 
         {vacRequestOpen && (
           <VacationRequestModal
@@ -689,6 +763,110 @@ export default function MyProfile() {
             onCreated={req => {
               setVacData(prev => prev ? ({ ...prev, requests: [req, ...(prev.requests ?? [])] }) : prev)
               setVacRequestOpen(false)
+            }}
+          />
+        )}
+
+        {/* Horas libres y días home */}
+        {rrhhEnabled && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">🎁 Horas libres y días home</h2>
+            <button
+              onClick={() => setBenefitHistoryOpen(v => !v)}
+              className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium flex items-center gap-1"
+            >
+              {benefitHistoryOpen ? '▲' : '▼'} Ver historial
+              {benefitsData?.adjustments && <span className="text-gray-400">({benefitsData.adjustments.length})</span>}
+            </button>
+          </div>
+
+          {/* Saldos de los 2 bancos */}
+          <div className="flex items-center gap-8 mb-4 flex-wrap">
+            {Object.entries(BENEFIT_BANKS).map(([bank, meta]) => (
+              <div key={bank} className="flex items-center gap-4">
+                <div className="text-center">
+                  <p className="text-4xl font-bold text-primary-600 dark:text-primary-400">
+                    {benefitsData?.balances?.[bank] ?? '—'}
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{meta.icon} {meta.unit} disponibles</p>
+                </div>
+                <button
+                  onClick={() => setBenefitRequestBank(bank)}
+                  className="flex items-center gap-1.5 text-xs font-medium bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 px-3 py-1.5 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors"
+                >
+                  Solicitar uso
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Historial de ajustes (otorgados + consumidos) */}
+          {benefitHistoryOpen && (
+            <div className="mb-4 max-h-48 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+              {!benefitsData?.adjustments?.length
+                ? <p className="text-xs text-gray-400 text-center py-4">Sin historial todavía</p>
+                : benefitsData.adjustments.map(adj => (
+                    <div key={adj.id} className="flex items-start gap-3 px-4 py-3 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-700 dark:text-gray-200">{BENEFIT_BANKS[adj.bank]?.icon} {adj.description}</p>
+                        <p className="text-gray-400 dark:text-gray-500 mt-0.5">
+                          {new Date(adj.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <span className={`flex-shrink-0 font-bold ${adj.newBalance >= adj.prevBalance ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                        {adj.prevBalance} → {adj.newBalance}
+                      </span>
+                    </div>
+                  ))
+              }
+            </div>
+          )}
+
+          {/* Solicitudes propias */}
+          {benefitsData?.requests?.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Mis solicitudes</p>
+              <div className="space-y-2">
+                {benefitsData.requests.map(req => {
+                  const meta = BENEFIT_BANKS[req.bank]
+                  return (
+                    <div key={req.id} className="flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{meta?.icon} {req.amount} {meta?.unit}</span>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${REQUEST_STATUS[req.status]?.color}`}>
+                            {REQUEST_STATUS[req.status]?.label}
+                          </span>
+                        </div>
+                        {req.date && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {new Date(req.date + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                        )}
+                        {req.reason && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 italic">{req.reason}</p>}
+                        {req.reviewNote && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Nota: {req.reviewNote}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+        )}
+
+        {benefitRequestBank && (
+          <BenefitRequestModal
+            bank={benefitRequestBank}
+            onClose={() => setBenefitRequestBank(null)}
+            onCreated={req => {
+              setBenefitsData(prev => prev ? ({ ...prev, requests: [req, ...(prev.requests ?? [])] }) : prev)
+              setBenefitRequestBank(null)
             }}
           />
         )}

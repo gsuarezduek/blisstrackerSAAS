@@ -1,6 +1,6 @@
 /**
  * Único punto de la lógica "¿este usuario puede ver el módulo X del workspace?".
- * Generaliza a 3 módulos (ventas/marketing/contenido) el mecanismo que antes era
+ * Generaliza a 4 módulos (ventas/marketing/contenido/rrhh) el mecanismo que antes era
  * exclusivo de Ventas (Workspace.salesRoleNames): un miembro accede si es
  * admin/owner, o si el módulo está abierto a todo el workspace (`allMembers`),
  * o si su teamRole está en la lista configurada.
@@ -8,21 +8,28 @@
  * ese decide si SuperAdmin habilitó el módulo para el workspace; esto decide
  * quién DENTRO del workspace lo ve. Configurable desde Preferencias.
  *
- * RRHH, EOS y Gamification NO usan este mecanismo — quedan estrictamente
- * admin-only (`workspaceAdminOnly`/`AdminRoute`, sin acceso configurable por
- * rol), decisión explícita: datos sensibles (RRHH/EOS: legajos, horarios,
- * evaluaciones de personas) o funciones de gestión (Gamification: crear/editar
- * juegos y puntajes del equipo) que no deben poder abrirse a otros roles por
- * error de configuración.
+ * RRHH SÍ usa este mecanismo (decisión explícita, a diferencia de EOS y
+ * Gamification que siguen estrictamente admin-only): implica que Legajos/Ingresos
+ * — datos sensibles como DNI, salud, contacto de emergencia, cuenta bancaria —
+ * quedan visibles para cualquier rol al que el admin le dé acceso al módulo, no
+ * solo para admins. Por eso su default es `allMembers: false` (opt-in explícito
+ * por rol), igual que Ventas.
+ *
+ * EOS y Gamification siguen sin este mecanismo — quedan estrictamente admin-only
+ * (`workspaceAdminOnly`/`AdminRoute`, sin acceso configurable por rol), decisión
+ * explícita: datos sensibles (EOS: evaluaciones de personas) o funciones de
+ * gestión (Gamification: crear/editar juegos y puntajes del equipo) que no deben
+ * poder abrirse a otros roles por error de configuración.
  */
 
-const MODULE_KEYS = ['ventas', 'marketing', 'contenido']
+const MODULE_KEYS = ['ventas', 'marketing', 'contenido', 'rrhh']
 
 // allMembers por defecto de cada módulo cuando el workspace no configuró nada.
 const MODULE_ACCESS_DEFAULTS = {
   ventas:       { allMembers: false },
   marketing:    { allMembers: true },
   contenido:    { allMembers: true },
+  rrhh:         { allMembers: false },
 }
 
 /**
@@ -72,8 +79,8 @@ function moduleAccessGuard(key) {
 }
 
 /**
- * Mapa { ventas: bool, marketing: bool, contenido: bool } con el acceso del
- * usuario actual a los 3 módulos configurables — para exponer en GET /auth/me.
+ * Mapa { ventas: bool, marketing: bool, contenido: bool, rrhh: bool } con el
+ * acceso del usuario actual a los módulos configurables — para exponer en GET /auth/me.
  * @param {import('express').Request} req
  */
 function getAllModuleAccess(req) {

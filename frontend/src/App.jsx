@@ -139,6 +139,18 @@ function SalesRoute({ children }) {
   return children
 }
 
+// Módulo RRHH: acceden admins/owners y el rol configurable (user.moduleAccess.rrhh).
+// A diferencia de EOS/Gamification (estrictamente AdminRoute), RRHH sí es configurable
+// por rol — decisión explícita, ver backend/src/lib/moduleAccess.js.
+function RRHHRoute({ children }) {
+  const { user, loading, workspaceSuspended } = useAuth()
+  if (loading) return <LoadingSpinner size="lg" fullPage />
+  if (workspaceSuspended) return <WorkspaceSuspendedScreen />
+  if (!user) return <Navigate to="/login" replace />
+  if (!user.isAdmin && !user.moduleAccess?.rrhh) return <Navigate to="/" replace />
+  return children
+}
+
 function RootPage() {
   if (!isWorkspaceSubdomain()) return <Landing />
   return <PrivateRoute><Dashboard /></PrivateRoute>
@@ -190,7 +202,7 @@ export default function App() {
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
           <Route path="/superadmin" element={<SuperAdminRoute><SuperAdmin /></SuperAdminRoute>} />
           <Route path="/admin"              element={<AdminRoute><Admin        /></AdminRoute>} />
-          <Route path="/admin/rrhh"         element={<AdminRoute><RRHH /></AdminRoute>} />
+          <Route path="/admin/rrhh"         element={<RRHHRoute><RRHH /></RRHHRoute>} />
           <Route path="/admin/eos"          element={<AdminRoute><EOS /></AdminRoute>} />
           <Route path="/admin/gamification" element={<AdminRoute><Gamification /></AdminRoute>} />
           <Route path="/ventas"       element={<SalesRoute><Ventas /></SalesRoute>} />

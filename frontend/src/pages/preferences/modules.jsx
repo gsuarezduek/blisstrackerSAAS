@@ -199,6 +199,48 @@ export default function ModulesTab({ loaded }) {
                 </div>
               )}
 
+              {/* RRHH habilitado → acumulación automática de vacaciones */}
+              {feat.key === 'rrhh' && !feat.disabled && globalSettings && (
+                <div className="mt-3 ml-12 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 p-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-gray-800 dark:text-gray-200">Acumulación automática de vacaciones</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                        Suma días de vacaciones automáticamente en el aniversario de ingreso de cada persona. No es retroactiva: solo cuenta desde que se activa.
+                      </p>
+                    </div>
+                    <Toggle
+                      on={!!globalSettings.vacationAccrualEnabled}
+                      onToggle={() => handleGlobalSetting({ vacationAccrualEnabled: !globalSettings.vacationAccrualEnabled })}
+                      disabled={!loaded}
+                    />
+                  </div>
+                  {globalSettings.vacationAccrualEnabled && (
+                    <div className="mt-3 flex items-center gap-2 flex-wrap text-xs text-gray-700 dark:text-gray-300">
+                      <span>Se agregan</span>
+                      <input
+                        type="number" min="0.5" max="60" step="0.5"
+                        value={globalSettings.vacationAccrualDays ?? 1}
+                        onChange={e => setGlobalSettings(p => ({ ...p, vacationAccrualDays: e.target.value }))}
+                        onBlur={e => handleGlobalSetting({ vacationAccrualDays: Math.max(0.5, Math.min(60, Number(e.target.value) || 1)) })}
+                        className="w-16 text-center border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400"
+                      />
+                      <span>día(s) cada</span>
+                      <select
+                        value={globalSettings.vacationAccrualIntervalMonths ?? 1}
+                        onChange={e => handleGlobalSetting({ vacationAccrualIntervalMonths: Number(e.target.value) })}
+                        className="border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-400"
+                      >
+                        <option value={1}>mes</option>
+                        <option value={3}>trimestre</option>
+                        <option value={6}>semestre</option>
+                        <option value={12}>año</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Marketing habilitado → pestañas visibles + automatizaciones/avisos */}
               {feat.key === 'marketing' && !feat.disabled && globalSettings && (
                 <div className="mt-3 ml-12 space-y-4">

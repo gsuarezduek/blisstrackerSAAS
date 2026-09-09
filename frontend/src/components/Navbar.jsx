@@ -105,8 +105,8 @@ export default function Navbar() {
   const adminRef   = useRef(null)
   const modulesRef = useRef(null)
 
-  const isAdminRoute   = !!useMatch('/admin') || !!useMatch('/reports') || !!useMatch('/admin/rrhh') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification')
-  const isModulesRoute = !!useMatch('/marketing') || !!useMatch('/contenido') || !!useMatch('/ventas') || !!useMatch('/admin/ventas')
+  const isAdminRoute   = !!useMatch('/admin') || !!useMatch('/reports') || !!useMatch('/admin/eos') || !!useMatch('/admin/gamification')
+  const isModulesRoute = !!useMatch('/marketing') || !!useMatch('/contenido') || !!useMatch('/ventas') || !!useMatch('/admin/ventas') || !!useMatch('/admin/rrhh')
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -145,6 +145,7 @@ export default function Navbar() {
   const { enabled: gamificationEnabled } = useFeatureFlag('gamification')
   const { enabled: ventasEnabled }    = useFeatureFlag('ventas')
   const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
+  const { enabled: rrhhEnabled }      = useFeatureFlag('rrhh')
 
   // ── Links de navegación principal ────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
@@ -166,24 +167,24 @@ export default function Navbar() {
   // rol configurado en Preferencias (user.moduleAccess, ver backend/src/lib/
   // moduleAccess.js) — admins siempre pasan ese segundo chequeo. Ventas mantiene
   // su criterio actual (admin → /admin/ventas, equipo comercial no-admin →
-  // /ventas), que ya equivale a moduleAccess.ventas. RRHH, EOS y Gamification NO
-  // viven acá — son estrictamente admin-only, sin acceso configurable por rol
-  // (datos sensibles o funciones de gestión), y su link vive en `adminSublinks`.
+  // /ventas), que ya equivale a moduleAccess.ventas. RRHH SÍ vive acá (decisión
+  // explícita, a diferencia de EOS/Gamification que quedan estrictamente
+  // admin-only, sin acceso configurable por rol, en `adminSublinks`).
   const moduleSublinks = [
     ...(ventasEnabled && (isAdmin || user?.isSales)
       ? [{ to: isAdmin ? '/admin/ventas' : '/ventas', label: '💰 Ventas' }]
       : []),
     ...(marketingEnabled && user?.moduleAccess?.marketing ? [{ to: '/marketing', label: '🎯 Marketing' }] : []),
     ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ to: '/contenido', label: '📅 Contenido' }] : []),
+    ...(rrhhEnabled && user?.moduleAccess?.rrhh ? [{ to: '/admin/rrhh', label: '👥 RRHH' }] : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
-  // Ventas/Marketing/Contenido se mudaron a "Módulos" (arriba, con acceso
-  // configurable por rol). RRHH, EOS y Gamification quedan acá, estrictamente admin-only.
+  // Ventas/Marketing/Contenido/RRHH se mudaron a "Módulos" (arriba, con acceso
+  // configurable por rol). EOS y Gamification quedan acá, estrictamente admin-only.
   const adminSublinks = [
     { to: '/reports',    label: '📈 Reportes' },
-    { to: '/admin/rrhh', label: '👥 RRHH' },
     ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
     ...(gamificationEnabled ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
     { to: '/admin',      label: '⚙️ Panel' },

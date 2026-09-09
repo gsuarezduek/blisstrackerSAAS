@@ -1,4 +1,5 @@
 const { resend, getEmailFrom, emailShell, logEmail, escHtml } = require('./_shared')
+const { labelFor: benefitBankLabel, unitFor: benefitBankUnit } = require('../../lib/benefitBanks')
 
 const LEAVE_TYPE_LABELS = {
   vacaciones: 'Vacaciones',
@@ -100,6 +101,91 @@ async function sendVacationReviewEmail(userEmail, userName, workspaceName, reque
   }
 }
 
+/**
+ * Notifica a los admins del workspace que un usuario pidió usar horas libres / un día home.
+ * @param {string[]} adminEmails
+ * @param {string}   userName
+ * @param {string}   workspaceName
+ * @param {object}   request        { bank, amount, date, reason }
+ * @param {number}   workspaceId
+ */
+async function sendBenefitRequestEmail(adminEmails, userName, workspaceName, request, workspaceId) {
+  const from = await getEmailFrom(workspaceId)
+  const bankLabel = benefitBankLabel(request.bank)
+  const unit = benefitBankUnit(request.bank)
+  const subject = `🎁 ${userName} pidió usar ${bankLabel}`
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: adminEmails,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <h2 style="color:#1e293b;margin:0 0 12px;font-size:20px;">🎁 Nueva solicitud de ${bankLabel}</h2>
+          <p style="color:#475569;margin:0 0 20px;">
+            <strong>${escHtml(userName)}</strong> pidió usar ${bankLabel} en <strong>${escHtml(workspaceName)}</strong>.
+          </p>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+            <tr><td style="padding:8px 0;color:#64748b;font-size:14px;width:120px;">Cantidad</td><td style="padding:8px 0;color:#1e293b;font-size:14px;font-weight:600;">${request.amount} ${unit}</td></tr>
+            ${request.date ? `<tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Fecha</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${request.date}</td></tr>` : ''}
+            ${request.reason ? `<tr><td style="padding:8px 0;color:#64748b;font-size:14px;vertical-align:top;">Motivo</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${escHtml(request.reason)}</td></tr>` : ''}
+          </table>
+          <p style="color:#94a3b8;font-size:13px;margin:0;">Revisá la solicitud en BlissTracker → Administración → RRHH → Beneficios.</p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: adminEmails.join(','), subject, type: 'benefitRequest', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: adminEmails.join(','), subject, type: 'benefitRequest', status: 'failed', errorMsg: err.message })
+  }
+}
+
+/**
+ * Notifica al usuario que su solicitud de beneficio fue revisada.
+ * @param {string}  userEmail
+ * @param {string}  userName
+ * @param {string}  workspaceName
+ * @param {object}  request   { bank, amount, date, status, reviewNote }
+ * @param {number}  workspaceId
+ */
+async function sendBenefitReviewEmail(userEmail, userName, workspaceName, request, workspaceId) {
+  const from = await getEmailFrom(workspaceId)
+  const approved  = request.status === 'approved'
+  const bankLabel = benefitBankLabel(request.bank)
+  const unit = benefitBankUnit(request.bank)
+  const subject = approved
+    ? `✅ Tu solicitud de ${bankLabel} fue aprobada`
+    : `❌ Tu solicitud de ${bankLabel} fue rechazada`
+  try {
+    const { error } = await resend.emails.send({
+      from,
+      to: userEmail,
+      subject,
+      html: emailShell(`
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;margin-top:8px;">
+          <div style="background:${approved ? '#f0fdf4' : '#fef2f2'};border:1px solid ${approved ? '#bbf7d0' : '#fecaca'};border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+            <h2 style="color:${approved ? '#15803d' : '#991b1b'};margin:0;font-size:18px;">
+              ${approved ? '✅ Solicitud aprobada' : '❌ Solicitud rechazada'}
+            </h2>
+          </div>
+          <p style="color:#475569;margin:0 0 16px;">Hola <strong>${escHtml(userName)}</strong>, tu solicitud de ${bankLabel} en <strong>${escHtml(workspaceName)}</strong> fue revisada.</p>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+            <tr><td style="padding:8px 0;color:#64748b;font-size:14px;width:120px;">Cantidad</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${request.amount} ${unit}</td></tr>
+            ${request.date ? `<tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Fecha</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${request.date}</td></tr>` : ''}
+            ${request.reviewNote ? `<tr><td style="padding:8px 0;color:#64748b;font-size:14px;vertical-align:top;">Nota</td><td style="padding:8px 0;color:#1e293b;font-size:14px;">${escHtml(request.reviewNote)}</td></tr>` : ''}
+          </table>
+          <p style="color:#94a3b8;font-size:13px;margin:0;">Podés ver el historial de tus solicitudes en BlissTracker → Tu perfil.</p>
+        </div>
+      `),
+    })
+    if (error) throw new Error(error.message)
+    await logEmail({ workspaceId, to: userEmail, subject, type: 'benefitReview', status: 'sent' })
+  } catch (err) {
+    await logEmail({ workspaceId, to: userEmail, subject, type: 'benefitReview', status: 'failed', errorMsg: err.message })
+  }
+}
+
 // Convierte texto plano (con saltos de línea) a HTML: párrafos por línea en blanco, <br> por salto simple.
 function textToHtmlParagraphs(text) {
   return String(text).trim().split(/\n{2,}/).map(block =>
@@ -136,4 +222,7 @@ async function sendLateNotificationEmail(email, name, workspaceName, template, w
   }
 }
 
-module.exports = { sendVacationRequestEmail, sendVacationReviewEmail, sendLateNotificationEmail }
+module.exports = {
+  sendVacationRequestEmail, sendVacationReviewEmail, sendLateNotificationEmail,
+  sendBenefitRequestEmail, sendBenefitReviewEmail,
+}

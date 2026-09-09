@@ -1,11 +1,14 @@
 const router = require('express').Router()
 const { loginHistory, lastLogins, userSummary, dashboardStats, updateLogin, deleteLogin, metricHistory } = require('../controllers/rrhh.controller')
 const { auth } = require('../middleware/auth')
-const { resolveWorkspace, workspaceAdminOnly } = require('../middleware/workspace')
+const { resolveWorkspace } = require('../middleware/workspace')
+const { requireFeatureFlag } = require('../lib/featureFlags')
+const { moduleAccessGuard } = require('../lib/moduleAccess')
 
 router.use(auth)
 router.use(resolveWorkspace)
-router.use(workspaceAdminOnly)
+router.use(requireFeatureFlag('rrhh'))
+router.use(moduleAccessGuard('rrhh'))
 
 router.get('/dashboard-stats',     dashboardStats)
 router.get('/metric-history',      metricHistory)

@@ -31,6 +31,9 @@ async function getGlobalSettings(req, res, next) {
       lateNotifyEnabled: workspace.lateNotifyEnabled ?? false,
       lateNotifyThreshold: workspace.lateNotifyThreshold ?? 3,
       lateNotifyTemplate: workspace.lateNotifyTemplate || DEFAULT_LATE_TEMPLATE,
+      vacationAccrualEnabled: workspace.vacationAccrualEnabled ?? false,
+      vacationAccrualDays: workspace.vacationAccrualDays ?? 1,
+      vacationAccrualIntervalMonths: workspace.vacationAccrualIntervalMonths ?? 1,
       emailFrom: effectiveEmailFrom,
       aiWeeklyTokenLimit: first?.aiWeeklyTokenLimit ?? 500000,
     })
@@ -95,7 +98,7 @@ async function getAiUsage(req, res, next) {
 
 async function saveGlobalSettings(req, res, next) {
   try {
-    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, rrssAdvisorAutoEnabled, marketingDisabledSections, marketingDigestEnabled, seoAlertsEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, emailFrom, aiWeeklyTokenLimit } = req.body
+    const { timezone, linksEnabled, situationEnabled, hoursEnabled, briefsEnabled, attendanceTrackingEnabled, productivityEnabled, productivityDigestEnabled, adsAdvisorAutoEnabled, rrssAdvisorAutoEnabled, marketingDisabledSections, marketingDigestEnabled, seoAlertsEnabled, lateToleranceMins, lateNotifyEnabled, lateNotifyThreshold, lateNotifyTemplate, vacationAccrualEnabled, vacationAccrualDays, vacationAccrualIntervalMonths, emailFrom, aiWeeklyTokenLimit } = req.body
     const workspaceData = {}
     const projectData = {}
 
@@ -145,6 +148,30 @@ async function saveGlobalSettings(req, res, next) {
         }
         workspaceData.lateNotifyTemplate = lateNotifyTemplate
       }
+    }
+    if (vacationAccrualEnabled !== undefined) {
+      const enabled = Boolean(vacationAccrualEnabled)
+      workspaceData.vacationAccrualEnabled = enabled
+      // Ancla del "no retroactivo": al activar (false→true), marcamos desde cuándo
+      // cuenta — nadie acumula por períodos anteriores a esta fecha. El cliente
+      // nunca manda este valor, se calcula server-side.
+      if (enabled && !req.workspace.vacationAccrualEnabled) {
+        workspaceData.vacationAccrualActivatedAt = new Date()
+      }
+    }
+    if (vacationAccrualDays !== undefined) {
+      const d = Number(vacationAccrualDays)
+      if (!Number.isFinite(d) || d <= 0 || d > 60) {
+        return res.status(400).json({ error: 'Los días a acumular deben ser un número entre 0 y 60' })
+      }
+      workspaceData.vacationAccrualDays = d
+    }
+    if (vacationAccrualIntervalMonths !== undefined) {
+      const m = Number(vacationAccrualIntervalMonths)
+      if (![1, 3, 6, 12].includes(m)) {
+        return res.status(400).json({ error: 'La frecuencia debe ser 1, 3, 6 o 12 meses' })
+      }
+      workspaceData.vacationAccrualIntervalMonths = m
     }
     if (linksEnabled !== undefined)    projectData.linksEnabled    = Boolean(linksEnabled)
     if (situationEnabled !== undefined) projectData.situationEnabled = Boolean(situationEnabled)

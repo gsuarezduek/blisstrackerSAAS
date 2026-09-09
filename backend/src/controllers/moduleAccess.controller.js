@@ -3,8 +3,8 @@ const { MODULE_KEYS, resolveModuleAccess } = require('../lib/moduleAccess')
 
 /**
  * GET /api/workspaces/current/module-access
- * Devuelve la config resuelta (default del catálogo + lo guardado) de los 6
- * módulos, para el editor de Preferencias.
+ * Devuelve la config resuelta (default del catálogo + lo guardado) de los
+ * módulos en MODULE_KEYS, para el editor de Preferencias.
  */
 async function list(req, res, next) {
   try {

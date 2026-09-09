@@ -3,7 +3,7 @@ import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import RoleBadge from '../../components/RoleBadge'
-import { LEAVE_TYPE_LABELS } from './shared'
+import { LEAVE_TYPE_LABELS, todayStr } from './shared'
 
 export { LEAVE_TYPE_LABELS }
 
@@ -190,13 +190,100 @@ export function EditModal({ request, onClose, onDone }) {
   )
 }
 
+function fmtDateRange(start, end) {
+  const fmt = d => new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
+  return start === end ? fmt(start) : `${fmt(start)} → ${fmt(end)}`
+}
+
+function RequestCard({ req, onReview, onEdit }) {
+  const st = REQUEST_STATUS[req.status] ?? REQUEST_STATUS.pending
+  const typeLabel = LEAVE_TYPE_LABELS[req.type] ?? req.type
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4 flex items-start gap-4">
+      <img src={avatarUrl(req.user.avatar)} alt={req.user.name}
+        className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-gray-100 dark:border-gray-600 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <p className="font-semibold text-sm text-gray-900 dark:text-white">{req.user.name}</p>
+          <RoleBadge userId={req.user.id} />
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">{typeLabel}</span>
+        </div>
+        <p className="text-sm text-gray-600 dark:text-gray-400">{fmtDateRange(req.startDate, req.endDate)}</p>
+        {req.observation && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 italic">{req.observation}</p>}
+        {req.reviewedBy && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            Revisado por {req.reviewedBy.name}
+            {req.reviewNote && ` · "${req.reviewNote}"`}
+          </p>
+        )}
+      </div>
+      <div className="flex-shrink-0 flex items-center gap-2">
+        {req.status === 'pending' && (
+          <button onClick={() => onReview(req)}
+            className="text-xs font-medium px-3 py-1.5 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors">
+            Revisar
+          </button>
+        )}
+        <button onClick={() => onEdit(req)}
+          className="text-xs font-medium px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+          Editar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const PAGE_SIZE = 20
 
-export function TabVacaciones() {
+// Sección colapsable con "cargar más" propio — misma UI para las 3 secciones
+// (Pendientes/Activas/Anteriores), todas en la misma pantalla (sin sub-tabs).
+function Section({ id, title, emptyIcon, emptyLabel, requests, defaultOpen, onReview, onEdit }) {
+  const [open, setOpen]       = useState(defaultOpen)
+  const [visible, setVisible] = useState(PAGE_SIZE)
+
+  return (
+    <div className="mb-5">
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 px-1 py-2 text-left group">
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+          {title} <span className="text-gray-400 dark:text-gray-500 font-normal">({requests.length})</span>
+        </h3>
+        <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        requests.length === 0
+          ? (
+              <div className="text-center py-10 text-gray-400">
+                <p className="text-2xl mb-2">{emptyIcon}</p>
+                <p className="text-sm font-medium">{emptyLabel}</p>
+              </div>
+            )
+          : (
+              <div className="space-y-3">
+                {requests.slice(0, visible).map(req => (
+                  <RequestCard key={req.id} req={req} onReview={onReview} onEdit={onEdit} />
+                ))}
+                {requests.length > visible && (
+                  <div className="pt-1 text-center">
+                    <button onClick={() => setVisible(v => v + PAGE_SIZE)}
+                      className="text-sm font-medium px-4 py-2 bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary-300 dark:hover:border-primary-600 transition-colors">
+                      Cargar más ({requests.length - visible} restantes)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+      )}
+    </div>
+  )
+}
+
+export function TabLicencias() {
   const [requests, setRequests] = useState([])
   const [loading, setLoading]   = useState(true)
-  const [filter, setFilter]     = useState('pending')
-  const [visible, setVisible]   = useState(PAGE_SIZE)
   const [reviewing, setReviewing] = useState(null)
   const [editing, setEditing]   = useState(null)
 
@@ -207,132 +294,36 @@ export function TabVacaciones() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Al cambiar de filtro, volver a mostrar solo las primeras 20.
-  useEffect(() => { setVisible(PAGE_SIZE) }, [filter])
-
   function handleDone(updated) {
     setRequests(prev => prev.map(r => r.id === updated.id ? updated : r))
     setReviewing(null)
     setEditing(null)
   }
 
-  const filtered = requests.filter(r =>
-    filter === 'all' ? true : r.status === filter
-  )
-  const shown = filtered.slice(0, visible)
+  const today = todayStr()
+  const pending   = requests.filter(r => r.status === 'pending')
+  // Activas: aprobadas que todavía no terminaron (incluye las que arrancan a futuro).
+  const active    = requests.filter(r => r.status === 'approved' && r.endDate >= today)
+  // Anteriores: rechazadas, o aprobadas ya finalizadas.
+  const previous  = requests.filter(r => r.status === 'rejected' || (r.status === 'approved' && r.endDate < today))
 
-  const pendingCount = requests.filter(r => r.status === 'pending').length
-
-  function fmtDateRange(start, end) {
-    const fmt = d => new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
-    return start === end ? fmt(start) : `${fmt(start)} → ${fmt(end)}`
-  }
+  if (loading) return <LoadingSpinner className="py-12" />
 
   return (
     <div>
-      {/* Filtros */}
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {[
-          ['pending',  `Pendientes${pendingCount > 0 ? ` (${pendingCount})` : ''}`],
-          ['approved', 'Aprobadas'],
-          ['rejected', 'Rechazadas'],
-          ['all',      'Todas'],
-        ].map(([v, l]) => (
-          <button key={v} onClick={() => setFilter(v)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              filter === v
-                ? 'bg-primary-600 text-white'
-                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
-          >{l}</button>
-        ))}
-      </div>
-
-      {loading
-        ? <LoadingSpinner className="py-12" />
-        : filtered.length === 0
-          ? (
-              <div className="text-center py-16 text-gray-400">
-                <p className="text-3xl mb-3">🏖️</p>
-                <p className="font-medium">
-                  {filter === 'pending' ? 'No hay solicitudes pendientes.' : 'Sin solicitudes en este filtro.'}
-                </p>
-              </div>
-            )
-          : (
-              <div className="space-y-3">
-                {shown.map(req => {
-                  const st = REQUEST_STATUS[req.status] ?? REQUEST_STATUS.pending
-                  const typeLabel = LEAVE_TYPE_LABELS[req.type] ?? req.type
-                  return (
-                    <div key={req.id}
-                      className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4 flex items-start gap-4">
-                      <img src={avatarUrl(req.user.avatar)} alt={req.user.name}
-                        className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-gray-100 dark:border-gray-600 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                          <p className="font-semibold text-sm text-gray-900 dark:text-white">{req.user.name}</p>
-                          <RoleBadge userId={req.user.id} />
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">{typeLabel}</span>
-                        </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{fmtDateRange(req.startDate, req.endDate)}</p>
-                        {req.observation && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 italic">{req.observation}</p>}
-                        {req.reviewedBy && (
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                            Revisado por {req.reviewedBy.name}
-                            {req.reviewNote && ` · "${req.reviewNote}"`}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex-shrink-0 flex items-center gap-2">
-                        {req.status === 'pending' && (
-                          <button onClick={() => setReviewing(req)}
-                            className="text-xs font-medium px-3 py-1.5 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors">
-                            Revisar
-                          </button>
-                        )}
-                        <button onClick={() => setEditing(req)}
-                          className="text-xs font-medium px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-                          Editar
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-
-                {filtered.length > visible && (
-                  <div className="pt-1 text-center">
-                    <button
-                      onClick={() => setVisible(v => v + PAGE_SIZE)}
-                      className="text-sm font-medium px-4 py-2 bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
-                    >
-                      Cargar más ({filtered.length - visible} restantes)
-                    </button>
-                  </div>
-                )}
-              </div>
-            )
-      }
+      <Section id="pending" title="⏳ Pendientes" emptyIcon="✅" emptyLabel="No hay solicitudes pendientes."
+        requests={pending} defaultOpen={true} onReview={setReviewing} onEdit={setEditing} />
+      <Section id="active" title="🏖️ Activas" emptyIcon="📭" emptyLabel="No hay licencias activas ni por venir."
+        requests={active} defaultOpen={true} onReview={setReviewing} onEdit={setEditing} />
+      <Section id="previous" title="🗂️ Anteriores" emptyIcon="🗂️" emptyLabel="Todavía no hay licencias anteriores."
+        requests={previous} defaultOpen={false} onReview={setReviewing} onEdit={setEditing} />
 
       {reviewing && (
-        <ReviewModal
-          request={reviewing}
-          onClose={() => setReviewing(null)}
-          onDone={handleDone}
-        />
+        <ReviewModal request={reviewing} onClose={() => setReviewing(null)} onDone={handleDone} />
       )}
-
       {editing && (
-        <EditModal
-          request={editing}
-          onClose={() => setEditing(null)}
-          onDone={handleDone}
-        />
+        <EditModal request={editing} onClose={() => setEditing(null)} onDone={handleDone} />
       )}
     </div>
   )
 }
-
-// ─── Página principal ─────────────────────────────────────────────────────────
-

@@ -37,6 +37,12 @@ export const MODULE_CATALOG = {
     detail: 'Calendario de contenido para redes sociales: piezas por proyecto, vistas Calendario/Tabla/Kanban, comentarios internos y aprobación del cliente desde el portal.',
     tourBody: 'En "Contenido" armás el calendario de piezas de RRSS por proyecto y pedís aprobación al cliente sin que tenga que loguearse.',
   },
+  rrhh: {
+    icon: '👥',
+    label: 'RRHH',
+    detail: 'Legajos, ingresos, licencias, vacaciones (con acumulación automática configurable), y beneficios de horas libres / días home. Configurable por rol — a diferencia de EOS/Gamification, incluye datos personales sensibles (DNI, salud, cuenta bancaria) para quien tenga acceso.',
+    tourBody: 'En "RRHH" gestionás legajos, licencias, vacaciones y los beneficios de horas libres / días home del equipo.',
+  },
 }
 
 export function moduleMeta(key, fallbackName) {

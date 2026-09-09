@@ -20,7 +20,7 @@ const FILTERS = [
   { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: isFollowedCompleted },
-  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED'].includes(n.type) },
+  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED'].includes(n.type) },
   { key: 'COMPLETED',    label: '✓',  title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
 
@@ -236,10 +236,12 @@ export default function NotificationBell() {
                 const isWhatsappMessage = n.type === 'WHATSAPP_MESSAGE'
                 const isVacationAction = n.type === 'VACATION_REQUEST'
                 const isVacation       = isVacationAction || n.type === 'VACATION_REVIEWED'
+                const isBenefitAction  = n.type === 'BENEFIT_REQUEST'
+                const isBenefit        = isBenefitAction || n.type === 'BENEFIT_REVIEWED'
                 const isGameLaunched   = n.type === 'GAME_LAUNCHED'
                 const isCompleted      = n.type === 'COMPLETED'
                 const isAssignment     = isMention || isLeadAssigned || isChatMention || isContentMention || isWhatsappMessage
-                const isAmberFamily    = isVacation || isGameLaunched || isContentChanges
+                const isAmberFamily    = isVacation || isBenefit || isGameLaunched || isContentChanges
 
                 const isGreenFamily = isUnblocked || isAddedProject || isContentApproved
 
@@ -271,25 +273,29 @@ export default function NotificationBell() {
                           : 'text-gray-800 dark:text-gray-200'
 
                 // Deep-link: leads van a Ventas (ruta según rol), solicitudes de licencia a
-                // RRHH → Vacaciones (solo lo ven admins, que son quienes las reciben), las
-                // revisiones de licencia al perfil propio (el destinatario puede no ser admin),
-                // las menciones de Contenido al calendario con el modal de la pieza abierto.
-                // Los juegos y las menciones de chat no navegan a ningún lado — abren su
-                // flotante (🏆 / 💬, ya visibles en cualquier página) vía un evento, ver handleRowClick.
+                // RRHH → Licencias y solicitudes de beneficios a RRHH → Beneficios (quien las
+                // recibe tiene acceso al módulo RRHH — admin u otro rol configurado, ya no es
+                // admin-only fijo), las revisiones (de licencia o de beneficio) al perfil propio
+                // (el destinatario puede no tener acceso al módulo), las menciones de Contenido
+                // al calendario con el modal de la pieza abierto. Los juegos y las menciones de
+                // chat no navegan a ningún lado — abren su flotante (🏆 / 💬, ya visibles en
+                // cualquier página) vía un evento, ver handleRowClick.
                 const ventasBase = user?.isAdmin ? '/admin/ventas' : '/ventas'
                 const dest = n.leadId
                   ? `${ventasBase}?lead=${n.leadId}`
                   : n.type === 'VACATION_REQUEST'
-                    ? '/admin/rrhh?tab=vacaciones'
-                    : n.type === 'VACATION_REVIEWED'
-                      ? '/profile'
-                      : (isGameLaunched || isChatMention)
-                        ? null
-                        : n.contentPieceId
-                          ? `/contenido?projectId=${n.projectId}&piece=${n.contentPieceId}`
-                          : n.projectId
-                            ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
-                            : null
+                    ? '/admin/rrhh?tab=licencias'
+                    : n.type === 'BENEFIT_REQUEST'
+                      ? '/admin/rrhh?tab=beneficios'
+                      : (n.type === 'VACATION_REVIEWED' || n.type === 'BENEFIT_REVIEWED')
+                        ? '/profile'
+                        : (isGameLaunched || isChatMention)
+                          ? null
+                          : n.contentPieceId
+                            ? `/contenido?projectId=${n.projectId}&piece=${n.contentPieceId}`
+                            : n.projectId
+                              ? `/my-projects/${n.projectId}${n.taskId ? `?task=${n.taskId}` : ''}`
+                              : null
 
                 const handleRowClick = (e) => {
                   setOpen(false)

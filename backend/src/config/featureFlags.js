@@ -41,6 +41,11 @@ const FEATURE_FLAGS = [
     name: 'WhatsApp (Ventas)',
     description: 'Conectá el WhatsApp del workspace vía un BSP (hoy: Chakra) para ver y responder conversaciones con leads desde Ventas. Flag independiente de "ventas" por su costo operativo real (BSP + tokens de IA).',
   },
+  {
+    key: 'rrhh',
+    name: 'Sección RRHH',
+    description: 'Panel de RRHH: legajos, ingresos, licencias, vacaciones, beneficios (horas libres / días home) y productividad. Sembrado con enabledGlobally=true al agregarse (ya lo usaban todos los workspaces sin flag).',
+  },
 ]
 
 module.exports = { FEATURE_FLAGS }

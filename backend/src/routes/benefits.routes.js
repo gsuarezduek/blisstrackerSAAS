@@ -1,8 +1,8 @@
 const router = require('express').Router()
 const {
-  adjustVacationDays, getAdjustmentHistory, listRequests, reviewRequest, editRequest,
-  getMyVacation, createRequest,
-} = require('../controllers/vacation.controller')
+  listBalances, adjustBalance, getAdjustmentHistory, listRequests, reviewRequest,
+  getMyBenefits, createRequest,
+} = require('../controllers/benefits.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 const { requireFeatureFlag } = require('../lib/featureFlags')
@@ -12,16 +12,15 @@ router.use(auth)
 router.use(resolveWorkspace)
 router.use(requireFeatureFlag('rrhh'))
 
-// Usuario autenticado: autoservicio sobre los propios datos, sin moduleAccessGuard
-// (gestionar a OTROS requiere acceso al módulo; ver/pedir lo propio no).
-router.get('/my',              getMyVacation)
-router.post('/my/request',     createRequest)
+// Usuario autenticado: autoservicio sobre los propios bancos, sin moduleAccessGuard.
+router.get('/my',          getMyBenefits)
+router.post('/my/request', createRequest)
 
 // Requiere acceso al módulo RRHH (admin/owner siempre pasa, ver moduleAccess.js)
-router.patch('/admin/adjust/:userId',    moduleAccessGuard('rrhh'), adjustVacationDays)
+router.get('/admin/balances',            moduleAccessGuard('rrhh'), listBalances)
+router.patch('/admin/balances/:userId',  moduleAccessGuard('rrhh'), adjustBalance)
 router.get('/admin/adjustments/:userId', moduleAccessGuard('rrhh'), getAdjustmentHistory)
 router.get('/admin/requests',            moduleAccessGuard('rrhh'), listRequests)
 router.patch('/admin/requests/:id',      moduleAccessGuard('rrhh'), reviewRequest)
-router.patch('/admin/requests/:id/edit', moduleAccessGuard('rrhh'), editRequest)
 
 module.exports = router

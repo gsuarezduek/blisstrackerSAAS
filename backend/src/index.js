@@ -317,6 +317,14 @@ cron.schedule('5 8 * * *', () => runCron('whatsappAutomation', 30 * 60 * 1000, a
   catch (err) { console.error('[WhatsappAutomation] Error en cron diario:', err.message) }
 }), { timezone: DEFAULT_TZ })
 
+// Cron: acumulación automática de vacaciones (regla "+N días cada M meses" por
+// aniversario de ingreso) — diario 02:00 ART
+cron.schedule('0 2 * * *', () => runCron('vacationAccrual', 30 * 60 * 1000, async () => {
+  const { runVacationAccrualCheck } = require('./services/vacationAccrual.service')
+  try { await runVacationAccrualCheck() }
+  catch (err) { console.error('[VacationAccrual] Error en cron diario:', err.message) }
+}), { timezone: DEFAULT_TZ })
+
 // Cron: eliminar workspaces vencidos — cada 15 minutos
 cron.schedule('*/15 * * * *', () => runCron('workspaceDeletion', 10 * 60 * 1000, async () => {
   const prisma = require('./lib/prisma')
