@@ -4,7 +4,8 @@ jest.mock('../../src/lib/prisma', () => ({
   project:         { findFirst: jest.fn(), findUnique: jest.fn() },
   projectFile:      {
     findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn(),
-    aggregate: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), deleteMany: jest.fn(),
+    aggregate: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(),
+    deleteMany: jest.fn(), updateMany: jest.fn(),
   },
 }))
 
@@ -315,49 +316,145 @@ describe('PATCH /files/:itemId (mover/renombrar)', () => {
   })
 })
 
-describe('DELETE /files/:itemId', () => {
-  it('borra un archivo: R2 antes que la fila', async () => {
+describe('DELETE /files/:itemId (papelera — soft-delete)', () => {
+  it('un archivo: solo marca deletedAt, no toca R2 todavía', async () => {
     mockBase()
-    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ id: 1, type: 'file', objectKey: 'files/1/a.pdf', posterKey: null }))
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ id: 1, type: 'file' }))
+    prisma.projectFile.updateMany.mockResolvedValue({ count: 1 })
 
     const res = await req('delete', `${BASE}/1`)
 
     expect(res.status).toBe(200)
-    expect(objectStorage.deleteObjects).toHaveBeenCalledWith(['files/1/a.pdf'])
-    expect(prisma.projectFile.delete).toHaveBeenCalledWith({ where: { id: 1 } })
+    expect(objectStorage.deleteObjects).not.toHaveBeenCalled()
+    expect(prisma.projectFile.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [1] } },
+      data:  { deletedAt: expect.any(Date), deletedById: 1 },
+    })
   })
 
-  it('borra una carpeta con contenido: recolecta las keys de todo el subárbol', async () => {
+  it('una carpeta con contenido: cascadea deletedAt a todo el subárbol', async () => {
     mockBase()
     prisma.projectFile.findFirst.mockResolvedValue(dbItem({ id: 1, type: 'folder' }))
-    // 1er nivel bajo la carpeta 1: una subcarpeta (10) y un archivo (11)
     prisma.projectFile.findMany
-      .mockResolvedValueOnce([
-        { id: 10, type: 'folder', objectKey: null, posterKey: null },
-        { id: 11, type: 'file', objectKey: 'files/1/b.pdf', posterKey: 'files/1/b-poster.jpg' },
-      ])
-      // 2do nivel bajo la subcarpeta 10: un archivo más
-      .mockResolvedValueOnce([
-        { id: 12, type: 'file', objectKey: 'files/1/c.pdf', posterKey: null },
-      ])
-      // 3er nivel: vacío, corta el BFS
-      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 10 }, { id: 11 }]) // 1er nivel bajo la carpeta 1
+      .mockResolvedValueOnce([{ id: 12 }]) // 2do nivel bajo 10
+      .mockResolvedValueOnce([]) // corta el BFS
+    prisma.projectFile.updateMany.mockResolvedValue({ count: 4 })
 
     const res = await req('delete', `${BASE}/1`)
 
     expect(res.status).toBe(200)
-    expect(objectStorage.deleteObjects).toHaveBeenCalledWith([
-      'files/1/b.pdf', 'files/1/b-poster.jpg', 'files/1/c.pdf',
-    ])
-    expect(prisma.projectFile.delete).toHaveBeenCalledWith({ where: { id: 1 } })
+    expect(prisma.projectFile.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [1, 10, 11, 12] } },
+      data:  { deletedAt: expect.any(Date), deletedById: 1 },
+    })
   })
 
-  it('404 si el ítem no existe', async () => {
+  it('404 si el ítem no existe (o ya está en la papelera)', async () => {
     mockBase()
     prisma.projectFile.findFirst.mockResolvedValue(null)
     const res = await req('delete', `${BASE}/999`)
     expect(res.status).toBe(404)
-    expect(objectStorage.deleteObjects).not.toHaveBeenCalled()
+    expect(prisma.projectFile.updateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /files/trash + POST /files/:itemId/restore', () => {
+  it('lista solo las raíces de cada subárbol borrado', async () => {
+    mockBase()
+    prisma.projectFile.findMany.mockResolvedValue([
+      dbItem({ id: 1, type: 'folder', mimeType: null, deletedBy: { id: 1, name: 'Ana' } }),
+    ])
+
+    const res = await req('get', `${BASE}/trash`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.items).toHaveLength(1)
+    expect(res.body.items[0]).toMatchObject({ id: 1, type: 'folder', deletedBy: { id: 1, name: 'Ana' } })
+    expect(prisma.projectFile.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        deletedAt: { not: null },
+        OR: [{ parentId: null }, { parent: { deletedAt: null } }],
+      }),
+    }))
+  })
+
+  it('restaura un archivo suelto', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValueOnce(dbItem({ id: 1, type: 'file', parentId: null }))
+    prisma.projectFile.updateMany.mockResolvedValue({ count: 1 })
+
+    const res = await req('post', `${BASE}/1/restore`)
+
+    expect(res.status).toBe(200)
+    expect(prisma.projectFile.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [1] } },
+      data:  { deletedAt: null, deletedById: null },
+    })
+    expect(prisma.projectFile.update).not.toHaveBeenCalled() // no cambia de padre
+  })
+
+  it('restaura una carpeta: cascadea a sus hijos', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValueOnce(dbItem({ id: 1, type: 'folder', parentId: null }))
+    prisma.projectFile.findMany
+      .mockResolvedValueOnce([{ id: 10 }])
+      .mockResolvedValueOnce([])
+    prisma.projectFile.updateMany.mockResolvedValue({ count: 2 })
+
+    const res = await req('post', `${BASE}/1/restore`)
+
+    expect(res.status).toBe(200)
+    expect(prisma.projectFile.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [1, 10] } },
+      data:  { deletedAt: null, deletedById: null },
+    })
+  })
+
+  it('si el padre sigue en la papelera, restaura a la raíz en vez de un huérfano', async () => {
+    mockBase()
+    prisma.projectFile.findFirst
+      .mockResolvedValueOnce(dbItem({ id: 5, type: 'file', parentId: 2 })) // el ítem
+      .mockResolvedValueOnce(null) // el padre (2) ya no está vivo (deletedAt: null no matchea)
+    prisma.projectFile.updateMany.mockResolvedValue({ count: 1 })
+    prisma.projectFile.update.mockResolvedValue(dbItem({ id: 5, parentId: null }))
+
+    const res = await req('post', `${BASE}/5/restore`)
+
+    expect(res.status).toBe(200)
+    expect(prisma.projectFile.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { parentId: null } })
+  })
+
+  it('404 al restaurar algo que no está en la papelera', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(null)
+    const res = await req('post', `${BASE}/999/restore`)
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /files/search', () => {
+  it('busca por nombre en todo el proyecto e incluye el breadcrumb', async () => {
+    mockBase()
+    prisma.projectFile.findMany.mockResolvedValue([
+      dbItem({ id: 3, name: 'informe final.pdf', parentId: 9 }),
+    ])
+    prisma.projectFile.findFirst.mockResolvedValueOnce({ id: 9, name: 'Reportes', parentId: null }) // buildPath
+
+    const res = await req('get', `${BASE}/search?q=informe`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.items).toHaveLength(1)
+    expect(res.body.items[0].name).toBe('informe final.pdf')
+    expect(res.body.items[0].path).toEqual([{ id: 9, name: 'Reportes' }])
+  })
+
+  it('sin query, devuelve vacío sin pegarle a la DB', async () => {
+    mockBase()
+    const res = await req('get', `${BASE}/search`)
+    expect(res.status).toBe(200)
+    expect(res.body.items).toEqual([])
+    expect(prisma.projectFile.findMany).not.toHaveBeenCalled()
   })
 })
 

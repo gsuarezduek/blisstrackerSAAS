@@ -284,6 +284,16 @@ const PLATFORM_SETTINGS = [
     help:    'Mismo mecanismo que contentAssetPendingRetentionHours, aplicado a ProjectFile: un archivo queda "pending" entre pedir la URL firmada y confirmarla; si se abandona la subida, la limpieza semanal lo borra —primero de R2, después de la DB— pasadas estas horas.',
   },
   {
+    key:     'projectFileTrashRetentionDays',
+    type:    'integer',
+    default: 30,
+    min:     1,
+    max:     180,
+    group:   'operational',
+    label:   'Papelera de Archivos de proyecto (días)',
+    help:    'Eliminar un archivo o carpeta del tab Archivos lo manda a la papelera (soft-delete), recuperable desde ahí — borrar una carpeta cascadea el mismo estado a todo su contenido. Pasados estos días desde el borrado, la limpieza semanal lo elimina en duro —primero de R2, después las filas— sin posibilidad de restaurarlo. Mismo mecanismo que contentPieceTrashRetentionDays.',
+  },
+  {
     key:     'contentPieceTrashRetentionDays',
     type:    'integer',
     default: 30,

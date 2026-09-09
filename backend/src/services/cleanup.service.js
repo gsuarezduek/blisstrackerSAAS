@@ -133,6 +133,14 @@ async function previewWeeklyCleanup(tables = null) {
       where: { type: 'file', status: 'pending', createdAt: { lt: hoursAgo(hours) } },
     })
   }
+  if (!tables || tables.includes('projectFilesTrash')) {
+    // Filtra por deletedAt (no createdAt) — no entra en RETENTION_KEYS. Ver
+    // projectFileTrashRetentionDays.
+    const days = await getSetting('projectFileTrashRetentionDays')
+    result.projectFilesTrash = await prisma.projectFile.count({
+      where: { deletedAt: { lt: daysAgo(days) } },
+    })
+  }
   return result
 }
 
@@ -249,6 +257,28 @@ async function runWeeklyCleanup(tables = null) {
     await objectStorage.deleteObjects(stale.flatMap(f => [f.objectKey, f.posterKey].filter(Boolean)))
     const { count } = await prisma.projectFile.deleteMany({ where: { id: { in: stale.map(f => f.id) } } })
     result.projectFilesPending = count
+  }
+  if (!tables || tables.includes('projectFilesTrash')) {
+    const days = await getSetting('projectFileTrashRetentionDays')
+    const cutoff = daysAgo(days)
+    // R2 se limpia para CADA archivo vencido (carpeta o nivel, no importa —
+    // solo type:'file' tiene objectKey), sin importar si es "raíz" de su
+    // subárbol borrado o un descendiente: el Cascade de Postgres solo borra
+    // filas, nunca bytes de R2.
+    const staleFiles = await prisma.projectFile.findMany({
+      where:  { type: 'file', deletedAt: { lt: cutoff } },
+      select: { objectKey: true, posterKey: true },
+    })
+    await objectStorage.deleteObjects(staleFiles.flatMap(f => [f.objectKey, f.posterKey].filter(Boolean)))
+    // Solo hace falta borrar las filas "raíz" del subárbol vencido (padre no
+    // vencido/borrado, o sin padre) — el Cascade de Postgres se encarga del
+    // resto del subárbol, ya limpiado de R2 arriba.
+    const staleRoots = await prisma.projectFile.findMany({
+      where:  { deletedAt: { lt: cutoff }, OR: [{ parentId: null }, { parent: { deletedAt: null } }] },
+      select: { id: true },
+    })
+    const { count } = await prisma.projectFile.deleteMany({ where: { id: { in: staleRoots.map(f => f.id) } } })
+    result.projectFilesTrash = count
   }
 
   return result

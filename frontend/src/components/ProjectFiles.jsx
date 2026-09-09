@@ -105,15 +105,18 @@ function RenameModal({ projectId, item, onClose, onRenamed }) {
 
 // Selector de carpeta destino: navega el mismo árbol con el mismo endpoint de
 // listado (filtrando solo carpetas). La validación de "no mover dentro de sí
-// misma / de una subcarpeta" la hace el backend — acá solo se oculta la
-// propia carpeta del listado como guía visual, sin duplicar esa lógica.
-function MoveModal({ projectId, item, onClose, onMoved }) {
+// misma / de una subcarpeta" la hace el backend — acá solo se oculta del
+// listado las propias carpetas que se están moviendo, como guía visual, sin
+// duplicar esa lógica. `items` siempre es un array (1 elemento = mover uno
+// solo desde el menú ⋯, N = acción en lote desde la selección múltiple).
+function MoveModal({ projectId, items, onClose, onMoved }) {
   const [folderId, setFolderId] = useState(null)
   const [path, setPath] = useState([])
   const [folders, setFolders] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const movingIds = new Set(items.map(it => it.id))
 
   useEffect(() => {
     let active = true
@@ -127,19 +130,26 @@ function MoveModal({ projectId, item, onClose, onMoved }) {
 
   async function handleMove() {
     setSaving(true); setError('')
-    try {
-      await api.patch(`/projects/${projectId}/files/${item.id}`, { parentId: folderId })
+    const results = await Promise.allSettled(
+      items.map(it => api.patch(`/projects/${projectId}/files/${it.id}`, { parentId: folderId }))
+    )
+    const failed = results.filter(r => r.status === 'rejected').length
+    setSaving(false)
+    if (failed > 0) {
+      setError(failed === items.length ? 'No se pudo mover' : `${failed} de ${items.length} no se pudieron mover`)
+      if (failed < items.length) onMoved()
+    } else {
       onMoved()
-    } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo mover')
-    } finally { setSaving(false) }
+    }
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-5 pb-3 border-b dark:border-gray-700 flex items-center justify-between gap-3">
-          <p className="text-sm font-bold text-gray-900 dark:text-white truncate">📂 Mover "{item.name}"</p>
+          <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
+            📂 Mover {items.length > 1 ? `${items.length} elementos` : `"${items[0].name}"`}
+          </p>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none shrink-0">×</button>
         </div>
         <div className="px-5 py-2.5 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 flex-wrap border-b dark:border-gray-700">
@@ -152,11 +162,11 @@ function MoveModal({ projectId, item, onClose, onMoved }) {
           ))}
         </div>
         <div className="overflow-y-auto px-3 py-2 flex-1 min-h-[160px]">
-          {loading ? <LoadingSpinner className="py-8" /> : folders.filter(f => f.id !== item.id).length === 0 ? (
+          {loading ? <LoadingSpinner className="py-8" /> : folders.filter(f => !movingIds.has(f.id)).length === 0 ? (
             <p className="text-sm text-gray-400 dark:text-gray-500 py-6 text-center">No hay subcarpetas acá</p>
           ) : (
             <div className="space-y-0.5">
-              {folders.filter(f => f.id !== item.id).map(f => (
+              {folders.filter(f => !movingIds.has(f.id)).map(f => (
                 <button
                   key={f.id} onClick={() => setFolderId(f.id)}
                   className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-left text-gray-700 dark:text-gray-200"
@@ -214,23 +224,30 @@ function CopyLinkModal({ projectId, item, onClose }) {
   )
 }
 
-function ConfirmDeleteModal({ item, onClose, onConfirm }) {
+// `items` siempre es un array (1 = borrado individual desde el menú ⋯, N =
+// acción en lote). `onConfirm` recibe el array y decide cómo borrarlos.
+function ConfirmDeleteModal({ items, onClose, onConfirm }) {
   const [saving, setSaving] = useState(false)
-  const isFolder = item.type === 'folder'
+  const hasFolder = items.some(it => it.type === 'folder')
 
   async function handleConfirm() {
     setSaving(true)
-    try { await onConfirm() } finally { setSaving(false) }
+    try { await onConfirm(items) } finally { setSaving(false) }
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
-        <p className="text-sm font-bold text-gray-900 dark:text-white mb-2">🗑️ Eliminar {isFolder ? 'carpeta' : 'archivo'}</p>
+        <p className="text-sm font-bold text-gray-900 dark:text-white mb-2">
+          🗑️ Eliminar {items.length > 1 ? `${items.length} elementos` : (items[0].type === 'folder' ? 'carpeta' : 'archivo')}
+        </p>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          {isFolder
-            ? <>Se va a eliminar <strong>"{item.name}"</strong> y todo su contenido (subcarpetas y archivos). Esta acción no se puede deshacer.</>
-            : <>Se va a eliminar <strong>"{item.name}"</strong>. Esta acción no se puede deshacer.</>}
+          {items.length > 1
+            ? <>Se van a mover <strong>{items.length} elementos</strong>{hasFolder ? ' (y el contenido de las carpetas)' : ''} a la Papelera.</>
+            : items[0].type === 'folder'
+              ? <>Se va a mover <strong>"{items[0].name}"</strong> y todo su contenido (subcarpetas y archivos) a la Papelera.</>
+              : <>Se va a mover <strong>"{items[0].name}"</strong> a la Papelera.</>}
+          {' '}Se puede restaurar desde ahí durante un tiempo.
         </p>
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Cancelar</button>
@@ -243,14 +260,89 @@ function ConfirmDeleteModal({ item, onClose, onConfirm }) {
   )
 }
 
+// Fecha corta: "3 sep" (o "3 sep 2025" si no es el año en curso) — se usa para
+// mostrar quién subió/borró algo sin ocupar mucho espacio en la grilla.
+function fmtDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
+}
+
+// "🗑️ Papelera" — lista solo las raíces de cada subárbol borrado (el backend
+// ya colapsa una carpeta con contenido en una sola fila) con quién y cuándo lo
+// borró, y un botón para restaurar (cascadea a todo el contenido, si aplica).
+function TrashModal({ projectId, onClose, onRestored }) {
+  const [items, setItems] = useState(null) // null = cargando
+  const [restoringId, setRestoringId] = useState(null)
+  const [error, setError] = useState('')
+
+  const load = useCallback(() => {
+    setItems(null)
+    api.get(`/projects/${projectId}/files/trash`)
+      .then(({ data }) => setItems(data.items))
+      .catch(() => { setItems([]); setError('No se pudo cargar la papelera') })
+  }, [projectId])
+
+  useEffect(() => { load() }, [load])
+
+  async function handleRestore(item) {
+    setRestoringId(item.id); setError('')
+    try {
+      await api.post(`/projects/${projectId}/files/${item.id}/restore`)
+      setItems(prev => prev.filter(it => it.id !== item.id))
+      onRestored()
+    } catch {
+      setError('No se pudo restaurar')
+    } finally { setRestoringId(null) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+        <div className="px-5 pt-5 pb-3 border-b dark:border-gray-700 flex items-center justify-between gap-3">
+          <p className="text-sm font-bold text-gray-900 dark:text-white">🗑️ Papelera</p>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none shrink-0">×</button>
+        </div>
+        <div className="overflow-y-auto px-3 py-2 flex-1 min-h-[160px]">
+          {items === null ? <LoadingSpinner className="py-8" /> : items.length === 0 ? (
+            <p className="text-sm text-gray-400 dark:text-gray-500 py-6 text-center">La papelera está vacía</p>
+          ) : (
+            <div className="space-y-0.5">
+              {items.map(it => (
+                <div key={it.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <span className="text-xl shrink-0">{it.type === 'folder' ? '📁' : iconFor(it.mimeType)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-700 dark:text-gray-200 truncate">{it.name}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
+                      Eliminado por {it.deletedBy?.name ?? 'alguien'} · {fmtDate(it.deletedAt)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRestore(it)} disabled={restoringId === it.id}
+                    className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 shrink-0"
+                  >
+                    {restoringId === it.id ? 'Restaurando…' : '↩️ Restaurar'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {error && <p className="px-5 pb-3 text-xs text-red-500 dark:text-red-400">{error}</p>}
+      </div>
+    </div>
+  )
+}
+
 // ─── Tarjeta de ítem (carpeta o archivo) con menú contextual ──────────────────
 
-function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onCreateTask }) {
+function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onCreateTask, caption, selected, onToggleSelect }) {
   const isFolder = item.type === 'folder'
   const isImage = !isFolder && item.mimeType?.startsWith('image/')
   const isPreviewable = !isFolder && !isImage && item.previewable
   return (
-    <div className="relative group">
+    <div className={`relative group rounded-xl ${selected ? 'ring-2 ring-primary-500' : ''}`}>
       <button
         onClick={() => onOpen(item)}
         className="w-full flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary-300 dark:hover:border-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-center"
@@ -265,7 +357,22 @@ function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDele
         </div>
         <span className="text-xs text-gray-700 dark:text-gray-200 truncate w-full">{item.name}</span>
         {!isFolder && <span className="text-[10px] text-gray-400 dark:text-gray-500">{fmtBytes(item.sizeBytes)}</span>}
+        {caption && <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate w-full">{caption}</span>}
       </button>
+
+      {onToggleSelect && (
+        <button
+          onClick={e => { e.stopPropagation(); onToggleSelect(item) }}
+          className={`absolute top-1 left-1 w-5 h-5 flex items-center justify-center rounded-md border text-[11px] transition-opacity ${
+            selected
+              ? 'bg-primary-600 border-primary-600 text-white opacity-100'
+              : 'bg-white/90 dark:bg-gray-800/90 border-gray-300 dark:border-gray-600 text-transparent opacity-0 group-hover:opacity-100 focus:opacity-100'
+          }`}
+          title="Seleccionar"
+        >
+          ✓
+        </button>
+      )}
 
       <button
         onClick={e => { e.stopPropagation(); onOpenMenu(menuOpen ? null : item.id) }}
@@ -303,6 +410,25 @@ function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDele
 
 // ─── Componente principal ──────────────────────────────────────────────────
 
+const SORT_OPTIONS = [
+  { value: 'name-asc',  label: 'Nombre (A-Z)' },
+  { value: 'name-desc', label: 'Nombre (Z-A)' },
+  { value: 'date-desc', label: 'Más reciente primero' },
+  { value: 'date-asc',  label: 'Más antiguo primero' },
+  { value: 'size-desc', label: 'Tamaño (mayor primero)' },
+]
+
+function sortItems(list, sortBy) {
+  const sorted = [...list]
+  switch (sortBy) {
+    case 'name-desc': return sorted.sort((a, b) => b.name.localeCompare(a.name))
+    case 'date-desc': return sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    case 'date-asc':  return sorted.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    case 'size-desc': return sorted.sort((a, b) => (b.sizeBytes ?? -1) - (a.sizeBytes ?? -1))
+    default:          return sorted.sort((a, b) => a.name.localeCompare(b.name)) // name-asc
+  }
+}
+
 export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFromFile }) {
   const [folderId, setFolderId] = useState(null)
   const [path, setPath] = useState([])
@@ -311,11 +437,17 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
   const [loading, setLoading] = useState(true)
   const [dragOver, setDragOver] = useState(false)
   const [menuOpenId, setMenuOpenId] = useState(null)
-  const [modal, setModal] = useState(null) // null | {type:'newFolder'|'rename'|'move'|'delete'|'copyLink', item?}
+  const [modal, setModal] = useState(null) // null | {type:'newFolder'|'rename'|'move'|'delete'|'copyLink'|'bulkMove'|'bulkDelete', item?, items?}
   const [error, setError] = useState('')
   const [lightbox, setLightbox] = useState(null) // url de imagen a mostrar en grande
   const [preview, setPreview] = useState(null) // null | { item, status:'loading'|'ready'|'error', blobUrl }
   const [highlightId, setHighlightId] = useState(null) // resalta brevemente el ítem abierto por deep-link
+  const [sortBy, setSortBy] = useState('name-asc')
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState(null) // null = no buscando
+  const [searching, setSearching] = useState(false)
+  const [showTrash, setShowTrash] = useState(false)
   const inputRef = useRef(null)
   const deepLinkConsumedRef = useRef(false)
 
@@ -334,6 +466,23 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
   }, [projectId])
 
   useEffect(() => { reload(folderId) }, [folderId, reload])
+  useEffect(() => { setSelectedIds(new Set()) }, [folderId]) // no arrastrar selección entre carpetas
+
+  // Buscador global del proyecto — debounce 300ms, cancela resultados viejos
+  // si la query cambió antes de que respondiera el servidor.
+  useEffect(() => {
+    const q = searchQuery.trim()
+    if (!q) { setSearchResults(null); setSearching(false); return }
+    let active = true
+    setSearching(true)
+    const t = setTimeout(() => {
+      api.get(`/projects/${projectId}/files/search?q=${encodeURIComponent(q)}`)
+        .then(({ data }) => { if (active) setSearchResults(data.items) })
+        .catch(() => { if (active) setSearchResults([]) })
+        .finally(() => { if (active) setSearching(false) })
+    }, 300)
+    return () => { active = false; clearTimeout(t) }
+  }, [searchQuery, projectId])
 
   // Deep-link "🔗 Copiar enlace": ?fileId= resuelto una sola vez al montar —
   // navega a la carpeta contenedora y abre el archivo (preview o lightbox).
@@ -371,6 +520,29 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     handleDownload(item)
   }
 
+  // Click en un resultado de búsqueda: navega a la carpeta contenedora (según
+  // el `path` que ya trajo el propio resultado) y abre el ítem — sin esperar
+  // a que recargue esa carpeta, ya tenemos toda la data del ítem en mano.
+  function openFoundItem(item) {
+    setSearchQuery('')
+    if (item.type === 'folder') { setFolderId(item.id); return }
+    const parentId = item.path.length ? item.path[item.path.length - 1].id : null
+    setFolderId(parentId)
+    const isImage = item.mimeType?.startsWith('image/')
+    if (isImage && item.url) { setLightbox(item.url); return }
+    if (!isImage && item.previewable) { openPreview(item); return }
+    handleDownload(item)
+  }
+
+  function toggleSelect(item) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(item.id)) next.delete(item.id)
+      else next.add(item.id)
+      return next
+    })
+  }
+
   async function openPreview(item) {
     setPreview({ item, status: 'loading', blobUrl: null })
     try {
@@ -403,9 +575,14 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     }
   }
 
-  async function handleDeleteConfirmed(item) {
-    await api.delete(`/projects/${projectId}/files/${item.id}`)
+  async function handleDeleteConfirmed(items) {
+    await Promise.allSettled(items.map(it => api.delete(`/projects/${projectId}/files/${it.id}`)))
     setModal(null)
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      items.forEach(it => next.delete(it.id))
+      return next
+    })
     reload(folderId)
   }
 
@@ -442,6 +619,13 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
+            onClick={() => setShowTrash(true)}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
+            title="Papelera"
+          >
+            🗑️
+          </button>
+          <button
             onClick={() => setModal({ type: 'newFolder' })}
             className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
           >
@@ -459,6 +643,44 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
           />
         </div>
       </div>
+
+      {/* Buscador + orden */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <input
+            value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder="🔍 Buscar en todo el proyecto…"
+            className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg pl-3 pr-7 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm">✕</button>
+          )}
+        </div>
+        {searchResults === null && (
+          <select
+            value={sortBy} onChange={e => setSortBy(e.target.value)}
+            className="text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
+      </div>
+
+      {/* Barra de acciones en lote — reemplaza la explicación de tamaño mientras haya selección */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 text-sm bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg px-3 py-2">
+          <span className="text-primary-700 dark:text-primary-300 font-medium">{selectedIds.size} seleccionado{selectedIds.size > 1 ? 's' : ''}</span>
+          <button
+            onClick={() => setModal({ type: 'bulkMove', items: [...folders, ...files].filter(it => selectedIds.has(it.id)) })}
+            className="text-gray-600 dark:text-gray-300 hover:text-primary-700 dark:hover:text-primary-300"
+          >📂 Mover</button>
+          <button
+            onClick={() => setModal({ type: 'bulkDelete', items: [...folders, ...files].filter(it => selectedIds.has(it.id)) })}
+            className="text-red-600 dark:text-red-400 hover:text-red-700"
+          >🗑️ Eliminar</button>
+          <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Cancelar</button>
+        </div>
+      )}
 
       {error && <p className="text-sm text-red-500 dark:text-red-400">{error}</p>}
 
@@ -486,8 +708,36 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
         </div>
       )}
 
-      {/* Grilla */}
-      {loading ? (
+      {/* Grilla — modo búsqueda (flat, todo el proyecto) o modo carpeta (normal) */}
+      {searchResults !== null ? (
+        searching && searchResults.length === 0 ? (
+          <LoadingSpinner className="py-16" />
+        ) : searchResults.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <p className="text-3xl mb-2">🔍</p>
+            <p>Sin resultados para "{searchQuery}".</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            {searchResults.map(item => (
+              <ItemCard
+                key={`${item.type}-${item.id}`}
+                item={item}
+                menuOpen={menuOpenId === item.id}
+                onOpenMenu={setMenuOpenId}
+                onOpen={openFoundItem}
+                onRename={it => setModal({ type: 'rename', item: it })}
+                onMove={it => setModal({ type: 'move', item: it })}
+                onDelete={it => setModal({ type: 'delete', item: it })}
+                onDownload={handleDownload}
+                onCopyLink={it => setModal({ type: 'copyLink', item: it })}
+                onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
+                caption={item.path.length ? `🏠 / ${item.path.map(p => p.name).join(' / ')}` : '🏠 Raíz'}
+              />
+            ))}
+          </div>
+        )
+      ) : loading ? (
         <LoadingSpinner className="py-16" />
       ) : folders.length === 0 && files.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
@@ -497,7 +747,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
         </div>
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-          {[...folders, ...files].map(item => (
+          {[...sortItems(folders, sortBy), ...sortItems(files, sortBy)].map(item => (
             <div key={`${item.type}-${item.id}`} className={highlightId === item.id ? 'rounded-xl ring-2 ring-primary-400 animate-pulse' : ''}>
               <ItemCard
                 item={item}
@@ -510,6 +760,9 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
                 onDownload={handleDownload}
                 onCopyLink={it => setModal({ type: 'copyLink', item: it })}
                 onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
+                caption={item.uploadedBy ? `${item.uploadedBy.name} · ${fmtDate(item.createdAt)}` : fmtDate(item.createdAt)}
+                selected={selectedIds.has(item.id)}
+                onToggleSelect={toggleSelect}
               />
             </div>
           ))}
@@ -533,22 +786,29 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
           onRenamed={() => { setModal(null); reload(folderId) }}
         />
       )}
-      {modal?.type === 'move' && (
+      {(modal?.type === 'move' || modal?.type === 'bulkMove') && (
         <MoveModal
-          projectId={projectId} item={modal.item}
+          projectId={projectId} items={modal.items ?? [modal.item]}
           onClose={() => setModal(null)}
-          onMoved={() => { setModal(null); reload(folderId) }}
+          onMoved={() => { setModal(null); setSelectedIds(new Set()); reload(folderId) }}
         />
       )}
-      {modal?.type === 'delete' && (
+      {(modal?.type === 'delete' || modal?.type === 'bulkDelete') && (
         <ConfirmDeleteModal
-          item={modal.item}
+          items={modal.items ?? [modal.item]}
           onClose={() => setModal(null)}
-          onConfirm={() => handleDeleteConfirmed(modal.item)}
+          onConfirm={handleDeleteConfirmed}
         />
       )}
       {modal?.type === 'copyLink' && (
         <CopyLinkModal projectId={projectId} item={modal.item} onClose={() => setModal(null)} />
+      )}
+      {showTrash && (
+        <TrashModal
+          projectId={projectId}
+          onClose={() => setShowTrash(false)}
+          onRestored={() => reload(folderId)}
+        />
       )}
 
       {/* Lightbox de imagen */}

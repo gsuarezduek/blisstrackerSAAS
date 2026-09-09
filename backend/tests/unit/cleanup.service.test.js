@@ -1,5 +1,6 @@
 jest.mock('../../src/lib/prisma', () => ({
   contentPiece: { count: jest.fn(), findMany: jest.fn(), deleteMany: jest.fn() },
+  projectFile:  { count: jest.fn(), findMany: jest.fn(), deleteMany: jest.fn() },
 }))
 
 jest.mock('../../src/lib/platformSettings', () => ({
@@ -65,6 +66,45 @@ describe('cleanup.service — contentPiecesTrash', () => {
 
       expect(objectStorage.deleteObjects).toHaveBeenCalledWith([])
       expect(result.contentPiecesTrash).toBe(0)
+    })
+  })
+})
+
+describe('cleanup.service — projectFilesTrash', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  describe('previewWeeklyCleanup', () => {
+    it('cuenta filas (archivo o carpeta) en la papelera más viejas que el retention', async () => {
+      getSetting.mockResolvedValue(30)
+      prisma.projectFile.count.mockResolvedValue(4)
+
+      const result = await previewWeeklyCleanup(['projectFilesTrash'])
+
+      expect(result.projectFilesTrash).toBe(4)
+      expect(getSetting).toHaveBeenCalledWith('projectFileTrashRetentionDays')
+    })
+  })
+
+  describe('runWeeklyCleanup', () => {
+    it('borra el R2 de cada archivo vencido, pero de la DB solo las raíces del subárbol (el resto cascadea)', async () => {
+      getSetting.mockResolvedValue(30)
+      // 2 archivos vencidos en R2 (uno es hijo de una carpeta también vencida)
+      prisma.projectFile.findMany
+        .mockResolvedValueOnce([
+          { objectKey: 'files/1/a.pdf', posterKey: null },
+          { objectKey: 'files/1/b.mp4', posterKey: 'files/1/b-poster.jpg' },
+        ])
+        // Solo la carpeta raíz (padre no vencido/borrado, o sin padre) es lo que se borra en DB
+        .mockResolvedValueOnce([{ id: 9 }])
+      prisma.projectFile.deleteMany.mockResolvedValue({ count: 1 })
+
+      const result = await runWeeklyCleanup(['projectFilesTrash'])
+
+      expect(objectStorage.deleteObjects).toHaveBeenCalledWith([
+        'files/1/a.pdf', 'files/1/b.mp4', 'files/1/b-poster.jpg',
+      ])
+      expect(prisma.projectFile.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [9] } } })
+      expect(result.projectFilesTrash).toBe(1)
     })
   })
 })

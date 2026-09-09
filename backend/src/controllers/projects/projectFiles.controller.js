@@ -111,7 +111,8 @@ async function assertWithinQuota(workspaceId, extraBytes) {
 /**
  * GET /api/projects/:id/files?parentId=
  * Lista carpetas + archivos de UN nivel (no recursivo) + breadcrumb. Solo
- * archivos 'ready' (oculta subidas pendientes/abandonadas de otras sesiones).
+ * archivos 'ready' (oculta subidas pendientes/abandonadas de otras sesiones)
+ * y nunca los que están en la papelera (deletedAt).
  */
 async function listFiles(req, res, next) {
   try {
@@ -123,12 +124,12 @@ async function listFiles(req, res, next) {
     if (req.query.parentId) {
       parentId = Number(req.query.parentId)
       if (!Number.isInteger(parentId) || parentId <= 0) return res.status(400).json({ error: 'parentId inválido' })
-      const parent = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, type: 'folder' } })
+      const parent = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, type: 'folder', deletedAt: null } })
       if (!parent) return res.status(404).json({ error: 'Carpeta no encontrada' })
     }
 
     const items = await prisma.projectFile.findMany({
-      where: { projectId, parentId, OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }] },
+      where: { projectId, parentId, deletedAt: null, OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }] },
       include: { uploadedBy: { select: { id: true, name: true } } },
       orderBy: [{ type: 'desc' }, { name: 'asc' }], // 'folder' > 'file' alfabéticamente → carpetas primero
     })
@@ -139,6 +140,41 @@ async function listFiles(req, res, next) {
       files:   items.filter(i => i.type === 'file').map(shapeItem),
       path,
     })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/projects/:id/files/search?q=
+ * Buscador global del proyecto (no acotado a la carpeta actual): substring
+ * case-insensitive sobre el nombre, cualquier nivel de anidamiento. Cada
+ * resultado incluye su breadcrumb (`path`) para poder navegar directo a la
+ * carpeta que lo contiene sin que el usuario tenga que buscarla a mano.
+ */
+async function searchFiles(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+    if (!q) return res.json({ items: [] })
+
+    const items = await prisma.projectFile.findMany({
+      where: {
+        projectId, deletedAt: null,
+        name: { contains: q, mode: 'insensitive' },
+        OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }],
+      },
+      include: { uploadedBy: { select: { id: true, name: true } } },
+      orderBy: { name: 'asc' },
+      take: 50,
+    })
+
+    const shaped = []
+    for (const f of items) {
+      shaped.push({ ...shapeItem(f), path: f.parentId ? await buildPath(f.parentId, projectId) : [] })
+    }
+    res.json({ items: shaped })
   } catch (err) { next(err) }
 }
 
@@ -154,7 +190,7 @@ async function createFolder(req, res, next) {
 
     const parentId = req.body?.parentId != null ? Number(req.body.parentId) : null
     if (parentId != null) {
-      const parent = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, type: 'folder' } })
+      const parent = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, type: 'folder', deletedAt: null } })
       if (!parent) return res.status(404).json({ error: 'Carpeta destino no encontrada' })
     }
 
@@ -195,7 +231,7 @@ async function presignFile(req, res, next) {
 
     const parentId = req.body?.parentId != null ? Number(req.body.parentId) : null
     if (parentId != null) {
-      const parent = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, type: 'folder' } })
+      const parent = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, type: 'folder', deletedAt: null } })
       if (!parent) return res.status(404).json({ error: 'Carpeta destino no encontrada' })
     }
 
@@ -297,7 +333,7 @@ async function updateItem(req, res, next) {
     if (guard.error) return res.status(guard.status).json({ error: guard.error })
     const { projectId } = guard
 
-    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId } })
+    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId, deletedAt: null } })
     if (!item) return res.status(404).json({ error: 'No encontrado' })
 
     const data = {}
@@ -310,7 +346,7 @@ async function updateItem(req, res, next) {
     if (req.body?.parentId !== undefined) {
       const parentId = req.body.parentId != null ? Number(req.body.parentId) : null
       if (parentId != null) {
-        const target = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, type: 'folder' } })
+        const target = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, type: 'folder', deletedAt: null } })
         if (!target) return res.status(404).json({ error: 'Carpeta destino no encontrada' })
 
         // Evita mover una carpeta dentro de sí misma o de una de sus propias subcarpetas.
@@ -341,30 +377,33 @@ async function updateItem(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// Recolecta objectKey/posterKey de todos los archivos de un subárbol (BFS por
-// parentId). Todo en JS, no una CTE recursiva — la profundidad esperada acá
-// es baja, no vale la complejidad.
-async function collectDescendantFileKeys(rootId, projectId) {
-  const keys = []
+// IDs de todo el subárbol de una carpeta (BFS por parentId), sin importar su
+// estado de papelera actual — se usa para cascadear deletedAt (borrar/restaurar)
+// a todo el contenido junto. Todo en JS, no una CTE recursiva — la profundidad
+// esperada acá es baja, no vale la complejidad.
+async function collectDescendantIds(rootId, projectId) {
+  const ids = []
   let frontier = [rootId]
   let guardLoop = 0
   while (frontier.length > 0 && guardLoop < 1000) {
     const children = await prisma.projectFile.findMany({
       where: { projectId, parentId: { in: frontier } },
-      select: { id: true, type: true, objectKey: true, posterKey: true },
+      select: { id: true },
     })
-    keys.push(...children.filter(c => c.type === 'file').flatMap(c => [c.objectKey, c.posterKey].filter(Boolean)))
+    ids.push(...children.map(c => c.id))
     frontier = children.map(c => c.id)
     guardLoop++
   }
-  return keys
+  return ids
 }
 
 /**
  * DELETE /api/projects/:id/files/:itemId
- * Archivo: borra el objeto (+poster) de R2 y la fila. Carpeta: recolecta y
- * borra de R2 todos los archivos del subárbol; el `onDelete: Cascade` de
- * Postgres se encarga de las filas hijas al borrar la carpeta.
+ * Soft-delete (papelera), NO toca R2 todavía — mismo patrón que ContentPiece.
+ * Al borrar una carpeta se cascadea el mismo deletedAt/deletedById a todo su
+ * subárbol (si no, sus hijos quedarían "vivos" pero inalcanzables, ocultos
+ * bajo un padre borrado). La limpieza semanal (cleanup.service.js) es quien
+ * de verdad borra de R2 y de la DB, pasado projectFileTrashRetentionDays.
  */
 async function deleteItem(req, res, next) {
   try {
@@ -372,18 +411,81 @@ async function deleteItem(req, res, next) {
     if (guard.error) return res.status(guard.status).json({ error: guard.error })
     const { projectId } = guard
 
-    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId } })
+    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId, deletedAt: null } })
     if (!item) return res.status(404).json({ error: 'No encontrado' })
 
-    if (item.type === 'file') {
-      await objectStorage.deleteObjects([item.objectKey, item.posterKey].filter(Boolean))
-    } else {
-      const keys = await collectDescendantFileKeys(item.id, projectId)
-      await objectStorage.deleteObjects(keys)
-    }
-    await prisma.projectFile.delete({ where: { id: item.id } })
+    const ids = item.type === 'folder' ? [item.id, ...(await collectDescendantIds(item.id, projectId))] : [item.id]
+    await prisma.projectFile.updateMany({
+      where: { id: { in: ids } },
+      data:  { deletedAt: new Date(), deletedById: req.user.userId },
+    })
 
     res.json({ deleted: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/projects/:id/files/trash
+ * Solo las "raíces" de cada subárbol borrado (padre no borrado, o sin padre)
+ * — así una carpeta con 50 archivos aparece como UNA fila, no 51 (sus hijos
+ * viajan implícitos: restaurar la raíz los restaura a todos).
+ */
+async function listTrash(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const items = await prisma.projectFile.findMany({
+      where: {
+        projectId, deletedAt: { not: null },
+        OR: [{ parentId: null }, { parent: { deletedAt: null } }],
+      },
+      include: { deletedBy: { select: { id: true, name: true } } },
+      orderBy: { deletedAt: 'desc' },
+    })
+
+    res.json({
+      items: items.map(f => ({
+        id: f.id, type: f.type, name: f.name, mimeType: f.mimeType, sizeBytes: f.sizeBytes,
+        deletedAt: f.deletedAt,
+        deletedBy: f.deletedBy ? { id: f.deletedBy.id, name: f.deletedBy.name } : null,
+      })),
+    })
+  } catch (err) { next(err) }
+}
+
+/**
+ * POST /api/projects/:id/files/:itemId/restore
+ * Saca de la papelera (y cascadea a todo su subárbol, si es carpeta). Si el
+ * padre sigue borrado (o ya no existe), restaura a la raíz del proyecto en
+ * vez de dejarlo huérfano dentro de una carpeta todavía en la papelera.
+ */
+async function restoreItem(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId, deletedAt: { not: null } } })
+    if (!item) return res.status(404).json({ error: 'No encontrado en la papelera' })
+
+    let parentId = item.parentId
+    if (parentId != null) {
+      const parent = await prisma.projectFile.findFirst({ where: { id: parentId, projectId, deletedAt: null } })
+      if (!parent) parentId = null
+    }
+
+    const ids = item.type === 'folder' ? [item.id, ...(await collectDescendantIds(item.id, projectId))] : [item.id]
+    await prisma.projectFile.updateMany({
+      where: { id: { in: ids } },
+      data:  { deletedAt: null, deletedById: null },
+    })
+    if (parentId !== item.parentId) {
+      await prisma.projectFile.update({ where: { id: item.id }, data: { parentId } })
+    }
+
+    res.json({ restored: true })
   } catch (err) { next(err) }
 }
 
@@ -409,7 +511,7 @@ async function downloadFile(req, res, next) {
     const { projectId } = guard
 
     const file = await prisma.projectFile.findFirst({
-      where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'ready' },
+      where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'ready', deletedAt: null },
     })
     if (!file || !file.objectKey) return res.status(404).json({ error: 'Archivo no encontrado' })
 
@@ -438,7 +540,7 @@ async function locateFile(req, res, next) {
     const { projectId } = guard
 
     const file = await prisma.projectFile.findFirst({
-      where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'ready' },
+      where: { id: Number(req.params.fileId), projectId, type: 'file', status: 'ready', deletedAt: null },
       include: { uploadedBy: { select: { id: true, name: true } } },
     })
     if (!file) return res.status(404).json({ error: 'Archivo no encontrado' })
@@ -450,11 +552,14 @@ async function locateFile(req, res, next) {
 
 module.exports = {
   listFiles,
+  searchFiles,
   createFolder,
   presignFile,
   confirmFile,
   updateItem,
   deleteItem,
+  listTrash,
+  restoreItem,
   downloadFile,
   locateFile,
   // exportados para tests

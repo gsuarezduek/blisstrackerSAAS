@@ -73,11 +73,14 @@ router.post('/:id/meetings/:mid/todos/:tid/send-to-dashboard', meetings.sendTodo
 
 // Archivos del proyecto (repositorio tipo Drive sobre R2 — ver projectFiles.controller.js)
 router.get('/:id/files',                    projectFiles.listFiles)
+router.get('/:id/files/search',             projectFiles.searchFiles)
+router.get('/:id/files/trash',              projectFiles.listTrash)
 router.post('/:id/files/folders',           projectFiles.createFolder)
 router.post('/:id/files/presign',           projectFiles.presignFile)
 router.post('/:id/files/:fileId/confirm',   projectFiles.confirmFile)
 router.get('/:id/files/:fileId/download',   projectFiles.downloadFile)
 router.get('/:id/files/:fileId/locate',     projectFiles.locateFile)
+router.post('/:id/files/:itemId/restore',   projectFiles.restoreItem)
 router.patch('/:id/files/:itemId',          projectFiles.updateItem)
 router.delete('/:id/files/:itemId',         projectFiles.deleteItem)
 

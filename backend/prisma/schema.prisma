@@ -368,6 +368,7 @@ model User {
   contentPiecesDeleted      ContentPiece[]             @relation("ContentPieceDeletedBy")
   contentAssetsUploaded     ContentAsset[]             @relation("ContentAssetUploader")
   projectFilesUploaded      ProjectFile[]              @relation("ProjectFileUploader")
+  projectFilesDeleted       ProjectFile[]              @relation("ProjectFileDeletedBy")
   contentComments           ContentComment[]           @relation("ContentCommentAuthor")
   contentStatusEvents       ContentStatusEvent[]        @relation("ContentEventActor")
   whatsappAccountsConnected WhatsappAccount[]
@@ -595,8 +596,20 @@ model ProjectFile {
   createdAt    DateTime @default(now())
   confirmedAt  DateTime?
 
+  // Papelera: "eliminar" es soft-delete (mismo patrón que ContentPiece — no
+  // dispara el Cascade de R2/hijos, queda todo intacto para restaurar). Al
+  // borrar una carpeta se cascadea el mismo deletedAt/deletedById a todo su
+  // subárbol (en código, no en DB) para que no queden hijos "vivos" bajo un
+  // padre borrado. La limpieza semanal (cleanup.service.js) borra en duro
+  // —R2 incluido— pasados `projectFileTrashRetentionDays` (default 30) desde
+  // este momento.
+  deletedAt    DateTime?
+  deletedById  Int?
+  deletedBy    User?    @relation("ProjectFileDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
   @@index([projectId, parentId])
   @@index([workspaceId])
+  @@index([projectId, deletedAt]) // vista Papelera + limpieza semanal
 }
 
 // Historial de horas contratadas por mes — permite que el % de uso de un mes
