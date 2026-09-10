@@ -1,23 +1,7 @@
 const prisma = require('../lib/prisma')
-
-function safeArr(str) { try { return JSON.parse(str || '[]') } catch { return [] } }
-
-// Normaliza coreValues — soporta legacy (strings) y nuevo formato ({name, description})
-function parseCoreValues(raw) {
-  return safeArr(raw).map(item => {
-    if (typeof item === 'string') {
-      const name = item.trim()
-      return name ? { name, description: '' } : null
-    }
-    if (item && typeof item === 'object' && typeof item.name === 'string' && item.name.trim()) {
-      return {
-        name: item.name.trim(),
-        description: typeof item.description === 'string' ? item.description : '',
-      }
-    }
-    return null
-  }).filter(Boolean)
-}
+const { safeArr, parseCoreValues } = require('../lib/peopleScore')
+const { captureCurrentMonth } = require('../services/peopleAnalyzerSnapshot.service')
+const { prevMonthsArr, monthLabel } = require('../lib/monthUtils')
 
 // ─── GET /api/eos/personas ────────────────────────────────────────────────────
 // Devuelve todo lo necesario para el tab Personas en una sola llamada.
@@ -51,6 +35,12 @@ async function getPersonas(req, res, next) {
     ])
 
     const coreValues = parseCoreValues(eosData?.coreValues)
+
+    // Snapshot perezoso del mes actual: cada visita al tab Personas actualiza el punto
+    // del mes, así se construye el historial del People Score. Aislado para no romper
+    // el tab si falla (best-effort, mismo patrón que RrhhMetricSnapshot en RRHH).
+    captureCurrentMonth(workspaceId, req.workspace.timezone)
+      .catch(err => console.error('[PeopleAnalyzerSnapshot] upsert mes actual:', err.message))
 
     // Ratings indexados: { [userId]: { [valueKey]: rating } }
     const ratingsMap = {}
@@ -91,6 +81,80 @@ async function getPersonas(req, res, next) {
         accountabilities: safeArr(n.accountabilities),
         order:            n.order,
       })),
+    })
+  } catch (err) { next(err) }
+}
+
+// ─── GET /api/eos/personas/history ───────────────────────────────────────────
+// Evolución mensual del People Score (para el gráfico de historial). Sin ?year → últimos
+// 12 meses; con ?year=YYYY → los 12 meses de ese año calendario. Mismo shape de respuesta
+// que GET /api/admin/rrhh/metric-history.
+
+async function getPersonasHistory(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const tz = req.workspace.timezone
+    const yearParam = req.query.year ? Number(req.query.year) : null
+
+    const all = await prisma.peopleAnalyzerSnapshot.findMany({
+      where:   { workspaceId },
+      select:  { month: true, score: true, rightPeople: true, total: true },
+      orderBy: { month: 'asc' },
+    })
+
+    const availableYears = [...new Set(all.map(s => Number(s.month.slice(0, 4))))].sort((a, b) => a - b)
+    const byMonth = Object.fromEntries(all.map(s => [s.month, s]))
+
+    let months
+    if (yearParam) {
+      months = Array.from({ length: 12 }, (_, i) => `${yearParam}-${String(i + 1).padStart(2, '0')}`)
+    } else {
+      const curMonth = new Date().toLocaleDateString('en-CA', { timeZone: tz }).slice(0, 7)
+      months = prevMonthsArr(curMonth, 12)
+    }
+
+    const snapshots = months.map(m => {
+      const s = byMonth[m]
+      return {
+        month:       m,
+        label:       monthLabel(m),
+        score:       s ? s.score : null,
+        rightPeople: s ? s.rightPeople : null,
+        total:       s ? s.total : null,
+      }
+    })
+
+    res.json({ snapshots, availableYears })
+  } catch (err) { next(err) }
+}
+
+// ─── GET /api/eos/personas/history/:month ────────────────────────────────────
+// Detalle de un mes puntual: la tabla completa (members, coreValues, ratingsMap) tal cual
+// estaba capturada ese mes, para reconstruirla en modo solo lectura.
+
+async function getPersonasHistoryMonth(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const month = req.params.month
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: 'month inválido (formato YYYY-MM)' })
+    }
+
+    const snapshot = await prisma.peopleAnalyzerSnapshot.findUnique({
+      where: { workspaceId_month: { workspaceId, month } },
+    })
+    if (!snapshot) return res.status(404).json({ error: 'No hay captura para ese mes' })
+
+    res.json({
+      month:       snapshot.month,
+      label:       monthLabel(snapshot.month),
+      score:       snapshot.score,
+      rightPeople: snapshot.rightPeople,
+      total:       snapshot.total,
+      members:     snapshot.data?.members ?? [],
+      coreValues:  snapshot.data?.coreValues ?? [],
+      ratingsMap:  snapshot.data?.ratingsMap ?? {},
     })
   } catch (err) { next(err) }
 }
@@ -297,4 +361,7 @@ function formatNode(n) {
   }
 }
 
-module.exports = { getPersonas, upsertRating, addStrike, removeStrike, createNode, updateNode, deleteNode }
+module.exports = {
+  getPersonas, getPersonasHistory, getPersonasHistoryMonth,
+  upsertRating, addStrike, removeStrike, createNode, updateNode, deleteNode,
+}

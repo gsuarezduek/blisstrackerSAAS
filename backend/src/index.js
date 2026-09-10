@@ -95,6 +95,7 @@ const { runWeeklyAdsAdvisor }             = require('./services/adsAdvisor.servi
 const { runWeeklyRrssAdvisor }            = require('./services/rrssAdvisor.service')
 const { saveAllMonthlyCompetitorSnapshots } = require('./services/competitorSnapshot.service')
 const { saveAllPreviousMonthSnapshots: saveAllPrevRrhhMetrics } = require('./services/rrhhMetricSnapshot.service')
+const { saveAllPreviousMonthSnapshots: saveAllPrevPeopleAnalyzer } = require('./services/peopleAnalyzerSnapshot.service')
 const { sendAllProductivityDigests } = require('./services/productivityDigest.service')
 const { sendAllMarketingDigests }    = require('./services/marketingDigest.service')
 
@@ -273,6 +274,7 @@ const MONTHLY_CHAIN = [
   ['AdsSnapshot',        saveAllAdsSnapshots],
   ['CompetitorSnapshot', saveAllMonthlyCompetitorSnapshots],
   ['RrhhMetricSnapshot', saveAllPrevRrhhMetrics],
+  ['PeopleAnalyzerSnapshot', saveAllPrevPeopleAnalyzer], // solo crea si no se capturó ya durante el mes
   ['SeoAlerts',          checkAndSendAllSeoAlerts], // compara el mes cerrado vs anterior y avisa retrocesos
 ]
 cron.schedule('0 1 1 * *', () => runCron('monthlyChain', 6 * 60 * 60 * 1000, async () => {

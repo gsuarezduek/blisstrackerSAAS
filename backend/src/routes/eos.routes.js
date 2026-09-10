@@ -1,7 +1,7 @@
 const router = require('express').Router()
 const { getEOS, updateEOS } = require('../controllers/eos.controller')
 const {
-  getPersonas, upsertRating,
+  getPersonas, getPersonasHistory, getPersonasHistoryMonth, upsertRating,
   addStrike, removeStrike,
   createNode, updateNode, deleteNode,
 } = require('../controllers/eosPeople.controller')
@@ -38,8 +38,10 @@ router.get('/',   getEOS)
 router.patch('/', updateEOS)
 
 // Personas — Analizador
-router.get('/personas',           getPersonas)
-router.patch('/people-analyzer',  upsertRating)
+router.get('/personas',                 getPersonas)
+router.get('/personas/history',         getPersonasHistory)
+router.get('/personas/history/:month',  getPersonasHistoryMonth)
+router.patch('/people-analyzer',        upsertRating)
 
 // Personas — 3 Faltas
 router.post('/strikes',        addStrike)

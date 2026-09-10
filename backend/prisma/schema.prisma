@@ -137,6 +137,7 @@ model Workspace {
   socialImages           SocialImage[]
   eosData                EOSData?
   peopleAnalyzerRatings  PeopleAnalyzerRating[]
+  peopleAnalyzerSnapshots PeopleAnalyzerSnapshot[]
   eosStrikes             EOSStrike[]
   accountabilityNodes    AccountabilityNode[]
   scorecardMetrics       ScorecardMetric[]
@@ -2572,6 +2573,34 @@ model PeopleAnalyzerRating {
   @@unique([workspaceId, userId, valueKey])
   @@index([workspaceId])
   @@index([userId])
+}
+
+// Snapshot mensual del Analizador de Personas (evolución histórica del People Score).
+// Doble escritura, mismo patrón que RrhhMetricSnapshot con una diferencia clave: acá los
+// ratings NO tienen fecha propia (son un estado mutable único por persona+valor), así que
+// "el mes de agosto" solo puede reconstruirse si se capturó DURANTE agosto — el cron mensual
+// del día 1 no puede recalcularlo después porque ya sería el estado de septiembre. Por eso:
+//  · upsert perezoso del mes ACTUAL en cada visita al tab Personas (construye el historial
+//    con el uso, y se sigue actualizando mientras el mes sigue corriendo).
+//  · el cron mensual solo CREA el snapshot del mes recién cerrado si no existe ya uno
+//    (nadie visitó la página en todo el mes) — nunca sobreescribe uno ya capturado.
+// `data` guarda members+coreValues+ratingsMap completos para poder reconstruir la tabla tal
+// cual estaba ese mes (incluye gente que después se fue del workspace, o valores medulares
+// que cambiaron desde entonces).
+model PeopleAnalyzerSnapshot {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  month       String // "YYYY-MM" en la timezone del workspace
+  score       Int?
+  rightPeople Int       @default(0)
+  total       Int       @default(0)
+  data        Json      @default("{}") // { members, coreValues, ratingsMap }
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([workspaceId, month])
+  @@index([workspaceId])
 }
 
 model EOSStrike {
