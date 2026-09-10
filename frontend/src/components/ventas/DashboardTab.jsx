@@ -103,17 +103,21 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
   // Orden de la tabla — client-side, sin refetch (mismo patrón que Reports.jsx).
   // 'whatsapp' (default): leads con conversación de WhatsApp primero, no
   // leídos antes que leídos, por último mensaje más reciente; el resto queda
-  // en su orden normal (backend: updatedAt desc) al final, sin mezclarse.
+  // ordenado por `lastActivityAt` al final, sin mezclarse.
+  // 'recent': todos ordenados por `lastActivityAt` (última actualización real,
+  // ver columna homónima) sin distinguir WhatsApp.
   const [sortMode, setSortMode] = useState('whatsapp')
 
   const sortedLeads = useMemo(() => {
-    if (sortMode !== 'whatsapp') return leads
+    const byLastActivity = (a, b) => new Date(b.lastActivityAt || 0) - new Date(a.lastActivityAt || 0)
+    if (sortMode === 'recent') return [...leads].sort(byLastActivity)
     const withWa = leads.filter(l => l.whatsapp?.connected)
     const withoutWa = leads.filter(l => !l.whatsapp?.connected)
     withWa.sort((a, b) => {
       if (a.whatsapp.unread !== b.whatsapp.unread) return a.whatsapp.unread ? -1 : 1
       return new Date(b.whatsapp.lastMessageAt || 0) - new Date(a.whatsapp.lastMessageAt || 0)
     })
+    withoutWa.sort(byLastActivity)
     return [...withWa, ...withoutWa]
   }, [leads, sortMode])
 
@@ -251,6 +255,7 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
                   <th className="px-4 py-3 font-medium">Origen</th>
                   <th className="px-4 py-3 font-medium text-right">Valor</th>
                   <th className="px-4 py-3 font-medium">Próx. contacto</th>
+                  <th className="px-4 py-3 font-medium">Actualización</th>
                   {filters.archived && <th className="px-4 py-3 font-medium"></th>}
                 </tr>
               </thead>
@@ -281,6 +286,7 @@ export default function DashboardTab({ team, onOpenLead, onDataChange }) {
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{originLabel(l.origin)}</td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">{fmtMoney(l.estimatedValue, l.currency)}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{fmtDate(l.nextContactAt)}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300" title={l.lastActivityAt ? new Date(l.lastActivityAt).toLocaleString('es-AR') : undefined}>{fmtDate(l.lastActivityAt)}</td>
                     {filters.archived && (
                       <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <button onClick={() => unarchive(l.id)} className="text-xs font-medium text-primary-600 hover:underline">↩️ Desarchivar</button>

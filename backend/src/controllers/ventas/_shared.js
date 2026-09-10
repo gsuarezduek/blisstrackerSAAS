@@ -115,4 +115,32 @@ async function attachWhatsappStatus(leads, workspaceId, userId) {
   return leads.map(l => ({ ...l, whatsapp: (l.primaryContactId && byContact.get(l.primaryContactId)) || EMPTY }))
 }
 
-module.exports = { OWNER_SELECT, LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent, assertContactAvailable, attachWhatsappStatus }
+/**
+ * Adjunta `lastActivityAt` a cada lead: el movimiento más reciente, sea lo que
+ * sea (cambio de estado/responsable, próxima acción agregada/resuelta, nota,
+ * propuesta o informe generado, conversión a proyecto, mensaje de WhatsApp).
+ * `Lead.updatedAt` solo cubre parte de esos casos (ver controllers), así que se
+ * combina con el máximo de `LeadActivity.createdAt` del lead (timeline, cubre
+ * el resto) y, si ya viene adjunto, `whatsapp.lastMessageAt` (llamar DESPUÉS de
+ * `attachWhatsappStatus` para reusar ese dato sin una query extra). Una sola
+ * query agregada por leadId — sin N+1 aunque haya muchos leads.
+ */
+async function attachLastActivity(leads, workspaceId) {
+  if (leads.length === 0) return leads
+
+  const grouped = await prisma.leadActivity.groupBy({
+    by: ['leadId'],
+    where: { workspaceId, leadId: { in: leads.map(l => l.id) } },
+    _max: { createdAt: true },
+  })
+  const lastEventByLead = new Map(grouped.map(g => [g.leadId, g._max.createdAt]))
+
+  return leads.map(l => {
+    const candidates = [l.updatedAt, lastEventByLead.get(l.id), l.whatsapp?.lastMessageAt]
+      .filter(Boolean)
+      .map(d => new Date(d).getTime())
+    return { ...l, lastActivityAt: candidates.length ? new Date(Math.max(...candidates)) : l.updatedAt }
+  })
+}
+
+module.exports = { OWNER_SELECT, LEAD_LIST_INCLUDE, LEAD_DETAIL_INCLUDE, logLeadEvent, assertContactAvailable, attachWhatsappStatus, attachLastActivity }
