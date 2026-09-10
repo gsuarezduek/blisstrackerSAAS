@@ -76,17 +76,21 @@ src/
     notifications.js # GET /api/notifications, POST /api/notifications/read-all
     chat.js          # helpers REST de /api/chat/channels[...]
     workdays.js      # POST /api/workdays/finish
+    vacation.js      # GET /api/vacation/my, POST /api/vacation/my/request
+    benefits.js      # GET /api/benefits/my, POST /api/benefits/my/request (horas libres/días home)
   lib/
     push.js          # permisos + Expo Push Token de este dispositivo
     events.js        # pub-sub mínimo propio (RN no tiene `window` ni el módulo `events` de Node)
     socket.js         # conexión Socket.IO única para toda la app (JWT en el handshake)
     biometrics.js     # disponibilidad + prompt de Face ID/huella
+    requestCatalog.js # espejo mínimo de VALID_TYPES (vacation) y BANK_CONFIG (benefits) — solo etiquetas
   context/
     AuthContext.jsx  # login, selección de workspace, logout, sesión persistida, registro/baja de push, conexión del socket, gate biométrico
   components/
     TaskCard.jsx           # tarjeta de tarea con botones de acción según status
     AddTaskModal.jsx       # modal para crear tarea (descripción + chips de proyecto)
     TaskCommentsModal.jsx  # comentarios de una tarea + autocomplete de @menciones
+    RequestBenefitModal.jsx # modal único para pedir vacaciones/licencia, horas libres o días home
   screens/
     LoginScreen.jsx
     WorkspaceSelectScreen.jsx
@@ -98,6 +102,7 @@ src/
     ProjectListScreen.jsx     # proyectos agrupados (destacados/míos/otros)
     ProjectDetailScreen.jsx   # info/situación/links/equipo/tareas/completadas de un proyecto
     ProfileScreen.jsx         # datos del usuario, toggles de biometría/push, logout
+    BenefitsScreen.jsx        # saldos + solicitudes de vacaciones/licencias y beneficios
   navigation/
     RootNavigator.jsx     # decide pantalla según loading/pendingWorkspaces/user + listener global de push tocado
 ```
@@ -550,12 +555,53 @@ adivinar el formato de cada red sin haberlo verificado primero.
     por error, ahora pide confirmación (`showAlert` con Cancelar/Cerrar
     sesión) desde una pantalla dedicada.
 
+### Vacaciones y beneficios (Fase 8)
+
+Arrancó tras un cambio real en el dominio mientras se trabajaba en mobile: el
+backend sumó un módulo nuevo de "bancos de beneficios" (`horas_libres` +
+`dias_home`, otorgados a mano por el admin — premio de un juego, cobertura de
+un evento fuera de horario, etc. — y consumidos por autoservicio con
+aprobación; **no son licencias legales**, eso sigue siendo `VacationRequest`
+aparte). Se investigó el backend real (`benefits.controller.js`,
+`lib/benefitBanks.js`) antes de tocar código mobile, en vez de asumir el
+shape a partir de lo ya documentado — el dominio se movió mientras esta
+sesión trabajaba en otra cosa.
+
+- **`BenefitsScreen`** — un solo request en paralelo a `GET /vacation/my` +
+  `GET /benefits/my`, combinados en una sola lista de "Mis solicitudes"
+  (ordenada por `createdAt`, cada fila distingue vacación/licencia de
+  beneficio por su `kind` sintético agregado en el cliente) + 3 tarjetas de
+  saldo arriba (días de vacaciones, horas libres, días home).
+- **`RequestBenefitModal`** — un único modal para las 3 clases de pedido
+  (selector inicial de chips), en vez de 3 modales separados: comparten
+  layout y validación server-side, la única diferencia real es qué campos
+  se muestran (fecha única + cantidad para beneficios, rango de fechas + tipo
+  para vacaciones/licencias).
+- **`@react-native-community/datetimepicker`** — primera dependencia nativa
+  nueva desde el crash de `BlissLoader`/Fabric de la Fase 5; se verificó
+  `expo-doctor` (21/21) y que el bundle compila, pero **no se pudo probar en
+  un dispositivo real antes de subir** (mismo patrón de riesgo que esa vez:
+  "compila" no es lo mismo que "no crashea en release"). Si vuelve a
+  crashear, el flujo de diagnóstico con `adb logcat` (celular o el emulador
+  `Pixel_10a`) ya está armado y anduvo rápido la vez anterior.
+- **Ambos endpoints requieren el feature flag `rrhh`** (`requireFeatureFlag`
+  en el backend) — verificado antes de reportar la fase como lista: está
+  `enabledGlobally: true` y el workspace `bliss` no lo tiene en
+  `disabledFeatureKeys`, así que no debería bloquear la prueba.
+
+**Fechas "YYYY-MM-DD" — mismo cuidado que el resto del backend**:
+`describeRequest()`/`fmtDate()` en `BenefitsScreen` arman la fecha a mano
+partiendo el string (`split('-')`) en vez de `new Date(dateStr)`, que
+interpretaría el string como medianoche UTC y la mostraría corrida un día en
+timezones al oeste de UTC (Argentina incluida).
+
 ## Roadmap (alcance v1 + extensiones)
 
 Alcance v1 original: tareas de hoy (ver/iniciar/pausar/completar/bloquear/
 destacar), comentarios y @menciones en tareas, chat interno, notificaciones
 push, login biométrico. Google Sign-In queda para v2. Extensiones agregadas
-después de validar la v1 en un dispositivo real: Proyectos, Housekeeping.
+después de validar la v1 en un dispositivo real: Proyectos, Housekeeping,
+Vacaciones y beneficios.
 
 | Fase | Contenido | Estado |
 |---|---|---|
@@ -567,7 +613,7 @@ después de validar la v1 en un dispositivo real: Proyectos, Housekeeping.
 | 5 | Biometría (`expo-local-authentication`) + pulido (manejo de errores de red, ícono/splash real, build de prueba) | ✅ — probado en dispositivo físico y emulador |
 | 6 | Proyectos: lista agrupada + detalle (info/situación/links/equipo/tareas/completadas) | ✅ |
 | 7 | Housekeeping: "Finalizar jornada" en el Dashboard + pantalla de Perfil (datos, apagar biometría/push, logout) | ✅ |
-| 8 | Vacaciones y licencias (saldo, pedir, ver solicitudes propias) | pendiente |
+| 8 | Vacaciones y beneficios: saldos + pedir + ver solicitudes (vacaciones/licencias, horas libres, días home) | ✅ — pendiente de probar en dispositivo real |
 | 9 | A evaluar más adelante: Backlog, self-view de Productividad, Accesos del proyecto, Briefs | pendiente |
 
 No hay modo offline en la v1 (se evalúa si se vuelve un problema real de uso

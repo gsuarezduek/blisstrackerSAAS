@@ -5,7 +5,7 @@ import { getBiometricEnabled, setBiometricEnabled, getPushDisabled } from '../ap
 import { isBiometricAvailable, authenticateAsync } from '../lib/biometrics'
 import { showAlert } from '../lib/alert'
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const { user, logout, togglePush } = useAuth()
   const [loading, setLoading] = useState(true)
   const [biometricAvailable, setBiometricAvailable] = useState(false)
@@ -70,6 +70,14 @@ export default function ProfileScreen() {
         ) : null}
       </View>
 
+      <Pressable style={styles.section} onPress={() => navigation.navigate('Benefits')}>
+        <View style={styles.row}>
+          <Text style={styles.rowIcon}>🏖️</Text>
+          <Text style={[styles.rowLabel, { flex: 1 }]}>Vacaciones y beneficios</Text>
+          <Text style={styles.chevron}>›</Text>
+        </View>
+      </Pressable>
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferencias</Text>
 
@@ -117,8 +125,10 @@ const styles = StyleSheet.create({
   section: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginTop: 12 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', marginBottom: 12 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 },
+  rowIcon: { fontSize: 18 },
   rowLabel: { fontSize: 14, color: '#1a1a1a', fontWeight: '600' },
   rowHint: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  chevron: { fontSize: 20, color: '#d1d5db' },
   logoutButton: { marginTop: 24, alignItems: 'center', paddingVertical: 14 },
   logoutText: { color: '#dc2626', fontWeight: '700', fontSize: 15 },
 })

@@ -16,6 +16,7 @@ import ChatScreen from '../screens/ChatScreen'
 import ProjectListScreen from '../screens/ProjectListScreen'
 import ProjectDetailScreen from '../screens/ProjectDetailScreen'
 import ProfileScreen from '../screens/ProfileScreen'
+import BenefitsScreen from '../screens/BenefitsScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -68,6 +69,7 @@ export default function RootNavigator() {
             <Stack.Screen name="Projects" component={ProjectListScreen} />
             <Stack.Screen name="ProjectDetail" component={ProjectDetailScreen} options={{ headerShown: true }} />
             <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, title: 'Mi perfil' }} />
+            <Stack.Screen name="Benefits" component={BenefitsScreen} />
           </>
         ) : pendingWorkspaces ? (
           <Stack.Screen name="WorkspaceSelect" component={WorkspaceSelectScreen} />
