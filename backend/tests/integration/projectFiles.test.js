@@ -253,6 +253,22 @@ describe('POST /files/:fileId/confirm', () => {
       data: expect.objectContaining({ mimeType: 'image/png' }),
     }))
   })
+
+  it('corrige el mimeType a application/pdf si el navegador declaró otra cosa (ej. octet-stream)', async () => {
+    mockBase()
+    const PDF = Buffer.from('%PDF-1.4\n%âãÏÓ\n1 0 obj')
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ status: 'pending', mimeType: 'application/octet-stream' }))
+    objectStorage.headObject.mockResolvedValue({ size: 5000 })
+    objectStorage.getObjectHead.mockResolvedValue(PDF)
+    prisma.projectFile.update.mockResolvedValue(dbItem({ status: 'ready', mimeType: 'application/pdf' }))
+
+    const res = await req('post', `${BASE}/1/confirm`).send({})
+
+    expect(res.status).toBe(200)
+    expect(prisma.projectFile.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ mimeType: 'application/pdf' }),
+    }))
+  })
 })
 
 describe('PATCH /files/:itemId (mover/renombrar)', () => {
@@ -477,6 +493,21 @@ describe('GET /files/:fileId/download', () => {
     expect(res.headers['content-disposition']).toContain('informe final.pdf')
     expect(Buffer.isBuffer(res.body) ? res.body.toString() : res.text).toBe('contenido')
     expect(objectStorage.getObjectStream).toHaveBeenCalledWith('files/1/a.pdf')
+  })
+
+  it('usa file.mimeType (validado en confirm) aunque R2 tenga guardado otro Content-Type', async () => {
+    mockBase()
+    prisma.projectFile.findFirst.mockResolvedValue(dbItem({ objectKey: 'files/1/a.pdf', mimeType: 'application/pdf' }))
+    const { Readable } = require('stream')
+    // R2 quedó con el Content-Type que declaró el navegador al subir (mal, en
+    // este caso) — no debe filtrarse a la respuesta.
+    objectStorage.getObjectStream.mockResolvedValue({
+      body: Readable.from([Buffer.from('%PDF-1.4')]), contentType: 'application/octet-stream', contentLength: 8,
+    })
+
+    const res = await req('get', `${BASE}/1/download?inline=1`)
+
+    expect(res.headers['content-type']).toBe('application/pdf')
   })
 
   it('?inline=1 pide Content-Disposition inline (para <video>/<iframe>)', async () => {

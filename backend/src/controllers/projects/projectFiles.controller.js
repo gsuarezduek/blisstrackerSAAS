@@ -13,6 +13,7 @@ const objectStorage = require('../../services/objectStorage.service')
 const { getSetting } = require('../../lib/platformSettings')
 const { detectImageType } = require('../../lib/imageType')
 const { detectVideoType } = require('../../lib/mediaType')
+const { detectDocumentType } = require('../../lib/documentType')
 const { resolveProjectId } = require('./_shared')
 
 const MAX_FILE_BYTES = 500 * 1024 * 1024 // 500MB — un solo PUT sin reintento parcial; más grande necesitaría multiparte
@@ -294,7 +295,12 @@ async function confirmFile(req, res, next) {
 
     let mimeType = file.mimeType
     const headerBuf = await objectStorage.getObjectHead(file.objectKey, 32)
-    mimeType = detectImageType(headerBuf) || detectVideoType(headerBuf) || mimeType
+    // PDF se corrige siempre por firma "%PDF" (sin ambigüedad, a diferencia de
+    // docx que es un ZIP genérico) — así el preview inline funciona aunque el
+    // navegador haya declarado un Content-Type distinto al subir (ej. algunos
+    // navegadores/OS mandan application/octet-stream para ciertos PDFs).
+    mimeType = detectImageType(headerBuf) || detectVideoType(headerBuf)
+      || (detectDocumentType(headerBuf) === 'pdf' ? 'application/pdf' : null) || mimeType
     if (DENIED_MIME.includes(mimeType)) return reject(400, 'Este tipo de archivo no está permitido.')
 
     let posterKey = null
@@ -515,8 +521,13 @@ async function downloadFile(req, res, next) {
     })
     if (!file || !file.objectKey) return res.status(404).json({ error: 'Archivo no encontrado' })
 
-    const { body, contentType, contentLength } = await objectStorage.getObjectStream(file.objectKey)
-    res.setHeader('Content-Type', contentType || file.mimeType || 'application/octet-stream')
+    const { body, contentLength } = await objectStorage.getObjectStream(file.objectKey)
+    // `file.mimeType` (validado por magic bytes en confirmFile) es la fuente de
+    // verdad — no lo que R2 tiene guardado como Content-Type del objeto, que es
+    // solo lo que el navegador declaró al momento del PUT y puede estar mal
+    // (ej. algunos navegadores mandan application/octet-stream para un PDF real,
+    // lo que rompía el <iframe> de preview aunque el archivo fuera válido).
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream')
     if (contentLength != null) res.setHeader('Content-Length', contentLength)
     const disposition = req.query.inline === '1' ? 'inline' : 'attachment'
     res.setHeader('Content-Disposition', `${disposition}; filename="${file.name.replace(/"/g, "'")}"`)

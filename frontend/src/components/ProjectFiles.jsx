@@ -498,7 +498,10 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
         setHighlightId(data.file.id)
         setTimeout(() => setHighlightId(null), 2500)
         if (data.file.mimeType?.startsWith('image/') && data.file.url) setLightbox(data.file.url)
-        else if (data.file.previewable) openPreview(data.file)
+        // PDF NO se auto-abre acá: no hay gesto de click en este momento (es un
+        // efecto al montar), así que window.open quedaría bloqueado como popup
+        // — el highlight ya señala el archivo, un click del usuario lo abre bien.
+        else if (data.file.mimeType?.startsWith('video/') && data.file.previewable) openPreview(data.file)
       } catch {
         setError('No se encontró el archivo del enlace (puede haber sido eliminado)')
       }
@@ -512,10 +515,15 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     onUploaded: () => reload(folderId),
   })
 
+  // Abre un ítem según su tipo: carpeta navega, imagen va al lightbox, video
+  // se previsualiza inline (modal), PDF se abre en una pestaña nueva (más
+  // confiable entre navegadores que un <iframe> con un blob — Safari/iOS en
+  // particular no siempre renderiza un PDF-blob embebido), el resto descarga.
   function openItem(item) {
     if (item.type === 'folder') { setFolderId(item.id); return }
     const isImage = item.mimeType?.startsWith('image/')
     if (isImage && item.url) { setLightbox(item.url); return }
+    if (item.mimeType === 'application/pdf') { openPdfInNewTab(item); return }
     if (!isImage && item.previewable) { openPreview(item); return }
     handleDownload(item)
   }
@@ -530,6 +538,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     setFolderId(parentId)
     const isImage = item.mimeType?.startsWith('image/')
     if (isImage && item.url) { setLightbox(item.url); return }
+    if (item.mimeType === 'application/pdf') { openPdfInNewTab(item); return }
     if (!isImage && item.previewable) { openPreview(item); return }
     handleDownload(item)
   }
@@ -541,6 +550,24 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
       else next.add(item.id)
       return next
     })
+  }
+
+  // Abre la pestaña VACÍA de forma sincrónica (dentro del gesto del click, o
+  // el navegador la bloquea como popup) y recién después la apunta al blob ya
+  // descargado — si el navegador igual bloqueó la apertura (`win` null), cae
+  // al modal inline de siempre como fallback.
+  function openPdfInNewTab(item) {
+    const win = window.open('', '_blank')
+    if (!win) { openPreview(item); return }
+    ;(async () => {
+      try {
+        const res = await api.get(`/projects/${projectId}/files/${item.id}/download?inline=1`, { responseType: 'blob' })
+        win.location.href = URL.createObjectURL(res.data)
+      } catch {
+        win.close()
+        setError('No se pudo cargar la vista previa del PDF')
+      }
+    })()
   }
 
   async function openPreview(item) {
