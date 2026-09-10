@@ -14,6 +14,7 @@ const { getSetting } = require('../../lib/platformSettings')
 const { detectImageType } = require('../../lib/imageType')
 const { detectVideoType } = require('../../lib/mediaType')
 const { detectDocumentType } = require('../../lib/documentType')
+const { safeContentDisposition } = require('../../lib/contentDisposition')
 const { resolveProjectId } = require('./_shared')
 
 const MAX_FILE_BYTES = 500 * 1024 * 1024 // 500MB — un solo PUT sin reintento parcial; más grande necesitaría multiparte
@@ -529,8 +530,8 @@ async function downloadFile(req, res, next) {
     // lo que rompía el <iframe> de preview aunque el archivo fuera válido).
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream')
     if (contentLength != null) res.setHeader('Content-Length', contentLength)
-    const disposition = req.query.inline === '1' ? 'inline' : 'attachment'
-    res.setHeader('Content-Disposition', `${disposition}; filename="${file.name.replace(/"/g, "'")}"`)
+    const type = req.query.inline === '1' ? 'inline' : 'attachment'
+    res.setHeader('Content-Disposition', safeContentDisposition(file.name, { type }))
     body.on('error', next)
     body.pipe(res)
   } catch (err) { next(err) }
@@ -576,4 +577,7 @@ module.exports = {
   // exportados para tests
   MAX_FILE_BYTES,
   DENIED_MIME,
+  // exportados para el controller de solo lectura del portal de cliente
+  shapeItem,
+  buildPath,
 }

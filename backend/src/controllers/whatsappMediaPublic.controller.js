@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma')
 const objectStorage = require('../services/objectStorage.service')
+const { safeContentDisposition } = require('../lib/contentDisposition')
 
 /**
  * GET /api/public/whatsapp-media/:id
@@ -29,7 +30,7 @@ async function serveMedia(req, res, next) {
     res.set('Content-Type', media.mimeType)
     res.set('Cache-Control', 'public, max-age=31536000, immutable')
     if (media.fileName) {
-      res.set('Content-Disposition', `inline; filename="${media.fileName.replace(/[\r\n"]/g, '')}"`)
+      res.set('Content-Disposition', safeContentDisposition(media.fileName, { type: 'inline' }))
     }
     res.send(Buffer.from(media.mediaData))
   } catch (err) { next(err) }

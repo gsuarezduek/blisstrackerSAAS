@@ -19,6 +19,11 @@ const {
   requestChanges,
   addPortalComment,
 } = require('../controllers/contentPortal.controller')
+const {
+  listPortalFiles,
+  searchPortalFiles,
+  downloadPortalFile,
+} = require('../controllers/clientPortalFiles.controller')
 const { clientPortalAuth } = require('../middleware/clientPortalAuth')
 
 // Sin auth — SOLO branding (nombre de proyecto + logo/color) para pintar la
@@ -49,5 +54,12 @@ router.get ('/client-portal/:slug/content/:pid',                clientPortalAuth
 router.post('/client-portal/:slug/content/:pid/approve',        clientPortalAuth, approvePiece)
 router.post('/client-portal/:slug/content/:pid/request-changes', clientPortalAuth, requestChanges)
 router.post('/client-portal/:slug/content/:pid/comments',       clientPortalAuth, addPortalComment)
+
+// Archivos — vista de solo lectura del mismo repositorio (ProjectFile) que ve
+// el equipo interno. Gateado por ProjectClientPortal.showFiles + Project.filesEnabled
+// (chequeados dentro de cada handler, ver clientPortalFiles.controller.js).
+router.get('/client-portal/:slug/files',                  clientPortalAuth, listPortalFiles)
+router.get('/client-portal/:slug/files/search',            clientPortalAuth, searchPortalFiles)
+router.get('/client-portal/:slug/files/:fileId/download',  clientPortalAuth, downloadPortalFile)
 
 module.exports = router

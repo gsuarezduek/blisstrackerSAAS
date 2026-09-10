@@ -31,7 +31,7 @@ const LIVE_SECTIONS = [
 // si el módulo Contenido está habilitado, el calendario de piezas (aprobación).
 // Los contactos autorizados (multi-contacto) se administran en ClientPortalContacts,
 // con sus propios endpoints — no dependen de este "Guardar".
-export default function ClientPortalConfig({ projectId, canEdit }) {
+export default function ClientPortalConfig({ projectId, canEdit, filesEnabled }) {
   const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
   const [portal,  setPortal]  = useState(null)
   const [loading, setLoading] = useState(true)
@@ -60,8 +60,8 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
 
   function openEdit() {
     setDraft(portal
-      ? { slug: portal.slug, active: portal.active, contentEnabled: portal.contentEnabled, showMeetings: portal.showMeetings, showTeam: portal.showTeam, showObjectives: portal.showObjectives, liveSections: portal.liveSections }
-      : { slug: '', active: true, contentEnabled: false, showMeetings: false, showTeam: false, showObjectives: false, liveSections: [] })
+      ? { slug: portal.slug, active: portal.active, contentEnabled: portal.contentEnabled, showMeetings: portal.showMeetings, showTeam: portal.showTeam, showObjectives: portal.showObjectives, showFiles: portal.showFiles, liveSections: portal.liveSections }
+      : { slug: '', active: true, contentEnabled: false, showMeetings: false, showTeam: false, showObjectives: false, showFiles: false, liveSections: [] })
     setError('')
     setEditing(true)
   }
@@ -85,6 +85,7 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
         showMeetings:   draft.showMeetings,
         showTeam:       draft.showTeam,
         showObjectives: draft.showObjectives,
+        showFiles:      draft.showFiles,
         liveSections:   draft.liveSections,
       })
       setPortal(data.portal)
@@ -176,6 +177,7 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
               {portal.showMeetings && ' · Próxima reunión visible'}
               {portal.showTeam && ' · Equipo visible'}
               {portal.showObjectives && ' · Objetivos visibles'}
+              {portal.showFiles && ' · Archivos visibles'}
             </p>
           </div>
 
@@ -287,6 +289,17 @@ export default function ClientPortalConfig({ projectId, canEdit }) {
             />
             <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el cumplimiento de objetivos en "Inicio"</span>
           </label>
+          {filesEnabled && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={draft.showFiles}
+                onChange={e => setDraft(prev => ({ ...prev, showFiles: e.target.checked }))}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el repositorio de Archivos del proyecto (solo lectura, mismos archivos que ve el equipo)</span>
+            </label>
+          )}
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">Secciones habilitadas para "Datos Actuales"</p>
             <div className="flex flex-wrap gap-1.5">

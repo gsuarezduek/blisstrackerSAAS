@@ -47,6 +47,7 @@ export default function PortalHome({ meta, onNavigate, brandPrimary }) {
   const team           = meta.team || []
   const objectives     = meta.objectives || []
   const hasLiveSections = !!meta.hasLiveSections
+  const showFiles      = !!meta.showFiles
 
   const cards = []
 
@@ -90,6 +91,14 @@ export default function PortalHome({ meta, onNavigate, brandPrimary }) {
     cards.push(
       <HomeCard key="vivo" icon="📊" title="Datos Actuales" onClick={() => onNavigate('vivo')} brandPrimary={brandPrimary}>
         <p>Métricas actualizadas de tu proyecto, en tiempo real.</p>
+      </HomeCard>
+    )
+  }
+
+  if (showFiles) {
+    cards.push(
+      <HomeCard key="archivos" icon="🗂️" title="Archivos" onClick={() => onNavigate('archivos')} brandPrimary={brandPrimary}>
+        <p>Todos los archivos y carpetas del proyecto.</p>
       </HomeCard>
     )
   }

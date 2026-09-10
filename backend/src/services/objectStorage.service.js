@@ -25,6 +25,7 @@ const {
   GetObjectCommand,
 } = require('@aws-sdk/client-s3')
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
+const { safeContentDisposition } = require('../lib/contentDisposition')
 
 const {
   R2_ACCOUNT_ID,
@@ -183,7 +184,7 @@ async function presignGet(key, { expiresIn = 300, filename } = {}) {
   const cmd = new GetObjectCommand({
     Bucket: R2_BUCKET,
     Key: key,
-    ...(filename ? { ResponseContentDisposition: `attachment; filename="${filename.replace(/"/g, "'")}"` } : {}),
+    ...(filename ? { ResponseContentDisposition: safeContentDisposition(filename) } : {}),
   })
   return getSignedUrl(getClient(), cmd, { expiresIn })
 }

@@ -54,6 +54,7 @@ function shapePortal(portal, workspaceSlug) {
     showMeetings:   portal.showMeetings,
     showTeam:       portal.showTeam,
     showObjectives: portal.showObjectives,
+    showFiles:      portal.showFiles,
     hasBanner:      !!portal.bannerMimeType,
     liveSections:   JSON.parse(portal.liveSections || '[]'),
     contactCount:   portal.contacts?.length ?? 0,
@@ -132,7 +133,7 @@ async function saveClientPortal(req, res, next) {
       return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
     }
 
-    const { slug, active, contentEnabled, showMeetings, showTeam, showObjectives, liveSections, clientEmail, clientName } = req.body || {}
+    const { slug, active, contentEnabled, showMeetings, showTeam, showObjectives, showFiles, liveSections, clientEmail, clientName } = req.body || {}
 
     if (!slug || !SLUG_RE.test(slug)) {
       return res.status(400).json({ error: 'El slug debe tener 3-40 caracteres: minúsculas, números y guiones.' })
@@ -151,6 +152,7 @@ async function saveClientPortal(req, res, next) {
       showMeetings:   showMeetings === true,
       showTeam:       showTeam === true,
       showObjectives: showObjectives === true,
+      showFiles:      showFiles === true,
       liveSections:   JSON.stringify(cleanSections),
     }
 
@@ -414,7 +416,7 @@ async function getPortalData(req, res, next) {
     const portal = req.clientPortal
 
     const [project, workspace, reportRows, latestReport, briefRows, contentFlag, nextMeeting, allMeetings] = await Promise.all([
-      prisma.project.findUnique({ where: { id: portal.projectId }, select: { id: true, name: true } }),
+      prisma.project.findUnique({ where: { id: portal.projectId }, select: { id: true, name: true, filesEnabled: true } }),
       prisma.workspace.findUnique({
         where:  { id: portal.workspaceId },
         select: { slug: true, name: true, companyName: true, companyDescription: true, industry: true, companyWebsite: true, logoData: true, brandColors: true, brandFonts: true, disabledFeatureKeys: true },
@@ -575,6 +577,7 @@ async function getPortalData(req, res, next) {
       team,
       showObjectives: portal.showObjectives,
       objectives: objectivesResults,
+      showFiles: portal.showFiles && project?.filesEnabled !== false,
     })
   } catch (err) { next(err) }
 }

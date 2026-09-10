@@ -9,6 +9,7 @@ import PortalLoginGate from '../components/portal/PortalLoginGate'
 import ClientContentTab from '../components/portal/ClientContentTab'
 import PortalHome from '../components/portal/PortalHome'
 import ClientTeamTab from '../components/portal/ClientTeamTab'
+import ClientFilesTab from '../components/portal/ClientFilesTab'
 import PortalFooter from '../components/portal/PortalFooter'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -226,6 +227,9 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportTok
         {meta.hasLiveSections && (
           <TabButton active={tab === 'vivo'} onClick={() => setTab('vivo')} brandPrimary={brandPrimary}>Datos Actuales</TabButton>
         )}
+        {meta.showFiles && (
+          <TabButton active={tab === 'archivos'} onClick={() => setTab('archivos')} brandPrimary={brandPrimary}>Archivos</TabButton>
+        )}
       </div>
 
       {tab === 'inicio' && <PortalHome meta={meta} onNavigate={setTab} brandPrimary={brandPrimary} />}
@@ -274,6 +278,12 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportTok
       {tab === 'vivo' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
           <LiveDataPanel slug={slug} token={token} requireReauth={requireReauth} workspace={workspace} />
+        </div>
+      )}
+
+      {tab === 'archivos' && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-6">
+          <ClientFilesTab slug={slug} token={token} requireReauth={requireReauth} />
         </div>
       )}
     </>

@@ -2,28 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api/client'
 import LoadingSpinner from './LoadingSpinner'
 import { useProjectFileUpload, fmtMb, MAX_FILE_BYTES } from './projectFilesUpload'
-
-function fmtBytes(n) {
-  if (n == null) return ''
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`
-  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`
-}
-
-function iconFor(mimeType) {
-  if (!mimeType) return '📎'
-  if (mimeType.startsWith('image/')) return '🖼️'
-  if (mimeType.startsWith('video/')) return '🎬'
-  if (mimeType.startsWith('audio/')) return '🎵'
-  if (mimeType === 'application/pdf') return '📕'
-  if (mimeType.includes('word')) return '📝'
-  if (mimeType.includes('sheet') || mimeType.includes('excel')) return '📊'
-  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📈'
-  if (mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('rar') || mimeType.includes('tar')) return '📦'
-  if (mimeType.startsWith('text/')) return '📄'
-  return '📎'
-}
+import { fmtBytes, iconFor } from '../lib/fileIcons'
 
 // ─── Modales chicos (nueva carpeta / renombrar / mover / confirmar borrado) ───
 

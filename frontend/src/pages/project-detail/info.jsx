@@ -171,6 +171,7 @@ export default function InfoTab({
       <ClientPortalConfig
         projectId={data.project.id}
         canEdit={authUser?.isAdmin || (data.project.members ?? []).some(pm => pm.user.id === authUser?.id)}
+        filesEnabled={data.project.filesEnabled !== false}
       />
 
       {/* Equipo */}

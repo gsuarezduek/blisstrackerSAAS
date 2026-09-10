@@ -4,6 +4,7 @@ const { getSetting } = require('../lib/platformSettings')
 const { emitTo } = require('../lib/socket')
 const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
+const { safeContentDisposition } = require('../lib/contentDisposition')
 const { resolveCtx, loadPiece, formatPiece, formatAsset } = require('./content.controller')
 
 // El asset cambió, pero lo que muestran las vistas (Kanban/Tabla/Calendario) es
@@ -424,7 +425,7 @@ async function serveContentAsset(req, res, next) {
     res.set('Content-Type', asset.mimeType)
     res.set('X-Content-Type-Options', 'nosniff')
     if (wantsDownload) {
-      res.set('Content-Disposition', `attachment; filename="${downloadName}"`)
+      res.set('Content-Disposition', safeContentDisposition(downloadName))
       res.set('Cache-Control', 'no-store')
     } else {
       res.set('Cache-Control', 'public, max-age=31536000, immutable')

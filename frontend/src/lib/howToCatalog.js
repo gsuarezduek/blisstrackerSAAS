@@ -75,8 +75,9 @@ export const HOW_TO_CATALOG = {
   'portal.config': {
     title: '¿Cómo funciona el Portal de cliente?',
     body: [
-      'Es un link público por proyecto (sin usuario del sistema) donde el cliente ve Informes y Briefs siempre, y — si lo habilitás acá — Datos en vivo y Contenido.',
-      'Para Datos en vivo y Contenido el cliente necesita identificarse: pide un código de 6 dígitos por email (no usa contraseña) a uno de los Contactos que cargues en esta ficha.',
+      'Es un link público por proyecto (sin usuario del sistema) donde el cliente ve Informes y Briefs siempre, y — si lo habilitás acá — Datos en vivo, Contenido y Archivos.',
+      'Para Datos en vivo, Contenido y Archivos el cliente necesita identificarse: pide un código de 6 dígitos por email (no usa contraseña) a uno de los Contactos que cargues en esta ficha.',
+      'Archivos muestra el mismo repositorio que ve el equipo (todas las carpetas y archivos del proyecto), en modo solo lectura: el cliente puede ver y descargar, pero no subir, mover ni borrar nada.',
       'Solo los contactos con "Puede aprobar" activado pueden aprobar o pedir cambios en una pieza de Contenido — el resto del portal lo pueden ver igual, pero no decidir.',
     ],
   },
