@@ -26,7 +26,7 @@ function StatusSelect({ status, saving, onChange, title }) {
 }
 
 const STAT_CARDS = [
-  { key: 'totalLeads',          label: 'Total de leads',        icon: '📇', accent: 'text-gray-900 dark:text-white' },
+  { key: 'totalLeads',          label: 'Leads nuevos (mes)',    icon: '📇', accent: 'text-gray-900 dark:text-white' },
   { key: 'proposalsThisMonth',  label: 'Propuestas del mes',    icon: '📄', accent: 'text-gray-900 dark:text-white' },
   { key: 'inProposal',          label: 'Por cerrar (Propuesta)', icon: '⏳', accent: 'text-amber-600 dark:text-amber-400' },
   { key: 'wonThisMonth',        label: 'Ganados este mes',      icon: '🏆', accent: 'text-green-600 dark:text-green-400' },

@@ -18,7 +18,7 @@ async function getDashboard(req, res, next) {
     const todayStr = todayString(tz)
 
     const [totalLeads, proposalsThisMonth, inProposal, wonThisMonth, lostThisMonth, actions] = await Promise.all([
-      prisma.lead.count({ where: { workspaceId } }),
+      prisma.lead.count({ where: { workspaceId, createdAt: { gte: start, lt: end } } }),
       prisma.proposal.count({ where: { workspaceId, createdAt: { gte: start, lt: end } } }),
       prisma.lead.count({ where: { workspaceId, status: 'propuesta' } }),
       prisma.lead.count({ where: { workspaceId, wonAt:  { gte: start, lt: end } } }),
