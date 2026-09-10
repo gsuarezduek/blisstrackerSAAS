@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
+import CompanyPicker from './CompanyPicker'
 
 const input = 'w-full px-3 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400'
 
@@ -22,6 +23,7 @@ export default function WhatsappLinkContactModal({ conversation, onClose, onLink
   const [name, setName] = useState('')
   const [title, setTitle] = useState('')
   const [email, setEmail] = useState('')
+  const [createLead, setCreateLead] = useState(true) // solo aplica en modo 'new' — crea además una oportunidad en el Pipeline
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -51,7 +53,7 @@ export default function WhatsappLinkContactModal({ conversation, onClose, onLink
       if (mode === 'existing') {
         await api.patch(`/whatsapp/conversations/${conversation.id}/contact`, { contactId })
       } else {
-        const payload = { name, title, email }
+        const payload = { name, title, email, createLead }
         if (companyMode === 'existing') payload.companyId = companyId
         else payload.newCompany = { name: newCompanyName }
         await api.post(`/whatsapp/conversations/${conversation.id}/contact`, payload)
@@ -84,10 +86,7 @@ export default function WhatsappLinkContactModal({ conversation, onClose, onLink
         <form onSubmit={submit} className="space-y-3">
           {mode === 'existing' ? (
             <>
-              <select className={input} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-                <option value="">Elegí una empresa…</option>
-                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <CompanyPicker companies={companies} value={companyId} onChange={setCompanyId} />
               {companyId && (
                 contacts.length > 0 ? (
                   <select className={input} value={contactId} onChange={e => setContactId(e.target.value)}>
@@ -110,10 +109,7 @@ export default function WhatsappLinkContactModal({ conversation, onClose, onLink
                 </button>
               </div>
               {companyMode === 'existing' ? (
-                <select className={input} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-                  <option value="">Elegí una empresa…</option>
-                  {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <CompanyPicker companies={companies} value={companyId} onChange={setCompanyId} />
               ) : (
                 <input className={input} placeholder="Nombre de la empresa *" value={newCompanyName} onChange={e => setNewCompanyName(e.target.value)} />
               )}
@@ -121,6 +117,10 @@ export default function WhatsappLinkContactModal({ conversation, onClose, onLink
               <input className={input} placeholder="Cargo" value={title} onChange={e => setTitle(e.target.value)} />
               <input className={input} placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
               <p className="text-xs text-gray-400">Teléfono: {conversation.phoneE164} (de la conversación)</p>
+              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 pt-1">
+                <input type="checkbox" checked={createLead} onChange={e => setCreateLead(e.target.checked)} className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-400" />
+                Crear también como oportunidad en Ventas
+              </label>
             </>
           )}
 

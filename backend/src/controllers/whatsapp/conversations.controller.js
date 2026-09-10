@@ -384,17 +384,24 @@ async function linkContact(req, res, next) {
 }
 
 /**
- * POST /api/whatsapp/conversations/:id/contact  { name, title?, email?, companyId?, newCompany? }
+ * POST /api/whatsapp/conversations/:id/contact  { name, title?, email?, companyId?, newCompany?, createLead? }
  * Crea un Contact nuevo a partir de una conversación sin vincular y lo
  * asocia — mismo patrón empresa existente/nueva que createLead
  * (leads.controller.js). El teléfono del contacto sale de la propia
  * conversación (phoneE164), no se vuelve a pedir.
+ *
+ * `createLead: true` (opcional, checkbox en el frontend) además crea un Lead
+ * con ese contacto como principal — sin esto, Contact/Company quedan "sueltos"
+ * (WhatsApp los vincula pero no generan ninguna oportunidad en el Pipeline).
+ * Mismos defaults que un alta manual sin datos comerciales: status inicial
+ * 'prospecto', origin 'whatsapp', responsable = quien vincula la conversación.
  */
 async function createContactFromConversation(req, res, next) {
   try {
     const workspaceId = req.workspace.id
+    const userId = req.user.userId
     const conversation = await assertConversation(req)
-    const { name, title, email, companyId, newCompany } = req.body
+    const { name, title, email, companyId, newCompany, createLead } = req.body
     if (!name || !name.trim()) return res.status(400).json({ error: 'El nombre del contacto es requerido' })
 
     let resolvedCompanyId = companyId ? Number(companyId) : null
@@ -406,12 +413,12 @@ async function createContactFromConversation(req, res, next) {
       if (!c) return res.status(404).json({ error: 'Empresa no encontrada' })
     }
 
-    const contact = await prisma.$transaction(async (tx) => {
+    const { contact, lead } = await prisma.$transaction(async (tx) => {
       if (!resolvedCompanyId) {
         const company = await tx.company.create({ data: { workspaceId, name: newCompany.name.trim() } })
         resolvedCompanyId = company.id
       }
-      return tx.contact.create({
+      const contact = await tx.contact.create({
         data: {
           workspaceId,
           companyId: resolvedCompanyId,
@@ -421,14 +428,32 @@ async function createContactFromConversation(req, res, next) {
           phone: conversation.phoneE164,
         },
       })
+
+      let lead = null
+      if (createLead) {
+        lead = await tx.lead.create({
+          data: {
+            workspaceId,
+            companyId: resolvedCompanyId,
+            primaryContactId: contact.id,
+            ownerId: userId,
+            status: 'prospecto',
+            origin: 'whatsapp',
+            createdById: userId,
+          },
+        })
+      }
+      return { contact, lead }
     })
+
+    if (lead) await logLeadEvent({ workspaceId, leadId: lead.id, userId, type: 'lead_created', content: 'creó el lead' })
 
     const updated = await prisma.whatsappConversation.update({
       where: { id: conversation.id },
       data: { contactId: contact.id },
       include: { contact: { select: { id: true, name: true, companyId: true } } },
     })
-    res.status(201).json(updated)
+    res.status(201).json({ ...updated, leadId: lead?.id ?? null })
   } catch (err) { next(err) }
 }
 

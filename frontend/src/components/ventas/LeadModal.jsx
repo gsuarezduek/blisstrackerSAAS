@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { LEAD_STATUSES, LEAD_ORIGINS } from './salesCatalog'
+import CompanyPicker from './CompanyPicker'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
@@ -103,10 +104,12 @@ export default function LeadModal({ lead, companies = [], team = [], onClose, on
                   </div>
                 </div>
                 {companyMode === 'existing' ? (
-                  <select className={input} value={companyId} onChange={e => { setCompanyId(e.target.value); setPrimaryContactId(''); setContactMode('none') }}>
-                    <option value="">Elegir empresa…</option>
-                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <CompanyPicker
+                    companies={companies}
+                    value={companyId}
+                    onChange={v => { setCompanyId(v); setPrimaryContactId(''); setContactMode('none') }}
+                    placeholder="Elegir empresa…"
+                  />
                 ) : (
                   <div className="space-y-2">
                     <input className={input} placeholder="Nombre de la empresa *" value={newCompany.name} onChange={e => setNewCompany({ ...newCompany, name: e.target.value })} />
