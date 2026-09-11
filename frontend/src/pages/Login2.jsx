@@ -12,10 +12,9 @@ import { isWorkspaceSubdomain } from '../utils/domain'
 
 function workspaceUrl(slug, token) {
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-  // En producción: subdominio real. En localhost: misma pestaña con ?ws= para conservar el slug.
-  const isLocal = !window.location.hostname.match(
-    new RegExp(`\\.${appDomain.replace(/\./g, '\\.')}$`)
-  )
+  // En producción: subdominio real. En localhost: misma pestaña con ?ws= para conservar
+  // el slug (mismo criterio que Register.jsx — "local" = dev server, no dominio raíz).
+  const isLocal = window.location.hostname === 'localhost'
   if (isLocal) return `/auth?token=${token}&ws=${slug}`
   return `https://${slug}.${appDomain}/auth?token=${token}`
 }

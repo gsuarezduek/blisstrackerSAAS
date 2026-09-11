@@ -122,8 +122,14 @@ export default function Register() {
       // arriba (cuenta nueva), así que entra directo a su workspace nuevo en vez de pasar
       // por la pantalla de login (mismo mecanismo que usa el login normal: AuthCallback en
       // /auth?token= guarda el JWT y redirige al Dashboard).
+      // "Local" = corriendo el dev server (sin DNS wildcard real para navegar a
+      // slug.blisstracker.app). Antes se inferia comparando el hostname contra
+      // `.${domain}$` — pero esa regex nunca matchea el dominio raíz pelado
+      // (blisstracker.app, sin subdominio, que es justamente desde donde se registra
+      // un usuario nuevo en producción), así que en ese caso el "auto-login" quedaba
+      // pegado en el dominio raíz en vez de cruzar al subdominio nuevo.
       const domain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
-      const isLocal = !window.location.hostname.match(new RegExp(`\\.${domain.replace(/\./g, '\\.')}$`))
+      const isLocal = window.location.hostname === 'localhost'
       if (isLocal) {
         navigate(`/auth?token=${data.token}&ws=${slug}`)
       } else {
