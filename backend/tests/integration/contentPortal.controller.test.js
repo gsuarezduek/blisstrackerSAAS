@@ -141,21 +141,37 @@ describe('GET /content — listado', () => {
     expect(p).not.toHaveProperty('taskId')
     expect(p).not.toHaveProperty('order')
 
-    // El WHERE debe filtrar por PORTAL_VISIBLE_STATUSES en SQL, no en JS.
+    // El listado ya no filtra por estado — el cliente ve TODAS las piezas del
+    // proyecto (idea/producción/revisión interna incluidas), solo se excluyen
+    // las borradas (deletedAt).
     const call = prisma.contentPiece.findMany.mock.calls[0][0]
-    expect(call.where.status.in).toEqual(
-      expect.arrayContaining(['aprobacion', 'cambios', 'aprobado', 'programado', 'publicado']),
-    )
-    expect(call.where.status.in).not.toContain('idea')
-    expect(call.where.status.in).not.toContain('archivado')
+    expect(call.where).not.toHaveProperty('status')
+    expect(call.where.deletedAt).toBeNull()
+  })
+
+  it('incluye piezas en estados internos (idea/producción/revisión) — el cliente ve el pipeline completo', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    mockAccessGranted()
+    prisma.contentPiece.findMany.mockResolvedValue([
+      dbPiece({ id: 21, status: 'idea', copy: null, hashtags: null, assets: [] }),
+      dbPiece({ id: 22, status: 'archivado' }),
+    ])
+
+    const res = await request(app)
+      .get(`/api/public/client-portal/${SLUG}/content`)
+      .set('Authorization', `Bearer ${legacyToken()}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.pieces.map(p => p.status)).toEqual(['idea', 'archivado'])
+    expect(res.body.pieces[0].canDecide).toBe(false)
   })
 })
 
 describe('GET /content/:pid — detalle + fuga de comentarios internos', () => {
-  it('404 si la pieza no está en un estado visible del portal', async () => {
+  it('404 si la pieza no existe (o es de otro proyecto/workspace)', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
     mockAccessGranted()
-    prisma.contentPiece.findFirst.mockResolvedValue(null) // el WHERE con status:{in:...} no matchea
+    prisma.contentPiece.findFirst.mockResolvedValue(null)
 
     const res = await request(app)
       .get(`/api/public/client-portal/${SLUG}/content/${PIECE_ID}`)

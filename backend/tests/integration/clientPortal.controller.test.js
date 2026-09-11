@@ -525,7 +525,7 @@ describe('Portal de cliente — meta completa (requiere token)', () => {
     prisma.projectBrief.findMany.mockResolvedValue([])
     prisma.featureFlag.findUnique.mockResolvedValue({ key: 'contenido', enabledGlobally: true, enabledWorkspaceIds: '[]' })
     prisma.contentPiece.count
-      .mockResolvedValueOnce(3) // visibleCount (PORTAL_VISIBLE_STATUSES)
+      .mockResolvedValueOnce(3) // visibleCount (cualquier pieza no borrada)
       .mockResolvedValueOnce(2) // pendingCount (status: 'aprobacion')
 
     const res = await request(app)

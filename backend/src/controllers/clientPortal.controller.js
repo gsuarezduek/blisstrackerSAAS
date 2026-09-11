@@ -12,7 +12,6 @@ const {
 const { buildPublicReportPayload } = require('./monthlyReport/reportPublic.controller')
 const { canWrite } = require('../lib/projectAccess')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
-const { PORTAL_VISIBLE_STATUSES } = require('../lib/contentCatalog')
 const { emitTo } = require('../lib/socket')
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
 
@@ -476,7 +475,10 @@ async function getPortalData(req, res, next) {
     // booleano + conteo, el detalle vive en /content). Requiere el flag
     // `contenido` grant (SuperAdmin) sin opt-out del workspace, ADEMÁS de
     // contentEnabled del portal (mismo criterio que assertContentAccess en
-    // contentPortal.controller.js).
+    // contentPortal.controller.js). hasContent ya no se limita a los estados
+    // `PORTAL_VISIBLE_STATUSES` — el portal ahora muestra TODAS las piezas del
+    // proyecto (cualquier estado), así que "hay contenido" = existe al menos
+    // una pieza sin borrar.
     let hasContent = false
     let pendingApprovalCount = 0
     let pendingPreview = []
@@ -484,14 +486,14 @@ async function getPortalData(req, res, next) {
       const disabledKeys = JSON.parse(workspace.disabledFeatureKeys || '[]')
       if (isFlagEnabledForWorkspace(contentFlag, portal.workspaceId, disabledKeys)) {
         const [visibleCount, pendingCount] = await Promise.all([
-          prisma.contentPiece.count({ where: { projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES } } }),
-          prisma.contentPiece.count({ where: { projectId: portal.projectId, workspaceId: portal.workspaceId, status: 'aprobacion' } }),
+          prisma.contentPiece.count({ where: { projectId: portal.projectId, workspaceId: portal.workspaceId, deletedAt: null } }),
+          prisma.contentPiece.count({ where: { projectId: portal.projectId, workspaceId: portal.workspaceId, status: 'aprobacion', deletedAt: null } }),
         ])
         hasContent = visibleCount > 0
         pendingApprovalCount = pendingCount
         if (pendingCount > 0) {
           const previewRows = await prisma.contentPiece.findMany({
-            where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, status: 'aprobacion' },
+            where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, status: 'aprobacion', deletedAt: null },
             select:  { id: true, title: true },
             orderBy: { updatedAt: 'desc' },
             take:    2,

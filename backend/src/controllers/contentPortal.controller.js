@@ -159,7 +159,11 @@ async function notifyTeamOfDecision(portal, piece, contact, decision, comment) {
 
 /**
  * GET /api/public/client-portal/:slug/content
- * Solo piezas en estados `portalVisible` — el WHERE filtra en SQL, nunca en JS.
+ * TODAS las piezas del proyecto, en cualquier estado — el cliente ve el pipeline
+ * completo (idea/producción/revisión interna incluidas) para estar al tanto del
+ * avance, no solo lo que ya está para aprobar. `formatPiecePublic` sigue siendo
+ * el único formatter acá (nunca internalNotes/designDetails/ownerId/taskId/order),
+ * así que mostrar más estados no expone más datos por pieza, solo más piezas.
  */
 async function listPortalPieces(req, res, next) {
   try {
@@ -168,7 +172,7 @@ async function listPortalPieces(req, res, next) {
     if (guard) return res.status(guard.status).json({ error: guard.error })
 
     const pieces = await prisma.contentPiece.findMany({
-      where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES }, deletedAt: null },
+      where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, deletedAt: null },
       select:  PUBLIC_PIECE_SELECT,
       orderBy: { updatedAt: 'desc' },
     })
@@ -179,7 +183,9 @@ async function listPortalPieces(req, res, next) {
 
 /**
  * GET /api/public/client-portal/:slug/content/:pid
- * Detalle + hilo de comentarios `visibility:'client'` únicamente.
+ * Detalle + hilo de comentarios `visibility:'client'` únicamente. Cualquier
+ * pieza del proyecto (no solo las que estaban en `PORTAL_VISIBLE_STATUSES`),
+ * mismo criterio que el listado de arriba.
  */
 async function getPortalPiece(req, res, next) {
   try {
@@ -188,7 +194,7 @@ async function getPortalPiece(req, res, next) {
     if (guard) return res.status(guard.status).json({ error: guard.error })
 
     const piece = await prisma.contentPiece.findFirst({
-      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES }, deletedAt: null },
+      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, deletedAt: null },
       select: PUBLIC_PIECE_SELECT,
     })
     if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
@@ -324,7 +330,8 @@ async function requestChanges(req, res, next) {
  * POST /api/public/client-portal/:slug/content/:pid/comments
  * Body: { body } — mensaje suelto del cliente en el hilo (fuera de aprobar/pedir
  * cambios). Sin @menciones ni email por comentario — solo aprobar/pedir cambios
- * disparan aviso al equipo (ver plan §7).
+ * disparan aviso al equipo (ver plan §7). Cualquier pieza del proyecto, mismo
+ * criterio que el listado.
  */
 async function addPortalComment(req, res, next) {
   try {
@@ -336,7 +343,7 @@ async function addPortalComment(req, res, next) {
     if (!contact) return res.status(403).json({ error: 'Iniciá sesión de nuevo para comentar', code: 'CONTACT_REQUIRED' })
 
     const piece = await prisma.contentPiece.findFirst({
-      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, status: { in: PORTAL_VISIBLE_STATUSES }, deletedAt: null },
+      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, deletedAt: null },
       select: { id: true },
     })
     if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })

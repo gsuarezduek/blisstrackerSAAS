@@ -5,12 +5,13 @@ import ClientPieceCard from './ClientPieceCard'
 const API = import.meta.env.VITE_API_URL || ''
 
 /**
- * Tab "Contenido" del portal de cliente — lista las piezas en estados
- * `portalVisible` (idea/producción/revisión NUNCA llegan acá, el backend ya
- * filtra por PORTAL_VISIBLE_STATUSES) agrupadas en "Esperando tu aprobación"
- * (canDecide) y el resto. Requiere identidad de contacto (canApprove/canDecide
- * vienen del lado del servidor) — un token legacy sin contactId puede leer
- * pero ClientPieceCard corta a re-login apenas intenta aprobar/comentar.
+ * Tab "Contenido" del portal de cliente — lista TODAS las piezas del proyecto,
+ * en cualquier estado (idea/producción/revisión interna incluidas: el cliente
+ * ve el pipeline completo para estar al tanto del avance), agrupadas en
+ * "Esperando tu aprobación" (canDecide) destacada arriba y el resto del
+ * contenido debajo. Requiere identidad de contacto (canApprove/canDecide vienen
+ * del lado del servidor) — un token legacy sin contactId puede leer pero
+ * ClientPieceCard corta a re-login apenas intenta aprobar/comentar.
  */
 export default function ClientContentTab({ slug, token, requireReauth, brandPrimary }) {
   const [pieces,  setPieces]  = useState([])
@@ -44,7 +45,7 @@ export default function ClientContentTab({ slug, token, requireReauth, brandPrim
     return (
       <div className="text-center py-10">
         <p className="text-3xl mb-2">📅</p>
-        <p className="text-sm text-gray-500">Todavía no hay piezas para revisar.</p>
+        <p className="text-sm text-gray-500">Todavía no hay piezas de contenido cargadas.</p>
       </div>
     )
   }
