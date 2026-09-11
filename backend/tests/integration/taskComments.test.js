@@ -54,9 +54,8 @@ function makeComment(overrides = {}) {
 describe('GET /api/tasks/:id/comments', () => {
   beforeEach(() => { jest.clearAllMocks(); mockWorkspace() })
 
-  it('devuelve 200 con lista de comentarios si el usuario es miembro', async () => {
+  it('devuelve 200 con lista de comentarios aunque el usuario no sea miembro del proyecto (equipo = etiqueta, no barrera)', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.findMany.mockResolvedValue([makeComment()])
 
     const res = await request(app)
@@ -67,18 +66,7 @@ describe('GET /api/tasks/:id/comments', () => {
     expect(res.status).toBe(200)
     expect(res.body).toHaveLength(1)
     expect(res.body[0].content).toBe('Buen trabajo')
-  })
-
-  it('devuelve 403 si el usuario no es miembro del proyecto', async () => {
-    prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue(null)
-
-    const res = await request(app)
-      .get('/api/tasks/10/comments')
-      .set('Authorization', authHeader(1))
-      .set('X-Workspace', WORKSPACE_SLUG)
-
-    expect(res.status).toBe(403)
+    expect(prisma.projectMember.findUnique).not.toHaveBeenCalled()
   })
 
   it('devuelve 403 si la tarea no existe', async () => {
@@ -105,7 +93,6 @@ describe('POST /api/tasks/:id/comments', () => {
 
   it('crea el comentario y devuelve 201', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.create.mockResolvedValue(makeComment())
     prisma.taskComment.findMany.mockResolvedValue([])
     prisma.notification.createMany.mockResolvedValue({ count: 1 })
@@ -122,7 +109,6 @@ describe('POST /api/tasks/:id/comments', () => {
 
   it('notifica al dueño de la tarea si el comentador es distinto', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 2 }))
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.create.mockResolvedValue(makeComment())
     prisma.taskComment.findMany.mockResolvedValue([])
     prisma.notification.createMany.mockResolvedValue({ count: 1 })
@@ -144,7 +130,6 @@ describe('POST /api/tasks/:id/comments', () => {
 
   it('no se auto-notifica cuando el comentador es el dueño de la tarea', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1 }))
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.create.mockResolvedValue(makeComment())
     prisma.taskComment.findMany.mockResolvedValue([])
 
@@ -159,7 +144,6 @@ describe('POST /api/tasks/:id/comments', () => {
 
   it('notifica también a comentadores previos únicos (sin duplicados)', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 2 }))
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.create.mockResolvedValue(makeComment())
     prisma.taskComment.findMany.mockResolvedValue([{ userId: 3 }])
     prisma.notification.createMany.mockResolvedValue({ count: 2 })
@@ -179,7 +163,6 @@ describe('POST /api/tasks/:id/comments', () => {
 
   it('notifica con TASK_MENTION a un nombre completo de 3 palabras (autocompletado)', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1 }))
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.workspaceMember.findMany.mockResolvedValue([
       { user: { id: 7, name: 'María José García' } },
     ])
@@ -204,7 +187,6 @@ describe('POST /api/tasks/:id/comments', () => {
 
   it('menciona a alguien del workspace que NO es del equipo del proyecto', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1 }))
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     // Resuelve contra TODO el workspace, no contra ProjectMember — no hace falta
     // (ni se consulta) que la persona mencionada sea parte del equipo del proyecto.
     prisma.workspaceMember.findMany.mockResolvedValue([
@@ -232,7 +214,6 @@ describe('POST /api/tasks/:id/comments', () => {
 
   it('no confunde un prefijo: "@Ana" no menciona a "Analía"', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask({ userId: 1 }))
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.workspaceMember.findMany.mockResolvedValue([
       { user: { id: 8, name: 'Analía Suárez' } },
     ])
@@ -250,7 +231,6 @@ describe('POST /api/tasks/:id/comments', () => {
 
   it('devuelve 400 si el texto está vacío', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
 
     const res = await request(app)
       .post('/api/tasks/10/comments')
@@ -259,19 +239,6 @@ describe('POST /api/tasks/:id/comments', () => {
       .send({ text: '   ' })
 
     expect(res.status).toBe(400)
-  })
-
-  it('devuelve 403 si el usuario no es miembro del proyecto', async () => {
-    prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue(null)
-
-    const res = await request(app)
-      .post('/api/tasks/10/comments')
-      .set('Authorization', authHeader(1))
-      .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ text: 'Hola' })
-
-    expect(res.status).toBe(403)
   })
 
   it('devuelve 401 sin autenticación', async () => {
@@ -290,7 +257,6 @@ describe('POST /api/tasks/:id/comments/:commentId/reactions', () => {
 
   it('agrega la reacción si no existía (toggle on) y devuelve 200', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.findFirst.mockResolvedValue(makeComment())
     prisma.taskCommentReaction.findUnique.mockResolvedValue(null)
     prisma.taskCommentReaction.create.mockResolvedValue({ id: 1 })
@@ -312,7 +278,6 @@ describe('POST /api/tasks/:id/comments/:commentId/reactions', () => {
 
   it('quita la reacción si ya existía (toggle off)', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.findFirst.mockResolvedValue(makeComment())
     prisma.taskCommentReaction.findUnique.mockResolvedValue({ id: 99 })
     prisma.taskComment.findUnique.mockResolvedValue({ ...makeComment(), reactions: [] })
@@ -330,7 +295,6 @@ describe('POST /api/tasks/:id/comments/:commentId/reactions', () => {
 
   it('devuelve 400 si el emoji está vacío', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
 
     const res = await request(app)
       .post('/api/tasks/10/comments/1/reactions')
@@ -343,7 +307,6 @@ describe('POST /api/tasks/:id/comments/:commentId/reactions', () => {
 
   it('devuelve 404 si el comentario no existe en esa tarea', async () => {
     prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue({ projectId: 5, userId: 1 })
     prisma.taskComment.findFirst.mockResolvedValue(null)
 
     const res = await request(app)
@@ -353,19 +316,6 @@ describe('POST /api/tasks/:id/comments/:commentId/reactions', () => {
       .send({ emoji: '👍' })
 
     expect(res.status).toBe(404)
-  })
-
-  it('devuelve 403 si el usuario no tiene acceso a la tarea', async () => {
-    prisma.task.findFirst.mockResolvedValue(makeTask())
-    prisma.projectMember.findUnique.mockResolvedValue(null)
-
-    const res = await request(app)
-      .post('/api/tasks/10/comments/1/reactions')
-      .set('Authorization', authHeader(1))
-      .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ emoji: '👍' })
-
-    expect(res.status).toBe(403)
   })
 
   it('devuelve 401 sin autenticación', async () => {

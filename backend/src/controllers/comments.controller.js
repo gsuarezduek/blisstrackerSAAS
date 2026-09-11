@@ -1,21 +1,16 @@
 const prisma = require('../lib/prisma')
-const { isAdmin } = require('../lib/projectAccess')
 const { resolveMentions } = require('../lib/mentions')
 const { sendPushToUser } = require('../services/pushNotification.service')
 
-async function getTaskWithAccess(taskId, userId, admin, workspaceId) {
-  // Scopear por workspace: evita que un admin lea/comente tareas de otros workspaces vía ID.
+// Mismo criterio "equipo = etiqueta, no barrera" que el resto del modelo de acceso a
+// proyectos (ver ProjectAccess/Links/lecturas): cualquier miembro activo del workspace
+// puede ver y comentar cualquier tarea, sin necesidad de ser ProjectMember. Solo se scopea
+// por workspace (evita leer/comentar tareas de otro workspace vía ID).
+async function getTaskWithAccess(taskId, workspaceId) {
   const task = await prisma.task.findFirst({
     where: { id: taskId, workDay: { workspaceId } },
     include: { project: true },
   })
-  if (!task) return null
-  if (!admin) {
-    const member = await prisma.projectMember.findUnique({
-      where: { projectId_userId: { projectId: task.projectId, userId } },
-    })
-    if (!member) return null
-  }
   return task
 }
 
@@ -27,8 +22,7 @@ const COMMENT_INCLUDE = {
 async function listComments(req, res, next) {
   try {
     const taskId = Number(req.params.id)
-    const userId = req.user.userId
-    const task = await getTaskWithAccess(taskId, userId, isAdmin(req), req.workspace.id)
+    const task = await getTaskWithAccess(taskId, req.workspace.id)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const comments = await prisma.taskComment.findMany({
@@ -49,7 +43,7 @@ async function addComment(req, res, next) {
 
     if (!text?.trim()) return res.status(400).json({ error: 'El comentario no puede estar vacío' })
 
-    const task = await getTaskWithAccess(taskId, userId, isAdmin(req), workspaceId)
+    const task = await getTaskWithAccess(taskId, workspaceId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const comment = await prisma.taskComment.create({
@@ -146,7 +140,7 @@ async function toggleReaction(req, res, next) {
     const emoji = (req.body?.emoji || '').trim()
     if (!emoji || emoji.length > 32) return res.status(400).json({ error: 'Emoji inválido' })
 
-    const task = await getTaskWithAccess(taskId, userId, isAdmin(req), workspaceId)
+    const task = await getTaskWithAccess(taskId, workspaceId)
     if (!task) return res.status(403).json({ error: 'No tenés acceso a esta tarea' })
 
     const comment = await prisma.taskComment.findFirst({ where: { id: commentId, taskId } })
