@@ -337,6 +337,14 @@ function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDele
         </div>
         <span className="text-xs text-gray-700 dark:text-gray-200 truncate w-full">{item.name}</span>
         {!isFolder && <span className="text-[10px] text-gray-400 dark:text-gray-500">{fmtBytes(item.sizeBytes)}</span>}
+        {!isFolder && item.contentPieces?.length > 0 && (
+          <span
+            className="text-[10px] text-primary-600 dark:text-primary-400 truncate w-full"
+            title={`Vinculado a: ${item.contentPieces.map(p => p.title).join(', ')}`}
+          >
+            📅 {item.contentPieces.length === 1 ? item.contentPieces[0].title : `${item.contentPieces.length} piezas`}
+          </span>
+        )}
         {caption && <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate w-full">{caption}</span>}
       </button>
 
@@ -376,7 +384,7 @@ function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDele
                 <button onClick={() => { onOpenMenu(null); onDownload(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">⬇️ Descargar</button>
                 <button onClick={() => { onOpenMenu(null); onCopyLink(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">🔗 Copiar enlace</button>
                 {onLinkToContent && (
-                  <button onClick={() => { onOpenMenu(null); onLinkToContent(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">📄 Contenido</button>
+                  <button onClick={() => { onOpenMenu(null); onLinkToContent(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">📅 Contenido</button>
                 )}
                 {onCreateTask && (
                   <button onClick={() => { onOpenMenu(null); onCreateTask(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">➕ Crear tarea</button>

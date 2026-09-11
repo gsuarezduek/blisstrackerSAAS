@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 
 /**
- * Modal abierto desde el menú ⋯ de un archivo en Archivos ("📄 Contenido") —
+ * Modal abierto desde el menú ⋯ de un archivo en Archivos ("📅 Contenido") —
  * lista las piezas del proyecto disponibles para vincular (todo menos
  * 'publicado') y permite togglear el vínculo con este archivo puntual.
  * Contraparte de ContentFileBrowserModal, que hace lo mismo pero desde el
@@ -50,7 +50,7 @@ export default function ContentFilePiecesModal({ projectId, file, onClose }) {
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
           <div className="min-w-0">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">📄 Contenido</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">📅 Contenido</h2>
             <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{file.name}</p>
           </div>
           <button

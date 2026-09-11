@@ -46,6 +46,17 @@ function clampDim(v) {
   return Number.isFinite(n) && n > 0 && n < 20000 ? Math.round(n) : null
 }
 
+// Vínculos con piezas de Contenido (ContentPieceFile) — opcional en el include
+// de quien llama a shapeItem: si no se pidió (ej. el portal de cliente, que no
+// necesita ni debe exponer esto), `f.contentLinks` viene undefined y
+// shapeItem simplemente devuelve `contentPieces: []`.
+const CONTENT_LINKS_INCLUDE = {
+  contentLinks: {
+    where:   { piece: { deletedAt: null } },
+    include: { piece: { select: { id: true, title: true } } },
+  },
+}
+
 // width/height llegan del cliente (imagen decodificada en el browser antes de subir)
 // — nunca se confían para nada de seguridad, solo se acotan a rangos razonables.
 //
@@ -73,6 +84,7 @@ function shapeItem(f) {
     posterUrl: f.posterKey ? objectStorage.publicUrl(f.posterKey) : null,
     uploadedBy: f.uploadedBy ? { id: f.uploadedBy.id, name: f.uploadedBy.name } : null,
     createdAt: f.createdAt,
+    contentPieces: f.contentLinks ? f.contentLinks.map(l => ({ id: l.piece.id, title: l.piece.title })) : [],
   }
 }
 
@@ -132,7 +144,7 @@ async function listFiles(req, res, next) {
 
     const items = await prisma.projectFile.findMany({
       where: { projectId, parentId, deletedAt: null, OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }] },
-      include: { uploadedBy: { select: { id: true, name: true } } },
+      include: { uploadedBy: { select: { id: true, name: true } }, ...CONTENT_LINKS_INCLUDE },
       orderBy: [{ type: 'desc' }, { name: 'asc' }], // 'folder' > 'file' alfabéticamente → carpetas primero
     })
     const path = parentId ? await buildPath(parentId, projectId) : []
@@ -167,7 +179,7 @@ async function searchFiles(req, res, next) {
         name: { contains: q, mode: 'insensitive' },
         OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }],
       },
-      include: { uploadedBy: { select: { id: true, name: true } } },
+      include: { uploadedBy: { select: { id: true, name: true } }, ...CONTENT_LINKS_INCLUDE },
       orderBy: { name: 'asc' },
       take: 50,
     })
@@ -580,4 +592,6 @@ module.exports = {
   // exportados para el controller de solo lectura del portal de cliente
   shapeItem,
   buildPath,
+  // exportado para contentFileMirror.service.js (mismo criterio de nombre de carpeta)
+  sanitizeName,
 }

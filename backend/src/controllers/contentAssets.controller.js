@@ -6,6 +6,7 @@ const { validateImageUpload } = require('../lib/imageType')
 const { validateMediaHeader } = require('../lib/mediaType')
 const { safeContentDisposition } = require('../lib/contentDisposition')
 const { resolveCtx, loadPiece, formatPiece, formatAsset } = require('./content.controller')
+const { mirrorAssetToArchivos } = require('../services/contentFileMirror.service')
 
 // El asset cambió, pero lo que muestran las vistas (Kanban/Tabla/Calendario) es
 // la PIEZA con su array de assets embebido — se recarga y emite completa, mismo
@@ -221,6 +222,12 @@ async function confirmAsset(req, res, next) {
     })
 
     await emitPieceUpdated(ctx.workspaceId, ctx.projectId, piece.id)
+    // Best-effort, nunca lanza — no debe demorar (más allá de lo que tarde) ni
+    // romper la confirmación del asset, que ya pasó.
+    await mirrorAssetToArchivos({
+      workspaceId: ctx.workspaceId, projectId: ctx.projectId, timezone: ctx.timezone,
+      pieceTitle: piece.title, asset: updated, uploaderId: req.user.userId,
+    })
     res.json(formatAsset(updated))
   } catch (err) { next(err) }
 }

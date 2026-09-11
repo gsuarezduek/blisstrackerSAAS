@@ -19,6 +19,7 @@ const { randomUUID } = require('crypto')
 const {
   S3Client,
   PutObjectCommand,
+  CopyObjectCommand,
   DeleteObjectsCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
@@ -159,6 +160,21 @@ function buildKey(prefix, mimeType) {
 }
 
 /**
+ * Copia un objeto ya existente a una key nueva, dentro del mismo bucket — sin
+ * bajar ni volver a subir bytes por nuestro servidor. Usado para "espejar" un
+ * asset de Contenido en Archivos (ver contentFileMirror.service.js): cada lado
+ * termina con su propio objeto independiente, así que borrar uno no afecta al
+ * otro (nunca comparten key).
+ */
+async function copyObject(sourceKey, destKey) {
+  await getClient().send(new CopyObjectCommand({
+    Bucket: R2_BUCKET,
+    CopySource: `${R2_BUCKET}/${sourceKey.split('/').map(encodeURIComponent).join('/')}`,
+    Key: destKey,
+  }))
+}
+
+/**
  * URL firmada para que el navegador haga PUT directo al bucket (subida de
  * imagen/video sin pasar por nuestro backend). Firma solo Content-Type, no
  * Content-Length: firmar el length obliga a que el header que manda el browser
@@ -231,5 +247,5 @@ async function getObjectHead(key, bytes = 32) {
 
 module.exports = {
   isConfigured, putObject, deleteObjects, deleteObject, publicUrl, isPublicUrl,
-  buildKey, presignPut, presignGet, headObject, getObjectHead, getObjectStream,
+  buildKey, copyObject, presignPut, presignGet, headObject, getObjectHead, getObjectStream,
 }
