@@ -348,7 +348,7 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                 {/* Archivos del proyecto vinculados — lista aparte del uploader de arriba */}
                 {(piece.files.length > 0 || (canEdit && piece.status !== 'publicado')) && (
                   <div className="pt-1">
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">📎 Archivos del proyecto vinculados</p>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">📎 Vinculados desde Nube</p>
                     {filesError && <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">{filesError}</p>}
                     {piece.files.length > 0 && (
                       <div className="space-y-1 mb-2">

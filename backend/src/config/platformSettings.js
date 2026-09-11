@@ -270,7 +270,7 @@ const PLATFORM_SETTINGS = [
     min:     0,
     max:     1_000_000,
     group:   'operational',
-    label:   'Storage de Archivos de proyecto por workspace (MB)',
+    label:   'Storage de Nube por workspace (MB)',
     help:    'Tope de bytes acumulados en ProjectFile (el repositorio de archivos tipo Drive de la ficha del proyecto) por workspace. Se chequea al pedir la URL de subida (POST .../files/presign), sumando el sizeBytes de los archivos ready + pending del workspace. 0 = ilimitado. Cuota independiente de la de Contenido (contentStorageMaxMbPerWorkspace) — son módulos distintos.',
   },
   {
@@ -280,7 +280,7 @@ const PLATFORM_SETTINGS = [
     min:     1,
     max:     720,
     group:   'operational',
-    label:   'Retención de Archivos de proyecto sin confirmar (horas)',
+    label:   'Retención de Nube sin confirmar (horas)',
     help:    'Mismo mecanismo que contentAssetPendingRetentionHours, aplicado a ProjectFile: un archivo queda "pending" entre pedir la URL firmada y confirmarla; si se abandona la subida, la limpieza semanal lo borra —primero de R2, después de la DB— pasadas estas horas.',
   },
   {
@@ -290,8 +290,8 @@ const PLATFORM_SETTINGS = [
     min:     1,
     max:     180,
     group:   'operational',
-    label:   'Papelera de Archivos de proyecto (días)',
-    help:    'Eliminar un archivo o carpeta del tab Archivos lo manda a la papelera (soft-delete), recuperable desde ahí — borrar una carpeta cascadea el mismo estado a todo su contenido. Pasados estos días desde el borrado, la limpieza semanal lo elimina en duro —primero de R2, después las filas— sin posibilidad de restaurarlo. Mismo mecanismo que contentPieceTrashRetentionDays.',
+    label:   'Papelera de Nube (días)',
+    help:    'Eliminar un archivo o carpeta del tab Nube lo manda a la papelera (soft-delete), recuperable desde ahí — borrar una carpeta cascadea el mismo estado a todo su contenido. Pasados estos días desde el borrado, la limpieza semanal lo elimina en duro —primero de R2, después las filas— sin posibilidad de restaurarlo. Mismo mecanismo que contentPieceTrashRetentionDays.',
   },
   {
     key:     'contentPieceTrashRetentionDays',

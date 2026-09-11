@@ -342,7 +342,7 @@ export default function ProjectDetail() {
                   <option value="info">Info</option>
                   {data.project.briefsEnabled !== false && <option value="briefs">Briefs</option>}
                   <option value="reuniones">Reuniones</option>
-                  {data.project.filesEnabled !== false && <option value="archivos">Archivos</option>}
+                  {data.project.filesEnabled !== false && <option value="archivos">Nube</option>}
                   <option value="reportes">Reportes</option>
                 </select>
                 {/* Desktop */}
@@ -378,7 +378,7 @@ export default function ProjectDetail() {
                       onClick={() => setInfoTab('archivos')}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${infoTab === 'archivos' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                     >
-                      Archivos
+                      Nube
                     </button>
                   )}
                   <button

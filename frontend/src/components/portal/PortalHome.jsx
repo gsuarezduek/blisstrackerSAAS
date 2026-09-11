@@ -97,7 +97,7 @@ export default function PortalHome({ meta, onNavigate, brandPrimary }) {
 
   if (showFiles) {
     cards.push(
-      <HomeCard key="archivos" icon="🗂️" title="Archivos" onClick={() => onNavigate('archivos')} brandPrimary={brandPrimary}>
+      <HomeCard key="archivos" icon="🗂️" title="Nube" onClick={() => onNavigate('archivos')} brandPrimary={brandPrimary}>
         <p>Todos los archivos y carpetas del proyecto.</p>
       </HomeCard>
     )

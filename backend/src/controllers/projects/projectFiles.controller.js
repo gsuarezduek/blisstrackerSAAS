@@ -30,7 +30,7 @@ async function resolveFilesGuard(req) {
   if (!projectId) return { error: 'Proyecto no encontrado', status: 404 }
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { filesEnabled: true } })
   if (project?.filesEnabled === false) {
-    return { error: 'La sección de Archivos está deshabilitada para este workspace', status: 403 }
+    return { error: 'La sección de Nube está deshabilitada para este workspace', status: 403 }
   }
   return { projectId, workspaceId }
 }

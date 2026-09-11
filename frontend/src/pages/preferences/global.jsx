@@ -377,7 +377,7 @@ export default function GlobalTab({ loaded }) {
 
             <div className="flex items-start justify-between gap-4 py-4 border-b dark:border-gray-700">
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Archivos</p>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Nube</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Muestra el repositorio de archivos (carpetas y subida de archivos, tipo Drive) en la vista de todos los proyectos.</p>
               </div>
               <Toggle on={globalSettings.filesEnabled !== false} onToggle={() => handleGlobalSetting({ filesEnabled: !globalSettings.filesEnabled })} disabled={!loaded} />

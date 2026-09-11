@@ -228,7 +228,7 @@ function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportTok
           <TabButton active={tab === 'vivo'} onClick={() => setTab('vivo')} brandPrimary={brandPrimary}>Datos Actuales</TabButton>
         )}
         {meta.showFiles && (
-          <TabButton active={tab === 'archivos'} onClick={() => setTab('archivos')} brandPrimary={brandPrimary}>Archivos</TabButton>
+          <TabButton active={tab === 'archivos'} onClick={() => setTab('archivos')} brandPrimary={brandPrimary}>Nube</TabButton>
         )}
       </div>
 

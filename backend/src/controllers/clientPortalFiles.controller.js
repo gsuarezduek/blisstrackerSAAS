@@ -18,11 +18,11 @@ const { shapeItem, buildPath } = require('./projects/projectFiles.controller')
  */
 async function assertFilesAccess(portal) {
   if (!portal.showFiles) {
-    return { status: 404, error: 'La sección de Archivos no está habilitada para este proyecto' }
+    return { status: 404, error: 'La sección de Nube no está habilitada para este proyecto' }
   }
   const project = await prisma.project.findUnique({ where: { id: portal.projectId }, select: { filesEnabled: true } })
   if (project?.filesEnabled === false) {
-    return { status: 404, error: 'La sección de Archivos está deshabilitada para este workspace' }
+    return { status: 404, error: 'La sección de Nube está deshabilitada para este workspace' }
   }
   return null
 }

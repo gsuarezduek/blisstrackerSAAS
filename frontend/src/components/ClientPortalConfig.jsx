@@ -177,7 +177,7 @@ export default function ClientPortalConfig({ projectId, canEdit, filesEnabled })
               {portal.showMeetings && ' · Próxima reunión visible'}
               {portal.showTeam && ' · Equipo visible'}
               {portal.showObjectives && ' · Objetivos visibles'}
-              {portal.showFiles && ' · Archivos visibles'}
+              {portal.showFiles && ' · Nube visible'}
             </p>
           </div>
 
@@ -297,7 +297,7 @@ export default function ClientPortalConfig({ projectId, canEdit, filesEnabled })
                 onChange={e => setDraft(prev => ({ ...prev, showFiles: e.target.checked }))}
                 className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
               />
-              <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el repositorio de Archivos del proyecto (solo lectura, mismos archivos que ve el equipo)</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Mostrar el repositorio de Nube del proyecto (solo lectura, mismos archivos que ve el equipo)</span>
             </label>
           )}
           <div>
