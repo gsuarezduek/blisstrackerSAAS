@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { listMessages, sendMessage, markChannelRead } from '../api/chat'
 import { listMembers } from '../api/members'
 import { getSocket } from '../lib/socket'
+import BlissLoader from '../components/BlissLoader'
 
 function timeLabel(dateStr) {
   return new Date(dateStr).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
@@ -31,6 +32,7 @@ export default function ChatScreen({ route, navigation }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [members, setMembers] = useState([])
+  const [inputFocused, setInputFocused] = useState(false)
   const listRef = useRef(null)
 
   useEffect(() => {
@@ -100,7 +102,7 @@ export default function ChatScreen({ route, navigation }) {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color="#F7931A" />
+        <View style={styles.centered}><BlissLoader size={56} /></View>
       ) : (
         <FlatList
           ref={listRef}
@@ -108,6 +110,12 @@ export default function ChatScreen({ route, navigation }) {
           keyExtractor={m => String(m.id)}
           contentContainerStyle={styles.listContent}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyEmoji}>💬</Text>
+              <Text style={styles.emptyText}>No hay mensajes todavía. ¡Escribí el primero!</Text>
+            </View>
+          }
           renderItem={({ item }) => (
             item.systemType ? (
               <View style={styles.systemRow}>
@@ -147,10 +155,13 @@ export default function ChatScreen({ route, navigation }) {
 
       <View style={styles.inputRow}>
         <TextInput
-          style={styles.input}
+          style={[styles.input, inputFocused && styles.inputFocused]}
           placeholder="Escribí un mensaje... usá @ para mencionar"
+          placeholderTextColor="#9ca3af"
           value={text}
           onChangeText={setText}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
           multiline
         />
         <Pressable
@@ -167,7 +178,11 @@ export default function ChatScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { padding: 16, flexGrow: 1 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyEmoji: { fontSize: 40, marginBottom: 8 },
+  emptyText: { color: '#9ca3af', fontSize: 14, textAlign: 'center' },
   message: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   avatar: {
     width: 32, height: 32, borderRadius: 16, backgroundColor: '#F7931A',
@@ -188,9 +203,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end', backgroundColor: '#fff',
   },
   input: {
-    flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, maxHeight: 100,
+    flex: 1, borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, maxHeight: 100, color: '#1a1a1a',
   },
+  inputFocused: { borderColor: '#F7931A' },
   sendButton: { backgroundColor: '#F7931A', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 11 },
   sendButtonText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   buttonDisabled: { opacity: 0.5 },

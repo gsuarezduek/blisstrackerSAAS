@@ -397,13 +397,12 @@ vez, hay que actualizar el path data en ambos lugares a mano.
   loader web con `react-native-svg` + `Animated` de React Native: mismos 4
   `<Path>`/gradientes, mismo timing (1.8s, `cubic-bezier(0.65, 0, 0.35, 1)`,
   keyframes 0%/50%/100% → rotate 0°/180°/360° + scale 1/0.88/1). Un solo
-  `Animated.Value` (`progress`, 0→1 en loop) interpola un **string de
-  transform SVG completo** (`"rotate(<a> 540 540) scale(<b>)"`) en vez de
-  animar rotate/scale por separado — así ambos quedan derivados del mismo
-  progreso ya easeado, preservando el timing relativo exacto del CSS
-  original. `useNativeDriver: false` a propósito: el native driver no
-  soporta animar un prop `transform` de string arbitrario en
-  `react-native-svg`.
+  `Animated.Value` (`progress`, 0→1 en loop) interpola dos salidas —
+  `rotate` (0→360) y `scale` (1→0.88→1) — aplicadas como las props
+  **numéricas** `rotation`/`scaleX`/`scaleY`/`originX={540}`/`originY={540}`
+  de `<G>` (no como un string de `transform` armado a mano — ver el bug de
+  Fabric más abajo). `useNativeDriver: false` porque el native driver no
+  soporta animar props de `react-native-svg`.
 - **`App.js`** llama `SplashScreen.preventAutoHideAsync()` (antes del primer
   render) + `SplashScreen.hideAsync()` (en un `useEffect` al montar) — el
   splash nativo estático se oculta apenas React Native toma control,
@@ -479,6 +478,161 @@ compilar** — pero como el APK del perfil `preview`/`production` es un
 bundle "release" con el JS embebido estáticamente (no conectado a Metro),
 sigue haciendo falta un `eas build` nuevo para verlo reflejado en el
 dispositivo, igual que cualquier otro cambio de JS en un build ya instalado.
+
+### Rediseño de las pantallas de entrada (Login, selección de workspace, bloqueo)
+
+Pulido de UX/UI a pedido del usuario, sin fase numerada propia (mismo criterio
+que "Identidad de marca real"/"Sistema de alertas propio" arriba): las
+pantallas por las que pasa cualquiera antes de llegar al Dashboard —
+`LoginScreen`, `WorkspaceSelectScreen`, `LockScreen` — tenían un look
+genérico (inputs de caja simple, sin logo, título plano "BlissTracker") muy
+distinto del login real de la web (`frontend/src/pages/Login2.jsx`).
+
+- **`src/lib/blissLogoPaths.js`** — se extrajo el array `BLISS_PATHS` (los 4
+  `<path>`/gradientes del isotipo) que antes vivía hardcodeado solo dentro de
+  `BlissLoader.jsx`, para que un componente estático pudiera reusarlo sin
+  duplicar los datos de coordenadas una tercera vez. `BlissLoader` ahora
+  importa de ahí en vez de tener su propia copia — mismo comportamiento,
+  una sola fuente.
+- **`src/components/BlissIcon.jsx`** — el mismo isotipo pero **sin animar**
+  (`<G>` estático, sin `Animated`), para usarlo como logo de marca en headers
+  y pantallas de entrada donde `BlissLoader` (que gira) no corresponde.
+- **`LoginScreen`** — reescrita para calcar el look del login web: lockup
+  ícono+"BlissTracker" arriba (alineado a la izquierda, como en
+  `Login2.jsx`), título "Bienvenido" + subtítulo, inputs con radio 14 y
+  **estado de foco** (borde gris que pasa a naranja de marca al tocar el
+  campo — `onFocus`/`onBlur` con estado local, no hay pseudo-clase `:focus`
+  en RN), contraseña con botón 👁/🙈 para mostrar/ocultar (mismo patrón que
+  `PasswordInput.jsx` de la web, con emoji en vez de SVG por consistencia con
+  el resto de la app mobile, que usa emoji como sistema de iconografía en
+  todos lados). Banner de error con fondo rojo suave (antes texto rojo
+  suelto). Se agregó un link "¿Olvidaste tu contraseña?" que abre en el
+  navegador el flujo de la web (`Linking.openURL`) — no hay pantalla de reset
+  propia en mobile, y no se justificaba construir una solo para esto
+  cuando la web ya la tiene.
+- **`WorkspaceSelectScreen`** — mismo lockup + headings, tarjetas con borde
+  en vez de fondo gris plano, chevron `›` y badge de rol reposicionados
+  (antes el rol quedaba pegado al borde derecho sin espacio para el
+  chevron).
+- **`LockScreen`** — el emoji 🔒 genérico se reemplazó por `BlissIcon` (logo
+  de marca real) y el `ActivityIndicator` nativo mientras autentica por
+  `BlissLoader` (mismo componente que ya usa `RootNavigator` al resolver la
+  sesión) — consistencia visual entre las dos únicas pantallas de "esperando
+  algo" del arranque.
+- **Ningún cambio nativo** — es JS/estilos puros (sin dependencias nuevas),
+  así que Metro lo refleja al instante en dev; para verlo en el APK ya
+  instalado sigue haciendo falta un build nuevo, igual que cualquier otro
+  cambio de JS.
+
+Verificado con `npx expo export --platform android` (bundle de 1096 módulos
+sin errores) — no reemplaza probarlo en un dispositivo, pero descarta
+errores de sintaxis/imports antes de gastar un build de EAS.
+
+### Rediseño de las pantallas internas (Dashboard, Notificaciones, Canales, Chat)
+
+Continuación del pase anterior — mismo lenguaje visual (tarjetas con borde
+`1.5px #e5e7eb` y radio `14`, headers blancos con `borderBottomColor: '#eee'`,
+`BlissLoader` en vez de `ActivityIndicator` genérico en las cargas de
+pantalla completa) aplicado a las pantallas que ya tenían uso diario, no solo
+a las de entrada. Deliberadamente **no** se repitió `BlissIcon` en estos
+headers — a diferencia de Login/WorkspaceSelect/Lock (donde no había ninguna
+marca visible todavía), estas pantallas ya viven detrás del login y repetir
+el logo en cada header sería ruido, no identidad (mismo criterio que la web:
+el logo aparece una vez en el Navbar, no en cada página interna).
+
+- **`DashboardScreen`** — el header pasa de transparente a tarjeta blanca con
+  borde inferior (igual que Notificaciones/Canales) y suma **badges** en los
+  íconos 💬/🔔: un círculo rojo con número si hay menciones o notificaciones
+  sin leer, o un punto gris chico si hay no-leídos sin mención. Se resuelven
+  con `Promise.all([listNotifications(), listChannels()])` en cada foco de
+  pantalla (`loadBadges`, junto a `load()` de las tareas) — mismos endpoints
+  que ya usan `NotificationsScreen`/`ChannelListScreen`, sin sumar ningún
+  endpoint nuevo. Es un adorno: si falla, se traga el error en silencio, no
+  bloquea ni ensucia el error banner de las tareas. `HeaderIcon` (componente
+  local del archivo, no exportado — se usa 4 veces solo ahí) centraliza el
+  ícono + el overlay del badge. `TaskCard` pasa de radio 12/borde 1px a
+  radio 14/borde 1.5px, mismo valor que el resto.
+- **`NotificationsScreen`/`ChannelListScreen`** — las filas planas separadas
+  por una línea (`borderBottomWidth`) pasan a ser tarjetas individuales con
+  borde y margen (mismo estilo que `BenefitsScreen`), sobre fondo `#f9fafb`
+  en vez de blanco puro. Se sumó `RefreshControl` (pull-to-refresh) a
+  Notificaciones, que no lo tenía — Canales ya lo tenía. Estados vacíos con
+  emoji grande + texto gris, mismo patrón que el Dashboard ("No hay tareas
+  para hoy").
+- **`ChatScreen`** — estado de foco en el input (borde gris → naranja al
+  tocar, mismo mecanismo `onFocus`/`onBlur` que `LoginScreen`) y un estado
+  vacío ("No hay mensajes todavía. ¡Escribí el primero!") para un canal
+  recién creado, que antes mostraba una lista en blanco sin ninguna pista.
+
+Ningún cambio nativo — verificado de nuevo con `npx expo export --platform
+android` (1096 módulos, sin errores) antes de dar por terminado el pase.
+
+### Backlog y tareas futuras/recurrentes (Dashboard)
+
+Primera pieza de la Fase 9 candidata a implementarse — sin cambios de
+backend: `GET /workdays/today` ya devolvía `futureTasks` (tareas con
+`scheduledFor` posterior a hoy) además de `tasks`/`carryOverTasks`, pero
+`DashboardScreen` los descartaba por completo (solo leía los primeros dos
+campos). El Backlog en sí tampoco necesitaba un endpoint nuevo: es
+puramente un criterio de agrupación client-side sobre las mismas tareas que
+ya se traían — se verificó primero cómo lo resuelve la web
+(`frontend/src/pages/Dashboard.jsx`) antes de portarlo, para no reinventar el
+criterio.
+
+- **Criterio de Backlog** (`buildSections`, mismo que la web): una tarea de
+  **hoy** cae al backlog solo si `isBacklog` (movida a mano con "→
+  Backlog"); una tarea **arrastrada** de un día anterior cae ahí además si
+  sigue `PENDING` sin destacar — perdió prioridad por el solo hecho de no
+  haber arrancado, sin que nadie la haya tocado. Distinguir "de hoy" vs
+  "arrastrada" no requirió taggear nada al mezclar `tasks`+`carryOverTasks`
+  en un único array: se deriva comparando `task.workDayId` contra el `id`
+  del `WorkDay` de hoy (`data.id`, ya venía en la respuesta y no se usaba).
+  Esto además hace que el criterio se recalcule solo y correctamente después
+  de cualquier `onUpdate` (ej. `add-to-today` le cambia el `workDayId` a
+  hoy del lado del backend, así que la próxima recomputación ya lo saca del
+  backlog sin lógica adicional en el cliente).
+- **Sección "Futuras"** — estado separado (`future`, del campo
+  `futureTasks` de la respuesta), no entra en el cálculo de backlog: son
+  tareas que directamente no deberían verse todavía. `handleBringToToday`
+  las saca de `future` y las mete en `tasks` cuando se confirma "Traer a
+  hoy" (`PATCH /tasks/:id/bring-to-today`).
+- **Ambas secciones son colapsables y arrancan cerradas** (`backlogOpen`/
+  `futureOpen`, default `false`, mismo comportamiento que
+  `backlogOpen`/`futureOpen` en la web) — se implementó dejando `data: []`
+  en la sección de `SectionList` mientras está cerrada (el header sigue
+  mostrándose, solo se vacía el contenido) en vez de no renderizar la
+  sección — más simple que manejar un `FlatList` propio para cada una.
+  **Ojo con el `ListEmptyComponent` de `SectionList`**: React Native lo
+  dispara cuando la suma de `data.length` de todas las secciones es 0, lo
+  cual pasaría igual con backlog/futuras colapsadas aunque tengan
+  contenido — se evitó directamente no delegándole el estado vacío a
+  `SectionList`: si `sections.length === 0` (ninguna categoría de foco, ni
+  backlog, ni futuras) se renderiza un `ScrollView` con el mensaje +
+  `RefreshControl` propio en vez de montar el `SectionList`.
+- **`TaskCard`** ahora acepta `backlog`/`future` (booleanos) que cambian su
+  modo, espejo del componente web: en `future` no se puede destacar
+  (aparece un badge 📅 `dd/mm` en vez del badge de estado) y el único botón
+  es "Traer a hoy"; en `backlog` el único botón es "Agregar a hoy"
+  (`PATCH /tasks/:id/add-to-today`); en modo normal, una tarea `PENDING`
+  suma un link secundario "→ Backlog" (`PATCH /tasks/:id/move-to-backlog`)
+  debajo de las acciones de siempre. Se agregó también un badge 🔁 para
+  tareas recurrentes (`task.recurrenceId`, dato que ya viajaba en cada tarea
+  sin necesidad de tocar el `include` del backend) — no existía ningún
+  indicador de esto en mobile hasta ahora.
+- **Deliberadamente fuera de esta pieza**: crear una tarea futura o
+  recurrente **desde mobile** (`AddTaskModal` sigue siendo
+  descripción+proyecto nomás) — esto solo cubre *ver y mover* lo que ya
+  existe (creado desde la web, o materializado en automático por
+  `materializeForUser` en cada `getOrCreateToday`). Sumar los controles de
+  fecha/recurrencia al modal de creación queda para más adelante si hace
+  falta.
+
+Verificado con `npx expo export --platform android` (1096 módulos, sin
+errores) — sin backend nuevo que probar, y `TaskCard` sigue siendo
+compatible con los demás lugares que lo usan sin estos props
+(`ProjectDetailScreen`, que no filtra backlog: ahí el link "→ Backlog"
+también aparece para tareas `PENDING`, comportamiento nuevo pero no
+rompe nada existente).
 
 ### Proyectos (Fase 6)
 
@@ -614,7 +768,8 @@ Vacaciones y beneficios.
 | 6 | Proyectos: lista agrupada + detalle (info/situación/links/equipo/tareas/completadas) | ✅ |
 | 7 | Housekeeping: "Finalizar jornada" en el Dashboard + pantalla de Perfil (datos, apagar biometría/push, logout) | ✅ |
 | 8 | Vacaciones y beneficios: saldos + pedir + ver solicitudes (vacaciones/licencias, horas libres, días home) | ✅ — pendiente de probar en dispositivo real |
-| 9 | A evaluar más adelante: Backlog, self-view de Productividad, Accesos del proyecto, Briefs | pendiente |
+| 9 | Backlog + tareas futuras/recurrentes en el Dashboard | ✅ — pendiente de probar en dispositivo real |
+| 9b | A evaluar más adelante: self-view de Productividad, Accesos del proyecto, Briefs, Reuniones | pendiente |
 
 No hay modo offline en la v1 (se evalúa si se vuelve un problema real de uso
 en campo con mala señal).

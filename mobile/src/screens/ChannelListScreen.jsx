@@ -1,20 +1,23 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator } from 'react-native'
+import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native'
 import { listChannels } from '../api/chat'
 import { getSocket } from '../lib/socket'
+import BlissLoader from '../components/BlissLoader'
 
 export default function ChannelListScreen({ navigation }) {
   const [channels, setChannels] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isRefresh = false) => {
+    isRefresh ? setRefreshing(true) : setLoading(true)
     try {
       setChannels(await listChannels())
     } catch {
       // silencioso — reintenta al volver a foco
     } finally {
-      setLoading(false)
+      isRefresh ? setRefreshing(false) : setLoading(false)
     }
   }, [])
 
@@ -53,12 +56,19 @@ export default function ChannelListScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color="#F7931A" />
+        <View style={styles.centered}><BlissLoader size={56} /></View>
       ) : (
         <FlatList
           data={channels}
           keyExtractor={c => String(c.id)}
-          ListEmptyComponent={<Text style={styles.empty}>No hay canales todavía</Text>}
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#F7931A" />}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyEmoji}>💬</Text>
+              <Text style={styles.emptyText}>No hay canales todavía</Text>
+            </View>
+          }
           renderItem={({ item }) => (
             <Pressable
               style={styles.row}
@@ -88,12 +98,23 @@ export default function ChannelListScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  container: { flex: 1, backgroundColor: '#f9fafb' },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  header: {
+    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee',
+  },
   backButton: { color: '#F7931A', fontWeight: '600', fontSize: 14, marginBottom: 8 },
   title: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  empty: { textAlign: 'center', color: '#9ca3af', marginTop: 40 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
+  listContent: { flexGrow: 1, padding: 16 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+  emptyEmoji: { fontSize: 40, marginBottom: 8 },
+  emptyText: { color: '#9ca3af', fontSize: 14 },
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff',
+    borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 14, marginBottom: 10,
+  },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 16, color: '#6b7280' },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
