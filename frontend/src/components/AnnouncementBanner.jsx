@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
+import { linkify } from '../utils/linkify'
 
 const DISMISSED_KEY = 'bliss_dismissed_announcements'
 
@@ -48,7 +49,7 @@ export default function AnnouncementBanner() {
             <span className="flex-shrink-0 ml-2 text-base leading-none mt-0.5">{s.icon}</span>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold leading-tight">{ann.title}</p>
-              <p className="text-sm opacity-90 mt-0.5 leading-snug">{ann.body}</p>
+              <p className="text-sm opacity-90 mt-0.5 leading-snug">{linkify(ann.body)}</p>
             </div>
             <button
               onClick={() => handleClose(ann.id)}

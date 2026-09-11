@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import { linkify } from '../../utils/linkify'
 
 export const ANN_TYPES = [
   { value: 'info',        label: 'ℹ️ Información',   color: 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-700',   badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
@@ -178,7 +179,7 @@ export function AnnouncementCard({ ann, workspaces, onToggle, onEdit, onDelete }
             {ann.endsAt && <span className="text-xs text-gray-400 dark:text-gray-500">hasta {new Date(ann.endsAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>}
           </div>
           <p className="font-semibold text-gray-900 dark:text-white">{ann.title}</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{ann.body}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{linkify(ann.body)}</p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button onClick={() => onToggle(ann)}
