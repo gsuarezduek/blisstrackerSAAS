@@ -352,10 +352,14 @@ export default function Dashboard() {
     setDismissing(false)
   }
 
-  // Quitar una sola fila — dismiss individual en Delegadas, dejar de seguir en Seguidas.
+  // Quitar una sola fila — dismiss individual en Delegadas (tarea real o aviso de
+  // eliminación, cada uno con su propio endpoint), dejar de seguir en Seguidas.
   async function handleRemoveOneSeguimiento(task) {
     try {
-      if (seguimientoTab === 'DELEGADAS') {
+      if (task.__deletedNotice) {
+        await api.delete(`/tasks/delegated/notices/${task.id}`)
+        setDelegated(prev => prev.filter(t => !(t.__deletedNotice && t.id === task.id)))
+      } else if (seguimientoTab === 'DELEGADAS') {
         await api.delete(`/tasks/${task.id}/delegated`)
         setDelegated(prev => prev.filter(t => t.id !== task.id))
       } else {

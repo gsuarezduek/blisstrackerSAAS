@@ -19,7 +19,7 @@ const FILTERS = [
   { key: 'CLIENT',       label: '🤝', title: 'Actividad del cliente',     match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' || n.type === 'PORTAL_CLIENT_LOGIN' },
   { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
-  { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: isFollowedCompleted },
+  { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: n => isFollowedCompleted(n) || n.type === 'TASK_DELETED' },
   { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED'].includes(n.type) },
   { key: 'COMPLETED',    label: '✓',  title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
@@ -240,14 +240,17 @@ export default function NotificationBell() {
                 const isBenefit        = isBenefitAction || n.type === 'BENEFIT_REVIEWED'
                 const isGameLaunched   = n.type === 'GAME_LAUNCHED'
                 const isCompleted      = n.type === 'COMPLETED'
+                const isTaskDeleted    = n.type === 'TASK_DELETED'
                 const isAssignment     = isMention || isLeadAssigned || isChatMention || isContentMention || isWhatsappMessage
                 const isAmberFamily    = isVacation || isBenefit || isGameLaunched || isContentChanges
+                // Aviso de tarea delegada eliminada: misma urgencia visual que un bloqueo.
+                const isRedFamily      = isBlocked || isTaskDeleted
 
                 const isGreenFamily = isUnblocked || isAddedProject || isContentApproved
 
                 const bgClass = isCompleted
                   ? 'bg-gray-50 dark:bg-gray-800/60'
-                  : isBlocked
+                  : isRedFamily
                   ? (!n.read ? 'bg-red-100 dark:bg-red-900/40'      : 'bg-red-50 dark:bg-red-900/20')
                   : isGreenFamily
                     ? (!n.read ? 'bg-green-100 dark:bg-green-900/40' : 'bg-green-50 dark:bg-green-900/20')
@@ -259,10 +262,10 @@ export default function NotificationBell() {
                             ? (!n.read ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-white dark:bg-gray-800')
                             : (!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : 'bg-white dark:bg-gray-800')
 
-                const dotClass = isBlocked ? 'bg-red-500' : isGreenFamily ? 'bg-green-500' : isComment ? 'bg-blue-500' : isAssignment ? 'bg-purple-500' : isAmberFamily ? 'bg-amber-500' : 'bg-primary-500'
+                const dotClass = isRedFamily ? 'bg-red-500' : isGreenFamily ? 'bg-green-500' : isComment ? 'bg-blue-500' : isAssignment ? 'bg-purple-500' : isAmberFamily ? 'bg-amber-500' : 'bg-primary-500'
                 const textClass = isCompleted
                   ? 'text-gray-500 dark:text-gray-400'
-                  : isBlocked
+                  : isRedFamily
                   ? 'text-red-800 dark:text-red-200'
                   : isGreenFamily
                     ? 'text-green-800 dark:text-green-200'
@@ -337,6 +340,9 @@ export default function NotificationBell() {
                         )}
                         {isUnblocked && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">🔓</span>
+                        )}
+                        {isTaskDeleted && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">🗑</span>
                         )}
                         {isAddedProject && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full flex items-center justify-center text-white text-[8px] leading-none">＋</span>

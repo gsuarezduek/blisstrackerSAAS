@@ -164,6 +164,7 @@ model Workspace {
   projectAccessLogs      ProjectAccessLog[]
   games                  Game[]
   taskFollows            TaskFollow[]
+  deletedTaskNotices     DeletedTaskNotice[]
   companies              Company[]
   contacts               Contact[]
   leads                  Lead[]
@@ -310,6 +311,9 @@ model User {
   taskRecurrencesCreated    TaskRecurrence[]           @relation("RecurrenceCreatedBy")
   taskComments              TaskComment[]
   taskFollows               TaskFollow[]               @relation("TaskFollower")
+  deletedNoticesAssigned    DeletedTaskNotice[]        @relation("DeletedNoticeAssignee")
+  deletedNoticesDelegated   DeletedTaskNotice[]        @relation("DeletedNoticeCreatedBy")
+  deletedNoticesDeletedByMe DeletedTaskNotice[]        @relation("DeletedNoticeDeletedBy")
   dailyInsights             DailyInsight[]
   insightMemories           UserInsightMemory[]
   notesBoardNotes           NotesBoardNote[]
@@ -564,6 +568,7 @@ model Project {
   contentPieces          ContentPiece[]
   monthlyHoursLogs       ProjectMonthlyHoursLog[]
   files                  ProjectFile[]
+  deletedTaskNotices     DeletedTaskNotice[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -912,6 +917,30 @@ model TaskFollow {
   @@index([taskId])
 }
 
+// Log de auditoría: snapshot de una tarea delegada (createdById != userId) que el
+// asignado (u otro) borró. No referencia a Task (ya no existe al crearse esta fila) —
+// permite avisarle al delegante y que la vea marcada como "eliminada" en su
+// seguimiento ("Delegadas"), sin convertir el borrado de Task en un soft-delete
+// estructural (evita tocar todas las queries del sistema que asumen Task viva).
+model DeletedTaskNotice {
+  id          Int       @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId   Int?
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  description String
+  userId      Int
+  user        User      @relation("DeletedNoticeAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  createdById Int
+  createdBy   User      @relation("DeletedNoticeCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  deletedById Int
+  deletedBy   User      @relation("DeletedNoticeDeletedBy", fields: [deletedById], references: [id], onDelete: Cascade)
+  dismissed   Boolean   @default(false)
+  deletedAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdById, dismissed])
+}
+
 // ─── NOTIFICACIONES ──────────────────────────────────────────────────────────
 
 enum NotificationType {
@@ -933,6 +962,7 @@ enum NotificationType {
   WHATSAPP_MESSAGE
   BENEFIT_REQUEST
   BENEFIT_REVIEWED
+  TASK_DELETED
 }
 
 model Notification {

@@ -33,7 +33,31 @@ async function delegated(req, res, next) {
       orderBy: [{ project: { name: 'asc' } }, { createdAt: 'desc' }],
     })
 
-    res.json(tasks)
+    // Avisos de tareas delegadas que otro borró (ver lifecycle.controller#remove) —
+    // se muestran como filas de pseudo-estado 'DELETED' en la misma lista, mismo
+    // criterio de ventana de 7 días que las completadas de arriba.
+    const deletedNotices = await prisma.deletedTaskNotice.findMany({
+      where: { createdById, workspaceId, dismissed: false, deletedAt: { gte: weekAgo } },
+      include: {
+        project: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, avatar: true } },
+        deletedBy: { select: { id: true, name: true, avatar: true } },
+      },
+      orderBy: [{ project: { name: 'asc' } }, { deletedAt: 'desc' }],
+    })
+    const noticeRows = deletedNotices.map(n => ({
+      id: n.id,
+      __deletedNotice: true,
+      status: 'DELETED',
+      description: n.description,
+      project: n.project,
+      user: n.user,
+      deletedBy: n.deletedBy,
+      deletedAt: n.deletedAt,
+      _count: { comments: 0 },
+    }))
+
+    res.json([...tasks, ...noticeRows])
   } catch (err) { next(err) }
 }
 
@@ -41,29 +65,40 @@ async function dismissDelegated(req, res, next) {
   try {
     const createdById = req.user.userId
     const workspaceId = req.workspace.id
-    const { status } = req.query  // opcional: filtra por estado
+    const { status } = req.query  // opcional: filtra por estado ('DELETED' = solo avisos)
 
     const weekAgo = new Date()
     weekAgo.setDate(weekAgo.getDate() - 7)
 
-    const where = {
-      createdById,
-      userId: { not: createdById },
-      dismissedByCreator: false,
-      workDay: { workspaceId },
-      OR: [
-        { status: { not: 'COMPLETED' } },
-        { status: 'COMPLETED', completedAt: { gte: weekAgo } },
-      ],
+    let taskCount = 0
+    if (status !== 'DELETED') {
+      const where = {
+        createdById,
+        userId: { not: createdById },
+        dismissedByCreator: false,
+        workDay: { workspaceId },
+        OR: [
+          { status: { not: 'COMPLETED' } },
+          { status: 'COMPLETED', completedAt: { gte: weekAgo } },
+        ],
+      }
+      if (status) where.status = status
+      const r = await prisma.task.updateMany({ where, data: { dismissedByCreator: true } })
+      taskCount = r.count
     }
-    if (status) where.status = status
 
-    const { count } = await prisma.task.updateMany({
-      where,
-      data: { dismissedByCreator: true },
-    })
+    // Sin filtro (ALL) o filtrando específicamente por los avisos: limpiar también
+    // DeletedTaskNotice — "Borrar todas" debe incluir los avisos de eliminación.
+    let noticeCount = 0
+    if (!status || status === 'DELETED') {
+      const r = await prisma.deletedTaskNotice.updateMany({
+        where: { createdById, workspaceId, dismissed: false, deletedAt: { gte: weekAgo } },
+        data: { dismissed: true },
+      })
+      noticeCount = r.count
+    }
 
-    res.json({ dismissed: count })
+    res.json({ dismissed: taskCount + noticeCount })
   } catch (err) { next(err) }
 }
 
@@ -82,4 +117,20 @@ async function dismissDelegatedOne(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { delegated, dismissDelegated, dismissDelegatedOne }
+// Descarta un aviso de tarea eliminada (espejo de dismissDelegatedOne, pero sobre
+// DeletedTaskNotice en vez de Task).
+async function dismissDeletedNotice(req, res, next) {
+  try {
+    const createdById = req.user.userId
+    const noticeId = Number(req.params.id)
+
+    const { count } = await prisma.deletedTaskNotice.updateMany({
+      where: { id: noticeId, createdById, workspaceId: req.workspace.id },
+      data: { dismissed: true },
+    })
+    if (count === 0) return res.status(404).json({ error: 'Aviso no encontrado' })
+    res.json({ dismissed: true })
+  } catch (err) { next(err) }
+}
+
+module.exports = { delegated, dismissDelegated, dismissDelegatedOne, dismissDeletedNotice }

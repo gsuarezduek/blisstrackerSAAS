@@ -13,6 +13,7 @@ function fmtShortDate(iso) {
 
 const SEGUIMIENTO_STATUS_LABEL = {
   PENDING: 'Pendiente', IN_PROGRESS: 'En curso', PAUSED: 'Pausada', BLOCKED: 'Bloqueada', COMPLETED: 'Completada',
+  DELETED: 'Eliminada',
 }
 const SEGUIMIENTO_STATUS_COLOR = {
   PENDING: 'text-gray-400 dark:text-gray-500',
@@ -20,9 +21,11 @@ const SEGUIMIENTO_STATUS_COLOR = {
   PAUSED: 'text-gray-500 dark:text-gray-400',
   BLOCKED: 'text-red-600 dark:text-red-400',
   COMPLETED: 'text-green-600 dark:text-green-400',
+  DELETED: 'text-red-500 dark:text-red-400',
 }
 // Orden de urgencia dentro de la sección Seguimiento: lo bloqueado necesita atención primero.
-export const SEGUIMIENTO_STATUS_PRIORITY = { BLOCKED: 0, IN_PROGRESS: 1, PAUSED: 2, PENDING: 3, COMPLETED: 4 }
+// DELETED va primero: es un aviso (la tarea ya no existe), no un estado de trabajo en curso.
+export const SEGUIMIENTO_STATUS_PRIORITY = { DELETED: -1, BLOCKED: 0, IN_PROGRESS: 1, PAUSED: 2, PENDING: 3, COMPLETED: 4 }
 
 // "Visto" por tarea (firma status+comentarios) persistido en localStorage por usuario,
 // para marcar con un punto las filas que cambiaron desde la última vez que se abrieron.
@@ -37,16 +40,17 @@ export function seguimientoSignature(t) { return `${t.status}:${t._count?.commen
 // estado, y los metadatos: fecha de creación, fecha de finalización y duración.
 function TrackedTaskRow({ task: t, onClick, onRemove, removeTitle, isNew }) {
   const dur = completedDuration(t)
+  const isDeletedNotice = t.__deletedNotice
   return (
     <div
-      className="group flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+      className={`group flex items-center gap-3 px-4 py-3 transition-colors ${onClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50' : ''}`}
       onClick={onClick}
     >
       {isNew && (
         <span className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0" title="Cambió desde tu última visita" />
       )}
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium leading-snug truncate ${t.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+        <p className={`text-sm font-medium leading-snug truncate ${t.status === 'COMPLETED' || t.status === 'DELETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
           {t.description}
         </p>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -61,19 +65,25 @@ function TrackedTaskRow({ task: t, onClick, onRemove, removeTitle, isNew }) {
             </>
           )}
         </div>
-        {/* Metadatos: creación, finalización, duración */}
+        {/* Metadatos: creación, finalización, duración — o, para un aviso de eliminación, quién y cuándo la borró */}
         <div className="flex items-center gap-x-2 gap-y-0.5 mt-1 flex-wrap text-[11px] text-gray-400 dark:text-gray-500">
-          {t.createdAt && <span>📅 {fmtShortDate(t.createdAt)}</span>}
-          {t.completedAt && (
+          {isDeletedNotice ? (
+            <span>🗑️ Eliminada por {t.deletedBy?.name} · {fmtShortDate(t.deletedAt)}</span>
+          ) : (
             <>
-              <span className="text-gray-300 dark:text-gray-600">·</span>
-              <span>✓ {fmtShortDate(t.completedAt)}</span>
-            </>
-          )}
-          {dur && (
-            <>
-              <span className="text-gray-300 dark:text-gray-600">·</span>
-              <span>⏱ {dur}</span>
+              {t.createdAt && <span>📅 {fmtShortDate(t.createdAt)}</span>}
+              {t.completedAt && (
+                <>
+                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <span>✓ {fmtShortDate(t.completedAt)}</span>
+                </>
+              )}
+              {dur && (
+                <>
+                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <span>⏱ {dur}</span>
+                </>
+              )}
             </>
           )}
         </div>
@@ -423,7 +433,7 @@ export function SeguimientoSection({
 
           {seguimientoTab === 'DELEGADAS' && filteredSeguimientoByProject.length > 0 && (
             <p className="text-[11px] text-gray-400 dark:text-gray-500 italic px-1 -mt-2">
-              Las completadas hace más de 7 días se ocultan automáticamente de esta lista.
+              Las completadas y los avisos de eliminación de hace más de 7 días se ocultan automáticamente de esta lista.
             </p>
           )}
 
@@ -439,12 +449,12 @@ export function SeguimientoSection({
               <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
                 {tasks.map(t => (
                   <TrackedTaskRow
-                    key={t.id}
+                    key={t.__deletedNotice ? `del-${t.id}` : t.id}
                     task={t}
-                    onClick={() => onOpenTask(t)}
+                    onClick={t.__deletedNotice ? undefined : () => onOpenTask(t)}
                     onRemove={onRemoveOne}
-                    removeTitle={seguimientoTab === 'SEGUIDAS' ? 'Dejar de seguir' : 'Quitar del dashboard'}
-                    isNew={seguimientoSeen[t.id] !== seguimientoSignature(t)}
+                    removeTitle={t.__deletedNotice ? 'Descartar aviso' : (seguimientoTab === 'SEGUIDAS' ? 'Dejar de seguir' : 'Quitar del dashboard')}
+                    isNew={!t.__deletedNotice && seguimientoSeen[t.id] !== seguimientoSignature(t)}
                   />
                 ))}
               </div>

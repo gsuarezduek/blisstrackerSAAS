@@ -679,11 +679,42 @@ async function remove(req, res, next) {
       return res.json({ ok: true, deletedSeries: true, deletedCount: ids.length })
     }
 
+    // Tarea delegada (creador != asignado) borrada por alguien que no es el propio
+    // delegante: deja un aviso — no se autonotifica quien borra su propia delegación.
+    const notifyCreatedById = (task.createdById && task.createdById !== task.userId && task.createdById !== req.user.userId)
+      ? task.createdById
+      : null
+
     // Notification no tiene cascade sobre Task — borrarlas antes para evitar el FK constraint
     await prisma.$transaction([
       prisma.notification.deleteMany({ where: { taskId: id } }),
       prisma.task.delete({ where: { id } }),
+      ...(notifyCreatedById ? [
+        prisma.deletedTaskNotice.create({
+          data: {
+            workspaceId: req.workspace.id,
+            projectId: task.projectId,
+            description: task.description,
+            userId: task.userId,
+            createdById: notifyCreatedById,
+            deletedById: req.user.userId,
+          },
+        }),
+        prisma.notification.create({
+          data: {
+            userId: notifyCreatedById,
+            actorId: req.user.userId,
+            workspaceId: req.workspace.id,
+            projectId: task.projectId,
+            type: 'TASK_DELETED',
+            message: `eliminó la tarea "${task.description}" que le habías delegado`,
+          },
+        }),
+      ] : []),
     ])
+    if (notifyCreatedById) {
+      emitTo(`user:${notifyCreatedById}`, 'notification:new', { type: 'TASK_DELETED' })
+    }
     res.json({ ok: true })
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
