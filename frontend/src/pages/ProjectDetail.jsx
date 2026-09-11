@@ -463,6 +463,7 @@ export default function ProjectDetail() {
                     setAddTaskDefaultDescription(`Archivo: ${file.name}\n${link}`)
                     setShowAddTask(true)
                   }}
+                  contenidoEnabled={contenidoEnabled}
                 />
               )}
 

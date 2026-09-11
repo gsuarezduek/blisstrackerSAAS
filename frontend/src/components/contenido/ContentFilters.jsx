@@ -55,9 +55,11 @@ export default function ContentFilters({ projectId, value, onChange, members = [
         className={`${SELECT} w-56`}
       />
 
+      {/* 'publicado' vive solo en la sección "Publicadas" — no se ofrece acá para
+          que no se vuelvan a mezclar en Tabla/Kanban/Calendario. */}
       <select value={value.status ?? ''} onChange={e => set({ status: e.target.value })} className={SELECT}>
         <option value="">Todos los estados</option>
-        {CONTENT_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        {CONTENT_STATUSES.filter(s => s.key !== 'publicado').map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
       </select>
 
       <select value={value.network ?? ''} onChange={e => set({ network: e.target.value })} className={SELECT}>

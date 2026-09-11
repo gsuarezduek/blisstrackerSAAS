@@ -10,6 +10,7 @@ import ContentKanbanView from '../components/contenido/ContentKanbanView'
 import ContentCalendarView, { currentMonthStr } from '../components/contenido/ContentCalendarView'
 import ContentPieceModal from '../components/contenido/ContentPieceModal'
 import ContentTrashModal from '../components/contenido/ContentTrashModal'
+import ContentPublishedModal from '../components/contenido/ContentPublishedModal'
 import useContentPieces from '../components/contenido/useContentPieces'
 import useContentSocket from '../components/contenido/useContentSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -48,6 +49,7 @@ export default function Contenido() {
   const [requestingApproval, setRequestingApproval] = useState(false)
   const [approvalMsg, setApprovalMsg] = useState(null) // { type: 'success'|'error', text }
   const [trashOpen, setTrashOpen] = useState(false)
+  const [publishedOpen, setPublishedOpen] = useState(false)
 
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
@@ -99,7 +101,51 @@ export default function Contenido() {
     onPieceDeleted: scheduleReload,
   })
 
-  const openPiece = useMemo(() => pieces.find(p => String(p.id) === String(pieceId)) ?? null, [pieces, pieceId])
+  // Una pieza puede abrirse (?piece=id) sin estar en `pieces` — la vista activa
+  // ya no incluye publicadas por default (ver nuevo default de listPieces), así
+  // que abrirla desde "📣 Publicadas" necesita traerla aparte. `fetchedPiece`
+  // cubre ese caso; se limpia solo apenas la pieza vuelve a aparecer en `pieces`
+  // o se cierra el modal.
+  const [fetchedPiece, setFetchedPiece] = useState(null)
+  const pieceInList = useMemo(() => pieces.some(p => String(p.id) === String(pieceId)), [pieces, pieceId])
+
+  const refetchPiece = useCallback(() => {
+    if (!projectId || !pieceId) { setFetchedPiece(null); return }
+    api.get(`/contenido/projects/${projectId}/pieces/${pieceId}`)
+      .then(r => setFetchedPiece(r.data))
+      .catch(() => setFetchedPiece(null))
+  }, [projectId, pieceId])
+
+  useEffect(() => {
+    if (!pieceId || pieceInList) { setFetchedPiece(null); return }
+    refetchPiece()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pieceId, pieceInList, projectId])
+
+  const openPiece = useMemo(() => pieces.find(p => String(p.id) === String(pieceId)) ?? fetchedPiece, [pieces, pieceId, fetchedPiece])
+
+  // Espejo de `update`/`reload` del hook, pero para una pieza traída aparte
+  // (fuera de `pieces`): pegarle directo al PATCH/GET puntual en vez de tocar
+  // una lista que no la contiene. Un cambio de `status` puede sacar o meter la
+  // pieza de la vista activa (ej. pasar a/desde 'publicado') — se recarga la
+  // lista además del update puntual, así no queda un row obsoleto hasta el
+  // próximo refresh manual.
+  async function handleModalUpdate(id, patch) {
+    if (pieceInList) {
+      const result = await update(id, patch)
+      if (patch.status !== undefined) reload()
+      return result
+    }
+    const { data } = await api.patch(`/contenido/projects/${projectId}/pieces/${id}`, patch)
+    setFetchedPiece(data)
+    if (patch.status !== undefined) reload()
+    return data
+  }
+
+  function handleModalPieceChanged() {
+    if (pieceInList) reload()
+    else refetchPiece()
+  }
 
   // Conteo por estado (incluye `awaitingClient`, el badge del botón "Pedir
   // aprobación"). Independiente de `filters`/`view` — siempre refleja TODAS las
@@ -328,6 +374,14 @@ export default function Contenido() {
                   </span>
                 )}
                 <button
+                  onClick={() => setPublishedOpen(true)}
+                  title="Piezas ya publicadas — salieron de la vista general"
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors inline-flex items-center gap-1.5"
+                >
+                  📣 Publicadas
+                  {summary?.byStatus?.publicado ? ` (${summary.byStatus.publicado})` : ''}
+                </button>
+                <button
                   onClick={() => setTrashOpen(true)}
                   title="Piezas eliminadas, recuperables durante 30 días"
                   className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors inline-flex items-center gap-1.5"
@@ -350,10 +404,18 @@ export default function Contenido() {
           canEdit={canEdit}
           currentUserId={user?.id}
           isAdmin={user?.isAdmin}
-          onUpdate={update}
+          onUpdate={handleModalUpdate}
           onDelete={handleDelete}
-          onPieceChanged={reload}
+          onPieceChanged={handleModalPieceChanged}
           onClose={() => patchParams({ piece: '' })}
+        />
+      )}
+
+      {publishedOpen && (
+        <ContentPublishedModal
+          projectId={projectId}
+          onClose={() => setPublishedOpen(false)}
+          onOpen={id => patchParams({ piece: id })}
         />
       )}
 

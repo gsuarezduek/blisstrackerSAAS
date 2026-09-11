@@ -9,10 +9,12 @@ import ContentHistoryList from './ContentHistoryList'
 import ContentAssetGallery from './ContentAssetGallery'
 import ContentAssetUploader from './ContentAssetUploader'
 import ContentCommentThread from './ContentCommentThread'
+import ContentFileBrowserModal from './ContentFileBrowserModal'
 import { useContentHistory, useContentComments } from './useContentPieces'
 import useContentSocket from './useContentSocket'
 import { CONTENT_STATUSES, CONTENT_TYPES, CONTENT_NETWORKS } from './contentCatalog'
 import { toLocalInput } from './dateHelpers'
+import { fmtBytes, iconFor } from '../../lib/fileIcons'
 
 const LABEL = 'text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block'
 const INPUT = 'w-full px-2.5 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 disabled:opacity-60 disabled:cursor-not-allowed'
@@ -50,9 +52,12 @@ function useDebouncedCommit(value, onCommit, delay = 600) {
  * optimismo local: es la única forma de que la pieza en memoria refleje el
  * asset nuevo/borrado/reordenado sin duplicar la lógica de fetch acá.
  *
- * El tab "Comentarios" es el hilo interno del equipo (visibility: 'internal').
- * El hilo con el cliente ('client') llega en F7, cuando el portal pueda
- * escribirlo — ContentCommentThread ya está armado para reusarse ahí.
+ * El tab "Comentarios" muestra el hilo MEZCLADO (internal + client, ver
+ * `visibility="all"` en ContentCommentThread más abajo): el cliente ya puede
+ * comentar desde el portal (aprobar/pedir cambios, o un mensaje suelto), así
+ * que el equipo necesita verlo acá, no solo como blurb en "Historial". Lo que
+ * el equipo escribe desde acá sigue siendo siempre `internal` (`postVisibility`)
+ * — no hay, hoy, una forma de responderle al cliente desde este tab.
  */
 export default function ContentPieceModal({ piece, members = [], clientContacts = [], canEdit, currentUserId, isAdmin, onUpdate, onDelete, onPieceChanged, onClose }) {
   const [tab, setTab] = useState('detalles')
@@ -94,6 +99,49 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
     await api.delete(`/contenido/projects/${piece.projectId}/pieces/${piece.id}/assets/${assetId}`)
     onPieceChanged()
   }, [piece.projectId, piece.id, onPieceChanged])
+
+  // Archivos del proyecto vinculados (ContentPieceFile) — separados de los
+  // assets subidos: comparten storage con Archivos, no tienen URL pública
+  // garantizada (solo las imágenes), así que se muestran en su propia lista
+  // en vez de mezclarse en ContentAssetGallery/el visor grande.
+  const [fileBrowserOpen, setFileBrowserOpen] = useState(false)
+  const [filesError, setFilesError] = useState(null)
+  const linkedFileIds = useMemo(() => new Set(piece.files.map(f => f.file.id)), [piece.files])
+
+  const handleLinkFile = useCallback(async (file) => {
+    await api.post(`/contenido/projects/${piece.projectId}/pieces/${piece.id}/files`, { fileId: file.id })
+    onPieceChanged()
+  }, [piece.projectId, piece.id, onPieceChanged])
+
+  const handleUnlinkFile = useCallback(async (fileId) => {
+    setFilesError(null)
+    try {
+      await api.delete(`/contenido/projects/${piece.projectId}/pieces/${piece.id}/files/${fileId}`)
+      onPieceChanged()
+    } catch (err) {
+      setFilesError(err.response?.data?.error || 'No se pudo desvincular el archivo')
+    }
+  }, [piece.projectId, piece.id, onPieceChanged])
+
+  async function handleOpenLinkedFile(file) {
+    if (file.mimeType?.startsWith('image/') && file.url) {
+      window.open(file.url, '_blank', 'noopener')
+      return
+    }
+    try {
+      const res = await api.get(`/projects/${piece.projectId}/files/${file.id}/download`, { responseType: 'blob' })
+      const blobUrl = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = file.name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      setFilesError('No se pudo abrir el archivo')
+    }
+  }
 
   const [sendingToDashboard, setSendingToDashboard] = useState(false)
   const [dashboardError, setDashboardError] = useState(null)
@@ -220,7 +268,7 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
             >
               {t.label}
               {t.id === 'comentarios' && comments.length > 0 && (
-                <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">{comments.filter(c => c.visibility === 'internal').length}</span>
+                <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">{comments.length}</span>
               )}
             </button>
           ))}
@@ -295,6 +343,52 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
 
                 {canEdit && (
                   <ContentAssetUploader projectId={piece.projectId} pieceId={piece.id} onUploaded={handleAssetUploaded} />
+                )}
+
+                {/* Archivos del proyecto vinculados — lista aparte del uploader de arriba */}
+                {(piece.files.length > 0 || (canEdit && piece.status !== 'publicado')) && (
+                  <div className="pt-1">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">📎 Archivos del proyecto vinculados</p>
+                    {filesError && <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">{filesError}</p>}
+                    {piece.files.length > 0 && (
+                      <div className="space-y-1 mb-2">
+                        {piece.files.map(link => (
+                          <div key={link.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-900/40 group">
+                            <button
+                              onClick={() => handleOpenLinkedFile(link.file)}
+                              className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
+                              title={link.file.name}
+                            >
+                              <span className="text-base shrink-0">{iconFor(link.file.mimeType)}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm text-gray-700 dark:text-gray-200 truncate">{link.file.name}</span>
+                                <span className="block text-[11px] text-gray-400 dark:text-gray-500">
+                                  {fmtBytes(link.file.sizeBytes)}{link.linkedBy ? ` · vinculado por ${link.linkedBy.name}` : ''}
+                                </span>
+                              </span>
+                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => handleUnlinkFile(link.file.id)}
+                                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity shrink-0 text-sm"
+                                title="Desvincular"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {canEdit && piece.status !== 'publicado' && (
+                      <button
+                        onClick={() => setFileBrowserOpen(true)}
+                        className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        📂 Seleccionar archivo del proyecto
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -451,14 +545,15 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
           {tab === 'comentarios' && (
             <ContentCommentThread
               comments={comments}
-              visibility="internal"
+              visibility="all"
+              postVisibility="internal"
               currentUserId={currentUserId}
               isAdmin={isAdmin}
               members={members}
               canPost={canEdit}
               onSubmit={addComment}
               onDelete={removeComment}
-              emptyLabel="Sin comentarios internos todavía."
+              emptyLabel="Sin comentarios todavía."
             />
           )}
 
@@ -476,6 +571,15 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
         onConfirm={handleConfirmDelete}
         onCancel={() => setConfirmDelete(false)}
       />
+
+      {fileBrowserOpen && (
+        <ContentFileBrowserModal
+          projectId={piece.projectId}
+          linkedFileIds={linkedFileIds}
+          onLink={handleLinkFile}
+          onClose={() => setFileBrowserOpen(false)}
+        />
+      )}
     </div>
   )
 }

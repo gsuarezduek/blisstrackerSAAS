@@ -182,6 +182,7 @@ model Workspace {
   contentAssets          ContentAsset[]
   contentComments        ContentComment[]
   contentStatusEvents    ContentStatusEvent[]
+  contentPieceFiles      ContentPieceFile[]
   projectFiles           ProjectFile[]
   whatsappAccounts          WhatsappAccount[]
   whatsappConversations     WhatsappConversation[]
@@ -372,6 +373,7 @@ model User {
   projectFilesDeleted       ProjectFile[]              @relation("ProjectFileDeletedBy")
   contentComments           ContentComment[]           @relation("ContentCommentAuthor")
   contentStatusEvents       ContentStatusEvent[]        @relation("ContentEventActor")
+  contentPieceFilesLinked   ContentPieceFile[]          @relation("ContentPieceFileLinkedBy")
   whatsappAccountsConnected WhatsappAccount[]
   whatsappMessagesSent      WhatsappMessage[]
   whatsappConversationReads WhatsappConversationRead[]
@@ -607,6 +609,10 @@ model ProjectFile {
   deletedAt    DateTime?
   deletedById  Int?
   deletedBy    User?    @relation("ProjectFileDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  // Vínculos con piezas de Contenido (ver modelo ContentPieceFile) — un archivo
+  // puede asociarse a una o más piezas, sin duplicar bytes ni objeto R2.
+  contentLinks ContentPieceFile[]
 
   @@index([projectId, parentId])
   @@index([workspaceId])
@@ -3405,12 +3411,38 @@ model ContentPiece {
   comments      ContentComment[]
   statusEvents  ContentStatusEvent[]
   notifications Notification[]
+  files         ContentPieceFile[]
 
   @@index([workspaceId])
   @@index([projectId, scheduledDate]) // vista Calendario (rango de mes)
   @@index([projectId, status, order]) // vista Kanban
   @@index([projectId, updatedAt]) // tiebreak legacy / futuras vistas por última edición
   @@index([projectId, deletedAt]) // vista Papelera + limpieza semanal
+}
+
+// Vínculo entre una pieza y un archivo ya existente en el repositorio de
+// Archivos del proyecto (ProjectFile) — asociación, no copia: no se sube nada
+// nuevo ni se duplica el objeto en R2, solo se referencia el ProjectFile ya
+// subido. Bidireccional en la UI (desde el archivo o desde la pieza) pero un
+// solo modelo de datos. onDelete: Cascade en fileId — si la limpieza semanal
+// borra en duro un ProjectFile (pasados los 30 días de papelera), el vínculo
+// desaparece solo, sin dejar un asset roto.
+model ContentPieceFile {
+  id          Int          @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pieceId     Int
+  piece       ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  fileId      Int
+  file        ProjectFile  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  linkedById  Int?
+  linkedBy    User?        @relation("ContentPieceFileLinkedBy", fields: [linkedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+
+  @@unique([pieceId, fileId])
+  @@index([pieceId])
+  @@index([fileId])
+  @@index([workspaceId])
 }
 
 // Asset de una pieza. Ciclo de vida en dos pasos por el flujo de presigned URL:

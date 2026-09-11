@@ -13,6 +13,7 @@ const {
   CONTENT_NETWORKS,
 } = require('../lib/contentCatalog')
 const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
+const { shapeItem: shapeProjectFile } = require('./projects/projectFiles.controller')
 
 // Todas las mutaciones de una pieza emiten a workspace:<id> con la pieza ya
 // formateada — así el Kanban/Tabla/Calendario de otra pestaña se actualiza sin
@@ -97,6 +98,15 @@ function safeParseArr(str) {
   try { const v = JSON.parse(str); return Array.isArray(v) ? v : [] } catch { return [] }
 }
 
+// select de ProjectFile con los campos que shapeProjectFile necesita para
+// armar el ítem (id/type/name/status/mimeType/sizeBytes/width/height/
+// objectKey/posterKey/uploadedBy/createdAt) — ver projectFiles.controller.js#shapeItem.
+const LINKED_FILE_SELECT = {
+  id: true, type: true, name: true, status: true, mimeType: true, sizeBytes: true,
+  width: true, height: true, objectKey: true, posterKey: true, createdAt: true,
+  uploadedBy: { select: { id: true, name: true } },
+}
+
 const PIECE_INCLUDE = {
   owner:       { select: { id: true, name: true, avatar: true } },
   ownerContact:{ select: { id: true, name: true, email: true } },
@@ -104,6 +114,15 @@ const PIECE_INCLUDE = {
   task:        { select: { id: true, status: true } },
   approvedBy:  { select: { id: true, name: true, email: true } },
   assets:      { where: { status: 'ready' }, orderBy: { order: 'asc' } },
+  // Archivos vinculados desde el repositorio de Archivos del proyecto (ver
+  // modelo ContentPieceFile) — se filtran los que están en la papelera de
+  // Archivos (deletedAt no nulo): desaparecen de la pieza mientras están ahí y
+  // reaparecen solos si se restauran, sin lógica especial.
+  files: {
+    where:   { file: { deletedAt: null } },
+    include: { file: { select: LINKED_FILE_SELECT }, linkedBy: { select: { id: true, name: true } } },
+    orderBy: { createdAt: 'asc' },
+  },
   _count:      { select: { comments: true } },
 }
 
@@ -140,6 +159,18 @@ function formatAsset(a) {
   }
 }
 
+// Archivo del proyecto vinculado a la pieza (ContentPieceFile). `id` es el id
+// del VÍNCULO (para desvincular), `file` es el ProjectFile formateado con el
+// mismo shape que usa Archivos (shapeProjectFile).
+function formatLinkedFile(link) {
+  return {
+    id:        link.id,
+    file:      shapeProjectFile(link.file),
+    linkedBy:  link.linkedBy ? { id: link.linkedBy.id, name: link.linkedBy.name } : null,
+    createdAt: link.createdAt,
+  }
+}
+
 // Formatter INTERNO (equipo). El del portal del cliente es una función aparte en
 // contentPortal.controller.js y nunca expone internalNotes ni datos de equipo.
 function formatPiece(p) {
@@ -169,6 +200,7 @@ function formatPiece(p) {
     taskId:        p.taskId ?? null,
     task:          p.task ? { id: p.task.id, status: p.task.status } : null,
     assets:        p.assets ? p.assets.map(formatAsset) : [],
+    files:         p.files ? p.files.map(formatLinkedFile) : [],
     commentCount:  p._count?.comments ?? 0,
     submittedAt:        p.submittedAt,
     approvedAt:         p.approvedAt,
@@ -338,6 +370,11 @@ async function listPieces(req, res, next) {
     if (status) {
       const list = String(status).split(',').filter(isValidStatus)
       if (list.length) where.status = { in: list }
+    } else {
+      // Sin filtro explícito de estado, las piezas 'publicado' quedan afuera
+      // de la vista general (Tabla/Kanban/Calendario) — viven solo en la
+      // sección "Publicadas", que pide explícitamente ?status=publicado.
+      where.status = { not: 'publicado' }
     }
     // `networks` es un JSON array serializado; el match por substring de la clave
     // entre comillas evita falsos positivos entre redes con nombres contenidos.
@@ -876,5 +913,7 @@ module.exports = {
   loadPiece,
   logEvent,
   statusSideEffects,
+  emitPieceUpdated,
+  formatLinkedFile,
   PIECE_INCLUDE,
 }

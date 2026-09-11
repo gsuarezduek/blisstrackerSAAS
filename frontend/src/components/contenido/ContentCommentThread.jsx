@@ -13,12 +13,14 @@ function formatWhen(iso) {
  * Hilo de comentarios de una pieza. Reusa el autocompletado de @menciones y el
  * resaltado de texto del chat interno (mismo componente, dos contextos).
  *
- * `visibility` filtra qué comentarios se muestran ('internal' o 'client') y con
- * qué visibilidad se postean los nuevos — así este mismo componente sirve tanto
- * para "Comentarios" (equipo, F4) como para "Feedback del cliente" (F7, cuando
- * el portal pueda escribir en el hilo 'client') sin duplicar la UI.
+ * `visibility` filtra qué comentarios se muestran ('internal', 'client', o
+ * 'all' para el hilo mezclado que usa el tab "Comentarios" del equipo).
+ * `postVisibility` (default = `visibility`) es con qué visibilidad se postean
+ * los nuevos — separado de `visibility` porque "Comentarios" muestra TODO pero
+ * sigue posteando como 'internal' (no hay, hoy, una forma de que el equipo le
+ * escriba al cliente desde acá; eso pasa por aprobar/pedir cambios).
  */
-export default function ContentCommentThread({ comments, visibility, currentUserId, isAdmin, members, canPost, onSubmit, onDelete, emptyLabel }) {
+export default function ContentCommentThread({ comments, visibility, postVisibility, currentUserId, isAdmin, members, canPost, onSubmit, onDelete, emptyLabel }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState(null)
@@ -28,7 +30,8 @@ export default function ContentCommentThread({ comments, visibility, currentUser
   const { mentionQuery, mentionMatches, mentionIdx, handleTextChange, handleMentionKeyDown, selectMention } =
     useMentionAutocomplete({ text, setText, textareaRef, members })
 
-  const thread = comments.filter(c => c.visibility === visibility)
+  const thread = visibility === 'all' ? comments : comments.filter(c => c.visibility === visibility)
+  const effectivePostVisibility = postVisibility ?? visibility
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
@@ -40,7 +43,7 @@ export default function ContentCommentThread({ comments, visibility, currentUser
     setSending(true)
     setError(null)
     try {
-      await onSubmit(clean, visibility)
+      await onSubmit(clean, effectivePostVisibility)
       setText('')
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudo enviar el comentario')

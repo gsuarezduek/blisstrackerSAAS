@@ -3,6 +3,7 @@ import api from '../api/client'
 import LoadingSpinner from './LoadingSpinner'
 import { useProjectFileUpload, fmtMb, MAX_FILE_BYTES } from './projectFilesUpload'
 import { fmtBytes, iconFor } from '../lib/fileIcons'
+import ContentFilePiecesModal from './contenido/ContentFilePiecesModal'
 
 // ─── Modales chicos (nueva carpeta / renombrar / mover / confirmar borrado) ───
 
@@ -316,7 +317,7 @@ function TrashModal({ projectId, onClose, onRestored }) {
 
 // ─── Tarjeta de ítem (carpeta o archivo) con menú contextual ──────────────────
 
-function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onCreateTask, caption, selected, onToggleSelect }) {
+function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onCreateTask, onLinkToContent, caption, selected, onToggleSelect }) {
   const isFolder = item.type === 'folder'
   const isImage = !isFolder && item.mimeType?.startsWith('image/')
   const isPreviewable = !isFolder && !isImage && item.previewable
@@ -374,6 +375,9 @@ function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDele
               <>
                 <button onClick={() => { onOpenMenu(null); onDownload(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">⬇️ Descargar</button>
                 <button onClick={() => { onOpenMenu(null); onCopyLink(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">🔗 Copiar enlace</button>
+                {onLinkToContent && (
+                  <button onClick={() => { onOpenMenu(null); onLinkToContent(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">📄 Contenido</button>
+                )}
                 {onCreateTask && (
                   <button onClick={() => { onOpenMenu(null); onCreateTask(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">➕ Crear tarea</button>
                 )}
@@ -408,7 +412,7 @@ function sortItems(list, sortBy) {
   }
 }
 
-export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFromFile }) {
+export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFromFile, contenidoEnabled }) {
   const [folderId, setFolderId] = useState(null)
   const [path, setPath] = useState([])
   const [folders, setFolders] = useState([])
@@ -738,6 +742,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
                 onDownload={handleDownload}
                 onCopyLink={it => setModal({ type: 'copyLink', item: it })}
                 onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
+                onLinkToContent={contenidoEnabled ? it => setModal({ type: 'linkContent', item: it }) : null}
                 caption={item.path.length ? `🏠 / ${item.path.map(p => p.name).join(' / ')}` : '🏠 Raíz'}
               />
             ))}
@@ -766,6 +771,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
                 onDownload={handleDownload}
                 onCopyLink={it => setModal({ type: 'copyLink', item: it })}
                 onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
+                onLinkToContent={contenidoEnabled ? it => setModal({ type: 'linkContent', item: it }) : null}
                 caption={item.uploadedBy ? `${item.uploadedBy.name} · ${fmtDate(item.createdAt)}` : fmtDate(item.createdAt)}
                 selected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
@@ -808,6 +814,9 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
       )}
       {modal?.type === 'copyLink' && (
         <CopyLinkModal projectId={projectId} item={modal.item} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'linkContent' && (
+        <ContentFilePiecesModal projectId={projectId} file={modal.item} onClose={() => setModal(null)} />
       )}
       {showTrash && (
         <TrashModal

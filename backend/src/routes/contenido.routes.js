@@ -29,6 +29,7 @@ router.use(moduleAccessGuard('contenido'))
 const content  = require('../controllers/content.controller')
 const assets   = require('../controllers/contentAssets.controller')
 const comments = require('../controllers/contentComments.controller')
+const files    = require('../controllers/contentFiles.controller')
 
 // Piezas. La lectura queda abierta a cualquier miembro activo; las mutaciones
 // validan canWrite() adentro del handler.
@@ -63,5 +64,12 @@ router.delete('/projects/:id/pieces/:pid/assets/:aid',           assets.deleteAs
 router.get   ('/projects/:id/pieces/:pid/comments',      comments.listComments)
 router.post  ('/projects/:id/pieces/:pid/comments',      comments.addComment)
 router.delete('/projects/:id/pieces/:pid/comments/:cid', comments.deleteComment)
+
+// Vínculos con archivos de Archivos (ver contentFiles.controller.js) — la lista
+// de archivos ya vinculados viaja embebida en cada pieza (`piece.files`), no
+// hace falta un GET propio acá.
+router.get   ('/projects/:id/files/:fileId/pieces',      files.listPiecesForFile)
+router.post  ('/projects/:id/pieces/:pid/files',          files.linkFile)
+router.delete('/projects/:id/pieces/:pid/files/:fileId',  files.unlinkFile)
 
 module.exports = router
