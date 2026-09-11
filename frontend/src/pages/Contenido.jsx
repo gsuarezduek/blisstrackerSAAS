@@ -10,7 +10,6 @@ import ContentKanbanView from '../components/contenido/ContentKanbanView'
 import ContentCalendarView, { currentMonthStr } from '../components/contenido/ContentCalendarView'
 import ContentPieceModal from '../components/contenido/ContentPieceModal'
 import ContentTrashModal from '../components/contenido/ContentTrashModal'
-import ContentPublishedModal from '../components/contenido/ContentPublishedModal'
 import useContentPieces from '../components/contenido/useContentPieces'
 import useContentSocket from '../components/contenido/useContentSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -49,7 +48,6 @@ export default function Contenido() {
   const [requestingApproval, setRequestingApproval] = useState(false)
   const [approvalMsg, setApprovalMsg] = useState(null) // { type: 'success'|'error', text }
   const [trashOpen, setTrashOpen] = useState(false)
-  const [publishedOpen, setPublishedOpen] = useState(false)
 
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
@@ -101,11 +99,10 @@ export default function Contenido() {
     onPieceDeleted: scheduleReload,
   })
 
-  // Una pieza puede abrirse (?piece=id) sin estar en `pieces` — la vista activa
-  // ya no incluye publicadas por default (ver nuevo default de listPieces), así
-  // que abrirla desde "📣 Publicadas" necesita traerla aparte. `fetchedPiece`
-  // cubre ese caso; se limpia solo apenas la pieza vuelve a aparecer en `pieces`
-  // o se cierra el modal.
+  // Una pieza puede abrirse (?piece=id) sin estar en `pieces` — ej. un deep-link
+  // (notificación/email) a una pieza que no matchea los filtros/mes activos.
+  // `fetchedPiece` cubre ese caso; se limpia solo apenas la pieza vuelve a
+  // aparecer en `pieces` o se cierra el modal.
   const [fetchedPiece, setFetchedPiece] = useState(null)
   const pieceInList = useMemo(() => pieces.some(p => String(p.id) === String(pieceId)), [pieces, pieceId])
 
@@ -374,9 +371,15 @@ export default function Contenido() {
                   </span>
                 )}
                 <button
-                  onClick={() => setPublishedOpen(true)}
-                  title="Piezas ya publicadas — salieron de la vista general"
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors inline-flex items-center gap-1.5"
+                  onClick={() => {
+                    patchParams({ view: 'tabla' })
+                    setFilters(prev => ({ ...prev, status: 'publicado' }))
+                  }}
+                  title="Ver las piezas ya publicadas — salieron de la vista general por default"
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors inline-flex items-center gap-1.5 ${
+                    filters.status === 'publicado'
+                      ? 'border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                 >
                   📣 Publicadas
                   {summary?.byStatus?.publicado ? ` (${summary.byStatus.publicado})` : ''}
@@ -408,14 +411,6 @@ export default function Contenido() {
           onDelete={handleDelete}
           onPieceChanged={handleModalPieceChanged}
           onClose={() => patchParams({ piece: '' })}
-        />
-      )}
-
-      {publishedOpen && (
-        <ContentPublishedModal
-          projectId={projectId}
-          onClose={() => setPublishedOpen(false)}
-          onOpen={id => patchParams({ piece: id })}
         />
       )}
 

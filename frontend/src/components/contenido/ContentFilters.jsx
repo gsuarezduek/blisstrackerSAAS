@@ -55,11 +55,13 @@ export default function ContentFilters({ projectId, value, onChange, members = [
         className={`${SELECT} w-56`}
       />
 
-      {/* 'publicado' vive solo en la sección "Publicadas" — no se ofrece acá para
-          que no se vuelvan a mezclar en Tabla/Kanban/Calendario. */}
+      {/* 'publicado' queda afuera del listado por DEFAULT (sin filtro de estado,
+          ver listPieces en el backend) — pero elegirlo acá a mano (o desde el
+          botón "📣 Publicadas", que solo setea este mismo filtro) sí las
+          muestra, en la misma Tabla/Kanban/Calendario que cualquier otra pieza. */}
       <select value={value.status ?? ''} onChange={e => set({ status: e.target.value })} className={SELECT}>
         <option value="">Todos los estados</option>
-        {CONTENT_STATUSES.filter(s => s.key !== 'publicado').map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        {CONTENT_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
       </select>
 
       <select value={value.network ?? ''} onChange={e => set({ network: e.target.value })} className={SELECT}>

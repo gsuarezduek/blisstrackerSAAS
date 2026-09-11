@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../api/client'
 import LoadingSpinner from './LoadingSpinner'
 import { useProjectFileUpload, fmtMb, MAX_FILE_BYTES } from './projectFilesUpload'
@@ -317,7 +318,7 @@ function TrashModal({ projectId, onClose, onRestored }) {
 
 // ─── Tarjeta de ítem (carpeta o archivo) con menú contextual ──────────────────
 
-function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onCreateTask, onLinkToContent, caption, selected, onToggleSelect }) {
+function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onCreateTask, onLinkToContent, caption, selected, onToggleSelect }) {
   const isFolder = item.type === 'folder'
   const isImage = !isFolder && item.mimeType?.startsWith('image/')
   const isPreviewable = !isFolder && !isImage && item.previewable
@@ -337,16 +338,23 @@ function ItemCard({ item, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDele
         </div>
         <span className="text-xs text-gray-700 dark:text-gray-200 truncate w-full">{item.name}</span>
         {!isFolder && <span className="text-[10px] text-gray-400 dark:text-gray-500">{fmtBytes(item.sizeBytes)}</span>}
-        {!isFolder && item.contentPieces?.length > 0 && (
-          <span
-            className="text-[10px] text-primary-600 dark:text-primary-400 truncate w-full"
-            title={`Vinculado a: ${item.contentPieces.map(p => p.title).join(', ')}`}
-          >
-            📅 {item.contentPieces.length === 1 ? item.contentPieces[0].title : `${item.contentPieces.length} piezas`}
-          </span>
-        )}
         {caption && <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate w-full">{caption}</span>}
       </button>
+
+      {/* Fuera del botón de arriba (que abre la vista previa) — a propósito, para
+          poder hacer las dos cosas: click en la tarjeta ve el archivo, click acá
+          va a la pieza. Si hay más de una vinculada, va a la primera; el resto
+          se listan en el tooltip. */}
+      {!isFolder && item.contentPieces?.length > 0 && (
+        <Link
+          to={`/contenido?projectId=${projectId}&piece=${item.contentPieces[0].id}`}
+          onClick={e => e.stopPropagation()}
+          title={`Ir a la pieza: ${item.contentPieces.map(p => p.title).join(', ')}`}
+          className="block w-full text-center text-[10px] text-primary-600 dark:text-primary-400 hover:underline truncate px-1 mt-0.5"
+        >
+          📅 {item.contentPieces.length === 1 ? item.contentPieces[0].title : `${item.contentPieces.length} piezas`}
+        </Link>
+      )}
 
       {onToggleSelect && (
         <button
@@ -741,6 +749,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
               <ItemCard
                 key={`${item.type}-${item.id}`}
                 item={item}
+                projectId={projectId}
                 menuOpen={menuOpenId === item.id}
                 onOpenMenu={setMenuOpenId}
                 onOpen={openFoundItem}
@@ -770,6 +779,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
             <div key={`${item.type}-${item.id}`} className={highlightId === item.id ? 'rounded-xl ring-2 ring-primary-400 animate-pulse' : ''}>
               <ItemCard
                 item={item}
+                projectId={projectId}
                 menuOpen={menuOpenId === item.id}
                 onOpenMenu={setMenuOpenId}
                 onOpen={openItem}
