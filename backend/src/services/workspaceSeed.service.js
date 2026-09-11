@@ -44,11 +44,20 @@ async function seedDefaults(workspaceId, tx = prisma) {
     await tx.service.create({ data: { workspaceId, name: 'Marketing Digital', active: true } })
   }
 
-  await tx.userRole.upsert({
-    where:  { workspaceId_name: { workspaceId, name: 'PROJECT_MANAGER' } },
-    create: { workspaceId, name: 'PROJECT_MANAGER', label: 'Project Manager' },
-    update: {},
-  }).catch(() => {}) // si no existe el unique compuesto, ignorar
+  // findFirst + create condicional (no upsert): un upsert que falla por un choque de
+  // constraint queda como statement fallido dentro de la transacción — en Postgres eso
+  // aborta TODA la transacción aunque el error se atrape en JS, y un COMMIT posterior
+  // sobre una transacción abortada no tira error (hace ROLLBACK silencioso), así que el
+  // registro entero del workspace se pierde sin que nadie se entere. Mismo patrón que
+  // Service arriba, sin depender de que el unique compuesto (workspaceId, name) sea el
+  // único índice de nombre vigente en la DB.
+  const existingRole = await tx.userRole.findFirst({
+    where: { workspaceId, name: 'PROJECT_MANAGER' },
+    select: { id: true },
+  })
+  if (!existingRole) {
+    await tx.userRole.create({ data: { workspaceId, name: 'PROJECT_MANAGER', label: 'Project Manager' } })
+  }
 }
 
 async function seedWorkspace(workspaceId, ownerId, tx = prisma) {
