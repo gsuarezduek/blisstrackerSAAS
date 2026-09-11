@@ -20,7 +20,11 @@ function StatusSelect({ status, saving, onChange, title }) {
       title={title}
       className={`text-xs font-semibold rounded-full pl-2.5 pr-1 py-0.5 border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 disabled:cursor-wait ${STATUS_BADGE[meta.color] || STATUS_BADGE.gray}`}
     >
-      {LEAD_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+      {LEAD_STATUSES.map(s => (
+        <option key={s.key} value={s.key} className="bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100">
+          {s.label}
+        </option>
+      ))}
     </select>
   )
 }
