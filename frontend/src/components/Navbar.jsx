@@ -4,8 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useWorkspace } from '../context/WorkspaceContext'
 import useRoles from '../hooks/useRoles'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
-import ChatWidget from './chat/ChatWidget'
-import GamificationFab from './GamificationFab'
+import FloatingDock from './FloatingDock'
 import NotificationBell from './NotificationBell'
 import { useTheme } from '../context/ThemeContext'
 import BlissLogo from './BlissLogo'
@@ -340,8 +339,7 @@ export default function Navbar() {
 
   return (
     <>
-      <ChatWidget />
-      <GamificationFab />
+      <FloatingDock />
       <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         {user && <AnnouncementBanner />}
         {user && <EmailVerifiedBanner />}

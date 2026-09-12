@@ -715,9 +715,14 @@ function SummaryBar({ members, filter, onFilter }) {
     { key: 'up',       label: 'En alza',   n: counts.up,       cls: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
   ]
   const needAttention = counts.down + counts.inactive + counts.stuck
+  // Mismo lenguaje visual que AttentionBanner (frontend/src/components/AttentionBanner.jsx):
+  // card con borde redondeado, verde si no hay nada pendiente, ámbar si hay algo.
+  const wrapperCls = needAttention === 0
+    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+    : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
 
   return (
-    <div className="mb-4">
+    <div className={`border rounded-xl px-4 py-3 mb-4 ${wrapperCls}`}>
       <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
         {needAttention === 0
           ? <>✅ Nadie necesita atención inmediata.</>

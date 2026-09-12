@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { isWorkspaceSubdomain } from '../utils/domain'
 import AddTaskModal from './AddTaskModal'
+import CommandPalette from './CommandPalette'
 
 // Catálogo de atajos — alimenta el overlay de ayuda (tecla "?"). Se sacaron los
 // atajos de navegación (Shift + D/Y/A/M/R) y las acciones de tarea con Shift
@@ -12,6 +13,7 @@ const SHORTCUT_GROUPS = [
     { keys: ['N'], desc: 'Nueva tarea (desde cualquier página; si estás en un proyecto, queda asociada a ese proyecto)' },
   ]},
   { title: 'General', items: [
+    { keys: ['Ctrl/Cmd', 'K'], desc: 'Buscador global — ir a cualquier pantalla o buscar un lead' },
     { keys: ['Ctrl/Cmd', 'B'], desc: 'Abrir / cerrar la pizarra de notas' },
     { keys: ['?'],             desc: 'Mostrar / ocultar esta ayuda' },
     { keys: ['Esc'],           desc: 'Cerrar la ventana actual' },
@@ -37,6 +39,7 @@ export default function GlobalShortcuts() {
   const { user } = useAuth()
   const [taskOpen, setTaskOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [toast, setToast] = useState('')
   // Proyecto actual, publicado por ProjectDetail vía evento (null fuera de un proyecto).
   // Si hay uno, la tarea creada desde el atajo/botón flotante queda asociada a él.
@@ -52,12 +55,31 @@ export default function GlobalShortcuts() {
     return () => window.removeEventListener('bliss:project-context', onProjectContext)
   }, [enabled])
 
+  // Disparado por FloatingDock (frontend/src/components/FloatingDock.jsx) — mismo
+  // mecanismo que ya usan Chat/Gamification (`bliss:open-chat`/`bliss:open-game`)
+  // para que el dock abra el modal de tarea sin necesitar su propio botón.
+  useEffect(() => {
+    if (!enabled) return
+    function onOpenAddTask() { setTaskOpen(true) }
+    window.addEventListener('bliss:open-add-task', onOpenAddTask)
+    return () => window.removeEventListener('bliss:open-add-task', onOpenAddTask)
+  }, [enabled])
+
   useEffect(() => {
     if (!enabled) return
 
     function onKey(e) {
+      // Cmd/Ctrl+K abre el buscador global — a diferencia del resto de los atajos,
+      // debe andar incluso con el foco en un input (estándar de estos paletteS).
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen(v => !v)
+        return
+      }
+
       // Escape cierra nuestras ventanas, incluso si el foco está dentro del modal.
       if (e.key === 'Escape') {
+        if (paletteOpen) { setPaletteOpen(false); return }
         if (helpOpen) { setHelpOpen(false); return }
         if (taskOpen) { setTaskOpen(false); return }
         return
@@ -77,13 +99,13 @@ export default function GlobalShortcuts() {
       if (e.shiftKey) return
 
       // Atajos de una sola tecla (sin Shift).
-      if (taskOpen || helpOpen) return
+      if (taskOpen || helpOpen || paletteOpen) return
       if (lower === 'n') { e.preventDefault(); setTaskOpen(true) }
     }
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [enabled, taskOpen, helpOpen])
+  }, [enabled, taskOpen, helpOpen, paletteOpen])
 
   function handleAdd(task) {
     // Avisamos a la página activa (ej. Dashboard) para que refresque su lista.
@@ -96,22 +118,14 @@ export default function GlobalShortcuts() {
 
   return (
     <>
-      {/* Botón flotante para crear tareas desde cualquier página — primero en la pila
-          (abajo), luego Feedback y Gamification. Si estamos dentro de un proyecto, la
-          tarea queda asociada a él. */}
-      <button
-        onClick={() => setTaskOpen(true)}
-        title={projectContext ? `Nueva tarea en ${projectContext.name}` : 'Nueva tarea'}
-        className="fixed bottom-6 right-6 z-40 bg-primary-600 hover:bg-primary-700 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6">
-          <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-        </svg>
-      </button>
-
+      {/* Botón "Nueva tarea" propio removido — ahora se abre desde FloatingDock
+          (frontend/src/components/FloatingDock.jsx) vía el evento `bliss:open-add-task`,
+          o con la tecla N. Si estamos dentro de un proyecto, la tarea queda asociada a él. */}
       {taskOpen && (
         <AddTaskModal defaultProject={projectContext} onAdd={handleAdd} onClose={() => setTaskOpen(false)} />
       )}
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
       {/* Overlay de ayuda de atajos */}
       {helpOpen && (

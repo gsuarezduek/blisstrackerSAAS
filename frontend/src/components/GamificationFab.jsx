@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import DOMPurify from 'dompurify'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import useActiveGames from '../hooks/useActiveGames'
 import { avatarUrl } from '../utils/avatarUrl'
 import './situation-editor.css'
 
@@ -12,40 +12,25 @@ const MEDAL = ['🥇', '🥈', '🥉']
 const looksLikeHtml = (s) => /<[a-z][\s\S]*>/i.test(s || '')
 
 /**
- * Botón flotante de Gamification (🏆). Solo aparece si el feature flag está
- * habilitado Y hay al menos un juego activo dentro de su ventana de visibilidad.
- * Abre un panel con los juegos visibles, sus rankings y la UI de votación.
- * Se monta una sola vez desde Navbar (igual que FeedbackButton).
+ * Panel de Gamification (🏆) — sin botón propio, es FloatingDock (frontend/src/
+ * components/FloatingDock.jsx) quien decide cuándo mostrar el trigger y el badge
+ * (vía useActiveGames, mismo hook que consume este componente). Se abre disparando
+ * el evento `bliss:open-game` (con o sin `detail.gameId`).
  */
 export default function GamificationFab() {
   const { user } = useAuth()
-  const { enabled } = useFeatureFlag('gamification')
-  const [games, setGames] = useState([])
+  const { games, setGames, load, visible } = useActiveGames()
   const [open, setOpen] = useState(false)
   const [voting, setVoting] = useState(null) // gameId en curso
   const [tab, setTab] = useState(0)          // juego seleccionado cuando hay varios
   const [pendingGameId, setPendingGameId] = useState(null) // abierto desde una notificación
 
-  const load = useCallback(() => {
-    api.get('/gamification/active')
-      .then((r) => setGames(r.data.games || []))
-      .catch(() => setGames([]))
-  }, [])
-
-  useEffect(() => {
-    if (!enabled || !user) return
-    load()
-    const t = setInterval(load, 60000)
-    return () => clearInterval(t)
-  }, [enabled, user, load])
-
-  // Al clickear una notificación de "nuevo juego" (NotificationBell), se abre el panel
-  // directo en ese juego — sin ruta propia, el FAB es global y ya está montado en toda la app.
+  // Al clickear una notificación de "nuevo juego" (NotificationBell) o el ícono del dock,
+  // se abre el panel — si viene con gameId (deep-link puntual), lo deja seleccionado.
   useEffect(() => {
     function handleOpenGame(e) {
       const gameId = e.detail?.gameId
-      if (!gameId) return
-      setPendingGameId(gameId)
+      if (gameId) setPendingGameId(gameId)
       setOpen(true)
       load()
     }
@@ -71,9 +56,7 @@ export default function GamificationFab() {
     setGames(gs => gs.map(g => (g.isNew ? { ...g, isNew: false } : g)))
   }, [open, games])
 
-  if (!enabled || !user || games.length === 0) return null
-
-  const newCount = games.filter(g => g.isNew).length
+  if (!visible) return null
 
   async function vote(gameId, targetUserId) {
     setVoting(gameId)
@@ -93,20 +76,6 @@ export default function GamificationFab() {
 
   return (
     <>
-      {/* Botón flotante — arriba del de feedback para no solaparse */}
-      <button
-        onClick={() => setOpen(true)}
-        title="Juegos y desafíos del equipo"
-        className="fixed bottom-[168px] right-6 z-40 bg-amber-500 hover:bg-amber-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg transition-all hover:scale-110"
-      >
-        <span className="text-xl leading-none">🏆</span>
-        {newCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-white dark:ring-gray-800 animate-pulse">
-            {newCount}
-          </span>
-        )}
-      </button>
-
       {open && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:justify-end sm:pr-6 sm:pb-6">
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import api from '../../api/client'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { avatarUrl } from '../../utils/avatarUrl'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import SetupHintCard from '../../components/SetupHintCard'
+import AttentionBanner from '../../components/AttentionBanner'
 import useLegajoFields from '../../hooks/useLegajoFields'
 import useRoles from '../../hooks/useRoles'
 import { useWorkspace } from '../../context/WorkspaceContext'
@@ -78,6 +79,7 @@ export function PeopleScoreCard({ peopleScore }) {
 }
 
 export function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) {
+  const navigate = useNavigate()
   const { labelFor } = useRoles()
   const { workspace } = useWorkspace()
   const { fields: legajoFields, legajoEnabled } = useLegajoFields()
@@ -256,6 +258,29 @@ export function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) 
     ? [{ icon: '✅', label: 'Legajos completos', value: activeUsers.length, sub: 'Todos completos ✓' }]
     : []
 
+  // Resumen ejecutivo arriba de todo: qué necesita atención hoy, antes de la
+  // grilla de métricas crudas (mismo criterio que DailyInsightBlock/SummaryBar).
+  const attentionItems = [
+    ...(notLoggedInToday.length > 0 ? [{
+      id: 'not-logged-in',
+      severity: 'warning',
+      label: `${notLoggedInToday.length} ${notLoggedInToday.length === 1 ? 'persona no inició' : 'personas no iniciaron'} sesión hoy`,
+      onClick: () => setListModal('notLoggedIn'),
+    }] : []),
+    ...(lateToday.length > 0 ? [{
+      id: 'late-today',
+      severity: 'warning',
+      label: `${lateToday.length} ${lateToday.length === 1 ? 'persona llegó' : 'personas llegaron'} tarde hoy`,
+      onClick: () => setListModal('lateToday'),
+    }] : []),
+    ...(showLegajoHint ? [{
+      id: 'incomplete-legajos',
+      severity: 'info',
+      label: `${incompleteCount} ${incompleteCount === 1 ? 'legajo incompleto' : 'legajos incompletos'}`,
+      onClick: () => navigate('/admin/rrhh?tab=legajos'),
+    }] : []),
+  ]
+
   // Todas las métricas numéricas, cada una en su propia tarjeta (sin slider)
   const statCards = [
     { icon: '🟢', label: 'Iniciaron sesión hoy',      value: `${loggedInToday} / ${presentExpected.length}`,
@@ -272,6 +297,8 @@ export function MiniDashboard({ users, lastLoginsMap, dashStats, peopleScore }) 
 
   return (
     <div className="mb-6 space-y-3">
+      <AttentionBanner items={attentionItems} />
+
       {/* Fila 1: stats numéricas — cada métrica en su propia tarjeta */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {statCards.map((s, i) => (
