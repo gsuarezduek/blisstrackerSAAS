@@ -6,10 +6,11 @@ import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import useNavDestinations from '../hooks/useNavDestinations'
 
 // Buscador global (Cmd/Ctrl+K) — navegación estática (fuzzy-match client-side
-// contra useNavDestinations) + búsqueda de leads de Ventas (el único endpoint de
-// entidad que ya soporta `?search=` tal cual). Proyectos/canales de chat quedan
-// para una v2 (requieren `?search=` server-side nuevo). Overlay/backdrop calcado
-// del modal de ayuda de GlobalShortcuts.jsx.
+// contra useNavDestinations), proyectos (fuzzy-match client-side: GET /api/projects
+// ya devuelve TODOS los proyectos activos del workspace sin paginar, así que no
+// hace falta un endpoint `?search=` nuevo) y leads de Ventas (`?search=` server-side,
+// el único endpoint de entidad que ya lo soporta tal cual). Canales de chat quedan
+// para una v2. Overlay/backdrop calcado del modal de ayuda de GlobalShortcuts.jsx.
 function scoreMatch(label, q) {
   const idx = label.toLowerCase().indexOf(q)
   return idx === -1 ? null : idx
@@ -23,10 +24,12 @@ export default function CommandPalette({ open, onClose }) {
   const canSeeLeads = ventasEnabled && (user?.isAdmin || user?.isSales)
 
   const [query, setQuery] = useState('')
+  const [projects, setProjects] = useState([])
   const [leadResults, setLeadResults] = useState(null) // null = sin buscar todavía
   const [searching, setSearching] = useState(false)
   const [selected, setSelected] = useState(0)
   const inputRef = useRef(null)
+  const projectsLoadedRef = useRef(false)
 
   useEffect(() => {
     if (!open) return
@@ -38,6 +41,15 @@ export default function CommandPalette({ open, onClose }) {
     return () => clearTimeout(t)
   }, [open])
 
+  // Proyectos: se traen una sola vez (la primera vez que se abre el palette) y se
+  // cachean — GET /api/projects no pagina, es la misma lista completa que ya usa
+  // MyProjects.jsx, así que fuzzy-matchear client-side no agrega costo real.
+  useEffect(() => {
+    if (!open || projectsLoadedRef.current) return
+    projectsLoadedRef.current = true
+    api.get('/projects').then(({ data }) => setProjects(data || [])).catch(() => setProjects([]))
+  }, [open])
+
   const navMatches = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
@@ -45,8 +57,18 @@ export default function CommandPalette({ open, onClose }) {
       .map(d => ({ ...d, type: 'nav', score: scoreMatch(d.label, q) }))
       .filter(d => d.score !== null)
       .sort((a, b) => a.score - b.score)
-      .slice(0, 8)
+      .slice(0, 6)
   }, [destinations, query])
+
+  const projectMatches = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return projects
+      .map(p => ({ id: `project-${p.id}`, type: 'project', label: p.name, to: `/my-projects/${p.id}`, score: scoreMatch(p.name, q) }))
+      .filter(p => p.score !== null)
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 6)
+  }, [projects, query])
 
   // Búsqueda de leads — debounce 300ms, descarta respuestas obsoletas (mismo
   // patrón que el buscador de archivos de proyecto, ProjectFiles.jsx).
@@ -73,7 +95,7 @@ export default function CommandPalette({ open, onClose }) {
     to: user?.isAdmin ? `/admin/ventas?lead=${l.id}` : `/ventas?lead=${l.id}`,
   }))
 
-  const results = [...navMatches, ...leadItems]
+  const results = [...navMatches, ...projectMatches, ...leadItems]
 
   function go(item) {
     if (!item) return
@@ -103,7 +125,7 @@ export default function CommandPalette({ open, onClose }) {
             value={query}
             onChange={e => { setQuery(e.target.value); setSelected(0) }}
             onKeyDown={onKeyDown}
-            placeholder="Ir a… o buscar un lead"
+            placeholder={`Ir a… o buscar un proyecto${canSeeLeads ? ' o un lead' : ''}`}
             className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
           />
           {searching && <span className="text-xs text-gray-400">Buscando…</span>}
@@ -111,7 +133,7 @@ export default function CommandPalette({ open, onClose }) {
 
         <div className="max-h-[50vh] overflow-y-auto py-1.5">
           {!query.trim() ? (
-            <p className="px-4 py-6 text-sm text-gray-400 text-center">Escribí para ir a una pantalla{canSeeLeads ? ' o buscar un lead' : ''}.</p>
+            <p className="px-4 py-6 text-sm text-gray-400 text-center">Escribí para ir a una pantalla, un proyecto{canSeeLeads ? ' o un lead' : ''}.</p>
           ) : results.length === 0 && !searching ? (
             <p className="px-4 py-6 text-sm text-gray-400 text-center">Sin resultados para "{query}".</p>
           ) : (
@@ -126,6 +148,7 @@ export default function CommandPalette({ open, onClose }) {
               >
                 <span className="text-gray-800 dark:text-gray-100 truncate">
                   {item.type === 'lead' && <span className="text-gray-400 mr-1.5">Lead ·</span>}
+                  {item.type === 'project' && <span className="text-gray-400 mr-1.5">Proyecto ·</span>}
                   {item.label}
                 </span>
                 {item.detail && <span className="text-xs text-gray-400 flex-shrink-0 truncate max-w-[40%]">{item.detail}</span>}
