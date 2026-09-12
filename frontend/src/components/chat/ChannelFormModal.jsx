@@ -7,6 +7,7 @@ export default function ChannelFormModal({ channel, onClose, onSaved, onDeleted 
   const isEdit = !!channel
   const [name, setName] = useState(channel?.name || '')
   const [description, setDescription] = useState(channel?.description || '')
+  const [medium, setMedium] = useState('text')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -18,7 +19,10 @@ export default function ChannelFormModal({ channel, onClose, onSaved, onDeleted 
     setSaving(true)
     setError('')
     try {
-      const body = { name: name.trim(), description: description.trim() || null }
+      // `medium` solo viaja al crear — es inmutable, updateChannel() lo ignora.
+      const body = isEdit
+        ? { name: name.trim(), description: description.trim() || null }
+        : { name: name.trim(), description: description.trim() || null, medium }
       const { data } = isEdit
         ? await api.patch(`/chat/channels/${channel.id}`, body)
         : await api.post('/chat/channels', body)
@@ -71,6 +75,36 @@ export default function ChannelFormModal({ channel, onClose, onSaved, onDeleted 
             />
           </div>
 
+          {!isEdit && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Tipo de canal</label>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setMedium('text')}
+                  className={`flex-1 text-sm py-1.5 rounded-xl border transition-colors ${
+                    medium === 'text'
+                      ? 'bg-primary-100 dark:bg-primary-900/40 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  # Texto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMedium('voice')}
+                  className={`flex-1 text-sm py-1.5 rounded-xl border transition-colors ${
+                    medium === 'voice'
+                      ? 'bg-primary-100 dark:bg-primary-900/40 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  🔊 Voz
+                </button>
+              </div>
+            </div>
+          )}
+
           {error && <p className="text-xs text-red-500">{error}</p>}
 
           <div className="flex items-center gap-2 pt-1">
@@ -98,7 +132,7 @@ export default function ChannelFormModal({ channel, onClose, onSaved, onDeleted 
 
         {confirmDelete && (
           <div className="mt-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
-            <p className="text-xs text-red-700 dark:text-red-300 mb-2">¿Eliminar #{channel.name}? Se borran también sus mensajes. No se puede deshacer.</p>
+            <p className="text-xs text-red-700 dark:text-red-300 mb-2">¿Eliminar {channel.medium === 'voice' ? '🔊' : '#'} {channel.name}? Se borran también sus mensajes. No se puede deshacer.</p>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleDelete}

@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { WorkspaceProvider } from './context/WorkspaceContext'
 import { ChatProvider } from './context/ChatContext'
+import { VoiceCallProvider } from './context/VoiceCallContext'
 import React from 'react'
 import LoadingSpinner from './components/LoadingSpinner'
 import WorkspaceSuspendedScreen from './components/WorkspaceSuspendedScreen'
@@ -164,6 +165,7 @@ export default function App() {
     <WorkspaceProvider>
     <AuthProvider>
     <ChatProvider>
+    <VoiceCallProvider>
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <React.Suspense fallback={<LoadingSpinner size="lg" fullPage />}>
         <Routes>
@@ -212,6 +214,7 @@ export default function App() {
         </React.Suspense>
         <GlobalShortcuts />
       </BrowserRouter>
+    </VoiceCallProvider>
     </ChatProvider>
     </AuthProvider>
     </WorkspaceProvider>

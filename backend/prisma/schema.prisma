@@ -63,6 +63,8 @@ model Workspace {
   billingExempt       Boolean   @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.
   demoSeeded          Boolean   @default(false) // True si tiene proyecto "Demo — Aprendé BlissTracker"
   onboardingCompletedAt DateTime? // null = todavía no completó/saltó el wizard de onboarding (selector de módulos + tour)
+  voiceChannelSeededAt DateTime? // null = todavía no se sembró el canal de voz default (kind:'custom', medium:'voice').
+                                 // No se re-crea si el admin lo borra después — mismo criterio que demoSeeded.
   // Identidad de marca
   brandColors         String    @default("[]") // JSON: [{ hex, name? }]
   brandFonts          String    @default("[]") // JSON: [{ name, role }] role: heading|body|accent
@@ -3273,6 +3275,8 @@ model ChatChannel {
   workspaceId Int
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   kind        String // "general" | "project" | "custom" — String (no enum): agregar tipos no requiere migración
+  medium      String    @default("text") // "text" | "voice" — canales de voz (WebRTC mesh). Inmutable tras crear:
+                                          // updateChannel() nunca lo lee del body, igual que kind nunca cambia.
   slug        String // clave estable en URL, ej "general", "marketing", "proyecto-mdz-rent-a-car"
   name        String? // solo custom/general; los de kind="project" usan project.name (no se duplica)
   description String?

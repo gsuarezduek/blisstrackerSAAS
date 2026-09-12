@@ -3,6 +3,7 @@ import { useChat } from '../context/ChatContext'
 import useActiveGames from '../hooks/useActiveGames'
 import ChatWidget from './chat/ChatWidget'
 import GamificationFab from './GamificationFab'
+import VoiceCallIndicator from './VoiceCallIndicator'
 
 // Punto único de entrada para los widgets flotantes que antes se apilaban
 // verticalmente en la esquina inferior derecha (bottom-6 / bottom-24 / bottom-[168px]):
@@ -46,6 +47,7 @@ export default function FloatingDock() {
       {/* Paneles reales — sin botón propio, se abren escuchando los eventos `bliss:open-*` */}
       <ChatWidget />
       <GamificationFab />
+      <VoiceCallIndicator />
 
       {menuOpen && (
         <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />

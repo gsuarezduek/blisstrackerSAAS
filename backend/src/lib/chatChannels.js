@@ -27,8 +27,23 @@ async function ensureProjectChannel({ id, name, workspaceId }) {
   })
 }
 
+// Canal de voz default: se siembra UNA sola vez por workspace (flag
+// Workspace.voiceChannelSeededAt, mismo criterio que demoSeeded). A diferencia de
+// #general, nace kind:'custom' — un admin puede renombrarlo/borrarlo como cualquier
+// custom channel — así que no alcanza con chequear "¿existe un canal medium=voice?"
+// en cada llamada: eso lo resucitaría apenas se borrara.
+async function ensureDefaultVoiceChannel(workspaceId) {
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { voiceChannelSeededAt: true } })
+  if (workspace?.voiceChannelSeededAt) return
+
+  const slug = await uniqueSlug(workspaceId, 'voz')
+  await prisma.chatChannel.create({ data: { workspaceId, kind: 'custom', medium: 'voice', slug, name: 'Voz' } })
+  await prisma.workspace.update({ where: { id: workspaceId }, data: { voiceChannelSeededAt: new Date() } })
+}
+
 // Materialización perezosa (mismo idioma que las tareas recurrentes): asegura que
-// #general exista y que todo proyecto activo tenga su canal, sin cron ni backfill.
+// #general exista, que todo proyecto activo tenga su canal, y que el canal de voz
+// default se haya sembrado — sin cron ni backfill.
 async function materializeChannels(workspaceId) {
   const general = await prisma.chatChannel.findFirst({ where: { workspaceId, kind: 'general' }, select: { id: true } })
   if (!general) {
@@ -42,6 +57,8 @@ async function materializeChannels(workspaceId) {
   for (const project of projects) {
     await ensureProjectChannel({ ...project, workspaceId })
   }
+
+  await ensureDefaultVoiceChannel(workspaceId)
 }
 
-module.exports = { channelLabel, uniqueSlug, ensureProjectChannel, materializeChannels }
+module.exports = { channelLabel, uniqueSlug, ensureProjectChannel, ensureDefaultVoiceChannel, materializeChannels }

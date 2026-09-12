@@ -9,6 +9,7 @@ import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import ChannelFormModal from './ChannelFormModal'
 import PinnedBar from './PinnedBar'
+import VoiceRoomBar from './VoiceRoomBar'
 import ChatSoundToggle from './ChatSoundToggle'
 import FeedbackModal from '../FeedbackModal'
 
@@ -233,7 +234,7 @@ export default function ChatWidget() {
                       onClick={() => setSwitcherOpen(v => !v)}
                       className="flex items-center gap-1 font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors max-w-full"
                     >
-                      <span className="truncate">{activeChannel.isPrivate ? '🔒' : '#'} {activeChannel.name}</span>
+                      <span className="truncate">{activeChannel.isPrivate ? '🔒' : activeChannel.medium === 'voice' ? '🔊' : '#'} {activeChannel.name}</span>
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                         className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${switcherOpen ? 'rotate-180' : ''}`}>
                         <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
@@ -282,6 +283,8 @@ export default function ChatWidget() {
                     <p className="text-[11px] font-medium text-amber-700 dark:text-amber-300">🔒 Canal privado — solo lo ven los administradores.</p>
                   </div>
                 )}
+
+                {activeChannel.medium === 'voice' && <VoiceRoomBar channel={activeChannel} />}
 
                 <PinnedBar pinned={pinnedMessages} onUnpin={handleTogglePin} />
 

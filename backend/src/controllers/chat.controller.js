@@ -72,6 +72,7 @@ async function listChannels(req, res, next) {
     res.json(channels.map(c => ({
       id: c.id,
       kind: c.kind,
+      medium: c.medium,
       slug: c.slug,
       name: channelLabel(c),
       description: c.description,
@@ -92,10 +93,14 @@ async function createChannel(req, res, next) {
     if (!trimmed) return res.status(400).json({ error: 'El nombre del canal es requerido' })
 
     const slug = await uniqueSlug(workspaceId, slugify(trimmed))
+    // Whitelist estricta — medium solo se fija al crear, nunca se lee en updateChannel
+    // (eso es lo que lo vuelve inmutable, mismo mecanismo implícito que kind).
+    const medium = req.body?.medium === 'voice' ? 'voice' : 'text'
     const channel = await prisma.chatChannel.create({
       data: {
         workspaceId,
         kind: 'custom',
+        medium,
         slug,
         name: trimmed,
         description: req.body?.description?.trim() || null,

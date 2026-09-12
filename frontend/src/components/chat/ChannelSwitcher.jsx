@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
+import { useVoiceCall } from '../../context/VoiceCallContext'
 
-function ChannelRow({ channel, active, onSelect }) {
+function ChannelRow({ channel, active, onSelect, voiceCount }) {
+  const isVoice = channel.medium === 'voice'
   const unread = channel.unreadCount > 0
   const mentioned = channel.mentionCount > 0
   return (
@@ -12,11 +14,19 @@ function ChannelRow({ channel, active, onSelect }) {
           : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
       }`}
     >
-      <span className={`text-gray-400 dark:text-gray-500 ${active ? '!text-primary-500' : ''}`}>{channel.isPrivate ? '🔒' : '#'}</span>
+      <span className={`text-gray-400 dark:text-gray-500 ${active ? '!text-primary-500' : ''}`}>
+        {channel.isPrivate ? '🔒' : isVoice ? '🔊' : '#'}
+      </span>
       <span className={`flex-1 truncate ${unread && !active ? 'font-semibold text-gray-900 dark:text-white' : ''}`}>
         {channel.name}
       </span>
-      {mentioned ? (
+      {isVoice ? (
+        voiceCount > 0 && (
+          <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" /> {voiceCount}
+          </span>
+        )
+      ) : mentioned ? (
         <span className="flex-shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
           {channel.mentionCount > 9 ? '9+' : channel.mentionCount}
         </span>
@@ -42,6 +52,7 @@ const byName = (a, b) => norm(a.name).localeCompare(norm(b.name), 'es', { sensit
 export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel, onFeedback }) {
   const [query, setQuery] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
+  const { voicePresence } = useVoiceCall() || {}
   const hasQuery = norm(query).trim().length > 0
   const unreadCount = useMemo(() => channels.filter(c => c.unreadCount > 0 || c.mentionCount > 0).length, [channels])
 
@@ -55,11 +66,14 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
 
   const groups = useMemo(() => {
     const general = filtered.filter(c => c.kind === 'general')
-    const custom = filtered.filter(c => c.kind === 'custom').sort(byName)
-    const pinnedIds = new Set([...general, ...custom].map(c => c.id))
+    // Los canales de voz también son kind:'custom' — se separan a su propio grupo
+    // fijo (🔊 Voz), debajo de general+custom, en vez de mezclarse ahí.
+    const custom = filtered.filter(c => c.kind === 'custom' && c.medium !== 'voice').sort(byName)
+    const voice = filtered.filter(c => c.medium === 'voice').sort(byName)
+    const pinnedIds = new Set([...general, ...custom, ...voice].map(c => c.id))
 
-    // Menciones/favoritos solo aplican al resto (canales de proyecto) — general y los
-    // canales custom quedan siempre arriba, independientemente de si tienen menciones.
+    // Menciones/favoritos solo aplican al resto (canales de proyecto) — general, los
+    // canales custom y los de voz quedan siempre arriba, sin importar menciones.
     const rest = filtered.filter(c => !pinnedIds.has(c.id))
     const mentioned = rest.filter(c => c.mentionCount > 0).sort(byName)
     const mentionedIds = new Set(mentioned.map(c => c.id))
@@ -72,6 +86,7 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
     return [
       { key: 'general',   label: null,          items: general },
       { key: 'custom',    label: 'Canales',     items: custom },
+      { key: 'voice',     label: '🔊 Voz',      items: voice },
       { key: 'mentions',  label: 'Menciones',   items: mentioned, accent: true },
       { key: 'favorites', label: 'Destacados',  items: favorites },
       { key: 'project',   label: 'Proyectos',   items: projects },
@@ -131,7 +146,7 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
               )}
               <div className="space-y-0.5">
                 {group.items.map(c => (
-                  <ChannelRow key={c.id} channel={c} active={c.id === activeChannelId} onSelect={onSelect} />
+                  <ChannelRow key={c.id} channel={c} active={c.id === activeChannelId} onSelect={onSelect} voiceCount={voicePresence?.get(c.id) || 0} />
                 ))}
               </div>
             </div>
