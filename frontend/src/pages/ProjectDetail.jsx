@@ -3,7 +3,6 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
-import AddTaskModal from '../components/AddTaskModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import ProjectBriefs from '../components/briefs/ProjectBriefs'
 import ProjectMeetings from '../components/meetings/ProjectMeetings'
@@ -37,8 +36,6 @@ export default function ProjectDetail() {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState('')
-  const [showAddTask, setShowAddTask] = useState(false)
-  const [addTaskDefaultDescription, setAddTaskDefaultDescription] = useState('')
   const [linkForm, setLinkForm] = useState(null) // null = oculto, { label, url } = visible
   const [linkSaving, setLinkSaving] = useState(false)
   const [commentTask, setCommentTask] = useState(null)
@@ -136,12 +133,6 @@ export default function ProjectDetail() {
   }
 
   const totalPending = data?.byUser.reduce((s, u) => s + u.tasks.length, 0) ?? 0
-
-  async function handleAddTask() {
-    const { data: res } = await api.get(`/projects/${encodedId}/tasks`)
-    setData(res)
-    setShowAddTask(false)
-  }
 
   function handleCommentAdded(taskId, newCount) {
     const bump = t => t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t
@@ -289,43 +280,30 @@ export default function ProjectDetail() {
                   )}
                 </div>
               </div>
+              {/* Chat del proyecto y "Agregar tarea" se sacaron de acá — ya están cubiertos
+                  por el ícono flotante único (FloatingDock, abajo a la derecha). Marketing/
+                  Contenido muestran el nombre además del ícono (dejaron de ser solo-ícono). */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {data.project.chatChannel?.slug && (
-                  <button
-                    onClick={() => window.dispatchEvent(new CustomEvent('bliss:open-chat', { detail: { slug: data.project.chatChannel.slug } }))}
-                    className="flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg rounded-xl transition-colors"
-                    title="Chat del proyecto"
-                  >
-                    💬
-                  </button>
-                )}
                 {marketingEnabled && (
                   <button
                     onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)}
-                    className="flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg rounded-xl transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-xl transition-colors"
                     title="Marketing"
                   >
-                    🎯
+                    <span className="text-base leading-none">🎯</span>
+                    Marketing
                   </button>
                 )}
                 {contenidoEnabled && (
                   <button
                     onClick={() => navigate(`/contenido?projectId=${data.project.id}`)}
-                    className="flex items-center justify-center w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-lg rounded-xl transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-xl transition-colors"
                     title="Calendario de contenido"
                   >
-                    📅
+                    <span className="text-base leading-none">📅</span>
+                    Contenido
                   </button>
                 )}
-                <button
-                  onClick={() => setShowAddTask(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-xl transition-colors flex-shrink-0"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                  </svg>
-                  Agregar tarea
-                </button>
               </div>
             </div>
 
@@ -476,15 +454,6 @@ export default function ProjectDetail() {
           </>
         )}
       </main>
-
-      {showAddTask && data && (
-        <AddTaskModal
-          lockedProject={data.project}
-          defaultDescription={addTaskDefaultDescription}
-          onAdd={handleAddTask}
-          onClose={() => { setShowAddTask(false); setAddTaskDefaultDescription('') }}
-        />
-      )}
 
       {showTeamModal && allUsers && (
         <TeamModal
