@@ -23,7 +23,7 @@ import FeedbackModal from '../FeedbackModal'
 export default function ChatWidget() {
   const { user } = useAuth()
   const {
-    channels = [], loadChannels,
+    channels = [], loaded = false, loadChannels,
     soundPref = 'mentions', setSoundPref = () => {},
   } = useChat() || {}
 
@@ -43,15 +43,18 @@ export default function ChatWidget() {
   const activeChannelIdRef = useRef(null)
   const switcherRef = useRef(null)
 
-  const activeChannel =
-    channels.find(c => c.slug === activeSlug) ||
-    channels.find(c => c.kind === 'general') ||
-    channels[0] ||
-    null
+  // Sin fallback a #general/primero: si no hay un canal elegido en la sesión,
+  // activeChannel queda null y se muestra el listado completo (ver más abajo) en vez
+  // de caer directo a un canal que la mayoría de las veces no es al que se quiere ir.
+  const activeChannel = activeSlug ? channels.find(c => c.slug === activeSlug) || null : null
 
   useEffect(() => {
     function handleOpenChat(e) {
-      setActiveSlug(e.detail?.slug || null)
+      // Un deep-link con slug (mención, botón "Chat" de un proyecto, volver a la
+      // llamada de voz) va directo a ese canal. Sin slug (ícono del dock), NO se
+      // toca activeSlug — se mantiene el último canal elegido en la sesión, o el
+      // listado completo si todavía no se eligió ninguno.
+      if (e.detail?.slug) setActiveSlug(e.detail.slug)
       setOpen(true)
     }
     window.addEventListener('bliss:open-chat', handleOpenChat)
@@ -224,11 +227,39 @@ export default function ChatWidget() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:justify-end sm:pr-6 sm:pb-24">
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
           <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full sm:w-[400px] mx-4 sm:mx-0 h-[85vh] sm:h-[600px] flex flex-col z-10">
-            {!activeChannel ? (
+            {!loaded ? (
               <LoadingSpinner size="sm" className="flex-1" />
+            ) : !activeChannel ? (
+              <>
+                <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+                  <h3 className="font-semibold text-gray-900 dark:text-white">Chat</h3>
+                  <button
+                    onClick={() => setOpen(false)}
+                    className="text-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 leading-none flex-shrink-0"
+                  >
+                    ×
+                  </button>
+                </div>
+                <ChannelSwitcher
+                  fullscreen
+                  channels={channels}
+                  activeChannelId={null}
+                  onSelect={handleSelectChannel}
+                  isAdmin={!!user?.isAdmin}
+                  onCreateChannel={() => setChannelForm(true)}
+                  onFeedback={() => setFeedbackOpen(true)}
+                />
+              </>
             ) : (
               <>
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+                  <button
+                    onClick={() => setActiveSlug(null)}
+                    title="Ver todos los canales"
+                    className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
+                  >
+                    ☰
+                  </button>
                   <div ref={switcherRef} className="relative min-w-0 flex-1">
                     <button
                       onClick={() => setSwitcherOpen(v => !v)}

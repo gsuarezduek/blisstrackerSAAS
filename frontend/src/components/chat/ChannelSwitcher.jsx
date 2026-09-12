@@ -49,7 +49,11 @@ const byName = (a, b) => norm(a.name).localeCompare(norm(b.name), 'es', { sensit
 // Switch "Todos"/"No leídos": filtra a solo los canales con `unreadCount`/`mentionCount`
 // > 0. La búsqueda por texto SIEMPRE ignora este switch (corre sobre todos los canales) —
 // mientras hay una búsqueda activa el switch queda visualmente atenuado y sin efecto.
-export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel, onFeedback }) {
+// `fullscreen`: modo alternativo al dropdown flotante — ocupa el 100% del panel de
+// ChatWidget en vez de posicionarse como popover. Mismo contenido/lógica, solo cambia
+// el contenedor exterior. Lo usa ChatWidget como vista inicial (sin canal elegido
+// todavía en la sesión) en vez de caer directo a #general.
+export default function ChannelSwitcher({ channels, activeChannelId, onSelect, isAdmin, onCreateChannel, onFeedback, fullscreen = false }) {
   const [query, setQuery] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
   const { voicePresence } = useVoiceCall() || {}
@@ -96,7 +100,13 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
   const hasResults = groups.some(g => g.items.length > 0)
 
   return (
-    <div className="absolute left-0 top-full mt-1.5 w-72 max-h-96 flex flex-col bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-20 overflow-hidden">
+    <div className={fullscreen
+      // flex-1 (no h-full): ocupa el espacio restante del panel de ChatWidget, que
+      // ya tiene su propio header arriba — h-full mediría contra el panel entero y
+      // desbordaría.
+      ? 'flex-1 min-h-0 flex flex-col bg-white dark:bg-gray-800'
+      : 'absolute left-0 top-full mt-1.5 w-72 max-h-96 flex flex-col bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg z-20 overflow-hidden'
+    }>
       <div className="p-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 space-y-1.5">
         <input
           autoFocus
@@ -127,7 +137,7 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
         </div>
       </div>
 
-      <div className="overflow-y-auto py-2 px-2">
+      <div className="flex-1 min-h-0 overflow-y-auto py-2 px-2">
         {!hasResults && (
           <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">
             {!hasQuery && unreadOnly ? 'No tenés canales sin leer' : 'Sin resultados'}
