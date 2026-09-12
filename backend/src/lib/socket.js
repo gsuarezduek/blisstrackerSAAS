@@ -14,9 +14,22 @@ let io = null
 // channelId(Number) -> { workspaceId, participants: Map<socketId, {userId, name, muted}> }
 const voiceRooms = new Map()
 
+// Personas únicas conectadas a una sala (dedupeadas por userId, no por socket —
+// alguien con dos pestañas abiertas no debe aparecer duplicado en la vista previa).
+function roomParticipantsList(channelId) {
+  const room = voiceRooms.get(channelId)
+  if (!room) return []
+  const byUser = new Map()
+  for (const p of room.participants.values()) {
+    if (!byUser.has(p.userId)) byUser.set(p.userId, { userId: p.userId, name: p.name })
+  }
+  return [...byUser.values()]
+}
+
 function broadcastPresence(channelId) {
   const room = voiceRooms.get(channelId)
-  emitTo(`workspace:${room?.workspaceId}`, 'voice:presence', { channelId, count: room ? room.participants.size : 0 })
+  const participants = roomParticipantsList(channelId)
+  emitTo(`workspace:${room?.workspaceId}`, 'voice:presence', { channelId, count: participants.length, participants })
 }
 
 // Compartida por voice:leave y por la limpieza en disconnect. Un socket solo puede
@@ -69,11 +82,14 @@ function initSocket(httpServer) {
     socket.join(`workspace:${workspaceId}`)
 
     // Snapshot de presencia de voz de este workspace, para que un cliente recién
-    // conectado (o reconectado) pinte los badges de "N conectados" sin esperar el
-    // próximo voice:presence — no requiere unirse a ninguna sala de voz.
+    // conectado (o reconectado) pinte los badges/vistas previas de "quién está"
+    // sin esperar el próximo voice:presence — no requiere unirse a ninguna sala.
     const snapshot = [...voiceRooms.entries()]
       .filter(([, room]) => room.workspaceId === workspaceId)
-      .map(([channelId, room]) => ({ channelId, count: room.participants.size }))
+      .map(([channelId]) => {
+        const participants = roomParticipantsList(channelId)
+        return { channelId, count: participants.length, participants }
+      })
     socket.emit('voice:presence:snapshot', snapshot)
 
     socket.on('join-channel', async (channelId) => {

@@ -6,19 +6,27 @@ import { useVoiceCall } from '../../context/VoiceCallContext'
 export default function VoiceRoomBar({ channel }) {
   const { activeCall, voicePresence, joinCall, leaveCall, toggleMute } = useVoiceCall() || {}
   const inCall = activeCall?.channelId === channel.id
-  const count = voicePresence?.get(channel.id) || 0
+  const preview = voicePresence?.get(channel.id) || []
 
   if (!inCall) {
     return (
-      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between gap-2">
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          {count > 0 ? `🔊 ${count} conectado${count === 1 ? '' : 's'}` : '🔊 Nadie conectado todavía'}
-        </p>
+      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 space-y-2">
+        {preview.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {preview.map(p => (
+              <span key={p.userId} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                🎙️ {p.name}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 dark:text-gray-400">🔊 Nadie conectado todavía</p>
+        )}
         <button
           onClick={() => joinCall(channel)}
           className="text-xs font-semibold px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
         >
-          🎙️ Unirse
+          🎙️ Unirse{preview.length > 0 ? ` (${preview.length})` : ''}
         </button>
       </div>
     )

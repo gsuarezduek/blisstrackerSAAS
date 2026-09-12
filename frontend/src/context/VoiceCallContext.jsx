@@ -23,7 +23,7 @@ const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }]
 export function VoiceCallProvider({ children }) {
   const { user } = useAuth()
   const [activeCall, setActiveCall] = useState(null) // { channelId, channelSlug, channelName, muted, participants: [{socketId,userId,name,muted}] } | null
-  const [voicePresence, setVoicePresence] = useState(new Map()) // channelId -> count, independiente de estar en la llamada
+  const [voicePresence, setVoicePresence] = useState(new Map()) // channelId -> [{userId,name}], independiente de estar en la llamada
   const [remoteStreams, setRemoteStreams] = useState(new Map()) // socketId -> MediaStream, para los <audio> ocultos
 
   const activeCallRef = useRef(null)
@@ -125,16 +125,16 @@ export function VoiceCallProvider({ children }) {
     const socket = connectSocket()
     if (!socket) return
 
-    function onPresence({ channelId, count } = {}) {
+    function onPresence({ channelId, participants } = {}) {
       if (channelId == null) return
       setVoicePresence(prev => {
         const next = new Map(prev)
-        next.set(channelId, count)
+        next.set(channelId, participants || [])
         return next
       })
     }
     function onPresenceSnapshot(rows = []) {
-      setVoicePresence(new Map(rows.map(r => [r.channelId, r.count])))
+      setVoicePresence(new Map(rows.map(r => [r.channelId, r.participants || []])))
     }
 
     // Yo soy quien se acaba de unir: recibo el roster existente y le ofrezco (offer)

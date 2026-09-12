@@ -86,7 +86,7 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
     return [
       { key: 'general',   label: null,          items: general },
       { key: 'custom',    label: 'Canales',     items: custom },
-      { key: 'voice',     label: '🔊 Voz',      items: voice },
+      { key: 'voice',     label: null,          items: voice },
       { key: 'mentions',  label: 'Menciones',   items: mentioned, accent: true },
       { key: 'favorites', label: 'Destacados',  items: favorites },
       { key: 'project',   label: 'Proyectos',   items: projects },
@@ -146,7 +146,7 @@ export default function ChannelSwitcher({ channels, activeChannelId, onSelect, i
               )}
               <div className="space-y-0.5">
                 {group.items.map(c => (
-                  <ChannelRow key={c.id} channel={c} active={c.id === activeChannelId} onSelect={onSelect} voiceCount={voicePresence?.get(c.id) || 0} />
+                  <ChannelRow key={c.id} channel={c} active={c.id === activeChannelId} onSelect={onSelect} voiceCount={(voicePresence?.get(c.id) || []).length} />
                 ))}
               </div>
             </div>
