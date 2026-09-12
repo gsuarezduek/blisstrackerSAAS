@@ -1,7 +1,12 @@
 jest.mock('../../src/lib/prisma', () => ({
-  projectMeeting: { findUnique: jest.fn(), update: jest.fn() },
-  taskSession:    { updateMany: jest.fn() },
-  task:           { updateMany: jest.fn() },
+  projectMeeting:     { findUnique: jest.fn(), update: jest.fn() },
+  taskSession:        { updateMany: jest.fn() },
+  task:               { updateMany: jest.fn(), create: jest.fn(), findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
+  workspace:          { findUnique: jest.fn() },
+  workspaceMember:    { findMany: jest.fn(), findUnique: jest.fn() },
+  workDay:            { findUnique: jest.fn(), create: jest.fn() },
+  projectMeetingTodo: { update: jest.fn(), findUnique: jest.fn() },
+  notification:       { create: jest.fn() },
 }))
 jest.mock('../../src/lib/chatSystemMessage', () => ({
   SYSTEM_TYPES: { MEETING_HELD: 'MEETING_HELD' },
@@ -47,6 +52,41 @@ describe('projectMeetingLifecycle.closeMeeting', () => {
     expect(prisma.taskSession.updateMany).not.toHaveBeenCalled()
     expect(prisma.task.updateMany).not.toHaveBeenCalled()
     expect(prisma.projectMeeting.update).toHaveBeenCalled()
+  })
+
+  it('envía al dashboard los to-dos con responsable que no tienen tarea vinculada', async () => {
+    const meeting = makeMeeting({
+      todos: [
+        { id: 1, title: 'Mandar propuesta', ownerId: 5, taskId: null },
+        { id: 2, title: 'Sin dueño',        ownerId: null, taskId: null },
+        { id: 3, title: 'Ya enviada',       ownerId: 6, taskId: 999 },
+      ],
+    })
+    prisma.workspace.findUnique.mockResolvedValue({ timezone: 'America/Argentina/Buenos_Aires' })
+    prisma.workspaceMember.findMany.mockResolvedValue([{ userId: 5 }])
+    prisma.workDay.findUnique.mockResolvedValue({ id: 77 })
+    prisma.task.create.mockResolvedValue({ id: 555 })
+
+    await closeMeeting(meeting, { actorName: 'Ana' })
+
+    expect(prisma.task.create).toHaveBeenCalledTimes(1)
+    expect(prisma.task.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ userId: 5, projectId: meeting.projectId, workDayId: 77 }),
+    }))
+    expect(prisma.projectMeetingTodo.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { taskId: 555 } })
+    expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ userId: 5, actorId: null, type: 'TASK_MENTION' }),
+    }))
+  })
+
+  it('no envía un to-do cuyo responsable ya no es miembro activo', async () => {
+    const meeting = makeMeeting({ todos: [{ id: 1, title: 'X', ownerId: 5, taskId: null }] })
+    prisma.workspace.findUnique.mockResolvedValue({ timezone: 'UTC' })
+    prisma.workspaceMember.findMany.mockResolvedValue([]) // nadie activo
+
+    await closeMeeting(meeting)
+
+    expect(prisma.task.create).not.toHaveBeenCalled()
   })
 })
 

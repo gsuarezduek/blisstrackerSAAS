@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { isAdmin, canWrite } = require('../lib/projectAccess')
-const { closeMeeting } = require('../lib/projectMeetingLifecycle')
+const { closeMeeting, ensureWorkDay, createDashboardTaskForTodo } = require('../lib/projectMeetingLifecycle')
 
 const VALID_TYPE = ['internal', 'client']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -37,6 +37,14 @@ async function getMembers(workspaceId, projectId) {
     id: m.user.id, name: m.user.name, avatar: m.user.avatar, role: m.role,
     inTeam: teamIds.has(m.user.id),
   }))
+}
+
+async function isActiveMember(workspaceId, userId) {
+  const member = await prisma.workspaceMember.findUnique({
+    where:  { workspaceId_userId: { workspaceId, userId } },
+    select: { active: true },
+  })
+  return !!member?.active
 }
 
 function formatTodo(t) {
@@ -96,21 +104,6 @@ async function loadMeeting(mid, projectId, workspaceId) {
 }
 
 const typeLabel = (t) => (t === 'client' ? 'Reunión con cliente' : 'Reunión de equipo')
-
-// WorkDay de hoy del usuario (crear si falta — mismo patrón que tasks.create).
-async function ensureWorkDay(userId, workspaceId, today) {
-  const wdKey = { userId_workspaceId_date: { userId, workspaceId, date: today } }
-  let workDay = await prisma.workDay.findUnique({ where: wdKey })
-  if (!workDay) {
-    try {
-      workDay = await prisma.workDay.create({ data: { userId, workspaceId, date: today } })
-    } catch (e) {
-      if (e.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
-      else throw e
-    }
-  }
-  return workDay
-}
 
 // ─── MEETINGS ─────────────────────────────────────────────────────────────────
 
@@ -401,7 +394,7 @@ async function createTodo(req, res, next) {
     if (!title?.trim()) return res.status(400).json({ error: 'title es requerido' })
 
     const count = await prisma.projectMeetingTodo.count({ where: { meetingId: meeting.id } })
-    const todo = await prisma.projectMeetingTodo.create({
+    let todo = await prisma.projectMeetingTodo.create({
       data: {
         meetingId: meeting.id,
         workspaceId,
@@ -411,6 +404,14 @@ async function createTodo(req, res, next) {
       },
       include: TODO_INCLUDE,
     })
+
+    // Si la reunión ya terminó y el to-do nace con responsable, va directo al dashboard
+    // (el envío normal ocurre al finalizar la reunión — esto cubre agregar tareas después).
+    if (meeting.endedAt && todo.ownerId && await isActiveMember(workspaceId, todo.ownerId)) {
+      await createDashboardTaskForTodo(todo, { projectId, workspaceId, tz: req.workspace.timezone, requesterId: req.user.userId })
+      todo = await prisma.projectMeetingTodo.findUnique({ where: { id: todo.id }, include: TODO_INCLUDE })
+    }
+
     res.status(201).json(formatTodo(todo))
   } catch (err) { next(err) }
 }
@@ -424,22 +425,75 @@ async function updateTodo(req, res, next) {
     if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
 
     const existing = await prisma.projectMeetingTodo.findFirst({
-      where: { id: Number(req.params.tid), workspaceId, meeting: { projectId } },
+      where:   { id: Number(req.params.tid), workspaceId, meeting: { projectId } },
+      include: { meeting: { select: { endedAt: true } } },
     })
     if (!existing) return res.status(404).json({ error: 'To-Do no encontrado' })
 
     const { title, done, ownerId } = req.body
     const data = {}
-    if (title   !== undefined) data.title   = title.trim().slice(0, 300)
-    if (ownerId !== undefined) data.ownerId = ownerId ? Number(ownerId) : null
-    if (done    !== undefined) {
+    if (title !== undefined) data.title = title.trim().slice(0, 300)
+    if (done  !== undefined) {
       data.done        = Boolean(done)
       data.completedAt = done ? new Date() : null
     }
 
-    const todo = await prisma.projectMeetingTodo.update({ where: { id: existing.id }, data, include: TODO_INCLUDE })
+    let newOwnerId = existing.ownerId
+    let ownerChanged = false
+    if (ownerId !== undefined) {
+      newOwnerId = ownerId ? Number(ownerId) : null
+      if (newOwnerId !== existing.ownerId) { data.ownerId = newOwnerId; ownerChanged = true }
+    }
+
+    let todo = await prisma.projectMeetingTodo.update({ where: { id: existing.id }, data, include: TODO_INCLUDE })
+
+    // La reunión ya finalizó: el dashboard se mantiene sincronizado con el responsable
+    // del to-do en tiempo real (no solo en el momento del cierre de la reunión).
+    if (ownerChanged && existing.meeting.endedAt) {
+      todo = await syncDashboardOnOwnerChange(todo, {
+        projectId, workspaceId, tz: req.workspace.timezone, requesterId: req.user.userId,
+      })
+    }
+
     res.json(formatTodo(todo))
   } catch (err) { next(err) }
+}
+
+// Mantiene la tarea del dashboard sincronizada cuando cambia el responsable de un
+// to-do de una reunión ya finalizada:
+// - Sin tarea todavía + nuevo responsable → la crea (mismo criterio que al cerrar la reunión).
+// - Con tarea vinculada aún PENDING + cambia de responsable → la mueve al dashboard del nuevo.
+// - Con tarea vinculada aún PENDING + se le saca el responsable → se descarta (vuelve a "sin enviar").
+// - Tarea ya iniciada/completada → no se toca (no se pierde lo ya trabajado).
+async function syncDashboardOnOwnerChange(todo, { projectId, workspaceId, tz, requesterId }) {
+  if (!todo.taskId) {
+    if (!todo.ownerId || !(await isActiveMember(workspaceId, todo.ownerId))) return todo
+    await createDashboardTaskForTodo(todo, { projectId, workspaceId, tz, requesterId })
+    return prisma.projectMeetingTodo.findUnique({ where: { id: todo.id }, include: TODO_INCLUDE })
+  }
+
+  const task = await prisma.task.findUnique({ where: { id: todo.taskId }, select: { id: true, status: true } })
+  if (!task || task.status !== 'PENDING') return todo
+
+  if (!todo.ownerId) {
+    await prisma.task.delete({ where: { id: task.id } })
+    return prisma.projectMeetingTodo.findUnique({ where: { id: todo.id }, include: TODO_INCLUDE })
+  }
+
+  if (!(await isActiveMember(workspaceId, todo.ownerId))) return todo
+
+  const workDay = await ensureWorkDay(todo.ownerId, workspaceId, todayString(tz))
+  await prisma.task.update({ where: { id: task.id }, data: { userId: todo.ownerId, workDayId: workDay.id } })
+  if (todo.ownerId !== requesterId) {
+    const desc = todo.title.length > 60 ? todo.title.slice(0, 57) + '...' : todo.title
+    await prisma.notification.create({
+      data: {
+        userId: todo.ownerId, actorId: requesterId, taskId: task.id, projectId, workspaceId,
+        type: 'TASK_MENTION', message: `te reasignaron una tarea de una reunión: "${desc}"`,
+      },
+    })
+  }
+  return todo
 }
 
 // DELETE /api/projects/:id/meetings/:mid/todos/:tid
@@ -460,82 +514,8 @@ async function deleteTodo(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// POST /api/projects/:id/meetings/:mid/todos/:tid/send-to-dashboard
-// Crea una tarea en el dashboard del responsable (en este mismo proyecto) y la vincula.
-async function sendTodoToDashboard(req, res, next) {
-  try {
-    const workspaceId = req.workspace.id
-    const tz          = req.workspace.timezone
-    const requesterId = req.user.userId
-    const projectId   = await resolveProjectId(req.params.id, workspaceId)
-    if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
-    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
-
-    const todo = await prisma.projectMeetingTodo.findFirst({
-      where: { id: Number(req.params.tid), workspaceId, meeting: { projectId } },
-    })
-    if (!todo)         return res.status(404).json({ error: 'To-Do no encontrado' })
-    if (!todo.ownerId) return res.status(400).json({ error: 'Asigná un responsable al to-do primero' })
-    if (todo.taskId)   return res.status(409).json({ error: 'Este to-do ya tiene una tarea vinculada' })
-
-    const member = await prisma.workspaceMember.findUnique({
-      where:  { workspaceId_userId: { workspaceId, userId: todo.ownerId } },
-      select: { active: true },
-    })
-    if (!member || !member.active) return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
-
-    // WorkDay de hoy del responsable (crear si falta — mismo patrón que tasks.create).
-    const today = todayString(tz)
-    const wdKey = { userId_workspaceId_date: { userId: todo.ownerId, workspaceId, date: today } }
-    let workDay = await prisma.workDay.findUnique({ where: wdKey })
-    if (!workDay) {
-      try {
-        workDay = await prisma.workDay.create({ data: { userId: todo.ownerId, workspaceId, date: today } })
-      } catch (e) {
-        if (e.code === 'P2002') workDay = await prisma.workDay.findUnique({ where: wdKey })
-        else throw e
-      }
-    }
-    if (!workDay) return res.status(500).json({ error: 'No se pudo obtener la jornada del responsable' })
-
-    const task = await prisma.task.create({
-      data: {
-        description: todo.title,
-        projectId,
-        userId:      todo.ownerId,
-        workDayId:   workDay.id,
-        createdById: todo.ownerId !== requesterId ? requesterId : null,
-      },
-    })
-
-    const updated = await prisma.projectMeetingTodo.update({
-      where:   { id: todo.id },
-      data:    { taskId: task.id },
-      include: TODO_INCLUDE,
-    })
-
-    // Avisar al responsable (si no es quien lo envió).
-    if (todo.ownerId !== requesterId) {
-      const desc = todo.title.length > 60 ? todo.title.slice(0, 57) + '...' : todo.title
-      await prisma.notification.create({
-        data: {
-          userId:     todo.ownerId,
-          actorId:    requesterId,
-          taskId:     task.id,
-          projectId,
-          workspaceId,
-          type:       'TASK_MENTION',
-          message:    `te asignó una tarea de una reunión: "${desc}"`,
-        },
-      })
-    }
-
-    res.status(201).json(formatTodo(updated))
-  } catch (err) { next(err) }
-}
-
 module.exports = {
   listMeetings, createMeeting, updateMeeting, deleteMeeting, startMeeting, finishMeeting,
   addParticipant, removeParticipant,
-  createTodo, updateTodo, deleteTodo, sendTodoToDashboard,
+  createTodo, updateTodo, deleteTodo,
 }

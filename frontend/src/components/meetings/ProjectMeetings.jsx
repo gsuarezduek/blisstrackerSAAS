@@ -115,60 +115,9 @@ function AddParticipant({ members, existingIds, onAdd }) {
   )
 }
 
-// ─── TodoDashboardLink ────────────────────────────────────────────────────────
-// Botón/badge para enviar el to-do al dashboard del responsable (en este proyecto).
-
-function TodoDashboardLink({ todo, onSend }) {
-  const [sending, setSending] = useState(false)
-
-  if (todo.taskId) {
-    const done = todo.task?.status === 'COMPLETED'
-    return (
-      <span
-        title={done ? 'Tarea completada en el dashboard' : 'Enviada al dashboard del responsable'}
-        className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${
-          done
-            ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
-            : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
-        }`}
-      >
-        📋 {done ? 'Hecha' : 'En dashboard'}
-      </span>
-    )
-  }
-
-  if (!todo.ownerId) {
-    return (
-      <span
-        title="Asigná un responsable para enviarla al dashboard"
-        className="shrink-0 text-gray-300 dark:text-gray-600 text-sm px-1 cursor-not-allowed select-none"
-      >
-        📋
-      </span>
-    )
-  }
-
-  async function submit() {
-    setSending(true)
-    await onSend(todo.id)
-    setSending(false)
-  }
-
-  return (
-    <button
-      onClick={submit}
-      disabled={sending}
-      title="Enviar al dashboard del responsable"
-      className="shrink-0 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-primary-500 text-sm transition-all px-1 disabled:opacity-50"
-    >
-      {sending ? '…' : '📋'}
-    </button>
-  )
-}
-
 // ─── TodoItem ─────────────────────────────────────────────────────────────────
 
-function TodoItem({ todo, members, canEdit, onUpdate, onDelete, onSendToDashboard }) {
+function TodoItem({ todo, members, canEdit, onUpdate, onDelete }) {
   const [editing, setEditing]       = useState(false)
   const [titleDraft, setTitleDraft] = useState(todo.title)
   const inputRef = useRef(null)
@@ -237,8 +186,6 @@ function TodoItem({ todo, members, canEdit, onUpdate, onDelete, onSendToDashboar
       {owner && (
         <img src={avatarUrl(owner.avatar)} alt={owner.name} title={owner.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
       )}
-
-      <TodoDashboardLink todo={todo} onSend={onSendToDashboard} />
 
       {canEdit && (
         <button
@@ -351,7 +298,7 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
 // ─── MeetingCard ──────────────────────────────────────────────────────────────
 
 function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, onSaveNotes, onDelete, onStart, onFinish,
-                       onAddParticipant, onRemoveParticipant, onAddTodo, onUpdateTodo, onDeleteTodo, onSendToDashboard }) {
+                       onAddParticipant, onRemoveParticipant, onAddTodo, onUpdateTodo, onDeleteTodo }) {
   const tm = typeMeta(meeting.type)
 
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -533,13 +480,12 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
                   canEdit={canEdit}
                   onUpdate={onUpdateTodo}
                   onDelete={onDeleteTodo}
-                  onSendToDashboard={onSendToDashboard}
                 />
               ))}
               {canEdit && <QuickAddTodo onAdd={title => onAddTodo(meeting.id, title)} />}
             </div>
             <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 leading-snug">
-              📋 Enviá una tarea al dashboard del responsable (en este proyecto). Al completarla, se tilda sola acá.
+              📋 Al finalizar la reunión, las tareas con responsable pasan solas al dashboard de esa persona (en este proyecto). Si cambiás el responsable, la tarea se mueve; al completarla, se tilda sola acá.
             </p>
           </div>
 
@@ -757,19 +703,6 @@ export default function ProjectMeetings({ projectId, canEdit }) {
     catch { setError('No se pudo eliminar la tarea') }
   }
 
-  async function handleSendToDashboard(todoId) {
-    const meeting = findMeetingOf(todoId)
-    if (!meeting) return false
-    try {
-      const { data } = await api.post(`/projects/${projectId}/meetings/${meeting.id}/todos/${todoId}/send-to-dashboard`)
-      patchTodos(meeting.id, todos => todos.map(t => t.id === todoId ? data : t))
-      return true
-    } catch (e) {
-      alert(e?.response?.data?.error || 'No se pudo enviar al dashboard')
-      return false
-    }
-  }
-
   if (loading) {
     return <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-10">Cargando reuniones…</p>
   }
@@ -848,7 +781,6 @@ export default function ProjectMeetings({ projectId, canEdit }) {
               onAddTodo={handleAddTodo}
               onUpdateTodo={handleUpdateTodo}
               onDeleteTodo={handleDeleteTodo}
-              onSendToDashboard={handleSendToDashboard}
             />
           ))}
         </div>

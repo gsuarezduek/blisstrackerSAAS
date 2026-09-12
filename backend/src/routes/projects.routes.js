@@ -69,7 +69,6 @@ router.delete('/:id/meetings/:mid/participants/:uid',       meetings.removeParti
 router.post('/:id/meetings/:mid/todos',                     meetings.createTodo)
 router.patch('/:id/meetings/:mid/todos/:tid',               meetings.updateTodo)
 router.delete('/:id/meetings/:mid/todos/:tid',              meetings.deleteTodo)
-router.post('/:id/meetings/:mid/todos/:tid/send-to-dashboard', meetings.sendTodoToDashboard)
 
 // Archivos del proyecto (repositorio tipo Drive sobre R2 — ver projectFiles.controller.js)
 router.get('/:id/files',                    projectFiles.listFiles)
