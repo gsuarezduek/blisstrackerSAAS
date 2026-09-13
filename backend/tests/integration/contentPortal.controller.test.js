@@ -362,3 +362,110 @@ describe('POST /content/:pid/comments', () => {
     }))
   })
 })
+
+describe('PATCH /content/:pid/copy', () => {
+  const BASE = `/api/public/client-portal/${SLUG}/content/${PIECE_ID}/copy`
+
+  it('403 CONTACT_REQUIRED sin identidad de contacto (a diferencia de aprobar, NO exige canApprove)', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    mockAccessGranted()
+
+    const res = await request(app).patch(BASE).set('Authorization', `Bearer ${legacyToken()}`).send({ copy: 'nuevo copy' })
+    expect(res.status).toBe(403)
+    expect(res.body.code).toBe('CONTACT_REQUIRED')
+  })
+
+  it('403 no requiere canApprove — un contacto sin permiso de aprobar igual puede editar el copy', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact({ canApprove: false }))
+    mockAccessGranted()
+    prisma.contentPiece.findFirst
+      .mockResolvedValueOnce({ id: PIECE_ID, title: 'Post de lanzamiento', status: 'produccion', copy: 'viejo' })
+      .mockResolvedValueOnce(dbPiece({ status: 'produccion', copy: 'nuevo copy' }))
+    prisma.contentPiece.update.mockResolvedValue({})
+    prisma.contentStatusEvent.create.mockResolvedValue({})
+
+    const res = await request(app).patch(BASE).set('Authorization', `Bearer ${contactToken()}`).send({ copy: 'nuevo copy' })
+    expect(res.status).toBe(200)
+  })
+
+  it('404 si la pieza no existe', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact())
+    mockAccessGranted()
+    prisma.contentPiece.findFirst.mockResolvedValue(null)
+
+    const res = await request(app).patch(BASE).set('Authorization', `Bearer ${contactToken()}`).send({ copy: 'x' })
+    expect(res.status).toBe(404)
+  })
+
+  it('409 si la pieza ya está publicada (estado terminal)', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact())
+    mockAccessGranted()
+    prisma.contentPiece.findFirst.mockResolvedValue({ id: PIECE_ID, title: 'x', status: 'publicado', copy: 'y' })
+
+    const res = await request(app).patch(BASE).set('Authorization', `Bearer ${contactToken()}`).send({ copy: 'nuevo' })
+    expect(res.status).toBe(409)
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
+  })
+
+  it('400 si copy no es un string', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact())
+    mockAccessGranted()
+    prisma.contentPiece.findFirst.mockResolvedValue({ id: PIECE_ID, title: 'x', status: 'aprobacion', copy: 'y' })
+
+    const res = await request(app).patch(BASE).set('Authorization', `Bearer ${contactToken()}`).send({})
+    expect(res.status).toBe(400)
+  })
+
+  it('200 happy path: actualiza el copy y deja un ContentStatusEvent con el copy anterior', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact())
+    mockAccessGranted()
+    // ① chequeo de estado ② loadPiece (para el emit interno) ③ refetch público para la respuesta
+    prisma.contentPiece.findFirst
+      .mockResolvedValueOnce({ id: PIECE_ID, title: 'Post de lanzamiento', status: 'aprobacion', copy: 'Copy viejo' })
+      .mockResolvedValueOnce({ id: PIECE_ID, title: 'Post de lanzamiento', status: 'aprobacion' })
+      .mockResolvedValueOnce(dbPiece({ copy: 'Copy nuevo del cliente' }))
+    prisma.contentPiece.update.mockResolvedValue({})
+    prisma.contentStatusEvent.create.mockResolvedValue({})
+
+    const res = await request(app)
+      .patch(BASE)
+      .set('Authorization', `Bearer ${contactToken()}`)
+      .send({ copy: 'Copy nuevo del cliente' })
+
+    expect(res.status).toBe(200)
+    expect(res.body.copy).toBe('Copy nuevo del cliente')
+    expect(prisma.contentPiece.update).toHaveBeenCalledWith({
+      where: { id: PIECE_ID },
+      data: { copy: 'Copy nuevo del cliente' },
+    })
+    expect(prisma.contentStatusEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'copy_edited', actorContactId: 1, comment: expect.stringContaining('Copy viejo'),
+      }),
+    })
+    expect(emitTo).toHaveBeenCalledWith(`workspace:${WORKSPACE_ID}`, 'content:piece:updated', expect.any(Object))
+  })
+
+  it('no-op si el copy enviado es igual al actual: no actualiza ni deja evento', async () => {
+    prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal())
+    prisma.clientPortalContact.findUnique.mockResolvedValue(makeContact())
+    mockAccessGranted()
+    prisma.contentPiece.findFirst
+      .mockResolvedValueOnce({ id: PIECE_ID, title: 'x', status: 'aprobacion', copy: 'Mismo copy' })
+      .mockResolvedValueOnce(dbPiece({ copy: 'Mismo copy' }))
+
+    const res = await request(app)
+      .patch(BASE)
+      .set('Authorization', `Bearer ${contactToken()}`)
+      .send({ copy: 'Mismo copy' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
+    expect(prisma.contentStatusEvent.create).not.toHaveBeenCalled()
+  })
+})

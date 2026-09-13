@@ -13,6 +13,7 @@ const { formatAsset, formatPiece, loadPiece } = require('./content.controller')
 const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
 
 const MAX_COMMENT = 2000
+const MAX_COPY = 5000
 
 function safeParseArr(str) {
   try { const v = JSON.parse(str); return Array.isArray(v) ? v : [] } catch { return [] }
@@ -149,6 +150,27 @@ async function notifyTeamOfDecision(portal, piece, contact, decision, comment) {
       portal.projectId, portal.workspaceId,
       decision === 'approved' ? SYSTEM_TYPES.CONTENT_APPROVED : SYSTEM_TYPES.CONTENT_CHANGES_REQUESTED,
       `${icon} ${message}${commentPart}`
+    )
+  } catch {
+    // best-effort — nunca debe tumbar nada, ya se respondió al cliente.
+  }
+}
+
+/**
+ * Avisa al equipo, solo con un mensaje en el chat del proyecto (sin Notification
+ * ni email — a diferencia de aprobar/pedir cambios, editar el copy no mueve el
+ * estado de la pieza, así que no amerita el mismo peso de aviso), cuando el
+ * cliente edita el copy directamente desde el portal. Fire-and-forget, mismo
+ * criterio best-effort que notifyTeamOfDecision.
+ */
+async function notifyTeamOfCopyEdit(portal, piece, contact) {
+  try {
+    const who = (contact.name && contact.name.trim()) ? contact.name.trim() : contact.email
+    const preview = piece.title.length > 60 ? `${piece.title.slice(0, 57)}…` : piece.title
+    await postProjectSystemMessage(
+      portal.projectId, portal.workspaceId,
+      SYSTEM_TYPES.CONTENT_COPY_EDITED,
+      `📝 ${who} (cliente) editó el copy de "${preview}"`
     )
   } catch {
     // best-effort — nunca debe tumbar nada, ya se respondió al cliente.
@@ -367,12 +389,68 @@ async function addPortalComment(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * PATCH /api/public/client-portal/:slug/content/:pid/copy
+ * Body: { copy }. Abierto a cualquier contacto activo — mismo nivel de confianza
+ * que comentar (NO requiere canApprove): a diferencia de aprobar/pedir cambios,
+ * editar el copy no mueve el estado de la pieza, es feedback directo sobre el
+ * texto, igual de reversible que un comentario. Bloqueado en estados terminales
+ * (publicado/archivado), igual que el equipo no puede tocar una pieza ya publicada.
+ * Deja rastro en ContentStatusEvent (con el copy anterior en `comment`, para
+ * poder recuperarlo desde Historial) y un mensaje en el chat del proyecto.
+ */
+async function updatePortalCopy(req, res, next) {
+  try {
+    const portal = req.clientPortal
+    const guard = await assertContentAccess(portal)
+    if (guard) return res.status(guard.status).json({ error: guard.error })
+
+    const contact = req.clientPortalContact
+    if (!contact) return res.status(403).json({ error: 'Iniciá sesión de nuevo para continuar', code: 'CONTACT_REQUIRED' })
+
+    const piece = await prisma.contentPiece.findFirst({
+      where:  { id: Number(req.params.pid), projectId: portal.projectId, workspaceId: portal.workspaceId, deletedAt: null },
+      select: { id: true, title: true, status: true, copy: true },
+    })
+    if (!piece) return res.status(404).json({ error: 'Pieza no encontrada' })
+    if (statusMeta(piece.status)?.isTerminal) {
+      return res.status(409).json({ error: 'Esta pieza ya está publicada y no se puede editar' })
+    }
+
+    if (typeof req.body?.copy !== 'string') return res.status(400).json({ error: 'copy es requerido' })
+    const copy = req.body.copy.trim().slice(0, MAX_COPY)
+    const previous = piece.copy || ''
+
+    if (copy !== previous) {
+      await prisma.contentPiece.update({ where: { id: piece.id }, data: { copy: copy || null } })
+
+      await prisma.contentStatusEvent.create({
+        data: {
+          pieceId: piece.id, workspaceId: portal.workspaceId,
+          action: 'copy_edited',
+          actorContactId: contact.id, actorName: contact.name || contact.email,
+          comment: previous ? `Copy anterior:\n${previous}` : null,
+        },
+      })
+
+      setImmediate(() => notifyTeamOfCopyEdit(portal, piece, contact))
+
+      const freshInternal = await loadPiece(piece.id, portal.projectId, portal.workspaceId)
+      emitTo(`workspace:${portal.workspaceId}`, 'content:piece:updated', { projectId: portal.projectId, piece: formatPiece(freshInternal) })
+    }
+
+    const fresh = await prisma.contentPiece.findFirst({ where: { id: piece.id }, select: PUBLIC_PIECE_SELECT })
+    res.json(formatPiecePublic(fresh))
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   listPortalPieces,
   getPortalPiece,
   approvePiece,
   requestChanges,
   addPortalComment,
+  updatePortalCopy,
   // exportado para el test de fuga y para getPortalData (F7.5)
   formatPiecePublic,
   PORTAL_VISIBLE_STATUSES,

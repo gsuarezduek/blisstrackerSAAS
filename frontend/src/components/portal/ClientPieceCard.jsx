@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
-import { statusBadgeClass, networkLabel } from '../contenido/contentCatalog'
+import { statusBadgeClass, statusMeta, networkLabel } from '../contenido/contentCatalog'
 import { linkify } from '../../utils/linkify'
 import { findDriveEmbeds, driveEmbedUrl } from '../../utils/driveEmbed'
 
@@ -45,6 +45,11 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
   const [deciding,        setDeciding]        = useState(false)
   const [decisionError,   setDecisionError]   = useState(null)
 
+  const [editingCopy, setEditingCopy] = useState(false)
+  const [copyDraft,   setCopyDraft]   = useState('')
+  const [savingCopy,  setSavingCopy]  = useState(false)
+  const [copyError,   setCopyError]   = useState(null)
+
   const authHeaders = { headers: { Authorization: `Bearer ${token}` } }
   const base = `${API}/api/public/client-portal/${slug}/content/${piece.id}`
 
@@ -59,6 +64,15 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
       })
       .finally(() => setDetailLoading(false))
   }
+
+  // Las piezas "esperando tu aprobación" arrancan expandidas (defaultOpen) sin
+  // pasar por el click de toggleExpand que dispara loadDetail — sin este efecto
+  // se quedaban sin hilo de mensajes hasta que el cliente colapsaba y volvía a
+  // abrir la tarjeta a mano.
+  useEffect(() => {
+    if (defaultOpen) loadDetail()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function toggleExpand() {
     const next = !expanded
@@ -109,6 +123,29 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
   const activeAssetDrive = useMemo(() => (
     activeAsset?.kind === 'link' ? (findDriveEmbeds(activeAsset.url)[0] || null) : null
   ), [activeAsset])
+  // El equipo no puede tocar una pieza publicada/archivada — el cliente tampoco.
+  const copyLocked = Boolean(statusMeta(detailPiece.status)?.isTerminal)
+
+  function startEditingCopy() {
+    setCopyDraft(detailPiece.copy || '')
+    setCopyError(null)
+    setEditingCopy(true)
+  }
+
+  async function handleSaveCopy() {
+    if (savingCopy) return
+    setSavingCopy(true)
+    setCopyError(null)
+    try {
+      const r = await axios.patch(`${base}/copy`, { copy: copyDraft }, authHeaders)
+      onChanged?.(r.data)
+      setDetail(prev => (prev ? { ...prev, piece: r.data } : prev))
+      setEditingCopy(false)
+    } catch (err) {
+      if (isAuthError(err)) requireReauth()
+      else setCopyError(err.response?.data?.error || 'No se pudo guardar el copy')
+    } finally { setSavingCopy(false) }
+  }
 
   return (
     <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
@@ -201,7 +238,57 @@ export default function ClientPieceCard({ slug, token, requireReauth, piece, bra
                 </div>
               )}
 
-              {piece.copy && <p className="text-sm text-gray-700 whitespace-pre-wrap break-words mt-3">{linkify(piece.copy)}</p>}
+              <div className="mt-3">
+                {editingCopy ? (
+                  <div className="space-y-1.5">
+                    <textarea
+                      value={copyDraft}
+                      onChange={e => setCopyDraft(e.target.value)}
+                      rows={4}
+                      autoFocus
+                      placeholder="Texto del posteo…"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                    />
+                    {copyError && <p className="text-xs text-red-600">{copyError}</p>}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveCopy}
+                        disabled={savingCopy}
+                        className="px-3 py-1.5 text-sm font-semibold rounded-lg text-white disabled:opacity-50 transition-colors"
+                        style={{ backgroundColor: brandPrimary }}
+                      >
+                        {savingCopy ? 'Guardando…' : 'Guardar copy'}
+                      </button>
+                      <button
+                        onClick={() => { setEditingCopy(false); setCopyError(null) }}
+                        disabled={savingCopy}
+                        className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      {detailPiece.copy ? (
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{linkify(detailPiece.copy)}</p>
+                      ) : !copyLocked ? (
+                        <p className="text-sm text-gray-400 italic">Todavía no hay copy — podés escribirlo vos.</p>
+                      ) : null}
+                    </div>
+                    {!copyLocked && (
+                      <button
+                        onClick={startEditingCopy}
+                        className="shrink-0 text-xs font-medium text-gray-400 hover:text-primary-600 transition-colors"
+                        title="Editar el copy"
+                      >
+                        ✏️ Editar
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               {piece.hashtags && <p className="text-xs text-primary-600 mt-1.5">{piece.hashtags}</p>}
 
               {driveEmbeds.map(d => (

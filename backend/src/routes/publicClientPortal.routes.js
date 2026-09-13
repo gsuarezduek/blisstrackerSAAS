@@ -18,6 +18,7 @@ const {
   approvePiece,
   requestChanges,
   addPortalComment,
+  updatePortalCopy,
 } = require('../controllers/contentPortal.controller')
 const {
   listPortalFiles,
@@ -53,7 +54,8 @@ router.get ('/client-portal/:slug/content',                    clientPortalAuth,
 router.get ('/client-portal/:slug/content/:pid',                clientPortalAuth, getPortalPiece)
 router.post('/client-portal/:slug/content/:pid/approve',        clientPortalAuth, approvePiece)
 router.post('/client-portal/:slug/content/:pid/request-changes', clientPortalAuth, requestChanges)
-router.post('/client-portal/:slug/content/:pid/comments',       clientPortalAuth, addPortalComment)
+router.post ('/client-portal/:slug/content/:pid/comments',       clientPortalAuth, addPortalComment)
+router.patch('/client-portal/:slug/content/:pid/copy',           clientPortalAuth, updatePortalCopy)
 
 // Archivos — vista de solo lectura del mismo repositorio (ProjectFile) que ve
 // el equipo interno. Gateado por ProjectClientPortal.showFiles + Project.filesEnabled

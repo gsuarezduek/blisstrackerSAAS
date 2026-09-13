@@ -856,7 +856,7 @@ async function requestApproval(req, res, next) {
 
     const contacts = await prisma.clientPortalContact.findMany({
       where:  { portalId: portal.id, active: true, canApprove: true },
-      select: { id: true, email: true },
+      select: { id: true, email: true, name: true },
     })
     if (contacts.length === 0) {
       return res.status(400).json({ error: 'No hay contactos activos que puedan aprobar — agregá uno en la configuración del portal' })
@@ -887,7 +887,11 @@ async function requestApproval(req, res, next) {
       }))
     })
 
-    res.json({ sent: contacts.length, pieces: pieces.length })
+    res.json({
+      sent: contacts.length,
+      pieces: pieces.length,
+      contacts: contacts.map(c => ({ name: c.name, email: c.email })),
+    })
   } catch (err) { next(err) }
 }
 

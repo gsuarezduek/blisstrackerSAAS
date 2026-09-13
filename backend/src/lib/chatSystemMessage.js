@@ -12,6 +12,7 @@ const SYSTEM_TYPES = {
   CONTENT_PUBLISHED: 'content_published',
   CONTENT_APPROVED: 'content_approved',
   CONTENT_CHANGES_REQUESTED: 'content_changes_requested',
+  CONTENT_COPY_EDITED: 'content_copy_edited',
   BRIEF_COMPLETED: 'brief_completed',
   MEETING_HELD: 'meeting_held',
 }

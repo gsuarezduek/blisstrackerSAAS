@@ -7,6 +7,7 @@ const ACTION_LABEL = {
   submitted:         'la envió a aprobación',
   approved:          'aprobó la pieza',
   changes_requested: 'pidió cambios',
+  copy_edited:       'editó el copy',
   published:         'la marcó como publicada',
   task_completed:    'completó la tarea vinculada',
 }

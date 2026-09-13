@@ -161,9 +161,12 @@ export default function Contenido() {
     setApprovalMsg(null)
     try {
       const { data } = await api.post(`/contenido/projects/${projectId}/request-approval`)
+      const who = (data.contacts || []).map(c => (c.name?.trim() ? `${c.name} (${c.email})` : c.email)).join(', ')
       setApprovalMsg({
         type: 'success',
-        text: `Avisamos a ${data.sent} contacto${data.sent === 1 ? '' : 's'} sobre ${data.pieces} pieza${data.pieces === 1 ? '' : 's'}.`,
+        text: who
+          ? `Se pidió aprobación a ${who} sobre ${data.pieces} pieza${data.pieces === 1 ? '' : 's'}.`
+          : `Avisamos a ${data.sent} contacto${data.sent === 1 ? '' : 's'} sobre ${data.pieces} pieza${data.pieces === 1 ? '' : 's'}.`,
       })
     } catch (err) {
       setApprovalMsg({ type: 'error', text: err.response?.data?.error || 'No se pudo enviar el aviso' })
