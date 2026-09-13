@@ -3,6 +3,8 @@ const {
   getSocialImageStats,
   cleanupOrphanImages,
 } = require('../services/storageStats.service')
+const { computeAllWorkspacesStorageUsage } = require('../services/workspaceStorage.service')
+const prisma = require('../lib/prisma')
 
 /**
  * GET /api/superadmin/storage
@@ -33,4 +35,35 @@ async function cleanupOrphanImagesHandler(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getStorage, cleanupOrphanImagesHandler }
+/**
+ * GET /api/superadmin/storage/by-workspace
+ * Ranking de almacenamiento por workspace (Archivos/Contenido/Imágenes RRSS/
+ * WhatsApp), para complementar la vista global de arriba con "quién ocupa
+ * qué". Incluye workspaces sin ningún uso (todo en 0) para que el ranking
+ * refleje la lista completa, no solo los que tienen datos.
+ */
+async function getStorageByWorkspace(req, res, next) {
+  try {
+    const [usage, workspaces] = await Promise.all([
+      computeAllWorkspacesStorageUsage(),
+      prisma.workspace.findMany({
+        select: { id: true, name: true, slug: true, status: true, storageLimitMb: true },
+      }),
+    ])
+    const usageByWs = new Map(usage.map(u => [u.workspaceId, u]))
+    const empty = { archivos: 0, contenido: 0, imagenesSociales: 0, whatsapp: 0, total: 0 }
+    const rows = workspaces
+      .map(w => ({
+        workspaceId: w.id,
+        name: w.name,
+        slug: w.slug,
+        status: w.status,
+        storageLimitMb: w.storageLimitMb,
+        ...(usageByWs.get(w.id) ?? empty),
+      }))
+      .sort((a, b) => b.total - a.total)
+    res.json({ workspaces: rows })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getStorage, getStorageByWorkspace, cleanupOrphanImagesHandler }

@@ -46,6 +46,15 @@ const PLATFORM_SETTINGS = [
     help:    'Aplica solo a workspaces nuevos. Los existentes mantienen su monthlyTokenLimit propio (editable por workspace). 0 = ilimitado.',
   },
   {
+    key:     'defaultStorageLimitMb',
+    type:    'integer',
+    default: 20480,
+    min:     0,
+    group:   'commercial',
+    label:   'Límite de almacenamiento (default para nuevos workspaces, MB)',
+    help:    'Aplica solo a workspaces nuevos. Los existentes mantienen su storageLimitMb propio (editable por workspace desde SuperAdmin → Workspaces). 0 = ilimitado. Es un límite informativo/de alerta (ver storageWarningPct/storageCriticalPct) — no bloquea subidas, eso lo siguen haciendo contentStorageMaxMbPerWorkspace y projectFilesMaxMbPerWorkspace.',
+  },
+  {
     key:     'pricingTiers',
     type:    'pricingTiers',
     default: [
@@ -122,6 +131,26 @@ const PLATFORM_SETTINGS = [
     group:   'operational',
     label:   'Umbral crítico de tokens (%)',
     help:    'Porcentaje de consumo a partir del cual un workspace entra en estado "critical". Debe ser mayor que el umbral de warning.',
+  },
+  {
+    key:     'storageWarningPct',
+    type:    'integer',
+    default: 80,
+    min:     50,
+    max:     99,
+    group:   'operational',
+    label:   'Umbral de warning de almacenamiento (%)',
+    help:    'Porcentaje de uso del storageLimitMb del workspace a partir del cual se muestra el aviso de advertencia (in-app, al admin del workspace en Preferencias → Global). Debe ser menor que el umbral crítico.',
+  },
+  {
+    key:     'storageCriticalPct',
+    type:    'integer',
+    default: 95,
+    min:     51,
+    max:     100,
+    group:   'operational',
+    label:   'Umbral crítico de almacenamiento (%)',
+    help:    'Porcentaje de uso del storageLimitMb del workspace a partir del cual se muestra el aviso crítico (in-app). Debe ser mayor que el umbral de warning.',
   },
   {
     key:     'trialingSoonDays',

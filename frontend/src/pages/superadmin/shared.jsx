@@ -71,6 +71,8 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
   const [impersonating, setImpersonating] = useState(false)
   const [tokenLimit,    setTokenLimit]    = useState('')
   const [savingLimit,   setSavingLimit]   = useState(false)
+  const [storageLimit,      setStorageLimit]      = useState('')
+  const [savingStorageLimit, setSavingStorageLimit] = useState(false)
   const [savingExempt,  setSavingExempt]  = useState(false)
   const appDomain = import.meta.env.VITE_APP_DOMAIN || 'blisstracker.app'
 
@@ -79,6 +81,7 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
       .then(r => {
         setDetail(r.data)
         setTokenLimit(String(r.data.monthlyTokenLimit ?? 1000000))
+        setStorageLimit(String(r.data.storageLimitMb ?? 20480))
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -94,6 +97,18 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
     } catch (err) {
       alert(err.response?.data?.error || 'Error al guardar')
     } finally { setSavingLimit(false) }
+  }
+
+  async function handleSaveStorageLimit() {
+    const limit = parseInt(storageLimit, 10)
+    if (isNaN(limit) || limit < 0) return alert('Ingresá un número válido (0 = ilimitado)')
+    setSavingStorageLimit(true)
+    try {
+      await api.patch(`/superadmin/workspaces/${workspace.id}/storage-limit`, { storageLimitMb: limit })
+      setDetail(prev => ({ ...prev, storageLimitMb: limit }))
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al guardar')
+    } finally { setSavingStorageLimit(false) }
   }
 
   async function handleToggleExempt() {
@@ -181,6 +196,21 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                 {savingLimit ? '...' : 'Guardar'}
               </button>
             </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Storage (MB):</label>
+              <input
+                type="number"
+                min="0"
+                value={storageLimit}
+                onChange={e => setStorageLimit(e.target.value)}
+                placeholder="20480"
+                className="w-28 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <button onClick={handleSaveStorageLimit} disabled={savingStorageLimit}
+                className="px-3 py-2 bg-gray-600 hover:bg-gray-700 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-colors">
+                {savingStorageLimit ? '...' : 'Guardar'}
+              </button>
+            </div>
             <button onClick={handleToggleExempt} disabled={savingExempt || loading}
               title="Un workspace exento queda activo de forma permanente y nunca es marcado como vencido por el cron de free tier."
               className={`px-3 py-2 text-sm font-medium rounded-xl transition-colors disabled:opacity-40 ${
@@ -197,7 +227,7 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
           ) : detail ? (
             <>
               {/* Métricas rápidas */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <StatCard label="Miembros activos" value={detail.members?.filter(m => m.active).length ?? 0} />
                 <StatCard label="Proyectos" value={detail.projects?.length ?? 0} />
                 {(() => {
@@ -210,6 +240,21 @@ export function WorkspaceDetailModal({ workspace, onClose, onStatusChange }) {
                       label="Tokens IA (mes)"
                       value={fmtTokens(used)}
                       sub={`de ${fmtTokens(limit)} (${pct}%)`}
+                      valueColor={valColor}
+                    />
+                  )
+                })()}
+                {(() => {
+                  const used      = detail.storageUsedBytes ?? 0
+                  const limitMb   = detail.storageLimitMb ?? 20480
+                  const limitBytes = limitMb * 1024 * 1024
+                  const pct       = limitMb > 0 ? Math.round((used / limitBytes) * 100) : 0
+                  const valColor  = limitMb > 0 && pct >= 100 ? 'text-red-500' : limitMb > 0 && pct >= 80 ? 'text-amber-500' : undefined
+                  return (
+                    <StatCard
+                      label="Almacenamiento"
+                      value={fmtBytes(used)}
+                      sub={limitMb > 0 ? `de ${fmtBytes(limitBytes)} (${pct}%)` : 'ilimitado'}
                       valueColor={valColor}
                     />
                   )

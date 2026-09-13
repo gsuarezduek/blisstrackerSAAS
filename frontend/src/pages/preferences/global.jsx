@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import { useWorkspace } from '../../context/WorkspaceContext'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ConfirmModal from '../../components/ConfirmModal'
+import { fmtBytes } from '../../lib/fileIcons'
 import { Toggle } from './shared'
 
 const TIMEZONES = [
@@ -30,6 +32,8 @@ export default function GlobalTab({ loaded }) {
   const [digestTest,          setDigestTest]          = useState({ sending: false, msg: '', error: false })
   const [aiUsage,             setAiUsage]             = useState(null)
   const [aiUsageError,        setAiUsageError]        = useState(false)
+  const [storageUsage,        setStorageUsage]        = useState(null)
+  const [storageUsageError,   setStorageUsageError]   = useState(false)
 
   // Detalle de consumo de IA (desplegable)
   const [showAiDetail,   setShowAiDetail]   = useState(false)
@@ -55,6 +59,13 @@ export default function GlobalTab({ loaded }) {
     api.get('/projects/settings/ai-usage')
       .then(({ data }) => setAiUsage(data))
       .catch(() => setAiUsageError(true))
+  }, [user?.isAdmin])
+
+  useEffect(() => {
+    if (!user?.isAdmin) return
+    api.get('/projects/settings/storage-usage')
+      .then(({ data }) => setStorageUsage(data))
+      .catch(() => setStorageUsageError(true))
   }, [user?.isAdmin])
 
   useEffect(() => {
@@ -309,6 +320,92 @@ export default function GlobalTab({ loaded }) {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Almacenamiento */}
+      {(() => {
+        const CATEGORY_LABELS = {
+          archivos:         'Archivos (Nube)',
+          contenido:        'Contenido',
+          imagenesSociales: 'Imágenes de RRSS',
+          whatsapp:         'WhatsApp',
+        }
+        const STATUS_COPY = {
+          warning:  { color: 'bg-amber-400', text: 'text-amber-600 dark:text-amber-400', msg: '⚠️ Te estás acercando al límite de almacenamiento del workspace.' },
+          critical: { color: 'bg-red-500',   text: 'text-red-500',                       msg: '⚠️ Estás muy cerca del límite de almacenamiento del workspace.' },
+          exceeded: { color: 'bg-red-500',   text: 'text-red-500',                       msg: '🚫 Se alcanzó el límite de almacenamiento del workspace.' },
+        }
+        // El color/mensaje sale del `status` que ya calculó el backend (contra
+        // storageWarningPct/storageCriticalPct de SuperAdmin) — a diferencia del
+        // bloque de Consumo de IA de arriba, NO se hardcodean porcentajes acá, así
+        // que un cambio de esos umbrales se refleja solo, sin tocar este componente.
+        const copy = storageUsage ? STATUS_COPY[storageUsage.status] : null
+
+        return (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border dark:border-gray-700 p-6">
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Almacenamiento</h2>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">Espacio usado por Archivos, Contenido, imágenes de RRSS y WhatsApp de este workspace.</p>
+
+            {storageUsageError ? (
+              <p className="text-sm text-red-500 dark:text-red-400">No se pudieron cargar las estadísticas.</p>
+            ) : !storageUsage ? (
+              <LoadingSpinner size="sm" className="py-2" />
+            ) : (
+              <div className="space-y-4">
+                {/* Barra de uso total */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Uso total</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {fmtBytes(storageUsage.usedBytes)}
+                      {storageUsage.limitBytes > 0 && <> / {fmtBytes(storageUsage.limitBytes)} ({storageUsage.pct}%)</>}
+                      {storageUsage.limitBytes === 0 && ' (sin límite)'}
+                    </p>
+                  </div>
+                  <div className="w-full h-2.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${copy?.color || 'bg-primary-500'}`}
+                      style={{ width: `${storageUsage.limitBytes > 0 ? storageUsage.pct : 0}%` }}
+                    />
+                  </div>
+                  {copy && <p className={`text-xs mt-1.5 ${copy.text}`}>{copy.msg}</p>}
+                </div>
+
+                {/* Desglose por categoría */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                    <div key={key} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+                      <p className="text-sm font-bold text-gray-800 dark:text-white">{fmtBytes(storageUsage.breakdown?.[key] || 0)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Ranking de proyectos */}
+                {storageUsage.byProject?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Proyectos que más espacio ocupan</p>
+                    <div className="rounded-xl border border-gray-100 dark:border-gray-700 divide-y divide-gray-50 dark:divide-gray-700/50 overflow-hidden">
+                      {storageUsage.byProject.slice(0, 8).map(p => (
+                        <Link
+                          key={p.projectId}
+                          to={`/my-projects/${p.projectId}?infoTab=archivos`}
+                          className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+                        >
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate pr-3">{p.projectName}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{fmtBytes(p.totalBytes)}</span>
+                        </Link>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">
+                      Solo incluye Archivos y Contenido (lo atribuible a un proyecto puntual) — imágenes de RRSS y WhatsApp no se pueden asociar a un proyecto específico. Incluye archivos en la papelera todavía no purgados.
+                    </p>
                   </div>
                 )}
               </div>

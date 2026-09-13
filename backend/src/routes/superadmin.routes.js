@@ -63,6 +63,7 @@ router.get('/workspaces',               c.listWorkspaces)
 router.get('/workspaces/:id',                  c.getWorkspace)
 router.patch('/workspaces/:id/status',         c.updateWorkspaceStatus)
 router.patch('/workspaces/:id/token-limit',    c.updateTokenLimit)
+router.patch('/workspaces/:id/storage-limit',  c.updateStorageLimit)
 router.patch('/workspaces/:id/billing-exempt', c.updateWorkspaceBillingExempt)
 router.post('/impersonate',             c.impersonate)
 router.get('/feedback',                 c.listFeedback)
@@ -88,6 +89,7 @@ router.post('/settings/cleanup-now',    ps.runCleanup)
 
 // Almacenamiento (tamaño de la DB + limpieza de imágenes sociales huérfanas)
 router.get('/storage',                       st.getStorage)
+router.get('/storage/by-workspace',          st.getStorageByWorkspace)
 router.post('/storage/cleanup-orphan-images', st.cleanupOrphanImagesHandler)
 
 // Anuncios

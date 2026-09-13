@@ -3,12 +3,23 @@ import api from '../../api/client'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ConfirmModal from '../../components/ConfirmModal'
 import { fmtBytes, StatCard } from './shared'
+import { TokenBar } from './aiTokens'
+
+const STORAGE_CATEGORY_LABELS = {
+  archivos:         'Archivos (Nube)',
+  contenido:        'Contenido',
+  imagenesSociales: 'Imágenes de RRSS',
+  whatsapp:         'WhatsApp',
+}
 
 export function SectionStorage() {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
   const [confirmCleanup, setConfirmCleanup] = useState(false)
+  const [byWorkspace, setByWorkspace]         = useState(null)
+  const [loadingByWorkspace, setLoadingByWorkspace] = useState(true)
+  const [expanded, setExpanded] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -18,7 +29,15 @@ export function SectionStorage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  async function loadByWorkspace() {
+    setLoadingByWorkspace(true)
+    try {
+      const { data } = await api.get('/superadmin/storage/by-workspace')
+      setByWorkspace(data.workspaces)
+    } finally { setLoadingByWorkspace(false) }
+  }
+
+  useEffect(() => { load(); loadByWorkspace() }, [])
 
   async function cleanup() {
     setRunning(true)
@@ -137,6 +156,72 @@ export function SectionStorage() {
           ))}
         </div>
       </div>
+
+      {/* Ranking por workspace */}
+      {loadingByWorkspace ? (
+        <LoadingSpinner size="sm" className="py-8" />
+      ) : byWorkspace && byWorkspace.length > 0 && (() => {
+        const withUsage = byWorkspace.filter(w => w.total > 0)
+        const maxTotal  = withUsage[0]?.total || 1
+        return (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                Ranking por workspace
+                <span className="ml-2 text-xs font-normal text-gray-400">({withUsage.length} con datos)</span>
+              </h3>
+              <button onClick={loadByWorkspace} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">Actualizar</button>
+            </div>
+            {withUsage.length === 0 ? (
+              <p className="px-5 py-8 text-sm text-gray-400 text-center">Ningún workspace tiene almacenamiento usado todavía.</p>
+            ) : (
+              <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                {withUsage.map((w, idx) => {
+                  const limitBytes = w.storageLimitMb > 0 ? w.storageLimitMb * 1024 * 1024 : null
+                  const pct = limitBytes ? Math.round((w.total / limitBytes) * 100) : null
+                  return (
+                    <div key={w.workspaceId}>
+                      <button
+                        className="w-full px-5 py-3 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors text-left"
+                        onClick={() => setExpanded(prev => prev === w.workspaceId ? null : w.workspaceId)}
+                      >
+                        <span className="w-5 flex-shrink-0 text-xs font-bold text-gray-300 dark:text-gray-600 tabular-nums">{idx + 1}</span>
+                        <div className="w-36 flex-shrink-0 min-w-0">
+                          <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{w.name}</p>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500">{w.slug}</p>
+                        </div>
+                        <TokenBar value={w.total} max={maxTotal} />
+                        <div className="text-right flex-shrink-0 w-32">
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fmtBytes(w.total)}</p>
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                            {pct != null ? `${pct}% de ${fmtBytes(limitBytes)}` : 'ilimitado'}
+                          </p>
+                        </div>
+                        <span className={`flex-shrink-0 text-gray-400 text-xs transition-transform duration-200 ${expanded === w.workspaceId ? 'rotate-180' : ''}`}>▾</span>
+                      </button>
+                      {expanded === w.workspaceId && (
+                        <div className="bg-gray-50 dark:bg-gray-700/30 border-t border-gray-100 dark:border-gray-700">
+                          {Object.entries(STORAGE_CATEGORY_LABELS).map(([key, label]) => (
+                            <div key={key} className="px-5 py-2 pl-12 flex items-center gap-4">
+                              <div className="w-36 flex-shrink-0">
+                                <p className="text-xs text-gray-600 dark:text-gray-400">{label}</p>
+                              </div>
+                              <TokenBar value={w[key] || 0} max={w.total || 1} color="bg-primary-300 dark:bg-primary-700" />
+                              <div className="text-right flex-shrink-0 w-32">
+                                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{fmtBytes(w[key] || 0)}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       <ConfirmModal
         open={confirmCleanup}

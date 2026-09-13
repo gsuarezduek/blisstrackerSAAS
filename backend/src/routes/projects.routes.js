@@ -25,6 +25,7 @@ router.patch('/settings',                  workspaceAdminOnly, globalSettings.sa
 router.post('/settings/late-notification/test', workspaceAdminOnly, globalSettings.testLateNotification)
 router.post('/settings/marketing-digest/test', workspaceAdminOnly, globalSettings.testMarketingDigest)
 router.get('/settings/ai-usage',           workspaceAdminOnly, globalSettings.getAiUsage)
+router.get('/settings/storage-usage',      workspaceAdminOnly, globalSettings.getStorageUsage)
 router.get('/:id/members',                 projects.getMembers)
 router.get('/:id/tasks',                   projectTasks.projectTasks)
 router.get('/:id/completed',               projectTasks.projectCompletedHistory)

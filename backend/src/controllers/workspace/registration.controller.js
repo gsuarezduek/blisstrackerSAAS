@@ -55,9 +55,10 @@ async function createWorkspace(req, res, next) {
       return res.status(400).json({ error: 'El slug solo puede contener letras minúsculas, números y guiones (2-30 caracteres)' })
     }
 
-    const [trialDays, defaultTokenLimit] = await Promise.all([
+    const [trialDays, defaultTokenLimit, defaultStorageLimit] = await Promise.all([
       getSetting('trialDays'),
       getSetting('defaultMonthlyTokenLimit'),
+      getSetting('defaultStorageLimitMb'),
     ])
     const trialEndsAt = new Date()
     trialEndsAt.setDate(trialEndsAt.getDate() + trialDays)
@@ -91,7 +92,7 @@ async function createWorkspace(req, res, next) {
     const result = await prisma.$transaction(async (tx) => {
       // Crear workspace
       const workspace = await tx.workspace.create({
-        data: { name: workspaceName, slug, status: 'trialing', trialEndsAt, monthlyTokenLimit: defaultTokenLimit },
+        data: { name: workspaceName, slug, status: 'trialing', trialEndsAt, monthlyTokenLimit: defaultTokenLimit, storageLimitMb: defaultStorageLimit },
       })
 
       // Reutiliza al owner ya resuelto arriba (sesión activa, o email con cuenta existente);

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import { StatusBadge, fmtTokens } from './shared'
+import { StatusBadge, fmtTokens, fmtBytes } from './shared'
 
 export function SectionWorkspaces({ workspaces, loading, onSelectWorkspace }) {
   const [search, setSearch] = useState('')
@@ -51,7 +51,7 @@ export function SectionWorkspaces({ workspaces, loading, onSelectWorkspace }) {
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{w.projectCount}</p>
                     <p className="text-xs text-gray-400">proyectos</p>
                   </div>
-                  <div className="hidden md:block text-right min-w-[80px]">
+                  <div className="hidden md:block text-right min-w-[90px]">
                     {(() => {
                       const used  = w.monthlyTokenUsed  ?? 0
                       const limit = w.monthlyTokenLimit  ?? 1000000
@@ -62,7 +62,24 @@ export function SectionWorkspaces({ workspaces, loading, onSelectWorkspace }) {
                       return (
                         <>
                           <p className={`text-sm font-medium ${color}`}>{fmtTokens(used)}</p>
-                          <p className="text-xs text-gray-400">de {fmtTokens(limit)}</p>
+                          <p className="text-xs text-gray-400">Tokens IA · de {fmtTokens(limit)}</p>
+                        </>
+                      )
+                    })()}
+                  </div>
+                  <div className="hidden lg:block text-right min-w-[100px]">
+                    {(() => {
+                      const used     = w.storageUsedBytes ?? 0
+                      const limitMb  = w.storageLimitMb   ?? 20480
+                      const limitBytes = limitMb * 1024 * 1024
+                      const pct      = limitMb > 0 ? Math.round((used / limitBytes) * 100) : 0
+                      const color    = limitMb > 0 && pct >= 100 ? 'text-red-500 dark:text-red-400'
+                                     : limitMb > 0 && pct >= 80  ? 'text-amber-500 dark:text-amber-400'
+                                     : 'text-gray-700 dark:text-gray-300'
+                      return (
+                        <>
+                          <p className={`text-sm font-medium ${color}`}>{fmtBytes(used)}</p>
+                          <p className="text-xs text-gray-400">Almacenamiento · {limitMb > 0 ? `de ${fmtBytes(limitBytes)}` : 'ilimitado'}</p>
                         </>
                       )
                     })()}

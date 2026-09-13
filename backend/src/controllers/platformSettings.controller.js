@@ -73,6 +73,24 @@ async function updateSettings(req, res, next) {
       }
     }
 
+    // 2b. Validación cross-field — storageCriticalPct debe ser > storageWarningPct (mismo criterio que tokens)
+    if ('storageWarningPct' in changes || 'storageCriticalPct' in changes) {
+      const currentRows = await prisma.platformSetting.findMany({
+        where: { key: { in: ['storageWarningPct', 'storageCriticalPct'] } },
+      })
+      const current = Object.fromEntries(
+        currentRows.map(r => [r.key, r.value?.value])
+      )
+      const warning  = changes.storageWarningPct  ?? current.storageWarningPct  ?? SETTINGS_BY_KEY.storageWarningPct.default
+      const critical = changes.storageCriticalPct ?? current.storageCriticalPct ?? SETTINGS_BY_KEY.storageCriticalPct.default
+      if (critical <= warning) {
+        return res.status(400).json({
+          error: 'Validación cross-field falló',
+          details: { storageCriticalPct: 'Debe ser mayor que storageWarningPct' },
+        })
+      }
+    }
+
     // 3. Aplicar en transacción + audit log
     const userId = req.user.userId
     const applied = await prisma.$transaction(async tx => {

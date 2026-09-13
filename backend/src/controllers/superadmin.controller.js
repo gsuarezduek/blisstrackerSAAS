@@ -11,9 +11,10 @@ const { DEFAULT_TZ } = require('../utils/dates')
 async function listWorkspaces(req, res, next) {
   try {
     const { startOfCurrentMonth } = require('../lib/tokenBudget')
+    const { computeAllWorkspacesStorageUsage } = require('../services/workspaceStorage.service')
     const monthStart = startOfCurrentMonth()
 
-    const [workspaces, tokenUsageRaw] = await Promise.all([
+    const [workspaces, tokenUsageRaw, storageUsageRaw] = await Promise.all([
       prisma.workspace.findMany({
         orderBy: { createdAt: 'desc' },
         include: {
@@ -31,6 +32,7 @@ async function listWorkspaces(req, res, next) {
         where:   { createdAt: { gte: monthStart } },
         _sum:    { inputTokens: true, outputTokens: true },
       }),
+      computeAllWorkspacesStorageUsage(),
     ])
 
     // Mapear consumo mensual por workspaceId
@@ -39,6 +41,10 @@ async function listWorkspaces(req, res, next) {
       if (r.workspaceId) {
         tokenByWs[r.workspaceId] = (r._sum.inputTokens ?? 0) + (r._sum.outputTokens ?? 0)
       }
+    }
+    const storageByWs = {}
+    for (const r of storageUsageRaw) {
+      storageByWs[r.workspaceId] = r.total
     }
 
     res.json(workspaces.map(w => ({
@@ -54,6 +60,8 @@ async function listWorkspaces(req, res, next) {
       subscription:      w.subscription,
       monthlyTokenLimit: w.monthlyTokenLimit,
       monthlyTokenUsed:  tokenByWs[w.id] ?? 0,
+      storageLimitMb:    w.storageLimitMb,
+      storageUsedBytes:  storageByWs[w.id] ?? 0,
     })))
   } catch (err) { next(err) }
 }
@@ -67,8 +75,9 @@ async function getWorkspace(req, res, next) {
     const id = Number(req.params.id)
 
     const { startOfCurrentMonth } = require('../lib/tokenBudget')
+    const { computeWorkspaceStorageUsage } = require('../services/workspaceStorage.service')
 
-    const [workspace, members, projects, tokenStats, monthlyUsageAgg] = await Promise.all([
+    const [workspace, members, projects, tokenStats, monthlyUsageAgg, storageUsage] = await Promise.all([
       prisma.workspace.findUnique({
         where: { id },
         include: { subscription: true },
@@ -92,6 +101,7 @@ async function getWorkspace(req, res, next) {
         where: { workspaceId: id, createdAt: { gte: startOfCurrentMonth() } },
         _sum:  { inputTokens: true, outputTokens: true },
       }),
+      computeWorkspaceStorageUsage(id),
     ])
 
     if (!workspace) return res.status(404).json({ error: 'Workspace no encontrado' })
@@ -110,6 +120,8 @@ async function getWorkspace(req, res, next) {
       projects,
       tokenStats,
       monthlyTokenUsed,
+      storageUsedBytes: storageUsage.total,
+      storageBreakdown: storageUsage,
     })
   } catch (err) { next(err) }
 }
@@ -130,6 +142,29 @@ async function updateTokenLimit(req, res, next) {
       where: { id },
       data:  { monthlyTokenLimit: limit },
       select: { id: true, name: true, monthlyTokenLimit: true },
+    })
+    res.json(workspace)
+  } catch (err) { next(err) }
+}
+
+/**
+ * PATCH /api/superadmin/workspaces/:id/storage-limit
+ * Actualiza el límite de almacenamiento (MB) del workspace. Es un límite
+ * informativo/de alerta (ver storageBudget.js) — NO bloquea subidas, eso lo
+ * siguen haciendo contentStorageMaxMbPerWorkspace/projectFilesMaxMbPerWorkspace.
+ * Body: { storageLimitMb: number }
+ */
+async function updateStorageLimit(req, res, next) {
+  try {
+    const id    = Number(req.params.id)
+    const limit = Number(req.body.storageLimitMb)
+    if (!Number.isInteger(limit) || limit < 0) {
+      return res.status(400).json({ error: 'storageLimitMb debe ser un entero ≥ 0 (0 = ilimitado)' })
+    }
+    const workspace = await prisma.workspace.update({
+      where: { id },
+      data:  { storageLimitMb: limit },
+      select: { id: true, name: true, storageLimitMb: true },
     })
     res.json(workspace)
   } catch (err) { next(err) }
@@ -1000,4 +1035,4 @@ async function getMetrics(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, getWhatsappUsageStats, listUsers, toggleUserActive, toggleUserDailyInsight, toggleUserSuperAdmin, getConversionFunnel, getMetrics }
+module.exports = { listWorkspaces, getWorkspace, updateWorkspaceStatus, updateTokenLimit, updateStorageLimit, updateWorkspaceBillingExempt, impersonate, getStats, listFeedback, markFeedbackRead, listEmailLogs, getBillingOverview, listPayments, getAiTokenStats, getWhatsappUsageStats, listUsers, toggleUserActive, toggleUserDailyInsight, toggleUserSuperAdmin, getConversionFunnel, getMetrics }

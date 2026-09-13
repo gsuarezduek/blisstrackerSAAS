@@ -3,6 +3,8 @@ const { DEFAULT_LATE_TEMPLATE } = require('../../services/lateNotification.servi
 const { MARKETING_SECTION_IDS } = require('../../lib/marketingSections')
 const { sendTestDigest: sendMarketingDigestTest } = require('../../services/marketingDigest.service')
 const { sendLateNotificationEmail } = require('../../services/email.service')
+const { getStorageBudget } = require('../../lib/storageBudget')
+const { computeProjectStorageBreakdown } = require('../../services/workspaceStorage.service')
 
 async function getGlobalSettings(req, res, next) {
   try {
@@ -94,6 +96,25 @@ async function getAiUsage(req, res, next) {
       period:            period || 'all',
       monthlyTokenLimit: workspace?.monthlyTokenLimit ?? 1000000,
     })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /projects/settings/storage-usage
+ * Vista de almacenamiento para el admin del workspace (Preferencias → Global):
+ * total usado/límite con estado (ok/warning/critical/exceeded), desglose por
+ * categoría, y ranking de proyectos por espacio usado (solo Archivos +
+ * Contenido, los únicos atribuibles a un proyecto — ver workspaceStorage.service.js).
+ * En vivo, sin cron ni persistencia de "ya se avisó" — mismo criterio que getAiUsage.
+ */
+async function getStorageUsage(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const [budget, byProject] = await Promise.all([
+      getStorageBudget(workspaceId),
+      computeProjectStorageBreakdown(workspaceId),
+    ])
+    res.json({ ...budget, byProject })
   } catch (err) { next(err) }
 }
 
@@ -237,4 +258,4 @@ async function testMarketingDigest(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getGlobalSettings, saveGlobalSettings, testLateNotification, testMarketingDigest, getAiUsage }
+module.exports = { getGlobalSettings, saveGlobalSettings, testLateNotification, testMarketingDigest, getAiUsage, getStorageUsage }
