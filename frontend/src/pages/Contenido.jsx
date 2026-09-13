@@ -97,6 +97,11 @@ export default function Contenido() {
     onPieceCreated: scheduleReload,
     onPieceUpdated: scheduleReload,
     onPieceDeleted: scheduleReload,
+    // Un comentario nuevo (del cliente o del equipo) puede cambiar el
+    // "último mensaje del cliente" que la Tabla muestra debajo del título
+    // (ver ContentTableView) — no viaja en `content:piece:updated`, así que
+    // sin este handler quedaba desactualizado hasta el próximo reload manual.
+    onCommentNew: scheduleReload,
   })
 
   // Una pieza puede abrirse (?piece=id) sin estar en `pieces` — ej. un deep-link

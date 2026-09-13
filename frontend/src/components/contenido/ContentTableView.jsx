@@ -48,22 +48,34 @@ function TitleCell({ piece, canEdit, onSave, onOpen }) {
 
   if (!editing) {
     return (
-      <div className="flex items-center gap-2 min-w-0">
-        <button
-          onClick={onOpen}
-          className="text-sm text-gray-800 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400 truncate text-left font-medium"
-          title={piece.title}
-        >
-          {piece.title}
-        </button>
-        {canEdit && (
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <button
-            onClick={() => setEditing(true)}
-            title="Renombrar"
-            className="opacity-0 group-hover:opacity-100 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 transition-opacity"
+            onClick={onOpen}
+            className="text-sm text-gray-800 dark:text-gray-100 hover:text-primary-600 dark:hover:text-primary-400 truncate text-left font-medium"
+            title={piece.title}
           >
-            ✏️
+            {piece.title}
           </button>
+          {canEdit && (
+            <button
+              onClick={() => setEditing(true)}
+              title="Renombrar"
+              className="opacity-0 group-hover:opacity-100 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0 transition-opacity"
+            >
+              ✏️
+            </button>
+          )}
+        </div>
+        {/* Último mensaje del cliente en el hilo — destacado para que no se
+            pierda entre el resto de las piezas de la tabla (ver ContentTableView). */}
+        {piece.lastClientComment && (
+          <p
+            className="mt-0.5 text-xs italic text-amber-700/90 dark:text-amber-400/90 truncate"
+            title={`${piece.lastClientComment.author}: "${piece.lastClientComment.body}"`}
+          >
+            🤝 {piece.lastClientComment.author}: «{piece.lastClientComment.body}»
+          </p>
         )}
       </div>
     )
@@ -208,7 +220,16 @@ export default function ContentTableView({ pieces, members, clientContacts = [],
             {canEdit && <NewPieceRow onCreate={handleCreate} busy={busy} />}
 
             {sorted.map(p => (
-              <tr key={p.id} className="group hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+              <tr
+                key={p.id}
+                className={`group transition-colors ${
+                  p.status === 'aprobado'
+                    ? 'bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/30'
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'}`}
+              >
+                {/* Fila destacada: el cliente aprobó esta pieza y todavía nadie la
+                    movió del estado — mismo criterio de "recién pasó algo, no te lo pierdas"
+                    que el comentario debajo del título. */}
                 {/* Fecha */}
                 <td className={`${CELL} w-44`}>
                   {canEdit ? (

@@ -123,6 +123,16 @@ const PIECE_INCLUDE = {
     include: { file: { select: LINKED_FILE_SELECT }, linkedBy: { select: { id: true, name: true } } },
     orderBy: { createdAt: 'asc' },
   },
+  // Último comentario DEL CLIENTE (no del hilo completo) — para poder
+  // destacarlo en la Tabla sin traer todo el hilo de comentarios en cada
+  // fila. `_count.comments` de abajo sigue contando el hilo entero
+  // (interno + cliente); esto es un dato aparte.
+  comments: {
+    where:   { visibility: 'client' },
+    orderBy: { createdAt: 'desc' },
+    take:    1,
+    select:  { id: true, body: true, authorName: true, createdAt: true },
+  },
   _count:      { select: { comments: true } },
 }
 
@@ -202,6 +212,15 @@ function formatPiece(p) {
     assets:        p.assets ? p.assets.map(formatAsset) : [],
     files:         p.files ? p.files.map(formatLinkedFile) : [],
     commentCount:  p._count?.comments ?? 0,
+    // Último mensaje del cliente en el hilo (cualquiera sea el estado de la
+    // pieza) — la Tabla lo muestra como una línea aparte debajo del título
+    // para que no se pierda entre el resto de las piezas.
+    lastClientComment: p.comments?.[0] ? {
+      id:        p.comments[0].id,
+      body:      p.comments[0].body,
+      author:    p.comments[0].authorName || 'Cliente',
+      createdAt: p.comments[0].createdAt,
+    } : null,
     submittedAt:        p.submittedAt,
     approvedAt:         p.approvedAt,
     approvedBy:         p.approvedBy ? { id: p.approvedBy.id, name: p.approvedBy.name || p.approvedBy.email } : null,
