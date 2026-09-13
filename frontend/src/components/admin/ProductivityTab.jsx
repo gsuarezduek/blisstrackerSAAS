@@ -7,6 +7,7 @@ import ProductivityPeriodLabel from './ProductivityPeriodLabel'
 import RoleBadge from '../RoleBadge'
 import UserLink from '../UserLink'
 import DateRangeFilter from '../DateRangeFilter'
+import HowToButton from '../HowToButton'
 
 // Arma los query params de período para cualquier request de Productividad, a partir del
 // modo elegido en PeriodSelector. `customRange` solo importa cuando mode === 'custom'.
@@ -662,44 +663,6 @@ function sortValue(m, col) {
 // Dirección por defecto al activar una columna
 const DEFAULT_DIR = { name: 'asc', status: 'asc', completed: 'desc', hours: 'desc', tasa: 'desc', dhoras: 'desc', attendance: 'desc' }
 
-// Panel colapsable de ayuda: glosario de métricas + cuándo preocuparse.
-function HelpPanel() {
-  const [open, setOpen] = useState(false)
-  const items = [
-    ['Δ horas', 'Horas registradas ÷ horas disponibles (días esperados × la jornada del horario configurado). Mide cuánto del tiempo disponible quedó registrado en tareas. Requiere horario (inicio y fin) cargado; si no, muestra "—".'],
-    ['Tareas', 'Tareas completadas en el período, por fecha de completado (incluye las que se arrastraron de días previos). Compará contra la mediana del equipo (▲/▼).'],
-    ['Horas', 'Tiempo activo de esas tareas (completado − iniciado − pausas, tope 8h por tarea, o el ajuste manual). No cuenta tiempo en tareas sin terminar.'],
-    ['Tasa', 'Completadas ÷ creadas en el período: ritmo de cierre vs creación. >100% = está bajando backlog; <100% sostenido = lo está acumulando.'],
-    ['Horas y Asistencia', 'Al expandir la fila: Δ horas, horas disponibles vs registradas, presencia (días hábiles trabajados / esperados = hábiles − licencias) y tardanzas (primer login vs su horario). Separa "el mes está a medias" de "faltó".'],
-    ['Estado', 'Semáforo automático: inactivo (vino ≥3 días la última semana y no completó nada), ↓ baja (cae fuerte en tareas/horas/tasa), atascos (≥5 tareas frenadas >7d), ↑ alta (sube ≥30%), OK. Mirá primero a los rojos y ámbar.'],
-    ['vs equipo', 'El ▲/▼ y la barra comparan a la persona contra la mediana del equipo (no el promedio, para que un outlier no la distorsione).'],
-    ['Período', 'En "Mes en curso" se compara el mes a la fecha contra los mismos días del mes anterior, para que los números sean comparables. "Mes cerrado" usa el último mes completo.'],
-  ]
-  return (
-    <div className="mb-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 overflow-hidden">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
-      >
-        <span>💡 ¿Cómo se lee esta sección?</span>
-        <span className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
-      </button>
-      {open && (
-        <div className="px-4 pb-4 pt-1 border-t border-gray-100 dark:border-gray-700">
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 mt-3">
-            {items.map(([term, desc]) => (
-              <div key={term}>
-                <dt className="text-xs font-semibold text-gray-800 dark:text-gray-200">{term}</dt>
-                <dd className="text-xs text-gray-500 dark:text-gray-400 leading-snug">{desc}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // Resumen ejecutivo: chips por estado, clickeables para filtrar.
 function SummaryBar({ members, filter, onFilter }) {
   const counts = useMemo(() => {
@@ -806,7 +769,10 @@ function ByPersonView({ data, loading, setData, mode, customRange }) {
 
   return (
     <div>
-      <HelpPanel />
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Productividad por persona</h2>
+        <HowToButton topic="rrhh.productividad" />
+      </div>
       <SummaryBar members={data.members} filter={filter} onFilter={setFilter} />
 
       {/* Buscador de personas */}

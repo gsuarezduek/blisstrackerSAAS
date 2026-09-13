@@ -12,6 +12,7 @@ import WhatsappBotToggle from './WhatsappBotToggle'
 import WhatsappBotConfigModal from './WhatsappBotConfigModal'
 import WhatsappTemplateManager from './WhatsappTemplateManager'
 import WhatsappAutomationManager from './WhatsappAutomationManager'
+import HowToButton from '../HowToButton'
 
 const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000
 
@@ -202,13 +203,14 @@ export default function WhatsappTab({ onOpenLead }) {
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
-        <span className="text-sm text-gray-600 dark:text-gray-300">
+        <span className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-1.5">
           📞 {account.displayPhoneNumber || account.phoneNumberId}
           {!account.pluginId && (
             <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
               Falta Plugin ID — no se puede responder
             </span>
           )}
+          <HowToButton topic="ventas.whatsapp" />
         </span>
         <div className="flex items-center gap-3">
           {(user?.isAdmin || user?.isSales) && (

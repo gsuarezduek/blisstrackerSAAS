@@ -8,6 +8,7 @@ import InactivityModal from '../components/InactivityModal'
 import TaskCommentsModal from '../components/TaskCommentsModal'
 import OnboardingWizard from '../components/OnboardingWizard'
 import SetupChecklist from '../components/SetupChecklist'
+import HowToButton from '../components/HowToButton'
 import { useInactivity } from '../hooks/useInactivity'
 import api from '../api/client'
 import RoleBadge from '../components/RoleBadge'
@@ -655,25 +656,30 @@ export default function Dashboard() {
         {/* 6. Backlog — collapsible */}
         {allBacklog.length > 0 && (
           <section className={focusTasks.length > 0 ? 'mb-6' : 'mb-6'}>
-            <button
-              onClick={() => setBacklogOpen(v => !v)}
-              className="w-full flex items-center justify-between py-2 group"
-            >
-              <div className="flex items-center gap-2">
+            <div className="w-full flex items-center justify-between py-2 group">
+              <button
+                onClick={() => setBacklogOpen(v => !v)}
+                className="flex items-center gap-2 flex-1 text-left"
+              >
                 <h2 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">Backlog</h2>
                 <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5 font-medium">
                   {allBacklog.length}
                 </span>
+              </button>
+              <div className="flex items-center gap-1.5">
+                <HowToButton topic="dashboard.backlog" />
+                <button onClick={() => setBacklogOpen(v => !v)} aria-label={backlogOpen ? 'Colapsar Backlog' : 'Expandir Backlog'}>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${backlogOpen ? 'rotate-180' : ''}`}
+                  >
+                    <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clipRule="evenodd" />
+                  </svg>
+                </button>
               </div>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${backlogOpen ? 'rotate-180' : ''}`}
-              >
-                <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06z" clipRule="evenodd" />
-              </svg>
-            </button>
+            </div>
 
             {backlogOpen && (
               <div className="space-y-1 mt-2">

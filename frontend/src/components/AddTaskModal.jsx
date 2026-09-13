@@ -3,6 +3,7 @@ import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
 import { avatarUrl } from '../utils/avatarUrl'
+import HowToButton from './HowToButton'
 
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
@@ -457,7 +458,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
 
           {/* Opciones avanzadas: tarea recurrente / futura */}
           <div className="pt-2 border-t border-gray-100 dark:border-gray-700 space-y-3">
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <button
                 type="button"
                 onClick={() => { setTaskMode(m => m === 'recurring' ? 'normal' : 'recurring'); setOptErr('') }}
@@ -480,6 +481,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
               >
                 📅 Tarea futura
               </button>
+              <HowToButton topic="tarea.recurrente" />
             </div>
 
             {taskMode === 'recurring' && (
