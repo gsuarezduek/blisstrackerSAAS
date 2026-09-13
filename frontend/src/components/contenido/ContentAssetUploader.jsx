@@ -81,21 +81,30 @@ function captureVideoMeta(file) {
 
 let nextLocalId = 1
 
+const CARD_BASE = 'h-32 rounded-xl border-2 border-dashed p-3 flex flex-col items-center justify-center gap-1 text-center transition-colors'
+const CARD_ENABLED = 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 cursor-pointer'
+const CARD_DISABLED = 'opacity-50 cursor-not-allowed border-gray-200 dark:border-gray-700'
+const CARD_ACTIVE = 'border-primary-400 bg-primary-50/50 dark:bg-primary-900/10'
+
 /**
- * Dropzone del módulo Contenido. Orquesta presign → PUT directo a R2 → confirm.
- * Si R2 no está configurado, el presign de una imagen cae automáticamente al
- * fallback multipart (`POST .../assets`, sin R2); un video sin R2 no tiene
- * fallback y se muestra como error. Sube varios archivos en paralelo, cada
- * uno con su propia barra de progreso y botón de cancelar.
+ * Tres formas equivalentes de sumar multimedia a una pieza de Contenido, como
+ * tres tarjetas del mismo tamaño (mismo peso visual, para que quede claro que
+ * son alternativas para más o menos lo mismo, no una principal y dos accesorias):
+ * (1) subir un archivo desde la computadora, (2) pegar un link externo (Google
+ * Drive, etc. — crea un asset kind:'link' sin subir nada, va directo a
+ * `POST .../assets/link` y queda 'ready' al instante), (3) elegir un archivo ya
+ * subido al repositorio de Archivos del proyecto (delegado al padre vía
+ * `onOpenLibrary`, que abre `ContentFileBrowserModal`).
  *
- * Debajo del dropzone hay una alternativa liviana: "Agregar link" crea un
- * asset kind:'link' con la URL tal cual (Google Drive, etc.) — sin subir
- * nada, va directo a `POST .../assets/link` y queda 'ready' al instante.
+ * La subida en sí orquesta presign → PUT directo a R2 → confirm. Si R2 no está
+ * configurado, el presign de una imagen cae automáticamente al fallback
+ * multipart (`POST .../assets`, sin R2); un video sin R2 no tiene fallback y
+ * se muestra como error. Sube varios archivos en paralelo, cada uno con su
+ * propia barra de progreso y botón de cancelar.
  */
-export default function ContentAssetUploader({ projectId, pieceId, onUploaded, disabled }) {
+export default function ContentAssetUploader({ projectId, pieceId, onUploaded, disabled, onOpenLibrary, libraryDisabled }) {
   const [queue, setQueue] = useState([]) // [{ id, name, kind, progress, status, error }]
   const [dragOver, setDragOver] = useState(false)
-  const [linkOpen, setLinkOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
   const [linkBusy, setLinkBusy] = useState(false)
   const [linkError, setLinkError] = useState(null)
@@ -215,7 +224,6 @@ export default function ContentAssetUploader({ projectId, pieceId, onUploaded, d
     try {
       const { data } = await api.post(`/contenido/projects/${projectId}/pieces/${pieceId}/assets/link`, { url })
       setLinkUrl('')
-      setLinkOpen(false)
       onUploaded?.(data)
     } catch (err) {
       setLinkError(err.response?.data?.error || 'No se pudo agregar el link')
@@ -235,36 +243,83 @@ export default function ContentAssetUploader({ projectId, pieceId, onUploaded, d
 
   return (
     <div>
-      <div
-        onClick={() => !disabled && inputRef.current?.click()}
-        onDragOver={e => { if (!disabled) { e.preventDefault(); setDragOver(true) } }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={e => {
-          e.preventDefault()
-          setDragOver(false)
-          if (!disabled) handleFiles(e.dataTransfer.files)
-        }}
-        className={`rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
-          disabled ? 'opacity-50 cursor-not-allowed border-gray-200 dark:border-gray-700' :
-          dragOver ? 'border-primary-400 bg-primary-50/50 dark:bg-primary-900/10 cursor-pointer'
-                   : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 cursor-pointer'}`}
-      >
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {dragOver ? 'Soltá para subir' : 'Arrastrá imágenes o video acá, o hacé click para elegir'}
-        </p>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-          PNG, JPG, WEBP, GIF (hasta {fmtMb(MAX_BYTES.image)}) · MP4, MOV, WEBM (hasta {fmtMb(MAX_BYTES.video)})
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept={ACCEPT}
-          disabled={disabled}
-          onChange={e => { handleFiles(e.target.files); e.target.value = '' }}
-          className="hidden"
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {/* 1. Subir desde la computadora */}
+        <div
+          onClick={() => !disabled && inputRef.current?.click()}
+          onDragOver={e => { if (!disabled) { e.preventDefault(); setDragOver(true) } }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => {
+            e.preventDefault()
+            setDragOver(false)
+            if (!disabled) handleFiles(e.dataTransfer.files)
+          }}
+          title={`PNG, JPG, WEBP, GIF (hasta ${fmtMb(MAX_BYTES.image)}) · MP4, MOV, WEBM (hasta ${fmtMb(MAX_BYTES.video)})`}
+          className={`${CARD_BASE} ${disabled ? CARD_DISABLED : dragOver ? CARD_ACTIVE : CARD_ENABLED}`}
+        >
+          <span className="text-xl">📤</span>
+          <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+            {dragOver ? 'Soltá para subir' : 'Desde tu computadora'}
+          </p>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-tight">
+            Arrastrá o hacé click
+          </p>
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept={ACCEPT}
+            disabled={disabled}
+            onChange={e => { handleFiles(e.target.files); e.target.value = '' }}
+            className="hidden"
+          />
+        </div>
+
+        {/* 2. Link externo (Google Drive, etc.) */}
+        <form
+          onSubmit={handleAddLink}
+          className={`${CARD_BASE} ${disabled ? CARD_DISABLED : 'border-gray-200 dark:border-gray-700 cursor-default'}`}
+        >
+          <span className="text-xl">🔗</span>
+          <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Link externo</p>
+          <div className="w-full flex items-center gap-1">
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              placeholder="Google Drive, etc."
+              disabled={disabled || linkBusy}
+              className="w-full min-w-0 text-[11px] px-1.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={disabled || linkBusy || !linkUrl.trim()}
+              className="shrink-0 text-[11px] px-2 py-1 rounded-md bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white font-medium transition-colors"
+            >
+              {linkBusy ? '…' : 'Agregar'}
+            </button>
+          </div>
+        </form>
+
+        {/* 3. Archivo ya subido a la nube de BlissTracker (repositorio de Archivos del proyecto) */}
+        {onOpenLibrary && (
+          <button
+            type="button"
+            onClick={() => { if (!disabled && !libraryDisabled) onOpenLibrary() }}
+            disabled={disabled || libraryDisabled}
+            title={libraryDisabled ? 'No disponible con la pieza publicada' : undefined}
+            className={`${CARD_BASE} ${disabled || libraryDisabled ? CARD_DISABLED : CARD_ENABLED}`}
+          >
+            <span className="text-xl">☁️</span>
+            <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Nube de BlissTracker</p>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-tight">
+              Archivo ya subido al proyecto
+            </p>
+          </button>
+        )}
       </div>
+
+      {linkError && <p className="mt-1.5 text-xs text-red-500 dark:text-red-400">{linkError}</p>}
 
       {queue.length > 0 && (
         <div className="mt-2 space-y-1.5">
@@ -289,47 +344,6 @@ export default function ContentAssetUploader({ projectId, pieceId, onUploaded, d
           ))}
         </div>
       )}
-
-      {/* Link externo (Google Drive, etc.) — alternativa a subir el archivo. */}
-      {!disabled && (
-        linkOpen ? (
-          <form onSubmit={handleAddLink} className="mt-2 flex items-center gap-1.5">
-            <input
-              type="url"
-              autoFocus
-              value={linkUrl}
-              onChange={e => setLinkUrl(e.target.value)}
-              placeholder="https://drive.google.com/…"
-              disabled={linkBusy}
-              className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 disabled:opacity-60"
-            />
-            <button
-              type="submit"
-              disabled={linkBusy || !linkUrl.trim()}
-              className="text-xs px-2.5 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white font-medium transition-colors shrink-0"
-            >
-              {linkBusy ? 'Agregando…' : 'Agregar'}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLinkOpen(false); setLinkUrl(''); setLinkError(null) }}
-              disabled={linkBusy}
-              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
-            >
-              Cancelar
-            </button>
-          </form>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setLinkOpen(true)}
-            className="mt-2 text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 flex items-center gap-1"
-          >
-            🔗 Agregar link (Google Drive, etc.)
-          </button>
-        )
-      )}
-      {linkError && <p className="mt-1 text-xs text-red-500 dark:text-red-400">{linkError}</p>}
     </div>
   )
 }

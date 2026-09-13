@@ -342,52 +342,48 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                 />
 
                 {canEdit && (
-                  <ContentAssetUploader projectId={piece.projectId} pieceId={piece.id} onUploaded={handleAssetUploaded} />
+                  <ContentAssetUploader
+                    projectId={piece.projectId}
+                    pieceId={piece.id}
+                    onUploaded={handleAssetUploaded}
+                    onOpenLibrary={() => setFileBrowserOpen(true)}
+                    libraryDisabled={piece.status === 'publicado'}
+                  />
                 )}
 
-                {/* Archivos del proyecto vinculados — lista aparte del uploader de arriba */}
-                {(piece.files.length > 0 || (canEdit && piece.status !== 'publicado')) && (
+                {/* Archivos del proyecto ya vinculados — lista aparte de las tarjetas de arriba */}
+                {piece.files.length > 0 && (
                   <div className="pt-1">
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">📎 Vinculados desde Nube</p>
                     {filesError && <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">{filesError}</p>}
-                    {piece.files.length > 0 && (
-                      <div className="space-y-1 mb-2">
-                        {piece.files.map(link => (
-                          <div key={link.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-900/40 group">
-                            <button
-                              onClick={() => handleOpenLinkedFile(link.file)}
-                              className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
-                              title={link.file.name}
-                            >
-                              <span className="text-base shrink-0">{iconFor(link.file.mimeType)}</span>
-                              <span className="min-w-0 flex-1">
-                                <span className="block text-sm text-gray-700 dark:text-gray-200 truncate">{link.file.name}</span>
-                                <span className="block text-[11px] text-gray-400 dark:text-gray-500">
-                                  {fmtBytes(link.file.sizeBytes)}{link.linkedBy ? ` · vinculado por ${link.linkedBy.name}` : ''}
-                                </span>
+                    <div className="space-y-1">
+                      {piece.files.map(link => (
+                        <div key={link.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-900/40 group">
+                          <button
+                            onClick={() => handleOpenLinkedFile(link.file)}
+                            className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
+                            title={link.file.name}
+                          >
+                            <span className="text-base shrink-0">{iconFor(link.file.mimeType)}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm text-gray-700 dark:text-gray-200 truncate">{link.file.name}</span>
+                              <span className="block text-[11px] text-gray-400 dark:text-gray-500">
+                                {fmtBytes(link.file.sizeBytes)}{link.linkedBy ? ` · vinculado por ${link.linkedBy.name}` : ''}
                               </span>
+                            </span>
+                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => handleUnlinkFile(link.file.id)}
+                              className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity shrink-0 text-sm"
+                              title="Desvincular"
+                            >
+                              ✕
                             </button>
-                            {canEdit && (
-                              <button
-                                onClick={() => handleUnlinkFile(link.file.id)}
-                                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity shrink-0 text-sm"
-                                title="Desvincular"
-                              >
-                                ✕
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {canEdit && piece.status !== 'publicado' && (
-                      <button
-                        onClick={() => setFileBrowserOpen(true)}
-                        className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        📂 Seleccionar archivo del proyecto
-                      </button>
-                    )}
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
