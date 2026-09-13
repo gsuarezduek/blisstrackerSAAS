@@ -634,6 +634,43 @@ compatible con los demás lugares que lo usan sin estos props
 también aparece para tareas `PENDING`, comportamiento nuevo pero no
 rompe nada existente).
 
+### Mi Productividad (self-view)
+
+Segunda pieza de la Fase 9 — pantalla nueva (`MyProductivityScreen`,
+accesible desde Perfil → "📊 Mi productividad") que replica
+`frontend/src/components/MyProductivity.jsx`: un solo endpoint ya existente,
+`GET /reports/mine/productivity`, sin tocar backend. Mismo criterio que la
+web: es una vista **de la propia persona** sobre el mes en curso, sin el
+lenguaje evaluativo crudo (`down`/`stuck`) que sí usa Productividad admin —
+`softNote()` es la misma función/mismos textos portados literal.
+
+- **4 tarjetas de métrica** (Δ horas, tareas completadas, horas registradas,
+  tasa de cierre), cada una con la mediana anónima del equipo como subtexto
+  cuando hay benchmark disponible.
+- **Sparkline de 12 semanas con navegación** (`← antes` / `después →`,
+  `GET /reports/mine/hours-history?back=N`) — se portó el SVG de la web
+  **directo**, sin reinventar la geometría: mismo cálculo de `x(i)`/`y(v)`
+  sobre un `viewBox` fijo, con `preserveAspectRatio="none"` para que se
+  estire 1:1 al ancho del contenedor (así las etiquetas del eje X, puestas
+  como `Text` con `left: N%` superpuesto, calzan exacto con los puntos del
+  SVG sin duplicar esa cuenta en dos sistemas de coordenadas distintos).
+  Usa `Line`/`Polyline`/`Circle` de `react-native-svg` — mismo paquete que
+  ya traía `BlissLoader`/`BlissIcon`, sin sumar ninguna dependencia nueva.
+- **Análisis IA** (tendencias/fortalezas/áreas de atención) si el usuario
+  tiene un `UserInsightMemory` generado esa semana — mismos 3 bloques que la
+  web, mismo criterio de "no mostrar nada si no hay ninguno de los tres".
+- **Si la sección de Productividad está deshabilitada para el workspace**
+  (`Workspace.productivityEnabled = false`), el endpoint devuelve 403 — a
+  diferencia de la web (que lo esconde por completo dentro de
+  `MyProductivity.jsx`, `catch(() => setData(null))`), mobile sí deja el
+  link en Perfil siempre visible (no vale la pena una consulta aparte solo
+  para decidir si mostrar el link) pero muestra el error dentro de la
+  pantalla con el mismo patrón `errorBox`/"Reintentar" que usa el resto de
+  la app — no es una pantalla en blanco.
+
+Verificado con `npx expo export --platform android` (1098 módulos, sin
+errores). Sin dependencias nativas nuevas.
+
 ### Proyectos (Fase 6)
 
 Primera fase que no estaba en el plan original de la v1 — arrancó a pedido
@@ -749,6 +786,39 @@ partiendo el string (`split('-')`) en vez de `new Date(dateStr)`, que
 interpretaría el string como medianoche UTC y la mostraría corrida un día en
 timezones al oeste de UTC (Argentina incluida).
 
+### Plan v1.0 — Bloque A: sistema de temas (modo oscuro)
+
+Primer bloque del plan de cierre de v1.0 (`/Users/gaston/.claude/plans/tranquil-wishing-brooks.md`) — decisión explícita del usuario: modo oscuro entra en v1.0, no se posterga. Hasta acá la app forzaba claro (`userInterfaceStyle: "light"`) sin ningún sistema de theming; cada pantalla tenía sus colores hardcodeados en su propio `StyleSheet.create`.
+
+- **`src/theme/colors.js`** (nuevo) — paletas `light`/`dark`, tokens semánticos (`bg`, `surface`, `surfaceAlt`, `border`, `borderLight`, `text`/`textSecondary`/`textMuted`/`textFaint`, `primary` (`#F7931A`, igual en ambos modos), `primarySoft`/`primarySoftText`, `success`/`successSoft`/`successText`, `star`/`starPaused`/`starUrgent`, `danger`/`dangerSoft`/`dangerText`/`dangerBorder`, `info`/`infoSoft`/`infoBorder`, `accent`/`accentSoft`, `overlay`, `shadow`, `white`). Los valores dark siguen la paleta gray-900/800/700/100 que ya usa el `dark:` de Tailwind en la web, para que ambas apps se sientan coherentes — no son colores inventados de cero.
+- **`src/context/ThemeContext.jsx`** (nuevo) — `ThemeProvider` + hook `useTheme()` → `{ colors, dark, preference, setPreference }`. `preference` (`'system' | 'light' | 'dark'`) se persiste en SecureStore (`getThemePreference`/`setThemePreference`, sumadas a `src/api/session.js` con el mismo criterio que biometría/push: preferencia del dispositivo, no de la sesión — `clearSession()` no la toca). Con `'system'` sigue `useColorScheme()` de React Native en vivo.
+- **`app.json`**: `userInterfaceStyle: "light"` → `"automatic"` — sin este cambio nativo, `useColorScheme()` nunca reporta `'dark'` aunque el modo del sistema lo esté. También se agregó una variante `dark` al plugin `expo-splash-screen` (`backgroundColor: "#0f1420"`, mismo ícono) — el splash nativo sí puede tener una versión oscura real (soportado por el plugin), a diferencia del `BlissLoader` animado que solo corre una vez React Native toma control.
+- **`RootNavigator`**: además de retocar sus dos colores hardcodeados, construye un `theme` para `NavigationContainer` (`DefaultTheme`/`DarkTheme` de `@react-navigation/native` con los `colors` propios encima) — necesario porque los headers nativos de `Chat`/`ProjectDetail`/`Profile` (`headerShown: true`) los pinta React Navigation, no un componente propio.
+- **Selector en `ProfileScreen`** ("Apariencia"): 3 chips Sistema/Claro/Oscuro, mismo patrón visual que los chips de `RequestBenefitModal`.
+- **Retrofit de las 12 pantallas + 5 componentes con color propio**: cada `StyleSheet.create({...})` estático pasó a una función módulo `makeStyles(c)` invocada con `const styles = useMemo(() => makeStyles(colors), [colors])` dentro del componente — solo cambiaron los valores de color (ningún padding/flex/tamaño se tocó). Afectados: `LoginScreen`, `WorkspaceSelectScreen`, `LockScreen`, `DashboardScreen`, `NotificationsScreen`, `ChannelListScreen`, `ChatScreen`, `ProjectListScreen`, `ProjectDetailScreen`, `ProfileScreen`, `BenefitsScreen`, `MyProductivityScreen`, `TaskCard`, `AddTaskModal`, `TaskCommentsModal`, `RequestBenefitModal`, `AppAlertHost`. **`BlissLoader`/`BlissIcon` no se tocaron a propósito** — el gradiente naranja de marca es idéntico en los dos modos.
+  - `DashboardScreen.HeaderIcon` (componente módulo, no puede leer el `useMemo` del padre) recibe `styles`/`colors` por prop.
+  - `requestCatalog.js`: `STATUS_COLOR` (hex fijo) se reemplazó por `STATUS_COLOR_KEYS` (nombres de token, ej. `{ bg: 'successSoft', text: 'successText' }`) — quien lo consume (`BenefitsScreen`) resuelve `colors[key]` contra el theme activo en vez de un color fijo. Era el único lugar que usaba colores "de negocio" (estado de una solicitud) fuera de un componente con acceso directo a `useTheme()`.
+
+**Verificado** con `npx expo export --platform android` (1100 módulos, sin errores) y `npx expo-doctor` (20/21 — el único check que falla es un desalineamiento de versiones de patch de varios paquetes `expo-*`, preexistente y sin relación con este cambio).
+
+**Bug real encontrado al probar en dispositivo: la barra de gestos de Android tapaba el FAB del Dashboard.** La app renderiza edge-to-edge (comportamiento default en Android desde hace varias versiones de Expo) — cualquier contenido `position: 'absolute'` anclado a `bottom: 0` queda físicamente detrás de la barra de gestos del sistema si no se le suma su alto. Fix: `react-native-safe-area-context` (ya estaba en `package.json` como dependencia — instalada para uso futuro en su momento, nunca se había usado) — `SafeAreaProvider` envolviendo todo en `App.js`, y `useSafeAreaInsets()` en cada lugar con contenido pegado al borde inferior físico:
+- `DashboardScreen.fabRow` / `BenefitsScreen.fab` (`position: absolute`) — `bottom: 24 + insets.bottom` en línea (el valor base "24" quedó en el `StyleSheet`, `bottom` se sobreescribe en el JSX porque `useSafeAreaInsets()` es un valor de runtime, no puede vivir dentro de `makeStyles(colors)`). Sus listas suman `paddingBottom: 100 + insets.bottom` para que la última tarjeta no quede tapada por el FAB.
+- `ChatScreen`/`TaskCommentsModal` (`inputRow`, en flujo normal, no absoluto — pero igual llega al borde físico en edge-to-edge) — `paddingBottom: 12 + insets.bottom`.
+- `AddTaskModal`/`RequestBenefitModal` (sheet que sube desde abajo) — `paddingBottom: Math.max(32, insets.bottom + 20)`.
+
+**Deliberadamente no tocado**: el `paddingTop: 60` fijo de los headers (Dashboard/Notificaciones/Canales/Proyectos/Beneficios/Mi Productividad) — no se reportó ningún problema arriba, y cambiarlo sin verificar en dispositivo real solo por simetría podría introducir una regresión donde hoy no hay ninguna. Queda como candidato para una pasada de `useSafeAreaInsets()` en el `top` también si algún dispositivo con notch/isla dinámica futuro lo necesita.
+
+### Plan v1.0 — Bloque B: cambiar de workspace sin cerrar sesión
+
+Hasta acá `AuthContext` solo resolvía el workspace **una vez**, al login (`pendingWorkspaces`/`selectWorkspace`, cuando `/auth/login` devuelve varios). No había forma de pasar a otro workspace del mismo usuario sin cerrar sesión y volver a entrar. Sin cambios de backend — ya exponía todo lo necesario:
+
+- **`src/api/workspaces.js`** (nuevo) — `listMyWorkspaces()` → `GET /workspaces/mine` (solo `auth`, sin `resolveWorkspace`; devuelve `{id, name, slug, role}` de cada workspace activo del usuario, **sin token**).
+- **`AuthContext.switchWorkspace(targetSlug)`** (nuevo método) — `POST /auth/switch-workspace` (usa el JWT actual para identificar al usuario, no hace falta reautenticar con contraseña) → devuelve `{token, slug}` del workspace destino. Antes de pisar la sesión, **desconecta el socket** (`disconnectSocket()`, mismo paso que ya hace `logout()`) — sin esto quedaría unido a los rooms de chat/notificaciones del workspace viejo. Después: `setSession(token, slug)` + `finishEnter()` (reusa lo existente: refetch de `/auth/me`, reconecta el socket, resincroniza el push token).
+- **`WorkspaceSwitcherScreen`** (nuevo, accesible desde Perfil → "🔀 Cambiar de workspace") — **no reusa `WorkspaceSelectScreen`**: esa pantalla asume el shape que devuelve `/auth/login` (cada workspace ya trae su token, se usa una sola vez antes de loguearse). Acá la lista viene de `listMyWorkspaces()` (sin token) y el intercambio real pasa recién al tocar uno, vía `switchWorkspace`. El workspace actual (comparado contra `getWorkspaceSlug()` de `session.js`) se marca "Actual" y no es tocable; el resto dispara el cambio con un `ActivityIndicator` inline en su propia fila.
+- **Reset de navegación** tras cambiar: `navigation.reset({ index: 0, routes: [{ name: 'Dashboard' }] })` — sin esto, el botón "atrás" físico podría volver a `Profile` o a este mismo selector con datos que ya quedaron viejos (todo lo que haya en el stack de navegación pertenece al workspace anterior).
+
+Verificado con `npx expo export --platform android` (1102 módulos, sin errores). Sin dependencias nuevas. **Pendiente de probar en un dispositivo real con una cuenta que tenga ≥2 workspaces** (crear uno de prueba si hace falta) — confirmar en particular que Chat/Notificaciones no arrastran datos del workspace anterior tras el cambio.
+
 ## Roadmap (alcance v1 + extensiones)
 
 Alcance v1 original: tareas de hoy (ver/iniciar/pausar/completar/bloquear/
@@ -769,7 +839,8 @@ Vacaciones y beneficios.
 | 7 | Housekeeping: "Finalizar jornada" en el Dashboard + pantalla de Perfil (datos, apagar biometría/push, logout) | ✅ |
 | 8 | Vacaciones y beneficios: saldos + pedir + ver solicitudes (vacaciones/licencias, horas libres, días home) | ✅ — pendiente de probar en dispositivo real |
 | 9 | Backlog + tareas futuras/recurrentes en el Dashboard | ✅ — pendiente de probar en dispositivo real |
-| 9b | A evaluar más adelante: self-view de Productividad, Accesos del proyecto, Briefs, Reuniones | pendiente |
+| 9b | Mi Productividad (self-view, mes en curso) | ✅ — pendiente de probar en dispositivo real |
+| 9c | A evaluar más adelante: Accesos del proyecto, Briefs, Reuniones | pendiente |
 
 No hay modo offline en la v1 (se evalúa si se vuelve un problema real de uso
 en campo con mala señal).

@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator,
   KeyboardAvoidingView, ScrollView, Platform, Linking,
 } from 'react-native'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import BlissIcon from '../components/BlissIcon'
 
 // Mismo look del login web (Login2.jsx → RootLogin): lockup arriba, título +
@@ -12,6 +13,8 @@ import BlissIcon from '../components/BlissIcon'
 // como en la web — para que se sienta la misma app, no una pantalla genérica.
 export default function LoginScreen() {
   const { login } = useAuth()
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -48,7 +51,7 @@ export default function LoginScreen() {
         <TextInput
           style={[styles.input, focusedField === 'email' && styles.inputFocused]}
           placeholder="tu@empresa.com"
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoComplete="email"
           keyboardType="email-address"
@@ -62,7 +65,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.passwordInput}
             placeholder="Contraseña"
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={colors.placeholder}
             secureTextEntry={!showPassword}
             autoCapitalize="none"
             value={password}
@@ -89,7 +92,7 @@ export default function LoginScreen() {
           disabled={submitting}
         >
           {submitting
-            ? <ActivityIndicator color="#fff" />
+            ? <ActivityIndicator color={colors.white} />
             : <Text style={styles.buttonText}>Ingresar</Text>}
         </Pressable>
 
@@ -105,31 +108,33 @@ export default function LoginScreen() {
   )
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: '#f9fafb' },
-  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 40 },
-  lockup: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 28 },
-  lockupText: { fontSize: 17, fontWeight: '700', color: '#1a1a1a' },
-  headings: { marginBottom: 24 },
-  title: { fontSize: 26, fontWeight: '700', color: '#1a1a1a', marginBottom: 4 },
-  subtitle: { fontSize: 14, color: '#6b7280' },
-  input: {
-    borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#fff', borderRadius: 14,
-    paddingHorizontal: 16, paddingVertical: 13, marginBottom: 12, fontSize: 15, color: '#1a1a1a',
-  },
-  inputFocused: { borderColor: '#F7931A' },
-  passwordRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 0, paddingRight: 12 },
-  passwordInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: '#1a1a1a' },
-  eyeIcon: { fontSize: 16, marginLeft: 8 },
-  errorBanner: { backgroundColor: '#fef2f2', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 12 },
-  errorText: { color: '#dc2626', fontSize: 13 },
-  button: {
-    backgroundColor: '#F7931A', borderRadius: 14, paddingVertical: 15,
-    alignItems: 'center', marginTop: 4,
-    shadowColor: '#F7931A', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  forgotLink: { marginTop: 20, alignItems: 'center' },
-  forgotLinkText: { color: '#9ca3af', fontSize: 13 },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.bg },
+    scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 40 },
+    lockup: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 28 },
+    lockupText: { fontSize: 17, fontWeight: '700', color: c.text },
+    headings: { marginBottom: 24 },
+    title: { fontSize: 26, fontWeight: '700', color: c.text, marginBottom: 4 },
+    subtitle: { fontSize: 14, color: c.textMuted },
+    input: {
+      borderWidth: 1.5, borderColor: c.border, backgroundColor: c.surface, borderRadius: 14,
+      paddingHorizontal: 16, paddingVertical: 13, marginBottom: 12, fontSize: 15, color: c.text,
+    },
+    inputFocused: { borderColor: c.primary },
+    passwordRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 0, paddingRight: 12 },
+    passwordInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: c.text },
+    eyeIcon: { fontSize: 16, marginLeft: 8 },
+    errorBanner: { backgroundColor: c.dangerSoft, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 12 },
+    errorText: { color: c.dangerText, fontSize: 13 },
+    button: {
+      backgroundColor: c.primary, borderRadius: 14, paddingVertical: 15,
+      alignItems: 'center', marginTop: 4,
+      shadowColor: c.primary, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: c.white, fontSize: 16, fontWeight: '700' },
+    forgotLink: { marginTop: 20, alignItems: 'center' },
+    forgotLinkText: { color: c.textFaint, fontSize: 13 },
+  })
+}

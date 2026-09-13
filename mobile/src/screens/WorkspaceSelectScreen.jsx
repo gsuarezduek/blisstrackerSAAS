@@ -1,9 +1,13 @@
+import { useMemo } from 'react'
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import BlissIcon from '../components/BlissIcon'
 
 export default function WorkspaceSelectScreen() {
   const { pendingWorkspaces, selectWorkspace } = useAuth()
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
 
   return (
     <View style={styles.container}>
@@ -40,21 +44,23 @@ export default function WorkspaceSelectScreen() {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 72, paddingHorizontal: 28, backgroundColor: '#f9fafb' },
-  lockup: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 28 },
-  lockupText: { fontSize: 17, fontWeight: '700', color: '#1a1a1a' },
-  headings: { marginBottom: 20 },
-  title: { fontSize: 22, fontWeight: '700', color: '#1a1a1a', marginBottom: 4 },
-  subtitle: { fontSize: 14, color: '#6b7280' },
-  item: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 16, paddingHorizontal: 16, borderRadius: 14,
-    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e5e7eb',
-  },
-  itemName: { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
-  itemSlug: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  roleBadge: { backgroundColor: '#fef3e2', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  roleBadgeText: { color: '#c2670a', fontWeight: '700', fontSize: 11, textTransform: 'capitalize' },
-  chevron: { fontSize: 20, color: '#d1d5db' },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    container: { flex: 1, paddingTop: 72, paddingHorizontal: 28, backgroundColor: c.bg },
+    lockup: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 28 },
+    lockupText: { fontSize: 17, fontWeight: '700', color: c.text },
+    headings: { marginBottom: 20 },
+    title: { fontSize: 22, fontWeight: '700', color: c.text, marginBottom: 4 },
+    subtitle: { fontSize: 14, color: c.textMuted },
+    item: {
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      paddingVertical: 16, paddingHorizontal: 16, borderRadius: 14,
+      backgroundColor: c.surface, borderWidth: 1.5, borderColor: c.border,
+    },
+    itemName: { fontSize: 15, fontWeight: '700', color: c.text },
+    itemSlug: { fontSize: 12, color: c.textFaint, marginTop: 2 },
+    roleBadge: { backgroundColor: c.primarySoft, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+    roleBadgeText: { color: c.primarySoftText, fontWeight: '700', fontSize: 11, textTransform: 'capitalize' },
+    chevron: { fontSize: 20, color: c.textFaint },
+  })
+}

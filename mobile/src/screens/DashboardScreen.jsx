@@ -1,7 +1,9 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
 import { View, Text, SectionList, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { getToday } from '../api/tasks'
 import { listNotifications } from '../api/notifications'
 import { listChannels } from '../api/chat'
@@ -20,7 +22,9 @@ function todayLabel() {
 // Botón de header con badge opcional — mismo criterio visual que la campana
 // de notificaciones/chat de la web: punto gris para "hay algo nuevo", círculo
 // rojo con número cuando hay menciones/no-leídos que sí piden atención.
-function HeaderIcon({ emoji, onPress, count = 0, dot = false, mention = false }) {
+// Recibe `styles`/`colors` por prop (vive fuera del componente, no puede
+// leer el `useMemo` de theme del padre directamente).
+function HeaderIcon({ emoji, onPress, count = 0, dot = false, mention = false, styles, colors }) {
   const showBadge = dot || count > 0
   return (
     <Pressable onPress={onPress} hitSlop={8} style={styles.headerIconWrap}>
@@ -72,6 +76,9 @@ function buildSections(tasks, todayWorkDayId) {
 
 export default function DashboardScreen({ navigation }) {
   const { user, logout } = useAuth()
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
+  const insets = useSafeAreaInsets()
   const [tasks, setTasks] = useState([])
   const [future, setFuture] = useState([])
   const [todayWorkDayId, setTodayWorkDayId] = useState(null)
@@ -210,10 +217,10 @@ export default function DashboardScreen({ navigation }) {
           <Text style={styles.date}>{todayLabel()}</Text>
         </View>
         <View style={styles.headerActions}>
-          <HeaderIcon emoji="📁" onPress={() => navigation.navigate('Projects')} />
-          <HeaderIcon emoji="💬" onPress={() => navigation.navigate('Channels')} count={chatBadge.count} dot={chatBadge.dot} mention={chatBadge.count > 0} />
-          <HeaderIcon emoji="🔔" onPress={() => navigation.navigate('Notifications')} count={unreadNotifs} />
-          <HeaderIcon emoji="👤" onPress={() => navigation.navigate('Profile')} />
+          <HeaderIcon emoji="📁" onPress={() => navigation.navigate('Projects')} styles={styles} colors={colors} />
+          <HeaderIcon emoji="💬" onPress={() => navigation.navigate('Channels')} count={chatBadge.count} dot={chatBadge.dot} mention={chatBadge.count > 0} styles={styles} colors={colors} />
+          <HeaderIcon emoji="🔔" onPress={() => navigation.navigate('Notifications')} count={unreadNotifs} styles={styles} colors={colors} />
+          <HeaderIcon emoji="👤" onPress={() => navigation.navigate('Profile')} styles={styles} colors={colors} />
         </View>
       </View>
 
@@ -227,7 +234,7 @@ export default function DashboardScreen({ navigation }) {
       {sections.length === 0 ? (
         <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#F7931A" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />}
         >
           <View style={styles.empty}>
             <Text style={styles.emptyEmoji}>📋</Text>
@@ -263,18 +270,18 @@ export default function DashboardScreen({ navigation }) {
               <Text style={styles.sectionTitle}>{section.title}</Text>
             )
           )}
-          contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#F7931A" />}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 100 + insets.bottom }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />}
           stickySectionHeadersEnabled={false}
         />
       )}
 
-      <View style={styles.fabRow}>
+      <View style={[styles.fabRow, { bottom: 24 + insets.bottom }]}>
         <Pressable style={styles.fab} onPress={() => setShowAddModal(true)}>
           <Text style={styles.fabText}>+ Agregar tarea</Text>
         </Pressable>
         <Pressable style={styles.finishButton} onPress={handleFinishDay} disabled={finishingDay}>
-          {finishingDay ? <ActivityIndicator size="small" color="#dc2626" /> : <Text style={styles.finishButtonText}>Finalizar jornada</Text>}
+          {finishingDay ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.finishButtonText}>Finalizar jornada</Text>}
         </Pressable>
       </View>
 
@@ -290,52 +297,56 @@ export default function DashboardScreen({ navigation }) {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-    paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
-    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee',
-  },
-  greeting: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  date: { fontSize: 13, color: '#9ca3af', marginTop: 2, textTransform: 'capitalize' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  headerIconWrap: { position: 'relative' },
-  headerIcon: { fontSize: 20 },
-  badgeDot: {
-    position: 'absolute', top: -4, right: -7, minWidth: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#9ca3af', alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 4, borderWidth: 1.5, borderColor: '#fff',
-  },
-  badgeDotRed: { backgroundColor: '#dc2626' },
-  badgeDotSmall: { minWidth: 10, height: 10, borderRadius: 5, top: -2, right: -3 },
-  badgeDotText: { color: '#fff', fontSize: 9, fontWeight: '700' },
-  listContent: { paddingHorizontal: 16, paddingBottom: 100, flexGrow: 1 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', marginTop: 16, marginBottom: 8 },
-  collapsibleHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginTop: 16, marginBottom: 8, paddingVertical: 4,
-  },
-  collapsibleHeaderText: { fontSize: 12, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase' },
-  chevron: { fontSize: 14, color: '#9ca3af' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-  emptyEmoji: { fontSize: 40, marginBottom: 8 },
-  emptyText: { color: '#9ca3af', fontSize: 14 },
-  errorBox: { backgroundColor: '#fee2e2', marginHorizontal: 16, borderRadius: 10, padding: 12, marginBottom: 4 },
-  errorText: { color: '#b91c1c', fontSize: 13 },
-  retryText: { color: '#b91c1c', fontWeight: '600', fontSize: 13, marginTop: 4, textDecorationLine: 'underline' },
-  fabRow: {
-    position: 'absolute', bottom: 24, left: 20, right: 20, flexDirection: 'row', gap: 10,
-  },
-  fab: {
-    flex: 2, backgroundColor: '#F7931A', borderRadius: 14, paddingVertical: 15, alignItems: 'center',
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4,
-  },
-  fabText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  finishButton: {
-    flex: 1, borderWidth: 1, borderColor: '#dc2626', borderRadius: 14, paddingVertical: 15,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff',
-  },
-  finishButtonText: { color: '#dc2626', fontWeight: '700', fontSize: 13, textAlign: 'center' },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg },
+    header: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+      paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
+      backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border,
+    },
+    greeting: { fontSize: 20, fontWeight: '700', color: c.text },
+    date: { fontSize: 13, color: c.textFaint, marginTop: 2, textTransform: 'capitalize' },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+    headerIconWrap: { position: 'relative' },
+    headerIcon: { fontSize: 20 },
+    badgeDot: {
+      position: 'absolute', top: -4, right: -7, minWidth: 16, height: 16, borderRadius: 8,
+      backgroundColor: c.textFaint, alignItems: 'center', justifyContent: 'center',
+      paddingHorizontal: 4, borderWidth: 1.5, borderColor: c.surface,
+    },
+    badgeDotRed: { backgroundColor: c.danger },
+    badgeDotSmall: { minWidth: 10, height: 10, borderRadius: 5, top: -2, right: -3 },
+    badgeDotText: { color: c.white, fontSize: 9, fontWeight: '700' },
+    listContent: { paddingHorizontal: 16, paddingBottom: 100, flexGrow: 1 },
+    sectionTitle: { fontSize: 12, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', marginTop: 16, marginBottom: 8 },
+    collapsibleHeader: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      marginTop: 16, marginBottom: 8, paddingVertical: 4,
+    },
+    collapsibleHeaderText: { fontSize: 12, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase' },
+    chevron: { fontSize: 14, color: c.textFaint },
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+    emptyEmoji: { fontSize: 40, marginBottom: 8 },
+    emptyText: { color: c.textFaint, fontSize: 14 },
+    errorBox: { backgroundColor: c.dangerSoft, marginHorizontal: 16, borderRadius: 10, padding: 12, marginBottom: 4 },
+    errorText: { color: c.dangerText, fontSize: 13 },
+    retryText: { color: c.dangerText, fontWeight: '600', fontSize: 13, marginTop: 4, textDecorationLine: 'underline' },
+    fabRow: {
+      // `bottom` se sobreescribe en línea con el inset de la barra de gestos
+      // del sistema (`useSafeAreaInsets`) — ver el JSX.
+      position: 'absolute', left: 20, right: 20, flexDirection: 'row', gap: 10,
+    },
+    fab: {
+      flex: 2, backgroundColor: c.primary, borderRadius: 14, paddingVertical: 15, alignItems: 'center',
+      shadowColor: c.shadow, shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4,
+    },
+    fabText: { color: c.white, fontWeight: '700', fontSize: 15 },
+    finishButton: {
+      flex: 1, borderWidth: 1, borderColor: c.danger, borderRadius: 14, paddingVertical: 15,
+      alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface,
+    },
+    finishButtonText: { color: c.danger, fontWeight: '700', fontSize: 13, textAlign: 'center' },
+  })
+}

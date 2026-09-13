@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, TextInput, Pressable, FlatList, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { listMessages, sendMessage, markChannelRead } from '../api/chat'
 import { listMembers } from '../api/members'
 import { getSocket } from '../lib/socket'
@@ -27,6 +29,9 @@ function insertMention(text, name) {
 export default function ChatScreen({ route, navigation }) {
   const { channelId, channelName } = route.params
   const { user } = useAuth()
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
+  const insets = useSafeAreaInsets()
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
@@ -153,11 +158,11 @@ export default function ChatScreen({ route, navigation }) {
         />
       )}
 
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, { paddingBottom: 12 + insets.bottom }]}>
         <TextInput
           style={[styles.input, inputFocused && styles.inputFocused]}
           placeholder="Escribí un mensaje... usá @ para mencionar"
-          placeholderTextColor="#9ca3af"
+          placeholderTextColor={colors.placeholder}
           value={text}
           onChangeText={setText}
           onFocus={() => setInputFocused(true)}
@@ -169,45 +174,47 @@ export default function ChatScreen({ route, navigation }) {
           onPress={handleSend}
           disabled={!text.trim() || sending}
         >
-          {sending ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.sendButtonText}>Enviar</Text>}
+          {sending ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.sendButtonText}>Enviar</Text>}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  listContent: { padding: 16, flexGrow: 1 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyEmoji: { fontSize: 40, marginBottom: 8 },
-  emptyText: { color: '#9ca3af', fontSize: 14, textAlign: 'center' },
-  message: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  avatar: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: '#F7931A',
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  avatarText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  messageHeaderRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  messageAuthor: { fontWeight: '700', fontSize: 13, color: '#1a1a1a' },
-  messageTime: { fontSize: 11, color: '#9ca3af' },
-  messageText: { fontSize: 14, color: '#374151', marginTop: 2 },
-  systemRow: { alignItems: 'center', marginBottom: 16 },
-  systemText: { fontSize: 12, color: '#9ca3af', backgroundColor: '#f3f4f6', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
-  mentionList: { maxHeight: 160, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fafafa' },
-  mentionRow: { paddingVertical: 10, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  mentionText: { fontSize: 14, color: '#1a1a1a' },
-  inputRow: {
-    flexDirection: 'row', gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: '#eee',
-    alignItems: 'flex-end', backgroundColor: '#fff',
-  },
-  input: {
-    flex: 1, borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, maxHeight: 100, color: '#1a1a1a',
-  },
-  inputFocused: { borderColor: '#F7931A' },
-  sendButton: { backgroundColor: '#F7931A', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 11 },
-  sendButtonText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  buttonDisabled: { opacity: 0.5 },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    listContent: { padding: 16, flexGrow: 1 },
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    emptyEmoji: { fontSize: 40, marginBottom: 8 },
+    emptyText: { color: c.textFaint, fontSize: 14, textAlign: 'center' },
+    message: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+    avatar: {
+      width: 32, height: 32, borderRadius: 16, backgroundColor: c.primary,
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    },
+    avatarText: { color: c.white, fontWeight: '700', fontSize: 13 },
+    messageHeaderRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+    messageAuthor: { fontWeight: '700', fontSize: 13, color: c.text },
+    messageTime: { fontSize: 11, color: c.textFaint },
+    messageText: { fontSize: 14, color: c.textSecondary, marginTop: 2 },
+    systemRow: { alignItems: 'center', marginBottom: 16 },
+    systemText: { fontSize: 12, color: c.textFaint, backgroundColor: c.surfaceAlt, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
+    mentionList: { maxHeight: 160, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surfaceAlt },
+    mentionRow: { paddingVertical: 10, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: c.borderLight },
+    mentionText: { fontSize: 14, color: c.text },
+    inputRow: {
+      flexDirection: 'row', gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: c.border,
+      alignItems: 'flex-end', backgroundColor: c.bg,
+    },
+    input: {
+      flex: 1, borderWidth: 1.5, borderColor: c.border, borderRadius: 20, backgroundColor: c.surface,
+      paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, maxHeight: 100, color: c.text,
+    },
+    inputFocused: { borderColor: c.primary },
+    sendButton: { backgroundColor: c.primary, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 11 },
+    sendButtonText: { color: c.white, fontWeight: '700', fontSize: 13 },
+    buttonDisabled: { opacity: 0.5 },
+  })
+}

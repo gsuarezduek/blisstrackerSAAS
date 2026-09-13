@@ -1,11 +1,14 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native'
+import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useTheme } from '../context/ThemeContext'
 import { getMyVacation } from '../api/vacation'
 import { getMyBenefits } from '../api/benefits'
-import { vacationTypeLabel, benefitBankLabel, STATUS_LABEL, STATUS_COLOR } from '../lib/requestCatalog'
+import { vacationTypeLabel, benefitBankLabel, STATUS_LABEL, STATUS_COLOR_KEYS } from '../lib/requestCatalog'
 import RequestBenefitModal from '../components/RequestBenefitModal'
 import { showAlert } from '../lib/alert'
+import BlissLoader from '../components/BlissLoader'
 
 function fmtDate(dateStr) {
   // Fechas "YYYY-MM-DD" puras — parsearlas con `new Date(str)` las corre un día
@@ -24,6 +27,9 @@ function describeRequest(item) {
 }
 
 export default function BenefitsScreen({ navigation }) {
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
+  const insets = useSafeAreaInsets()
   const [vacation, setVacation] = useState(null)
   const [benefits, setBenefits] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -59,7 +65,7 @@ export default function BenefitsScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#F7931A" />
+        <BlissLoader size={56} />
       </View>
     )
   }
@@ -95,13 +101,13 @@ export default function BenefitsScreen({ navigation }) {
         <FlatList
           data={requests}
           keyExtractor={item => `${item.kind}-${item.id}`}
-          contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#F7931A" />}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 100 + insets.bottom }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />}
           ListHeaderComponent={<Text style={styles.sectionTitle}>Mis solicitudes</Text>}
           ListEmptyComponent={<Text style={styles.empty}>No pediste licencias ni beneficios todavía</Text>}
           renderItem={({ item }) => {
             const { icon, title, subtitle } = describeRequest(item)
-            const statusStyle = STATUS_COLOR[item.status]
+            const statusKey = STATUS_COLOR_KEYS[item.status]
             return (
               <View style={styles.row}>
                 <Text style={styles.rowIcon}>{icon}</Text>
@@ -110,15 +116,15 @@ export default function BenefitsScreen({ navigation }) {
                   <Text style={styles.rowSubtitle}>{subtitle}</Text>
                   {item.reviewNote ? <Text style={styles.reviewNote}>{item.reviewNote}</Text> : null}
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusStyle.color }]}>{STATUS_LABEL[item.status]}</Text>
+                <View style={[styles.statusBadge, { backgroundColor: colors[statusKey.bg] }]}>
+                  <Text style={[styles.statusBadgeText, { color: colors[statusKey.text] }]}>{STATUS_LABEL[item.status]}</Text>
                 </View>
               </View>
             )
           }}
         />
 
-        <Pressable style={styles.fab} onPress={() => setShowModal(true)}>
+        <Pressable style={[styles.fab, { bottom: 24 + insets.bottom }]} onPress={() => setShowModal(true)}>
           <Text style={styles.fabText}>+ Nueva solicitud</Text>
         </Pressable>
       </View>
@@ -128,34 +134,38 @@ export default function BenefitsScreen({ navigation }) {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
-  header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  backButton: { color: '#F7931A', fontWeight: '600', fontSize: 14, marginBottom: 8 },
-  title: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  balancesRow: { flexDirection: 'row', gap: 10, padding: 16, backgroundColor: '#fff' },
-  balanceCard: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  balanceEmoji: { fontSize: 20, marginBottom: 4 },
-  balanceValue: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  balanceLabel: { fontSize: 11, color: '#9ca3af', marginTop: 2, textAlign: 'center' },
-  listContent: { padding: 16, paddingBottom: 100 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', marginBottom: 8 },
-  empty: { textAlign: 'center', color: '#9ca3af', marginTop: 24 },
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff',
-    borderRadius: 12, padding: 14, marginBottom: 10,
-  },
-  rowIcon: { fontSize: 22 },
-  rowTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', textTransform: 'capitalize' },
-  rowSubtitle: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  reviewNote: { fontSize: 12, color: '#6b7280', marginTop: 4, fontStyle: 'italic' },
-  statusBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  statusBadgeText: { fontSize: 11, fontWeight: '700' },
-  fab: {
-    position: 'absolute', bottom: 24, left: 20, right: 20,
-    backgroundColor: '#F7931A', borderRadius: 14, paddingVertical: 15, alignItems: 'center',
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4,
-  },
-  fabText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg },
+    header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
+    backButton: { color: c.primary, fontWeight: '600', fontSize: 14, marginBottom: 8 },
+    title: { fontSize: 20, fontWeight: '700', color: c.text },
+    balancesRow: { flexDirection: 'row', gap: 10, padding: 16, backgroundColor: c.surface },
+    balanceCard: { flex: 1, backgroundColor: c.surfaceAlt, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+    balanceEmoji: { fontSize: 20, marginBottom: 4 },
+    balanceValue: { fontSize: 20, fontWeight: '700', color: c.text },
+    balanceLabel: { fontSize: 11, color: c.textFaint, marginTop: 2, textAlign: 'center' },
+    listContent: { padding: 16, paddingBottom: 100 },
+    sectionTitle: { fontSize: 12, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', marginBottom: 8 },
+    empty: { textAlign: 'center', color: c.textFaint, marginTop: 24 },
+    row: {
+      flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.surface,
+      borderRadius: 12, padding: 14, marginBottom: 10,
+    },
+    rowIcon: { fontSize: 22 },
+    rowTitle: { fontSize: 14, fontWeight: '700', color: c.text, textTransform: 'capitalize' },
+    rowSubtitle: { fontSize: 12, color: c.textFaint, marginTop: 2 },
+    reviewNote: { fontSize: 12, color: c.textMuted, marginTop: 4, fontStyle: 'italic' },
+    statusBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+    statusBadgeText: { fontSize: 11, fontWeight: '700' },
+    fab: {
+      // `bottom` se sobreescribe en línea con el inset de la barra de gestos
+      // del sistema (`useSafeAreaInsets`) — ver el JSX.
+      position: 'absolute', left: 20, right: 20,
+      backgroundColor: c.primary, borderRadius: 14, paddingVertical: 15, alignItems: 'center',
+      shadowColor: c.shadow, shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4,
+    },
+    fabText: { color: c.white, fontWeight: '700', fontSize: 15 },
+  })
+}

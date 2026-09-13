@@ -1,21 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator } from 'react-native'
 import {
   startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, starTask,
   addToToday, bringToToday, moveToBacklog,
 } from '../api/tasks'
 import { showAlert } from '../lib/alert'
-
-const STATUS_STYLE = {
-  PENDING:     { bg: '#f3f4f6', color: '#4b5563', label: 'Pendiente' },
-  IN_PROGRESS: { bg: '#fef3e2', color: '#c2670a', label: 'En curso' },
-  PAUSED:      { bg: '#f3f4f6', color: '#6b7280', label: 'Pausada' },
-  BLOCKED:     { bg: '#fee2e2', color: '#b91c1c', label: 'Bloqueada' },
-  COMPLETED:   { bg: '#dcfce7', color: '#15803d', label: 'Completada' },
-}
-
-// starred: 0=sin destacar, 1=verde, 2=amarillo, 3=rojo (mismo criterio que la web)
-const STAR_COLOR = { 0: '#d1d5db', 1: '#22c55e', 2: '#eab308', 3: '#ef4444' }
+import { useTheme } from '../context/ThemeContext'
 
 // `backlog`/`future` cambian el modo de la tarjeta (espejo de TaskCard.jsx en
 // la web): en vez de las acciones normales por estado, muestran un único
@@ -25,6 +15,20 @@ export default function TaskCard({
   task, hasActiveTask, onUpdate, onOpenComments,
   backlog = false, future = false, onBringToToday, onMoveToBacklog,
 }) {
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
+  const STATUS_STYLE = useMemo(() => ({
+    PENDING:     { bg: colors.surfaceAlt, color: colors.textMuted, label: 'Pendiente' },
+    IN_PROGRESS: { bg: colors.primarySoft, color: colors.primarySoftText, label: 'En curso' },
+    PAUSED:      { bg: colors.surfaceAlt, color: colors.textMuted, label: 'Pausada' },
+    BLOCKED:     { bg: colors.dangerSoft, color: colors.dangerText, label: 'Bloqueada' },
+    COMPLETED:   { bg: colors.successSoft, color: colors.successText, label: 'Completada' },
+  }), [colors])
+  // starred: 0=sin destacar, 1=verde, 2=amarillo, 3=rojo (mismo criterio que la web)
+  const STAR_COLOR = useMemo(() => ({
+    0: colors.border, 1: colors.star, 2: colors.starPaused, 3: colors.starUrgent,
+  }), [colors])
+
   const [loading, setLoading] = useState(false)
   const [showBlockForm, setShowBlockForm] = useState(false)
   const [blockReason, setBlockReason] = useState('')
@@ -145,6 +149,7 @@ export default function TaskCard({
           <TextInput
             style={styles.blockInput}
             placeholder="Motivo del bloqueo"
+            placeholderTextColor={colors.placeholder}
             value={blockReason}
             onChangeText={setBlockReason}
             autoFocus
@@ -160,7 +165,7 @@ export default function TaskCard({
         </View>
       ) : future ? (
         <View style={styles.actionsRow}>
-          {loading ? <ActivityIndicator size="small" color="#F7931A" /> : (
+          {loading ? <ActivityIndicator size="small" color={colors.primary} /> : (
             <Pressable style={styles.futureButton} onPress={handleBringToToday}>
               <Text style={styles.futureButtonText}>Traer a hoy</Text>
             </Pressable>
@@ -168,7 +173,7 @@ export default function TaskCard({
         </View>
       ) : backlog ? (
         <View style={styles.actionsRow}>
-          {loading ? <ActivityIndicator size="small" color="#F7931A" /> : (
+          {loading ? <ActivityIndicator size="small" color={colors.primary} /> : (
             <Pressable style={styles.primaryButton} onPress={handleAddToToday}>
               <Text style={styles.primaryButtonText}>Agregar a hoy</Text>
             </Pressable>
@@ -178,7 +183,7 @@ export default function TaskCard({
         !isCompleted && (
           <>
             <View style={styles.actionsRow}>
-              {loading ? <ActivityIndicator size="small" color="#F7931A" /> : (
+              {loading ? <ActivityIndicator size="small" color={colors.primary} /> : (
                 <>
                   {task.status === 'PENDING' && (
                     <Pressable
@@ -235,43 +240,45 @@ export default function TaskCard({
   )
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#fff', borderRadius: 14, borderWidth: 1.5, borderColor: '#e5e7eb',
-    padding: 14, marginBottom: 10,
-  },
-  cardBlocked: { borderColor: '#fca5a5' },
-  cardCompleted: { opacity: 0.6 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  badge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  badgeFuture: { backgroundColor: '#eef2ff' },
-  badgeFutureText: { color: '#4338ca' },
-  badgeRecurrence: { backgroundColor: '#f3e8ff', paddingHorizontal: 6 },
-  badgeRecurrenceText: { fontSize: 11 },
-  project: { flex: 1, fontSize: 12, color: '#9ca3af', textAlign: 'right' },
-  description: { fontSize: 15, color: '#1a1a1a', marginBottom: 4 },
-  descriptionCompleted: { textDecorationLine: 'line-through', color: '#9ca3af' },
-  blockedReason: { fontSize: 13, color: '#b91c1c', marginBottom: 8 },
-  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' },
-  primaryButton: { backgroundColor: '#F7931A', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  primaryButtonText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  buttonDisabled: { opacity: 0.4 },
-  secondaryButton: { backgroundColor: '#f3f4f6', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  secondaryButtonText: { color: '#374151', fontWeight: '600', fontSize: 13 },
-  dangerButton: { backgroundColor: '#dc2626', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  dangerButtonText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  dangerButtonOutline: { borderWidth: 1, borderColor: '#dc2626', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  dangerButtonOutlineText: { color: '#dc2626', fontWeight: '600', fontSize: 13 },
-  futureButton: { borderWidth: 1, borderColor: '#c7d2fe', backgroundColor: '#eef2ff', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  futureButtonText: { color: '#4338ca', fontWeight: '600', fontSize: 13 },
-  moveToBacklogLink: { alignSelf: 'center', marginTop: 6 },
-  moveToBacklogText: { color: '#9ca3af', fontSize: 12 },
-  blockForm: { marginTop: 4 },
-  blockInput: {
-    borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, marginBottom: 8,
-  },
-  commentsButton: { alignSelf: 'flex-start', marginBottom: 4 },
-  commentsButtonText: { fontSize: 12, color: '#6b7280', fontWeight: '600' },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: c.surface, borderRadius: 14, borderWidth: 1.5, borderColor: c.border,
+      padding: 14, marginBottom: 10,
+    },
+    cardBlocked: { borderColor: c.dangerBorder },
+    cardCompleted: { opacity: 0.6 },
+    headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+    badge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+    badgeText: { fontSize: 11, fontWeight: '600' },
+    badgeFuture: { backgroundColor: c.infoSoft },
+    badgeFutureText: { color: c.info },
+    badgeRecurrence: { backgroundColor: c.accentSoft, paddingHorizontal: 6 },
+    badgeRecurrenceText: { fontSize: 11 },
+    project: { flex: 1, fontSize: 12, color: c.textFaint, textAlign: 'right' },
+    description: { fontSize: 15, color: c.text, marginBottom: 4 },
+    descriptionCompleted: { textDecorationLine: 'line-through', color: c.textFaint },
+    blockedReason: { fontSize: 13, color: c.dangerText, marginBottom: 8 },
+    actionsRow: { flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' },
+    primaryButton: { backgroundColor: c.primary, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+    primaryButtonText: { color: c.white, fontWeight: '600', fontSize: 13 },
+    buttonDisabled: { opacity: 0.4 },
+    secondaryButton: { backgroundColor: c.surfaceAlt, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+    secondaryButtonText: { color: c.textSecondary, fontWeight: '600', fontSize: 13 },
+    dangerButton: { backgroundColor: c.danger, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+    dangerButtonText: { color: c.white, fontWeight: '600', fontSize: 13 },
+    dangerButtonOutline: { borderWidth: 1, borderColor: c.danger, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+    dangerButtonOutlineText: { color: c.danger, fontWeight: '600', fontSize: 13 },
+    futureButton: { borderWidth: 1, borderColor: c.infoBorder, backgroundColor: c.infoSoft, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+    futureButtonText: { color: c.info, fontWeight: '600', fontSize: 13 },
+    moveToBacklogLink: { alignSelf: 'center', marginTop: 6 },
+    moveToBacklogText: { color: c.textFaint, fontSize: 12 },
+    blockForm: { marginTop: 4 },
+    blockInput: {
+      borderWidth: 1, borderColor: c.border, borderRadius: 8, backgroundColor: c.surface,
+      paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, marginBottom: 8, color: c.text,
+    },
+    commentsButton: { alignSelf: 'flex-start', marginBottom: 4 },
+    commentsButtonText: { fontSize: 12, color: c.textMuted, fontWeight: '600' },
+  })
+}

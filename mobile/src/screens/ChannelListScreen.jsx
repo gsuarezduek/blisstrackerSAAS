@@ -1,11 +1,14 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
 import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl } from 'react-native'
 import { listChannels } from '../api/chat'
 import { getSocket } from '../lib/socket'
+import { useTheme } from '../context/ThemeContext'
 import BlissLoader from '../components/BlissLoader'
 
 export default function ChannelListScreen({ navigation }) {
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
   const [channels, setChannels] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -62,7 +65,7 @@ export default function ChannelListScreen({ navigation }) {
           data={channels}
           keyExtractor={c => String(c.id)}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#F7931A" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>💬</Text>
@@ -97,31 +100,33 @@ export default function ChannelListScreen({ navigation }) {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: {
-    paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14,
-    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee',
-  },
-  backButton: { color: '#F7931A', fontWeight: '600', fontSize: 14, marginBottom: 8 },
-  title: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  listContent: { flexGrow: 1, padding: 16 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-  emptyEmoji: { fontSize: 40, marginBottom: 8 },
-  emptyText: { color: '#9ca3af', fontSize: 14 },
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff',
-    borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 14, marginBottom: 10,
-  },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, color: '#6b7280' },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  channelName: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', flexShrink: 1 },
-  star: { color: '#eab308', fontSize: 13 },
-  preview: { fontSize: 13, color: '#9ca3af', marginTop: 2 },
-  badge: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: '#d1d5db', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  badgeMention: { backgroundColor: '#dc2626' },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    header: {
+      paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14,
+      backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border,
+    },
+    backButton: { color: c.primary, fontWeight: '600', fontSize: 14, marginBottom: 8 },
+    title: { fontSize: 20, fontWeight: '700', color: c.text },
+    listContent: { flexGrow: 1, padding: 16 },
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+    emptyEmoji: { fontSize: 40, marginBottom: 8 },
+    emptyText: { color: c.textFaint, fontSize: 14 },
+    row: {
+      flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.surface,
+      borderWidth: 1.5, borderColor: c.border, borderRadius: 14,
+      paddingHorizontal: 14, paddingVertical: 14, marginBottom: 10,
+    },
+    avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+    avatarText: { fontSize: 16, color: c.textMuted },
+    rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    channelName: { fontSize: 15, fontWeight: '700', color: c.text, flexShrink: 1 },
+    star: { color: c.starPaused, fontSize: 13 },
+    preview: { fontSize: 13, color: c.textFaint, marginTop: 2 },
+    badge: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: c.textFaint, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+    badgeMention: { backgroundColor: c.danger },
+    badgeText: { color: c.white, fontSize: 11, fontWeight: '700' },
+  })
+}

@@ -1,12 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { View, Text, Pressable, Switch, StyleSheet, ActivityIndicator } from 'react-native'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { getBiometricEnabled, setBiometricEnabled, getPushDisabled } from '../api/session'
 import { isBiometricAvailable, authenticateAsync } from '../lib/biometrics'
 import { showAlert } from '../lib/alert'
 
+const THEME_OPTIONS = [
+  { value: 'system', label: 'Sistema' },
+  { value: 'light', label: 'Claro' },
+  { value: 'dark', label: 'Oscuro' },
+]
+
 export default function ProfileScreen({ navigation }) {
   const { user, logout, togglePush } = useAuth()
+  const { colors, preference, setPreference } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
   const [loading, setLoading] = useState(true)
   const [biometricAvailable, setBiometricAvailable] = useState(false)
   const [biometricOn, setBiometricOn] = useState(false)
@@ -50,7 +59,7 @@ export default function ProfileScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#F7931A" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     )
   }
@@ -70,6 +79,14 @@ export default function ProfileScreen({ navigation }) {
         ) : null}
       </View>
 
+      <Pressable style={styles.section} onPress={() => navigation.navigate('Productivity')}>
+        <View style={styles.row}>
+          <Text style={styles.rowIcon}>📊</Text>
+          <Text style={[styles.rowLabel, { flex: 1 }]}>Mi productividad</Text>
+          <Text style={styles.chevron}>›</Text>
+        </View>
+      </Pressable>
+
       <Pressable style={styles.section} onPress={() => navigation.navigate('Benefits')}>
         <View style={styles.row}>
           <Text style={styles.rowIcon}>🏖️</Text>
@@ -77,6 +94,29 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.chevron}>›</Text>
         </View>
       </Pressable>
+
+      <Pressable style={styles.section} onPress={() => navigation.navigate('WorkspaceSwitcher')}>
+        <View style={styles.row}>
+          <Text style={styles.rowIcon}>🔀</Text>
+          <Text style={[styles.rowLabel, { flex: 1 }]}>Cambiar de workspace</Text>
+          <Text style={styles.chevron}>›</Text>
+        </View>
+      </Pressable>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Apariencia</Text>
+        <View style={styles.chipsRow}>
+          {THEME_OPTIONS.map(opt => (
+            <Pressable
+              key={opt.value}
+              style={[styles.chip, preference === opt.value && styles.chipSelected]}
+              onPress={() => setPreference(opt.value)}
+            >
+              <Text style={[styles.chipText, preference === opt.value && styles.chipTextSelected]}>{opt.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferencias</Text>
@@ -92,13 +132,13 @@ export default function ProfileScreen({ navigation }) {
             value={biometricOn}
             onValueChange={handleToggleBiometric}
             disabled={!biometricAvailable}
-            trackColor={{ true: '#F7931A' }}
+            trackColor={{ true: colors.primary }}
           />
         </View>
 
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Notificaciones push</Text>
-          <Switch value={pushOn} onValueChange={handleTogglePush} trackColor={{ true: '#F7931A' }} />
+          <Switch value={pushOn} onValueChange={handleTogglePush} trackColor={{ true: colors.primary }} />
         </View>
       </View>
 
@@ -109,26 +149,33 @@ export default function ProfileScreen({ navigation }) {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb', padding: 20 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
-  header: { alignItems: 'center', paddingVertical: 24 },
-  avatar: {
-    width: 72, height: 72, borderRadius: 36, backgroundColor: '#F7931A',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-  },
-  avatarText: { color: '#fff', fontWeight: '700', fontSize: 28 },
-  name: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
-  email: { fontSize: 13, color: '#9ca3af', marginTop: 2 },
-  roleBadge: { backgroundColor: '#fef3e2', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, marginTop: 10 },
-  roleBadgeText: { color: '#c2670a', fontWeight: '700', fontSize: 12, textTransform: 'uppercase' },
-  section: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginTop: 12 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', marginBottom: 12 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 },
-  rowIcon: { fontSize: 18 },
-  rowLabel: { fontSize: 14, color: '#1a1a1a', fontWeight: '600' },
-  rowHint: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  chevron: { fontSize: 20, color: '#d1d5db' },
-  logoutButton: { marginTop: 24, alignItems: 'center', paddingVertical: 14 },
-  logoutText: { color: '#dc2626', fontWeight: '700', fontSize: 15 },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg, padding: 20 },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg },
+    header: { alignItems: 'center', paddingVertical: 24 },
+    avatar: {
+      width: 72, height: 72, borderRadius: 36, backgroundColor: c.primary,
+      alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+    },
+    avatarText: { color: c.white, fontWeight: '700', fontSize: 28 },
+    name: { fontSize: 18, fontWeight: '700', color: c.text },
+    email: { fontSize: 13, color: c.textFaint, marginTop: 2 },
+    roleBadge: { backgroundColor: c.primarySoft, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, marginTop: 10 },
+    roleBadgeText: { color: c.primarySoftText, fontWeight: '700', fontSize: 12, textTransform: 'uppercase' },
+    section: { backgroundColor: c.surface, borderRadius: 14, padding: 16, marginTop: 12 },
+    sectionTitle: { fontSize: 12, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', marginBottom: 12 },
+    chipsRow: { flexDirection: 'row', gap: 8 },
+    chip: { flex: 1, borderWidth: 1.5, borderColor: c.border, borderRadius: 10, paddingVertical: 9, alignItems: 'center' },
+    chipSelected: { backgroundColor: c.primary, borderColor: c.primary },
+    chipText: { fontSize: 13, color: c.textSecondary, fontWeight: '600' },
+    chipTextSelected: { color: c.white },
+    row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 },
+    rowIcon: { fontSize: 18 },
+    rowLabel: { fontSize: 14, color: c.text, fontWeight: '600' },
+    rowHint: { fontSize: 12, color: c.textFaint, marginTop: 2 },
+    chevron: { fontSize: 20, color: c.border },
+    logoutButton: { marginTop: 24, alignItems: 'center', paddingVertical: 14 },
+    logoutText: { color: c.danger, fontWeight: '700', fontSize: 15 },
+  })
+}

@@ -186,10 +186,23 @@ export function AuthProvider({ children }) {
     await enterWorkspace(ws)
   }
 
+  // Cambiar de workspace sin cerrar sesión — a diferencia de enterWorkspace
+  // (login inicial, token ya viene resuelto de /auth/login), acá el token
+  // actual identifica al usuario ante POST /auth/switch-workspace, que emite
+  // uno nuevo para el workspace destino. Se desconecta el socket ANTES de
+  // pisar la sesión — mismo paso que logout() — para no quedar unido a rooms
+  // (canales de chat, notificaciones) del workspace anterior.
+  async function switchWorkspace(targetSlug) {
+    const { data } = await api.post('/auth/switch-workspace', { targetSlug })
+    disconnectSocket()
+    await setSession(data.token, data.slug)
+    await finishEnter()
+  }
+
   return (
     <AuthContext.Provider value={{
       user, loading, locked, pendingWorkspaces,
-      login, selectWorkspace, logout, unlock, forgetBiometricAndLogout, togglePush,
+      login, selectWorkspace, switchWorkspace, logout, unlock, forgetBiometricAndLogout, togglePush,
     }}>
       {children}
     </AuthContext.Provider>

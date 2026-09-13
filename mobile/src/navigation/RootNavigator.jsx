@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { View } from 'react-native'
-import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native'
+import { NavigationContainer, DefaultTheme, DarkTheme, useNavigationContainerRef } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import * as Notifications from 'expo-notifications'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { appEvents, EVENTS } from '../lib/events'
 import BlissLoader from '../components/BlissLoader'
 import LoginScreen from '../screens/LoginScreen'
@@ -17,12 +18,34 @@ import ProjectListScreen from '../screens/ProjectListScreen'
 import ProjectDetailScreen from '../screens/ProjectDetailScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import BenefitsScreen from '../screens/BenefitsScreen'
+import MyProductivityScreen from '../screens/MyProductivityScreen'
+import WorkspaceSwitcherScreen from '../screens/WorkspaceSwitcherScreen'
 
 const Stack = createNativeStackNavigator()
 
 export default function RootNavigator() {
   const { user, loading, locked, pendingWorkspaces } = useAuth()
+  const { colors, dark } = useTheme()
   const navRef = useNavigationContainerRef()
+
+  // Tema de React Navigation (headers nativos de Chat/ProjectDetail/Profile,
+  // fondo detrás de las transiciones de stack) — derivado de los mismos
+  // tokens que el resto de la app, en vez de los DefaultTheme/DarkTheme de
+  // stock, para que el header combine con el resto de la pantalla.
+  const navTheme = useMemo(() => {
+    const base = dark ? DarkTheme : DefaultTheme
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: colors.primary,
+        background: colors.bg,
+        card: colors.surface,
+        text: colors.text,
+        border: colors.border,
+      },
+    }
+  }, [colors, dark])
 
   // Tocar una notificación push (app en background o cerrada) navega a
   // Notificaciones y deep-linkea a la tarea si trae taskId — mismo evento
@@ -49,14 +72,14 @@ export default function RootNavigator() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
         <BlissLoader size={96} />
       </View>
     )
   }
 
   return (
-    <NavigationContainer ref={navRef}>
+    <NavigationContainer ref={navRef} theme={navTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {locked ? (
           <Stack.Screen name="Lock" component={LockScreen} />
@@ -70,6 +93,8 @@ export default function RootNavigator() {
             <Stack.Screen name="ProjectDetail" component={ProjectDetailScreen} options={{ headerShown: true }} />
             <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: true, title: 'Mi perfil' }} />
             <Stack.Screen name="Benefits" component={BenefitsScreen} />
+            <Stack.Screen name="Productivity" component={MyProductivityScreen} />
+            <Stack.Screen name="WorkspaceSwitcher" component={WorkspaceSwitcherScreen} />
           </>
         ) : pendingWorkspaces ? (
           <Stack.Screen name="WorkspaceSelect" component={WorkspaceSelectScreen} />

@@ -23,10 +23,13 @@ export const STATUS_LABEL = {
   rejected: 'Rechazada',
 }
 
-export const STATUS_COLOR = {
-  pending: { bg: '#fef3e2', color: '#c2670a' },
-  approved: { bg: '#dcfce7', color: '#15803d' },
-  rejected: { bg: '#fee2e2', color: '#b91c1c' },
+// Nombres de tokens de theme/colors.js (no hex directo) — quien los usa
+// resuelve `colors[key]` contra el theme activo, para que el badge se vea
+// bien tanto en claro como en oscuro.
+export const STATUS_COLOR_KEYS = {
+  pending: { bg: 'primarySoft', text: 'primarySoftText' },
+  approved: { bg: 'successSoft', text: 'successText' },
+  rejected: { bg: 'dangerSoft', text: 'dangerText' },
 }
 
 export function vacationTypeLabel(type) {

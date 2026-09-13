@@ -1,11 +1,14 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Modal, View, Text, Pressable, StyleSheet } from 'react-native'
 import { setAlertHandler } from '../lib/alert'
+import { useTheme } from '../context/ThemeContext'
 
 // Montado una vez en App.js. Reemplaza Alert.alert (diálogo gris del SO) por
 // un modal con la estética de BlissTracker — ver src/lib/alert.js para la
 // API imperativa que lo dispara desde cualquier parte de la app.
 export default function AppAlertHost() {
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
   const [config, setConfig] = useState(null)
 
   const show = useCallback(cfg => setConfig(cfg), [])
@@ -55,20 +58,22 @@ export default function AppAlertHost() {
   )
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 32 },
-  card: {
-    width: '100%', maxWidth: 340, backgroundColor: '#fff', borderRadius: 18, padding: 22,
-    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8,
-  },
-  title: { fontSize: 17, fontWeight: '700', color: '#1a1a1a', marginBottom: 8, textAlign: 'center' },
-  message: { fontSize: 14, color: '#4b5563', lineHeight: 20, textAlign: 'center', marginBottom: 20 },
-  buttonRow: { flexDirection: 'row', gap: 10 },
-  buttonRowSingle: { justifyContent: 'center' },
-  button: { flex: 1, backgroundColor: '#F7931A', borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
-  buttonFull: { flex: 1 },
-  buttonCancel: { backgroundColor: '#f3f4f6' },
-  buttonDestructive: { backgroundColor: '#dc2626' },
-  buttonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  buttonTextCancel: { color: '#374151' },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    backdrop: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', alignItems: 'center', padding: 32 },
+    card: {
+      width: '100%', maxWidth: 340, backgroundColor: c.surface, borderRadius: 18, padding: 22,
+      shadowColor: c.shadow, shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8,
+    },
+    title: { fontSize: 17, fontWeight: '700', color: c.text, marginBottom: 8, textAlign: 'center' },
+    message: { fontSize: 14, color: c.textSecondary, lineHeight: 20, textAlign: 'center', marginBottom: 20 },
+    buttonRow: { flexDirection: 'row', gap: 10 },
+    buttonRowSingle: { justifyContent: 'center' },
+    button: { flex: 1, backgroundColor: c.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+    buttonFull: { flex: 1 },
+    buttonCancel: { backgroundColor: c.surfaceAlt },
+    buttonDestructive: { backgroundColor: c.danger },
+    buttonText: { color: c.white, fontWeight: '700', fontSize: 15 },
+    buttonTextCancel: { color: c.textSecondary },
+  })
+}

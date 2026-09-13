@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
 import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, Linking, RefreshControl } from 'react-native'
+import { useTheme } from '../context/ThemeContext'
 import { getProjectDetail, getProjectCompleted } from '../api/projects'
 import { listChannels } from '../api/chat'
 import TaskCard from '../components/TaskCard'
@@ -22,6 +23,8 @@ function fmtCompletedDate(dateStr) {
 
 export default function ProjectDetailScreen({ route, navigation }) {
   const { projectId, projectName } = route.params
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
   const [project, setProject] = useState(null)
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -119,7 +122,7 @@ export default function ProjectDetailScreen({ route, navigation }) {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#F7931A" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     )
   }
@@ -133,11 +136,11 @@ export default function ProjectDetailScreen({ route, navigation }) {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#F7931A" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />}
       >
         {project.chatChannel?.slug && (
           <Pressable style={styles.chatButton} onPress={handleOpenChat} disabled={openingChat}>
-            {openingChat ? <ActivityIndicator size="small" color="#F7931A" /> : <Text style={styles.chatButtonText}>💬 Abrir chat del proyecto</Text>}
+            {openingChat ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={styles.chatButtonText}>💬 Abrir chat del proyecto</Text>}
           </Pressable>
         )}
 
@@ -206,7 +209,7 @@ export default function ProjectDetailScreen({ route, navigation }) {
                 <Text style={styles.completedMeta}>{t.user?.name} · {fmtCompletedDate(t.completedAt)}</Text>
               </View>
             ))}
-            {completedLoading && <ActivityIndicator style={{ marginVertical: 12 }} color="#F7931A" />}
+            {completedLoading && <ActivityIndicator style={{ marginVertical: 12 }} color={colors.primary} />}
             {completedHasMore && !completedLoading && (
               <Pressable onPress={() => loadCompleted(completedSkip)} style={{ paddingVertical: 12 }}>
                 <Text style={styles.loadMoreText}>Cargar más</Text>
@@ -231,28 +234,30 @@ export default function ProjectDetailScreen({ route, navigation }) {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f9fafb' },
-  content: { padding: 16, paddingBottom: 40 },
-  chatButton: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#F7931A', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 },
-  chatButtonText: { color: '#F7931A', fontWeight: '700', fontSize: 14 },
-  infoRow: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12 },
-  infoLabel: { fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', fontWeight: '700', marginBottom: 2 },
-  infoLink: { fontSize: 14, color: '#F7931A', fontWeight: '600' },
-  section: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 12 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', marginBottom: 8 },
-  sectionText: { fontSize: 14, color: '#374151', lineHeight: 20 },
-  linkRow: { paddingVertical: 8 },
-  linkText: { fontSize: 14, color: '#F7931A', fontWeight: '600' },
-  membersRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  memberChip: { backgroundColor: '#f3f4f6', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  memberChipText: { fontSize: 13, color: '#374151', fontWeight: '600' },
-  userGroupTitle: { fontSize: 13, fontWeight: '700', color: '#1a1a1a', marginBottom: 6, marginTop: 4 },
-  emptyText: { fontSize: 13, color: '#9ca3af' },
-  completedHeader: { paddingVertical: 8 },
-  completedRow: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8 },
-  completedDesc: { fontSize: 13, color: '#374151', textDecorationLine: 'line-through' },
-  completedMeta: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
-  loadMoreText: { color: '#F7931A', fontWeight: '600', fontSize: 13, textAlign: 'center' },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg },
+    content: { padding: 16, paddingBottom: 40 },
+    chatButton: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 },
+    chatButtonText: { color: c.primary, fontWeight: '700', fontSize: 14 },
+    infoRow: { backgroundColor: c.surface, borderRadius: 12, padding: 14, marginBottom: 12 },
+    infoLabel: { fontSize: 11, color: c.textFaint, textTransform: 'uppercase', fontWeight: '700', marginBottom: 2 },
+    infoLink: { fontSize: 14, color: c.primary, fontWeight: '600' },
+    section: { backgroundColor: c.surface, borderRadius: 12, padding: 14, marginBottom: 12 },
+    sectionTitle: { fontSize: 12, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', marginBottom: 8 },
+    sectionText: { fontSize: 14, color: c.textSecondary, lineHeight: 20 },
+    linkRow: { paddingVertical: 8 },
+    linkText: { fontSize: 14, color: c.primary, fontWeight: '600' },
+    membersRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    memberChip: { backgroundColor: c.surfaceAlt, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+    memberChipText: { fontSize: 13, color: c.textSecondary, fontWeight: '600' },
+    userGroupTitle: { fontSize: 13, fontWeight: '700', color: c.text, marginBottom: 6, marginTop: 4 },
+    emptyText: { fontSize: 13, color: c.textFaint },
+    completedHeader: { paddingVertical: 8 },
+    completedRow: { backgroundColor: c.surface, borderRadius: 10, padding: 12, marginBottom: 8 },
+    completedDesc: { fontSize: 13, color: c.textSecondary, textDecorationLine: 'line-through' },
+    completedMeta: { fontSize: 11, color: c.textFaint, marginTop: 4 },
+    loadMoreText: { color: c.primary, fontWeight: '600', fontSize: 13, textAlign: 'center' },
+  })
+}

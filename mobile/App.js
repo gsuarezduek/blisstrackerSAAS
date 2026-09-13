@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { ThemeProvider } from './src/context/ThemeContext'
 import { AuthProvider } from './src/context/AuthContext'
 import RootNavigator from './src/navigation/RootNavigator'
 import AppAlertHost from './src/components/AppAlertHost'
@@ -19,10 +21,14 @@ export default function App() {
   }, [])
 
   return (
-    <AuthProvider>
-      <StatusBar style="auto" />
-      <RootNavigator />
-      <AppAlertHost />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <StatusBar style="auto" />
+          <RootNavigator />
+          <AppAlertHost />
+        </AuthProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   )
 }

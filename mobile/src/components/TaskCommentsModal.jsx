@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { listComments, addComment } from '../api/comments'
 import { listMembers } from '../api/members'
 import { showAlert } from '../lib/alert'
@@ -31,6 +33,9 @@ function insertMention(text, name) {
 
 export default function TaskCommentsModal({ visible, task, onClose, onCommentAdded }) {
   const { user } = useAuth()
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
+  const insets = useSafeAreaInsets()
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
@@ -90,7 +95,7 @@ export default function TaskCommentsModal({ visible, task, onClose, onCommentAdd
         </View>
 
         {loading ? (
-          <ActivityIndicator style={{ marginTop: 40 }} color="#F7931A" />
+          <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
         ) : (
           <FlatList
             ref={listRef}
@@ -130,10 +135,11 @@ export default function TaskCommentsModal({ visible, task, onClose, onCommentAdd
           />
         )}
 
-        <View style={styles.inputRow}>
+        <View style={[styles.inputRow, { paddingBottom: 12 + insets.bottom }]}>
           <TextInput
             style={styles.input}
             placeholder="Escribí un comentario... usá @ para mencionar"
+            placeholderTextColor={colors.placeholder}
             value={text}
             onChangeText={setText}
             multiline
@@ -143,7 +149,7 @@ export default function TaskCommentsModal({ visible, task, onClose, onCommentAdd
             onPress={handleSend}
             disabled={!text.trim() || sending}
           >
-            {sending ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.sendButtonText}>Enviar</Text>}
+            {sending ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.sendButtonText}>Enviar</Text>}
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -151,39 +157,42 @@ export default function TaskCommentsModal({ visible, task, onClose, onCommentAdd
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    paddingTop: 56, paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#eee',
-  },
-  headerTitle: { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
-  headerSubtitle: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  closeButton: { color: '#F7931A', fontWeight: '600', fontSize: 14, marginTop: 2 },
-  listContent: { padding: 16, flexGrow: 1 },
-  empty: { textAlign: 'center', color: '#9ca3af', marginTop: 40 },
-  comment: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  avatar: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: '#F7931A',
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  avatarText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  commentHeaderRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  commentAuthor: { fontWeight: '700', fontSize: 13, color: '#1a1a1a' },
-  commentTime: { fontSize: 11, color: '#9ca3af' },
-  commentText: { fontSize: 14, color: '#374151', marginTop: 2 },
-  mentionList: { maxHeight: 160, borderTopWidth: 1, borderTopColor: '#eee', backgroundColor: '#fafafa' },
-  mentionRow: { paddingVertical: 10, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  mentionText: { fontSize: 14, color: '#1a1a1a' },
-  inputRow: {
-    flexDirection: 'row', gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: '#eee',
-    alignItems: 'flex-end', backgroundColor: '#fff',
-  },
-  input: {
-    flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, maxHeight: 100,
-  },
-  sendButton: { backgroundColor: '#F7931A', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 11 },
-  sendButtonText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  buttonDisabled: { opacity: 0.5 },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    header: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+      paddingTop: 56, paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: c.border,
+      backgroundColor: c.surface,
+    },
+    headerTitle: { fontSize: 15, fontWeight: '700', color: c.text },
+    headerSubtitle: { fontSize: 12, color: c.textFaint, marginTop: 2 },
+    closeButton: { color: c.primary, fontWeight: '600', fontSize: 14, marginTop: 2 },
+    listContent: { padding: 16, flexGrow: 1 },
+    empty: { textAlign: 'center', color: c.textFaint, marginTop: 40 },
+    comment: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+    avatar: {
+      width: 32, height: 32, borderRadius: 16, backgroundColor: c.primary,
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    },
+    avatarText: { color: c.white, fontWeight: '700', fontSize: 13 },
+    commentHeaderRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+    commentAuthor: { fontWeight: '700', fontSize: 13, color: c.text },
+    commentTime: { fontSize: 11, color: c.textFaint },
+    commentText: { fontSize: 14, color: c.textSecondary, marginTop: 2 },
+    mentionList: { maxHeight: 160, borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surfaceAlt },
+    mentionRow: { paddingVertical: 10, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: c.borderLight },
+    mentionText: { fontSize: 14, color: c.text },
+    inputRow: {
+      flexDirection: 'row', gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: c.border,
+      alignItems: 'flex-end', backgroundColor: c.bg,
+    },
+    input: {
+      flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 20, backgroundColor: c.surface,
+      paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, maxHeight: 100, color: c.text,
+    },
+    sendButton: { backgroundColor: c.primary, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 11 },
+    sendButtonText: { color: c.white, fontWeight: '700', fontSize: 13 },
+    buttonDisabled: { opacity: 0.5 },
+  })
+}

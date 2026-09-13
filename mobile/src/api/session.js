@@ -14,6 +14,9 @@ const BIOMETRIC_PROMPTED_KEY = 'bliss_biometric_prompted'
 // volvería a registrar el dispositivo en cada login aunque el usuario lo
 // haya apagado a mano desde Perfil.
 const PUSH_DISABLED_KEY = 'bliss_push_disabled'
+// Preferencia de tema — del dispositivo, no de la sesión (mismo motivo que
+// biometría/push): 'system' | 'light' | 'dark'. Ver ThemeContext.jsx.
+const THEME_PREFERENCE_KEY = 'bliss_theme_preference'
 
 export async function getToken() {
   return SecureStore.getItemAsync(TOKEN_KEY)
@@ -55,4 +58,12 @@ export async function getPushDisabled() {
 
 export async function setPushDisabled(disabled) {
   await SecureStore.setItemAsync(PUSH_DISABLED_KEY, disabled ? 'true' : 'false')
+}
+
+export async function getThemePreference() {
+  return (await SecureStore.getItemAsync(THEME_PREFERENCE_KEY)) || 'system'
+}
+
+export async function setThemePreference(preference) {
+  await SecureStore.setItemAsync(THEME_PREFERENCE_KEY, preference)
 }

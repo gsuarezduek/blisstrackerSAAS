@@ -1,8 +1,10 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
-import { View, Text, SectionList, Pressable, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native'
+import { View, Text, SectionList, Pressable, StyleSheet, RefreshControl } from 'react-native'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { listProjects, toggleProjectStar } from '../api/projects'
+import BlissLoader from '../components/BlissLoader'
 
 // Mismo agrupado que "Mis Proyectos" en la web: Destacados (preferencia
 // personal, ProjectStar) → Mis proyectos (soy del equipo, ProjectMember) →
@@ -26,6 +28,8 @@ function groupProjects(projects, userId) {
 
 export default function ProjectListScreen({ navigation }) {
   const { user } = useAuth()
+  const { colors } = useTheme()
+  const styles = useMemo(() => makeStyles(colors), [colors])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -64,14 +68,14 @@ export default function ProjectListScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color="#F7931A" />
+        <View style={styles.centered}><BlissLoader size={56} /></View>
       ) : (
         <SectionList
           sections={sections}
           keyExtractor={p => String(p.id)}
           renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#F7931A" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />}
           ListEmptyComponent={<Text style={styles.empty}>No hay proyectos todavía</Text>}
           renderItem={({ item }) => {
             const counts = item.taskCounts || {}
@@ -100,20 +104,29 @@ export default function ProjectListScreen({ navigation }) {
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  backButton: { color: '#F7931A', fontWeight: '600', fontSize: 14, marginBottom: 8 },
-  title: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-  listContent: { paddingBottom: 24 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
-  empty: { textAlign: 'center', color: '#9ca3af', marginTop: 40 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
-  rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  blockedDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#dc2626' },
-  projectName: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', flexShrink: 1 },
-  projectMeta: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  starButton: { padding: 4 },
-  star: { fontSize: 20, color: '#d1d5db' },
-  starActive: { color: '#eab308' },
-})
+function makeStyles(c) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    header: {
+      paddingTop: 60, paddingHorizontal: 20, paddingBottom: 14,
+      backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border,
+    },
+    backButton: { color: c.primary, fontWeight: '600', fontSize: 14, marginBottom: 8 },
+    title: { fontSize: 20, fontWeight: '700', color: c.text },
+    listContent: { paddingBottom: 24 },
+    sectionTitle: { fontSize: 12, fontWeight: '700', color: c.textFaint, textTransform: 'uppercase', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
+    empty: { textAlign: 'center', color: c.textFaint, marginTop: 40 },
+    row: {
+      flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingVertical: 14,
+      backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.borderLight,
+    },
+    rowTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    blockedDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.danger },
+    projectName: { fontSize: 15, fontWeight: '700', color: c.text, flexShrink: 1 },
+    projectMeta: { fontSize: 12, color: c.textFaint, marginTop: 2 },
+    starButton: { padding: 4 },
+    star: { fontSize: 20, color: c.border },
+    starActive: { color: c.starPaused },
+  })
+}
