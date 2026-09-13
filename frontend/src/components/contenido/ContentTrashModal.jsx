@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import { fmtBytes } from '../../lib/fileIcons'
 
 function timeAgo(iso) {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / (24 * 60 * 60 * 1000))
@@ -15,11 +16,13 @@ function timeAgo(iso) {
  * `onRestored` dispara el reload de la lista principal (Tabla/Kanban/Calendario)
  * para que la pieza restaurada reaparezca sin recargar la página.
  */
-export default function ContentTrashModal({ projectId, onClose, onRestored }) {
-  const [pieces,      setPieces]      = useState([])
-  const [loading,     setLoading]     = useState(true)
-  const [error,       setError]       = useState(null)
-  const [restoringId, setRestoringId] = useState(null)
+export default function ContentTrashModal({ projectId, isAdmin, onClose, onRestored }) {
+  const [pieces,        setPieces]        = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [error,         setError]         = useState(null)
+  const [restoringId,   setRestoringId]   = useState(null)
+  const [purgingId,     setPurgingId]     = useState(null)
+  const [confirmPurgeId, setConfirmPurgeId] = useState(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -43,6 +46,20 @@ export default function ContentTrashModal({ projectId, onClose, onRestored }) {
       setError(err.response?.data?.error || 'No se pudo restaurar la pieza')
     } finally {
       setRestoringId(null)
+    }
+  }
+
+  async function handlePurge(id) {
+    setPurgingId(id)
+    setError(null)
+    setConfirmPurgeId(null)
+    try {
+      await api.delete(`/contenido/projects/${projectId}/pieces/${id}/purge`)
+      setPieces(prev => prev.filter(p => p.id !== id))
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo eliminar definitivamente')
+    } finally {
+      setPurgingId(null)
     }
   }
 
@@ -83,16 +100,47 @@ export default function ContentTrashModal({ projectId, onClose, onRestored }) {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{p.title}</p>
                     <p className="text-xs text-gray-400 dark:text-gray-500">
-                      {p.statusLabel} · Eliminada {timeAgo(p.deletedAt)}{p.deletedBy ? ` por ${p.deletedBy.name}` : ''}
+                      {fmtBytes(p.sizeBytes)} · {p.statusLabel} · Eliminada {timeAgo(p.deletedAt)}{p.deletedBy ? ` por ${p.deletedBy.name}` : ''}
                     </p>
                   </div>
-                  <button
-                    onClick={() => handleRestore(p.id)}
-                    disabled={restoringId === p.id}
-                    className="shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white transition-colors"
-                  >
-                    {restoringId === p.id ? 'Restaurando…' : '↩️ Restaurar'}
-                  </button>
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleRestore(p.id)}
+                      disabled={restoringId === p.id || purgingId === p.id}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white transition-colors"
+                    >
+                      {restoringId === p.id ? 'Restaurando…' : '↩️ Restaurar'}
+                    </button>
+                    {isAdmin && (
+                      confirmPurgeId === p.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handlePurge(p.id)}
+                            disabled={purgingId === p.id}
+                            className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white transition-colors"
+                          >
+                            {purgingId === p.id ? 'Eliminando…' : 'Confirmar'}
+                          </button>
+                          <button
+                            onClick={() => setConfirmPurgeId(null)}
+                            disabled={purgingId === p.id}
+                            className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmPurgeId(p.id)}
+                          disabled={restoringId === p.id || purgingId === p.id}
+                          title="Eliminar definitivamente ahora, sin esperar la limpieza automática"
+                          className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-red-200 dark:border-red-900/50 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 transition-colors"
+                        >
+                          🗑️ Eliminar
+                        </button>
+                      )
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

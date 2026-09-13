@@ -425,6 +425,7 @@ export default function Contenido() {
       {trashOpen && (
         <ContentTrashModal
           projectId={projectId}
+          isAdmin={user?.isAdmin}
           onClose={() => setTrashOpen(false)}
           onRestored={reload}
         />

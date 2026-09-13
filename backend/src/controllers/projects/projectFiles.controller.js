@@ -464,9 +464,23 @@ async function listTrash(req, res, next) {
       orderBy: { deletedAt: 'desc' },
     })
 
+    // Tamaño total de cada raíz: una carpeta no tiene sizeBytes propio, hay que
+    // sumar los archivos de todo su subárbol borrado.
+    const totalSizes = await Promise.all(items.map(async it => {
+      if (it.type !== 'folder') return it.sizeBytes || 0
+      const descendantIds = await collectDescendantIds(it.id, projectId)
+      if (descendantIds.length === 0) return 0
+      const agg = await prisma.projectFile.aggregate({
+        where: { id: { in: descendantIds }, type: 'file' },
+        _sum: { sizeBytes: true },
+      })
+      return agg._sum.sizeBytes || 0
+    }))
+
     res.json({
-      items: items.map(f => ({
+      items: items.map((f, i) => ({
         id: f.id, type: f.type, name: f.name, mimeType: f.mimeType, sizeBytes: f.sizeBytes,
+        totalSizeBytes: totalSizes[i],
         deletedAt: f.deletedAt,
         deletedBy: f.deletedBy ? { id: f.deletedBy.id, name: f.deletedBy.name } : null,
       })),
@@ -505,6 +519,39 @@ async function restoreItem(req, res, next) {
     }
 
     res.json({ restored: true })
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/projects/:id/files/:itemId/purge
+ * Elimina definitivamente AHORA un ítem que ya está en la papelera — mismo
+ * efecto que la limpieza semanal (cleanup.service.js `projectFilesTrash`),
+ * disparado a mano en vez de esperar `projectFileTrashRetentionDays`.
+ * Irreversible: borra los objetos de R2 primero, después las filas (la
+ * cascada de Postgres se encarga del subárbol si es carpeta). Restringido a
+ * admin/owner vía `workspaceAdminOnly` en la ruta — a diferencia del resto de
+ * este controller (abierto a cualquier miembro), esto no tiene vuelta atrás.
+ */
+async function purgeItem(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId, deletedAt: { not: null } } })
+    if (!item) return res.status(404).json({ error: 'No encontrado en la papelera' })
+
+    const ids = item.type === 'folder' ? [item.id, ...(await collectDescendantIds(item.id, projectId))] : [item.id]
+    const files = await prisma.projectFile.findMany({
+      where:  { id: { in: ids }, type: 'file' },
+      select: { objectKey: true, posterKey: true, sizeBytes: true },
+    })
+    await objectStorage.deleteObjects(files.flatMap(f => [f.objectKey, f.posterKey].filter(Boolean)))
+    const freedBytes = files.reduce((sum, f) => sum + (f.sizeBytes || 0), 0)
+
+    await prisma.projectFile.delete({ where: { id: item.id } }) // cascada del subárbol en DB
+
+    res.json({ purged: true, freedBytes })
   } catch (err) { next(err) }
 }
 
@@ -584,6 +631,7 @@ module.exports = {
   deleteItem,
   listTrash,
   restoreItem,
+  purgeItem,
   downloadFile,
   locateFile,
   // exportados para tests

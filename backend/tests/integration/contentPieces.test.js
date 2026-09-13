@@ -5,6 +5,7 @@ jest.mock('../../src/lib/prisma', () => ({
   project:            { findFirst: jest.fn() },
   featureFlag:        { findUnique: jest.fn() },
   contentPiece:       { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), groupBy: jest.fn() },
+  contentAsset:       { groupBy: jest.fn() },
   contentStatusEvent: { create: jest.fn(), findMany: jest.fn() },
   projectClientPortal:  { findUnique: jest.fn() },
   clientPortalContact:  { findMany: jest.fn() },
@@ -56,6 +57,7 @@ function mockBase({ workspaceRole = 'member', flagOn = true } = {}) {
   // Sin portal de cliente por default — getClientContacts devuelve [] sin pegarle
   // a clientPortalContact.findMany. Los tests que sí necesitan contactos lo pisan.
   prisma.projectClientPortal.findUnique.mockResolvedValue(null)
+  prisma.contentAsset.groupBy.mockResolvedValue([])
 }
 
 const dbPiece = (over = {}) => ({
