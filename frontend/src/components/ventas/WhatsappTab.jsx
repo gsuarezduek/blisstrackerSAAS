@@ -44,11 +44,14 @@ export default function WhatsappTab({ onOpenLead }) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [search, setSearch] = useState('')
+  const [viewingBlocked, setViewingBlocked] = useState(false)
 
   const activeIdRef = useRef(null)
   activeIdRef.current = activeId
   const searchRef = useRef('')
   searchRef.current = search
+  const viewingBlockedRef = useRef(false)
+  viewingBlockedRef.current = viewingBlocked
 
   const loadAccount = useCallback(async () => {
     setLoadingAccount(true)
@@ -68,7 +71,8 @@ export default function WhatsappTab({ onOpenLead }) {
     setLoadingConversations(true)
     try {
       const q = searchRef.current.trim()
-      const { data } = await api.get('/whatsapp/conversations', { params: q ? { q } : {} })
+      const params = { ...(q ? { q } : {}), ...(viewingBlockedRef.current ? { blocked: 'true' } : {}) }
+      const { data } = await api.get('/whatsapp/conversations', { params })
       setConversations(data)
     } finally {
       setLoadingConversations(false)
@@ -86,7 +90,7 @@ export default function WhatsappTab({ onOpenLead }) {
     if (!account) return
     const t = setTimeout(loadConversations, search ? 300 : 0)
     return () => clearTimeout(t)
-  }, [account, search, loadConversations])
+  }, [account, search, viewingBlocked, loadConversations])
 
   const openConversation = useCallback(async (id) => {
     setActiveId(id)
@@ -138,6 +142,20 @@ export default function WhatsappTab({ onOpenLead }) {
   // fijados primero, ver listConversations).
   const handleTogglePin = useCallback(async (conversation) => {
     await api.patch(`/whatsapp/conversations/${conversation.id}/pin`, { pinned: !conversation.pinnedAt })
+    loadConversations()
+  }, [loadConversations])
+
+  // Spam/bloqueo — al bloquear la conversación desaparece de la bandeja
+  // principal (o de la vista de spam si se desbloquea), así que si era la
+  // activa se deselecciona (ya no está en la lista que se ve ahora).
+  const handleToggleBlock = useCallback(async (conversation) => {
+    const blocking = !conversation.isBlocked
+    if (blocking && !window.confirm('¿Marcar este chat como spam? Se bloquea y el bot deja de responder ahí hasta que lo desbloquees.')) return
+    await api.patch(`/whatsapp/conversations/${conversation.id}/block`, { blocked: blocking })
+    if (activeIdRef.current === conversation.id) {
+      setActiveId(null)
+      setActiveConversation(null)
+    }
     loadConversations()
   }, [loadConversations])
 
@@ -286,11 +304,31 @@ export default function WhatsappTab({ onOpenLead }) {
                 </button>
               )}
             </div>
+            <button
+              onClick={() => { setViewingBlocked(v => !v); setActiveId(null); setActiveConversation(null) }}
+              className={`mt-2 text-[11px] px-2 py-1 rounded-full font-medium ${
+                viewingBlocked
+                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                  : 'bg-gray-100 dark:bg-gray-700/60 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              {viewingBlocked ? '← Volver a los chats' : '🚫 Ver spam'}
+            </button>
           </div>
           {loadingConversations && conversations.length === 0 ? (
             <LoadingSpinner size="sm" className="flex-1 py-10" />
           ) : (
-            <WhatsappConversationList conversations={conversations} activeId={activeId} onSelect={openConversation} onLinkContact={setLinkingConversation} onOpenLead={onOpenLead} onTogglePin={handleTogglePin} search={search} />
+            <WhatsappConversationList
+              conversations={conversations}
+              activeId={activeId}
+              onSelect={openConversation}
+              onLinkContact={setLinkingConversation}
+              onOpenLead={onOpenLead}
+              onTogglePin={handleTogglePin}
+              onToggleBlock={handleToggleBlock}
+              search={search}
+              viewingBlocked={viewingBlocked}
+            />
           )}
         </div>
 
@@ -308,12 +346,26 @@ export default function WhatsappTab({ onOpenLead }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <WhatsappBotToggle
-                    conversationId={activeConversation?.id}
-                    botEnabled={activeConversation?.botEnabled}
-                    workspaceBotEnabled={botConfig?.enabled}
-                    onChanged={(botEnabled) => setActiveConversation(c => ({ ...c, botEnabled }))}
-                  />
+                  {!activeConversation?.isBlocked && (
+                    <WhatsappBotToggle
+                      conversationId={activeConversation?.id}
+                      botEnabled={activeConversation?.botEnabled}
+                      workspaceBotEnabled={botConfig?.enabled}
+                      onChanged={(botEnabled) => setActiveConversation(c => ({ ...c, botEnabled }))}
+                    />
+                  )}
+                  {activeConversation && (
+                    <button
+                      onClick={() => handleToggleBlock(activeConversation)}
+                      className={`shrink-0 text-xs px-2.5 py-1.5 rounded-lg font-medium ${
+                        activeConversation.isBlocked
+                          ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40'
+                          : 'bg-gray-50 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {activeConversation.isBlocked ? '✅ Desbloquear' : '🚫 Marcar como spam'}
+                    </button>
+                  )}
                   {activeConversation?.leadId && (
                     <button
                       onClick={() => onOpenLead?.(activeConversation.leadId)}

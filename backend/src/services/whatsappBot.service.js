@@ -367,9 +367,12 @@ async function maybeRespondWithBot({ account, conversation, contact }) {
 
   const fresh = await prisma.whatsappConversation.findUnique({
     where: { id: conversation.id },
-    select: { botEnabled: true, phoneE164: true, assignedToId: true },
+    select: { botEnabled: true, phoneE164: true, assignedToId: true, isBlocked: true },
   })
-  if (!fresh?.botEnabled) return
+  // isBlocked ya implica botEnabled=false (ver toggleBlock), pero se chequea
+  // explícito acá como segunda capa — no depender de que nadie haya tocado
+  // ese campo después de bloquear la conversación.
+  if (!fresh?.botEnabled || fresh.isBlocked) return
 
   if (config.onlyNewConversations && await humanAlreadyReplied(conversation.id)) return
 

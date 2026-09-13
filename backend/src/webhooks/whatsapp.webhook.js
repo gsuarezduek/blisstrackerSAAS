@@ -118,6 +118,13 @@ async function handleInboundMessage(account, event) {
 
   emitTo(`workspace:${account.workspaceId}`, 'whatsapp:message', { conversationId: conversation.id, message: fullMessage })
 
+  // Conversación marcada como spam (ver toggleBlock en conversations.controller.js):
+  // el mensaje se sigue guardando como evidencia, pero no genera ruido — ni
+  // notificación al lead ni respuesta del bot. `botEnabled` ya queda en false
+  // al bloquear (maybeRespondWithBot lo respeta solo), pero el chequeo acá es
+  // explícito para no depender de que nadie haya tocado ese campo después.
+  if (conversation.isBlocked) return
+
   if (contact) await notifyLeadOfMessage({ workspaceId: account.workspaceId, contact, conversation, event })
 
   // Bot (Fase 4 del plan) — una reacción no es una consulta que responder

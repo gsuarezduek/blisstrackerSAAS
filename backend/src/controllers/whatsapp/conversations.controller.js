@@ -39,7 +39,7 @@ async function resolveLeadByContact(workspaceId, contactIds) {
 }
 
 /**
- * GET /api/whatsapp/conversations  ?q=<texto>
+ * GET /api/whatsapp/conversations  ?q=<texto>&blocked=true
  * Lista conversaciones del workspace, más reciente primero, con el último
  * mensaje y no-leídos por usuario (mismo cálculo que listChannels del chat
  * interno: solo cuenta si hay mensajes más nuevos que el último leído).
@@ -53,13 +53,20 @@ async function resolveLeadByContact(workspaceId, contactIds) {
  *
  * Los chats fijados (`pinnedAt`, pin compartido — ver togglePin) van siempre
  * primero, ordenados por fecha de fijado desc; el resto sigue por actividad.
+ *
+ * `blocked` (ausente por default, mismo criterio que `?archived=` de Leads):
+ * sin el param solo se listan las NO bloqueadas (bandeja principal); con
+ * `blocked=true` se listan solo las marcadas como spam (ver toggleBlock) —
+ * excluyente, no aditivo.
  */
 async function listConversations(req, res, next) {
   try {
     const q = (req.query.q || '').trim()
+    const showBlocked = req.query.blocked === 'true'
     const conversations = await prisma.whatsappConversation.findMany({
       where: {
         workspaceId: req.workspace.id,
+        isBlocked: showBlocked,
         ...(q ? {
           OR: [
             { contactName: { contains: q, mode: 'insensitive' } },
@@ -95,6 +102,8 @@ async function listConversations(req, res, next) {
         lastInboundAt: c.lastInboundAt,
         pinnedAt: c.pinnedAt,
         pinnedBy: c.pinnedBy,
+        isBlocked: c.isBlocked,
+        blockedAt: c.blockedAt,
         lastMessage: lastMessage
           ? {
               content: lastMessage.content,
@@ -537,7 +546,40 @@ async function togglePin(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * PATCH /api/whatsapp/conversations/:id/block  { blocked }
+ * Marcar/desmarcar una conversación como spam — mismo criterio de acceso que
+ * pin/bot (cualquier miembro con acceso a Ventas, no solo admin/owner): es una
+ * acción operativa del día a día del equipo comercial, no una configuración
+ * del workspace.
+ *
+ * Al bloquear se fuerza `botEnabled: false` — así el bot deja de responder de
+ * inmediato (mismo campo que ya chequea `maybeRespondWithBot`), sin necesitar
+ * un segundo toggle. Al desbloquear NO se reactiva el bot solo — queda en
+ * false hasta que alguien lo devuelva a mano con el toggle existente
+ * (WhatsappBotToggle), mismo criterio que "tomar el control" manual: volver a
+ * confiar en el bot es una decisión aparte de sacar la conversación de spam.
+ *
+ * La conversación bloqueada sale de la bandeja principal (ver `?blocked=`
+ * en listConversations) pero no se borra ni se le borran los mensajes — sigue
+ * disponible en la vista de spam para revisar o desbloquear.
+ */
+async function toggleBlock(req, res, next) {
+  try {
+    const conversation = await assertConversation(req)
+    const blocked = Boolean(req.body.blocked)
+    const updated = await prisma.whatsappConversation.update({
+      where: { id: conversation.id },
+      data: blocked
+        ? { isBlocked: true, blockedAt: new Date(), blockedById: req.user.userId, botEnabled: false }
+        : { isBlocked: false, blockedAt: null, blockedById: null },
+      include: { blockedBy: { select: { id: true, name: true } } },
+    })
+    res.json({ id: updated.id, isBlocked: updated.isBlocked, blockedAt: updated.blockedAt, blockedBy: updated.blockedBy, botEnabled: updated.botEnabled })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   listConversations, getMessages, sendMessage, sendMedia, linkContact,
-  createContactFromConversation, assignConversation, markRead, toggleConversationBot, togglePin,
+  createContactFromConversation, assignConversation, markRead, toggleConversationBot, togglePin, toggleBlock,
 }

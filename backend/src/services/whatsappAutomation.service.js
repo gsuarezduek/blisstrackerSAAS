@@ -78,7 +78,10 @@ async function runRule(rule, workspaceId, account) {
   if (leads.length === 0) return { sent, failed }
 
   const contactIds = leads.map(l => l.primaryContactId)
-  const conversations = await prisma.whatsappConversation.findMany({ where: { workspaceId, contactId: { in: contactIds } } })
+  // isBlocked=false: una conversación marcada como spam no debe reabrirse
+  // sola con una plantilla — mismo espíritu que apagar el bot ahí, ver
+  // toggleBlock en conversations.controller.js.
+  const conversations = await prisma.whatsappConversation.findMany({ where: { workspaceId, contactId: { in: contactIds }, isBlocked: false } })
   const conversationByContact = new Map(conversations.map(c => [c.contactId, c]))
 
   let processed = 0

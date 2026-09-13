@@ -385,6 +385,7 @@ model User {
   whatsappConversationReads WhatsappConversationRead[]
   whatsappConversationsAssigned WhatsappConversation[] @relation("WhatsappConversationAssignee")
   whatsappConversationsPinned WhatsappConversation[] @relation("WhatsappConversationPinnedBy")
+  whatsappConversationsBlocked WhatsappConversation[] @relation("WhatsappConversationBlockedBy")
   whatsappAutomationRulesCreated WhatsappAutomationRule[]
   whatsappBotDocumentsUploaded WhatsappBotDocument[] @relation("WhatsappBotDocumentUploadedBy")
   dismissedFindings         DismissedFinding[]
@@ -3644,6 +3645,18 @@ model WhatsappConversation {
   pinnedById Int?
   pinnedBy   User?     @relation("WhatsappConversationPinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
 
+  // Spam / bloqueo — cualquier miembro con acceso a Ventas puede marcar una
+  // conversación como spam (mismo criterio de acceso que pin/bot). Al
+  // bloquear se fuerza botEnabled=false (el bot deja de responder) y la
+  // conversación sale de la lista principal (listConversations la excluye por
+  // default, ver ?blocked=true); los mensajes entrantes se siguen guardando
+  // (como evidencia) pero no notifican al lead ni disparan al bot — ver
+  // handleInboundMessage en whatsapp.webhook.js. isBlocked=false = no bloqueada.
+  isBlocked   Boolean   @default(false)
+  blockedAt   DateTime?
+  blockedById Int?
+  blockedBy   User?     @relation("WhatsappConversationBlockedBy", fields: [blockedById], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -3654,6 +3667,7 @@ model WhatsappConversation {
   @@unique([workspaceId, phoneE164])
   @@index([workspaceId, lastMessageAt])
   @@index([workspaceId, pinnedAt])
+  @@index([workspaceId, isBlocked])
   @@index([contactId])
 }
 

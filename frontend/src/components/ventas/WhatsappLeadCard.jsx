@@ -109,6 +109,15 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
     onChanged?.()
   }, [conversation?.id, onChanged])
 
+  // Spam/bloqueo (mismo endpoint y criterio que WhatsappTab) — al bloquear se
+  // fuerza botEnabled:false server-side, así que se refleja acá también.
+  const handleToggleBlock = useCallback(async () => {
+    const blocking = !conversation.isBlocked
+    if (blocking && !window.confirm('¿Marcar este chat como spam? Se bloquea y el bot deja de responder ahí hasta que lo desbloquees.')) return
+    const { data } = await api.patch(`/whatsapp/conversations/${conversation.id}/block`, { blocked: blocking })
+    setConversation(c => ({ ...c, isBlocked: data.isBlocked, botEnabled: data.botEnabled }))
+  }, [conversation])
+
   async function reassign(e) {
     const userId = e.target.value || null
     setAssigning(true)
@@ -155,12 +164,24 @@ export default function WhatsappLeadCard({ leadId, lead, onChanged }) {
         <h3 className="text-sm font-bold text-gray-900 dark:text-white">💬 WhatsApp</h3>
         {conversation && (
           <div className="flex items-center gap-2">
-            <WhatsappBotToggle
-              conversationId={conversation.id}
-              botEnabled={conversation.botEnabled}
-              workspaceBotEnabled={botConfig?.enabled}
-              onChanged={(botEnabled) => setConversation(c => ({ ...c, botEnabled }))}
-            />
+            {!conversation.isBlocked && (
+              <WhatsappBotToggle
+                conversationId={conversation.id}
+                botEnabled={conversation.botEnabled}
+                workspaceBotEnabled={botConfig?.enabled}
+                onChanged={(botEnabled) => setConversation(c => ({ ...c, botEnabled }))}
+              />
+            )}
+            <button
+              onClick={handleToggleBlock}
+              className={`text-xs px-2 py-1 rounded-lg font-medium ${
+                conversation.isBlocked
+                  ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40'
+                  : 'bg-gray-50 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              {conversation.isBlocked ? '✅ Desbloquear' : '🚫 Spam'}
+            </button>
             <select
               value={assignedToId}
               onChange={reassign}

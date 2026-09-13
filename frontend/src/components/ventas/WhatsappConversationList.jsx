@@ -23,9 +23,10 @@ function timeLabel(iso) {
 
 // Una fila de conversación — extraída para reusarse en el grupo "Fijados" y
 // en el resto sin duplicar el JSX.
-function ConversationRow({ c, active, onSelect, onLinkContact, onOpenLead, onTogglePin }) {
+function ConversationRow({ c, active, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock }) {
   const title = c.contact?.name || c.contactName || c.phoneE164
   const pinned = Boolean(c.pinnedAt)
+  const blocked = Boolean(c.isBlocked)
   return (
     <button
       onClick={() => onSelect(c.id)}
@@ -38,17 +39,28 @@ function ConversationRow({ c, active, onSelect, onLinkContact, onOpenLead, onTog
           {title}
         </span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          {!blocked && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onTogglePin(c) }}
+              title={pinned ? 'Desfijar chat' : 'Fijar chat'}
+              className={`text-xs leading-none transition-all ${
+                // El emoji 📌 es un glyph a color: las clases de texto (text-*) no lo
+                // tiñen, siempre se ve con su color nativo. Para distinguir
+                // pinneado/no pinneado hay que desaturarlo con un filtro CSS, no con color.
+                pinned ? 'grayscale-0 opacity-100' : 'grayscale opacity-40 hover:opacity-70'
+              }`}
+            >
+              📌
+            </button>
+          )}
           <button
-            onClick={(e) => { e.stopPropagation(); onTogglePin(c) }}
-            title={pinned ? 'Desfijar chat' : 'Fijar chat'}
+            onClick={(e) => { e.stopPropagation(); onToggleBlock(c) }}
+            title={blocked ? 'Desbloquear (sacar de spam)' : 'Marcar como spam y bloquear'}
             className={`text-xs leading-none transition-all ${
-              // El emoji 📌 es un glyph a color: las clases de texto (text-*) no lo
-              // tiñen, siempre se ve con su color nativo. Para distinguir
-              // pinneado/no pinneado hay que desaturarlo con un filtro CSS, no con color.
-              pinned ? 'grayscale-0 opacity-100' : 'grayscale opacity-40 hover:opacity-70'
+              blocked ? 'grayscale-0 opacity-100' : 'grayscale opacity-40 hover:opacity-70'
             }`}
           >
-            📌
+            🚫
           </button>
           <span className="text-[11px] text-gray-400 dark:text-gray-500">{timeLabel(c.lastMessageAt)}</span>
         </div>
@@ -91,21 +103,25 @@ function ConversationRow({ c, active, onSelect, onLinkContact, onOpenLead, onTog
 // — el matching automático por teléfono no cubre todos los casos). Si el
 // contacto está vinculado, además muestra su empresa y un atajo para abrir el
 // lead asociado (resuelto server-side en listConversations).
-export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact, onOpenLead, onTogglePin, search }) {
+export default function WhatsappConversationList({ conversations, activeId, onSelect, onLinkContact, onOpenLead, onTogglePin, onToggleBlock, search, viewingBlocked }) {
   if (conversations.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
         <p className="text-sm text-gray-400 dark:text-gray-500 text-center">
           {search
             ? `No encontramos chats que coincidan con "${search}".`
-            : 'Todavía no llegó ningún mensaje. En cuanto un lead escriba al número conectado, aparece acá.'}
+            : viewingBlocked
+              ? 'No hay conversaciones marcadas como spam.'
+              : 'Todavía no llegó ningún mensaje. En cuanto un lead escriba al número conectado, aparece acá.'}
         </p>
       </div>
     )
   }
 
-  const pinned = conversations.filter(c => c.pinnedAt)
-  const rest = conversations.filter(c => !c.pinnedAt)
+  // La vista de spam (viewingBlocked) ya viene filtrada 1 a 1 del backend
+  // (?blocked=true) — no tiene sentido de "fijados" (se ocultan al bloquear).
+  const pinned = viewingBlocked ? [] : conversations.filter(c => c.pinnedAt)
+  const rest = viewingBlocked ? conversations : conversations.filter(c => !c.pinnedAt)
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -115,7 +131,7 @@ export default function WhatsappConversationList({ conversations, activeId, onSe
             📌 Fijados
           </p>
           {pinned.map(c => (
-            <ConversationRow key={c.id} c={c} active={c.id === activeId} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} />
+            <ConversationRow key={c.id} c={c} active={c.id === activeId} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} />
           ))}
           <p className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Chats
@@ -123,7 +139,7 @@ export default function WhatsappConversationList({ conversations, activeId, onSe
         </>
       )}
       {rest.map(c => (
-        <ConversationRow key={c.id} c={c} active={c.id === activeId} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} />
+        <ConversationRow key={c.id} c={c} active={c.id === activeId} onSelect={onSelect} onLinkContact={onLinkContact} onOpenLead={onOpenLead} onTogglePin={onTogglePin} onToggleBlock={onToggleBlock} />
       ))}
     </div>
   )
