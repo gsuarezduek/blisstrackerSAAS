@@ -6,11 +6,14 @@ import { useFeatureFlag } from '../hooks/useFeatureFlag'
 import useNavDestinations from '../hooks/useNavDestinations'
 
 // Buscador global (Cmd/Ctrl+K) — navegación estática (fuzzy-match client-side
-// contra useNavDestinations), proyectos (fuzzy-match client-side: GET /api/projects
-// ya devuelve TODOS los proyectos activos del workspace sin paginar, así que no
-// hace falta un endpoint `?search=` nuevo) y leads de Ventas (`?search=` server-side,
-// el único endpoint de entidad que ya lo soporta tal cual). Canales de chat quedan
-// para una v2. Overlay/backdrop calcado del modal de ayuda de GlobalShortcuts.jsx.
+// contra useNavDestinations), proyectos y personas del equipo (fuzzy-match client-side:
+// GET /api/projects y GET /api/workspaces/current/members ya devuelven la lista
+// completa sin paginar — el segundo es el mismo endpoint que ya usa ChatWidget.jsx
+// para armar el autocompletado de @menciones, abierto a cualquier miembro, no solo
+// admin — así que no hace falta un endpoint `?search=` nuevo para ninguno de los dos)
+// y leads de Ventas (`?search=` server-side, el único endpoint de entidad que ya lo
+// soporta tal cual). Canales de chat quedan para una v2. Overlay/backdrop calcado del
+// modal de ayuda de GlobalShortcuts.jsx.
 function scoreMatch(label, q) {
   const idx = label.toLowerCase().indexOf(q)
   return idx === -1 ? null : idx
@@ -25,11 +28,13 @@ export default function CommandPalette({ open, onClose }) {
 
   const [query, setQuery] = useState('')
   const [projects, setProjects] = useState([])
+  const [members, setMembers] = useState([])
   const [leadResults, setLeadResults] = useState(null) // null = sin buscar todavía
   const [searching, setSearching] = useState(false)
   const [selected, setSelected] = useState(0)
   const inputRef = useRef(null)
   const projectsLoadedRef = useRef(false)
+  const membersLoadedRef = useRef(false)
 
   useEffect(() => {
     if (!open) return
@@ -48,6 +53,16 @@ export default function CommandPalette({ open, onClose }) {
     if (!open || projectsLoadedRef.current) return
     projectsLoadedRef.current = true
     api.get('/projects').then(({ data }) => setProjects(data || [])).catch(() => setProjects([]))
+  }, [open])
+
+  // Personas del equipo: mismo criterio — un solo fetch cacheado, mismo endpoint que
+  // ya usa ChatWidget.jsx para su autocompletado de @menciones.
+  useEffect(() => {
+    if (!open || membersLoadedRef.current) return
+    membersLoadedRef.current = true
+    api.get('/workspaces/current/members')
+      .then(({ data }) => setMembers((data || []).filter(m => m.active)))
+      .catch(() => setMembers([]))
   }, [open])
 
   const navMatches = useMemo(() => {
@@ -69,6 +84,16 @@ export default function CommandPalette({ open, onClose }) {
       .sort((a, b) => a.score - b.score)
       .slice(0, 6)
   }, [projects, query])
+
+  const memberMatches = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return members
+      .map(m => ({ id: `member-${m.id}`, type: 'member', label: m.name, to: `/users/${m.id}`, score: scoreMatch(m.name, q) }))
+      .filter(m => m.score !== null)
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 6)
+  }, [members, query])
 
   // Búsqueda de leads — debounce 300ms, descarta respuestas obsoletas (mismo
   // patrón que el buscador de archivos de proyecto, ProjectFiles.jsx).
@@ -95,7 +120,7 @@ export default function CommandPalette({ open, onClose }) {
     to: user?.isAdmin ? `/admin/ventas?lead=${l.id}` : `/ventas?lead=${l.id}`,
   }))
 
-  const results = [...navMatches, ...projectMatches, ...leadItems]
+  const results = [...navMatches, ...projectMatches, ...memberMatches, ...leadItems]
 
   function go(item) {
     if (!item) return
@@ -125,7 +150,7 @@ export default function CommandPalette({ open, onClose }) {
             value={query}
             onChange={e => { setQuery(e.target.value); setSelected(0) }}
             onKeyDown={onKeyDown}
-            placeholder={`Ir a… o buscar un proyecto${canSeeLeads ? ' o un lead' : ''}`}
+            placeholder={`Ir a… o buscar un proyecto, una persona${canSeeLeads ? ' o un lead' : ''}`}
             className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
           />
           {searching && <span className="text-xs text-gray-400">Buscando…</span>}
@@ -133,7 +158,7 @@ export default function CommandPalette({ open, onClose }) {
 
         <div className="max-h-[50vh] overflow-y-auto py-1.5">
           {!query.trim() ? (
-            <p className="px-4 py-6 text-sm text-gray-400 text-center">Escribí para ir a una pantalla, un proyecto{canSeeLeads ? ' o un lead' : ''}.</p>
+            <p className="px-4 py-6 text-sm text-gray-400 text-center">Escribí para ir a una pantalla, un proyecto, una persona{canSeeLeads ? ' o un lead' : ''}.</p>
           ) : results.length === 0 && !searching ? (
             <p className="px-4 py-6 text-sm text-gray-400 text-center">Sin resultados para "{query}".</p>
           ) : (
@@ -149,6 +174,7 @@ export default function CommandPalette({ open, onClose }) {
                 <span className="text-gray-800 dark:text-gray-100 truncate">
                   {item.type === 'lead' && <span className="text-gray-400 mr-1.5">Lead ·</span>}
                   {item.type === 'project' && <span className="text-gray-400 mr-1.5">Proyecto ·</span>}
+                  {item.type === 'member' && <span className="text-gray-400 mr-1.5">Persona ·</span>}
                   {item.label}
                 </span>
                 {item.detail && <span className="text-xs text-gray-400 flex-shrink-0 truncate max-w-[40%]">{item.detail}</span>}
