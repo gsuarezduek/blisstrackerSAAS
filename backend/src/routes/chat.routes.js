@@ -1,7 +1,7 @@
 const router = require('express').Router()
 const {
   listChannels, createChannel, updateChannel, updateChannelPrivacy, deleteChannel,
-  listMessages, listPinned, sendMessage, editMessage, deleteMessage, togglePin, toggleReaction,
+  listMessages, listPinned, searchMessages, sendMessage, editMessage, deleteMessage, togglePin, toggleReaction,
   markRead, searchGifs, trendingGifs,
 } = require('../controllers/chat.controller')
 const { auth } = require('../middleware/auth')
@@ -25,6 +25,7 @@ router.delete('/channels/:id',    workspaceAdminOnly, deleteChannel)
 
 router.get('/channels/:id/messages',  listMessages)
 router.get('/channels/:id/pinned',    listPinned)
+router.get('/channels/:id/search',    searchMessages)
 router.post('/channels/:id/messages', sendMessage)
 router.post('/channels/:id/read',     markRead)
 

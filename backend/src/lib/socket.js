@@ -114,6 +114,15 @@ function initSocket(httpServer) {
       if (id) socket.leave(`channel:${id}`)
     })
 
+    // "Fulano está escribiendo..." — 100% efímero, sin persistencia ni chequeo contra
+    // la DB (relay de bajo riesgo, ya acotado a quien esté unido a `channel:<id>` vía
+    // join-channel, que sí valida privacidad). `socket.to` excluye al emisor solo.
+    socket.on('chat:typing', (channelId) => {
+      const id = Number(channelId)
+      if (!id) return
+      socket.to(`channel:${id}`).emit('chat:typing', { channelId: id, userId: socket.user.userId, name: socket.user.name })
+    })
+
     // Canales de voz — señalización WebRTC (mesh: cada peer negocia directo con
     // cada otro peer, el servidor solo rutea SDP/ICE sin interpretarlos).
     socket.on('voice:join', async (channelId) => {

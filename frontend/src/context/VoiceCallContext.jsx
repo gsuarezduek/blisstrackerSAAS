@@ -1,6 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from './AuthContext'
 import { connectSocket } from '../lib/socket'
+import { createSpeakingMonitor } from '../lib/audioLevel'
+import {
+  SUPPORTS_OUTPUT_SELECTION,
+  getAudioInputPref, setAudioInputPref,
+  getAudioOutputPref, setAudioOutputPref,
+} from '../lib/audioDevicePrefs'
+import { saveVoiceCallSession, getVoiceCallSession, clearVoiceCallSession } from '../lib/voiceCallSession'
 
 const VoiceCallContext = createContext(null)
 
@@ -16,41 +23,90 @@ const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }]
 // ChatWidget se cierre: la llamada sigue activa mientras el usuario navega el
 // resto de la app, con VoiceCallIndicator (FloatingDock.jsx) como acceso rápido.
 //
-// Fuera de alcance a propósito (ver plan): sin TURN server (solo STUN público —
-// alcanza para redes normales, puede fallar en NATs corporativos restrictivos),
-// sin reconexión transparente de peers (una reconexión de socket simplemente
-// re-hace voice:join y reconstruye todo desde cero).
+// Fuera de alcance a propósito: sin TURN server (solo STUN público — alcanza para
+// redes normales, puede fallar en NATs corporativos restrictivos), sin reconexión
+// transparente de peers (una reconexión de socket simplemente re-hace voice:join y
+// reconstruye todo desde cero — sí se ofrece un rejoin MANUAL tras recargar la
+// página completa, ver pendingReconnect/acceptReconnect más abajo).
 export function VoiceCallProvider({ children }) {
   const { user } = useAuth()
   const [activeCall, setActiveCall] = useState(null) // { channelId, channelSlug, channelName, muted, participants: [{socketId,userId,name,muted}] } | null
   const [voicePresence, setVoicePresence] = useState(new Map()) // channelId -> [{userId,name}], independiente de estar en la llamada
   const [remoteStreams, setRemoteStreams] = useState(new Map()) // socketId -> MediaStream, para los <audio> ocultos
+  const [speakingIds, setSpeakingIds] = useState(new Set()) // 'self' | socketId — quién tiene el mic activo ahora mismo
+  const [connectionIssues, setConnectionIssues] = useState(new Set()) // socketId con la conexión P2P caída
+  const [inputDeviceId, setInputDeviceId] = useState(null) // deviceId preferido de micrófono, o null = predeterminado
+  const [outputDeviceId, setOutputDeviceId] = useState(null) // ídem, salida de audio (setSinkId)
+  const [pendingReconnect, setPendingReconnect] = useState(null) // { channelId, channelSlug, channelName } | null
 
   const activeCallRef = useRef(null)
   const peersRef = useRef(new Map()) // socketId -> RTCPeerConnection
   const localStreamRef = useRef(null)
   const pendingIceRef = useRef(new Map()) // socketId -> RTCIceCandidate[] buffereados hasta tener remoteDescription
+  const speakingMonitorsRef = useRef(new Map()) // 'self' | socketId -> { stop() }
+  const restartAttemptedRef = useRef(new Set()) // socketId — para no encadenar restartIce() en loop
+  const audioElsRef = useRef(new Map()) // socketId -> HTMLAudioElement, para poder aplicarles setSinkId
 
   useEffect(() => { activeCallRef.current = activeCall }, [activeCall])
+
+  // Preferencias de dispositivo: se leen recién con user.id disponible (localStorage
+  // es por usuario, igual que chatSound.js).
+  useEffect(() => {
+    if (!user?.id) return
+    setInputDeviceId(getAudioInputPref(user.id))
+    setOutputDeviceId(getAudioOutputPref(user.id))
+  }, [user?.id])
+
+  // Al montar con un usuario ya logueado (típicamente tras un F5 completo, que mata
+  // todo este estado de React): si había una llamada en curso en esta pestaña, ofrecer
+  // reconectar en vez de reactivar el micrófono solo y sin avisar.
+  useEffect(() => {
+    if (!user?.id || activeCallRef.current) return
+    const session = getVoiceCallSession(user.id)
+    if (session) setPendingReconnect(session)
+  }, [user?.id])
+
+  const setSpeaking = useCallback((id, isSpeaking) => {
+    setSpeakingIds(prev => {
+      if (isSpeaking === prev.has(id)) return prev
+      const next = new Set(prev)
+      if (isSpeaking) next.add(id); else next.delete(id)
+      return next
+    })
+  }, [])
 
   const cleanupPeer = useCallback((socketId) => {
     const pc = peersRef.current.get(socketId)
     if (pc) { pc.close(); peersRef.current.delete(socketId) }
     pendingIceRef.current.delete(socketId)
+    speakingMonitorsRef.current.get(socketId)?.stop()
+    speakingMonitorsRef.current.delete(socketId)
+    restartAttemptedRef.current.delete(socketId)
+    setSpeaking(socketId, false)
+    setConnectionIssues(prev => {
+      if (!prev.has(socketId)) return prev
+      const next = new Set(prev)
+      next.delete(socketId)
+      return next
+    })
     setRemoteStreams(prev => {
       if (!prev.has(socketId)) return prev
       const next = new Map(prev)
       next.delete(socketId)
       return next
     })
-  }, [])
+  }, [setSpeaking])
 
   const cleanupCall = useCallback(() => {
     for (const socketId of peersRef.current.keys()) cleanupPeer(socketId)
+    speakingMonitorsRef.current.get('self')?.stop()
+    speakingMonitorsRef.current.delete('self')
+    setSpeaking('self', false)
     localStreamRef.current?.getTracks().forEach(t => t.stop())
     localStreamRef.current = null
     setActiveCall(null)
-  }, [cleanupPeer])
+    clearVoiceCallSession(user?.id)
+  }, [cleanupPeer, setSpeaking, user?.id])
 
   // Crea (si falta) la RTCPeerConnection de un peer, con los tracks locales ya
   // agregados y el manejo de ICE candidates propio hacia ese peer.
@@ -68,14 +124,37 @@ export function VoiceCallProvider({ children }) {
       socket?.emit('voice:signal', { to: socketId, signal: { type: 'ice', candidate: e.candidate } })
     }
     pc.ontrack = (e) => {
+      const stream = e.streams[0]
       setRemoteStreams(prev => {
         const next = new Map(prev)
-        next.set(socketId, e.streams[0])
+        next.set(socketId, stream)
         return next
       })
+      speakingMonitorsRef.current.get(socketId)?.stop()
+      speakingMonitorsRef.current.set(socketId, createSpeakingMonitor(stream, isSpeaking => setSpeaking(socketId, isSpeaking)))
+    }
+    // Un intento automático de restartIce() por episodio de falla — si vuelve a
+    // reconectar y falla de nuevo más tarde, se permite un nuevo intento (no es
+    // "una sola vez para siempre", es "una vez por caída").
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') {
+        setConnectionIssues(prev => new Set(prev).add(socketId))
+        if (!restartAttemptedRef.current.has(socketId)) {
+          restartAttemptedRef.current.add(socketId)
+          pc.restartIce()
+        }
+      } else if (pc.connectionState === 'connected') {
+        restartAttemptedRef.current.delete(socketId)
+        setConnectionIssues(prev => {
+          if (!prev.has(socketId)) return prev
+          const next = new Set(prev)
+          next.delete(socketId)
+          return next
+        })
+      }
     }
     return pc
-  }, [])
+  }, [setSpeaking])
 
   const joinCall = useCallback(async (channel) => {
     if (activeCallRef.current?.channelId === channel.id) return
@@ -85,15 +164,20 @@ export function VoiceCallProvider({ children }) {
     if (!socket) return
 
     try {
-      localStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true })
+      localStreamRef.current = await navigator.mediaDevices.getUserMedia({
+        audio: inputDeviceId ? { deviceId: { exact: inputDeviceId } } : true,
+      })
     } catch {
       alert('No pudimos acceder a tu micrófono. Revisá los permisos del navegador.')
       return
     }
+    speakingMonitorsRef.current.set('self', createSpeakingMonitor(localStreamRef.current, isSpeaking => setSpeaking('self', isSpeaking)))
 
     setActiveCall({ channelId: channel.id, channelSlug: channel.slug, channelName: channel.name, muted: false, participants: [] })
+    saveVoiceCallSession(user?.id, { channelId: channel.id, channelSlug: channel.slug, channelName: channel.name })
+    setPendingReconnect(null) // si venía de aceptar un reconnect, ya se resolvió
     socket.emit('voice:join', channel.id)
-  }, [cleanupCall])
+  }, [cleanupCall, setSpeaking, inputDeviceId, user?.id])
 
   const leaveCall = useCallback(() => {
     const call = activeCallRef.current
@@ -112,6 +196,48 @@ export function VoiceCallProvider({ children }) {
     socket?.emit('voice:mute', { channelId: call.channelId, muted: nextMuted })
     setActiveCall(prev => (prev ? { ...prev, muted: nextMuted } : prev))
   }, [])
+
+  // Cambia el micrófono EN VIVO sin cortar la llamada: reemplaza el track en cada
+  // RTCPeerConnection (`replaceTrack`) en vez de salir y volver a entrar. Si no hay
+  // llamada activa, solo persiste la preferencia para la próxima vez que se una.
+  const setAudioInputDevice = useCallback(async (deviceId) => {
+    setInputDeviceId(deviceId)
+    setAudioInputPref(user?.id, deviceId)
+    if (!activeCallRef.current) return
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+    })
+    const newTrack = newStream.getAudioTracks()[0]
+    newTrack.enabled = !activeCallRef.current.muted // replaceTrack no hereda el estado de mute
+    for (const pc of peersRef.current.values()) {
+      const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
+      if (sender) await sender.replaceTrack(newTrack)
+    }
+    localStreamRef.current?.getTracks().forEach(t => t.stop())
+    localStreamRef.current = newStream
+    speakingMonitorsRef.current.get('self')?.stop()
+    speakingMonitorsRef.current.set('self', createSpeakingMonitor(newStream, isSpeaking => setSpeaking('self', isSpeaking)))
+  }, [user?.id, setSpeaking])
+
+  // Salida de audio: persiste la preferencia; el efecto de renderizado de <audio>
+  // (más abajo) es quien aplica setSinkId a cada elemento ya montado.
+  const setAudioOutputDevice = useCallback((deviceId) => {
+    setOutputDeviceId(deviceId)
+    setAudioOutputPref(user?.id, deviceId)
+  }, [user?.id])
+
+  // Reconexión manual tras F5 — nunca automática/silenciosa: aceptar vuelve a pedir
+  // getUserMedia (mic apagado hasta ese click), descartar solo limpia el aviso.
+  const acceptReconnect = useCallback(() => {
+    if (pendingReconnect) {
+      joinCall({ id: pendingReconnect.channelId, slug: pendingReconnect.channelSlug, name: pendingReconnect.channelName })
+    }
+  }, [pendingReconnect, joinCall])
+
+  const dismissReconnect = useCallback(() => {
+    clearVoiceCallSession(user?.id)
+    setPendingReconnect(null)
+  }, [user?.id])
 
   // Al deslogearse: cortar cualquier llamada en curso (no dejar el micrófono
   // abierto). No hace falta disconnectSocket() acá — ChatContext ya lo hace.
@@ -214,8 +340,23 @@ export function VoiceCallProvider({ children }) {
     }
   }, [user?.id, getOrCreatePeer, cleanupPeer])
 
+  // Reaplica setSinkId a los <audio> ya montados cuando cambia la preferencia de
+  // salida (sin esto, solo se aplicaría a elementos nuevos vía el callback ref).
+  useEffect(() => {
+    if (!SUPPORTS_OUTPUT_SELECTION) return
+    for (const el of audioElsRef.current.values()) {
+      el.setSinkId?.(outputDeviceId || '').catch(() => {})
+    }
+  }, [outputDeviceId])
+
   return (
-    <VoiceCallContext.Provider value={{ activeCall, voicePresence, joinCall, leaveCall, toggleMute }}>
+    <VoiceCallContext.Provider value={{
+      activeCall, voicePresence, speakingIds, connectionIssues,
+      joinCall, leaveCall, toggleMute,
+      inputDeviceId, outputDeviceId, setAudioInputDevice, setAudioOutputDevice,
+      supportsOutputSelection: SUPPORTS_OUTPUT_SELECTION,
+      pendingReconnect, acceptReconnect, dismissReconnect,
+    }}>
       {children}
       {/* Elementos <audio> ocultos, uno por peer remoto — viven en la raíz del árbol
           (no dentro del panel condicional de ChatWidget) para sobrevivir intactos
@@ -225,7 +366,12 @@ export function VoiceCallProvider({ children }) {
           key={socketId}
           autoPlay
           style={{ display: 'none' }}
-          ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream }}
+          ref={el => {
+            if (!el) { audioElsRef.current.delete(socketId); return }
+            audioElsRef.current.set(socketId, el)
+            if (el.srcObject !== stream) el.srcObject = stream
+            if (SUPPORTS_OUTPUT_SELECTION && outputDeviceId) el.setSinkId?.(outputDeviceId).catch(() => {})
+          }}
         />
       ))}
     </VoiceCallContext.Provider>

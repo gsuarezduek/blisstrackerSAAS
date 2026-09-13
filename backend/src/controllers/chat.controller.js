@@ -214,6 +214,33 @@ async function listPinned(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Buscador de mensajes dentro de un canal — Postgres `contains`/insensitive alcanza,
+// no hace falta full-text search para el volumen de un chat de equipo. v1 no permite
+// "saltar" al mensaje encontrado dentro del hilo completo (eso requeriría poder cargar
+// mensajes alrededor de uno puntual, una pieza más grande) — el resultado se muestra
+// tal cual en el propio panel de búsqueda.
+async function searchMessages(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const channelId = Number(req.params.id)
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+    if (q.length < 2) return res.json({ messages: [] })
+    const limit = Math.min(Number(req.query.limit) || 30, 50)
+
+    const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
+    if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
+    if (!assertChannelAccess(req, res, channel)) return
+
+    const messages = await prisma.chatMessage.findMany({
+      where: { channelId, content: { contains: q, mode: 'insensitive' } },
+      include: MESSAGE_INCLUDE,
+      orderBy: { id: 'desc' },
+      take: limit,
+    })
+    res.json({ messages })
+  } catch (err) { next(err) }
+}
+
 async function sendMessage(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -507,6 +534,7 @@ module.exports = {
   deleteChannel,
   listMessages,
   listPinned,
+  searchMessages,
   sendMessage,
   editMessage,
   deleteMessage,

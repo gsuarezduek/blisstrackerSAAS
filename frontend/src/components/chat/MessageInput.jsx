@@ -2,6 +2,11 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useMentionAutocomplete } from './useMentionAutocomplete'
 import EmojiGifPicker from './EmojiGifPicker'
 import { avatarUrl } from '../../utils/avatarUrl'
+import { connectSocket } from '../../lib/socket'
+
+// Throttle de emisión de "escribiendo..." — con margen respecto al timeout de 4s del
+// receptor (ChatWidget.jsx onTyping) para que un typer continuo no parpadee.
+const TYPING_EMIT_THROTTLE_MS = 2500
 
 // Entrada especial de autocompletado: notifica a todo el equipo del canal, no a una persona.
 // Se antepone a la lista real para que "@ev..." la matchee y quede siempre primera.
@@ -9,16 +14,29 @@ const EVERYONE_ID = '__everyone__'
 const EVERYONE_ITEM = { id: EVERYONE_ID, name: 'everyone' }
 
 // Input del chat: texto + @menciones + GIF + responder.
-export default function MessageInput({ onSend, members, replyingTo, onCancelReply }) {
+export default function MessageInput({ onSend, members, replyingTo, onCancelReply, channelId }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   const textareaRef = useRef(null)
   const pickerRef = useRef(null)
+  const lastTypingEmitRef = useRef(0)
 
   const mentionable = useMemo(() => [EVERYONE_ITEM, ...members], [members])
   const { mentionQuery, mentionMatches, mentionIdx, handleTextChange, handleMentionKeyDown, selectMention } =
     useMentionAutocomplete({ text, setText, textareaRef, members: mentionable })
+
+  // Se resetea al cambiar de canal para no heredar el throttle del canal anterior.
+  useEffect(() => { lastTypingEmitRef.current = 0 }, [channelId])
+
+  function handleInputChange(e) {
+    handleTextChange(e)
+    const now = Date.now()
+    if (now - lastTypingEmitRef.current > TYPING_EMIT_THROTTLE_MS) {
+      lastTypingEmitRef.current = now
+      connectSocket()?.emit('chat:typing', channelId)
+    }
+  }
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -122,7 +140,7 @@ export default function MessageInput({ onSend, members, replyingTo, onCancelRepl
             ref={textareaRef}
             rows={1}
             value={text}
-            onChange={handleTextChange}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder="Escribí un mensaje... Usá @ para mencionar"
             className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none max-h-28"

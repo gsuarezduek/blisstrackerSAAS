@@ -10,6 +10,7 @@ import MessageInput from './MessageInput'
 import ChannelFormModal from './ChannelFormModal'
 import PinnedBar from './PinnedBar'
 import VoiceRoomBar from './VoiceRoomBar'
+import ChannelSearch from './ChannelSearch'
 import ChatSoundToggle from './ChatSoundToggle'
 import FeedbackModal from '../FeedbackModal'
 
@@ -40,8 +41,11 @@ export default function ChatWidget() {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [pinnedMessages, setPinnedMessages] = useState([])
   const [replyingTo, setReplyingTo] = useState(null)
+  const [typingUsers, setTypingUsers] = useState([]) // [{userId, name}] — solo del canal activo, efímero
+  const [searchOpen, setSearchOpen] = useState(false)
   const activeChannelIdRef = useRef(null)
   const switcherRef = useRef(null)
+  const typingTimeoutsRef = useRef(new Map()) // userId -> timeout, para ocultar solo si no llegó otro evento suyo
 
   // Sin fallback a #general/primero: si no hay un canal elegido en la sesión,
   // activeChannel queda null y se muestra el listado completo (ver más abajo) en vez
@@ -92,6 +96,10 @@ export default function ChatWidget() {
     setFirstUnreadMessageId(null)
     setPinnedMessages([])
     setReplyingTo(null)
+    setTypingUsers([])
+    typingTimeoutsRef.current.forEach(t => clearTimeout(t))
+    typingTimeoutsRef.current.clear()
+    setSearchOpen(false)
 
     loadMessages(activeChannel.id).then(data => {
       if (activeChannelIdRef.current !== activeChannel.id) return
@@ -140,18 +148,31 @@ export default function ChatWidget() {
       if (m.channelId !== activeChannelIdRef.current) return
       setMessages(prev => prev.map(x => (x.id === m.id ? m : x)))
     }
+    // Sin evento explícito de "dejé de escribir": si no llega otro de la misma
+    // persona en 4s, se oculta sola (margen respecto al throttle de emisión de 2.5s).
+    function onTyping({ channelId, userId, name } = {}) {
+      if (channelId !== activeChannelIdRef.current || userId === user?.id) return
+      setTypingUsers(prev => (prev.some(t => t.userId === userId) ? prev : [...prev, { userId, name }]))
+      clearTimeout(typingTimeoutsRef.current.get(userId))
+      typingTimeoutsRef.current.set(userId, setTimeout(() => {
+        setTypingUsers(prev => prev.filter(t => t.userId !== userId))
+        typingTimeoutsRef.current.delete(userId)
+      }, 4000))
+    }
 
     socket.on('chat:message', onMessage)
     socket.on('chat:message:edited', onEdited)
     socket.on('chat:message:deleted', onDeleted)
     socket.on('chat:message:pinned', onPinned)
     socket.on('chat:message:reaction', onReaction)
+    socket.on('chat:typing', onTyping)
     return () => {
       socket.off('chat:message', onMessage)
       socket.off('chat:message:edited', onEdited)
       socket.off('chat:message:deleted', onDeleted)
       socket.off('chat:message:pinned', onPinned)
       socket.off('chat:message:reaction', onReaction)
+      socket.off('chat:typing', onTyping)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -300,6 +321,13 @@ export default function ChatWidget() {
                       {activeChannel.isPrivate ? '🔒' : '🔓'}
                     </button>
                   )}
+                  <button
+                    onClick={() => setSearchOpen(true)}
+                    title="Buscar en este canal"
+                    className="p-1.5 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
+                  >
+                    🔍
+                  </button>
                   <ChatSoundToggle pref={soundPref} onChange={setSoundPref} />
                   <button
                     onClick={() => setOpen(false)}
@@ -309,6 +337,10 @@ export default function ChatWidget() {
                   </button>
                 </div>
 
+                {searchOpen ? (
+                  <ChannelSearch channelId={activeChannel.id} onClose={() => setSearchOpen(false)} />
+                ) : (
+                  <>
                 {activeChannel.isPrivate && (
                   <div className="px-4 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800/40 flex-shrink-0">
                     <p className="text-[11px] font-medium text-amber-700 dark:text-amber-300">🔒 Canal privado — solo lo ven los administradores.</p>
@@ -337,12 +369,25 @@ export default function ChatWidget() {
                   onReply={setReplyingTo}
                 />
 
+                {typingUsers.length > 0 && (
+                  <p className="px-4 pt-1 text-xs italic text-gray-400 dark:text-gray-500 flex-shrink-0">
+                    {typingUsers.length === 1
+                      ? `${typingUsers[0].name} está escribiendo...`
+                      : typingUsers.length === 2
+                        ? `${typingUsers[0].name} y ${typingUsers[1].name} están escribiendo...`
+                        : 'Varias personas están escribiendo...'}
+                  </p>
+                )}
+
                 <MessageInput
                   onSend={handleSend}
                   members={members}
                   replyingTo={replyingTo}
                   onCancelReply={() => setReplyingTo(null)}
+                  channelId={activeChannel.id}
                 />
+                  </>
+                )}
               </>
             )}
           </div>

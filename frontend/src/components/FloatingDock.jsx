@@ -4,6 +4,7 @@ import useActiveGames from '../hooks/useActiveGames'
 import ChatWidget from './chat/ChatWidget'
 import GamificationFab from './GamificationFab'
 import VoiceCallIndicator from './VoiceCallIndicator'
+import VoiceReconnectPrompt from './VoiceReconnectPrompt'
 
 // Punto único de entrada para los widgets flotantes que antes se apilaban
 // verticalmente en la esquina inferior derecha (bottom-6 / bottom-24 / bottom-[168px]):
@@ -48,6 +49,7 @@ export default function FloatingDock() {
       <ChatWidget />
       <GamificationFab />
       <VoiceCallIndicator />
+      <VoiceReconnectPrompt />
 
       {menuOpen && (
         <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
