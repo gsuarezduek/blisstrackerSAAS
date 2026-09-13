@@ -284,8 +284,8 @@ export default function WhatsappTab({ onOpenLead }) {
 
       <div className="flex h-[70vh]">
         <div className="w-72 flex-shrink-0 border-r border-gray-100 dark:border-gray-700 flex flex-col">
-          <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-            <div className="relative">
+          <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center gap-1.5">
+            <div className="relative flex-1 min-w-0">
               <span className="absolute inset-y-0 left-2.5 flex items-center text-gray-400 text-sm pointer-events-none">🔍</span>
               <input
                 type="text"
@@ -306,13 +306,14 @@ export default function WhatsappTab({ onOpenLead }) {
             </div>
             <button
               onClick={() => { setViewingBlocked(v => !v); setActiveId(null); setActiveConversation(null) }}
-              className={`mt-2 text-[11px] px-2 py-1 rounded-full font-medium ${
+              title={viewingBlocked ? 'Volver a los chats' : 'Ver spam'}
+              className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-sm transition-colors ${
                 viewingBlocked
                   ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                  : 'bg-gray-100 dark:bg-gray-700/60 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300'
               }`}
             >
-              {viewingBlocked ? '← Volver a los chats' : '🚫 Ver spam'}
+              {viewingBlocked ? '←' : '🚫'}
             </button>
           </div>
           {loadingConversations && conversations.length === 0 ? (
