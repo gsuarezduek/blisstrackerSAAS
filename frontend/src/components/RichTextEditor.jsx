@@ -15,6 +15,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { Color, TextStyle } from '@tiptap/extension-text-style'
 import { TableKit } from '@tiptap/extension-table'
 import Link from '@tiptap/extension-link'
+import Highlight from '@tiptap/extension-highlight'
 import { useEffect } from 'react'
 import './situation-editor.css'
 
@@ -40,6 +41,17 @@ export const COLORS = [
   '#8b5cf6', // violeta
   '#ec4899', // rosa
   '#6b7280', // gris
+]
+
+export const HIGHLIGHT_COLORS = [
+  '#fef08a', // amarillo
+  '#fecaca', // rojo
+  '#fed7aa', // naranja
+  '#bbf7d0', // verde
+  '#bfdbfe', // azul
+  '#e9d5ff', // violeta
+  '#fbcfe8', // rosa
+  '#e5e7eb', // gris
 ]
 
 export function ToolBtn({ active, onClick, title, children }) {
@@ -130,6 +142,30 @@ export function Toolbar({ editor }) {
           ✕
         </button>
       </div>
+
+      <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1" />
+
+      {/* Resaltador (color de fondo) */}
+      <div className="flex items-center gap-1">
+        {HIGHLIGHT_COLORS.map(color => (
+          <button
+            key={color}
+            type="button"
+            title={`Resaltar en ${color}`}
+            onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleHighlight({ color }).run() }}
+            className="w-4 h-4 rounded border border-white dark:border-gray-700 shadow-sm hover:scale-125 transition-transform flex-shrink-0"
+            style={{ backgroundColor: color }}
+          />
+        ))}
+        <button
+          type="button"
+          title="Quitar resaltado"
+          onMouseDown={e => { e.preventDefault(); editor.chain().focus().unsetHighlight().run() }}
+          className="w-4 h-4 rounded border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-700 hover:scale-125 transition-transform text-[8px] flex items-center justify-center text-gray-500"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   )
 }
@@ -140,6 +176,7 @@ export default function RichTextEditor({ defaultContent = '', onChange, onBlur, 
       StarterKit,
       TextStyle,
       Color,
+      Highlight.configure({ multicolor: true }),
       TableKit.configure({ table: { resizable: false } }),
       Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
     ],
