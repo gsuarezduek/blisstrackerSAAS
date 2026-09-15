@@ -181,6 +181,7 @@ model Workspace {
   chatMessages           ChatMessage[]
   chatChannelReads       ChatChannelRead[]
   chatMessageReactions   ChatMessageReaction[]
+  chatAttachments        ChatAttachment[]
   taskCommentReactions   TaskCommentReaction[]
   contentPieces          ContentPiece[]
   contentAssets          ContentAsset[]
@@ -3335,11 +3336,39 @@ model ChatMessage {
 
   notifications Notification[]
   reactions     ChatMessageReaction[]
+  attachment    ChatAttachment?
 
   @@index([channelId, createdAt])
   @@index([channelId, pinnedAt])
   @@index([workspaceId])
   @@index([replyToId])
+}
+
+// Adjunto de un mensaje del chat interno (imagen o documento). Un adjunto por
+// mensaje, mismo criterio que gifUrl — no es una galería. Dual storage
+// R2/DB idéntico a WhatsappMedia. Se borra solo (R2 + fila) a los
+// `chatAttachmentRetentionDays` vía la limpieza semanal (cleanup.service.js);
+// el mensaje en sí sobrevive, solo desaparece el adjunto.
+model ChatAttachment {
+  id          String      @id @default(uuid())
+  workspaceId Int
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messageId   Int         @unique
+  message     ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  kind      String // "image" | "document"
+  mimeType  String
+  fileName  String? // solo documentos, informativo — nunca se usa para armar la key
+  sizeBytes Int?
+  objectKey String? // key en R2, bajo chat/<workspaceId>/
+  fileData  Bytes? // fallback sin R2 (dev local / legacy)
+  width     Int? // solo imágenes — reserva el layout, evita el salto de scroll
+  height    Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId])
+  @@index([createdAt])
 }
 
 // Reacciones con emoji: cualquier miembro activo puede reaccionar, sin catálogo fijo

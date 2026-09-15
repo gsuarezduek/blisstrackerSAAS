@@ -335,6 +335,7 @@ export default function GlobalTab({ loaded }) {
           contenido:        'Contenido',
           imagenesSociales: 'Imágenes de RRSS',
           whatsapp:         'WhatsApp',
+          chat:             'Chat',
         }
         const STATUS_COPY = {
           warning:  { color: 'bg-amber-400', text: 'text-amber-600 dark:text-amber-400', msg: '⚠️ Te estás acercando al límite de almacenamiento del workspace.' },

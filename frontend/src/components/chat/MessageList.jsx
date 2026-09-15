@@ -5,8 +5,41 @@ import LoadingSpinner from '../LoadingSpinner'
 import { renderRichText } from '../../utils/richText'
 import MessageReactionPicker from './MessageReactionPicker'
 import { groupReactions } from './reactions'
+import { chatAttachmentUrl } from '../../utils/chatAttachmentUrl'
+import { fmtBytes, iconFor } from '../../lib/fileIcons'
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000
+
+// Adjunto de un mensaje — imagen inline (como el GIF) o chip de documento
+// (mismo patrón que MediaContent en WhatsappMessageList.jsx).
+function AttachmentContent({ attachment }) {
+  const url = chatAttachmentUrl(attachment.id)
+  if (attachment.kind === 'image') {
+    return (
+      <a href={url} target="_blank" rel="noreferrer">
+        <img
+          src={url}
+          alt={attachment.fileName || 'Imagen adjunta'}
+          className="mt-1 rounded-lg max-w-[260px] max-h-[260px] object-contain"
+        />
+      </a>
+    )
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-1 flex items-center gap-2 max-w-[260px] bg-black/5 dark:bg-white/10 rounded-lg px-2.5 py-2 hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
+    >
+      <span className="text-xl flex-shrink-0">{iconFor(attachment.mimeType)}</span>
+      <span className="min-w-0">
+        <span className="block text-xs font-medium truncate">{attachment.fileName || 'Archivo'}</span>
+        {attachment.sizeBytes ? <span className="block text-[10px] opacity-70">{fmtBytes(attachment.sizeBytes)}</span> : null}
+      </span>
+    </a>
+  )
+}
 
 function timeLabel(iso) {
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })
@@ -252,7 +285,7 @@ export default function MessageList({
                       {m.replyTo.systemType ? '⚙️ Mensaje del sistema' : (m.replyTo.author?.name || 'Alguien')}
                     </span>
                     {' — '}
-                    {m.replyTo.gifUrl ? '🖼️ GIF' : (m.replyTo.content || '')}
+                    {m.replyTo.gifUrl ? '🖼️ GIF' : m.replyTo.attachment ? '📎 Archivo' : (m.replyTo.content || '')}
                   </button>
                 )}
                 {editingId === m.id ? (
@@ -285,6 +318,7 @@ export default function MessageList({
                     {m.gifUrl && (
                       <img src={m.gifUrl} alt="GIF" className="mt-1 rounded-lg max-w-[220px] max-h-[220px] object-contain" />
                     )}
+                    {m.attachment && <AttachmentContent attachment={m.attachment} />}
                     {groupReactions(m.reactions, currentUserId).length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
                         {groupReactions(m.reactions, currentUserId).map(g => (

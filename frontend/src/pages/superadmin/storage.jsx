@@ -10,6 +10,7 @@ const STORAGE_CATEGORY_LABELS = {
   contenido:        'Contenido',
   imagenesSociales: 'Imágenes de RRSS',
   whatsapp:         'WhatsApp',
+  chat:             'Chat',
 }
 
 export function SectionStorage() {
@@ -73,6 +74,7 @@ export function SectionStorage() {
     contenido:        byWorkspace.reduce((s, w) => s + (w.contenido || 0), 0),
     imagenesSociales: socialImages.location.r2.bytes,
     whatsapp:         byWorkspace.reduce((s, w) => s + (w.whatsapp || 0), 0),
+    chat:             byWorkspace.reduce((s, w) => s + (w.chat || 0), 0),
   }
   const totalR2Bytes = Object.values(categoryTotals).reduce((s, v) => s + v, 0)
   const maxCategoryBytes = Math.max(...Object.values(categoryTotals), 1)

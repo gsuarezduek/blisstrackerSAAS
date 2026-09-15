@@ -193,6 +193,17 @@ export default function ChatWidget() {
     await api.post(`/chat/channels/${activeChannel.id}/messages`, { content, gifUrl, replyToId })
   }
 
+  // Igual que handleSend, sin update optimista — el mensaje llega vía el socket
+  // `chat:message` (incluye al emisor). Multipart: campo `file` + `content`
+  // (caption opcional) + `replyToId` opcional.
+  async function handleSendMedia(file, caption, replyToId) {
+    const form = new FormData()
+    form.append('file', file)
+    if (caption) form.append('content', caption)
+    if (replyToId) form.append('replyToId', replyToId)
+    await api.post(`/chat/channels/${activeChannel.id}/messages/media`, form)
+  }
+
   async function handleSaveEdit(messageId, content) {
     await api.patch(`/chat/messages/${messageId}`, { content })
   }
@@ -381,6 +392,7 @@ export default function ChatWidget() {
 
                 <MessageInput
                   onSend={handleSend}
+                  onSendMedia={handleSendMedia}
                   members={members}
                   replyingTo={replyingTo}
                   onCancelReply={() => setReplyingTo(null)}

@@ -8,7 +8,9 @@
  *
  * Categorías cubiertas (las que generan costo real de R2/DB y son las más
  * grandes en volumen): Archivos (ProjectFile), Contenido (ContentAsset),
- * Imágenes de RRSS (SocialImage) y WhatsApp (WhatsappMedia + WhatsappBotDocument).
+ * Imágenes de RRSS (SocialImage), WhatsApp (WhatsappMedia + WhatsappBotDocument)
+ * y Chat (ChatAttachment — se auto-acota solo por su retención de 30 días,
+ * ver chatAttachmentRetentionDays/cleanup.service.js).
  *
  * Fuera de alcance a propósito (bajo volumen y/o atribución ambigua a un
  * workspace): Avatar (catálogo compartido + fotos propias, User↔Workspace es
@@ -25,11 +27,11 @@
 const prisma = require('../lib/prisma')
 
 function emptyBreakdown() {
-  return { archivos: 0, contenido: 0, imagenesSociales: 0, whatsapp: 0, total: 0 }
+  return { archivos: 0, contenido: 0, imagenesSociales: 0, whatsapp: 0, chat: 0, total: 0 }
 }
 
 function withTotal(b) {
-  b.total = b.archivos + b.contenido + b.imagenesSociales + b.whatsapp
+  b.total = b.archivos + b.contenido + b.imagenesSociales + b.whatsapp + b.chat
   return b
 }
 
@@ -39,7 +41,7 @@ function withTotal(b) {
  * @returns {Promise<Array<{ workspaceId: number, archivos: number, contenido: number, imagenesSociales: number, whatsapp: number, total: number }>>}
  */
 async function computeAllWorkspacesStorageUsage() {
-  const [archivos, contenido, imagenesSociales, whatsappMedia, whatsappDocs] = await Promise.all([
+  const [archivos, contenido, imagenesSociales, whatsappMedia, whatsappDocs, chatAttachments] = await Promise.all([
     prisma.projectFile.groupBy({
       by: ['workspaceId'],
       where: { type: 'file', status: { in: ['ready', 'pending'] } },
@@ -67,6 +69,10 @@ async function computeAllWorkspacesStorageUsage() {
       by: ['workspaceId'],
       _sum: { sizeBytes: true },
     }),
+    prisma.chatAttachment.groupBy({
+      by: ['workspaceId'],
+      _sum: { sizeBytes: true },
+    }),
   ])
 
   const byWorkspace = new Map()
@@ -80,6 +86,7 @@ async function computeAllWorkspacesStorageUsage() {
   for (const row of imagenesSociales) get(row.workspaceId).imagenesSociales += Number(row.bytes || 0)
   for (const row of whatsappMedia) get(row.workspaceId).whatsapp += row._sum.sizeBytes || 0
   for (const row of whatsappDocs) get(row.workspaceId).whatsapp += row._sum.sizeBytes || 0
+  for (const row of chatAttachments) get(row.workspaceId).chat += row._sum.sizeBytes || 0
 
   return [...byWorkspace.entries()].map(([workspaceId, breakdown]) => ({
     workspaceId,
@@ -94,7 +101,7 @@ async function computeAllWorkspacesStorageUsage() {
  * @param {number} workspaceId
  */
 async function computeWorkspaceStorageUsage(workspaceId) {
-  const [archivos, contenido, imagenesSociales, whatsappMedia, whatsappDocs] = await Promise.all([
+  const [archivos, contenido, imagenesSociales, whatsappMedia, whatsappDocs, chatAttachments] = await Promise.all([
     prisma.projectFile.aggregate({
       where: { workspaceId, type: 'file', status: { in: ['ready', 'pending'] } },
       _sum: { sizeBytes: true },
@@ -116,6 +123,10 @@ async function computeWorkspaceStorageUsage(workspaceId) {
       where: { workspaceId },
       _sum: { sizeBytes: true },
     }),
+    prisma.chatAttachment.aggregate({
+      where: { workspaceId },
+      _sum: { sizeBytes: true },
+    }),
   ])
 
   return withTotal({
@@ -123,6 +134,7 @@ async function computeWorkspaceStorageUsage(workspaceId) {
     contenido: contenido._sum.sizeBytes || 0,
     imagenesSociales: Number(imagenesSociales[0]?.bytes || 0),
     whatsapp: (whatsappMedia._sum.sizeBytes || 0) + (whatsappDocs._sum.sizeBytes || 0),
+    chat: chatAttachments._sum.sizeBytes || 0,
   })
 }
 

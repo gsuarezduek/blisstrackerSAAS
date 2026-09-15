@@ -3,6 +3,11 @@ import { useMentionAutocomplete } from './useMentionAutocomplete'
 import EmojiGifPicker from './EmojiGifPicker'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { connectSocket } from '../../lib/socket'
+import { fmtBytes } from '../../lib/fileIcons'
+
+// Mismo tope que ATTACHMENT_MAX_BYTES en chat.controller.js — chequeo temprano
+// en el cliente, el backend lo vuelve a validar igual.
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 
 // Throttle de emisión de "escribiendo..." — con margen respecto al timeout de 4s del
 // receptor (ChatWidget.jsx onTyping) para que un typer continuo no parpadee.
@@ -13,13 +18,16 @@ const TYPING_EMIT_THROTTLE_MS = 2500
 const EVERYONE_ID = '__everyone__'
 const EVERYONE_ITEM = { id: EVERYONE_ID, name: 'everyone' }
 
-// Input del chat: texto + @menciones + GIF + responder.
-export default function MessageInput({ onSend, members, replyingTo, onCancelReply, channelId }) {
+// Input del chat: texto + @menciones + GIF + adjunto + responder.
+export default function MessageInput({ onSend, onSendMedia, members, replyingTo, onCancelReply, channelId }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
+  const [file, setFile] = useState(null)
+  const [error, setError] = useState('')
   const textareaRef = useRef(null)
   const pickerRef = useRef(null)
+  const fileInputRef = useRef(null)
   const lastTypingEmitRef = useRef(0)
 
   const mentionable = useMemo(() => [EVERYONE_ITEM, ...members], [members])
@@ -47,16 +55,36 @@ export default function MessageInput({ onSend, members, replyingTo, onCancelRepl
   }, [])
 
   async function handleSend() {
-    if (!text.trim() || sending) return
+    if ((!text.trim() && !file) || sending) return
     setSending(true)
+    setError('')
     try {
-      await onSend(text.trim(), null, replyingTo?.id ?? null)
+      if (file) {
+        await onSendMedia(file, text.trim(), replyingTo?.id ?? null)
+        setFile(null)
+      } else {
+        await onSend(text.trim(), null, replyingTo?.id ?? null)
+      }
       setText('')
       onCancelReply?.()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo enviar el mensaje')
     } finally {
       setSending(false)
       textareaRef.current?.focus()
     }
+  }
+
+  function handleFilePick(e) {
+    const picked = e.target.files?.[0]
+    e.target.value = '' // permite re-elegir el mismo archivo después de quitarlo
+    if (!picked) return
+    if (picked.size > ATTACHMENT_MAX_BYTES) {
+      setError(`El archivo supera el máximo permitido (${Math.round(ATTACHMENT_MAX_BYTES / 1024 / 1024)} MB).`)
+      return
+    }
+    setError('')
+    setFile(picked)
   }
 
   async function handleSendGif(url) {
@@ -103,7 +131,7 @@ export default function MessageInput({ onSend, members, replyingTo, onCancelRepl
               Respondiendo a {replyingTo.systemType ? 'un mensaje del sistema' : (replyingTo.author?.name || 'alguien')}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-              {replyingTo.gifUrl ? '🖼️ GIF' : (replyingTo.content || '')}
+              {replyingTo.gifUrl ? '🖼️ GIF' : replyingTo.attachment ? '📎 Archivo' : (replyingTo.content || '')}
             </p>
           </div>
           <button
@@ -116,6 +144,22 @@ export default function MessageInput({ onSend, members, replyingTo, onCancelRepl
           </button>
         </div>
       )}
+      {file && (
+        <div className="flex items-center gap-2 mb-2 pl-2.5 pr-1.5 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-700/60 border-l-2 border-primary-400">
+          <span className="flex-1 min-w-0 text-xs text-gray-600 dark:text-gray-300 truncate">
+            📎 {file.name} <span className="text-gray-400">({fmtBytes(file.size)})</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setFile(null)}
+            title="Quitar archivo"
+            className="p-1 text-gray-400 hover:text-red-500 rounded flex-shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      {error && <p className="text-xs text-red-600 dark:text-red-400 mb-1.5">⚠️ {error}</p>}
       <div className="flex items-end gap-2">
         <div ref={pickerRef} className="relative flex-shrink-0">
           <button
@@ -135,6 +179,17 @@ export default function MessageInput({ onSend, members, replyingTo, onCancelRepl
           )}
         </div>
 
+        <input ref={fileInputRef} type="file" onChange={handleFilePick} className="hidden" />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={sending}
+          className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 transition-colors"
+          title="Adjuntar archivo"
+        >
+          📎
+        </button>
+
         <div className="flex-1 relative">
           <textarea
             ref={textareaRef}
@@ -142,7 +197,7 @@ export default function MessageInput({ onSend, members, replyingTo, onCancelRepl
             value={text}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Escribí un mensaje... Usá @ para mencionar"
+            placeholder={file ? 'Agregá un texto (opcional)…' : 'Escribí un mensaje... Usá @ para mencionar'}
             className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none max-h-28"
           />
           {mentionQuery !== null && mentionMatches.length > 0 && (
@@ -171,7 +226,7 @@ export default function MessageInput({ onSend, members, replyingTo, onCancelRepl
 
         <button
           onClick={handleSend}
-          disabled={sending || !text.trim()}
+          disabled={sending || (!text.trim() && !file)}
           className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:hover:bg-primary-600 text-white transition-colors"
           title="Enviar (Enter)"
         >

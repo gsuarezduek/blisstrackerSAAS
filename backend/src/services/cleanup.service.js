@@ -47,7 +47,8 @@ function hoursAgo(h) {
  * Cuenta cuántas filas se borrarían con los retention actuales (preview).
  * @param {string[]} tables — subset de ['notifications', 'aiTokenLog', 'userLogin',
  *   'dailyInsight', 'emailLog', 'socialImages', 'serpSnapshots', 'followerLogs',
- *   'conversionEvents', 'accessLogs', 'contentAssetsPending', 'contentPiecesTrash']
+ *   'conversionEvents', 'accessLogs', 'contentAssetsPending', 'contentPiecesTrash',
+ *   'projectFilesPending', 'projectFilesTrash', 'chatAttachments']
  */
 async function previewWeeklyCleanup(tables = null) {
   const s = await getSettings(RETENTION_KEYS)
@@ -139,6 +140,15 @@ async function previewWeeklyCleanup(tables = null) {
     const days = await getSetting('projectFileTrashRetentionDays')
     result.projectFilesTrash = await prisma.projectFile.count({
       where: { deletedAt: { lt: daysAgo(days) } },
+    })
+  }
+  if (!tables || tables.includes('chatAttachments')) {
+    // Filtra por createdAt del adjunto (no del mensaje) — no entra en
+    // RETENTION_KEYS porque, a diferencia de esas, hay que limpiar R2 antes de
+    // borrar la fila. Ver chatAttachmentRetentionDays.
+    const days = await getSetting('chatAttachmentRetentionDays')
+    result.chatAttachments = await prisma.chatAttachment.count({
+      where: { createdAt: { lt: daysAgo(days) } },
     })
   }
   return result
@@ -279,6 +289,18 @@ async function runWeeklyCleanup(tables = null) {
     })
     const { count } = await prisma.projectFile.deleteMany({ where: { id: { in: staleRoots.map(f => f.id) } } })
     result.projectFilesTrash = count
+  }
+  if (!tables || tables.includes('chatAttachments')) {
+    const days = await getSetting('chatAttachmentRetentionDays')
+    const stale = await prisma.chatAttachment.findMany({
+      where:  { createdAt: { lt: daysAgo(days) } },
+      select: { id: true, objectKey: true },
+    })
+    // R2 primero, después las filas — el mensaje en sí no se toca, solo
+    // desaparece su adjunto.
+    await objectStorage.deleteObjects(stale.map(a => a.objectKey).filter(Boolean))
+    const { count } = await prisma.chatAttachment.deleteMany({ where: { id: { in: stale.map(a => a.id) } } })
+    result.chatAttachments = count
   }
 
   return result

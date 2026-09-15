@@ -6,8 +6,37 @@ const { emitTo } = require('../lib/socket')
 const { channelLabel, uniqueSlug, materializeChannels } = require('../lib/chatChannels')
 const { MESSAGE_INCLUDE } = require('../lib/chatMessageInclude')
 const { sendPushToUser } = require('../services/pushNotification.service')
+const objectStorage = require('../services/objectStorage.service')
+const { validateImageUpload } = require('../lib/imageType')
+const { getSetting } = require('../lib/platformSettings')
 
 const MESSAGE_PAGE_SIZE = 50
+
+// Adjuntos: un archivo por mensaje (como gifUrl, no es una galería). 10 MB
+// alcanza una foto de celular con margen; documentos NO se validan por magic
+// bytes (mismo criterio que WhatsApp sendMedia — solo imagen se valida en serio).
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+const ATTACHMENT_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+
+function sanitizeAttachmentFileName(name) {
+  if (!name) return null
+  const cleaned = String(name).replace(/[/\\]/g, '_').replace(/[\x00-\x1f]/g, '').trim()
+  return cleaned ? cleaned.slice(0, 200) : null
+}
+
+function resolveAttachmentKind(mimetype) {
+  return mimetype && mimetype.startsWith('image/') ? 'image' : 'document'
+}
+
+async function assertAttachmentQuota(workspaceId, extraBytes) {
+  const limitMb = await getSetting('chatAttachmentMaxMbPerWorkspace')
+  if (!limitMb) return null // 0 = ilimitado
+  const agg = await prisma.chatAttachment.aggregate({ where: { workspaceId }, _sum: { sizeBytes: true } })
+  if ((agg._sum.sizeBytes || 0) + extraBytes > limitMb * 1024 * 1024) {
+    return `Se alcanzó el límite de almacenamiento de adjuntos del chat del workspace (${limitMb} MB).`
+  }
+  return null
+}
 
 // Canal privado (ChatChannel.isPrivate): solo lo ven/usan admin/owner del workspace —
 // mismo criterio que workspaceAdminOnly, pero evaluado por canal en vez de por ruta
@@ -241,6 +270,91 @@ async function searchMessages(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Responder: solo válido si el mensaje citado es del MISMO canal — si no existe
+// (o es de otro canal/se borró justo ahora) se ignora en silencio, no rompe el envío.
+async function resolveReplyTarget(channelId, requestedReplyToId) {
+  if (!requestedReplyToId) return null
+  return prisma.chatMessage.findFirst({
+    where: { id: requestedReplyToId, channelId },
+    select: { id: true, authorId: true },
+  })
+}
+
+// Compartido por sendMessage y sendMessageWithMedia — se llama DESPUÉS de crear
+// el ChatMessage (con MESSAGE_INCLUDE ya resuelto): marca leído para el autor,
+// resuelve @menciones (+ @everyone) y "responder = mención", y hace el broadcast.
+async function finalizeSentMessage({ req, channel, channelId, workspaceId, userId, message, text, replyTarget }) {
+  // El autor no debe ver su propio mensaje como no-leído.
+  await prisma.chatChannelRead.upsert({
+    where: { channelId_userId: { channelId, userId } },
+    create: { workspaceId, channelId, userId, lastReadMessageId: message.id },
+    update: { lastReadMessageId: message.id, lastReadAt: new Date() },
+  })
+
+  // Menciones contra miembros activos del workspace (cualquier canal es abierto a todos).
+  // "@everyone" (con límite de palabra, insensible a mayúsculas) notifica a todo el equipo
+  // en vez de resolver nombres individuales. En un canal privado sólo pueden verlo (y por
+  // ende ser notificados) admin/owner — mencionar a alguien sin acceso sería un callejón
+  // sin salida (notificación a un canal que no puede abrir).
+  let mentionedUserIds = new Set()
+  let isEveryoneMention = false
+  if (text.includes('@')) {
+    const members = await prisma.workspaceMember.findMany({
+      where: { workspaceId, active: true, ...(channel.isPrivate ? { role: { in: ['admin', 'owner'] } } : {}) },
+      select: { user: { select: { id: true, name: true } } },
+    })
+    const allUsers = members.map(m => m.user)
+    isEveryoneMention = /@everyone\b/i.test(text)
+    mentionedUserIds = isEveryoneMention
+      ? new Set(allUsers.filter(u => u.id !== userId).map(u => u.id))
+      : resolveMentions(text, allUsers, userId)
+  }
+
+  if (mentionedUserIds.size > 0) {
+    const notifMessage = isEveryoneMention
+      ? `mencionó a todo el equipo en #${channelLabel(channel)}`
+      : `te mencionó en #${channelLabel(channel)}`
+    await prisma.notification.createMany({
+      data: Array.from(mentionedUserIds).map(uid => ({
+        userId: uid,
+        actorId: userId,
+        workspaceId,
+        channelId,
+        chatMessageId: message.id,
+        type: 'CHAT_MENTION',
+        message: notifMessage,
+      })),
+    })
+    for (const uid of mentionedUserIds) {
+      emitTo(`user:${uid}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
+      sendPushToUser({ userId: uid, workspaceId, type: 'CHAT_MENTION', channelId, message: `${req.user.name} ${notifMessage}` }).catch(() => {})
+    }
+  }
+
+  // Responder equivale a una mención: notifica al autor del mensaje original (si tiene
+  // uno — no a un mensaje de sistema, ni a uno mismo, ni si ya se lo notificó arriba
+  // por @mención, para no duplicar).
+  if (replyTarget?.authorId && replyTarget.authorId !== userId && !mentionedUserIds.has(replyTarget.authorId)) {
+    const replyMessage = `te respondió en #${channelLabel(channel)}`
+    await prisma.notification.create({
+      data: {
+        userId: replyTarget.authorId,
+        actorId: userId,
+        workspaceId,
+        channelId,
+        chatMessageId: message.id,
+        type: 'CHAT_MENTION',
+        message: replyMessage,
+      },
+    })
+    emitTo(`user:${replyTarget.authorId}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
+    sendPushToUser({ userId: replyTarget.authorId, workspaceId, type: 'CHAT_MENTION', channelId, message: `${req.user.name} ${replyMessage}` }).catch(() => {})
+  }
+
+  emitTo(`channel:${channelId}`, 'chat:message', message)
+  emitTo(`workspace:${workspaceId}`, 'chat:unread', { channelId, authorId: userId })
+}
+
 async function sendMessage(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -257,91 +371,83 @@ async function sendMessage(req, res, next) {
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
     if (!assertChannelAccess(req, res, channel)) return
 
-    // Responder: solo válido si el mensaje citado es del MISMO canal — si no existe
-    // (o es de otro canal/se borró justo ahora) se ignora en silencio, no rompe el envío.
     const requestedReplyToId = req.body?.replyToId ? Number(req.body.replyToId) : null
-    let replyTarget = null
-    if (requestedReplyToId) {
-      replyTarget = await prisma.chatMessage.findFirst({
-        where: { id: requestedReplyToId, channelId },
-        select: { id: true, authorId: true },
-      })
-    }
+    const replyTarget = await resolveReplyTarget(channelId, requestedReplyToId)
 
     const message = await prisma.chatMessage.create({
       data: { workspaceId, channelId, authorId: userId, content: text || null, gifUrl, replyToId: replyTarget?.id ?? null },
       include: MESSAGE_INCLUDE,
     })
 
-    // El autor no debe ver su propio mensaje como no-leído.
-    await prisma.chatChannelRead.upsert({
-      where: { channelId_userId: { channelId, userId } },
-      create: { workspaceId, channelId, userId, lastReadMessageId: message.id },
-      update: { lastReadMessageId: message.id, lastReadAt: new Date() },
+    await finalizeSentMessage({ req, channel, channelId, workspaceId, userId, message, text, replyTarget })
+
+    res.status(201).json(message)
+  } catch (err) { next(err) }
+}
+
+// POST /api/chat/channels/:id/messages/media — multipart, campo `file` + `content`
+// (caption opcional) + `replyToId` opcional. Un adjunto por mensaje (como gifUrl,
+// no es una galería). Mismo patrón que WhatsApp (whatsapp/conversations.controller.js
+// sendMedia): magic bytes solo para imagen — un documento se acepta con el
+// mimetype que declaró el navegador, sin validación profunda (mismo criterio de
+// esa ruta) — y dual storage R2/DB vía objectStorage.service.
+async function sendMessageWithMedia(req, res, next) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Adjuntá un archivo' })
+    const workspaceId = req.workspace.id
+    const userId = req.user.userId
+    const channelId = Number(req.params.id)
+    const text = typeof req.body?.content === 'string' ? req.body.content.trim() : ''
+
+    const channel = await prisma.chatChannel.findFirst({
+      where: { id: channelId, workspaceId },
+      include: { project: { select: { name: true } } },
+    })
+    if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
+    if (!assertChannelAccess(req, res, channel)) return
+
+    if (req.file.buffer.length > ATTACHMENT_MAX_BYTES) {
+      return res.status(413).json({ error: `El archivo supera el máximo permitido (${Math.round(ATTACHMENT_MAX_BYTES / 1024 / 1024)} MB).` })
+    }
+
+    const kind = resolveAttachmentKind(req.file.mimetype)
+    let mimeType = req.file.mimetype
+    if (kind === 'image') {
+      const check = validateImageUpload(req.file.buffer, ATTACHMENT_IMAGE_MIMES)
+      if (!check.ok) return res.status(400).json({ error: check.error })
+      mimeType = check.mimeType
+    }
+
+    const quotaError = await assertAttachmentQuota(workspaceId, req.file.buffer.length)
+    if (quotaError) return res.status(413).json({ error: quotaError, code: 'STORAGE_QUOTA_EXCEEDED' })
+
+    const requestedReplyToId = req.body?.replyToId ? Number(req.body.replyToId) : null
+    const replyTarget = await resolveReplyTarget(channelId, requestedReplyToId)
+
+    const stored = objectStorage.isConfigured()
+      ? await (async () => {
+          const { key, size } = await objectStorage.putObject(req.file.buffer, mimeType, { prefix: `chat/${workspaceId}` })
+          return { objectKey: key, fileData: null, sizeBytes: size }
+        })()
+      : { objectKey: null, fileData: req.file.buffer, sizeBytes: req.file.buffer.length }
+
+    const message = await prisma.chatMessage.create({
+      data: {
+        workspaceId, channelId, authorId: userId,
+        content: text || null,
+        replyToId: replyTarget?.id ?? null,
+        attachment: {
+          create: {
+            workspaceId, kind, mimeType,
+            fileName: sanitizeAttachmentFileName(req.file.originalname),
+            ...stored,
+          },
+        },
+      },
+      include: MESSAGE_INCLUDE,
     })
 
-    // Menciones contra miembros activos del workspace (cualquier canal es abierto a todos).
-    // "@everyone" (con límite de palabra, insensible a mayúsculas) notifica a todo el equipo
-    // en vez de resolver nombres individuales. En un canal privado sólo pueden verlo (y por
-    // ende ser notificados) admin/owner — mencionar a alguien sin acceso sería un callejón
-    // sin salida (notificación a un canal que no puede abrir).
-    let mentionedUserIds = new Set()
-    let isEveryoneMention = false
-    if (text.includes('@')) {
-      const members = await prisma.workspaceMember.findMany({
-        where: { workspaceId, active: true, ...(channel.isPrivate ? { role: { in: ['admin', 'owner'] } } : {}) },
-        select: { user: { select: { id: true, name: true } } },
-      })
-      const allUsers = members.map(m => m.user)
-      isEveryoneMention = /@everyone\b/i.test(text)
-      mentionedUserIds = isEveryoneMention
-        ? new Set(allUsers.filter(u => u.id !== userId).map(u => u.id))
-        : resolveMentions(text, allUsers, userId)
-    }
-
-    if (mentionedUserIds.size > 0) {
-      const notifMessage = isEveryoneMention
-        ? `mencionó a todo el equipo en #${channelLabel(channel)}`
-        : `te mencionó en #${channelLabel(channel)}`
-      await prisma.notification.createMany({
-        data: Array.from(mentionedUserIds).map(uid => ({
-          userId: uid,
-          actorId: userId,
-          workspaceId,
-          channelId,
-          chatMessageId: message.id,
-          type: 'CHAT_MENTION',
-          message: notifMessage,
-        })),
-      })
-      for (const uid of mentionedUserIds) {
-        emitTo(`user:${uid}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
-        sendPushToUser({ userId: uid, workspaceId, type: 'CHAT_MENTION', channelId, message: `${req.user.name} ${notifMessage}` }).catch(() => {})
-      }
-    }
-
-    // Responder equivale a una mención: notifica al autor del mensaje original (si tiene
-    // uno — no a un mensaje de sistema, ni a uno mismo, ni si ya se lo notificó arriba
-    // por @mención, para no duplicar).
-    if (replyTarget?.authorId && replyTarget.authorId !== userId && !mentionedUserIds.has(replyTarget.authorId)) {
-      const replyMessage = `te respondió en #${channelLabel(channel)}`
-      await prisma.notification.create({
-        data: {
-          userId: replyTarget.authorId,
-          actorId: userId,
-          workspaceId,
-          channelId,
-          chatMessageId: message.id,
-          type: 'CHAT_MENTION',
-          message: replyMessage,
-        },
-      })
-      emitTo(`user:${replyTarget.authorId}`, 'notification:new', { type: 'CHAT_MENTION', channelId })
-      sendPushToUser({ userId: replyTarget.authorId, workspaceId, type: 'CHAT_MENTION', channelId, message: `${req.user.name} ${replyMessage}` }).catch(() => {})
-    }
-
-    emitTo(`channel:${channelId}`, 'chat:message', message)
-    emitTo(`workspace:${workspaceId}`, 'chat:unread', { channelId, authorId: userId })
+    await finalizeSentMessage({ req, channel, channelId, workspaceId, userId, message, text, replyTarget })
 
     res.status(201).json(message)
   } catch (err) { next(err) }
@@ -376,12 +482,20 @@ async function deleteMessage(req, res, next) {
     const messageId = Number(req.params.messageId)
     const isModerator = req.workspaceMember?.role === 'admin' || req.workspaceMember?.role === 'owner'
 
-    const existing = await prisma.chatMessage.findFirst({ where: { id: messageId, workspaceId } })
+    const existing = await prisma.chatMessage.findFirst({
+      where: { id: messageId, workspaceId },
+      include: { attachment: { select: { objectKey: true } } },
+    })
     if (!existing) return res.status(404).json({ error: 'Mensaje no encontrado' })
     if (existing.authorId !== userId && !isModerator) {
       return res.status(403).json({ error: 'No podés eliminar este mensaje' })
     }
 
+    // R2 primero (best-effort, no bloquea el borrado si falla), después la fila —
+    // el Cascade de Postgres se encarga del ChatAttachment, pero no de sus bytes en R2.
+    if (existing.attachment?.objectKey) {
+      await objectStorage.deleteObject(existing.attachment.objectKey)
+    }
     await prisma.chatMessage.delete({ where: { id: messageId } })
     emitTo(`channel:${existing.channelId}`, 'chat:message:deleted', { id: messageId, channelId: existing.channelId })
     res.json({ ok: true })
@@ -536,6 +650,7 @@ module.exports = {
   listPinned,
   searchMessages,
   sendMessage,
+  sendMessageWithMedia,
   editMessage,
   deleteMessage,
   togglePin,
