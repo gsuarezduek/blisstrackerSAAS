@@ -226,7 +226,7 @@ async function confirmAsset(req, res, next) {
     // romper la confirmación del asset, que ya pasó.
     await mirrorAssetToArchivos({
       workspaceId: ctx.workspaceId, projectId: ctx.projectId, timezone: ctx.timezone,
-      pieceTitle: piece.title, asset: updated, uploaderId: req.user.userId,
+      pieceId: piece.id, pieceTitle: piece.title, asset: updated, uploaderId: req.user.userId,
     })
     res.json(formatAsset(updated))
   } catch (err) { next(err) }

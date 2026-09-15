@@ -42,11 +42,12 @@ async function findOrCreateFolder(projectId, workspaceId, parentId, name, upload
  * @param {number} params.workspaceId
  * @param {number} params.projectId
  * @param {string} params.timezone — del proyecto, para nombrar la carpeta del mes
+ * @param {number} params.pieceId
  * @param {string} params.pieceTitle
  * @param {object} params.asset — ContentAsset ya confirmado ('ready'), kind image|video
  * @param {number} params.uploaderId
  */
-async function mirrorAssetToArchivos({ workspaceId, projectId, timezone, pieceTitle, asset, uploaderId }) {
+async function mirrorAssetToArchivos({ workspaceId, projectId, timezone, pieceId, pieceTitle, asset, uploaderId }) {
   try {
     if (!objectStorage.isConfigured()) return // Archivos no tiene fallback sin R2 — ver ProjectFile
     // El thumbnail de video que genera el propio uploader (ContentAssetUploader.jsx,
@@ -71,7 +72,7 @@ async function mirrorAssetToArchivos({ workspaceId, projectId, timezone, pieceTi
       await objectStorage.copyObject(asset.posterKey, destPosterKey)
     }
 
-    await prisma.projectFile.create({
+    const file = await prisma.projectFile.create({
       data: {
         projectId, workspaceId, parentId: pieceFolderId, type: 'file',
         name: asset.fileName || DEFAULT_NAME_BY_MIME[asset.mimeType] || 'archivo',
@@ -85,6 +86,14 @@ async function mirrorAssetToArchivos({ workspaceId, projectId, timezone, pieceTi
         uploadedById: uploaderId,
         confirmedAt: new Date(),
       },
+    })
+
+    // Vinculado a la pieza igual que un archivo cualquiera que se asocia a
+    // mano desde Archivos (ver ContentPieceFile) — así también aparece en la
+    // sección "Archivos del proyecto vinculados" de la pieza y con el badge
+    // "vinculado a" cuando se lo ve desde Archivos.
+    await prisma.contentPieceFile.create({
+      data: { workspaceId, pieceId, fileId: file.id, linkedById: uploaderId },
     })
   } catch (err) {
     console.warn('[contentFileMirror] No se pudo espejar el asset a Archivos:', err.message)
