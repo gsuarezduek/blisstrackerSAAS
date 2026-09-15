@@ -4,6 +4,12 @@
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/20f1f814-c156-4818-87e4-0a45757d78d9"
+    },
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {

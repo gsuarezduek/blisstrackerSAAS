@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { View, Text, Pressable, Switch, StyleSheet, ActivityIndicator } from 'react-native'
+import { View, Text, Pressable, Switch, StyleSheet, ActivityIndicator, Linking } from 'react-native'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { getBiometricEnabled, setBiometricEnabled, getPushDisabled } from '../api/session'
@@ -142,6 +142,15 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </View>
 
+      <View style={styles.section}>
+        <Pressable style={styles.legalRow} onPress={() => Linking.openURL('https://blisstracker.app/condiciones')}>
+          <Text style={styles.legalText}>Términos de servicio</Text>
+        </Pressable>
+        <Pressable style={styles.legalRow} onPress={() => Linking.openURL('https://blisstracker.app/privacidad')}>
+          <Text style={styles.legalText}>Política de privacidad</Text>
+        </Pressable>
+      </View>
+
       <Pressable style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutText}>Cerrar sesión</Text>
       </Pressable>
@@ -175,6 +184,8 @@ function makeStyles(c) {
     rowLabel: { fontSize: 14, color: c.text, fontWeight: '600' },
     rowHint: { fontSize: 12, color: c.textFaint, marginTop: 2 },
     chevron: { fontSize: 20, color: c.border },
+    legalRow: { paddingVertical: 8 },
+    legalText: { fontSize: 13, color: c.textMuted, fontWeight: '600' },
     logoutButton: { marginTop: 24, alignItems: 'center', paddingVertical: 14 },
     logoutText: { color: c.danger, fontWeight: '700', fontSize: 15 },
   })
