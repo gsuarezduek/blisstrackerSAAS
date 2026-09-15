@@ -2922,6 +2922,21 @@ model PlatformSettingLog {
   @@index([settingKey, createdAt])
 }
 
+// Tendencia histórica del storage total de la plataforma (todos los workspaces
+// sumados) — un snapshot por mes calendario. `breakdown` guarda los mismos
+// bytes por categoría que `workspaceStorage.service.js` (archivos, contenido,
+// imagenesSociales, whatsapp, chat), para poder graficar por categoría además
+// del total. `totalBytes`/valores de `breakdown` son Float (no Int) porque el
+// total de la plataforma fácilmente supera el rango de un INTEGER de 32 bits
+// (~2.1 GB) — mismo criterio que RrhhMetricSnapshot.value.
+model PlatformStorageSnapshot {
+  id         Int      @id @default(autoincrement())
+  month      String   @unique // "YYYY-MM"
+  totalBytes Float
+  breakdown  Json
+  createdAt  DateTime @default(now())
+}
+
 // ─── EVENTOS DE CONVERSIÓN (analytics simple cross-funnel) ───────────────────
 
 model ConversionEvent {

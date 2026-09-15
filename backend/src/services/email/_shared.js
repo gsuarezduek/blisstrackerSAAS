@@ -97,6 +97,7 @@ const PLATFORM_EVENT_TOGGLE = {
   deletionRequest: 'notifyOnDeletionRequest',
   trialExpired:    'notifyOnTrialExpired',
   scrapeError:     'notifyOnScrapeError',
+  storageThreshold: 'notifyOnStorageThreshold',
 }
 
 async function logEmail({ workspaceId, to, subject, type, status, errorMsg }) {

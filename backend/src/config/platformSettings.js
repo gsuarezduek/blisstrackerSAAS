@@ -55,6 +55,15 @@ const PLATFORM_SETTINGS = [
     help:    'Aplica solo a workspaces nuevos. Los existentes mantienen su storageLimitMb propio (editable por workspace desde SuperAdmin → Workspaces). 0 = ilimitado. Es un límite informativo/de alerta (ver storageWarningPct/storageCriticalPct) — no bloquea subidas, eso lo siguen haciendo contentStorageMaxMbPerWorkspace y projectFilesMaxMbPerWorkspace.',
   },
   {
+    key:     'r2CostPerGbMonth',
+    type:    'float',
+    default: 0.015,
+    min:     0,
+    group:   'commercial',
+    label:   'Costo Cloudflare R2 (USD / GB / mes)',
+    help:    'Precio actual de Cloudflare R2 para almacenamiento (Standard). Se usa para mostrar un costo estimado del object storage en SuperAdmin → Almacenamiento — es una aproximación (no incluye operaciones Clase A/B, que R2 cobra aparte pero son marginales frente al costo de storage). Actualizá cuando Cloudflare cambie sus tarifas.',
+  },
+  {
     key:     'pricingTiers',
     type:    'pricingTiers',
     default: [
@@ -530,6 +539,23 @@ const PLATFORM_SETTINGS = [
     group:   'platform',
     label:   'Avisar: error de scraping de RRSS (Apify)',
     help:    'Enviar un aviso cuando el scraping de redes sociales (Apify) falla — por ejemplo si la cuenta de Apify se queda sin crédito, el token es inválido o el proveedor responde con error. Limitado a un aviso cada 6 horas por tipo de error para no saturar la casilla durante el cron mensual.',
+  },
+  {
+    key:     'platformStorageAlertThresholdGb',
+    type:    'integer',
+    default: 100,
+    min:     1,
+    group:   'platform',
+    label:   'Umbral de aviso de almacenamiento total (GB)',
+    help:    'Si el total de la plataforma en object storage (R2, sumando todos los workspaces) llega o supera este valor, se envía el aviso mensual de abajo. Se evalúa una vez por mes, dentro de la cadena mensual de snapshots (1° del mes).',
+  },
+  {
+    key:     'notifyOnStorageThreshold',
+    type:    'boolean',
+    default: true,
+    group:   'platform',
+    label:   'Avisar: almacenamiento total sobre el umbral',
+    help:    'Enviar un aviso mensual a la casilla de administración cuando el total de object storage (R2) de la plataforma llega o supera platformStorageAlertThresholdGb. Se re-evalúa cada mes mientras siga por encima (no es un aviso único).',
   },
 ]
 

@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ConfirmModal from '../../components/ConfirmModal'
-import { fmtBytes, StatCard } from './shared'
+import { fmtBytes, StatCard, STATUS_LABELS } from './shared'
 import { TokenBar } from './aiTokens'
+import { MetricChart } from './metrics'
 
 const STORAGE_CATEGORY_LABELS = {
   archivos:         'Archivos (Nube)',
@@ -11,6 +12,16 @@ const STORAGE_CATEGORY_LABELS = {
   imagenesSociales: 'Imágenes de RRSS',
   whatsapp:         'WhatsApp',
   chat:             'Chat',
+}
+
+// Workspaces que ya no son un cliente activo pero cuyo storage sigue
+// facturando en R2 — candidatos a limpiar/exportar+borrar.
+const INACTIVE_STATUSES = ['past_due', 'suspended', 'cancelled']
+
+function fmtCost(usd) {
+  if (usd < 0.01) return `$${usd.toFixed(4)}`
+  if (usd < 1)    return `$${usd.toFixed(3)}`
+  return `$${usd.toFixed(2)}`
 }
 
 export function SectionStorage() {
@@ -21,6 +32,7 @@ export function SectionStorage() {
   const [byWorkspace, setByWorkspace]         = useState(null)
   const [loadingByWorkspace, setLoadingByWorkspace] = useState(true)
   const [expanded, setExpanded] = useState(null)
+  const [history, setHistory] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -38,7 +50,14 @@ export function SectionStorage() {
     } finally { setLoadingByWorkspace(false) }
   }
 
-  useEffect(() => { load(); loadByWorkspace() }, [])
+  async function loadHistory() {
+    try {
+      const { data } = await api.get('/superadmin/storage/history?months=12')
+      setHistory(data.snapshots)
+    } catch { setHistory([]) }
+  }
+
+  useEffect(() => { load(); loadByWorkspace(); loadHistory() }, [])
 
   async function cleanup() {
     setRunning(true)
@@ -61,23 +80,14 @@ export function SectionStorage() {
   const ready = !loading && data && !loadingByWorkspace && byWorkspace
   if (!ready) return <LoadingSpinner />
 
-  const { database, socialImages } = data
+  const { database, socialImages, r2 } = data
   const maxTableBytes = database.tables[0]?.bytes || 1
+  const maxCategoryBytes = Math.max(...Object.values(r2.breakdown), 1)
 
-  // Totales globales en R2: Archivos/Contenido/WhatsApp viven 100% en R2 en
-  // cualquier deploy con las envs R2_* configuradas (ProjectFile ni siquiera
-  // tiene fallback a DB). Imágenes de RRSS es el único caso con legado real en
-  // Postgres (`socialImages.location`, ya calculado aparte) — se usa solo su
-  // porción `r2`, no `socialImages.inUse`/`orphan` que mezclan R2 + legacy.
-  const categoryTotals = {
-    archivos:         byWorkspace.reduce((s, w) => s + (w.archivos || 0), 0),
-    contenido:        byWorkspace.reduce((s, w) => s + (w.contenido || 0), 0),
-    imagenesSociales: socialImages.location.r2.bytes,
-    whatsapp:         byWorkspace.reduce((s, w) => s + (w.whatsapp || 0), 0),
-    chat:             byWorkspace.reduce((s, w) => s + (w.chat || 0), 0),
-  }
-  const totalR2Bytes = Object.values(categoryTotals).reduce((s, v) => s + v, 0)
-  const maxCategoryBytes = Math.max(...Object.values(categoryTotals), 1)
+  const withUsage = byWorkspace.filter(w => w.total > 0)
+  const inactiveWithUsage = withUsage
+    .filter(w => INACTIVE_STATUSES.includes(w.status))
+    .sort((a, b) => b.total - a.total)
 
   return (
     <div className="space-y-8">
@@ -93,18 +103,63 @@ export function SectionStorage() {
         <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">☁️ Object Storage (R2)</h3>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-          <p className="text-xs text-gray-500 dark:text-gray-400">Total en R2</p>
-          <p className="text-3xl font-bold text-primary-600 dark:text-primary-400 mt-1">{fmtBytes(totalR2Bytes)}</p>
+          <div className="flex items-baseline justify-between flex-wrap gap-2">
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Total en R2</p>
+              <p className="text-3xl font-bold text-primary-600 dark:text-primary-400 mt-1">{fmtBytes(r2.totalBytes)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Costo estimado</p>
+              <p className="text-xl font-bold text-gray-700 dark:text-gray-300">{fmtCost(r2.estimatedCostUsd)}<span className="text-xs font-normal text-gray-400">/mes</span></p>
+            </div>
+          </div>
           <div className="mt-4 space-y-2.5">
             {Object.entries(STORAGE_CATEGORY_LABELS).map(([key, label]) => (
               <div key={key} className="flex items-center gap-3">
                 <span className="w-36 shrink-0 text-xs text-gray-600 dark:text-gray-400">{label}</span>
-                <TokenBar value={categoryTotals[key]} max={maxCategoryBytes} />
-                <span className="w-24 shrink-0 text-right text-xs font-medium text-gray-700 dark:text-gray-300">{fmtBytes(categoryTotals[key])}</span>
+                <TokenBar value={r2.breakdown[key] || 0} max={maxCategoryBytes} />
+                <span className="w-24 shrink-0 text-right text-xs font-medium text-gray-700 dark:text-gray-300">{fmtBytes(r2.breakdown[key] || 0)}</span>
               </div>
             ))}
           </div>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-3">
+            Costo estimado según el precio de R2 configurado en Configuración → Comercial — no incluye operaciones Clase A/B de R2, marginales frente al costo de storage.
+          </p>
         </div>
+
+        {/* Tendencia mensual */}
+        {history && history.length >= 2 && (
+          <MetricChart
+            title="Tendencia de R2 (12 meses)"
+            values={history.map(h => h.totalBytes)}
+            axis={history.map(h => h.month)}
+            fmt={fmtBytes}
+          />
+        )}
+
+        {/* Workspaces inactivos que siguen ocupando espacio — candidatos a limpiar */}
+        {inactiveWithUsage.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-amber-200 dark:border-amber-900/50 p-5">
+            <h4 className="font-semibold text-gray-900 dark:text-white text-sm">⚠️ Workspaces inactivos con storage</h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-3">
+              Ya no son un cliente activo (vencido/suspendido/cancelado) pero su storage sigue costando en R2 — candidatos a exportar y borrar.
+            </p>
+            <div className="space-y-1.5">
+              {inactiveWithUsage.map(w => (
+                <div key={w.workspaceId} className="flex items-center justify-between gap-3 text-sm">
+                  <div className="min-w-0 flex items-center gap-2">
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_LABELS[w.status]?.color}`}>{STATUS_LABELS[w.status]?.label ?? w.status}</span>
+                    <span className="truncate text-gray-700 dark:text-gray-300">{w.name}</span>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className="font-medium text-gray-800 dark:text-gray-200">{fmtBytes(w.total)}</span>
+                    <span className="text-amber-600 dark:text-amber-400 ml-2">{fmtCost(w.estimatedCostUsd)}/mes</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Huérfanas: plata recuperable en R2, no solo "prolijidad" de la DB */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
@@ -174,8 +229,7 @@ export function SectionStorage() {
 
       {/* ── Ranking por workspace ── */}
       {byWorkspace.length > 0 && (() => {
-        const withUsage = byWorkspace.filter(w => w.total > 0)
-        const maxTotal  = withUsage[0]?.total || 1
+        const maxTotal = withUsage[0]?.total || 1
         return (
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">📊 Ranking por workspace</h3>
@@ -191,6 +245,7 @@ export function SectionStorage() {
                   {withUsage.map((w, idx) => {
                     const limitBytes = w.storageLimitMb > 0 ? w.storageLimitMb * 1024 * 1024 : null
                     const pct = limitBytes ? Math.round((w.total / limitBytes) * 100) : null
+                    const inactive = INACTIVE_STATUSES.includes(w.status)
                     return (
                       <div key={w.workspaceId}>
                         <button
@@ -199,14 +254,16 @@ export function SectionStorage() {
                         >
                           <span className="w-5 flex-shrink-0 text-xs font-bold text-gray-300 dark:text-gray-600 tabular-nums">{idx + 1}</span>
                           <div className="w-36 flex-shrink-0 min-w-0">
-                            <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{w.name}</p>
+                            <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
+                              {w.name} {inactive && <span title={STATUS_LABELS[w.status]?.label}>⚠️</span>}
+                            </p>
                             <p className="text-[10px] text-gray-400 dark:text-gray-500">{w.slug}</p>
                           </div>
                           <TokenBar value={w.total} max={maxTotal} />
                           <div className="text-right flex-shrink-0 w-32">
                             <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fmtBytes(w.total)}</p>
                             <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                              {pct != null ? `${pct}% de ${fmtBytes(limitBytes)}` : 'ilimitado'}
+                              {pct != null ? `${pct}% de ${fmtBytes(limitBytes)}` : 'ilimitado'} · {fmtCost(w.estimatedCostUsd)}/mes
                             </p>
                           </div>
                           <span className={`flex-shrink-0 text-gray-400 text-xs transition-transform duration-200 ${expanded === w.workspaceId ? 'rotate-180' : ''}`}>▾</span>

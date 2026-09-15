@@ -90,6 +90,7 @@ router.post('/settings/cleanup-now',    ps.runCleanup)
 // Almacenamiento (tamaño de la DB + limpieza de imágenes sociales huérfanas)
 router.get('/storage',                       st.getStorage)
 router.get('/storage/by-workspace',          st.getStorageByWorkspace)
+router.get('/storage/history',               st.getStorageHistoryHandler)
 router.post('/storage/cleanup-orphan-images', st.cleanupOrphanImagesHandler)
 
 // Anuncios

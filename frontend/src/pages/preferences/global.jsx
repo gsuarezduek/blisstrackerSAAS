@@ -400,12 +400,19 @@ export default function GlobalTab({ loaded }) {
                           className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
                         >
                           <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate pr-3">{p.projectName}</span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">{fmtBytes(p.totalBytes)}</span>
+                          <span className="text-xs shrink-0 text-right">
+                            <span className="text-gray-500 dark:text-gray-400">{fmtBytes(p.totalBytes)}</span>
+                            {p.trashBytes > 0 && (
+                              <span className="block text-[10px] text-amber-600 dark:text-amber-400">
+                                {fmtBytes(p.trashBytes)} en papelera
+                              </span>
+                            )}
+                          </span>
                         </Link>
                       ))}
                     </div>
                     <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">
-                      Solo incluye Archivos y Contenido (lo atribuible a un proyecto puntual) — imágenes de RRSS y WhatsApp no se pueden asociar a un proyecto específico. Incluye archivos en la papelera todavía no purgados.
+                      Solo incluye Archivos y Contenido (lo atribuible a un proyecto puntual) — imágenes de RRSS y WhatsApp no se pueden asociar a un proyecto específico. Lo marcado "en papelera" es basura recuperable: abrí el proyecto → Nube → 🗑️ Papelera para verla y, si sos admin, eliminarla ya mismo (si no, se borra sola a los 30 días).
                     </p>
                   </div>
                 )}
