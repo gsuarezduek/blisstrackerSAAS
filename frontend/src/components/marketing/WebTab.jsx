@@ -933,6 +933,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
   const [errorStatus,   setErrorStatus]   = useState(null)
   const [error,         setError]         = useState('')
   const [reconnecting,  setReconnecting]  = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
   const [retryKey,      setRetryKey]      = useState(0)
 
   const allObjectives = useObjectiveProgress(projectId)
@@ -992,6 +993,22 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
     }
   }
 
+  async function handleDisconnectGoogle() {
+    if (!projectId || disconnecting) return
+    if (!window.confirm('¿Desconectar Google Analytics de este proyecto? Vas a tener que volver a autorizar el acceso.')) return
+    setDisconnecting(true)
+    try {
+      await api.delete(`/marketing/projects/${projectId}/integrations/google_analytics`)
+      setError('')
+      setAnalytics(null)
+      setErrorStatus('no_integration')
+    } catch (err) {
+      alert(err.response?.data?.error || 'No se pudo desconectar la integración')
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
   function handlePresetChange(val) {
     setRangePreset(val)
     if (val !== 'custom') setAppliedRange({ preset: val, start: '', end: '' })
@@ -1027,6 +1044,7 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
         if (status === 404)                                              setErrorStatus('no_integration')
         else if (body?.status === 'no_property')                        setErrorStatus('no_property')
         else if (body?.code === 'TOKEN_EXPIRED' || body?.status === 'revoked' || body?.status === 'error') setErrorStatus('revoked')
+        else if (body?.code === 'FETCH_ERROR')                          setErrorStatus('fetch_error')
         else setError(body?.error || 'Error al cargar datos')
       })
       .finally(() => setLoading(false))
@@ -1310,15 +1328,59 @@ export default function WebTab({ subtab = 'analytics', projectId, projects, onSe
           <p className="text-xs text-red-500 dark:text-red-400 mb-4">
             Volvé a autorizar para restaurar el acceso a Analytics y Search Console.
           </p>
-          <button
-            onClick={handleReconnectGoogle}
-            disabled={reconnecting}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
-          >
-            {reconnecting ? (
-              <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Esperando autorización…</>
-            ) : '🔄 Reconectar con Google'}
-          </button>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={handleReconnectGoogle}
+              disabled={reconnecting || disconnecting}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+            >
+              {reconnecting ? (
+                <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Esperando autorización…</>
+              ) : '🔄 Reconectar con Google'}
+            </button>
+            <button
+              onClick={handleDisconnectGoogle}
+              disabled={reconnecting || disconnecting}
+              className="text-xs text-red-500 dark:text-red-400 hover:underline disabled:opacity-50"
+            >
+              {disconnecting ? 'Desconectando…' : 'Desconectar'}
+            </button>
+          </div>
+        </div>
+      )}
+      {subtab === 'analytics' && errorStatus === 'fetch_error' && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-2xl p-8 text-center">
+          <div className="text-3xl mb-3">⚠️</div>
+          <p className="text-sm font-semibold text-red-700 dark:text-red-300 mb-1">
+            No se pudo cargar Analytics
+          </p>
+          <p className="text-xs text-red-500 dark:text-red-400 mb-4">
+            Puede ser algo puntual con Google, o que la conexión necesite reautorizarse.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => setRetryKey(k => k + 1)}
+              className="inline-flex items-center gap-2 px-4 py-2 border border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-700 dark:text-red-300 text-sm font-medium rounded-xl transition-colors"
+            >
+              Reintentar
+            </button>
+            <button
+              onClick={handleReconnectGoogle}
+              disabled={reconnecting || disconnecting}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+            >
+              {reconnecting ? (
+                <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Esperando autorización…</>
+              ) : '🔄 Reconectar con Google'}
+            </button>
+            <button
+              onClick={handleDisconnectGoogle}
+              disabled={reconnecting || disconnecting}
+              className="text-xs text-red-500 dark:text-red-400 hover:underline disabled:opacity-50"
+            >
+              {disconnecting ? 'Desconectando…' : 'Desconectar'}
+            </button>
+          </div>
         </div>
       )}
       {subtab === 'analytics' && error && (

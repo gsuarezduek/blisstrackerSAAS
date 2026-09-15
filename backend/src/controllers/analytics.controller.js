@@ -80,7 +80,12 @@ async function getAnalyticsData(req, res, next) {
         code:  'TOKEN_EXPIRED',
       })
     }
-    next(err)
+    // Cualquier otro error al pedir datos a Google: no lo dejamos caer en un 500
+    // genérico — el usuario puede reintentar o reconectar sin salir de esta vista.
+    return res.status(502).json({
+      error: 'No se pudo obtener los datos de Google Analytics. Probá de nuevo o reconectá la integración.',
+      code:  'FETCH_ERROR',
+    })
   }
 }
 

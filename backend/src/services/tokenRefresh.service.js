@@ -19,7 +19,13 @@ async function getValidAccessToken(integration) {
   }
 
   if (!integration.refreshToken) {
-    throw new Error('No hay refresh token disponible — el usuario debe reconectar la integración')
+    await prisma.projectIntegration.update({
+      where: { id: integration.id },
+      data:  { status: 'expired' },
+    }).catch(err => console.error('[TokenRefresh] Error al marcar integración como expirada:', err.message))
+    const e = new Error('No hay refresh token disponible — el usuario debe reconectar la integración')
+    e.code = 'TOKEN_EXPIRED'
+    throw e
   }
 
   const client = new OAuth2Client(
