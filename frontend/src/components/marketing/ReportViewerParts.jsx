@@ -146,8 +146,11 @@ export function BarChart({ items, maxVal, color = '#f97316' }) {
   )
 }
 
-// Línea SVG — soporta una o dos series
-export function LineChart({ points, color = '#f97316', height = 60, showLabels = true, secondPoints, secondColor = '#3b82f6' }) {
+// Línea SVG — soporta una o dos series. Eje Y (gridlines + referencias) y valor
+// del último punto siempre visibles (no dependen de hover, así también se ven
+// en el PDF impreso); el <title> por punto suma un tooltip nativo para la vista
+// interactiva.
+export function LineChart({ points, color = '#f97316', height = 60, showLabels = true, secondPoints, secondColor = '#3b82f6', formatY = fmt }) {
   if (!points || points.length < 2) return null
 
   const values1   = points.map(p => p.value)
@@ -158,12 +161,19 @@ export function LineChart({ points, color = '#f97316', height = 60, showLabels =
   const range     = max - min || 1
   const w = 300
   const h = height
-  const pad = 12
+  const padTop = 14
+  const padBottom = 8
+  const padLeft = 30
+  const padRight = 8
+
+  function yFor(value) {
+    return h - padBottom - ((value - min) / range) * (h - padTop - padBottom)
+  }
 
   function coordsFor(pts) {
     return pts.map((p, i) => ({
-      x: pad + (i / (pts.length - 1)) * (w - pad * 2),
-      y: h - pad - ((p.value - min) / range) * (h - pad * 2),
+      x: padLeft + (i / (pts.length - 1)) * (w - padLeft - padRight),
+      y: yFor(p.value),
       ...p,
     }))
   }
@@ -172,11 +182,19 @@ export function LineChart({ points, color = '#f97316', height = 60, showLabels =
     return coords.map((c, i) => `${i === 0 ? 'M' : 'L'} ${c.x} ${c.y}`).join(' ')
   }
   function areaD(coords) {
-    return `${pathD(coords)} L ${coords[coords.length - 1].x} ${h - pad} L ${coords[0].x} ${h - pad} Z`
+    return `${pathD(coords)} L ${coords[coords.length - 1].x} ${h - padBottom} L ${coords[0].x} ${h - padBottom} Z`
   }
 
   const coords1 = coordsFor(points)
   const coords2 = secondPoints ? coordsFor(secondPoints) : null
+
+  // Eje Y: hasta 3 referencias (máximo, medio, mínimo), sin duplicados si el rango es chico
+  const gridValues = [...new Set([max, (max + min) / 2, min].map(v => Math.round(v * 100) / 100))]
+
+  const last1 = coords1[coords1.length - 1]
+  const last2 = coords2 ? coords2[coords2.length - 1] : null
+  const label1Y = Math.max(last1.y - 8, padTop - 4)
+  const label2Y = last2 ? Math.min(last2.y + 14, h - 2) : null
 
   return (
     <div>
@@ -193,14 +211,46 @@ export function LineChart({ points, color = '#f97316', height = 60, showLabels =
             </linearGradient>
           )}
         </defs>
+
+        {gridValues.map((v, i) => {
+          const y = yFor(v)
+          return (
+            <g key={i}>
+              <line
+                x1={padLeft} y1={y} x2={w - padRight} y2={y}
+                stroke="currentColor" strokeWidth="1" strokeDasharray="2 3"
+                className="text-gray-200 dark:text-gray-700"
+              />
+              <text x={padLeft - 4} y={y} textAnchor="end" dominantBaseline="middle" fontSize="9" className="fill-gray-400 dark:fill-gray-500">
+                {formatY(v)}
+              </text>
+            </g>
+          )
+        })}
+
         <path d={areaD(coords1)} fill="url(#cg1)" />
         <path d={pathD(coords1)} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-        {coords1.map((c, i) => <circle key={i} cx={c.x} cy={c.y} r="3" fill={color} />)}
+        {coords1.map((c, i) => (
+          <circle key={i} cx={c.x} cy={c.y} r="3" fill={color}>
+            <title>{`${c.label}: ${formatY(c.value)}`}</title>
+          </circle>
+        ))}
+        <text x={last1.x} y={label1Y} textAnchor="end" fontSize="10" fontWeight="700" fill={color}>
+          {formatY(last1.value)}
+        </text>
+
         {coords2 && (
           <>
             <path d={areaD(coords2)} fill="url(#cg2)" />
             <path d={pathD(coords2)} fill="none" stroke={secondColor} strokeWidth="2" strokeLinejoin="round" />
-            {coords2.map((c, i) => <circle key={i} cx={c.x} cy={c.y} r="3" fill={secondColor} />)}
+            {coords2.map((c, i) => (
+              <circle key={i} cx={c.x} cy={c.y} r="3" fill={secondColor}>
+                <title>{`${c.label}: ${formatY(c.value)}`}</title>
+              </circle>
+            ))}
+            <text x={last2.x} y={label2Y} textAnchor="end" fontSize="10" fontWeight="700" fill={secondColor}>
+              {formatY(last2.value)}
+            </text>
           </>
         )}
       </svg>
