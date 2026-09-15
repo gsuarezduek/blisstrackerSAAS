@@ -31,7 +31,11 @@ export default function AppAlertHost() {
         <View style={styles.card}>
           {config.title ? <Text style={styles.title}>{config.title}</Text> : null}
           {config.message ? <Text style={styles.message}>{config.message}</Text> : null}
-          <View style={[styles.buttonRow, config.buttons.length === 1 && styles.buttonRowSingle]}>
+          <View style={[
+            styles.buttonRow,
+            config.buttons.length === 1 && styles.buttonRowSingle,
+            config.buttons.length >= 3 && styles.buttonColumn,
+          ]}>
             {config.buttons.map((b, i) => (
               <Pressable
                 key={i}
@@ -40,6 +44,7 @@ export default function AppAlertHost() {
                   b.style === 'cancel' && styles.buttonCancel,
                   b.style === 'destructive' && styles.buttonDestructive,
                   config.buttons.length === 1 && styles.buttonFull,
+                  config.buttons.length >= 3 && styles.buttonInColumn,
                 ]}
                 onPress={() => press(b)}
               >
@@ -69,8 +74,10 @@ function makeStyles(c) {
     message: { fontSize: 14, color: c.textSecondary, lineHeight: 20, textAlign: 'center', marginBottom: 20 },
     buttonRow: { flexDirection: 'row', gap: 10 },
     buttonRowSingle: { justifyContent: 'center' },
+    buttonColumn: { flexDirection: 'column' },
     button: { flex: 1, backgroundColor: c.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
     buttonFull: { flex: 1 },
+    buttonInColumn: { flex: 0, width: '100%' },
     buttonCancel: { backgroundColor: c.surfaceAlt },
     buttonDestructive: { backgroundColor: c.danger },
     buttonText: { color: c.white, fontWeight: '700', fontSize: 15 },

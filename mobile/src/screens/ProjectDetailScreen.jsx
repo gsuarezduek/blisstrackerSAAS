@@ -72,6 +72,13 @@ export default function ProjectDetailScreen({ route, navigation }) {
     )))
   }
 
+  // scope='series' (recurrenceId != null) saca de la lista local todas las
+  // instancias de la serie, no solo la tocada — mismo criterio que la web.
+  function handleDelete(taskId, recurrenceId) {
+    const match = recurrenceId ? t => t.recurrenceId === recurrenceId : t => t.id === taskId
+    setTasks(prev => prev.filter(t => !match(t)))
+  }
+
   const byUser = useMemo(() => {
     const map = new Map()
     for (const t of tasks) {
@@ -191,7 +198,7 @@ export default function ProjectDetailScreen({ route, navigation }) {
               <View key={group.userName} style={{ marginBottom: 12 }}>
                 <Text style={styles.userGroupTitle}>{group.userName}</Text>
                 {group.tasks.map(t => (
-                  <TaskCard key={t.id} task={t} hasActiveTask={hasActiveTask} onUpdate={handleUpdate} onOpenComments={setCommentTask} />
+                  <TaskCard key={t.id} task={t} hasActiveTask={hasActiveTask} onUpdate={handleUpdate} onOpenComments={setCommentTask} onDelete={handleDelete} />
                 ))}
               </View>
             ))

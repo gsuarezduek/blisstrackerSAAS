@@ -162,6 +162,14 @@ export default function DashboardScreen({ navigation }) {
     setTasks(prev => [task, ...prev])
   }
 
+  // scope='series' (recurrenceId != null) saca de ambas listas locales todas
+  // las instancias de la serie, no solo la tocada — mismo criterio que la web.
+  function handleDelete(taskId, recurrenceId) {
+    const match = recurrenceId ? t => t.recurrenceId === recurrenceId : t => t.id === taskId
+    setTasks(prev => prev.filter(t => !match(t)))
+    setFuture(prev => prev.filter(t => !match(t)))
+  }
+
   function handleCommentAdded(taskId, newCount) {
     setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, _count: { ...t._count, comments: newCount } } : t)))
   }
@@ -260,6 +268,7 @@ export default function DashboardScreen({ navigation }) {
               hasActiveTask={hasActiveTask}
               onUpdate={handleUpdate}
               onOpenComments={setCommentTask}
+              onDelete={handleDelete}
               backlog={section.key === 'backlog'}
               future={section.key === 'future'}
               onBringToToday={handleBringToToday}

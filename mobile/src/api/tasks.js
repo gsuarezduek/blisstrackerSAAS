@@ -19,3 +19,8 @@ export const moveToBacklog = id => api.patch(`/tasks/${id}/move-to-backlog`).the
 
 export const blockTask = (id, reason) =>
   api.patch(`/tasks/${id}/block`, { reason }).then(r => r.data)
+
+// scope='series' borra la plantilla recurrente + instancias no completadas
+// (las completadas conservan el historial, ver CLAUDE.md → "Tareas futuras y recurrentes").
+export const deleteTask = (id, scope) =>
+  api.delete(`/tasks/${id}${scope === 'series' ? '?scope=series' : ''}`)

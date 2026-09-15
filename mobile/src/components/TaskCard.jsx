@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { View, Text, Pressable, TextInput, StyleSheet, ActivityIndicator } from 'react-native'
 import {
   startTask, pauseTask, resumeTask, completeTask, blockTask, unblockTask, starTask,
-  addToToday, bringToToday, moveToBacklog,
+  addToToday, bringToToday, moveToBacklog, deleteTask,
 } from '../api/tasks'
 import { showAlert } from '../lib/alert'
 import { useTheme } from '../context/ThemeContext'
@@ -12,7 +12,7 @@ import { useTheme } from '../context/ThemeContext'
 // botón para "subir de prioridad" ("Agregar a hoy"/"Traer a hoy"). Ver
 // mobile/CLAUDE.md → "Backlog y tareas futuras".
 export default function TaskCard({
-  task, hasActiveTask, onUpdate, onOpenComments,
+  task, hasActiveTask, onUpdate, onOpenComments, onDelete,
   backlog = false, future = false, onBringToToday, onMoveToBacklog,
 }) {
   const { colors } = useTheme()
@@ -94,6 +94,32 @@ export default function TaskCard({
     }
   }
 
+  async function runDelete(scope) {
+    setLoading(true)
+    try {
+      await deleteTask(task.id, scope)
+      onDelete(task.id, scope === 'series' ? task.recurrenceId : null)
+    } catch (err) {
+      showAlert('No se pudo eliminar', err.response?.data?.error || 'Probá de nuevo.')
+      setLoading(false)
+    }
+  }
+
+  function handleDeletePress() {
+    if (task.recurrenceId) {
+      showAlert('Eliminar tarea recurrente', `"${task.description}" — ¿qué querés eliminar?`, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Solo esta', style: 'destructive', onPress: () => runDelete('one') },
+        { text: 'Esta y las siguientes', style: 'destructive', onPress: () => runDelete('series') },
+      ])
+    } else {
+      showAlert('Eliminar tarea', `"${task.description}" — esta acción no se puede deshacer.`, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => runDelete('one') },
+      ])
+    }
+  }
+
   const status = STATUS_STYLE[task.status]
   const canStart = task.status === 'PENDING' && !hasActiveTask
   const canResume = task.status === 'PAUSED' && !hasActiveTask
@@ -104,9 +130,15 @@ export default function TaskCard({
     ? `${task.scheduledFor.slice(8, 10)}/${task.scheduledFor.slice(5, 7)}`
     : null
   const canMoveToBacklog = !backlog && !future && task.status === 'PENDING'
+  const canDelete = onDelete && (task.status === 'PENDING' || task.status === 'PAUSED')
 
   return (
     <View style={[styles.card, task.status === 'BLOCKED' && styles.cardBlocked, isCompleted && styles.cardCompleted]}>
+      {canDelete && (
+        <Pressable style={styles.deleteButton} onPress={handleDeletePress} disabled={loading} hitSlop={8}>
+          <Text style={styles.deleteButtonText}>✕</Text>
+        </Pressable>
+      )}
       <View style={styles.headerRow}>
         {!future && !isCompleted && (
           <Pressable onPress={() => run(() => starTask(task.id))} hitSlop={8} disabled={loading}>
@@ -244,8 +276,14 @@ function makeStyles(c) {
   return StyleSheet.create({
     card: {
       backgroundColor: c.surface, borderRadius: 14, borderWidth: 1.5, borderColor: c.border,
-      padding: 14, marginBottom: 10,
+      padding: 14, marginBottom: 10, position: 'relative',
     },
+    deleteButton: {
+      position: 'absolute', top: -8, right: -8, width: 22, height: 22, borderRadius: 11, zIndex: 1,
+      backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    deleteButtonText: { fontSize: 12, color: c.textFaint, fontWeight: '700' },
     cardBlocked: { borderColor: c.dangerBorder },
     cardCompleted: { opacity: 0.6 },
     headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },

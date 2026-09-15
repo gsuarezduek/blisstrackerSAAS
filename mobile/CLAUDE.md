@@ -838,6 +838,21 @@ Verificado con `npx expo export --platform android` (1102 módulos, sin errores)
 
 Verificado con `npx expo export --platform android` (1102 módulos, sin errores). Sin dependencias nuevas. **Pendiente de probar en dispositivo**: recurrencia semanal con varios días, tarea asignada a un compañero (confirmar que no aparece en el propio Dashboard y que el compañero recibe la notificación push ya existente en el backend), tarea futura (aparece en Futuras, no en el foco de hoy).
 
+### Plan v1.0 — Bloque D: eliminar tarea
+
+Único hueco de CRUD que faltaba contra la web (`DELETE /api/tasks/:id?scope=series`) — sin cambios de backend.
+
+- **`src/api/tasks.js`** — `deleteTask(id, scope)`; `scope='series'` agrega `?scope=series` a la URL (borra la plantilla recurrente + instancias no completadas), cualquier otro valor (o ausente) borra solo esa tarea.
+- **`TaskCard`** — botón "✕" en la esquina superior derecha de la tarjeta (`position: absolute`, mismo lugar que en la web), visible para `PENDING`/`PAUSED` **y solo si el padre pasó `onDelete`** (no rompe los usos existentes que todavía no lo pasan). Al tocar, confirma con `showAlert`:
+  - Tarea normal → 2 botones (Cancelar / Eliminar, `style: 'destructive'`).
+  - Tarea recurrente (`task.recurrenceId`) → 3 botones (Cancelar / Solo esta / Esta y las siguientes) — mismas opciones que la web, con la etiqueta pidiendo confirmar cuál alcance borrar.
+  - `runDelete(scope)` llama a `deleteTask` y avisa al padre vía `onDelete(taskId, scope === 'series' ? task.recurrenceId : null)` — el padre decide si filtra una sola tarea o toda la serie.
+- **`AppAlertHost`** necesitó un ajuste chico para soportar el diálogo de 3 botones: con `buttons.length >= 3` pasa de fila a columna (`flexDirection: 'column'`, cada botón a `width: '100%'`) — con 3 en fila los labels largos ("Esta y las siguientes") quedaban ilegibles. Con 1 o 2 botones el comportamiento no cambió.
+- **`DashboardScreen`/`ProjectDetailScreen`** — `handleDelete(taskId, recurrenceId)`: si viene `recurrenceId`, filtra del estado local **todas** las tareas con ese `recurrenceId` (no solo la tocada); si no, filtra solo por `id`. En `DashboardScreen` se aplica sobre `tasks` **y** `future` (la tarea borrada puede estar en cualquiera de las dos listas, según si ya está activa o programada a futuro).
+- Mismo criterio de permisos que la web, sin duplicar lógica en el cliente: el backend deja borrar al dueño de la tarea, a quien la delegó, o a un admin — `ProjectDetailScreen` ya renderizaba tareas de **todo el equipo** con acciones completas (start/pause/etc.) antes de este cambio, así que un intento de borrar la tarea de otro sin permiso simplemente cae en el mismo `catch`/`showAlert` de error que ya usan el resto de las acciones ahí.
+
+Verificado con `npx expo export --platform android` (1102 módulos, sin errores). Sin dependencias nuevas. **Pendiente de probar en dispositivo**: borrado de una tarea suelta, borrado de "solo esta" vs "esta y las siguientes" en una serie recurrente, y confirmar que el diálogo de 3 botones se ve bien en modo oscuro.
+
 ## Roadmap (alcance v1 + extensiones)
 
 Alcance v1 original: tareas de hoy (ver/iniciar/pausar/completar/bloquear/
