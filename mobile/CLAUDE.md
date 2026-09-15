@@ -819,6 +819,25 @@ Hasta acá `AuthContext` solo resolvía el workspace **una vez**, al login (`pen
 
 Verificado con `npx expo export --platform android` (1102 módulos, sin errores). Sin dependencias nuevas. **Pendiente de probar en un dispositivo real con una cuenta que tenga ≥2 workspaces** (crear uno de prueba si hace falta) — confirmar en particular que Chat/Notificaciones no arrastran datos del workspace anterior tras el cambio.
 
+### Plan v1.0 — Bloque C: completar "Agregar tarea" (asignar + programar + recurrencia)
+
+`AddTaskModal` solo permitía crear una tarea para uno mismo, para hoy. Sin cambios de backend — `POST /api/tasks` ya aceptaba `{ description, projectId, targetUserId?, scheduledFor?, recurrence? }` desde la Fase de Backlog/Futuras, la web ya lo usa completo; acá faltaba exponerlo en la UI.
+
+- **`src/api/tasks.js`** — `createTask` pasa a mandar `targetUserId`/`scheduledFor`/`recurrence` además de `description`/`projectId`.
+- **`AddTaskModal`**:
+  - **Asignar a** — chips "Vos" + resto del workspace (`listMembers()`, mismo endpoint que ya usa `ChatScreen` para @menciones; se filtra el propio usuario de la lista). La sección entera no se renderiza en un workspace de una sola persona (`members.length === 0` tras filtrar).
+  - **Cuándo** — 3 chips mutuamente excluyentes: Hoy / 📅 Futura / 🔁 Recurrente.
+    - Futura → `DateTimePicker` (`@react-native-community/datetimepicker`, ya en uso desde `RequestBenefitModal`) con `minimumDate` = mañana.
+    - Recurrente → chips de frecuencia (Diaria/Semanal/Mensual/Anual) + si Semanal, chips de día de la semana (multi-select, valida ≥1 antes de enviar) + fecha de fin opcional (fila "+ Agregar fecha de fin" ↔ date button + "✕" para quitarla). **A diferencia de la web, no hay selector de día/mes para Mensual/Anual** — el backend (`buildRecurrenceParams`) por defecto toma el día/mes de hoy si no se manda `dayOfMonth`/`month`, que alcanza para el caso de uso mobile (crear "ahora" una recurrencia mensual/anual que arranca en la fecha de creación); si hace falta elegir otro día se sigue pudiendo editar la serie desde la web.
+  - El sheet pasó a `ScrollView` (antes `View` fijo) porque con los 3 bloques nuevos no entra en pantalla; el `DateTimePicker` (modal nativo en Android, no ocupa layout) y el footer de botones quedan fuera del scroll, como ya hacía `RequestBenefitModal`.
+  - El nombre del asignado para el aviso post-creación (ver abajo) sale de la lista `members` ya cargada en el propio modal, **no** de la respuesta de `POST /tasks` — `taskInclude` (`backend/src/controllers/tasks/_shared.js`) no incluye la relación `user`, solo `project`/`createdBy`/`sessions`/`_count.comments`/`contentPiece`.
+- **`DashboardScreen.handleCreated(task, assigneeName)`** — antes asumía que toda tarea creada era "mía y de hoy" (`setTasks(prev => [task, ...prev])` sin condición). Ahora bifurca en 3 casos:
+  1. `task.userId !== user.id` (asignada a otro) → no entra a ningún estado local de este Dashboard, se muestra un `showAlert` de confirmación ("Le asignaste... a {assigneeName}").
+  2. `task.scheduledFor` truthy (futura o primera ocurrencia de una recurrencia que arranca a futuro) → `setFuture(prev => [task, ...prev])`, misma sección colapsable "📅 Futuras" que ya usa `bringToToday`.
+  3. Resto (para mí, hoy) → comportamiento original, `setTasks`.
+
+Verificado con `npx expo export --platform android` (1102 módulos, sin errores). Sin dependencias nuevas. **Pendiente de probar en dispositivo**: recurrencia semanal con varios días, tarea asignada a un compañero (confirmar que no aparece en el propio Dashboard y que el compañero recibe la notificación push ya existente en el backend), tarea futura (aparece en Futuras, no en el foco de hoy).
+
 ## Roadmap (alcance v1 + extensiones)
 
 Alcance v1 original: tareas de hoy (ver/iniciar/pausar/completar/bloquear/

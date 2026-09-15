@@ -149,7 +149,16 @@ export default function DashboardScreen({ navigation }) {
     setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)))
   }
 
-  function handleCreated(task) {
+  function handleCreated(task, assigneeName) {
+    if (task.userId !== user?.id) {
+      // Asignada a otro miembro del workspace — no es mía, no entra a mi Dashboard.
+      showAlert('Tarea asignada', `Le asignaste "${task.description}" a ${assigneeName || 'otro miembro'}.`)
+      return
+    }
+    if (task.scheduledFor) {
+      setFuture(prev => [task, ...prev])
+      return
+    }
     setTasks(prev => [task, ...prev])
   }
 

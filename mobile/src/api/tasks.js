@@ -2,8 +2,8 @@ import api from './client'
 
 export const getToday = () => api.get('/workdays/today').then(r => r.data)
 
-export const createTask = ({ description, projectId }) =>
-  api.post('/tasks', { description, projectId }).then(r => r.data)
+export const createTask = ({ description, projectId, targetUserId, scheduledFor, recurrence }) =>
+  api.post('/tasks', { description, projectId, targetUserId, scheduledFor, recurrence }).then(r => r.data)
 
 export const startTask    = id => api.patch(`/tasks/${id}/start`).then(r => r.data)
 export const pauseTask    = id => api.patch(`/tasks/${id}/pause`).then(r => r.data)
