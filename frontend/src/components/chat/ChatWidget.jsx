@@ -5,7 +5,7 @@ import { useChat } from '../../context/ChatContext'
 import { connectSocket } from '../../lib/socket'
 import LoadingSpinner from '../LoadingSpinner'
 import ChannelSwitcher from './ChannelSwitcher'
-import MessageList from './MessageList'
+import MessageList, { scrollToMessage } from './MessageList'
 import MessageInput from './MessageInput'
 import ChannelFormModal from './ChannelFormModal'
 import PinnedBar from './PinnedBar'
@@ -41,6 +41,8 @@ export default function ChatWidget() {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [pinnedMessages, setPinnedMessages] = useState([])
   const [replyingTo, setReplyingTo] = useState(null)
+  const [jumpToMessageId, setJumpToMessageId] = useState(null)
+  const [jumpMode, setJumpMode] = useState(false) // true = la ventana cargada quedó "parada" en un mensaje del pasado (via around), no en lo más reciente
   const [typingUsers, setTypingUsers] = useState([]) // [{userId, name}] — solo del canal activo, efímero
   const [searchOpen, setSearchOpen] = useState(false)
   const activeChannelIdRef = useRef(null)
@@ -78,8 +80,8 @@ export default function ChatWidget() {
     api.get('/workspaces/current/members').then(r => setMembers(r.data.filter(m => m.active))).catch(() => {})
   }, [open, members.length])
 
-  const loadMessages = useCallback((channelId, before) => {
-    const qs = before ? `?before=${before}` : ''
+  const loadMessages = useCallback((channelId, before, around) => {
+    const qs = around ? `?around=${around}` : before ? `?before=${before}` : ''
     return api.get(`/chat/channels/${channelId}/messages${qs}`).then(r => r.data)
   }, [])
 
@@ -96,6 +98,8 @@ export default function ChatWidget() {
     setFirstUnreadMessageId(null)
     setPinnedMessages([])
     setReplyingTo(null)
+    setJumpMode(false)
+    setJumpToMessageId(null)
     setTypingUsers([])
     typingTimeoutsRef.current.forEach(t => clearTimeout(t))
     typingTimeoutsRef.current.clear()
@@ -187,6 +191,33 @@ export default function ChatWidget() {
     } finally {
       setLoadingMore(false)
     }
+  }
+
+  // Tocar un mensaje fijado (PinnedBar) lleva hasta él dentro del hilo real, en vez de
+  // dejarlo solo visible ahí recortado a una línea. Si ya está en la ventana cargada,
+  // solo hace falta el scroll; si quedó fuera (fijado hace tiempo), se trae el contexto
+  // alrededor con `around` y la ventana de mensajes se reemplaza por esa — `jumpMode`
+  // queda activo para poder volver después a lo más reciente.
+  async function handleJumpToMessage(message) {
+    if (messages.some(x => x.id === message.id)) {
+      scrollToMessage(message.id)
+      return
+    }
+    const data = await loadMessages(activeChannel.id, null, message.id)
+    setMessages(data.messages)
+    setHasMore(data.hasMore)
+    setFirstUnreadMessageId(null)
+    setJumpMode(true)
+    setJumpToMessageId(message.id)
+  }
+
+  async function handleReturnToRecent() {
+    if (!activeChannel) return
+    const data = await loadMessages(activeChannel.id)
+    setMessages(data.messages)
+    setHasMore(data.hasMore)
+    setFirstUnreadMessageId(data.firstUnreadMessageId)
+    setJumpMode(false)
   }
 
   async function handleSend(content, gifUrl, replyToId) {
@@ -360,25 +391,37 @@ export default function ChatWidget() {
 
                 {activeChannel.medium === 'voice' && <VoiceRoomBar channel={activeChannel} />}
 
-                <PinnedBar pinned={pinnedMessages} onUnpin={handleTogglePin} />
+                <PinnedBar pinned={pinnedMessages} onUnpin={handleTogglePin} onJump={handleJumpToMessage} />
 
-                <MessageList
-                  key={activeChannel.id}
-                  messages={messages}
-                  loading={msgLoading}
-                  loadingMore={loadingMore}
-                  hasMore={hasMore}
-                  onLoadMore={handleLoadMore}
-                  firstUnreadMessageId={firstUnreadMessageId}
-                  currentUserId={user?.id}
-                  canModerate={!!user?.isAdmin}
-                  members={members}
-                  onSaveEdit={handleSaveEdit}
-                  onDelete={handleDelete}
-                  onTogglePin={handleTogglePin}
-                  onToggleReaction={handleToggleReaction}
-                  onReply={setReplyingTo}
-                />
+                <div className="relative flex-1 min-h-0 flex flex-col">
+                  <MessageList
+                    key={activeChannel.id}
+                    messages={messages}
+                    loading={msgLoading}
+                    loadingMore={loadingMore}
+                    hasMore={hasMore}
+                    onLoadMore={handleLoadMore}
+                    firstUnreadMessageId={firstUnreadMessageId}
+                    currentUserId={user?.id}
+                    canModerate={!!user?.isAdmin}
+                    members={members}
+                    onSaveEdit={handleSaveEdit}
+                    onDelete={handleDelete}
+                    onTogglePin={handleTogglePin}
+                    onToggleReaction={handleToggleReaction}
+                    onReply={setReplyingTo}
+                    jumpToMessageId={jumpToMessageId}
+                    onJumpHandled={() => setJumpToMessageId(null)}
+                  />
+                  {jumpMode && (
+                    <button
+                      onClick={handleReturnToRecent}
+                      className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs font-medium bg-gray-800/90 dark:bg-gray-700/90 text-white px-3 py-1.5 rounded-full shadow-lg hover:bg-gray-900 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      ↓ Volver a mensajes recientes
+                    </button>
+                  )}
+                </div>
 
                 {typingUsers.length > 0 && (
                   <p className="px-4 pt-1 text-xs italic text-gray-400 dark:text-gray-500 flex-shrink-0">

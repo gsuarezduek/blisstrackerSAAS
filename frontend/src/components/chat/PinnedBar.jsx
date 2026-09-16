@@ -4,7 +4,10 @@ import UserLink from '../UserLink'
 
 // Barra colapsable de mensajes fijados, arriba de la lista. Cualquier miembro puede
 // fijar/desfijar (ver chat.controller.js togglePin) — no hay gating de permisos acá.
-export default function PinnedBar({ pinned, onUnpin }) {
+// Tocar un mensaje (fuera del botón "Desfijar") dispara `onJump`, que lo lleva al
+// mensaje real dentro del hilo (ChatWidget.handleJumpToMessage) — acá se muestra
+// recortado a una línea, así que verlo completo requiere saltar a donde vive de verdad.
+export default function PinnedBar({ pinned, onUnpin, onJump }) {
   const [expanded, setExpanded] = useState(false)
   if (!pinned || pinned.length === 0) return null
 
@@ -29,11 +32,16 @@ export default function PinnedBar({ pinned, onUnpin }) {
               <UserLink userId={m.author.id} className="flex-shrink-0">
                 <img src={avatarUrl(m.author.avatar)} alt={m.author.name} className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-600" />
               </UserLink>
-              <div className="flex-1 min-w-0">
+              <button
+                type="button"
+                onClick={() => onJump(m)}
+                title="Ir al mensaje"
+                className="flex-1 min-w-0 text-left"
+              >
                 <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">{m.author.name}</p>
-                {m.content && <p className="text-xs text-gray-600 dark:text-gray-300 truncate">{m.content}</p>}
+                {m.content && <p className="text-xs text-gray-600 dark:text-gray-300 truncate hover:underline">{m.content}</p>}
                 {m.gifUrl && !m.content && <p className="text-xs text-gray-400 dark:text-gray-500 italic">GIF</p>}
-              </div>
+              </button>
               <button
                 onClick={() => onUnpin(m)}
                 title="Desfijar"

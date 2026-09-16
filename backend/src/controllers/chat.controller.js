@@ -198,10 +198,39 @@ async function listMessages(req, res, next) {
     const channelId = Number(req.params.id)
     const limit = Math.min(Number(req.query.limit) || MESSAGE_PAGE_SIZE, 100)
     const before = req.query.before ? Number(req.query.before) : null
+    const around = req.query.around ? Number(req.query.around) : null
 
     const channel = await prisma.chatChannel.findFirst({ where: { id: channelId, workspaceId } })
     if (!channel) return res.status(404).json({ error: 'Canal no encontrado' })
     if (!assertChannelAccess(req, res, channel)) return
+
+    // "around" — saltar a un mensaje puntual que puede haber quedado fuera de la
+    // ventana normal de paginación (ej. un mensaje fijado hace meses, desde
+    // PinnedBar). Trae la mitad del límite antes (inclusive, para incluir al propio
+    // mensaje) y la mitad después, y expone hasMoreAfter además de hasMore para que
+    // el frontend sepa que quedó "parado en el medio" del historial.
+    if (around) {
+      const half = Math.max(Math.floor(limit / 2), 1)
+      const [beforeMsgs, afterMsgs] = await Promise.all([
+        prisma.chatMessage.findMany({
+          where: { channelId, id: { lte: around } },
+          include: MESSAGE_INCLUDE,
+          orderBy: { id: 'desc' },
+          take: half + 1,
+        }),
+        prisma.chatMessage.findMany({
+          where: { channelId, id: { gt: around } },
+          include: MESSAGE_INCLUDE,
+          orderBy: { id: 'asc' },
+          take: half,
+        }),
+      ])
+      const hasMore = beforeMsgs.length > half
+      if (hasMore) beforeMsgs.pop()
+      beforeMsgs.reverse()
+      const messages = [...beforeMsgs, ...afterMsgs]
+      return res.json({ messages, hasMore, hasMoreAfter: afterMsgs.length === half, firstUnreadMessageId: null })
+    }
 
     const messages = await prisma.chatMessage.findMany({
       where: { channelId, ...(before ? { id: { lt: before } } : {}) },

@@ -62,21 +62,24 @@ function sameGroup(a, b) {
   return a.authorId === b.authorId && (new Date(b.createdAt) - new Date(a.createdAt)) < GROUP_WINDOW_MS
 }
 
-// Lleva el scroll hasta el mensaje citado por un "Respondiendo a" (si sigue cargado en
-// esta página) y lo resalta un instante — solo funciona con lo que ya está en el DOM, no
-// dispara una carga de páginas viejas.
-function scrollToMessage(id) {
+// Lleva el scroll hasta un mensaje (si está en el DOM) y lo resalta un instante.
+// Usado tanto por el quote de "Respondiendo a" (dentro de este mismo componente) como,
+// vía la prop `jumpToMessageId`, por quien llame desde afuera (ej. ChatWidget cuando se
+// toca un mensaje fijado en PinnedBar).
+export function scrollToMessage(id) {
   const el = document.getElementById(`chat-msg-${id}`)
-  if (!el) return
+  if (!el) return false
   el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   el.classList.add('bg-primary-50', 'dark:bg-primary-900/20')
   setTimeout(() => el.classList.remove('bg-primary-50', 'dark:bg-primary-900/20'), 1200)
+  return true
 }
 
 export default function MessageList({
   messages, loading, loadingMore, hasMore, onLoadMore,
   firstUnreadMessageId, currentUserId, canModerate, members = [],
   onSaveEdit, onDelete, onTogglePin, onToggleReaction, onReply,
+  jumpToMessageId, onJumpHandled,
 }) {
   const scrollRef = useRef(null)
   const contentRef = useRef(null)
@@ -176,6 +179,21 @@ export default function MessageList({
     ro.observe(content)
     return () => ro.disconnect()
   }, [loading, messages.length === 0])
+
+  // Salto a un mensaje puntual (PinnedBar, "ver mensaje"): si ChatWidget ya tiene el
+  // mensaje cargado en `messages`, esto corre apenas cambia `jumpToMessageId`. Si tuvo
+  // que traerlo con `around` (fuera de la ventana de paginación), ChatWidget actualiza
+  // `messages` y `jumpToMessageId` en el mismo batch de React, así que este efecto —
+  // que depende de ambos — encuentra el elemento ya pintado en el DOM. Se desactiva
+  // `stickToBottomRef` primero para que el ResizeObserver de más abajo no compita
+  // empujando la vista de vuelta al fondo.
+  useEffect(() => {
+    if (!jumpToMessageId) return
+    stickToBottomRef.current = false
+    scrollToMessage(jumpToMessageId)
+    onJumpHandled?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpToMessageId, messages])
 
   function handleScroll() {
     const el = scrollRef.current
