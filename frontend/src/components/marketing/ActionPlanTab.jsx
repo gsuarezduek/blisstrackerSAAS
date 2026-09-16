@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import { useAuth } from '../../context/AuthContext'
 import LoadingSpinner from '../LoadingSpinner'
+import CreateTaskModal from './CreateTaskModal'
 
 const PRIORITY = {
   high:   { label: 'Alta',  cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
@@ -23,14 +25,13 @@ export default function ActionPlanTab({ projectId, projects }) {
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState('')
   const [selected, setSelected] = useState(() => new Set())
-  const [creating, setCreating] = useState(false)
-  const [result, setResult]     = useState(null) // { created }
+  const [taskModalItems, setTaskModalItems] = useState(null) // items pendientes de confirmar en el modal
 
   const selectedProject = projects.find(p => String(p.id) === projectId)
 
   const load = useCallback((pid) => {
     if (!pid) return
-    setLoading(true); setErr(''); setData(null); setSelected(new Set()); setResult(null)
+    setLoading(true); setErr(''); setData(null); setSelected(new Set()); setTaskModalItems(null)
     api.get(`/marketing/projects/${pid}/seo/action-plan`)
       .then(r => setData(r.data))
       .catch(e => setErr(e.response?.data?.error || 'Error al cargar el plan de acción'))
@@ -47,19 +48,13 @@ export default function ActionPlanTab({ projectId, projects }) {
     setSelected(prev => prev.size === data.items.length ? new Set() : new Set(data.items.map(i => i.key)))
   }
 
-  async function createTasks() {
+  function openCreateModal() {
     if (!data || selected.size === 0) return
-    setCreating(true)
-    const chosen = data.items.filter(i => selected.has(i.key))
-    let created = 0
-    for (const it of chosen) {
-      try {
-        await api.post('/tasks', { description: `SEO - ${it.title}`, projectId: String(projectId) })
-        created++
-      } catch {}
-    }
-    setCreating(false)
-    setResult({ created })
+    setTaskModalItems(data.items.filter(i => selected.has(i.key)))
+  }
+
+  function closeCreateModal() {
+    setTaskModalItems(null)
     setSelected(new Set())
   }
 
@@ -122,10 +117,9 @@ export default function ActionPlanTab({ projectId, projects }) {
               Seleccionar todo ({items.length})
             </label>
             <div className="flex items-center gap-3">
-              {result && <span className="text-xs text-green-600 dark:text-green-400 font-medium">✅ {result.created} tarea(s) creada(s)</span>}
-              <button onClick={createTasks} disabled={selected.size === 0 || creating}
+              <button onClick={openCreateModal} disabled={selected.size === 0}
                 className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
-                {creating ? 'Creando…' : `Crear ${selected.size || ''} tarea${selected.size === 1 ? '' : 's'}`}
+                {`Crear ${selected.size || ''} tarea${selected.size === 1 ? '' : 's'}`}
               </button>
             </div>
           </div>
@@ -148,9 +142,108 @@ export default function ActionPlanTab({ projectId, projects }) {
               </label>
             ))}
           </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500">Las tareas se crean en el proyecto <span className="font-medium">{selectedProject?.name}</span> con el prefijo "SEO -" y quedan asignadas a vos.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">Las tareas se crean en el proyecto <span className="font-medium">{selectedProject?.name}</span> con el prefijo "SEO -".</p>
         </>
       )}
+
+      {taskModalItems && taskModalItems.length === 1 && (
+        <CreateTaskModal
+          defaultDescription={`SEO - ${taskModalItems[0].title}`}
+          projectId={projectId}
+          projectName={selectedProject?.name ?? ''}
+          onClose={closeCreateModal}
+        />
+      )}
+      {taskModalItems && taskModalItems.length > 1 && (
+        <BulkCreateTaskModal
+          items={taskModalItems}
+          projectId={projectId}
+          projectName={selectedProject?.name ?? ''}
+          onClose={closeCreateModal}
+        />
+      )}
+    </div>
+  )
+}
+
+function BulkCreateTaskModal({ items, projectId, projectName, onClose }) {
+  const { user } = useAuth()
+  const [members, setMembers]     = useState([])
+  const [assigneeId, setAssigneeId] = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [done, setDone]           = useState(null) // { created }
+
+  useEffect(() => {
+    api.get(`/projects/${projectId}/members`)
+      .then(r => { setMembers(r.data); setAssigneeId(String(user?.id ?? '')) })
+      .catch(() => {})
+  }, [projectId, user])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setSaving(true)
+    let created = 0
+    for (const it of items) {
+      try {
+        const body = { description: `SEO - ${it.title}`, projectId: String(projectId) }
+        if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
+        await api.post('/tasks', body)
+        created++
+      } catch {}
+    }
+    setSaving(false)
+    setDone({ created })
+    setTimeout(onClose, 1200)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Crear {items.length} tareas</h2>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Proyecto: <span className="font-medium text-gray-600 dark:text-gray-300">{projectName}</span></p>
+
+        {done ? (
+          <div className="flex flex-col items-center py-6 gap-2">
+            <span className="text-3xl">✅</span>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{done.created} tarea(s) creada(s)</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripciones ({items.length})</label>
+              <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+                {items.map(it => (
+                  <p key={it.key} className="px-3 py-2 text-sm text-gray-700 dark:text-gray-200">SEO - {it.title}</p>
+                ))}
+              </div>
+            </div>
+            {members.length > 1 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Asignar a</label>
+                <select
+                  value={assigneeId}
+                  onChange={e => setAssigneeId(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {members.map(m => (
+                    <option key={m.id} value={String(m.id)}>{m.name}{String(m.id) === String(user?.id) ? ' (yo)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose} disabled={saving}
+                className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                Cancelar
+              </button>
+              <button type="submit" disabled={saving}
+                className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white rounded-lg py-2 text-sm font-medium transition-colors">
+                {saving ? 'Creando…' : `Crear ${items.length} tareas`}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   )
 }
