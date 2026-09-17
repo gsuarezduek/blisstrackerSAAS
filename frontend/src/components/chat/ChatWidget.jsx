@@ -46,8 +46,11 @@ export default function ChatWidget() {
   const [typingUsers, setTypingUsers] = useState([]) // [{userId, name}] — solo del canal activo, efímero
   const [searchOpen, setSearchOpen] = useState(false)
   const activeChannelIdRef = useRef(null)
+  const jumpModeRef = useRef(false) // espejo de jumpMode, para leerlo dentro del listener estable de onConnect
   const switcherRef = useRef(null)
   const typingTimeoutsRef = useRef(new Map()) // userId -> timeout, para ocultar solo si no llegó otro evento suyo
+
+  useEffect(() => { jumpModeRef.current = jumpMode }, [jumpMode])
 
   // Sin fallback a #general/primero: si no hay un canal elegido en la sesión,
   // activeChannel queda null y se muestra el listado completo (ver más abajo) en vez
@@ -164,12 +167,39 @@ export default function ChatWidget() {
       }, 4000))
     }
 
+    // Reconexión de socket (cambio de pestaña en una tablet, blip de red, el
+    // pingTimeout del server, etc.): los rooms de socket.io NO sobreviven a una
+    // reconexión — el servidor le asigna un socket.id nuevo y `channel:<id>` queda
+    // vacío de este cliente hasta que vuelva a pedir `join-channel`. Sin este
+    // re-join, el canal sigue "abierto" en la UI pero deja de recibir chat:message
+    // para siempre (el síntoma reportado: "escribo y envío, pero no se ve
+    // reflejado ni para mí ni para el otro" — a ambos lados les pasó lo mismo).
+    // Además recarga los últimos mensajes para no perder los que se mandaron
+    // mientras estuvo desconectado — salvo que esté mirando historial viejo
+    // (jumpMode), donde no tiene sentido pisarle la vista de golpe.
+    function onConnect() {
+      const channelId = activeChannelIdRef.current
+      if (!channelId) return
+      socket.emit('join-channel', channelId)
+      if (jumpModeRef.current) return
+      loadMessages(channelId).then(data => {
+        if (activeChannelIdRef.current !== channelId) return
+        setMessages(data.messages)
+        setHasMore(data.hasMore)
+        setFirstUnreadMessageId(data.firstUnreadMessageId)
+        // El canal sigue abierto y visible — lo que haya llegado mientras estuvo
+        // desconectado ya está "leído" en los hechos, mismo criterio que onMessage.
+        api.post(`/chat/channels/${channelId}/read`).then(loadChannels).catch(() => {})
+      }).catch(() => {})
+    }
+
     socket.on('chat:message', onMessage)
     socket.on('chat:message:edited', onEdited)
     socket.on('chat:message:deleted', onDeleted)
     socket.on('chat:message:pinned', onPinned)
     socket.on('chat:message:reaction', onReaction)
     socket.on('chat:typing', onTyping)
+    socket.on('connect', onConnect)
     return () => {
       socket.off('chat:message', onMessage)
       socket.off('chat:message:edited', onEdited)
@@ -177,6 +207,7 @@ export default function ChatWidget() {
       socket.off('chat:message:pinned', onPinned)
       socket.off('chat:message:reaction', onReaction)
       socket.off('chat:typing', onTyping)
+      socket.off('connect', onConnect)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
