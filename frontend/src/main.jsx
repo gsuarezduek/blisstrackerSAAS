@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { HelmetProvider } from 'react-helmet-async'
 import App from './App'
 import './index.css'
+import './lib/domPurifyLinks'
 
 // Red de seguridad global: Vite emite `vite:preloadError` cuando falla precargar un
 // módulo (chunk con hash viejo que ya no existe tras un deploy). Recargamos una vez
