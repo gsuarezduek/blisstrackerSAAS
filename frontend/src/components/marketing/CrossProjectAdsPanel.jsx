@@ -161,7 +161,7 @@ function ProjectRow({ p, onSelectProject, maxSpend, down }) {
             {p.impressions > 0 && <span><TrendChip value={p.impressions} prevValue={p.prev?.impressions} fmt={v => `${fmtK(v)} imp.`} /></span>}
             {p.clicks > 0 && <span><TrendChip value={p.clicks} prevValue={p.prev?.clicks} fmt={v => `${fmtK(v)} clics`} /></span>}
             {p.conversions > 0 && <span><TrendChip value={p.conversions} prevValue={p.prev?.conversions} fmt={v => `${Number(v).toFixed(1)} conv.`} /></span>}
-            {p.ctr > 0 && <span><TrendChip value={p.ctr} prevValue={p.prev?.ctr} fmt={fmtPct} /></span>}
+            {p.ctr > 0 && <span><TrendChip value={p.ctr} prevValue={p.prev?.ctr} fmt={v => `CTR ${fmtPct(v)}`} /></span>}
             {p.reach > 0 && <span>{fmtK(p.reach)} alcance</span>}
           </div>
         )}
@@ -258,6 +258,16 @@ export default function CrossProjectAdsPanel({ type, label, icon, emptyIcon, act
           {dirLabel}
         </button>
       </div>
+
+      <p className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 mb-4">
+        <span className="text-green-600 dark:text-green-400 font-semibold">▲ verde</span>
+        <span>subió</span>
+        <span className="mx-1">·</span>
+        <span className="text-red-600 dark:text-red-400 font-semibold">▼ rojo</span>
+        <span>bajó</span>
+        <span className="mx-1">·</span>
+        <span>comparado contra el mismo período inmediato anterior</span>
+      </p>
 
       {loading ? (
         <div className="flex justify-center py-12"><div className={`w-6 h-6 border-2 ${spinnerBorderClass} border-t-transparent rounded-full animate-spin`} /></div>
