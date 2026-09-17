@@ -18,7 +18,7 @@ const CATEGORY_ICON = {
 // ignorados (que solo guarda `source`, no la `category` de display del item original).
 const SOURCE_LABEL = {
   geo: 'GEO', cannibal: 'Canibalización', pagespeed: 'Performance', keywords: 'Keywords',
-  objective: 'Objetivos', content: 'Contenido', ads_advisor: 'Ads', report: 'Informes',
+  objective: 'Objetivos', content: 'Contenido', ads_advisor: 'Ads', rrss_advisor: 'RRSS', report: 'Informes',
 }
 
 /**
@@ -194,6 +194,15 @@ function ProjectPending({ projectId, projects, onNavigate }) {
   function closeCreateModal() {
     setTaskModalItems(null)
     setSelected(new Set())
+    silentReload(projectId) // refleja al instante los hallazgos recién snoozeados
+  }
+
+  // Al crear una tarea desde un hallazgo, dejar de mostrarlo por un tiempo (en vez de
+  // para siempre como "Ignorar") — si el análisis lo sigue detectando pasado ese
+  // plazo, vuelve a aparecer solo. Best-effort: si falla, el hallazgo simplemente
+  // sigue apareciendo, no rompe la creación de la tarea (que ya se hizo).
+  function snoozeFinding({ source, title }) {
+    api.post(`/marketing/projects/${projectId}/pending/snooze`, { source, title }).catch(() => {})
   }
 
   async function dismiss(it) {
@@ -312,7 +321,10 @@ function ProjectPending({ projectId, projects, onNavigate }) {
                 <div key={d.id} className="flex items-center justify-between gap-3 px-5 py-3">
                   <div className="min-w-0">
                     <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{d.title}</p>
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500">{SOURCE_LABEL[d.source] ?? d.source}</p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                      {SOURCE_LABEL[d.source] ?? d.source}
+                      {d.snoozedUntil && ` · postergado hasta ${new Date(d.snoozedUntil).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
+                    </p>
                   </div>
                   <button onClick={() => undismiss(d.id)} className="flex-shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">
                     ↩️ Restaurar
@@ -330,14 +342,16 @@ function ProjectPending({ projectId, projects, onNavigate }) {
           projectId={projectId}
           projectName={selectedProject?.name ?? ''}
           onClose={closeCreateModal}
+          onCreated={() => snoozeFinding(taskModalItems[0])}
         />
       )}
       {taskModalItems && taskModalItems.length > 1 && (
         <BulkCreateTaskModal
-          items={taskModalItems.map(it => ({ key: it.key, description: `${it.taskPrefix} - ${it.title}` }))}
+          items={taskModalItems.map(it => ({ key: it.key, description: `${it.taskPrefix} - ${it.title}`, source: it.source, title: it.title }))}
           projectId={projectId}
           projectName={selectedProject?.name ?? ''}
           onClose={closeCreateModal}
+          onItemCreated={snoozeFinding}
         />
       )}
     </div>

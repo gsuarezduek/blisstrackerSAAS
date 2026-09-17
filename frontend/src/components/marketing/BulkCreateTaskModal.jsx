@@ -8,9 +8,12 @@ import { useAuth } from '../../context/AuthContext'
  * CreateTaskModal.jsx (proyecto fijo, asignación editable) pero para N items en un
  * solo submit — las descripciones ya vienen resueltas por el caller (con el prefijo
  * de cada fuente), acá solo se listan.
- * Props: items ([{ key, description }]), projectId, projectName, onClose.
+ * Props: items ([{ key, description, source?, title? }]), projectId, projectName,
+ * onClose, onItemCreated? (llamado con { source, title } por cada tarea creada con
+ * éxito cuyo item traiga esos campos — el modal no sabe qué hace el caller con eso,
+ * solo lo informa).
  */
-export default function BulkCreateTaskModal({ items, projectId, projectName, onClose }) {
+export default function BulkCreateTaskModal({ items, projectId, projectName, onClose, onItemCreated }) {
   const { user } = useAuth()
   const [members, setMembers]     = useState([])
   const [assigneeId, setAssigneeId] = useState('')
@@ -33,6 +36,7 @@ export default function BulkCreateTaskModal({ items, projectId, projectName, onC
         if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
         await api.post('/tasks', body)
         created++
+        if (it.source && it.title) onItemCreated?.({ source: it.source, title: it.title })
       } catch {}
     }
     setSaving(false)

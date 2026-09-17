@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma')
 const {
   computeProjectPendingItems, computeWorkspacePendingSummary,
-  dismissFinding, listDismissedFindings, undismissFinding,
+  dismissFinding, snoozeFinding, listDismissedFindings, undismissFinding,
 } = require('../services/marketingPending.service')
 
 const VALID_SOURCES = new Set(['geo', 'cannibal', 'pagespeed', 'keywords', 'objective', 'content', 'ads_advisor', 'rrss_advisor', 'report'])
@@ -56,6 +56,24 @@ async function dismiss(req, res, next) {
 }
 
 /**
+ * POST /api/marketing/projects/:id/pending/snooze
+ * body: { source, title } — auto-snooze temporal (30 días) al crear una tarea desde un
+ * hallazgo del panel "Prioridades". A diferencia de /dismiss (indefinido, manual), este
+ * vuelve a aparecer solo si el análisis lo sigue detectando después de ese plazo.
+ */
+async function snooze(req, res, next) {
+  try {
+    const projectId   = Number(req.params.id)
+    const workspaceId = req.workspace.id
+    const { source, title } = req.body
+    if (!VALID_SOURCES.has(source)) return res.status(400).json({ error: 'source inválido' })
+    if (!title || typeof title !== 'string') return res.status(400).json({ error: 'title requerido' })
+    await snoozeFinding({ workspaceId, projectId, source, title, userId: req.user.userId })
+    res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/marketing/projects/:id/pending/dismissed
  * Lista los hallazgos ignorados del proyecto (para "ver ignorados").
  */
@@ -83,4 +101,4 @@ async function undismiss(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getProjectPending, getWorkspacePending, dismiss, listDismissed, undismiss }
+module.exports = { getProjectPending, getWorkspacePending, dismiss, snooze, listDismissed, undismiss }

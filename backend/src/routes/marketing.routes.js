@@ -211,6 +211,7 @@ router.get('/projects/:id/seo/action-plan',   seoOpportunities.getActionPlan)
 // Panel "Hoy" — pendientes accionables cross-área (SEO, Objetivos, Contenido, Ads Advisor)
 router.get('/projects/:id/pending', marketingPending.getProjectPending)
 router.post('/projects/:id/pending/dismiss',         marketingPending.dismiss)
+router.post('/projects/:id/pending/snooze',           marketingPending.snooze)
 router.get('/projects/:id/pending/dismissed',         marketingPending.listDismissed)
 router.delete('/projects/:id/pending/dismissed/:did', marketingPending.undismiss)
 

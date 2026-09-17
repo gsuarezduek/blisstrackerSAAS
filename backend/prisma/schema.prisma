@@ -2109,14 +2109,15 @@ model RrssAdvisorResult {
 // (texto libre de IA) sobrevive solo si la redacción no cambia entre corridas. `title`
 // queda sin normalizar, únicamente para mostrar en "ver ignorados".
 model DismissedFinding {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   workspaceId   Int
   projectId     Int
   source        String // 'geo' | 'cannibal' | 'pagespeed' | 'keywords' | 'objective' | 'content' | 'ads_advisor'
   signature     String
   title         String
   dismissedById Int?
-  dismissedAt   DateTime @default(now())
+  dismissedAt   DateTime  @default(now())
+  snoozedUntil  DateTime? // null = ignorado a mano (indefinido); con fecha = auto-snoozeado al crear una tarea desde el hallazgo, vuelve a aparecer si sigue detectado después de esta fecha
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

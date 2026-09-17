@@ -5,6 +5,20 @@ const { computeSeoActionItems, PRIORITY_WEIGHT } = require('./seoActionPlan.serv
 const { computeObjectives } = require('./marketingObjectives.service')
 const { prevMonthStr, monthLabel } = require('../lib/monthUtils')
 const { MARKETING_SECTION_IDS } = require('../lib/marketingSections')
+const { jaccardSimilarity } = require('../lib/textSimilarity')
+
+// Días que dura el auto-snooze al crear una tarea desde un hallazgo (a diferencia de
+// "Ignorar" a mano, que es indefinido). Si el análisis lo sigue detectando después de
+// este plazo, vuelve a aparecer.
+const AUTO_SNOOZE_DAYS = 30
+
+// Fuentes de texto libre generado por IA: la redacción puede variar levemente entre
+// corridas del análisis para el mismo hallazgo real, así que además del match exacto
+// por título normalizado se acepta un match "muy parecido" por solapamiento de
+// palabras (ver textSimilarity.js). Las demás fuentes son determinísticas (el título
+// embebe un dato real: query, nombre de pieza, label) y solo usan match exacto.
+const FUZZY_SOURCES = new Set(['geo', 'ads_advisor', 'rrss_advisor'])
+const SIMILARITY_THRESHOLD = 0.5
 
 const ADS_PLATFORM_LABEL = { meta_ads: 'Meta Ads', google_ads: 'Google Ads' }
 const ADS_PLATFORM_SUB   = { meta_ads: 'meta-ads', google_ads: 'google-ads' }
@@ -175,20 +189,30 @@ async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT
     adsItems({ projectId, workspaceId }).catch(() => []),
     rrssItems({ projectId, workspaceId }).catch(() => []),
     reportItems({ projectId, workspaceId, tz }).catch(() => []),
-    prisma.dismissedFinding.findMany({ where: { projectId, workspaceId }, select: { source: true, signature: true } }),
+    prisma.dismissedFinding.findMany({ where: { projectId, workspaceId }, select: { source: true, signature: true, title: true, snoozedUntil: true } }),
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { marketingDisabledSections: true } }),
   ])
   if (!seo) return null
 
   const disabledSections = JSON.parse(workspace?.marketingDisabledSections || '[]')
-  const dismissedSet = new Set(dismissed.map(d => `${d.source}:${d.signature}`))
+  const now = new Date()
+  const activeDismissed = dismissed.filter(d => !d.snoozedUntil || d.snoozedUntil > now)
+  const isDismissed = (it) => {
+    const sig = normalizeTitle(it.title)
+    const bySource = activeDismissed.filter(d => d.source === it.source)
+    if (bySource.some(d => d.signature === sig)) return true
+    if (FUZZY_SOURCES.has(it.source)) {
+      return bySource.some(d => jaccardSimilarity(it.title, d.title) >= SIMILARITY_THRESHOLD)
+    }
+    return false
+  }
 
   const seoItems = seo.items.map(it => ({ ...it, taskPrefix: 'SEO', link: { tab: 'geo-seo', sub: 'plan' } }))
   const allItems = [...seoItems, ...objectives, ...content, ...ads, ...rrss, ...reports].map(it => ({ ...it, section: sectionOf(it) }))
 
   const items = allItems
     .filter(it => it.section === 'contenido' || !disabledSections.includes(it.section))
-    .filter(it => !dismissedSet.has(`${it.source}:${normalizeTitle(it.title)}`))
+    .filter(it => !isDismissed(it))
     .sort((a, b) => PRIORITY_WEIGHT[b.priority] - PRIORITY_WEIGHT[a.priority])
     .map(({ key, ...rest }, i) => ({ key: `p-${i}`, ...rest }))
 
@@ -208,7 +232,7 @@ async function computeProjectPendingItems({ projectId, workspaceId, tz = DEFAULT
     items,
     groups,
     counts: { total: items.length, high: items.filter(i => i.priority === 'high').length },
-    dismissedCount: dismissed.length,
+    dismissedCount: activeDismissed.length,
   }
 }
 
@@ -242,24 +266,41 @@ function invalidateWorkspacePending(workspaceId) {
 
 /**
  * Ignora un hallazgo del panel "Prioridades" (por proyecto+fuente+título normalizado).
- * Idempotente: ignorarlo dos veces no falla ni duplica fila.
+ * Idempotente: ignorarlo dos veces no falla ni duplica fila (no pisa un snooze ya
+ * activo con uno nuevo). `snoozedUntil` null = indefinido ("Ignorar" a mano);
+ * con fecha = temporal (ver `snoozeFinding`).
  */
-async function dismissFinding({ workspaceId, projectId, source, title, userId }) {
+async function dismissFinding({ workspaceId, projectId, source, title, userId, snoozedUntil = null }) {
   const signature = normalizeTitle(title)
   await prisma.dismissedFinding.upsert({
     where:  { projectId_source_signature: { projectId, source, signature } },
     update: {},
-    create: { workspaceId, projectId, source, signature, title, dismissedById: userId ?? null },
+    create: { workspaceId, projectId, source, signature, title, dismissedById: userId ?? null, snoozedUntil },
   })
   invalidateWorkspacePending(workspaceId)
 }
 
+/**
+ * Auto-snooze de un hallazgo al crear una tarea desde él (Prioridades): no vuelve a
+ * aparecer por AUTO_SNOOZE_DAYS aunque el análisis lo siga detectando. Si después de
+ * ese plazo el hallazgo (o uno muy parecido, para las fuentes de texto libre de IA)
+ * sigue ahí, reaparece solo.
+ */
+async function snoozeFinding({ workspaceId, projectId, source, title, userId }) {
+  const snoozedUntil = new Date(Date.now() + AUTO_SNOOZE_DAYS * 86400000)
+  return dismissFinding({ workspaceId, projectId, source, title, userId, snoozedUntil })
+}
+
 async function listDismissedFindings({ workspaceId, projectId }) {
-  return prisma.dismissedFinding.findMany({
+  const now = new Date()
+  const rows = await prisma.dismissedFinding.findMany({
     where:   { projectId, workspaceId },
     orderBy: { dismissedAt: 'desc' },
-    select:  { id: true, source: true, title: true, dismissedAt: true },
+    select:  { id: true, source: true, title: true, dismissedAt: true, snoozedUntil: true },
   })
+  // Un snooze ya vencido no oculta nada (el hallazgo ya volvió a aparecer arriba) —
+  // no tiene sentido ofrecerlo para "restaurar" en la lista de ignorados.
+  return rows.filter(r => !r.snoozedUntil || r.snoozedUntil > now)
 }
 
 async function undismissFinding({ workspaceId, projectId, id }) {
@@ -270,5 +311,5 @@ async function undismissFinding({ workspaceId, projectId, id }) {
 
 module.exports = {
   computeProjectPendingItems, computeWorkspacePendingSummary,
-  dismissFinding, listDismissedFindings, undismissFinding,
+  dismissFinding, snoozeFinding, listDismissedFindings, undismissFinding,
 }
