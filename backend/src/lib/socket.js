@@ -56,6 +56,17 @@ function leaveVoiceRoom(socket, channelId) {
 // voz debe sobrevivir a que el panel se cierre.
 function initSocket(httpServer) {
   io = new Server(httpServer, {
+    // Defaults de socket.io (pingInterval 25s / pingTimeout 20s) declaran el socket
+    // muerto ~45s después del último pong — muy poco para tablets/celulares, donde el
+    // navegador (sobre todo iOS Safari) suspende los timers de JS en cuanto la pestaña
+    // pasa a background y no vuelve a responder pings hasta que el usuario vuelve.
+    // Con esto el server tolera ~90s de pestaña en background antes de tirar el socket,
+    // así una reconexión de "cambié de pestaña un toque" la resuelve el propio
+    // socket.io-client solo, sin que se note del lado del cliente. El costo es tardar
+    // más en notar a alguien que cerró la pestaña de golpe (ventana de voz-presence un
+    // poco más lenta en limpiarse) — trade-off aceptable acá.
+    pingInterval: 25000,
+    pingTimeout: 60000,
     cors: {
       origin: (origin, callback) => {
         if (isAllowedOrigin(origin)) return callback(null, true)

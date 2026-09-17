@@ -97,8 +97,15 @@ export function VoiceCallProvider({ children }) {
     })
   }, [setSpeaking])
 
-  const cleanupCall = useCallback(() => {
+  // Cierra y descarta TODAS las RTCPeerConnection remotas sin tocar el mic local ni
+  // `activeCall` — usada tanto al colgar (cleanupCall) como al reconectar el socket
+  // (onConnect más abajo), donde los peers viejos quedan huérfanos igual.
+  const cleanupAllPeers = useCallback(() => {
     for (const socketId of peersRef.current.keys()) cleanupPeer(socketId)
+  }, [cleanupPeer])
+
+  const cleanupCall = useCallback(() => {
+    cleanupAllPeers()
     speakingMonitorsRef.current.get('self')?.stop()
     speakingMonitorsRef.current.delete('self')
     setSpeaking('self', false)
@@ -106,7 +113,7 @@ export function VoiceCallProvider({ children }) {
     localStreamRef.current = null
     setActiveCall(null)
     clearVoiceCallSession(user?.id)
-  }, [cleanupPeer, setSpeaking, user?.id])
+  }, [cleanupAllPeers, setSpeaking, user?.id])
 
   // Crea (si falta) la RTCPeerConnection de un peer, con los tracks locales ya
   // agregados y el manejo de ICE candidates propio hacia ese peer.
@@ -315,9 +322,15 @@ export function VoiceCallProvider({ children }) {
 
     // Reconexión de socket: el servidor perdió el estado de la sala anterior en el
     // disconnect — corte breve, no transparente. Rejoin completo si había llamada.
+    // Los peers que teníamos quedan huérfanos (del otro lado, cada participante
+    // reconectado tiene un socket.id NUEVO, así que jamás va a llegar un
+    // voice:peer-left para el viejo): se cierran acá antes de re-unirse, si no
+    // quedan RTCPeerConnection zombies + audio congelado de la sesión anterior.
     function onConnect() {
       const call = activeCallRef.current
-      if (call) socket.emit('voice:join', call.channelId)
+      if (!call) return
+      cleanupAllPeers()
+      socket.emit('voice:join', call.channelId)
     }
 
     socket.on('voice:presence', onPresence)
@@ -338,7 +351,7 @@ export function VoiceCallProvider({ children }) {
       socket.off('voice:peer-muted', onPeerMuted)
       socket.off('connect', onConnect)
     }
-  }, [user?.id, getOrCreatePeer, cleanupPeer])
+  }, [user?.id, getOrCreatePeer, cleanupPeer, cleanupAllPeers])
 
   // Reaplica setSinkId a los <audio> ya montados cuando cambia la preferencia de
   // salida (sin esto, solo se aplicaría a elementos nuevos vía el callback ref).
@@ -348,6 +361,28 @@ export function VoiceCallProvider({ children }) {
       el.setSinkId?.(outputDeviceId || '').catch(() => {})
     }
   }, [outputDeviceId])
+
+  // Media Session API: le avisa al navegador que hay "audio en curso" mientras dura
+  // la llamada — en Chrome/Android esto es lo que evita que el sistema operativo
+  // mate la pestaña en background para ahorrar batería (soporte parcial en iOS
+  // Safari, pero declarar la metadata no rompe nada donde no aplique). Depende solo
+  // de `channelId`/`channelName` (no del objeto `activeCall` completo, que cambia de
+  // referencia en cada mute/participante nuevo) para no reescribir esto de más.
+  const callChannelId = activeCall?.channelId ?? null
+  const callChannelName = activeCall?.channelName ?? null
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
+    if (callChannelId != null) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: `Llamada de voz · ${callChannelName || ''}`,
+        artist: 'BlissTracker',
+      })
+      navigator.mediaSession.playbackState = 'playing'
+    } else {
+      navigator.mediaSession.playbackState = 'none'
+      navigator.mediaSession.metadata = null
+    }
+  }, [callChannelId, callChannelName])
 
   return (
     <VoiceCallContext.Provider value={{
