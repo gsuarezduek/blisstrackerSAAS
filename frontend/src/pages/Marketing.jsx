@@ -118,7 +118,7 @@ export default function Marketing() {
   const activeSub = activeNav.subs.find(s => s.id === sub) ?? activeNav.subs[0]
 
   function renderContent() {
-    if (tab === 'hoy')      return <PrioridadesTab projectId={projectId} onSelectProject={handleProjectChange} onNavigate={handleNavigateTo} />
+    if (tab === 'hoy')      return <PrioridadesTab projectId={projectId} projects={projects} onSelectProject={handleProjectChange} onNavigate={handleNavigateTo} />
     if (tab === 'informes') return <InformesTab projectId={projectId} onSelectProject={handleProjectChange} projects={projects} />
 
     if (activeNav.soon || activeNav.subs.length === 0) return <ComingSoon label={activeNav.label} />

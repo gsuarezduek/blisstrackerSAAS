@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
+import CreateTaskModal from './CreateTaskModal'
+import BulkCreateTaskModal from './BulkCreateTaskModal'
 
 const PRIORITY = {
   high:   { label: 'Alta',  cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
@@ -26,9 +28,9 @@ const SOURCE_LABEL = {
  * marketingPending.service.js), con el mismo patrón de selección múltiple + creación
  * de tareas en masa que ya prueba ActionPlanTab.jsx.
  */
-export default function PrioridadesTab({ projectId, onSelectProject, onNavigate }) {
+export default function PrioridadesTab({ projectId, projects, onSelectProject, onNavigate }) {
   if (!projectId) return <WorkspacePending onSelectProject={onSelectProject} />
-  return <ProjectPending projectId={projectId} onNavigate={onNavigate} />
+  return <ProjectPending projectId={projectId} projects={projects} onNavigate={onNavigate} />
 }
 
 function WorkspacePending({ onSelectProject }) {
@@ -146,19 +148,20 @@ function PendingItemRow({ it, selected, onToggle, onDismiss, onNavigate }) {
   )
 }
 
-function ProjectPending({ projectId, onNavigate }) {
+function ProjectPending({ projectId, projects, onNavigate }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr]         = useState('')
   const [selected, setSelected] = useState(() => new Set())
-  const [creating, setCreating] = useState(false)
-  const [result, setResult]     = useState(null)
+  const [taskModalItems, setTaskModalItems] = useState(null) // items pendientes de confirmar en el modal
   const [showDismissed, setShowDismissed] = useState(false)
   const [dismissedList, setDismissedList] = useState(null)
 
+  const selectedProject = (projects ?? []).find(p => String(p.id) === String(projectId))
+
   const load = useCallback((pid) => {
     if (!pid) return
-    setLoading(true); setErr(''); setData(null); setSelected(new Set()); setResult(null)
+    setLoading(true); setErr(''); setData(null); setSelected(new Set()); setTaskModalItems(null)
     setShowDismissed(false); setDismissedList(null)
     api.get(`/marketing/projects/${pid}/pending`)
       .then(r => setData(r.data))
@@ -183,19 +186,13 @@ function ProjectPending({ projectId, onNavigate }) {
     setSelected(prev => prev.size === data.items.length ? new Set() : new Set(data.items.map(i => i.key)))
   }
 
-  async function createTasks() {
+  function openCreateModal() {
     if (!data || selected.size === 0) return
-    setCreating(true)
-    const chosen = data.items.filter(i => selected.has(i.key))
-    let created = 0
-    for (const it of chosen) {
-      try {
-        await api.post('/tasks', { description: `${it.taskPrefix} - ${it.title}`, projectId: String(projectId) })
-        created++
-      } catch {}
-    }
-    setCreating(false)
-    setResult({ created })
+    setTaskModalItems(data.items.filter(i => selected.has(i.key)))
+  }
+
+  function closeCreateModal() {
+    setTaskModalItems(null)
     setSelected(new Set())
   }
 
@@ -254,10 +251,9 @@ function ProjectPending({ projectId, onNavigate }) {
               Seleccionar todo ({items.length})
             </label>
             <div className="flex items-center gap-3">
-              {result && <span className="text-xs text-green-600 dark:text-green-400 font-medium">✅ {result.created} tarea(s) creada(s)</span>}
-              <button onClick={createTasks} disabled={selected.size === 0 || creating}
+              <button onClick={openCreateModal} disabled={selected.size === 0}
                 className="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
-                {creating ? 'Creando…' : `Crear ${selected.size || ''} tarea${selected.size === 1 ? '' : 's'}`}
+                {`Crear ${selected.size || ''} tarea${selected.size === 1 ? '' : 's'}`}
               </button>
             </div>
           </div>
@@ -326,6 +322,23 @@ function ProjectPending({ projectId, onNavigate }) {
             </div>
           )}
         </div>
+      )}
+
+      {taskModalItems && taskModalItems.length === 1 && (
+        <CreateTaskModal
+          defaultDescription={`${taskModalItems[0].taskPrefix} - ${taskModalItems[0].title}`}
+          projectId={projectId}
+          projectName={selectedProject?.name ?? ''}
+          onClose={closeCreateModal}
+        />
+      )}
+      {taskModalItems && taskModalItems.length > 1 && (
+        <BulkCreateTaskModal
+          items={taskModalItems.map(it => ({ key: it.key, description: `${it.taskPrefix} - ${it.title}` }))}
+          projectId={projectId}
+          projectName={selectedProject?.name ?? ''}
+          onClose={closeCreateModal}
+        />
       )}
     </div>
   )
