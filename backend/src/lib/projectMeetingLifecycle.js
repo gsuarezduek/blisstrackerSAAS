@@ -11,6 +11,7 @@ function durationLabel(mins) {
 }
 
 const meetingTypePhrase = (t) => (t === 'client' ? 'con el cliente' : 'interna')
+const typeLabel = (t) => (t === 'client' ? 'Reunión con cliente' : 'Reunión de equipo')
 
 // WorkDay de hoy del usuario (crear si falta — mismo patrón que tasks.create).
 async function ensureWorkDay(userId, workspaceId, today) {
@@ -89,6 +90,77 @@ async function sendOwnedTodosToDashboard(meeting) {
   }
 }
 
+// Arranca el cronómetro de una reunión YA CARGADA (con `participants` incluidos —
+// cada uno con `id`/`userId` escalares). Valida que ningún participante tenga ya una
+// tarea IN_PROGRESS, crea una Task IN_PROGRESS + TaskSession por participante (su
+// tiempo cuenta para `meeting.projectId`), vincula `participant.taskId`, y setea
+// `meeting.startedAt`. Lanza errores TIPADOS (`err.status`) en vez de responder HTTP
+// directo — así la puede reusar tanto projectMeetings.controller.js#startMeeting como
+// calendar.controller.js#startMeetingFromEvent (POST /calendar/events/:id/start-meeting)
+// sin duplicar la lógica ni el busy-check.
+async function startMeetingParticipants(meeting, participants, { requesterId, workspaceId, tz }) {
+  const participantIds = participants.map(p => p.userId)
+
+  // Bloqueo: nadie del grupo puede tener una tarea en curso al iniciar.
+  if (participantIds.length) {
+    const busy = await prisma.task.findMany({
+      where:   { userId: { in: participantIds }, status: 'IN_PROGRESS' },
+      include: { user: { select: { name: true } } },
+    })
+    if (busy.length) {
+      const names = [...new Set(busy.map(b => b.user.name))].join(', ')
+      throw Object.assign(new Error(
+        `No se puede iniciar: ${names} ${busy.length > 1 ? 'tienen' : 'tiene'} una tarea en curso. Debe pausarla o completarla primero.`
+      ), { status: 409 })
+    }
+  }
+
+  const now   = new Date()
+  const today = todayString(tz)
+
+  // Workdays por participante (idempotente — no es sensible dejarla creada aunque la
+  // transacción de abajo falle).
+  const workDays = {}
+  for (const p of participants) {
+    const wd = await ensureWorkDay(p.userId, workspaceId, today)
+    if (wd) workDays[p.userId] = wd
+  }
+
+  // Todo o nada: si algún participante ya tiene una tarea en curso (condición de
+  // carrera con el busy-check de arriba), se revierte todo lo creado en este loop en
+  // vez de dejar tareas "fantasma" para los participantes anteriores.
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const p of participants) {
+        const workDay = workDays[p.userId]
+        if (!workDay) continue
+        const task = await tx.task.create({
+          data: {
+            description: typeLabel(meeting.type),
+            projectId:   meeting.projectId,
+            userId:      p.userId,
+            workDayId:   workDay.id,
+            status:      'IN_PROGRESS',
+            startedAt:   now,
+            createdById: p.userId !== requesterId ? requesterId : null,
+          },
+        })
+        await tx.taskSession.create({ data: { taskId: task.id, startedAt: now } })
+        await tx.projectMeetingParticipant.update({ where: { id: p.id }, data: { taskId: task.id } })
+      }
+      await tx.projectMeeting.update({
+        where: { id: meeting.id },
+        data:  { startedAt: now, endedAt: null, durationMins: null },
+      })
+    })
+  } catch (e) {
+    if (e.code === 'P2002') {
+      throw Object.assign(new Error('Uno de los participantes acaba de iniciar otra tarea. Reintentá.'), { status: 409 })
+    }
+    throw e
+  }
+}
+
 // Cierra una reunión YA CARGADA (con `participants` y `todos` incluidos, cada
 // participante con `taskId`/`task.status`). No valida permisos ni pertenencia al
 // workspace — eso lo hace el caller HTTP antes de llamarla. `actorName` presente =
@@ -139,6 +211,6 @@ async function maybeAutoFinishMeeting(meetingId) {
 }
 
 module.exports = {
-  durationLabel, meetingTypePhrase, closeMeeting, maybeAutoFinishMeeting,
-  ensureWorkDay, createDashboardTaskForTodo,
+  durationLabel, meetingTypePhrase, typeLabel, closeMeeting, maybeAutoFinishMeeting,
+  ensureWorkDay, createDashboardTaskForTodo, startMeetingParticipants,
 }

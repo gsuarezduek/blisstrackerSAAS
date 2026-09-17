@@ -11,6 +11,7 @@ async function list(req, res, next) {
         project: { select: { id: true, name: true } },
         channel: { select: { slug: true } },
         contentPiece: { select: { id: true, title: true, projectId: true } },
+        calendarEvent: { select: { id: true, date: true } },
       },
       orderBy: { createdAt: 'desc' },
       // Suben a 80 para que el buscador por proyecto en "Completadas" tenga material

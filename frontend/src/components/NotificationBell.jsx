@@ -17,10 +17,10 @@ const isFollowedCompleted = n => n.type === 'COMPLETED' && (n.relation === 'foll
 const FILTERS = [
   { key: 'BLOCKED',      label: '🔒', title: 'Bloqueos',                  match: n => n.type === 'BLOCKED' || n.type === 'UNBLOCKED' },
   { key: 'CLIENT',       label: '🤝', title: 'Actividad del cliente',     match: n => n.type === 'CONTENT_APPROVED' || n.type === 'CONTENT_CHANGES_REQUESTED' || n.type === 'PORTAL_CLIENT_LOGIN' },
-  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' },
+  { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' || n.type === 'CALENDAR_INVITE' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: n => isFollowedCompleted(n) || n.type === 'TASK_DELETED' },
-  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED'].includes(n.type) },
+  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE'].includes(n.type) },
   { key: 'COMPLETED',    label: '✓',  title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
 
@@ -275,7 +275,8 @@ export default function NotificationBell() {
                           ? 'text-purple-800 dark:text-purple-200'
                           : 'text-gray-800 dark:text-gray-200'
 
-                // Deep-link: leads van a Ventas (ruta según rol), solicitudes de licencia a
+                // Deep-link: leads van a Ventas (ruta según rol), invitaciones/respuestas de
+                // Calendario van a la semana del evento, solicitudes de licencia a
                 // RRHH → Licencias y solicitudes de beneficios a RRHH → Beneficios (quien las
                 // recibe tiene acceso al módulo RRHH — admin u otro rol configurado, ya no es
                 // admin-only fijo), las revisiones (de licencia o de beneficio) al perfil propio
@@ -286,7 +287,9 @@ export default function NotificationBell() {
                 const ventasBase = user?.isAdmin ? '/admin/ventas' : '/ventas'
                 const dest = n.leadId
                   ? `${ventasBase}?lead=${n.leadId}`
-                  : n.type === 'VACATION_REQUEST'
+                  : n.calendarEvent
+                    ? `/calendario?view=semana&date=${n.calendarEvent.date}`
+                    : n.type === 'VACATION_REQUEST'
                     ? '/admin/rrhh?tab=licencias'
                     : n.type === 'BENEFIT_REQUEST'
                       ? '/admin/rrhh?tab=beneficios'

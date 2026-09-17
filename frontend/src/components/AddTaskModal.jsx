@@ -160,6 +160,10 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
   const [endMode, setEndMode] = useState('never') // never | custom
   const [endDate, setEndDate] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
+  // Bloqueo horario opcional en el Calendario (ver Task.scheduledTime) — aplica a
+  // cualquier modo (normal/recurring/future), independiente entre sí.
+  const [scheduledTime, setScheduledTime] = useState('')
+  const [scheduledDurationMins, setScheduledDurationMins] = useState(30)
   const [optErr, setOptErr] = useState('')
 
   const todayStr = new Date().toLocaleDateString('en-CA')
@@ -247,6 +251,10 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
     try {
       const body = { description: description.trim(), projectId }
       if (assigneeId && assigneeId !== String(user?.id)) body.targetUserId = assigneeId
+      if (scheduledTime) {
+        body.scheduledTime = scheduledTime
+        body.scheduledDurationMins = scheduledDurationMins
+      }
       if (taskMode === 'future') {
         body.scheduledFor = scheduledDate
       } else if (taskMode === 'recurring') {
@@ -588,6 +596,39 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
                 <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">La tarea aparecerá en tu dashboard ese día.</p>
               </div>
             )}
+
+            {/* Bloqueo horario opcional en el Calendario — independiente del modo
+                (normal/recurrente/futura): si tiene hora, ocupa esa franja en el
+                calendario de quien la tiene asignada (ver Task.scheduledTime). */}
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-700/40 p-3">
+              <label className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={!!scheduledTime}
+                  onChange={e => setScheduledTime(e.target.checked ? '09:00' : '')}
+                  className="rounded"
+                />
+                🗓️ Bloquear horario en el Calendario
+              </label>
+              {scheduledTime && (
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="time"
+                    value={scheduledTime}
+                    onChange={e => setScheduledTime(e.target.value)}
+                    className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <select
+                    value={scheduledDurationMins}
+                    onChange={e => setScheduledDurationMins(Number(e.target.value))}
+                    className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    {[15, 30, 45, 60, 90, 120].map(d => <option key={d} value={d}>{d} min</option>)}
+                  </select>
+                </div>
+              )}
+              <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Ocupa esa franja en tu Calendario (opcional).</p>
+            </div>
 
             {optErr && <p className="text-xs text-red-500">{optErr}</p>}
           </div>

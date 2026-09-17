@@ -70,6 +70,23 @@ async function create(req, res, next) {
     // Una fecha futura igual o anterior a hoy es una tarea normal.
     if (scheduledFor && scheduledFor <= today) scheduledFor = null
 
+    // Bloqueo horario opcional en el Calendario (ver Task.scheduledTime en
+    // schema.prisma) — aplica igual a tareas normales, futuras y recurrentes.
+    let scheduledTime = req.body.scheduledTime || null
+    let scheduledDurationMins = null
+    if (scheduledTime) {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(scheduledTime)) {
+        return res.status(400).json({ error: 'Hora inválida (formato HH:MM)' })
+      }
+      if (req.body.scheduledDurationMins != null) {
+        const dur = Number(req.body.scheduledDurationMins)
+        if (!Number.isInteger(dur) || dur < 5 || dur > 8 * 60) {
+          return res.status(400).json({ error: 'Duración inválida' })
+        }
+        scheduledDurationMins = dur
+      }
+    }
+
     if (recurrence) {
       const FREQ = ['daily', 'weekly', 'monthly', 'annual']
       if (!FREQ.includes(recurrence.frequency)) {
@@ -151,6 +168,8 @@ async function create(req, res, next) {
           month:       params.month,
           startDate:   today,
           endDate:     recurrence.endDate || null,
+          scheduledTime,
+          scheduledDurationMins,
         },
       })
       const first = firstScheduledDate(rec)
@@ -171,6 +190,8 @@ async function create(req, res, next) {
           workDayId: workDay.id,
           createdById: userId !== requesterId ? requesterId : null,
           scheduledFor: scheduledFor || null,
+          scheduledTime,
+          scheduledDurationMins,
         },
         include: taskInclude,
       })
@@ -596,6 +617,28 @@ async function editTask(req, res, next) {
       if (!isYMD(scheduledFor)) return res.status(400).json({ error: 'Fecha inválida (formato YYYY-MM-DD)' })
       if (scheduledFor <= today) return res.status(400).json({ error: 'La fecha debe ser posterior a hoy.' })
       data.scheduledFor = scheduledFor
+    }
+
+    // ── Bloqueo horario en el Calendario ── (ver Task.scheduledTime) — editable en
+    // cualquier tarea (normal, futura o una instancia recurrente puntual; no toca la
+    // plantilla). `scheduledTime: null` lo saca del calendario.
+    if (req.body.scheduledTime !== undefined) {
+      if (req.body.scheduledTime === null) {
+        data.scheduledTime = null
+        data.scheduledDurationMins = null
+      } else {
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(req.body.scheduledTime)) {
+          return res.status(400).json({ error: 'Hora inválida (formato HH:MM)' })
+        }
+        data.scheduledTime = req.body.scheduledTime
+        if (req.body.scheduledDurationMins != null) {
+          const dur = Number(req.body.scheduledDurationMins)
+          if (!Number.isInteger(dur) || dur < 5 || dur > 8 * 60) {
+            return res.status(400).json({ error: 'Duración inválida' })
+          }
+          data.scheduledDurationMins = dur
+        }
+      }
     }
 
     // scope=series en una instancia recurrente: actualiza la plantilla + las instancias

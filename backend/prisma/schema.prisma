@@ -20,187 +20,189 @@ model CronLock {
 // ─── WORKSPACE ───────────────────────────────────────────────────────────────
 
 model Workspace {
-  id                  Int       @id @default(autoincrement())
-  name                String
-  slug                String    @unique // subdominio, ej: "bliss"
-  timezone            String    @default("America/Argentina/Buenos_Aires")
-  status              String    @default("trialing") // trialing | active | past_due | suspended | cancelled
-  trialEndsAt         DateTime?
-  stripeCustomerId    String?
+  id                            Int       @id @default(autoincrement())
+  name                          String
+  slug                          String    @unique // subdominio, ej: "bliss"
+  timezone                      String    @default("America/Argentina/Buenos_Aires")
+  status                        String    @default("trialing") // trialing | active | past_due | suspended | cancelled
+  trialEndsAt                   DateTime?
+  stripeCustomerId              String?
   // Branding / perfil de empresa
-  companyName         String?
-  companyDescription  String?
-  industry            String?
-  companyWebsite      String?
-  logoData            Bytes?
-  logoMimeType        String?
-  bannerData          Bytes?
-  bannerMimeType      String?
+  companyName                   String?
+  companyDescription            String?
+  industry                      String?
+  companyWebsite                String?
+  logoData                      Bytes?
+  logoMimeType                  String?
+  bannerData                    Bytes?
+  bannerMimeType                String?
   // Feature flags: keys que este workspace optó por desactivar (aunque estén habilitados globalmente o en su lista)
-  disabledFeatureKeys String    @default("[]")
-  monthlyTokenLimit   Int       @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
-  storageLimitMb      Int       @default(20480) // Límite de almacenamiento (MB) del workspace (configurable desde SuperAdmin). 0 = ilimitado
-  attendanceTrackingEnabled Boolean @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
-  productivityEnabled       Boolean @default(true) // Muestra la sección de Productividad (nav + página) para los admins
-  productivityDigestEnabled Boolean @default(true) // Aviso semanal por mail a admins/owners con las personas en alerta de Productividad
-  adsAdvisorAutoEnabled     Boolean @default(true) // Corre el Ads Advisor (IA) automáticamente cada lunes para proyectos con Meta/Google Ads conectado
-  rrssAdvisorAutoEnabled    Boolean @default(true) // Corre el RRSS Advisor (IA) automáticamente cada lunes para proyectos con alguna red social conectada
-  marketingDisabledSections String  @default("[]") // Secciones de Marketing ocultas para este workspace (ids de NAV: hoy/geo-seo/web/rrss/anuncios/informes). Mismo patrón que disabledFeatureKeys
-  marketingDigestEnabled    Boolean @default(true) // Aviso semanal por mail a admins/owners con los pendientes de alta prioridad de Prioridades (Marketing)
-  seoAlertsEnabled          Boolean @default(true) // Alertas SEO mensuales automáticas (caídas de tráfico/posición/DR/keywords). OFF = no se envían
-  lateToleranceMins   Int       @default(0) // Tolerancia (min) para tardanza: la llegada cuenta tarde solo si supera workStartTime + tolerancia
-  lateNotifyEnabled   Boolean   @default(false) // Enviar email a quien acumula tardanzas en los últimos 30 días
-  lateNotifyThreshold Int       @default(3) // Cantidad de tardanzas (1-10) en 30 días que dispara el email
-  lateNotifyTemplate  String?   // Cuerpo del email de tardanza (placeholders [Nombre] y [workspace]); null = texto por defecto
-  legajoEnabled       Boolean   @default(true) // Muestra la tarjeta/hint de legajos en RRHH. OFF = no se nudge-ea completar el legajo
-  legajoFields        Json      @default("[]") // Config del formulario de legajo (campos default + custom). [] = usa el catálogo default
+  disabledFeatureKeys           String    @default("[]")
+  monthlyTokenLimit             Int       @default(1000000) // Límite mensual de tokens de IA (configurable desde SuperAdmin)
+  storageLimitMb                Int       @default(20480) // Límite de almacenamiento (MB) del workspace (configurable desde SuperAdmin). 0 = ilimitado
+  attendanceTrackingEnabled     Boolean   @default(true) // Seguimiento de horarios y puntualidad en RRHH. OFF = oculta puntualidad/tardanzas (ej: equipos full freelance sin horarios)
+  productivityEnabled           Boolean   @default(true) // Muestra la sección de Productividad (nav + página) para los admins
+  productivityDigestEnabled     Boolean   @default(true) // Aviso semanal por mail a admins/owners con las personas en alerta de Productividad
+  adsAdvisorAutoEnabled         Boolean   @default(true) // Corre el Ads Advisor (IA) automáticamente cada lunes para proyectos con Meta/Google Ads conectado
+  rrssAdvisorAutoEnabled        Boolean   @default(true) // Corre el RRSS Advisor (IA) automáticamente cada lunes para proyectos con alguna red social conectada
+  marketingDisabledSections     String    @default("[]") // Secciones de Marketing ocultas para este workspace (ids de NAV: hoy/geo-seo/web/rrss/anuncios/informes). Mismo patrón que disabledFeatureKeys
+  marketingDigestEnabled        Boolean   @default(true) // Aviso semanal por mail a admins/owners con los pendientes de alta prioridad de Prioridades (Marketing)
+  seoAlertsEnabled              Boolean   @default(true) // Alertas SEO mensuales automáticas (caídas de tráfico/posición/DR/keywords). OFF = no se envían
+  lateToleranceMins             Int       @default(0) // Tolerancia (min) para tardanza: la llegada cuenta tarde solo si supera workStartTime + tolerancia
+  lateNotifyEnabled             Boolean   @default(false) // Enviar email a quien acumula tardanzas en los últimos 30 días
+  lateNotifyThreshold           Int       @default(3) // Cantidad de tardanzas (1-10) en 30 días que dispara el email
+  lateNotifyTemplate            String? // Cuerpo del email de tardanza (placeholders [Nombre] y [workspace]); null = texto por defecto
+  legajoEnabled                 Boolean   @default(true) // Muestra la tarjeta/hint de legajos en RRHH. OFF = no se nudge-ea completar el legajo
+  legajoFields                  Json      @default("[]") // Config del formulario de legajo (campos default + custom). [] = usa el catálogo default
   // Acumulación automática de vacaciones: regla única global del workspace ("+N días cada M meses"),
   // anclada al aniversario de ingreso de cada persona (WorkspaceMember.joinedAt). No retroactiva:
   // vacationAccrualActivatedAt marca desde cuándo empieza a contar (ver vacationAccrual.service.js).
-  vacationAccrualEnabled       Boolean   @default(false)
-  vacationAccrualDays          Float     @default(1)
-  vacationAccrualIntervalMonths Int      @default(1)
-  vacationAccrualActivatedAt   DateTime?
-  billingExempt       Boolean   @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.
-  demoSeeded          Boolean   @default(false) // True si tiene proyecto "Demo — Aprendé BlissTracker"
-  onboardingCompletedAt DateTime? // null = todavía no completó/saltó el wizard de onboarding (selector de módulos + tour)
-  voiceChannelSeededAt DateTime? // null = todavía no se sembró el canal de voz default (kind:'custom', medium:'voice').
-                                 // No se re-crea si el admin lo borra después — mismo criterio que demoSeeded.
+  vacationAccrualEnabled        Boolean   @default(false)
+  vacationAccrualDays           Float     @default(1)
+  vacationAccrualIntervalMonths Int       @default(1)
+  vacationAccrualActivatedAt    DateTime?
+  billingExempt                 Boolean   @default(false) // Exento de billing (ej: workspace bliss). Nunca pasa a past_due por superar el free tier.
+  demoSeeded                    Boolean   @default(false) // True si tiene proyecto "Demo — Aprendé BlissTracker"
+  onboardingCompletedAt         DateTime? // null = todavía no completó/saltó el wizard de onboarding (selector de módulos + tour)
+  voiceChannelSeededAt          DateTime? // null = todavía no se sembró el canal de voz default (kind:'custom', medium:'voice').
+  // No se re-crea si el admin lo borra después — mismo criterio que demoSeeded.
   // Identidad de marca
-  brandColors         String    @default("[]") // JSON: [{ hex, name? }]
-  brandFonts          String    @default("[]") // JSON: [{ name, role }] role: heading|body|accent
+  brandColors                   String    @default("[]") // JSON: [{ hex, name? }]
+  brandFonts                    String    @default("[]") // JSON: [{ name, role }] role: heading|body|accent
   // Acceso por rol a los módulos del dropdown "Módulos" (rrhh/gamification/ventas/marketing/
   // contenido/eos): JSON { [moduleKey]: { allMembers: bool, roles: string[] } }. Una clave
   // ausente cae al default del catálogo (backend/src/lib/moduleAccess.js). Los admins/owners
   // siempre acceden sin importar esta config. Configurable desde Preferencias.
-  moduleAccess        Json      @default("{}")
+  moduleAccess                  Json      @default("{}")
   // Indicaciones persistentes que la IA tiene en cuenta al generar propuestas (tono, estructura, qué incluir/evitar).
-  salesProposalGuidelines String?
+  salesProposalGuidelines       String?
   // Firmas / datos de contacto que pueden cerrar la propuesta en el PDF. JSON: [{ id, label, closing, name, role, email, phone, note, showLogo }]
   // Al generar/editar una propuesta se elige una (Proposal.signatureId).
-  salesSignatures     Json      @default("[]")
+  salesSignatures               Json      @default("[]")
   // Proyecto donde se crean las tareas futuras auto-generadas por las próximas acciones
   // de leads (que todavía no tienen proyecto propio). null = no se auto-crean tareas.
-  salesTasksProjectId Int?
-  salesTasksProject   Project?  @relation("WorkspaceSalesTasksProject", fields: [salesTasksProjectId], references: [id], onDelete: SetNull)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  salesTasksProjectId           Int?
+  salesTasksProject             Project?  @relation("WorkspaceSalesTasksProject", fields: [salesTasksProjectId], references: [id], onDelete: SetNull)
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
 
-  members                WorkspaceMember[]
-  projects               Project[]
-  userRoles              UserRole[]
-  services               Service[]
-  roleExpectations       RoleExpectation[]
-  aiTokenLogs            AiTokenLog[]
-  apifyUsageLogs         ApifyUsageLog[]
-  dailyInsights          DailyInsight[]
-  insightMemories        UserInsightMemory[]
-  notesBoardNotes        NotesBoardNote[]
-  notifications          Notification[]
-  workDays               WorkDay[]
-  taskRecurrences        TaskRecurrence[]
-  subscription           Subscription?
-  loginEvents            UserLogin[]
-  feedbacks              Feedback[]
-  invitations            WorkspaceInvitation[]
-  deletionRequest        WorkspaceDeletionRequest?
-  emailLogs              EmailLog[]
-  vacationAdjustments    VacationAdjustment[]
-  vacationRequests       VacationRequest[]
-  benefitBankAdjustments BenefitBankAdjustment[]
-  benefitBankRequests    BenefitBankRequest[]
-  geoAudits              GeoAudit[]
-  integrations           ProjectIntegration[]
-  analyticsSnapshots     AnalyticsSnapshot[]
-  analyticsInsights      AnalyticsInsight[]
-  pageSpeedResults       PageSpeedResult[]
-  trackedKeywords        TrackedKeyword[]          @relation("WorkspaceTrackedKeywords")
-  keywordRankings        KeywordRanking[]          @relation("WorkspaceKeywordRankings")
-  instagramSnapshots     InstagramSnapshot[]
-  instagramFollowerLogs  InstagramFollowerLog[]
-  instagramStories       InstagramStory[]
-  tiktokSnapshots        TikTokSnapshot[]
-  tiktokFollowerLogs     TikTokFollowerLog[]
-  youtubeSnapshots       YouTubeSnapshot[]
-  youtubeFollowerLogs    YouTubeFollowerLog[]
-  linkedinSnapshots      LinkedinSnapshot[]
-  linkedinFollowerLogs   LinkedinFollowerLog[]
-  facebookSnapshots      FacebookSnapshot[]
-  facebookFollowerLogs   FacebookFollowerLog[]
-  monthlyReports         MonthlyReport[]
-  reportFeedback         ReportFeedback[]
-  reportGenerationLogs   ReportGenerationLog[]
-  searchConsoleSnapshots SearchConsoleSnapshot[]
-  seoAiInsights          SeoAiInsight[]
-  cannibalReports        CannibalReport[]
-  adsSnapshots           AdsSnapshot[]
-  adsAdvisorResults      AdsAdvisorResult[]
-  rrssAdvisorResults     RrssAdvisorResult[]
-  dismissedFindings      DismissedFinding[]
-  socialImages           SocialImage[]
-  eosData                EOSData?
-  peopleAnalyzerRatings  PeopleAnalyzerRating[]
-  peopleAnalyzerSnapshots PeopleAnalyzerSnapshot[]
-  eosStrikes             EOSStrike[]
-  accountabilityNodes    AccountabilityNode[]
-  scorecardMetrics       ScorecardMetric[]
-  scorecardEntries       ScorecardEntry[]
-  eosProcesses           EOSProcess[]
-  eosProcessSteps        EOSProcessStep[]
-  eosIssues              EOSIssue[]
-  eosRocks               EOSRock[]
-  eosTodos               EOSTodo[]
-  eosMeetings            EOSMeeting[]
-  eosMeetingParticipants EOSMeetingParticipant[]
-  projectMeetings        ProjectMeeting[]
-  projectMeetingTodos    ProjectMeetingTodo[]
+  members                    WorkspaceMember[]
+  projects                   Project[]
+  userRoles                  UserRole[]
+  services                   Service[]
+  roleExpectations           RoleExpectation[]
+  aiTokenLogs                AiTokenLog[]
+  apifyUsageLogs             ApifyUsageLog[]
+  dailyInsights              DailyInsight[]
+  insightMemories            UserInsightMemory[]
+  notesBoardNotes            NotesBoardNote[]
+  notifications              Notification[]
+  workDays                   WorkDay[]
+  taskRecurrences            TaskRecurrence[]
+  subscription               Subscription?
+  loginEvents                UserLogin[]
+  feedbacks                  Feedback[]
+  invitations                WorkspaceInvitation[]
+  deletionRequest            WorkspaceDeletionRequest?
+  emailLogs                  EmailLog[]
+  vacationAdjustments        VacationAdjustment[]
+  vacationRequests           VacationRequest[]
+  benefitBankAdjustments     BenefitBankAdjustment[]
+  benefitBankRequests        BenefitBankRequest[]
+  geoAudits                  GeoAudit[]
+  integrations               ProjectIntegration[]
+  analyticsSnapshots         AnalyticsSnapshot[]
+  analyticsInsights          AnalyticsInsight[]
+  pageSpeedResults           PageSpeedResult[]
+  trackedKeywords            TrackedKeyword[]            @relation("WorkspaceTrackedKeywords")
+  keywordRankings            KeywordRanking[]            @relation("WorkspaceKeywordRankings")
+  instagramSnapshots         InstagramSnapshot[]
+  instagramFollowerLogs      InstagramFollowerLog[]
+  instagramStories           InstagramStory[]
+  tiktokSnapshots            TikTokSnapshot[]
+  tiktokFollowerLogs         TikTokFollowerLog[]
+  youtubeSnapshots           YouTubeSnapshot[]
+  youtubeFollowerLogs        YouTubeFollowerLog[]
+  linkedinSnapshots          LinkedinSnapshot[]
+  linkedinFollowerLogs       LinkedinFollowerLog[]
+  facebookSnapshots          FacebookSnapshot[]
+  facebookFollowerLogs       FacebookFollowerLog[]
+  monthlyReports             MonthlyReport[]
+  reportFeedback             ReportFeedback[]
+  reportGenerationLogs       ReportGenerationLog[]
+  searchConsoleSnapshots     SearchConsoleSnapshot[]
+  seoAiInsights              SeoAiInsight[]
+  cannibalReports            CannibalReport[]
+  adsSnapshots               AdsSnapshot[]
+  adsAdvisorResults          AdsAdvisorResult[]
+  rrssAdvisorResults         RrssAdvisorResult[]
+  dismissedFindings          DismissedFinding[]
+  socialImages               SocialImage[]
+  eosData                    EOSData?
+  peopleAnalyzerRatings      PeopleAnalyzerRating[]
+  peopleAnalyzerSnapshots    PeopleAnalyzerSnapshot[]
+  eosStrikes                 EOSStrike[]
+  accountabilityNodes        AccountabilityNode[]
+  scorecardMetrics           ScorecardMetric[]
+  scorecardEntries           ScorecardEntry[]
+  eosProcesses               EOSProcess[]
+  eosProcessSteps            EOSProcessStep[]
+  eosIssues                  EOSIssue[]
+  eosRocks                   EOSRock[]
+  eosTodos                   EOSTodo[]
+  eosMeetings                EOSMeeting[]
+  eosMeetingParticipants     EOSMeetingParticipant[]
+  projectMeetings            ProjectMeeting[]
+  projectMeetingTodos        ProjectMeetingTodo[]
   projectMeetingParticipants ProjectMeetingParticipant[]
-  orgAssessmentRounds    OrgAssessmentRound[]
-  orgAssessmentResponses OrgAssessmentResponse[]
-  marketingObjectives    MarketingObjective[]
-  projectBriefs          ProjectBrief[]
-  contentBriefs          ContentBrief[]
-  onPageAudits           OnPageAudit[]
-  contentGaps            ContentGap[]
-  rrhhMetricSnapshots    RrhhMetricSnapshot[]
-  projectAccesses        ProjectAccess[]
-  projectAccessLogs      ProjectAccessLog[]
-  games                  Game[]
-  taskFollows            TaskFollow[]
-  deletedTaskNotices     DeletedTaskNotice[]
-  companies              Company[]
-  contacts               Contact[]
-  leads                  Lead[]
-  leadActivities         LeadActivity[]
-  proposals              Proposal[]
-  leadResearches         LeadResearch[]
-  leadActions            LeadAction[]
-  clientPortals          ProjectClientPortal[]
-  clientPortalContacts   ClientPortalContact[]
-  chatChannels           ChatChannel[]
-  chatMessages           ChatMessage[]
-  chatChannelReads       ChatChannelRead[]
-  chatMessageReactions   ChatMessageReaction[]
-  chatAttachments        ChatAttachment[]
-  taskCommentReactions   TaskCommentReaction[]
-  contentPieces          ContentPiece[]
-  contentAssets          ContentAsset[]
-  contentComments        ContentComment[]
-  contentStatusEvents    ContentStatusEvent[]
-  contentPieceFiles      ContentPieceFile[]
-  projectFiles           ProjectFile[]
-  whatsappAccounts          WhatsappAccount[]
-  whatsappConversations     WhatsappConversation[]
-  whatsappMessages          WhatsappMessage[]
-  whatsappConversationReads WhatsappConversationRead[]
-  whatsappMedia             WhatsappMedia[]
-  whatsappBotConfig         WhatsappBotConfig?
-  whatsappTemplates         WhatsappTemplate[]
-  whatsappAutomationRules   WhatsappAutomationRule[]
-  whatsappAutomationLogs    WhatsappAutomationLog[]
-  whatsappBotDocuments      WhatsappBotDocument[]
-  whatsappBotEscalations    WhatsappBotEscalation[]
-  deviceTokens              DeviceToken[]
+  orgAssessmentRounds        OrgAssessmentRound[]
+  orgAssessmentResponses     OrgAssessmentResponse[]
+  marketingObjectives        MarketingObjective[]
+  projectBriefs              ProjectBrief[]
+  contentBriefs              ContentBrief[]
+  onPageAudits               OnPageAudit[]
+  contentGaps                ContentGap[]
+  rrhhMetricSnapshots        RrhhMetricSnapshot[]
+  projectAccesses            ProjectAccess[]
+  projectAccessLogs          ProjectAccessLog[]
+  games                      Game[]
+  taskFollows                TaskFollow[]
+  deletedTaskNotices         DeletedTaskNotice[]
+  companies                  Company[]
+  contacts                   Contact[]
+  leads                      Lead[]
+  leadActivities             LeadActivity[]
+  proposals                  Proposal[]
+  leadResearches             LeadResearch[]
+  leadActions                LeadAction[]
+  clientPortals              ProjectClientPortal[]
+  clientPortalContacts       ClientPortalContact[]
+  chatChannels               ChatChannel[]
+  chatMessages               ChatMessage[]
+  chatChannelReads           ChatChannelRead[]
+  chatMessageReactions       ChatMessageReaction[]
+  chatAttachments            ChatAttachment[]
+  taskCommentReactions       TaskCommentReaction[]
+  contentPieces              ContentPiece[]
+  contentAssets              ContentAsset[]
+  contentComments            ContentComment[]
+  contentStatusEvents        ContentStatusEvent[]
+  contentPieceFiles          ContentPieceFile[]
+  projectFiles               ProjectFile[]
+  whatsappAccounts           WhatsappAccount[]
+  whatsappConversations      WhatsappConversation[]
+  whatsappMessages           WhatsappMessage[]
+  whatsappConversationReads  WhatsappConversationRead[]
+  whatsappMedia              WhatsappMedia[]
+  whatsappBotConfig          WhatsappBotConfig?
+  whatsappTemplates          WhatsappTemplate[]
+  whatsappAutomationRules    WhatsappAutomationRule[]
+  whatsappAutomationLogs     WhatsappAutomationLog[]
+  whatsappBotDocuments       WhatsappBotDocument[]
+  whatsappBotEscalations     WhatsappBotEscalation[]
+  deviceTokens               DeviceToken[]
+  calendarEvents             CalendarEvent[]
+  calendarEventParticipants  CalendarEventParticipant[]
 
   @@index([slug])
 }
@@ -237,11 +239,11 @@ model WorkspaceMember {
   taskQualityEnabled   Boolean @default(true)
 
   // Preferencias de UI (por workspace)
-  notesBoardEnabled    Boolean @default(true)  // mostrar/ocultar la pizarra de notas
+  notesBoardEnabled Boolean @default(true) // mostrar/ocultar la pizarra de notas
 
   // Respuestas de los campos custom del legajo (los campos default viven en columnas de User).
   // Workspace-scoped: { fieldKey: value }. Ver Workspace.legajoFields.
-  legajoData           Json    @default("{}")
+  legajoData Json @default("{}")
 
   joinedAt DateTime @default(now())
 
@@ -267,22 +269,22 @@ model Subscription {
 // ─── USER (global — datos personales, no workspace-specific) ─────────────────
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
+  id            Int      @id @default(autoincrement())
+  name          String
+  email         String   @unique
+  password      String
   // Email primario verificado. Default true para no afectar cuentas existentes
   // (backfill); el signup nuevo en `createWorkspace` lo setea false explícitamente
   // y dispara `EmailVerificationToken` — hasta confirmarlo, el frontend muestra un
   // banner. `joinWorkspace` (invitación) lo deja en true: el control del email ya
   // quedó probado por haber llegado el link de invitación a esa casilla.
-  emailVerified Boolean @default(true)
+  emailVerified Boolean  @default(true)
   // ID estable de la cuenta de Google vinculada (el `sub` del token de Google).
   // Permite iniciar sesión con Google aunque el email de esa cuenta difiera del
   // email primario, y sobrevive a un cambio de email. null = sin Google conectado.
-  googleId  String?  @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  googleId      String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Super admin global (solo equipo Bliss)
   isSuperAdmin Boolean @default(false)
@@ -304,94 +306,96 @@ model User {
   healthInsurance   String?
   emergencyContact  String?
   avatar            String    @default("2bee.png")
-  customAvatar      Avatar?   // foto propia subida por el usuario (Avatar.ownerId), si tiene
+  customAvatar      Avatar? // foto propia subida por el usuario (Avatar.ownerId), si tiene
 
   // Relaciones
-  workspaceMembers          WorkspaceMember[]
-  workDays                  WorkDay[]
-  tasks                     Task[]
-  tasksCreated              Task[]                     @relation("TaskCreatedBy")
-  taskRecurrences           TaskRecurrence[]           @relation("RecurrenceAssignee")
-  taskRecurrencesCreated    TaskRecurrence[]           @relation("RecurrenceCreatedBy")
-  taskComments              TaskComment[]
-  taskFollows               TaskFollow[]               @relation("TaskFollower")
-  deletedNoticesAssigned    DeletedTaskNotice[]        @relation("DeletedNoticeAssignee")
-  deletedNoticesDelegated   DeletedTaskNotice[]        @relation("DeletedNoticeCreatedBy")
-  deletedNoticesDeletedByMe DeletedTaskNotice[]        @relation("DeletedNoticeDeletedBy")
-  dailyInsights             DailyInsight[]
-  insightMemories           UserInsightMemory[]
-  notesBoardNotes           NotesBoardNote[]
-  feedbacks                 Feedback[]
-  projects                  ProjectMember[]
-  starredProjects           ProjectStar[]
-  notifications             Notification[]             @relation("NotificationRecipient")
-  notificationsAsActor      Notification[]             @relation("NotificationActor")
-  passwordResetTokens       PasswordResetToken[]
-  emailChangeTokens         EmailChangeToken[]
-  emailVerificationTokens   EmailVerificationToken[]
-  loginEvents               UserLogin[]
-  sentInvitations           WorkspaceInvitation[]      @relation("InvitedByUser")
-  deletionRequestsMade      WorkspaceDeletionRequest[] @relation("DeletionRequestedBy")
-  deletionRequestsCancelled WorkspaceDeletionRequest[] @relation("DeletionCancelledBy")
-  vacationAdjustments       VacationAdjustment[]       @relation("VacationAdjustmentUser")
-  vacationAdjustmentsAdmin  VacationAdjustment[]       @relation("VacationAdjustmentAdmin")
-  vacationRequests          VacationRequest[]          @relation("VacationRequestUser")
-  vacationRequestsReviewed  VacationRequest[]          @relation("VacationRequestReviewer")
-  benefitBankAdjustments      BenefitBankAdjustment[]  @relation("BenefitBankAdjustmentUser")
-  benefitBankAdjustmentsAdmin BenefitBankAdjustment[]  @relation("BenefitBankAdjustmentAdmin")
-  benefitBankRequests         BenefitBankRequest[]     @relation("BenefitBankRequestUser")
-  benefitBankRequestsReviewed BenefitBankRequest[]     @relation("BenefitBankRequestReviewer")
-  announcements             Announcement[]             @relation("AnnouncementCreatedBy")
-  analyzerRatings           PeopleAnalyzerRating[]     @relation("AnalyzedPerson")
-  eosStrikesReceived        EOSStrike[]                @relation("StrikedPerson")
-  eosStrikesGiven           EOSStrike[]                @relation("StrikeCreator")
-  accountabilitySeats       AccountabilityNode[]       @relation("SeatHolder")
-  ownedMetrics              ScorecardMetric[]          @relation("MetricOwner")
-  ownedIssues               EOSIssue[]                 @relation("IssueOwner")
-  createdIssues             EOSIssue[]                 @relation("IssueCreatedBy")
-  ownedRocks                EOSRock[]                  @relation("RockOwner")
-  ownedTodos                EOSTodo[]                  @relation("TodoOwner")
-  ownedMeetingTodos         ProjectMeetingTodo[]       @relation("MeetingTodoOwner")
-  meetingParticipations     ProjectMeetingParticipant[] @relation("MeetingParticipant")
-  eosMeetingParticipations  EOSMeetingParticipant[]     @relation("EOSMeetingParticipant")
-  orgAssessmentResponses    OrgAssessmentResponse[]
-  generatedReports          MonthlyReport[]            @relation("ReportGeneratedBy")
-  reportGenerationLogs      ReportGenerationLog[]
-  platformSettingChanges    PlatformSettingLog[]       @relation("SettingChangedBy")
-  accessRevealLogs          ProjectAccessLog[]
-  ownedLeads                Lead[]                     @relation("LeadOwner")
-  createdLeads              Lead[]                     @relation("LeadCreatedBy")
-  leadActivities            LeadActivity[]             @relation("LeadActivityUser")
-  proposalsCreated          Proposal[]                 @relation("ProposalCreatedBy")
-  researchesCreated         LeadResearch[]             @relation("ResearchCreatedBy")
-  ownedLeadActions          LeadAction[]               @relation("LeadActionOwner")
-  resolvedLeadActions       LeadAction[]               @relation("LeadActionDoneBy")
-  createdLeadActions        LeadAction[]               @relation("LeadActionCreatedBy")
-  chatMessages              ChatMessage[]
-  chatChannelsCreated       ChatChannel[]
-  chatChannelReads          ChatChannelRead[]
-  chatMessagesPinned        ChatMessage[]              @relation("ChatMessagePinnedBy")
-  chatMessageReactions      ChatMessageReaction[]
-  taskCommentReactions      TaskCommentReaction[]
-  contentPiecesOwned        ContentPiece[]             @relation("ContentPieceOwner")
-  contentPiecesCreated      ContentPiece[]             @relation("ContentPieceCreator")
-  contentPiecesDeleted      ContentPiece[]             @relation("ContentPieceDeletedBy")
-  contentAssetsUploaded     ContentAsset[]             @relation("ContentAssetUploader")
-  projectFilesUploaded      ProjectFile[]              @relation("ProjectFileUploader")
-  projectFilesDeleted       ProjectFile[]              @relation("ProjectFileDeletedBy")
-  contentComments           ContentComment[]           @relation("ContentCommentAuthor")
-  contentStatusEvents       ContentStatusEvent[]        @relation("ContentEventActor")
-  contentPieceFilesLinked   ContentPieceFile[]          @relation("ContentPieceFileLinkedBy")
-  whatsappAccountsConnected WhatsappAccount[]
-  whatsappMessagesSent      WhatsappMessage[]
-  whatsappConversationReads WhatsappConversationRead[]
-  whatsappConversationsAssigned WhatsappConversation[] @relation("WhatsappConversationAssignee")
-  whatsappConversationsPinned WhatsappConversation[] @relation("WhatsappConversationPinnedBy")
-  whatsappConversationsBlocked WhatsappConversation[] @relation("WhatsappConversationBlockedBy")
+  workspaceMembers               WorkspaceMember[]
+  workDays                       WorkDay[]
+  tasks                          Task[]
+  tasksCreated                   Task[]                      @relation("TaskCreatedBy")
+  taskRecurrences                TaskRecurrence[]            @relation("RecurrenceAssignee")
+  taskRecurrencesCreated         TaskRecurrence[]            @relation("RecurrenceCreatedBy")
+  taskComments                   TaskComment[]
+  taskFollows                    TaskFollow[]                @relation("TaskFollower")
+  deletedNoticesAssigned         DeletedTaskNotice[]         @relation("DeletedNoticeAssignee")
+  deletedNoticesDelegated        DeletedTaskNotice[]         @relation("DeletedNoticeCreatedBy")
+  deletedNoticesDeletedByMe      DeletedTaskNotice[]         @relation("DeletedNoticeDeletedBy")
+  dailyInsights                  DailyInsight[]
+  insightMemories                UserInsightMemory[]
+  notesBoardNotes                NotesBoardNote[]
+  feedbacks                      Feedback[]
+  projects                       ProjectMember[]
+  starredProjects                ProjectStar[]
+  notifications                  Notification[]              @relation("NotificationRecipient")
+  notificationsAsActor           Notification[]              @relation("NotificationActor")
+  passwordResetTokens            PasswordResetToken[]
+  emailChangeTokens              EmailChangeToken[]
+  emailVerificationTokens        EmailVerificationToken[]
+  loginEvents                    UserLogin[]
+  sentInvitations                WorkspaceInvitation[]       @relation("InvitedByUser")
+  deletionRequestsMade           WorkspaceDeletionRequest[]  @relation("DeletionRequestedBy")
+  deletionRequestsCancelled      WorkspaceDeletionRequest[]  @relation("DeletionCancelledBy")
+  vacationAdjustments            VacationAdjustment[]        @relation("VacationAdjustmentUser")
+  vacationAdjustmentsAdmin       VacationAdjustment[]        @relation("VacationAdjustmentAdmin")
+  vacationRequests               VacationRequest[]           @relation("VacationRequestUser")
+  vacationRequestsReviewed       VacationRequest[]           @relation("VacationRequestReviewer")
+  benefitBankAdjustments         BenefitBankAdjustment[]     @relation("BenefitBankAdjustmentUser")
+  benefitBankAdjustmentsAdmin    BenefitBankAdjustment[]     @relation("BenefitBankAdjustmentAdmin")
+  benefitBankRequests            BenefitBankRequest[]        @relation("BenefitBankRequestUser")
+  benefitBankRequestsReviewed    BenefitBankRequest[]        @relation("BenefitBankRequestReviewer")
+  announcements                  Announcement[]              @relation("AnnouncementCreatedBy")
+  analyzerRatings                PeopleAnalyzerRating[]      @relation("AnalyzedPerson")
+  eosStrikesReceived             EOSStrike[]                 @relation("StrikedPerson")
+  eosStrikesGiven                EOSStrike[]                 @relation("StrikeCreator")
+  accountabilitySeats            AccountabilityNode[]        @relation("SeatHolder")
+  ownedMetrics                   ScorecardMetric[]           @relation("MetricOwner")
+  ownedIssues                    EOSIssue[]                  @relation("IssueOwner")
+  createdIssues                  EOSIssue[]                  @relation("IssueCreatedBy")
+  ownedRocks                     EOSRock[]                   @relation("RockOwner")
+  ownedTodos                     EOSTodo[]                   @relation("TodoOwner")
+  ownedMeetingTodos              ProjectMeetingTodo[]        @relation("MeetingTodoOwner")
+  meetingParticipations          ProjectMeetingParticipant[] @relation("MeetingParticipant")
+  eosMeetingParticipations       EOSMeetingParticipant[]     @relation("EOSMeetingParticipant")
+  orgAssessmentResponses         OrgAssessmentResponse[]
+  generatedReports               MonthlyReport[]             @relation("ReportGeneratedBy")
+  reportGenerationLogs           ReportGenerationLog[]
+  platformSettingChanges         PlatformSettingLog[]        @relation("SettingChangedBy")
+  accessRevealLogs               ProjectAccessLog[]
+  ownedLeads                     Lead[]                      @relation("LeadOwner")
+  createdLeads                   Lead[]                      @relation("LeadCreatedBy")
+  leadActivities                 LeadActivity[]              @relation("LeadActivityUser")
+  proposalsCreated               Proposal[]                  @relation("ProposalCreatedBy")
+  researchesCreated              LeadResearch[]              @relation("ResearchCreatedBy")
+  ownedLeadActions               LeadAction[]                @relation("LeadActionOwner")
+  resolvedLeadActions            LeadAction[]                @relation("LeadActionDoneBy")
+  createdLeadActions             LeadAction[]                @relation("LeadActionCreatedBy")
+  chatMessages                   ChatMessage[]
+  chatChannelsCreated            ChatChannel[]
+  chatChannelReads               ChatChannelRead[]
+  chatMessagesPinned             ChatMessage[]               @relation("ChatMessagePinnedBy")
+  chatMessageReactions           ChatMessageReaction[]
+  taskCommentReactions           TaskCommentReaction[]
+  contentPiecesOwned             ContentPiece[]              @relation("ContentPieceOwner")
+  contentPiecesCreated           ContentPiece[]              @relation("ContentPieceCreator")
+  contentPiecesDeleted           ContentPiece[]              @relation("ContentPieceDeletedBy")
+  contentAssetsUploaded          ContentAsset[]              @relation("ContentAssetUploader")
+  projectFilesUploaded           ProjectFile[]               @relation("ProjectFileUploader")
+  projectFilesDeleted            ProjectFile[]               @relation("ProjectFileDeletedBy")
+  contentComments                ContentComment[]            @relation("ContentCommentAuthor")
+  contentStatusEvents            ContentStatusEvent[]        @relation("ContentEventActor")
+  contentPieceFilesLinked        ContentPieceFile[]          @relation("ContentPieceFileLinkedBy")
+  whatsappAccountsConnected      WhatsappAccount[]
+  whatsappMessagesSent           WhatsappMessage[]
+  whatsappConversationReads      WhatsappConversationRead[]
+  whatsappConversationsAssigned  WhatsappConversation[]      @relation("WhatsappConversationAssignee")
+  whatsappConversationsPinned    WhatsappConversation[]      @relation("WhatsappConversationPinnedBy")
+  whatsappConversationsBlocked   WhatsappConversation[]      @relation("WhatsappConversationBlockedBy")
   whatsappAutomationRulesCreated WhatsappAutomationRule[]
-  whatsappBotDocumentsUploaded WhatsappBotDocument[] @relation("WhatsappBotDocumentUploadedBy")
-  dismissedFindings         DismissedFinding[]
-  deviceTokens              DeviceToken[]
+  whatsappBotDocumentsUploaded   WhatsappBotDocument[]       @relation("WhatsappBotDocumentUploadedBy")
+  dismissedFindings              DismissedFinding[]
+  deviceTokens                   DeviceToken[]
+  calendarEventsOrganized        CalendarEvent[]             @relation("CalendarEventOrganizer")
+  calendarEventParticipations    CalendarEventParticipant[]  @relation("CalendarEventParticipant")
 }
 
 model UserLogin {
@@ -496,30 +500,30 @@ model UserRole {
 }
 
 model Project {
-  id                 Int       @id @default(autoincrement())
-  workspaceId        Int
-  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name               String
-  active             Boolean   @default(true)
-  lostAt             DateTime? // se setea al pasar a inactivo (true→false), se limpia al reactivar; alimenta "Proyectos perdidos" del Scorecard EOS
-  situation          String?
-  timezone           String    @default("America/Argentina/Buenos_Aires")
-  linksEnabled       Boolean   @default(true)
-  situationEnabled   Boolean   @default(true)
-  hoursEnabled       Boolean   @default(false)
-  briefsEnabled      Boolean   @default(true)
-  filesEnabled       Boolean   @default(true)
-  monthlyHours       Int?
-  emailFrom          String?
-  aiWeeklyTokenLimit Int       @default(500000)
-  websiteUrl         String?
-  connections        String    @default("{}") // JSON: { instagram, facebook, ... }
-  integrationDefaults String   @default("{}") // JSON: IDs recordados por tipo para reconexión, ej { google_ads: { customerId, propertyId, country }, google_analytics: { propertyId } }
-  domainRating       Float?    // Ahrefs Domain Rating (0-100), valor actual cacheado
-  domainRatingAt     DateTime? // última actualización del Domain Rating
-  reportSections     String?   // JSON: array de claves de sección habilitadas para el informe de este proyecto (ej: ["analytics","instagram"]). null = sin restricción (todas las disponibles, comportamiento legacy)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                  Int       @id @default(autoincrement())
+  workspaceId         Int
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name                String
+  active              Boolean   @default(true)
+  lostAt              DateTime? // se setea al pasar a inactivo (true→false), se limpia al reactivar; alimenta "Proyectos perdidos" del Scorecard EOS
+  situation           String?
+  timezone            String    @default("America/Argentina/Buenos_Aires")
+  linksEnabled        Boolean   @default(true)
+  situationEnabled    Boolean   @default(true)
+  hoursEnabled        Boolean   @default(false)
+  briefsEnabled       Boolean   @default(true)
+  filesEnabled        Boolean   @default(true)
+  monthlyHours        Int?
+  emailFrom           String?
+  aiWeeklyTokenLimit  Int       @default(500000)
+  websiteUrl          String?
+  connections         String    @default("{}") // JSON: { instagram, facebook, ... }
+  integrationDefaults String    @default("{}") // JSON: IDs recordados por tipo para reconexión, ej { google_ads: { customerId, propertyId, country }, google_analytics: { propertyId } }
+  domainRating        Float? // Ahrefs Domain Rating (0-100), valor actual cacheado
+  domainRatingAt      DateTime? // última actualización del Domain Rating
+  reportSections      String? // JSON: array de claves de sección habilitadas para el informe de este proyecto (ej: ["analytics","instagram"]). null = sin restricción (todas las disponibles, comportamiento legacy)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   tasks                  Task[]
   taskRecurrences        TaskRecurrence[]
@@ -534,8 +538,8 @@ model Project {
   analyticsSnapshots     AnalyticsSnapshot[]
   analyticsInsights      AnalyticsInsight[]
   pageSpeedResults       PageSpeedResult[]
-  trackedKeywords        TrackedKeyword[]        @relation("ProjectTrackedKeywords")
-  keywordRankings        KeywordRanking[]        @relation("ProjectKeywordRankings")
+  trackedKeywords        TrackedKeyword[]         @relation("ProjectTrackedKeywords")
+  keywordRankings        KeywordRanking[]         @relation("ProjectKeywordRankings")
   instagramSnapshots     InstagramSnapshot[]
   instagramFollowerLogs  InstagramFollowerLog[]
   instagramStories       InstagramStory[]
@@ -565,15 +569,16 @@ model Project {
   accesses               ProjectAccess[]
   accessLogs             ProjectAccessLog[]
   meetings               ProjectMeeting[]
-  eosMeetingConfigs      EOSData[]               @relation("EOSMeetingProject")
-  sourceLead             Lead?                   @relation("LeadConvertedProject")
+  eosMeetingConfigs      EOSData[]                @relation("EOSMeetingProject")
+  sourceLead             Lead?                    @relation("LeadConvertedProject")
   clientPortal           ProjectClientPortal?
-  salesTasksWorkspaces   Workspace[]             @relation("WorkspaceSalesTasksProject")
+  salesTasksWorkspaces   Workspace[]              @relation("WorkspaceSalesTasksProject")
   chatChannel            ChatChannel?
   contentPieces          ContentPiece[]
   monthlyHoursLogs       ProjectMonthlyHoursLog[]
   files                  ProjectFile[]
   deletedTaskNotices     DeletedTaskNotice[]
+  calendarEvents         CalendarEvent[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -586,27 +591,27 @@ model Project {
 // que usa Contenido; sin @@unique de nombre por carpeta a propósito — Drive tampoco
 // impide nombres duplicados en la misma carpeta.
 model ProjectFile {
-  id           Int      @id @default(autoincrement())
-  projectId    Int
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workspaceId  Int
-  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  parentId     Int?
-  parent       ProjectFile?  @relation("ProjectFileChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children     ProjectFile[] @relation("ProjectFileChildren")
+  id          Int           @id @default(autoincrement())
+  projectId   Int
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspaceId Int
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentId    Int?
+  parent      ProjectFile?  @relation("ProjectFileChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children    ProjectFile[] @relation("ProjectFileChildren")
 
-  type         String   // "folder" | "file"
+  type         String // "folder" | "file"
   name         String
-  status       String?  // solo type:"file" — "pending" | "ready" (mismo patrón que ContentAsset)
+  status       String? // solo type:"file" — "pending" | "ready" (mismo patrón que ContentAsset)
   mimeType     String?
-  objectKey    String?  // key en R2, prefijo files/<workspaceId>/
-  posterKey    String?  // thumbnail del primer frame, solo videos
-  sizeBytes    Int?     // autoritativo: sale del HeadObject post-upload, no del cliente
+  objectKey    String? // key en R2, prefijo files/<workspaceId>/
+  posterKey    String? // thumbnail del primer frame, solo videos
+  sizeBytes    Int? // autoritativo: sale del HeadObject post-upload, no del cliente
   width        Int?
   height       Int?
   uploadedById Int?
-  uploadedBy   User?    @relation("ProjectFileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
+  uploadedBy   User?     @relation("ProjectFileUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
   confirmedAt  DateTime?
 
   // Papelera: "eliminar" es soft-delete (mismo patrón que ContentPiece — no
@@ -616,9 +621,9 @@ model ProjectFile {
   // padre borrado. La limpieza semanal (cleanup.service.js) borra en duro
   // —R2 incluido— pasados `projectFileTrashRetentionDays` (default 30) desde
   // este momento.
-  deletedAt    DateTime?
-  deletedById  Int?
-  deletedBy    User?    @relation("ProjectFileDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedAt   DateTime?
+  deletedById Int?
+  deletedBy   User?     @relation("ProjectFileDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   // Vínculos con piezas de Contenido (ver modelo ContentPieceFile) — un archivo
   // puede asociarse a una o más piezas, sin duplicar bytes ni objeto R2.
@@ -636,8 +641,8 @@ model ProjectMonthlyHoursLog {
   id            Int      @id @default(autoincrement())
   projectId     Int
   project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  monthlyHours  Int?     // horas contratadas vigentes desde effectiveFrom; null = sin presupuesto desde ese mes
-  effectiveFrom String   // "YYYY-MM", mes calendario (en Project.timezone) desde el cual aplica
+  monthlyHours  Int? // horas contratadas vigentes desde effectiveFrom; null = sin presupuesto desde ese mes
+  effectiveFrom String // "YYYY-MM", mes calendario (en Project.timezone) desde el cual aplica
   createdAt     DateTime @default(now())
 
   @@unique([projectId, effectiveFrom])
@@ -649,7 +654,7 @@ model Service {
   workspaceId Int
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   name        String
-  description String?   // qué incluye/es el servicio; contexto para la IA al generar propuestas comerciales
+  description String? // qué incluye/es el servicio; contexto para la IA al generar propuestas comerciales
   active      Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -708,15 +713,15 @@ model ProjectAccess {
   id          Int      @id @default(autoincrement())
   projectId   Int
   workspaceId Int
-  account     String?  // Cuenta (ej. "Instagram")
-  username    String?  // Usuario
-  password    String?  // Contraseña cifrada ("iv:tag:ciphertext")
-  twofa       String?  // Segundo factor (2FA) cifrado ("iv:tag:ciphertext")
-  extra       String?  // Notas / dato extra
+  account     String? // Cuenta (ej. "Instagram")
+  username    String? // Usuario
+  password    String? // Contraseña cifrada ("iv:tag:ciphertext")
+  twofa       String? // Segundo factor (2FA) cifrado ("iv:tag:ciphertext")
+  extra       String? // Notas / dato extra
   createdAt   DateTime @default(now())
 
-  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   revealLogs ProjectAccessLog[]
 
   @@index([projectId])
@@ -733,7 +738,7 @@ model ProjectAccessLog {
   projectId   Int
   accessId    Int?
   userId      Int
-  field       String   // "password" | "twofa" — qué dato se solicitó
+  field       String // "password" | "twofa" — qué dato se solicitó
   createdAt   DateTime @default(now())
 
   workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -777,80 +782,91 @@ enum TaskStatus {
 }
 
 model Task {
-  id                 Int        @id @default(autoincrement())
-  workDayId          Int
-  workDay            WorkDay    @relation(fields: [workDayId], references: [id])
-  userId             Int
-  user               User       @relation(fields: [userId], references: [id])
-  createdById        Int?
-  createdBy          User?      @relation("TaskCreatedBy", fields: [createdById], references: [id])
-  projectId          Int
-  project            Project    @relation(fields: [projectId], references: [id])
-  description        String
-  status             TaskStatus @default(PENDING)
-  blockedReason      String?
-  startedAt          DateTime?
-  pausedAt           DateTime?
-  pausedMinutes      Int        @default(0)
-  completedAt        DateTime?
-  minutesOverride    Int?
-  starred            Int        @default(0)
-  isBacklog          Boolean    @default(false)
-  dismissedByCreator Boolean    @default(false)
+  id                    Int             @id @default(autoincrement())
+  workDayId             Int
+  workDay               WorkDay         @relation(fields: [workDayId], references: [id])
+  userId                Int
+  user                  User            @relation(fields: [userId], references: [id])
+  createdById           Int?
+  createdBy             User?           @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  projectId             Int
+  project               Project         @relation(fields: [projectId], references: [id])
+  description           String
+  status                TaskStatus      @default(PENDING)
+  blockedReason         String?
+  startedAt             DateTime?
+  pausedAt              DateTime?
+  pausedMinutes         Int             @default(0)
+  completedAt           DateTime?
+  minutesOverride       Int?
+  starred               Int             @default(0)
+  isBacklog             Boolean         @default(false)
+  dismissedByCreator    Boolean         @default(false)
   // Tareas futuras/recurrentes: fecha de aparición "YYYY-MM-DD". null = tarea normal/ya activa.
   // Mientras scheduledFor > hoy la tarea NO aparece en el foco/backlog; al llegar la fecha se
   // engancha al workday del día y se setea scheduledFor = null (activación perezosa + cron).
-  scheduledFor       String?
+  scheduledFor          String?
+  // Bloqueo horario opcional en el módulo Calendario. "HH:MM" en timezone del workspace;
+  // null = la tarea no ocupa ninguna franja. Aplica a tareas normales (de hoy) y futuras
+  // por igual — ver availability.service.js: cuando activateDueTasks limpia scheduledFor,
+  // la fecha efectiva pasa a resolverse por workDay.date.
+  scheduledTime         String?
+  // Minutos que ocupa en el calendario. null = usar el default (30 min) del servicio de
+  // disponibilidad — no se persiste un valor fijo para no tener que migrar si cambia.
+  scheduledDurationMins Int?
   // Instancia generada por una recurrencia (null = tarea suelta). SetNull conserva el historial
   // completado si se borra la serie.
-  recurrenceId       Int?
-  recurrence         TaskRecurrence? @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  recurrenceId          Int?
+  recurrence            TaskRecurrence? @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
-  notifications Notification[]
-  comments      TaskComment[]
-  sessions      TaskSession[]
-  followers     TaskFollow[]
-  eosTodo       EOSTodo? // To-Do de L10 vinculado (uno a uno); completar la tarea lo tilda
+  notifications         Notification[]
+  comments              TaskComment[]
+  sessions              TaskSession[]
+  followers             TaskFollow[]
+  eosTodo               EOSTodo? // To-Do de L10 vinculado (uno a uno); completar la tarea lo tilda
   eosMeetingParticipant EOSMeetingParticipant? // Tarea auto-creada por una reunión L10 (uno a uno); su tiempo es la participación en la reunión
-  meetingTodo   ProjectMeetingTodo? // To-Do de reunión de proyecto vinculado (uno a uno); completar la tarea lo tilda
-  meetingParticipant ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
-  leadAction    LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
-  contentPiece  ContentPiece? // Pieza de Contenido vinculada (uno a uno); completar la tarea la hace avanzar de estado
+  meetingTodo           ProjectMeetingTodo? // To-Do de reunión de proyecto vinculado (uno a uno); completar la tarea lo tilda
+  meetingParticipant    ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
+  leadAction            LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
+  contentPiece          ContentPiece? // Pieza de Contenido vinculada (uno a uno); completar la tarea la hace avanzar de estado
 
+  @@unique([recurrenceId, scheduledFor])
   @@index([userId, status])
   @@index([projectId])
   @@index([workDayId])
   @@index([userId, scheduledFor])
   @@index([recurrenceId])
   @@index([status, completedAt])
-  @@unique([recurrenceId, scheduledFor])
 }
 
 // Plantilla de tarea recurrente. Genera instancias Task (con scheduledFor + recurrenceId) que
 // se materializan de a una por adelantado (sin backfill de ocurrencias perdidas).
 model TaskRecurrence {
-  id          Int       @id @default(autoincrement())
-  workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  userId      Int // a quién se le asigna la tarea
-  user        User      @relation("RecurrenceAssignee", fields: [userId], references: [id], onDelete: Cascade)
-  createdById Int? // quién la creó/delegó (null si es propia)
-  createdBy   User?     @relation("RecurrenceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  projectId   Int
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  description String
-  frequency   String // daily | weekly | monthly | annual
-  weekdays    String  @default("[]") // JSON [0-6] (0=domingo) — solo weekly
-  dayOfMonth  Int? // 1-31 — monthly/annual (derivado de startDate)
-  month       Int? // 1-12 — annual (derivado de startDate)
-  startDate      String // "YYYY-MM-DD" — primera ocurrencia
-  endDate        String? // "YYYY-MM-DD" — null = nunca termina
-  lastSpawnedDate String? // "YYYY-MM-DD" — última ocurrencia materializada (para generar la próxima sin backfill)
-  active         Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                    Int       @id @default(autoincrement())
+  workspaceId           Int
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId                Int // a quién se le asigna la tarea
+  user                  User      @relation("RecurrenceAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  createdById           Int? // quién la creó/delegó (null si es propia)
+  createdBy             User?     @relation("RecurrenceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  projectId             Int
+  project               Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description           String
+  frequency             String // daily | weekly | monthly | annual
+  weekdays              String    @default("[]") // JSON [0-6] (0=domingo) — solo weekly
+  dayOfMonth            Int? // 1-31 — monthly/annual (derivado de startDate)
+  month                 Int? // 1-12 — annual (derivado de startDate)
+  startDate             String // "YYYY-MM-DD" — primera ocurrencia
+  endDate               String? // "YYYY-MM-DD" — null = nunca termina
+  lastSpawnedDate       String? // "YYYY-MM-DD" — última ocurrencia materializada (para generar la próxima sin backfill)
+  // Bloqueo horario opcional (ver Task.scheduledTime) — se copia a cada instancia generada.
+  scheduledTime         String?
+  scheduledDurationMins Int?
+  active                Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   tasks Task[]
 
@@ -968,37 +984,41 @@ enum NotificationType {
   BENEFIT_REQUEST
   BENEFIT_REVIEWED
   TASK_DELETED
+  CALENDAR_INVITE
+  CALENDAR_RESPONSE
 }
 
 model Notification {
-  id          Int              @id @default(autoincrement())
-  userId      Int
-  user        User             @relation("NotificationRecipient", fields: [userId], references: [id])
+  id              Int              @id @default(autoincrement())
+  userId          Int
+  user            User             @relation("NotificationRecipient", fields: [userId], references: [id])
   // Nullable: el actor de CONTENT_APPROVED / CONTENT_CHANGES_REQUESTED es un
   // contacto del cliente (ClientPortalContact), no un User. En esos casos el
   // `message` es autocontenido e incluye el nombre de quien actuó.
-  actorId     Int?
-  actor       User?            @relation("NotificationActor", fields: [actorId], references: [id])
-  workspaceId Int
-  workspace   Workspace        @relation(fields: [workspaceId], references: [id])
-  taskId      Int?
-  task        Task?            @relation(fields: [taskId], references: [id])
-  projectId   Int?
-  project     Project?         @relation(fields: [projectId], references: [id])
-  leadId      Int?
-  lead        Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  gameId      Int?
-  game        Game?            @relation(fields: [gameId], references: [id], onDelete: SetNull)
-  channelId   Int?
-  channel     ChatChannel?     @relation(fields: [channelId], references: [id], onDelete: SetNull)
-  chatMessageId Int?
-  chatMessage ChatMessage?     @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
-  contentPieceId Int?
-  contentPiece ContentPiece?   @relation(fields: [contentPieceId], references: [id], onDelete: SetNull)
-  type        NotificationType @default(COMPLETED)
-  message     String
-  read        Boolean          @default(false)
-  createdAt   DateTime         @default(now())
+  actorId         Int?
+  actor           User?            @relation("NotificationActor", fields: [actorId], references: [id])
+  workspaceId     Int
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id])
+  taskId          Int?
+  task            Task?            @relation(fields: [taskId], references: [id])
+  projectId       Int?
+  project         Project?         @relation(fields: [projectId], references: [id])
+  leadId          Int?
+  lead            Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  gameId          Int?
+  game            Game?            @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  channelId       Int?
+  channel         ChatChannel?     @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  chatMessageId   Int?
+  chatMessage     ChatMessage?     @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
+  contentPieceId  Int?
+  contentPiece    ContentPiece?    @relation(fields: [contentPieceId], references: [id], onDelete: SetNull)
+  calendarEventId Int?
+  calendarEvent   CalendarEvent?   @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+  type            NotificationType @default(COMPLETED)
+  message         String
+  read            Boolean          @default(false)
+  createdAt       DateTime         @default(now())
 
   @@index([userId])
   @@index([userId, read])
@@ -1037,7 +1057,7 @@ model NotesBoardNote {
   user        User      @relation(fields: [userId], references: [id])
   workspaceId Int
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  columnIndex Int       // 0, 1, 2
+  columnIndex Int // 0, 1, 2
   content     String    @default("") @db.Text
   updatedAt   DateTime  @updatedAt
 
@@ -1358,8 +1378,8 @@ model Avatar {
   label     String
   order     Int      @default(0)
   active    Boolean  @default(true)
-  imageData Bytes?   // null cuando vive en object storage (objectKey seteado)
-  objectKey String?  // key en R2 (dual storage, mismo patrón que SocialImage)
+  imageData Bytes? // null cuando vive en object storage (objectKey seteado)
+  objectKey String? // key en R2 (dual storage, mismo patrón que SocialImage)
   sizeBytes Int?
   mimeType  String   @default("image/png")
   createdAt DateTime @default(now())
@@ -1378,7 +1398,7 @@ model Avatar {
 model ApifyToken {
   id           Int       @id @default(autoincrement())
   label        String
-  token        String    // cifrado AES-256-GCM "iv:tag:ciphertext" — mismo patrón que ProjectIntegration.accessToken (lib/encryption.js)
+  token        String // cifrado AES-256-GCM "iv:tag:ciphertext" — mismo patrón que ProjectIntegration.accessToken (lib/encryption.js)
   order        Int       @default(0) // prioridad de fallback: se prueban en este orden ante error/sin crédito
   active       Boolean   @default(true)
   lastUsedAt   DateTime?
@@ -1399,13 +1419,13 @@ model ApifyUsageLog {
   workspace   Workspace?  @relation(fields: [workspaceId], references: [id])
   projectId   Int?
   project     Project?    @relation(fields: [projectId], references: [id])
-  platform    String      // "instagram" | "linkedin" | "facebook"
-  action      String      // "connect" | "refresh" | "monthly_snapshot" | "diagnostic" | "collab_merge" | "competitor_add" | "competitor_refresh" | "competitor_monthly_snapshot"
+  platform    String // "instagram" | "linkedin" | "facebook"
+  action      String // "connect" | "refresh" | "monthly_snapshot" | "diagnostic" | "collab_merge" | "competitor_add" | "competitor_refresh" | "competitor_monthly_snapshot"
   tokenId     Int?
   token       ApifyToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
-  tokenLabel  String      // snapshot del label de la cuenta al momento del log (sobrevive al borrado del token)
+  tokenLabel  String // snapshot del label de la cuenta al momento del log (sobrevive al borrado del token)
   success     Boolean
-  itemCount   Int?        // cantidad de items devueltos por Apify (null si no aplica)
+  itemCount   Int? // cantidad de items devueltos por Apify (null si no aplica)
   errorMsg    String?
   createdAt   DateTime    @default(now())
 
@@ -1419,11 +1439,11 @@ model ApifyUsageLog {
 // ─── LANDING PÚBLICA (editable desde SuperAdmin → Landing) ───────────────────
 
 model LandingContent {
-  id                   Int      @id @default(autoincrement()) // fila única, siempre se opera sobre id=1
-  heroBadge            String   @default("Hecho para agencias de marketing · Gratis hasta 3 usuarios")
-  heroTitle            String   @default("El sistema operativo") // 1ª línea del <h1>
-  heroTitleAccentWords Json     @default("[\"agencia\",\"negocio\",\"equipo\",\"empresa\"]") // 2ª línea (coloreada): "de tu " + palabra que rota con efecto typewriter + "." — prefijo/sufijo fijos en el frontend
-  heroSubtitle         String   @default("Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.")
+  id                   Int     @id @default(autoincrement()) // fila única, siempre se opera sobre id=1
+  heroBadge            String  @default("Hecho para agencias de marketing · Gratis hasta 3 usuarios")
+  heroTitle            String  @default("El sistema operativo") // 1ª línea del <h1>
+  heroTitleAccentWords Json    @default("[\"agencia\",\"negocio\",\"equipo\",\"empresa\"]") // 2ª línea (coloreada): "de tu " + palabra que rota con efecto typewriter + "." — prefijo/sufijo fijos en el frontend
+  heroSubtitle         String  @default("Tareas con foco real, visibilidad de tu equipo en vivo, e informes automáticos — más los módulos que tu agencia necesite: marketing, EOS, ventas.")
   demoVideoUrl         String? // URL de EMBED de Loom/YouTube; null = se muestra el AppMockup de fallback
 
   // Secciones intermedias — defaults reales (copy original) viven en el controller
@@ -1602,10 +1622,10 @@ model TrackedKeyword {
   analysisUpdatedAt DateTime?
   createdAt         DateTime  @default(now())
 
-  project       Project          @relation("ProjectTrackedKeywords", fields: [projectId], references: [id], onDelete: Cascade)
-  workspace     Workspace        @relation("WorkspaceTrackedKeywords", fields: [workspaceId], references: [id], onDelete: Cascade)
-  rankings      KeywordRanking[]
-  serpSnapshots SerpSnapshot[]
+  project             Project              @relation("ProjectTrackedKeywords", fields: [projectId], references: [id], onDelete: Cascade)
+  workspace           Workspace            @relation("WorkspaceTrackedKeywords", fields: [workspaceId], references: [id], onDelete: Cascade)
+  rankings            KeywordRanking[]
+  serpSnapshots       SerpSnapshot[]
   marketingObjectives MarketingObjective[]
 
   @@unique([projectId, query])
@@ -1696,9 +1716,9 @@ model SocialImage {
   id          String   @id @default(uuid())
   workspaceId Int
   sourceUrl   String   @db.Text // URL original del CDN (referencia/dedup)
-  imageData   Bytes?   // bytes en DB (legacy / fallback si no hay object storage configurado)
-  objectKey   String?  // key del objeto en Cloudflare R2 cuando vive en object storage; null = vive en imageData
-  sizeBytes   Int?     // tamaño del blob, para reportar peso esté en DB o en R2
+  imageData   Bytes? // bytes en DB (legacy / fallback si no hay object storage configurado)
+  objectKey   String? // key del objeto en Cloudflare R2 cuando vive en object storage; null = vive en imageData
+  sizeBytes   Int? // tamaño del blob, para reportar peso esté en DB o en R2
   mimeType    String
   createdAt   DateTime @default(now())
 
@@ -1760,16 +1780,16 @@ model InstagramStory {
 // Competidores de RRSS — cuentas de la competencia que se trackean por scraping.
 // Por ahora solo Instagram (platform = "instagram").
 model CompetitorAccount {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   projectId     Int
   workspaceId   Int
-  platform      String   @default("instagram")
+  platform      String    @default("instagram")
   username      String // handle sin @
   displayName   String?
   profilePicUrl String?
   lastScrapedAt DateTime? // última vez que se llamó al proveedor de scraping (Apify) — gate de "1 vez por mes calendario"
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   project             Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
   snapshots           CompetitorSnapshot[]
@@ -1891,12 +1911,12 @@ model YouTubeSnapshot {
 // ─── YOUTUBE SUBSCRIBER LOG ───────────────────────────────────────────────────
 
 model YouTubeFollowerLog {
-  id              Int      @id @default(autoincrement())
-  projectId       Int
-  workspaceId     Int
-  date            String // "YYYY-MM-DD" en horario ART
-  followersCount  Int // suscriptores (nombre alineado con las otras redes para reutilizar helpers)
-  createdAt       DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  projectId      Int
+  workspaceId    Int
+  date           String // "YYYY-MM-DD" en horario ART
+  followersCount Int // suscriptores (nombre alineado con las otras redes para reutilizar helpers)
+  createdAt      DateTime @default(now())
 
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -2048,7 +2068,7 @@ model AdsSnapshot {
 // solo cachea el último resultado para que el panel "Hoy" pueda leerlo sin volver a
 // pegarle a Claude. Upsert por (projectId, platform), se pisa en cada nuevo análisis.
 model AdsAdvisorResult {
-  id          Int      @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   workspaceId Int
   projectId   Int
   platform    String // "meta_ads" | "google_ads"
@@ -2068,7 +2088,7 @@ model AdsAdvisorResult {
 // para Instagram/TikTok/LinkedIn/Facebook/YouTube. Sin `nuevosCopys` — v1 solo genera
 // diagnóstico, no ideas de contenido nuevo (ver rrssAdvisor.service.js).
 model RrssAdvisorResult {
-  id          Int      @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   workspaceId Int
   projectId   Int
   platform    String // "instagram" | "tiktok" | "linkedin" | "facebook" | "youtube"
@@ -2109,28 +2129,28 @@ model DismissedFinding {
 // ─── MONTHLY REPORT ──────────────────────────────────────────────────────────
 
 model MonthlyReport {
-  id             Int      @id @default(autoincrement())
-  projectId      Int
-  workspaceId    Int
-  month          String // "YYYY-MM" — ancla estable de id/URL. El NOMBRE visible sale del período (periodStart/End).
-  periodStart    DateTime? // Inicio del período de datos (fecha real). null en informes legacy → se deriva del mes completo prevMonthStr(month).
-  periodEnd      DateTime? // Fin del período de datos (fecha real). null en legacy → último día de prevMonthStr(month).
-  status         String   @default("draft") // "draft" | "published" — el link público solo sirve informes publicados
-  token          String   @unique
-  objectives     String   @default("{}") // JSON: { sessions, followersIg, followersTk, ... }
-  notes          String?
-  analysis       String? // JSON: { resumen, highlights, alertas, nextSteps } — cacheado, no se regenera
-  dataCache      String? // JSON: secciones agregadas (analytics, ads, instagram, seo, etc.) — caché para evitar llamadas repetidas a APIs
+  id              Int       @id @default(autoincrement())
+  projectId       Int
+  workspaceId     Int
+  month           String // "YYYY-MM" — ancla estable de id/URL. El NOMBRE visible sale del período (periodStart/End).
+  periodStart     DateTime? // Inicio del período de datos (fecha real). null en informes legacy → se deriva del mes completo prevMonthStr(month).
+  periodEnd       DateTime? // Fin del período de datos (fecha real). null en legacy → último día de prevMonthStr(month).
+  status          String    @default("draft") // "draft" | "published" — el link público solo sirve informes publicados
+  token           String    @unique
+  objectives      String    @default("{}") // JSON: { sessions, followersIg, followersTk, ... }
+  notes           String?
+  analysis        String? // JSON: { resumen, highlights, alertas, nextSteps } — cacheado, no se regenera
+  dataCache       String? // JSON: secciones agregadas (analytics, ads, instagram, seo, etc.) — caché para evitar llamadas repetidas a APIs
   enabledSections String? // JSON: array de secciones a incluir (ej: ["analytics","instagram"]). null = informe aún no generado
-  bannerData     Bytes? // Imagen de portada del informe (PNG/JPG/WebP, max 5MB)
-  bannerMimeType String? // ej: "image/jpeg"
-  generatedById  Int? // usuario que generó o regeneró el informe por última vez
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  bannerData      Bytes? // Imagen de portada del informe (PNG/JPG/WebP, max 5MB)
+  bannerMimeType  String? // ej: "image/jpeg"
+  generatedById   Int? // usuario que generó o regeneró el informe por última vez
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  generatedBy    User?     @relation("ReportGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
+  project        Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  generatedBy    User?                 @relation("ReportGeneratedBy", fields: [generatedById], references: [id], onDelete: SetNull)
   feedback       ReportFeedback[]
   generationLogs ReportGenerationLog[]
 
@@ -2238,8 +2258,8 @@ model ClientPortalContact {
   updatedAt   DateTime            @updatedAt
 
   loginCodes     ClientPortalLoginCode[]
-  approvedPieces ContentPiece[] @relation("ContentPieceApprovedBy")
-  ownedPieces    ContentPiece[] @relation("ContentPieceOwnerContact")
+  approvedPieces ContentPiece[]          @relation("ContentPieceApprovedBy")
+  ownedPieces    ContentPiece[]          @relation("ContentPieceOwnerContact")
   comments       ContentComment[]
   statusEvents   ContentStatusEvent[]
 
@@ -2250,16 +2270,16 @@ model ClientPortalContact {
 
 // Códigos OTP de un solo uso para desbloquear "Datos en vivo" del portal de cliente.
 model ClientPortalLoginCode {
-  id        Int      @id @default(autoincrement())
+  id        Int                  @id @default(autoincrement())
   portalId  Int
-  portal    ProjectClientPortal @relation(fields: [portalId], references: [id], onDelete: Cascade)
+  portal    ProjectClientPortal  @relation(fields: [portalId], references: [id], onDelete: Cascade)
   contactId Int?
   contact   ClientPortalContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
   email     String
   code      String
   expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  used      Boolean              @default(false)
+  createdAt DateTime             @default(now())
 
   // El rate limit del OTP es por (portal, email) y no por portal: con varios
   // contactos, un límite por portal se agotaría con un login de cada uno.
@@ -2380,11 +2400,11 @@ model OnPageAudit {
 // gaps              = JSON [{tema, tipo, descripcion, prioridad}]
 // headingsSuggested = JSON [string]
 model ContentGap {
-  id          Int    @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   workspaceId Int
   projectId   Int
   keyword     String
-  status      String @default("pending") // pending|running|completed|failed
+  status      String  @default("pending") // pending|running|completed|failed
   ownUrl      String?
   ownPosition Int?
 
@@ -2411,24 +2431,27 @@ model ContentGap {
 // cronómetro de inicio/fin (duración) y to-dos con responsable que se pueden
 // enviar al dashboard (igual que los To-Dos de L10).
 model ProjectMeeting {
-  id          Int      @id @default(autoincrement())
-  projectId   Int
-  workspaceId Int
-  date        String // "YYYY-MM-DD"
-  title       String? // título opcional de la reunión (para identificarla entre varias)
-  type        String   @default("internal") // 'internal' (equipo) | 'client' (cliente)
-  notes       String? // HTML del editor de notas
-  startedAt   DateTime? // cronómetro: arranca al iniciar la reunión
-  endedAt     DateTime? // cronómetro: se setea al finalizar
+  id           Int       @id @default(autoincrement())
+  projectId    Int
+  workspaceId  Int
+  date         String // "YYYY-MM-DD"
+  title        String? // título opcional de la reunión (para identificarla entre varias)
+  type         String    @default("internal") // 'internal' (equipo) | 'client' (cliente)
+  notes        String? // HTML del editor de notas
+  startedAt    DateTime? // cronómetro: arranca al iniciar la reunión
+  endedAt      DateTime? // cronómetro: se setea al finalizar
   durationMins Int? // duración en minutos, congelada al finalizar
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project      Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  workspace    Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  todos        ProjectMeetingTodo[]
-  participants ProjectMeetingParticipant[]
+  project       Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace     Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  todos         ProjectMeetingTodo[]
+  participants  ProjectMeetingParticipant[]
+  // Evento del módulo Calendario que originó esta reunión, si se creó al apretar
+  // "Iniciar" desde un CalendarEvent (lado inverso de CalendarEvent.realMeetingId).
+  calendarEvent CalendarEvent?
 
   @@index([projectId])
   @@index([workspaceId])
@@ -2480,6 +2503,71 @@ model ProjectMeetingTodo {
   @@index([workspaceId])
 }
 
+// ─── CALENDARIO (disponibilidad interna del equipo) ──────────────────────────
+// Reunión agendada desde el módulo Calendario — a diferencia de ProjectMeeting (que
+// arranca "en vivo" el mismo día que se crea), un CalendarEvent se agenda a futuro con
+// fecha+hora y requiere que cada invitado acepte antes de contar como confirmado.
+// "date"/"startTime" son strings en la timezone del workspace (mismo criterio que
+// WorkDay.date / WorkspaceMember.workStartTime), no DateTime UTC, para evitar el
+// problema de corrimiento por DST ya documentado en recurrence.service.js.
+// Sin campo `status` propio: el estado de confirmación se DERIVA de
+// CalendarEventParticipant.status al formatear la respuesta (evita un campo
+// denormalizado que se desincroniza) — mismo criterio que ProjectMeeting.running,
+// calculado al vuelo en vez de persistido.
+model CalendarEvent {
+  id            Int             @id @default(autoincrement())
+  workspaceId   Int
+  organizerId   Int
+  title         String
+  date          String // "YYYY-MM-DD"
+  startTime     String // "HH:MM"
+  durationMins  Int             @default(30)
+  projectId     Int?
+  meetLink      String?
+  notes         String?
+  // Reunión real (ProjectMeeting) creada al apretar "Iniciar" — null hasta entonces.
+  // Mientras es null el evento se puede editar/cancelar; una vez seteado queda
+  // congelado (mismo criterio que ProjectMeeting con participantes tras iniciar).
+  realMeetingId Int?            @unique
+  realMeeting   ProjectMeeting? @relation(fields: [realMeetingId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace     Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organizer     User                       @relation("CalendarEventOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  project       Project?                   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  participants  CalendarEventParticipant[]
+  notifications Notification[]
+
+  @@index([workspaceId, date])
+  @@index([organizerId])
+  @@index([projectId])
+}
+
+// Participante de un CalendarEvent, con estado de aceptación — a diferencia de
+// ProjectMeetingParticipant (que no tiene estado: al agregarse ya cuenta como "en la
+// reunión"). El organizador se auto-agrega como "accepted" al crear el evento (mismo
+// patrón que ProjectMeeting: "el creador queda como participante por defecto").
+model CalendarEventParticipant {
+  id          Int       @id @default(autoincrement())
+  eventId     Int
+  workspaceId Int
+  userId      Int
+  status      String    @default("pending") // "pending" | "accepted" | "declined"
+  respondedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  event     CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User          @relation("CalendarEventParticipant", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId, status])
+  @@index([workspaceId])
+}
+
 // ─── SEO SNAPSHOTS ────────────────────────────────────────────────────────────
 
 model SearchConsoleSnapshot {
@@ -2488,14 +2576,14 @@ model SearchConsoleSnapshot {
   workspaceId Int
   month       String // "YYYY-MM"
 
-  clicks      Int    @default(0)
-  impressions Int    @default(0)
-  ctr         Float  @default(0)
-  avgPosition Float  @default(0)
-  devices     String @default("{}") // JSON: {DESKTOP:{clicks,impressions}, MOBILE:{...}, TABLET:{...}}
-  countries   String @default("[]") // JSON: [{country, clicks, impressions}]
-  topQueries  String @default("[]") // JSON: [{query, clicks, impressions, ctr, position}]
-  topPages    String @default("[]") // JSON: [{page, clicks, impressions, ctr, position}]
+  clicks       Int    @default(0)
+  impressions  Int    @default(0)
+  ctr          Float  @default(0)
+  avgPosition  Float  @default(0)
+  devices      String @default("{}") // JSON: {DESKTOP:{clicks,impressions}, MOBILE:{...}, TABLET:{...}}
+  countries    String @default("[]") // JSON: [{country, clicks, impressions}]
+  topQueries   String @default("[]") // JSON: [{query, clicks, impressions, ctr, position}]
+  topPages     String @default("[]") // JSON: [{page, clicks, impressions, ctr, position}]
   domainRating Float? // Ahrefs Domain Rating (0-100) al momento del snapshot — histórico mensual
 
   createdAt DateTime @default(now())
@@ -2584,12 +2672,12 @@ model EOSData {
   oneYearDate    String? // Fecha de realización (YYYY-MM-DD)
   oneYearRevenue String?
   oneYearProfit  String?
-  oneYearGoals   String   @default("[]") // JSON: string[] (Rocks)
+  oneYearGoals   String  @default("[]") // JSON: string[] (Rocks)
 
   // Reuniones L10 — proyecto por defecto donde se crean las tareas de los participantes
   meetingProjectId Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   meetingProject Project?  @relation("EOSMeetingProject", fields: [meetingProjectId], references: [id], onDelete: SetNull)
@@ -2684,18 +2772,18 @@ model AccountabilityNode {
 // ─── EOS SCORECARD ────────────────────────────────────────────────────────────
 
 model ScorecardMetric {
-  id          Int      @id @default(autoincrement())
-  workspaceId Int
-  name        String
-  ownerId     Int?
-  goal        Float?
-  lowerIsBetter Boolean @default(false) // true = menor es mejor (ej: tardanzas); verde cuando value <= goal
-  unit        String?
-  frequency   String   @default("weekly") // 'weekly' | 'monthly'
-  autoKey     String?  // null = métrica manual; 'tardanzas' | 'ocupacion' = automática (valores calculados por el sistema, no se cargan a mano)
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  workspaceId   Int
+  name          String
+  ownerId       Int?
+  goal          Float?
+  lowerIsBetter Boolean  @default(false) // true = menor es mejor (ej: tardanzas); verde cuando value <= goal
+  unit          String?
+  frequency     String   @default("weekly") // 'weekly' | 'monthly'
+  autoKey       String? // null = métrica manual; 'tardanzas' | 'ocupacion' = automática (valores calculados por el sistema, no se cargan a mano)
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   owner     User?            @relation("MetricOwner", fields: [ownerId], references: [id], onDelete: SetNull)
@@ -2825,17 +2913,17 @@ model EOSTodo {
 }
 
 model EOSMeeting {
-  id          Int      @id @default(autoincrement())
-  workspaceId Int
-  week        String // "2026-W18"
-  date        String? // "2026-05-06"
-  notes       String?
-  type        String   @default("weekly") // 'weekly' | 'quarterly' | 'annual'
+  id           Int       @id @default(autoincrement())
+  workspaceId  Int
+  week         String // "2026-W18"
+  date         String? // "2026-05-06"
+  notes        String?
+  type         String    @default("weekly") // 'weekly' | 'quarterly' | 'annual'
   startedAt    DateTime? // cronómetro: arranca al iniciar la reunión
   endedAt      DateTime? // cronómetro: se setea al finalizar
   durationMins Int? // duración en minutos, congelada al finalizar
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   workspace    Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   participants EOSMeetingParticipant[]
@@ -3081,16 +3169,16 @@ model GameScore {
 
 // Empresa: una cuenta comercial. Puede tener múltiples contactos y múltiples leads.
 model Company {
-  id          Int       @id @default(autoincrement())
-  workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name        String
-  website     String? // sitio web
-  industry    String? // rubro (opcional)
-  notes       String? // observaciones
-  botFilledFields Json @default("[]") // nombres de campos (website/industry) completados por el bot de WhatsApp y aún no revisados por un humano — se limpia el nombre del array al editar ese campo a mano
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              Int       @id @default(autoincrement())
+  workspaceId     Int
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name            String
+  website         String? // sitio web
+  industry        String? // rubro (opcional)
+  notes           String? // observaciones
+  botFilledFields Json      @default("[]") // nombres de campos (website/industry) completados por el bot de WhatsApp y aún no revisados por un humano — se limpia el nombre del array al editar ese campo a mano
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   contacts Contact[]
   leads    Lead[]
@@ -3100,20 +3188,20 @@ model Company {
 
 // Contacto: una persona dentro de una empresa. N contactos por empresa.
 model Contact {
-  id          Int       @id @default(autoincrement())
-  workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  companyId   Int
-  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name        String
-  title       String? // cargo
-  email       String?
-  phone       String?
-  botFilledFields Json @default("[]") // nombres de campos (email) completados por el bot de WhatsApp y aún no revisados por un humano — se limpia el nombre del array al editar ese campo a mano
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              Int       @id @default(autoincrement())
+  workspaceId     Int
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  companyId       Int
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name            String
+  title           String? // cargo
+  email           String?
+  phone           String?
+  botFilledFields Json      @default("[]") // nombres de campos (email) completados por el bot de WhatsApp y aún no revisados por un humano — se limpia el nombre del array al editar ese campo a mano
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  primaryForLeads Lead[] @relation("LeadPrimaryContact")
+  primaryForLeads       Lead[]                 @relation("LeadPrimaryContact")
   whatsappConversations WhatsappConversation[]
 
   @@index([workspaceId])
@@ -3141,8 +3229,8 @@ model Lead {
   notes          String? // notas de reunión, HTML del WYSIWYG (separado del timeline de LeadActivity)
 
   // Conversión a cliente (estado Ganado → Crear Proyecto)
-  convertedProjectId Int?     @unique
-  convertedProject   Project? @relation("LeadConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
+  convertedProjectId Int?      @unique
+  convertedProject   Project?  @relation("LeadConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
   wonAt              DateTime?
   lostAt             DateTime?
   lostReason         String?
@@ -3158,11 +3246,11 @@ model Lead {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  activities    LeadActivity[]
-  proposals     Proposal[]
-  researches    LeadResearch[]
-  actions       LeadAction[]
-  notifications Notification[]
+  activities             LeadActivity[]
+  proposals              Proposal[]
+  researches             LeadResearch[]
+  actions                LeadAction[]
+  notifications          Notification[]
   whatsappAutomationLogs WhatsappAutomationLog[]
 
   @@index([workspaceId])
@@ -3273,9 +3361,9 @@ model LeadResearch {
   reportHtml  String?
 
   createdById Int?
-  createdBy   User?     @relation("ResearchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdBy   User?    @relation("ResearchCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([workspaceId])
   @@index([leadId])
@@ -3294,7 +3382,7 @@ model ChatChannel {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   kind        String // "general" | "project" | "custom" — String (no enum): agregar tipos no requiere migración
   medium      String    @default("text") // "text" | "voice" — canales de voz (WebRTC mesh). Inmutable tras crear:
-                                          // updateChannel() nunca lo lee del body, igual que kind nunca cambia.
+  // updateChannel() nunca lo lee del body, igual que kind nunca cambia.
   slug        String // clave estable en URL, ej "general", "marketing", "proyecto-mdz-rent-a-car"
   name        String? // solo custom/general; los de kind="project" usan project.name (no se duplica)
   description String?
@@ -3338,16 +3426,16 @@ model ChatMessage {
 
   // Mensajes fijados: cualquier miembro activo puede fijar/desfijar (sin restricción de
   // autor/admin, a diferencia de editar/borrar). pinnedAt null = no fijado.
-  pinnedAt    DateTime?
-  pinnedById  Int?
-  pinnedBy    User?       @relation("ChatMessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
+  pinnedAt   DateTime?
+  pinnedById Int?
+  pinnedBy   User?     @relation("ChatMessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
 
   // Responder un mensaje (estilo WhatsApp/Discord): auto-relación, null = no es una
   // respuesta. Si se borra el original, la respuesta queda huérfana (SetNull) en vez de
   // arrastrarla en cascada — el quote simplemente desaparece del mensaje que respondía.
-  replyToId   Int?
-  replyTo     ChatMessage?  @relation("ChatMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies     ChatMessage[] @relation("ChatMessageReplies")
+  replyToId Int?
+  replyTo   ChatMessage?  @relation("ChatMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   ChatMessage[] @relation("ChatMessageReplies")
 
   notifications Notification[]
   reactions     ChatMessageReaction[]
@@ -3429,42 +3517,42 @@ model ChatChannelRead {
 // catálogo, no una migración de tipo (mismo criterio que Lead.status).
 
 model ContentPiece {
-  id            Int       @id @default(autoincrement())
-  workspaceId   Int
-  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  projectId     Int
-  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  title         String
-  status        String    @default("idea") // clave de CONTENT_STATUSES
-  types         String    @default("[]") // JSON array de claves de CONTENT_TYPES (multi-selección, mismo patrón que networks)
-  networks      String    @default("[]") // JSON array de claves de CONTENT_NETWORKS (una pieza puede salir a varias)
+  id             Int                  @id @default(autoincrement())
+  workspaceId    Int
+  workspace      Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId      Int
+  project        Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title          String
+  status         String               @default("idea") // clave de CONTENT_STATUSES
+  types          String               @default("[]") // JSON array de claves de CONTENT_TYPES (multi-selección, mismo patrón que networks)
+  networks       String               @default("[]") // JSON array de claves de CONTENT_NETWORKS (una pieza puede salir a varias)
   // Brief de diseño (WYSIWYG, HTML) — interno, NUNCA viaja al portal del cliente (mismo
   // criterio que internalNotes). Hasta la migración `add_content_piece_design_details`
   // este campo se llamaba `copy` y era el texto del posteo; ese dato viejo quedó acá
   // (envuelto en HTML básico) y `copy` pasó a ser un campo nuevo, simple.
-  designDetails String?
-  copy          String? // texto simple del posteo — este SÍ viaja al portal del cliente
-  hashtags      String?
-  internalNotes String? // NUNCA viaja al portal del cliente
-  scheduledAt   DateTime? // fecha+hora de publicación planificada (UTC)
+  designDetails  String?
+  copy           String? // texto simple del posteo — este SÍ viaja al portal del cliente
+  hashtags       String?
+  internalNotes  String? // NUNCA viaja al portal del cliente
+  scheduledAt    DateTime? // fecha+hora de publicación planificada (UTC)
   // "YYYY-MM-DD" en Project.timezone, calculado por el backend al escribir. El
   // calendario agrupa por este string para no hacer aritmética de zona horaria en
   // el cliente (mismo criterio que WorkDay.date y ProjectMeeting.date).
-  scheduledDate String?
-  publishedAt   DateTime?
-  publishedUrl  String?
-  ownerId       Int? // responsable interno
-  owner         User?     @relation("ContentPieceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  scheduledDate  String?
+  publishedAt    DateTime?
+  publishedUrl   String?
+  ownerId        Int? // responsable interno
+  owner          User?                @relation("ContentPieceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   // Responsable = el cliente (ej. "está en su cancha, esperando su aprobación").
   // Mutuamente excluyente con ownerId — se aplica en buildPieceData, no acá:
   // no hay CHECK de DB, mismo criterio liviano que el resto de los campos.
   ownerContactId Int?
   ownerContact   ClientPortalContact? @relation("ContentPieceOwnerContact", fields: [ownerContactId], references: [id], onDelete: SetNull)
-  order         Int       @default(0) // orden dentro de la columna del Kanban
+  order          Int                  @default(0) // orden dentro de la columna del Kanban
   // Tarea del dashboard vinculada ("enviar al dashboard"). Completarla avanza la
   // pieza según ADVANCE_ON_TASK_DONE. SetNull: borrar la tarea no borra la pieza.
-  taskId        Int?      @unique
-  task          Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  taskId         Int?                 @unique
+  task           Task?                @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   // Denormalizados para filtros y badges sin joinear el log. La verdad histórica
   // completa (quién aprobó qué y cuándo) vive en ContentStatusEvent.
@@ -3529,33 +3617,33 @@ model ContentPieceFile {
 // 'pending' (URL firmada emitida, bytes todavía no confirmados) → 'ready'.
 // Los 'pending' abandonados los barre la limpieza semanal (cleanup.service.js).
 model ContentAsset {
-  id          Int          @id @default(autoincrement())
+  id           Int          @id @default(autoincrement())
   // Id no adivinable para la URL pública: un <img src> no puede llevar
   // Authorization, así que la no-adivinabilidad ES el control de acceso
   // (mismo criterio que SocialImage.id). Con un Int se podría enumerar el
   // contenido sin publicar de todos los clientes.
-  publicId    String       @unique @default(uuid())
-  workspaceId Int
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  pieceId     Int
-  piece       ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
-  kind        String // "image" | "video" | "link"
-  status      String       @default("pending") // "pending" | "ready"
-  mimeType    String? // null para kind:"link" (no hay archivo propio)
-  objectKey   String? // key en R2, bajo el prefijo content/<workspaceId>/
-  imageData   Bytes? // fallback sin R2 (solo imagen, dev local) — patrón de SocialImage
-  sourceUrl   String? // URL externa para kind:"link" (Google Drive, etc.) — sin subir archivo
-  posterKey   String? // thumbnail del video, generado en el browser
-  sizeBytes   Int? // autoritativo: sale del HeadObject post-upload, no del cliente
-  width       Int?
-  height      Int?
-  durationSec Int?
-  fileName    String? // solo display; NUNCA se usa para armar la key
-  order       Int      @default(0)
+  publicId     String       @unique @default(uuid())
+  workspaceId  Int
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pieceId      Int
+  piece        ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  kind         String // "image" | "video" | "link"
+  status       String       @default("pending") // "pending" | "ready"
+  mimeType     String? // null para kind:"link" (no hay archivo propio)
+  objectKey    String? // key en R2, bajo el prefijo content/<workspaceId>/
+  imageData    Bytes? // fallback sin R2 (solo imagen, dev local) — patrón de SocialImage
+  sourceUrl    String? // URL externa para kind:"link" (Google Drive, etc.) — sin subir archivo
+  posterKey    String? // thumbnail del video, generado en el browser
+  sizeBytes    Int? // autoritativo: sale del HeadObject post-upload, no del cliente
+  width        Int?
+  height       Int?
+  durationSec  Int?
+  fileName     String? // solo display; NUNCA se usa para armar la key
+  order        Int          @default(0)
   uploadedById Int?
-  uploadedBy  User?    @relation("ContentAssetUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-  confirmedAt DateTime?
+  uploadedBy   User?        @relation("ContentAssetUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+  confirmedAt  DateTime?
 
   @@index([pieceId, order])
   @@index([workspaceId])
@@ -3753,9 +3841,9 @@ model WhatsappMessage {
   reactionEmoji String?
   // A qué mensaje reaccionó, si lo pudimos resolver por waMessageId (puede no
   // resolver si el mensaje original quedó fuera de nuestro historial).
-  reactionToId Int?
-  reactionTo   WhatsappMessage?  @relation("WhatsappMessageReaction", fields: [reactionToId], references: [id], onDelete: SetNull)
-  reactions    WhatsappMessage[] @relation("WhatsappMessageReaction")
+  reactionToId  Int?
+  reactionTo    WhatsappMessage?  @relation("WhatsappMessageReaction", fields: [reactionToId], references: [id], onDelete: SetNull)
+  reactions     WhatsappMessage[] @relation("WhatsappMessageReaction")
 
   media WhatsappMedia?
 
@@ -3878,8 +3966,8 @@ model WhatsappBotDocument {
   // para resumir preservando lo más útil (servicios, precios, políticas, FAQs)
   // — es el camino normal para un documento largo; `truncated` solo queda en
   // true si además el resumen en sí no pudo generarse y se cayó al corte crudo.
-  truncated  Boolean @default(false)
-  summarized Boolean @default(false)
+  truncated     Boolean @default(false)
+  summarized    Boolean @default(false)
 
   status   String  @default("processing") // processing | ready | error
   errorMsg String?
@@ -3970,8 +4058,8 @@ model WhatsappAutomationRule {
   statusFilter String? // JSON array de LEAD_STATUSES keys; null/[] = todos los estados activos
   originFilter String? // JSON array de ORIGIN keys; null/[] = todos los orígenes
 
-  templateId Int
-  template   WhatsappTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  templateId      Int
+  template        WhatsappTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   // Mapeo de las variables {{1}} {{2}}… del template: texto libre que puede
   // incluir merge tags ({{contact_name}}, {{company_name}}, {{lead_title}},
   // {{owner_name}}) resueltos por lead al momento de enviar — ver
@@ -3981,7 +4069,7 @@ model WhatsappAutomationRule {
   cooldownDays Int @default(14) // no re-disparar la misma regla sobre el mismo lead antes de N días
 
   createdById Int?
-  createdBy   User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -3994,13 +4082,13 @@ model WhatsappAutomationRule {
 // o no. El cron consulta esto para no re-disparar la misma regla sobre el
 // mismo lead antes de `rule.cooldownDays`.
 model WhatsappAutomationLog {
-  id          Int       @id @default(autoincrement())
+  id          Int                    @id @default(autoincrement())
   workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   ruleId      Int
   rule        WhatsappAutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   leadId      Int
-  lead        Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead        Lead                   @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   status   String // 'sent' | 'skipped' | 'failed'
   errorMsg String?
@@ -4021,7 +4109,7 @@ model DeviceToken {
   userId      Int
   workspaceId Int
   token       String   @unique
-  platform    String   // 'ios' | 'android'
+  platform    String // 'ios' | 'android'
   createdAt   DateTime @default(now())
   lastUsedAt  DateTime @default(now())
 

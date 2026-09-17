@@ -99,6 +99,7 @@ const EOS              = lazyWithReload(() => import('./pages/EOS'))
 const Gamification     = lazyWithReload(() => import('./pages/Gamification'))
 const Ventas           = lazyWithReload(() => import('./pages/Ventas'))
 const Contenido        = lazyWithReload(() => import('./pages/Contenido'))
+const Calendario       = lazyWithReload(() => import('./pages/Calendario'))
 const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
 const ReportOrClientPortal = lazyWithReload(() => import('./pages/ReportOrClientPortal'))
 const ProposalPublic   = lazyWithReload(() => import('./pages/ProposalPublic'))
@@ -200,6 +201,7 @@ export default function App() {
           <Route path="/realtime"   element={<PrivateRoute><RealTime  /></PrivateRoute>} />
           <Route path="/marketing"  element={<PrivateRoute><Marketing /></PrivateRoute>} />
           <Route path="/contenido"  element={<PrivateRoute><Contenido /></PrivateRoute>} />
+          <Route path="/calendario" element={<PrivateRoute><Calendario /></PrivateRoute>} />
           <Route path="/billing"    element={<PrivateRoute><Billing  /></PrivateRoute>} />
           <Route path="/reports"             element={<AdminRoute><Reports      /></AdminRoute>} />
           <Route path="/superadmin" element={<SuperAdminRoute><SuperAdmin /></SuperAdminRoute>} />

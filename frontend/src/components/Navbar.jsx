@@ -145,6 +145,7 @@ export default function Navbar() {
   const { enabled: ventasEnabled }    = useFeatureFlag('ventas')
   const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
   const { enabled: rrhhEnabled }      = useFeatureFlag('rrhh')
+  const { enabled: calendarioEnabled } = useFeatureFlag('calendario')
 
   // ── Links de navegación principal ────────────────────────────────────────
   // FUENTE ÚNICA: cualquier cambio aquí aplica en desktop Y mobile automáticamente.
@@ -176,6 +177,7 @@ export default function Navbar() {
     ...(marketingEnabled && user?.moduleAccess?.marketing ? [{ to: '/marketing', label: '🎯 Marketing' }] : []),
     ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ to: '/contenido', label: '📅 Contenido' }] : []),
     ...(rrhhEnabled && user?.moduleAccess?.rrhh ? [{ to: '/admin/rrhh', label: '👥 RRHH' }] : []),
+    ...(calendarioEnabled && user?.moduleAccess?.calendario ? [{ to: '/calendario', label: '🗓️ Calendario' }] : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────

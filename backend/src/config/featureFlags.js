@@ -46,6 +46,11 @@ const FEATURE_FLAGS = [
     name: 'Sección RRHH',
     description: 'Panel de RRHH: legajos, ingresos, licencias, vacaciones, beneficios (horas libres / días home) y productividad. Sembrado con enabledGlobally=true al agregarse (ya lo usaban todos los workspaces sin flag).',
   },
+  {
+    key: 'calendario',
+    name: 'Calendario',
+    description: 'Disponibilidad del equipo: horario laboral por persona, tareas con hora que bloquean franjas, reuniones agendadas que requieren aceptación de los invitados y filtro de huecos comunes entre varias personas.',
+  },
 ]
 
 module.exports = { FEATURE_FLAGS }

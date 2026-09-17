@@ -131,6 +131,8 @@ async function spawnInstance(client, rec, scheduledFor, workDayId) {
         status:       'PENDING',
         scheduledFor,
         recurrenceId: rec.id,
+        scheduledTime:         rec.scheduledTime ?? null,
+        scheduledDurationMins: rec.scheduledDurationMins ?? null,
       },
     })
   } catch (err) {

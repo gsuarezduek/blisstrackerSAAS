@@ -1,7 +1,7 @@
 const prisma = require('../lib/prisma')
 const { todayString } = require('../utils/dates')
 const { isAdmin, canWrite } = require('../lib/projectAccess')
-const { closeMeeting, ensureWorkDay, createDashboardTaskForTodo } = require('../lib/projectMeetingLifecycle')
+const { closeMeeting, ensureWorkDay, createDashboardTaskForTodo, startMeetingParticipants } = require('../lib/projectMeetingLifecycle')
 
 const VALID_TYPE = ['internal', 'client']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -102,8 +102,6 @@ async function loadMeeting(mid, projectId, workspaceId) {
     include: MEETING_INCLUDE,
   })
 }
-
-const typeLabel = (t) => (t === 'client' ? 'Reunión con cliente' : 'Reunión de equipo')
 
 // ─── MEETINGS ─────────────────────────────────────────────────────────────────
 
@@ -235,66 +233,10 @@ async function startMeeting(req, res, next) {
     if (existing.startedAt && !existing.endedAt) return res.status(409).json({ error: 'La reunión ya está en curso' })
     if (existing.endedAt) return res.status(409).json({ error: 'La reunión ya fue finalizada' })
 
-    const participants = existing.participants
-    const participantIds = participants.map(p => p.userId)
-
-    // Bloqueo: nadie del grupo puede tener una tarea en curso al iniciar.
-    if (participantIds.length) {
-      const busy = await prisma.task.findMany({
-        where:   { userId: { in: participantIds }, status: 'IN_PROGRESS' },
-        include: { user: { select: { name: true } } },
-      })
-      if (busy.length) {
-        const names = [...new Set(busy.map(b => b.user.name))].join(', ')
-        return res.status(409).json({
-          error: `No se puede iniciar: ${names} ${busy.length > 1 ? 'tienen' : 'tiene'} una tarea en curso. Debe pausarla o completarla primero.`,
-        })
-      }
-    }
-
-    const now   = new Date()
-    const today = todayString(tz)
-
-    // Workdays por participante (idempotente — no es sensible dejarla creada
-    // aunque la transacción de abajo falle).
-    const workDays = {}
-    for (const p of participants) {
-      const wd = await ensureWorkDay(p.userId, workspaceId, today)
-      if (wd) workDays[p.userId] = wd
-    }
-
-    // Todo o nada: si algún participante ya tiene una tarea en curso (condición de
-    // carrera con el busy-check de arriba, ej. dos reuniones iniciándose casi
-    // simultáneamente con un participante en común), se revierte todo lo creado en
-    // este loop en vez de dejar tareas "fantasma" para los participantes anteriores.
     try {
-      await prisma.$transaction(async (tx) => {
-        for (const p of participants) {
-          const workDay = workDays[p.userId]
-          if (!workDay) continue
-          const task = await tx.task.create({
-            data: {
-              description: typeLabel(existing.type),
-              projectId,
-              userId:      p.userId,
-              workDayId:   workDay.id,
-              status:      'IN_PROGRESS',
-              startedAt:   now,
-              createdById: p.userId !== requesterId ? requesterId : null,
-            },
-          })
-          await tx.taskSession.create({ data: { taskId: task.id, startedAt: now } })
-          await tx.projectMeetingParticipant.update({ where: { id: p.id }, data: { taskId: task.id } })
-        }
-        await tx.projectMeeting.update({
-          where: { id: existing.id },
-          data:  { startedAt: now, endedAt: null, durationMins: null },
-        })
-      })
+      await startMeetingParticipants(existing, existing.participants, { requesterId, workspaceId, tz })
     } catch (e) {
-      if (e.code === 'P2002') {
-        return res.status(409).json({ error: 'Uno de los participantes acaba de iniciar otra tarea. Reintentá.' })
-      }
+      if (e.status) return res.status(e.status).json({ error: e.message })
       throw e
     }
 

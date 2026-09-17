@@ -1,6 +1,6 @@
 /**
  * Único punto de la lógica "¿este usuario puede ver el módulo X del workspace?".
- * Generaliza a 4 módulos (ventas/marketing/contenido/rrhh) el mecanismo que antes era
+ * Generaliza a 5 módulos (ventas/marketing/contenido/rrhh/calendario) el mecanismo que antes era
  * exclusivo de Ventas (Workspace.salesRoleNames): un miembro accede si es
  * admin/owner, o si el módulo está abierto a todo el workspace (`allMembers`),
  * o si su teamRole está en la lista configurada.
@@ -22,7 +22,7 @@
  * poder abrirse a otros roles por error de configuración.
  */
 
-const MODULE_KEYS = ['ventas', 'marketing', 'contenido', 'rrhh']
+const MODULE_KEYS = ['ventas', 'marketing', 'contenido', 'rrhh', 'calendario']
 
 // allMembers por defecto de cada módulo cuando el workspace no configuró nada.
 const MODULE_ACCESS_DEFAULTS = {
@@ -30,6 +30,9 @@ const MODULE_ACCESS_DEFAULTS = {
   marketing:    { allMembers: true },
   contenido:    { allMembers: true },
   rrhh:         { allMembers: false },
+  // Todos necesitan ver/agendar su propia disponibilidad — mismo default que
+  // marketing/contenido, no admin-only.
+  calendario:   { allMembers: true },
 }
 
 /**
