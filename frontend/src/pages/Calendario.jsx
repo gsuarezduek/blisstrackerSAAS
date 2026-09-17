@@ -12,6 +12,7 @@ import ScheduleEventModal from '../components/calendar/ScheduleEventModal'
 import EventDetailModal from '../components/calendar/EventDetailModal'
 import { todayYMD, shiftDay, weekDates, weekdayLabel, weekRangeLabel } from '../components/calendar/dateHelpers'
 import { useCalendarSocket } from '../components/calendar/useCalendarSocket'
+import { useFeatureFlag } from '../hooks/useFeatureFlag'
 
 const VIEWS = [
   { id: 'semana', label: '🗓️ Mi semana' },
@@ -33,6 +34,8 @@ function monthBounds(month) {
 
 export default function Calendario() {
   const { user } = useAuth()
+  const { enabled, loading: flagLoading } = useFeatureFlag('calendario')
+  const moduleAllowed = enabled && !!user?.moduleAccess?.calendario
   const { byId: memberById } = useMembers()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -60,6 +63,7 @@ export default function Calendario() {
   const [events, setEvents] = useState([])        // eventos donde soy organizador/participante, del rango visible
   const [availability, setAvailability] = useState({}) // { [userId]: {workStart, workEnd, fullDayOff, blocks} }
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [scheduleModal, setScheduleModal] = useState(null) // null | { date?, startTime?, participantIds? }
   const [detailEvent, setDetailEvent] = useState(null)
 
@@ -76,7 +80,9 @@ export default function Calendario() {
   }, [view, peopleIds, user.id])
 
   const load = useCallback(async () => {
+    if (!moduleAllowed) return
     setLoading(true)
+    setLoadError('')
     try {
       const [eventsRes, availRes] = await Promise.all([
         api.get('/calendar/events', { params: range }),
@@ -86,12 +92,12 @@ export default function Calendario() {
       ])
       setEvents(eventsRes.data)
       setAvailability(availRes.data)
-    } catch {
-      // silencioso — la página muestra los datos que ya tenía
+    } catch (e) {
+      setLoadError(e.response?.data?.error || 'No se pudo cargar el calendario.')
     } finally {
       setLoading(false)
     }
-  }, [range.from, range.to, availabilityUserIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [moduleAllowed, range.from, range.to, availabilityUserIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
   useCalendarSocket(load)
@@ -141,20 +147,36 @@ export default function Calendario() {
     }))
   ), [user.id, peopleIds, memberById])
 
+  if (flagLoading) return <LoadingSpinner size="lg" fullPage />
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Calendario</h1>
-          <button
-            onClick={() => setScheduleModal({})}
-            className="bg-primary-600 hover:bg-primary-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition-colors"
-          >
-            + Agendar reunión
-          </button>
+          {moduleAllowed && (
+            <button
+              onClick={() => setScheduleModal({})}
+              className="bg-primary-600 hover:bg-primary-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition-colors"
+            >
+              + Agendar reunión
+            </button>
+          )}
         </div>
 
+        {!moduleAllowed ? (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-10 text-center">
+            <div className="text-4xl mb-4">🔒</div>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Sección no disponible</h3>
+            <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm mx-auto">
+              {enabled
+                ? 'No tenés acceso a esta sección. Consultá con un administrador.'
+                : 'Esta sección está siendo activada gradualmente. Si querés acceso anticipado, contactá al equipo de BlissTracker.'}
+            </p>
+          </div>
+        ) : (
+        <>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1">
             {VIEWS.map(v => (
@@ -196,7 +218,13 @@ export default function Calendario() {
 
         {loading && <LoadingSpinner />}
 
-        {!loading && view === 'mes' && (
+        {!loading && loadError && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3 text-sm text-red-600 dark:text-red-400 mb-4">
+            {loadError}
+          </div>
+        )}
+
+        {!loading && !loadError && view === 'mes' && (
           <CalendarMonthView
             events={events}
             month={monthOf(date)}
@@ -206,7 +234,7 @@ export default function Calendario() {
           />
         )}
 
-        {!loading && view === 'semana' && (
+        {!loading && !loadError && view === 'semana' && (
           <WeekTimeGrid
             columns={weekColumns}
             getBlocks={colDate => blocksFor(user.id, colDate)}
@@ -219,7 +247,7 @@ export default function Calendario() {
           />
         )}
 
-        {!loading && view === 'equipo' && (
+        {!loading && !loadError && view === 'equipo' && (
           <WeekTimeGrid
             columns={teamColumns}
             getBlocks={uid => blocksFor(uid, date)}
@@ -235,6 +263,8 @@ export default function Calendario() {
         <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3">
           Franjas punteadas = invitación sin responder (no cuenta como ocupado para buscar huecos). Zona gris = fuera del horario laboral.
         </p>
+        </>
+        )}
       </div>
 
       <ScheduleEventModal
