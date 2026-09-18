@@ -206,31 +206,30 @@ export default function Calendario() {
           </div>
 
           {view !== 'mes' && (
-            <div className="flex items-center gap-1">
-              <button onClick={() => shiftView(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">‹</button>
-              <button onClick={goToday} className="px-3 py-1.5 text-xs font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">Hoy</button>
-              <button onClick={() => shiftView(1)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">›</button>
-              <span className="text-sm text-gray-600 dark:text-gray-300 ml-2 capitalize">
-                {viewingOther && `${memberById.get(targetUserId)?.name || 'Persona'} · `}
-                {view === 'equipo' ? weekdayLabel(date) : weekRangeLabel(date)}
-              </span>
+            <div className="flex items-center gap-2">
+              {view === 'semana' && (
+                <PersonSearchSelect
+                  value={personId}
+                  onChange={id => updateParams({ person: id ?? null })}
+                />
+              )}
+              <div className="flex items-center gap-1">
+                <button onClick={() => shiftView(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">‹</button>
+                <button onClick={goToday} className="px-3 py-1.5 text-xs font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">Hoy</button>
+                <button onClick={() => shiftView(1)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">›</button>
+                <span className="text-sm text-gray-600 dark:text-gray-300 ml-2 capitalize">
+                  {viewingOther && `${memberById.get(targetUserId)?.name || 'Persona'} · `}
+                  {view === 'equipo' ? weekdayLabel(date) : weekRangeLabel(date)}
+                </span>
+              </div>
             </div>
           )}
         </div>
 
-        {view === 'semana' && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-4 flex flex-wrap items-center gap-3">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Ver calendario de</p>
-            <PersonSearchSelect
-              value={personId}
-              onChange={id => updateParams({ person: id ?? null })}
-            />
-            {viewingOther && (
-              <p className="text-xs text-gray-400 dark:text-gray-500">
-                Clickeá un hueco libre, o "+ Agendar reunión" arriba, para proponerle una reunión.
-              </p>
-            )}
-          </div>
+        {viewingOther && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 -mt-2">
+            Clickeá un hueco libre, o "+ Agendar reunión" arriba, para proponerle una reunión.
+          </p>
         )}
 
         {view === 'equipo' && (
