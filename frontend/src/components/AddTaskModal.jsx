@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import useRoles from '../hooks/useRoles'
 import { avatarUrl } from '../utils/avatarUrl'
 import HowToButton from './HowToButton'
+import { useTaskFileUpload, MAX_FILE_BYTES, fmtMb } from './taskFileUpload'
+import { fmtBytes, iconFor } from '../lib/fileIcons'
 
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
@@ -166,6 +168,64 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
   const [scheduledDurationMins, setScheduledDurationMins] = useState(30)
   const [optErr, setOptErr] = useState('')
 
+  // Adjuntos elegidos ANTES de crear la tarea: se guardan como File[] en memoria
+  // (no se puede presignar sin un taskId real — la carpeta destino en R2 depende
+  // de task.description/task.project) y se suben recién cuando POST /tasks
+  // devuelve el id, reusando el mismo hook que TaskCommentsModal.jsx.
+  const [pendingFiles, setPendingFiles] = useState([])
+  const [pendingFileError, setPendingFileError] = useState('')
+  const pendingFileInputRef = useRef(null)
+  const [createdTaskId, setCreatedTaskId] = useState(null)
+  const [resolvedCount, setResolvedCount] = useState(0) // adjuntos ya subidos con éxito
+  const uploadStartedRef = useRef(false)
+
+  const { queue: uploadQueue, handleFiles: uploadFilesToTask } = useTaskFileUpload({
+    taskId: createdTaskId,
+    onUploaded: () => setResolvedCount(c => c + 1),
+  })
+
+  // Recién con el taskId real (post-creación) el hook queda apuntando al endpoint
+  // correcto — este efecto dispara la subida real de lo que se eligió antes.
+  useEffect(() => {
+    if (createdTaskId && !uploadStartedRef.current) {
+      uploadStartedRef.current = true
+      uploadFilesToTask(pendingFiles)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createdTaskId])
+
+  // La tarea ya se agregó (onAdd se llamó apenas se creó); este modal se queda
+  // abierto solo para mostrar el progreso de los adjuntos y se cierra solo
+  // (automáticamente) cuando TODOS se subieron con éxito. Comparar contra
+  // pendingFiles.length (no "la cola quedó vacía") evita cerrar de arranque, en
+  // el instante en que recién se disparó la subida y la cola todavía no se
+  // pobló. Si algo falla, resolvedCount nunca llega al total — queda visible
+  // con su error y el usuario cierra manualmente con la × sabiendo qué faltó.
+  useEffect(() => {
+    if (createdTaskId && resolvedCount >= pendingFiles.length) {
+      onClose()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createdTaskId, resolvedCount])
+
+  function handlePickPendingFiles(e) {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!files.length) return
+    const tooBig = files.filter(f => f.size > MAX_FILE_BYTES)
+    const ok = files.filter(f => f.size <= MAX_FILE_BYTES)
+    setPendingFileError(tooBig.length ? `${tooBig.map(f => f.name).join(', ')} supera el máximo permitido (${fmtMb(MAX_FILE_BYTES)}).` : '')
+    if (ok.length) setPendingFiles(prev => [...prev, ...ok])
+  }
+
+  function removePendingFile(idx) {
+    setPendingFiles(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  // Ocupado: mientras se guarda la tarea, o después de creada mientras se suben
+  // los adjuntos elegidos (el modal sigue abierto solo para eso).
+  const attaching = createdTaskId !== null
+
   const todayStr = new Date().toLocaleDateString('en-CA')
   const toggleWeekday = (d) => setWeekdays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b))
 
@@ -275,7 +335,13 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
           data = res.data
         } catch { /* se agrega sin iniciar */ }
       }
+      // La tarea ya existe: la reflejamos ya mismo en la lista del usuario aunque
+      // los adjuntos (si eligió alguno) sigan subiendo en segundo plano.
       onAdd(data)
+      if (pendingFiles.length > 0) {
+        setCreatedTaskId(data.id) // dispara el efecto que sube los adjuntos y cierra al terminar
+        return
+      }
       onClose()
     } finally {
       setLoading(false)
@@ -317,7 +383,9 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
   // no se puede iniciar una tarea futura/recurrente ni la de otra persona.
   const canStartNow = taskMode === 'normal' && (!assigneeId || assigneeId === String(user?.id))
 
-  const submitLabel = loading ? 'Guardando...'
+  const submitLabel = attaching
+    ? (uploadQueue.some(it => it.status === 'error') ? 'Revisá los adjuntos con error' : 'Subiendo adjuntos...')
+    : loading ? 'Guardando...'
     : showGtdWarning ? 'Guardar igual'
     : taskMode === 'recurring' ? 'Crear tarea recurrente'
     : taskMode === 'future' ? 'Programar tarea'
@@ -437,12 +505,62 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
               </select>
             </div>
           )}
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Adjuntos</label>
+              {!attaching && (
+                <button
+                  type="button"
+                  onClick={() => pendingFileInputRef.current?.click()}
+                  className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                >
+                  📎 Adjuntar archivo
+                </button>
+              )}
+              <input ref={pendingFileInputRef} type="file" multiple className="hidden" onChange={handlePickPendingFiles} />
+            </div>
+            {pendingFileError && <p className="text-xs text-red-500 mb-1">{pendingFileError}</p>}
+            {!attaching && pendingFiles.length > 0 && (
+              <div className="space-y-1">
+                {pendingFiles.map((f, i) => (
+                  <div key={`${f.name}-${i}`} className="group flex items-center gap-2 text-sm px-2 py-1 rounded-lg bg-gray-50 dark:bg-gray-700/40">
+                    <span className="flex-shrink-0">{iconFor(f.type)}</span>
+                    <span className="flex-1 min-w-0 truncate text-gray-700 dark:text-gray-300">{f.name}</span>
+                    <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{fmtBytes(f.size)}</span>
+                    <button
+                      type="button"
+                      onClick={() => removePendingFile(i)}
+                      className="flex-shrink-0 text-gray-400 hover:text-red-500"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <p className="text-[11px] text-gray-400 dark:text-gray-500">Se suben apenas creás la tarea.</p>
+              </div>
+            )}
+            {attaching && (
+              <div className="space-y-1">
+                {uploadQueue.map(item => (
+                  <div key={item.id} className="flex items-center gap-2 text-sm px-2 py-1 rounded-lg bg-gray-50 dark:bg-gray-700/40">
+                    <span className="flex-shrink-0">📎</span>
+                    <span className="flex-1 min-w-0 truncate text-gray-600 dark:text-gray-300">{item.name}</span>
+                    <span className={`flex-shrink-0 text-xs ${item.status === 'error' ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'}`}>
+                      {item.status === 'error' ? (item.error || 'Error') : `${item.progress}%`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-3 pt-2">
             {canStartNow && (
               <button
                 type="button"
                 onClick={() => attemptSubmit(true)}
-                disabled={loading || !projectId}
+                disabled={loading || attaching || !projectId}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60 bg-green-600 hover:bg-green-700"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -453,7 +571,7 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
             )}
             <button
               type="submit"
-              disabled={loading || !projectId}
+              disabled={loading || attaching || !projectId}
               className={`flex-1 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60 ${
                 showGtdWarning
                   ? 'bg-amber-500 hover:bg-amber-600'
