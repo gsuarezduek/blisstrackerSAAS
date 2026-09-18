@@ -307,6 +307,15 @@ function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, on
                 💬
               </button>
             )}
+            {onOpenComments && (task._count?.files ?? 0) > 0 && (
+              <button
+                onClick={() => onOpenComments(task)}
+                title="Ver adjuntos"
+                className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              >
+                📎 {task._count.files}
+              </button>
+            )}
           </div>
         </div>
 

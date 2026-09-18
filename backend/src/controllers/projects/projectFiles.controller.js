@@ -642,4 +642,7 @@ module.exports = {
   buildPath,
   // exportado para contentFileMirror.service.js (mismo criterio de nombre de carpeta)
   sanitizeName,
+  // exportados para tasks/attachments.controller.js (mismo presign/confirm/cuota que Archivos)
+  assertWithinQuota,
+  PRESIGN_EXPIRES_IN,
 }

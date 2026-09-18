@@ -16,25 +16,13 @@
 const prisma = require('../lib/prisma')
 const objectStorage = require('./objectStorage.service')
 const { sanitizeName } = require('../controllers/projects/projectFiles.controller')
+const { findOrCreateFolder } = require('../lib/projectFileTree')
 const { monthLabel } = require('../lib/monthUtils')
 const { todayString } = require('../utils/dates')
 
 const DEFAULT_NAME_BY_MIME = {
   'image/png': 'imagen.png', 'image/jpeg': 'imagen.jpg', 'image/webp': 'imagen.webp', 'image/gif': 'imagen.gif',
   'video/mp4': 'video.mp4', 'video/quicktime': 'video.mov', 'video/webm': 'video.webm',
-}
-
-async function findOrCreateFolder(projectId, workspaceId, parentId, name, uploaderId) {
-  const existing = await prisma.projectFile.findFirst({
-    where: { projectId, parentId, type: 'folder', name, deletedAt: null },
-    select: { id: true },
-  })
-  if (existing) return existing.id
-  const created = await prisma.projectFile.create({
-    data: { projectId, workspaceId, parentId, type: 'folder', name, uploadedById: uploaderId },
-    select: { id: true },
-  })
-  return created.id
 }
 
 /**

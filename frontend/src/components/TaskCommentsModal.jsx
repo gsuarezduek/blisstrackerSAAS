@@ -9,6 +9,8 @@ import { avatarUrl } from '../utils/avatarUrl'
 import UserLink from './UserLink'
 import MessageReactionPicker from './chat/MessageReactionPicker'
 import { groupReactions } from './chat/reactions'
+import { useTaskFileUpload } from './taskFileUpload'
+import { fmtBytes, iconFor } from '../lib/fileIcons'
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
@@ -184,6 +186,52 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
       .then(r => setComments(r.data))
       .finally(() => setLoading(false))
   }, [task.id])
+
+  // Adjuntos — se suben directo al repositorio de Archivos del proyecto
+  // (carpeta "Tareas / <mes> / <tarea>" resuelta sola por el backend, ver
+  // taskFileUpload.js) y quedan linkeados a la tarea.
+  const [attachments, setAttachments] = useState([])
+  const [attError, setAttError]       = useState('')
+  const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    api.get(`/tasks/${task.id}/attachments`).then(r => setAttachments(r.data)).catch(() => {})
+  }, [task.id])
+
+  const { queue: uploadQueue, handleFiles: handleFilesSelected } = useTaskFileUpload({
+    taskId: task.id,
+    onUploaded: (fileRow) => setAttachments(prev => [...prev, fileRow]),
+  })
+
+  function handlePickFiles(e) {
+    if (e.target.files?.length) { setAttError(''); handleFilesSelected(e.target.files) }
+    e.target.value = ''
+  }
+
+  async function handleDownloadAttachment(item) {
+    try {
+      const res = await api.get(`/projects/${item.projectId}/files/${item.id}/download`, { responseType: 'blob' })
+      const blobUrl = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = item.name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      setAttError('No se pudo descargar el archivo')
+    }
+  }
+
+  async function handleRemoveAttachment(item) {
+    try {
+      await api.delete(`/tasks/${task.id}/attachments/${item.id}`)
+      setAttachments(prev => prev.filter(f => f.id !== item.id))
+    } catch {
+      setAttError('No se pudo quitar el adjunto')
+    }
+  }
 
 
   const selectMention = useCallback((member) => {
@@ -585,6 +633,59 @@ export default function TaskCommentsModal({ task, onClose, onCommentAdded, onTas
               <p className="text-xs text-gray-400 dark:text-gray-500">
                 Completada el {fmtDate(task.completedAt)}
               </p>
+            )}
+          </div>
+
+          {/* Adjuntos — viven en Archivos del proyecto, solo se linkean acá */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
+                Adjuntos
+              </p>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+              >
+                📎 Adjuntar archivo
+              </button>
+              <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handlePickFiles} />
+            </div>
+            {attError && <p className="text-xs text-red-500 mt-1">{attError}</p>}
+            {(attachments.length > 0 || uploadQueue.length > 0) && (
+              <div className="mt-1.5 space-y-1">
+                {attachments.map(f => (
+                  <div key={f.id} className="group flex items-center gap-2 text-sm px-2 py-1 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <span className="flex-shrink-0">{iconFor(f.mimeType)}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadAttachment(f)}
+                      title="Descargar"
+                      className="flex-1 min-w-0 text-left truncate text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400"
+                    >
+                      {f.name}
+                    </button>
+                    <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{fmtBytes(f.sizeBytes)}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(f)}
+                      title="Quitar de la tarea (el archivo sigue en Archivos del proyecto)"
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {uploadQueue.map(item => (
+                  <div key={item.id} className="flex items-center gap-2 text-sm px-2 py-1 rounded-lg">
+                    <span className="flex-shrink-0">📎</span>
+                    <span className="flex-1 min-w-0 truncate text-gray-500 dark:text-gray-400">{item.name}</span>
+                    <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">
+                      {item.status === 'error' ? (item.error || 'Error') : `${item.progress}%`}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

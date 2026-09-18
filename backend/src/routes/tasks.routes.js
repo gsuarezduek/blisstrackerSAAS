@@ -5,6 +5,7 @@ const history = require('../controllers/tasks/history.controller')
 const delegation = require('../controllers/tasks/delegation.controller')
 const following = require('../controllers/tasks/following.controller')
 const { listComments, addComment, toggleReaction } = require('../controllers/comments.controller')
+const attachments = require('../controllers/tasks/attachments.controller')
 const { auth } = require('../middleware/auth')
 const { resolveWorkspace } = require('../middleware/workspace')
 
@@ -38,5 +39,9 @@ router.patch('/:id/duration',        lifecycle.setDuration)
 router.get('/:id/comments',          listComments)
 router.post('/:id/comments',         addComment)
 router.post('/:id/comments/:commentId/reactions', toggleReaction)
+router.get('/:id/attachments',                  attachments.listAttachments)
+router.post('/:id/attachments/presign',         attachments.presignAttachment)
+router.post('/:id/attachments/:fileId/confirm', attachments.confirmAttachment)
+router.delete('/:id/attachments/:fileId',       attachments.removeAttachment)
 
 module.exports = router

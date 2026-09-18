@@ -5,7 +5,7 @@ const { materializeForUser } = require('../services/recurrence.service')
 const taskInclude = {
   project: true,
   createdBy: { select: { id: true, name: true } },
-  _count: { select: { comments: true } },
+  _count: { select: { comments: true, files: { where: { file: { status: 'ready', deletedAt: null } } } } },
   sessions: { select: { startedAt: true, endedAt: true } },
   // Pieza de Contenido vinculada (si la tarea vino de "Enviar al dashboard") — alcanza con
   // el id para armar el deep-link a /contenido?projectId=&piece= desde TaskCard.
