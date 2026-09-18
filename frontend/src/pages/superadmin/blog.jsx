@@ -210,6 +210,10 @@ export function BlogPostCard({ post, onTogglePublish, onEdit, onDelete }) {
               </span>
             )}
             <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">/blog/{post.slug}</span>
+            <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400" title="Vistas">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+              {(post.views ?? 0).toLocaleString('es-AR')}
+            </span>
           </div>
           <p className="font-semibold text-gray-900 dark:text-white">{post.title}</p>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{post.excerpt}</p>
@@ -285,6 +289,7 @@ export function SectionBlog() {
     filter === 'all' ? true : filter === 'published' ? p.status === 'published' : p.status === 'draft'
   )
   const publishedCount = posts.filter(p => p.status === 'published').length
+  const totalViews = posts.reduce((sum, p) => sum + (p.views || 0), 0)
 
   return (
     <div className="space-y-6">
@@ -306,7 +311,7 @@ export function SectionBlog() {
       </div>
 
       {/* Stats rápidas */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
           <p className="text-2xl font-bold text-gray-900 dark:text-white">{posts.length}</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Total</p>
@@ -318,6 +323,10 @@ export function SectionBlog() {
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
           <p className="text-2xl font-bold text-gray-400">{posts.length - publishedCount}</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Borradores</p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 text-center">
+          <p className="text-2xl font-bold text-primary-600 dark:text-primary-400">{totalViews.toLocaleString('es-AR')}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Vistas totales</p>
         </div>
       </div>
 

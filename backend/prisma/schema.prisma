@@ -1535,6 +1535,7 @@ model BlogPost {
   metaTitle          String?
   metaDescription    String?
   authorName         String    @default("Equipo BlissTracker") // texto libre, no FK a User: son posts institucionales
+  views              Int       @default(0) // contador simple, incrementado en cada GET público del post (aproximado: no dedupea refrescos/bots)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

@@ -62,6 +62,9 @@ async function getBySlug(req, res, next) {
     })
     if (!post) return res.status(404).json({ error: 'Post no encontrado' })
 
+    // Fire-and-forget: una vista de más nunca debe romper la respuesta del post.
+    prisma.blogPost.update({ where: { id: post.id }, data: { views: { increment: 1 } } }).catch(() => {})
+
     res.json({
       ...stripCover(post),
       metaTitle: post.metaTitle || post.title,
@@ -116,7 +119,7 @@ async function listAll(req, res, next) {
       select: {
         id: true, slug: true, title: true, excerpt: true, contentHtml: true,
         coverImageMimeType: true, status: true, publishedAt: true,
-        metaTitle: true, metaDescription: true, authorName: true,
+        metaTitle: true, metaDescription: true, authorName: true, views: true,
         createdAt: true, updatedAt: true,
       },
     })
