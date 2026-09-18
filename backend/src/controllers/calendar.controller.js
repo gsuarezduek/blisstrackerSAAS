@@ -4,6 +4,7 @@ const { canWrite } = require('../lib/projectAccess')
 const { todayString } = require('../utils/dates')
 const { getBusyBlocks, findCommonFreeSlots, DEFAULT_TASK_BLOCK_MINS } = require('../services/availability.service')
 const { startMeetingParticipants } = require('../lib/projectMeetingLifecycle')
+const googleCalendarSync = require('../services/googleCalendarSync.service')
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -234,6 +235,9 @@ async function createEvent(req, res, next) {
 
     await notifyInvitees(event, inviteeIds, organizerId)
     emitTo(`workspace:${workspaceId}`, 'calendar:event:created', { event: formatEvent(event) })
+    // Best-effort: si el organizador tiene Google Calendar conectado, crea el
+    // evento espejo (no bloquea la respuesta ni falla la creación si Google falla).
+    setImmediate(() => googleCalendarSync.pushEvent(event.id).catch(() => {}))
     res.status(201).json(formatEvent(event))
   } catch (err) { next(err) }
 }
@@ -338,6 +342,7 @@ async function updateEvent(req, res, next) {
 
     const fresh = await loadEvent(existing.id, workspaceId)
     emitTo(`workspace:${workspaceId}`, 'calendar:event:updated', { event: formatEvent(fresh) })
+    setImmediate(() => googleCalendarSync.updateEvent(existing.id).catch(() => {}))
     res.json(formatEvent(fresh))
   } catch (err) { next(err) }
 }
@@ -354,6 +359,9 @@ async function deleteEvent(req, res, next) {
 
     const invitees = existing.participants.filter(p => p.userId !== organizerId)
     await prisma.calendarEvent.delete({ where: { id: existing.id } })
+    // `existing` ya tiene googleEventId/organizerId/workspaceId (se borró de la DB,
+    // no se puede volver a consultar) — deleteEvent solo lee esos escalares.
+    setImmediate(() => googleCalendarSync.deleteEvent(existing).catch(() => {}))
 
     for (const p of invitees) {
       await prisma.notification.create({

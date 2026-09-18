@@ -8,14 +8,16 @@ import useMembers from '../hooks/useMembers'
 import WeekTimeGrid from '../components/calendar/WeekTimeGrid'
 import CalendarMonthView from '../components/calendar/CalendarMonthView'
 import PeoplePicker from '../components/calendar/PeoplePicker'
+import PersonSearchSelect from '../components/calendar/PersonSearchSelect'
 import ScheduleEventModal from '../components/calendar/ScheduleEventModal'
 import EventDetailModal from '../components/calendar/EventDetailModal'
 import { todayYMD, shiftDay, weekDates, weekdayLabel, weekRangeLabel } from '../components/calendar/dateHelpers'
 import { useCalendarSocket } from '../components/calendar/useCalendarSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
+import GoogleCalendarConnectButton from '../components/calendar/GoogleCalendarConnectButton'
 
 const VIEWS = [
-  { id: 'semana', label: '🗓️ Mi semana' },
+  { id: 'semana', label: '🗓️ Semana' },
   { id: 'equipo', label: '👥 Equipo' },
   { id: 'mes',    label: '📅 Mes' },
 ]
@@ -51,6 +53,12 @@ export default function Calendario() {
     return [...new Set(raw.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0 && n !== user?.id))]
   }, [searchParams, user?.id])
 
+  // Vista "semana": de quién estoy viendo el calendario — null = el mío.
+  const rawPerson = searchParams.get('person')
+  const personId = rawPerson && Number.isInteger(Number(rawPerson)) && Number(rawPerson) !== user?.id ? Number(rawPerson) : null
+  const targetUserId = personId || user.id
+  const viewingOther = view === 'semana' && personId != null
+
   function updateParams(next) {
     const params = new URLSearchParams(searchParams)
     for (const [k, v] of Object.entries(next)) {
@@ -76,8 +84,9 @@ export default function Calendario() {
 
   const availabilityUserIds = useMemo(() => {
     if (view === 'equipo') return [user.id, ...peopleIds]
+    if (view === 'semana') return [targetUserId]
     return [user.id]
-  }, [view, peopleIds, user.id])
+  }, [view, peopleIds, user.id, targetUserId])
 
   const load = useCallback(async () => {
     if (!moduleAllowed) return
@@ -156,12 +165,15 @@ export default function Calendario() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Calendario</h1>
           {moduleAllowed && (
-            <button
-              onClick={() => setScheduleModal({})}
-              className="bg-primary-600 hover:bg-primary-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition-colors"
-            >
-              + Agendar reunión
-            </button>
+            <div className="flex items-center gap-2">
+              <GoogleCalendarConnectButton />
+              <button
+                onClick={() => setScheduleModal(viewingOther ? { participantIds: [targetUserId] } : {})}
+                className="bg-primary-600 hover:bg-primary-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition-colors"
+              >
+                + Agendar reunión
+              </button>
+            </div>
           )}
         </div>
 
@@ -199,11 +211,27 @@ export default function Calendario() {
               <button onClick={goToday} className="px-3 py-1.5 text-xs font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">Hoy</button>
               <button onClick={() => shiftView(1)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">›</button>
               <span className="text-sm text-gray-600 dark:text-gray-300 ml-2 capitalize">
+                {viewingOther && `${memberById.get(targetUserId)?.name || 'Persona'} · `}
                 {view === 'equipo' ? weekdayLabel(date) : weekRangeLabel(date)}
               </span>
             </div>
           )}
         </div>
+
+        {view === 'semana' && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-4 flex flex-wrap items-center gap-3">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Ver calendario de</p>
+            <PersonSearchSelect
+              value={personId}
+              onChange={id => updateParams({ person: id ?? null })}
+            />
+            {viewingOther && (
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Clickeá un hueco libre, o "+ Agendar reunión" arriba, para proponerle una reunión.
+              </p>
+            )}
+          </div>
+        )}
 
         {view === 'equipo' && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-4">
@@ -237,13 +265,16 @@ export default function Calendario() {
         {!loading && !loadError && view === 'semana' && (
           <WeekTimeGrid
             columns={weekColumns}
-            getBlocks={colDate => blocksFor(user.id, colDate)}
+            getBlocks={colDate => blocksFor(targetUserId, colDate)}
             getWorkWindow={() => {
-              const s = availability[user.id]
+              const s = availability[targetUserId]
               return s?.workStart && s?.workEnd ? { start: s.workStart, end: s.workEnd } : null
             }}
-            isFullDayOff={key => availability[user.id]?.fullDayOff?.includes(key)}
-            onSlotClick={(dateKey, time) => setScheduleModal({ date: dateKey, startTime: time })}
+            isFullDayOff={key => availability[targetUserId]?.fullDayOff?.includes(key)}
+            onSlotClick={(dateKey, time) => setScheduleModal({
+              date: dateKey, startTime: time,
+              ...(viewingOther ? { participantIds: [targetUserId] } : {}),
+            })}
           />
         )}
 

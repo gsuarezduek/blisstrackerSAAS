@@ -203,6 +203,7 @@ model Workspace {
   deviceTokens               DeviceToken[]
   calendarEvents             CalendarEvent[]
   calendarEventParticipants  CalendarEventParticipant[]
+  googleCalendarConnections  GoogleCalendarConnection[]
 
   @@index([slug])
 }
@@ -396,6 +397,7 @@ model User {
   deviceTokens                   DeviceToken[]
   calendarEventsOrganized        CalendarEvent[]             @relation("CalendarEventOrganizer")
   calendarEventParticipations    CalendarEventParticipant[]  @relation("CalendarEventParticipant")
+  googleCalendarConnections      GoogleCalendarConnection[]
 }
 
 model UserLogin {
@@ -2531,6 +2533,10 @@ model CalendarEvent {
   // congelado (mismo criterio que ProjectMeeting con participantes tras iniciar).
   realMeetingId Int?            @unique
   realMeeting   ProjectMeeting? @relation(fields: [realMeetingId], references: [id], onDelete: SetNull)
+  // Id del evento espejado en el Google Calendar del ORGANIZADOR (solo si tiene
+  // GoogleCalendarConnection activa) — ver googleCalendarSync.service.js. null =
+  // nunca se empujó (el organizador no tiene Google conectado, o falló el push).
+  googleEventId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2566,6 +2572,33 @@ model CalendarEventParticipant {
   @@unique([eventId, userId])
   @@index([eventId])
   @@index([userId, status])
+  @@index([workspaceId])
+}
+
+// Conexión OAuth de Google Calendar — a diferencia de ProjectIntegration (GA4/Ads/
+// GSC/YouTube, todas por PROYECTO), esta es por PERSONA: cada quien conecta su
+// propia cuenta de Google desde el módulo Calendario. Tokens cifrados con el mismo
+// AES-256-GCM de lib/encryption.js que ya usa ProjectIntegration. v1 es solo
+// "empujar" (crear/actualizar/borrar el evento en el Google Calendar del
+// ORGANIZADOR, con los demás participantes como attendees — Google les manda la
+// invitación nativa sin que ellos necesiten conectar nada) — "traer" disponibilidad
+// desde Google queda para una fase futura, sin modelar todavía.
+model GoogleCalendarConnection {
+  id           Int       @id @default(autoincrement())
+  workspaceId  Int
+  userId       Int
+  accessToken  String? // cifrado
+  refreshToken String? // cifrado
+  expiresAt    DateTime?
+  accountEmail String? // cuenta de Google conectada, informativo
+  status       String    @default("active") // "active" | "expired"
+  connectedAt  DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
   @@index([workspaceId])
 }
 
