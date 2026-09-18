@@ -20,7 +20,7 @@ const FILTERS = [
   { key: 'TASK_MENTION', label: '@',  title: 'Asignaciones y menciones',  match: n => n.type === 'TASK_MENTION' || n.type === 'LEAD_ASSIGNED' || n.type === 'CHAT_MENTION' || n.type === 'CONTENT_MENTION' || n.type === 'WHATSAPP_MESSAGE' || n.type === 'CALENDAR_INVITE' },
   { key: 'TASK_COMMENT', label: '💬', title: 'Comentarios',               match: n => n.type === 'TASK_COMMENT' },
   { key: 'FOLLOWED',     label: '👁', title: 'Seguidas y delegadas',      match: n => isFollowedCompleted(n) || n.type === 'TASK_DELETED' },
-  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE'].includes(n.type) },
+  { key: 'OTHER',        label: '🔔', title: 'Otras',                     match: n => ['VACATION_REQUEST', 'ADDED_TO_PROJECT', 'VACATION_REVIEWED', 'GAME_LAUNCHED', 'BENEFIT_REQUEST', 'BENEFIT_REVIEWED', 'CALENDAR_RESPONSE', 'LEGAJO_UPDATED'].includes(n.type) },
   { key: 'COMPLETED',    label: '✓',  title: 'Completadas',               match: n => n.type === 'COMPLETED' && !isFollowedCompleted(n), muted: true },
 ]
 
@@ -280,10 +280,12 @@ export default function NotificationBell() {
                 // RRHH → Licencias y solicitudes de beneficios a RRHH → Beneficios (quien las
                 // recibe tiene acceso al módulo RRHH — admin u otro rol configurado, ya no es
                 // admin-only fijo), las revisiones (de licencia o de beneficio) al perfil propio
-                // (el destinatario puede no tener acceso al módulo), las menciones de Contenido
-                // al calendario con el modal de la pieza abierto. Los juegos y las menciones de
-                // chat no navegan a ningún lado — abren su flotante (🏆 / 💬, ya visibles en
-                // cualquier página) vía un evento, ver handleRowClick.
+                // (el destinatario puede no tener acceso al módulo), cambios de legajo a
+                // RRHH → Legajos con la persona preseleccionada (n.actor es quien editó su
+                // propio legajo), las menciones de Contenido al calendario con el modal de la
+                // pieza abierto. Los juegos y las menciones de chat no navegan a ningún lado —
+                // abren su flotante (🏆 / 💬, ya visibles en cualquier página) vía un evento,
+                // ver handleRowClick.
                 const ventasBase = user?.isAdmin ? '/admin/ventas' : '/ventas'
                 const dest = n.leadId
                   ? `${ventasBase}?lead=${n.leadId}`
@@ -293,6 +295,8 @@ export default function NotificationBell() {
                     ? '/admin/rrhh?tab=licencias'
                     : n.type === 'BENEFIT_REQUEST'
                       ? '/admin/rrhh?tab=beneficios'
+                      : n.type === 'LEGAJO_UPDATED'
+                        ? `/admin/rrhh?tab=legajos${n.actor?.id ? `&userId=${n.actor.id}` : ''}`
                       : (n.type === 'VACATION_REVIEWED' || n.type === 'BENEFIT_REVIEWED')
                         ? '/profile'
                         : (isGameLaunched || isChatMention)

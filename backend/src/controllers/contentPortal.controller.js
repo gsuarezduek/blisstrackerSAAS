@@ -109,11 +109,12 @@ async function assertContentAccess(portal) {
 }
 
 /**
- * Avisa al equipo (solo notificación in-app, sin email — los emails quedan
- * reservados para avisos al cliente, no de vuelta al equipo) que el cliente
- * decidió sobre una pieza. Fire-and-forget total — se llama con setImmediate
- * después de responder; una aprobación ya persistida no debe fallar por un
- * aviso caído.
+ * Avisa al equipo DEL PROYECTO (ProjectMember — no a los admins/owners del
+ * resto del workspace, `includeAdmins:false`; solo notificación in-app, sin
+ * email — los emails quedan reservados para avisos al cliente, no de vuelta
+ * al equipo) que el cliente decidió sobre una pieza. Fire-and-forget total —
+ * se llama con setImmediate después de responder; una aprobación ya
+ * persistida no debe fallar por un aviso caído.
  */
 async function notifyTeamOfDecision(portal, piece, contact, decision, comment) {
   try {
@@ -126,7 +127,7 @@ async function notifyTeamOfDecision(portal, piece, contact, decision, comment) {
     // apoyarse en `actor.name` como el resto de las notificaciones.
     const message = `${who} (cliente) ${verb} "${preview}"`
 
-    const { userIds } = await getProjectNotifyRecipients(portal.projectId, portal.workspaceId)
+    const { userIds } = await getProjectNotifyRecipients(portal.projectId, portal.workspaceId, { includeAdmins: false })
 
     if (userIds.length > 0) {
       await prisma.notification.createMany({

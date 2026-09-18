@@ -20,11 +20,11 @@ export function Field({ label, value }) {
   )
 }
 
-export function TabLegajos({ users }) {
+export function TabLegajos({ users, initialUserId }) {
   const { labelFor } = useRoles()
   const { workspace } = useWorkspace()
   const { fields: legajoFields } = useLegajoFields()
-  const [selectedId, setSelectedId] = useState('')
+  const [selectedId, setSelectedId] = useState(initialUserId ? String(initialUserId) : '')
   const [summary, setSummary]       = useState(null)   // { avgLoginTime, loginCount, projects }
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [showLoginDays, setShowLoginDays] = useState(false)

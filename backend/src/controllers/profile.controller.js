@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs')
 const crypto = require('crypto')
 const jwt = require('jsonwebtoken')
 const prisma = require('../lib/prisma')
-const { resolveLegajoFields, coerceCustomValue } = require('../lib/legajoCatalog')
+const { resolveLegajoFields, coerceCustomValue, BUILTIN_KEYS } = require('../lib/legajoCatalog')
 const { sendEmailChangeVerification } = require('../services/email.service')
 const { validatePassword } = require('../lib/passwordPolicy')
 const { validateImageUpload } = require('../lib/imageType')
@@ -36,6 +36,40 @@ const USER_SELECT = {
 
 // Flags de preferencias que viven en WorkspaceMember
 const PREF_FLAGS = ['weeklyEmailEnabled', 'dailyInsightEnabled', 'insightMemoryEnabled', 'taskQualityEnabled', 'notesBoardEnabled']
+
+// Compara valor viejo vs nuevo de un campo de legajo para detectar cambios reales
+// (el form de Mi Perfil manda el formulario completo en cada guardado, no solo lo
+// tocado — sin esto, cada "Guardar" sin cambios spamearía a los admins). Coacciona
+// Date/número/null a string para no pelear con tipos distintos entre Prisma y body.
+function legajoValueChanged(oldVal, newVal) {
+  const norm = v => (v instanceof Date ? v.toISOString() : String(v ?? ''))
+  return norm(oldVal) !== norm(newVal)
+}
+
+/**
+ * Avisa a los admins/owners del workspace (no al propio usuario) que alguien
+ * actualizó su legajo. Fire-and-forget, mismo patrón que BENEFIT_REQUEST/
+ * VACATION_REQUEST (benefits.controller.js / vacation.controller.js):
+ * notificación in-app, nunca bloquea la respuesta ya enviada al usuario.
+ */
+async function notifyLegajoUpdate(workspaceId, actorId, actorName, changedLabels) {
+  const adminMembers = await prisma.workspaceMember.findMany({
+    where:  { workspaceId, role: { in: ['admin', 'owner'] }, active: true, userId: { not: actorId } },
+    select: { userId: true },
+  })
+  if (adminMembers.length === 0) return
+
+  const preview = changedLabels.length > 3
+    ? `${changedLabels.slice(0, 3).join(', ')} y ${changedLabels.length - 3} más`
+    : changedLabels.join(', ')
+  const message = `${actorName} actualizó su legajo: ${preview}`
+
+  await prisma.notification.createMany({
+    data: adminMembers.map(m => ({
+      workspaceId, userId: m.userId, actorId, type: 'LEGAJO_UPDATED', message,
+    })),
+  })
+}
 
 // La validación de avatares se hace contra la DB (modelo Avatar) en updateAvatar.
 
@@ -97,6 +131,17 @@ async function updateProfile(req, res, next) {
       }
     }
 
+    // Campos builtin del legajo tocados en este guardado (todo PERSONAL_FIELDS salvo
+    // 'name', que no es un dato de legajo) — snapshot de sus valores viejos, para
+    // detectar más abajo si realmente cambiaron y avisar a los admins solo en ese caso.
+    const legajoBuiltinKeys = Object.keys(data).filter(f => BUILTIN_KEYS.has(f))
+    const oldBuiltinValues = legajoBuiltinKeys.length > 0
+      ? await prisma.user.findUnique({
+          where: { id: req.user.userId },
+          select: Object.fromEntries(legajoBuiltinKeys.map(f => [f, true])),
+        })
+      : null
+
     const user = await prisma.user.update({
       where: { id: req.user.userId },
       data,
@@ -104,22 +149,36 @@ async function updateProfile(req, res, next) {
     })
 
     let member = req.workspaceMember
+    const changedLegajoKeys = oldBuiltinValues
+      ? legajoBuiltinKeys.filter(f => legajoValueChanged(oldBuiltinValues[f], data[f]))
+      : []
     // Campos custom del legajo → se guardan en WorkspaceMember.legajoData (workspace-scoped).
     if (req.body.legajoData && typeof req.body.legajoData === 'object' && member) {
       const fields = resolveLegajoFields(req.workspace.legajoFields)
       const customByKey = Object.fromEntries(fields.filter(f => !f.builtin).map(f => [f.key, f]))
-      const next = { ...(member.legajoData || {}) }
+      const oldLegajoData = member.legajoData || {}
+      const next = { ...oldLegajoData }
       for (const [key, raw] of Object.entries(req.body.legajoData)) {
         const field = customByKey[key]
         if (!field) continue // ignora claves desconocidas o builtins (esos van en columnas de User)
         const val = coerceCustomValue(field, raw)
         if (val === undefined) delete next[key]
         else next[key] = val
+        if (legajoValueChanged(oldLegajoData[key], next[key])) changedLegajoKeys.push(key)
       }
       member = await prisma.workspaceMember.update({
         where: { workspaceId_userId: { workspaceId: req.workspace.id, userId: req.user.userId } },
         data: { legajoData: next },
       })
+    }
+
+    if (changedLegajoKeys.length > 0) {
+      const labelByKey = Object.fromEntries(
+        resolveLegajoFields(req.workspace.legajoFields).map(f => [f.key, f.label])
+      )
+      const changedLabels = changedLegajoKeys.map(k => labelByKey[k] || k)
+      notifyLegajoUpdate(req.workspace.id, req.user.userId, user.name, changedLabels)
+        .catch(err => console.error('[Profile] Error al notificar cambio de legajo:', err.message))
     }
 
     res.json(buildProfileResponse(user, member))

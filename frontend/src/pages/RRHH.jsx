@@ -34,6 +34,7 @@ const VALID_TABS = new Set([...BASE_TABS, PRODUCTIVIDAD_TAB].map(t => t.id))
 export default function RRHH() {
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab')
+  const initialLegajoUserId = searchParams.get('userId')
   const [tab, setTab]           = useState(VALID_TABS.has(initialTab) ? initialTab : 'dashboard')
   const [users, setUsers]       = useState([])
   const [lastLoginsMap, setLastLoginsMap] = useState({})
@@ -100,7 +101,7 @@ export default function RRHH() {
         {tab === 'dashboard' && users.length > 0 && (
           <MiniDashboard users={users} lastLoginsMap={lastLoginsMap} dashStats={dashStats} peopleScore={peopleScore} />
         )}
-        {tab === 'legajos'      && <TabLegajos    users={users.filter(u => u.active)} />}
+        {tab === 'legajos'      && <TabLegajos    users={users.filter(u => u.active)} initialUserId={initialLegajoUserId} />}
         {tab === 'licencias'    && <TabLicencias />}
         {tab === 'vacaciones'   && <TabVacaciones users={users.filter(u => u.active)} onVacationUpdate={updated => setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, vacationDays: updated.vacationDays } : u))} />}
         {tab === 'beneficios'   && <TabBeneficios />}

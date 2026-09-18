@@ -188,6 +188,7 @@ model Workspace {
   contentComments            ContentComment[]
   contentStatusEvents        ContentStatusEvent[]
   contentPieceFiles          ContentPieceFile[]
+  taskFiles                  TaskFile[]
   projectFiles               ProjectFile[]
   whatsappAccounts           WhatsappAccount[]
   whatsappConversations      WhatsappConversation[]
@@ -385,6 +386,7 @@ model User {
   contentComments                ContentComment[]            @relation("ContentCommentAuthor")
   contentStatusEvents            ContentStatusEvent[]        @relation("ContentEventActor")
   contentPieceFilesLinked        ContentPieceFile[]          @relation("ContentPieceFileLinkedBy")
+  taskFilesLinked                TaskFile[]                  @relation("TaskFileLinkedBy")
   whatsappAccountsConnected      WhatsappAccount[]
   whatsappMessagesSent           WhatsappMessage[]
   whatsappConversationReads      WhatsappConversationRead[]
@@ -631,6 +633,10 @@ model ProjectFile {
   // puede asociarse a una o más piezas, sin duplicar bytes ni objeto R2.
   contentLinks ContentPieceFile[]
 
+  // Vínculos con Tareas (ver modelo TaskFile) — un archivo puede adjuntarse a
+  // una o más tareas, sin duplicar bytes ni objeto R2 (mismo criterio que contentLinks).
+  taskLinks TaskFile[]
+
   @@index([projectId, parentId])
   @@index([workspaceId])
   @@index([projectId, deletedAt]) // vista Papelera + limpieza semanal
@@ -833,6 +839,7 @@ model Task {
   meetingParticipant    ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
   leadAction            LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
   contentPiece          ContentPiece? // Pieza de Contenido vinculada (uno a uno); completar la tarea la hace avanzar de estado
+  files                 TaskFile[] // Adjuntos — archivos de la Nube del proyecto (ProjectFile) linkeados a esta tarea
 
   @@unique([recurrenceId, scheduledFor])
   @@index([userId, status])
@@ -988,6 +995,7 @@ enum NotificationType {
   TASK_DELETED
   CALENDAR_INVITE
   CALENDAR_RESPONSE
+  LEGAJO_UPDATED
 }
 
 model Notification {
@@ -3620,6 +3628,34 @@ model ContentPiece {
   @@index([projectId, status, order]) // vista Kanban
   @@index([projectId, updatedAt]) // tiebreak legacy / futuras vistas por última edición
   @@index([projectId, deletedAt]) // vista Papelera + limpieza semanal
+}
+
+// Adjunto de una Tarea: vincula la tarea con un ProjectFile del repositorio de
+// Archivos del proyecto (mismo criterio que ContentPieceFile, pero acá el
+// archivo NACE ahí — no es una asociación a algo ya existente, sino el punto
+// de entrada de la subida (presign/confirm normal de Archivos con la carpeta
+// resuelta automáticamente, ver tasks/attachments.controller.js). El archivo
+// queda en la Nube del proyecto igual que cualquier otro, aunque se borre la
+// tarea o se remueva el vínculo — "se guarda automáticamente en la nube de
+// ese proyecto" es la premisa de esta tabla. onDelete: Cascade en fileId —
+// si la limpieza semanal purga en duro el ProjectFile (30 días de papelera),
+// el vínculo desaparece solo, sin dejar un adjunto roto en la tarea.
+model TaskFile {
+  id          Int         @id @default(autoincrement())
+  workspaceId Int
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  taskId      Int
+  task        Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileId      Int
+  file        ProjectFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  linkedById  Int?
+  linkedBy    User?       @relation("TaskFileLinkedBy", fields: [linkedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+
+  @@unique([taskId, fileId])
+  @@index([taskId])
+  @@index([fileId])
+  @@index([workspaceId])
 }
 
 // Vínculo entre una pieza y un archivo ya existente en el repositorio de

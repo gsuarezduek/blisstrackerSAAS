@@ -253,10 +253,13 @@ describe('POST /content/:pid/approve', () => {
       .mockResolvedValueOnce(dbPiece({ status: 'aprobado' }))
     prisma.contentPiece.update.mockResolvedValue({})
     prisma.contentStatusEvent.create.mockResolvedValue({})
+    // Notifica al EQUIPO DEL PROYECTO (ProjectMember), no a cualquier admin del
+    // workspace ajeno al proyecto — de ahí que el destinatario sea 'member' y
+    // además figure en projectMember.findMany.
     prisma.workspaceMember.findMany.mockResolvedValue([
-      { userId: 2, role: 'admin', user: { email: 'admin@bliss.test' } },
+      { userId: 2, role: 'member', user: { email: 'team@bliss.test' } },
     ])
-    prisma.projectMember.findMany.mockResolvedValue([])
+    prisma.projectMember.findMany.mockResolvedValue([{ userId: 2 }])
     prisma.project.findUnique.mockResolvedValue({ name: 'Proyecto Demo' })
 
     const res = await request(app)
