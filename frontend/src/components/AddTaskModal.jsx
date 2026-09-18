@@ -9,6 +9,13 @@ import { fmtBytes, iconFor } from '../lib/fileIcons'
 
 const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
+// Horarios cada 15 minutos (00:00–23:45) para el bloqueo de Calendario — evita minutos sueltos tipo "9:38".
+const SCHEDULED_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, i) => {
+  const h = String(Math.floor(i / 4)).padStart(2, '0')
+  const m = String((i % 4) * 15).padStart(2, '0')
+  return `${h}:${m}`
+})
+
 function ProjectCombobox({ projects, value, onChange, userId }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -729,23 +736,37 @@ export default function AddTaskModal({ onAdd, onClose, lockedProject, defaultPro
                 🗓️ Bloquear horario en el Calendario
               </label>
               {scheduledTime && (
-                <div className="flex gap-2 mt-2">
-                  <input
-                    type="time"
-                    value={scheduledTime}
-                    onChange={e => setScheduledTime(e.target.value)}
-                    className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                  <select
-                    value={scheduledDurationMins}
-                    onChange={e => setScheduledDurationMins(Number(e.target.value))}
-                    className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    {[15, 30, 45, 60, 90, 120].map(d => <option key={d} value={d}>{d} min</option>)}
-                  </select>
+                <div className="mt-2">
+                  {taskMode === 'future' && scheduledDate && (
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">
+                      Hora ese día ({Number(scheduledDate.slice(8, 10))}/{Number(scheduledDate.slice(5, 7))}):
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <select
+                      value={scheduledTime}
+                      onChange={e => setScheduledTime(e.target.value)}
+                      className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      {SCHEDULED_TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <select
+                      value={scheduledDurationMins}
+                      onChange={e => setScheduledDurationMins(Number(e.target.value))}
+                      className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      {[15, 30, 45, 60, 90, 120].map(d => <option key={d} value={d}>{d} min</option>)}
+                    </select>
+                  </div>
                 </div>
               )}
-              <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Ocupa esa franja en tu Calendario (opcional).</p>
+              <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                {taskMode === 'future' && scheduledDate
+                  ? `Reserva esa franja el ${Number(scheduledDate.slice(8, 10))} de ${MONTH_NAMES[Number(scheduledDate.slice(5, 7)) - 1]} (no espera a que inicies la tarea ese día) — así nadie te agenda una reunión encima.`
+                  : taskMode === 'recurring'
+                    ? 'Reserva esa franja cada vez que se repita la tarea (no espera a que la inicies) — así nadie te agenda una reunión encima.'
+                    : 'Reserva esa franja en tu Calendario desde ya (no espera a que inicies la tarea) — así nadie te agenda una reunión encima.'}
+              </p>
             </div>
 
             {optErr && <p className="text-xs text-red-500">{optErr}</p>}
