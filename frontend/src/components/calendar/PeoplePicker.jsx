@@ -41,7 +41,7 @@ export default function PeoplePicker({ value, onChange, excludeIds = [], placeho
               key={m.id}
               className="inline-flex items-center gap-1 pl-1 pr-1.5 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 text-xs"
             >
-              <img src={avatarUrl(m.avatar)} alt="" className="w-4 h-4 rounded-full" />
+              <img src={avatarUrl(m.avatar)} alt="" className="w-4 h-4 rounded-full object-cover" />
               {m.name}
               <button
                 type="button"
@@ -76,7 +76,7 @@ export default function PeoplePicker({ value, onChange, excludeIds = [], placeho
                 className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
               >
                 <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggle(m.id)} className="rounded" />
-                <img src={avatarUrl(m.avatar)} alt="" className="w-5 h-5 rounded-full" />
+                <img src={avatarUrl(m.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />
                 <span className="text-gray-700 dark:text-gray-300">{m.name}</span>
               </label>
             ))}

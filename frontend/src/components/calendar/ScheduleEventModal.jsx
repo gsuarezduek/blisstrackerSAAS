@@ -2,10 +2,26 @@ import { useEffect, useState } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import PeoplePicker from './PeoplePicker'
+import ProjectSearchSelect from './ProjectSearchSelect'
 
 const DURATIONS = [15, 30, 45, 60, 90, 120]
 const INPUT_CLS = 'w-full mt-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const LABEL_CLS = 'text-xs font-medium text-gray-500 dark:text-gray-400'
+
+// Horarios cada 15 minutos (00:00–23:45) — evita minutos sueltos tipo "9:38".
+const TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, i) => {
+  const h = String(Math.floor(i / 4)).padStart(2, '0')
+  const m = String((i % 4) * 15).padStart(2, '0')
+  return `${h}:${m}`
+})
+
+// Redondea "HH:MM" al múltiplo de 15 más cercano (por si `initial.startTime` viniera desalineado).
+function roundToQuarter(hhmm) {
+  if (!hhmm) return hhmm
+  const [h, m] = hhmm.split(':').map(Number)
+  const total = Math.min(23 * 60 + 45, Math.round((h * 60 + m) / 15) * 15)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
 
 /**
  * Modal "Agendar reunión". `initial` (opcional) prellena fecha/hora — viene de
@@ -31,7 +47,7 @@ export default function ScheduleEventModal({ open, initial, onClose, onCreated }
     if (!open) return
     setTitle('')
     setDate(initial?.date || '')
-    setStartTime(initial?.startTime || '')
+    setStartTime(roundToQuarter(initial?.startTime) || '')
     setDurationMins(30)
     setProjectId('')
     setParticipantIds(initial?.participantIds || [])
@@ -99,7 +115,10 @@ export default function ScheduleEventModal({ open, initial, onClose, onCreated }
           </div>
           <div>
             <label className={LABEL_CLS}>Hora</label>
-            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={INPUT_CLS} />
+            <select value={startTime} onChange={e => setStartTime(e.target.value)} className={INPUT_CLS}>
+              <option value="" disabled>Elegir</option>
+              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
           </div>
           <div>
             <label className={LABEL_CLS}>Duración</label>
@@ -111,10 +130,9 @@ export default function ScheduleEventModal({ open, initial, onClose, onCreated }
 
         <div>
           <label className={LABEL_CLS}>Proyecto (opcional)</label>
-          <select value={projectId} onChange={e => setProjectId(e.target.value)} className={INPUT_CLS}>
-            <option value="">Sin proyecto</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <div className="mt-1">
+            <ProjectSearchSelect projects={projects} value={projectId} onChange={setProjectId} />
+          </div>
           {projectId && (
             <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
               Con proyecto vas a poder iniciar la reunión real (con cronómetro) desde el evento, una vez que llegue la hora.

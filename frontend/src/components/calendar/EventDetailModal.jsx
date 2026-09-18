@@ -85,7 +85,7 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
           <div className="flex flex-col gap-1">
             {event.participants.map(p => (
               <div key={p.userId} className="flex items-center gap-2 text-sm">
-                <img src={avatarUrl(p.user?.avatar)} alt="" className="w-5 h-5 rounded-full" />
+                <img src={avatarUrl(p.user?.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />
                 <span className="text-gray-700 dark:text-gray-300">{p.user?.name}</span>
                 {p.userId === event.organizerId && <span className="text-[10px] text-gray-400 dark:text-gray-500">(organizador)</span>}
                 <span className={`ml-auto w-2 h-2 rounded-full ${STATUS_DOT[p.status]}`} title={STATUS_LABEL[p.status]} />

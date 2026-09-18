@@ -39,7 +39,7 @@ export default function PersonSearchSelect({ value, onChange }) {
     setOpen(false)
   }
 
-  const label = selected ? selected.name : 'Vos'
+  const label = selected ? selected.name : 'Mi calendario'
   const avatarSrc = avatarUrl(selected?.avatar || user?.avatar)
 
   return (
@@ -49,7 +49,7 @@ export default function PersonSearchSelect({ value, onChange }) {
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
       >
-        <img src={avatarSrc} alt="" className="w-5 h-5 rounded-full" />
+        <img src={avatarSrc} alt="" className="w-5 h-5 rounded-full object-cover" />
         <span className="font-medium text-gray-700 dark:text-gray-200">{label}</span>
         <span className="text-gray-400 text-xs">▾</span>
       </button>
@@ -72,7 +72,7 @@ export default function PersonSearchSelect({ value, onChange }) {
                 className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
                   (value ?? user.id) === m.id ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}
               >
-                <img src={avatarUrl(m.avatar)} alt="" className="w-5 h-5 rounded-full" />
+                <img src={avatarUrl(m.avatar)} alt="" className="w-5 h-5 rounded-full object-cover" />
                 <span className="text-gray-700 dark:text-gray-300">{m.id === user.id ? `${m.name} (vos)` : m.name}</span>
               </button>
             ))}
