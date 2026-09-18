@@ -3,7 +3,7 @@ const prisma = require('../../lib/prisma')
 const { aggregateReportData, getAvailableSections } = require('../../services/monthlyReport.service')
 const {
   SECTION_KEYS, reportPeriod, reportLabel, sanitizeSections,
-  safeParseArr, safeParseObj, loadBriefs, loadFeedbackSummary,
+  safeParseArr, safeParseObj, loadBriefs, loadFeedbackSummary, loadSignature,
 } = require('./_shared')
 
 /**
@@ -106,7 +106,10 @@ async function getReport(req, res, next) {
     }
 
     const period = reportPeriod(report)
-    const feedback = await loadFeedbackSummary(report.id)
+    const [feedback, signature] = await Promise.all([
+      loadFeedbackSummary(report.id),
+      loadSignature(report.generatedById, workspaceId),
+    ])
     res.json({
       report: {
         id:              report.id,
@@ -121,6 +124,7 @@ async function getReport(req, res, next) {
         periodEnd:       period.end,
         periodLabel:     reportLabel(report),
         feedback,
+        signature,
         enabledSections,
         isGenerated,
       },

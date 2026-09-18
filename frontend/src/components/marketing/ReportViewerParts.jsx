@@ -1,6 +1,7 @@
 // Helpers, charts y cards presentacionales del informe. Extraído de ReportViewer.jsx.
 // Todas piezas sin estado (props → JSX); se comparten entre el viewer y entre sí.
 import { createContext, useContext } from 'react'
+import { avatarUrl } from '../../utils/avatarUrl'
 
 export const PRINT_STYLES = `
 @media print {
@@ -40,6 +41,28 @@ export function DeleteSectionBtn({ keys, label, className = '' }) {
         <line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
       </svg>
     </button>
+  )
+}
+
+// ─── Firma del informe ──────────────────────────────────────────────────────
+// Quién lo generó/regeneró por última vez (report.signature, ver monthlyReport
+// controllers). Se muestra igual en la vista interna, el link público y el
+// portal de cliente — el avatar sale de un endpoint público, sin auth.
+export function ReportSignature({ signature }) {
+  if (!signature?.name) return null
+  return (
+    <div className="flex items-center gap-2 px-1">
+      <img
+        src={avatarUrl(signature.avatar)}
+        alt={signature.name}
+        className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-700 shrink-0"
+      />
+      <p className="text-xs text-gray-400 dark:text-gray-500">
+        Informe generado por{' '}
+        <span className="font-medium text-gray-600 dark:text-gray-300">{signature.name}</span>
+        {signature.role && <> · {signature.role}</>}
+      </p>
+    </div>
   )
 }
 

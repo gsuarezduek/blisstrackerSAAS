@@ -10,7 +10,7 @@ const { saveLinkedinSnapshot }  = require('../../services/linkedinSnapshot.servi
 const { saveFacebookSnapshot }  = require('../../services/facebookSnapshot.service')
 const { fetchGoogleAdsData }               = require('../../services/googleAds.service')
 const { fetchMetaAdsData, getValidFbToken } = require('../../services/metaAds.service')
-const { SECTION_KEYS, reportPeriod, reportLabel, sanitizeSections, safeParseArr, loadBriefs } = require('./_shared')
+const { SECTION_KEYS, reportPeriod, reportLabel, sanitizeSections, safeParseArr, loadBriefs, loadSignature } = require('./_shared')
 
 // Valida un rango recibido del cliente. Devuelve { periodStart, periodEnd } (Date) o null si inválido/ausente.
 // `null` (sin rango) es válido → se usa el default (mes anterior completo).
@@ -238,6 +238,7 @@ async function regenerateReport(req, res, next) {
 
     const updatedReport = await prisma.monthlyReport.findUnique({ where: { id: report.id } })
     const period = reportPeriod(updatedReport)
+    const signature = await loadSignature(updatedReport.generatedById, workspaceId)
 
     const actorName = req.user?.name || 'Alguien'
     setImmediate(() => {
@@ -260,6 +261,7 @@ async function regenerateReport(req, res, next) {
         periodStart:     period.start,
         periodEnd:       period.end,
         periodLabel:     reportLabel(updatedReport),
+        signature,
         enabledSections: updatedReport.enabledSections ? safeParseArr(updatedReport.enabledSections) : null,
         isGenerated:     updatedReport.enabledSections != null,
       },

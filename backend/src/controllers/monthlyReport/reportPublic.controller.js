@@ -1,6 +1,6 @@
 const prisma = require('../../lib/prisma')
 const { aggregateReportData } = require('../../services/monthlyReport.service')
-const { GENERATED_WHERE, reportLabel, safeParseArr, safeParseObj, loadBriefs } = require('./_shared')
+const { GENERATED_WHERE, reportLabel, safeParseArr, safeParseObj, loadBriefs, loadSignature } = require('./_shared')
 
 /**
  * GET /api/public/report/:token
@@ -24,7 +24,7 @@ async function buildPublicReportPayload(report) {
   const enabledSections = report.enabledSections ? safeParseArr(report.enabledSections) : null
   const cachedData      = report.dataCache ? safeParseObj(report.dataCache) : null
   const briefs          = await loadBriefs(report.projectId)
-  const [data, siblingRows] = await Promise.all([
+  const [data, siblingRows, signature] = await Promise.all([
     aggregateReportData(report.projectId, report.workspaceId, report.month, cachedAnalysis, objectives, cachedData, enabledSections, {
       periodStart: report.periodStart, periodEnd: report.periodEnd, briefs,
     }),
@@ -34,6 +34,7 @@ async function buildPublicReportPayload(report) {
       select:  { token: true, month: true, periodStart: true, periodEnd: true },
       orderBy: { month: 'desc' },
     }),
+    loadSignature(report.generatedById, report.workspaceId),
   ])
   const siblings = siblingRows.map(r => ({ token: r.token, month: r.month, label: reportLabel(r) }))
 
@@ -54,6 +55,7 @@ async function buildPublicReportPayload(report) {
       notes:       report.notes,
       hasBanner:   !!report.bannerData,
       periodLabel: reportLabel(report),
+      signature,
     },
     workspace: workspace ? {
       slug:               workspace.slug,

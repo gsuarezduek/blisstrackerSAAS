@@ -80,6 +80,34 @@ async function loadFeedbackSummary(reportId) {
   return { count, avg, items }
 }
 
+// Firma del informe: nombre + foto + rol de quién lo generó/regeneró por última vez
+// (MonthlyReport.generatedById). Se muestra tanto en la vista interna como en el link
+// público y el portal de cliente — el avatar se sirve desde un endpoint público
+// (/api/avatars/img/:filename), así que no hay problema en exponerlo sin auth.
+// null si el informe nunca se generó (placeholder recién creado) o el usuario ya no existe.
+async function loadSignature(generatedById, workspaceId) {
+  if (!generatedById) return null
+  const [user, member] = await Promise.all([
+    prisma.user.findUnique({ where: { id: generatedById }, select: { name: true, avatar: true } }),
+    prisma.workspaceMember.findUnique({
+      where:  { workspaceId_userId: { workspaceId, userId: generatedById } },
+      select: { teamRole: true },
+    }),
+  ])
+  if (!user) return null
+
+  let role = null
+  if (member?.teamRole) {
+    const userRole = await prisma.userRole.findUnique({
+      where:  { workspaceId_name: { workspaceId, name: member.teamRole } },
+      select: { label: true },
+    })
+    role = userRole?.label || member.teamRole
+  }
+
+  return { name: user.name, avatar: user.avatar, role }
+}
+
 module.exports = {
   GENERATED_WHERE,
   SECTION_KEYS,
@@ -91,4 +119,5 @@ module.exports = {
   currentMonthStr,
   loadBriefs,
   loadFeedbackSummary,
+  loadSignature,
 }

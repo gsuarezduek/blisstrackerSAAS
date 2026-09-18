@@ -6,7 +6,7 @@ import { linkify } from '../../utils/linkify'
 import '../situation-editor.css'
 import {
   PRINT_STYLES, ReportEditContext, fmt, monthLabel, dataPeriodLabel,
-  DeltaChip, SectionCard, ObjectivesResults,
+  DeltaChip, SectionCard, ObjectivesResults, ReportSignature,
 } from './ReportViewerParts'
 import { RRSSSection, PublicidadSection, SeoGeoSection, SitioWebSection } from './ReportViewerSections'
 
@@ -344,6 +344,8 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
           </div>
         </div>
       )}
+
+      <ReportSignature signature={report?.signature} />
 
       {/* ── 0. Scorecard ejecutivo ── */}
       {heroMetrics.length > 0 && (
