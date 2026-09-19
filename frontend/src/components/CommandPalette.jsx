@@ -24,7 +24,11 @@ export default function CommandPalette({ open, onClose }) {
   const { user } = useAuth()
   const destinations = useNavDestinations()
   const { enabled: ventasEnabled } = useFeatureFlag('ventas')
+  const { enabled: marketingEnabled } = useFeatureFlag('marketing')
+  const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
   const canSeeLeads = ventasEnabled && (user?.isAdmin || user?.isSales)
+  const canJumpToMarketing = marketingEnabled && !!user?.moduleAccess?.marketing
+  const canJumpToContenido = contenidoEnabled && !!user?.moduleAccess?.contenido
 
   const [query, setQuery] = useState('')
   const [projects, setProjects] = useState([])
@@ -72,18 +76,34 @@ export default function CommandPalette({ open, onClose }) {
       .map(d => ({ ...d, type: 'nav', score: scoreMatch(d.label, q) }))
       .filter(d => d.score !== null)
       .sort((a, b) => a.score - b.score)
-      .slice(0, 6)
+      .slice(0, 10)
   }, [destinations, query])
 
+  // Proyectos: además de "ir al proyecto", los 2 mejores matches suman un atajo
+  // directo a Contenido/Marketing filtrado por ese proyecto (?projectId=) — evita
+  // tener que entrar primero a la ficha del proyecto para llegar a esas secciones.
   const projectMatches = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
-    return projects
-      .map(p => ({ id: `project-${p.id}`, type: 'project', label: p.name, to: `/my-projects/${p.id}`, score: scoreMatch(p.name, q) }))
+    const top = projects
+      .map(p => ({ ...p, score: scoreMatch(p.name, q) }))
       .filter(p => p.score !== null)
       .sort((a, b) => a.score - b.score)
       .slice(0, 6)
-  }, [projects, query])
+    const items = []
+    top.forEach((p, i) => {
+      items.push({ id: `project-${p.id}`, type: 'project', label: p.name, to: `/my-projects/${p.id}` })
+      if (i < 2) {
+        if (canJumpToMarketing) {
+          items.push({ id: `project-${p.id}-marketing`, type: 'project-link', label: p.name, module: '🎯 Marketing', to: `/marketing?projectId=${p.id}` })
+        }
+        if (canJumpToContenido) {
+          items.push({ id: `project-${p.id}-contenido`, type: 'project-link', label: p.name, module: '📅 Contenido', to: `/contenido?projectId=${p.id}` })
+        }
+      }
+    })
+    return items
+  }, [projects, query, canJumpToMarketing, canJumpToContenido])
 
   const memberMatches = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -176,6 +196,7 @@ export default function CommandPalette({ open, onClose }) {
                   {item.type === 'project' && <span className="text-gray-400 mr-1.5">Proyecto ·</span>}
                   {item.type === 'member' && <span className="text-gray-400 mr-1.5">Persona ·</span>}
                   {item.label}
+                  {item.type === 'project-link' && <span className="text-gray-400"> → {item.module}</span>}
                 </span>
                 {item.detail && <span className="text-xs text-gray-400 flex-shrink-0 truncate max-w-[40%]">{item.detail}</span>}
               </button>

@@ -284,6 +284,7 @@ const CONTENT_DEFAULTS = {
 export default function Landing() {
   const [openFaq, setOpenFaq] = useState(null)
   const [hero, setHero] = useState(CONTENT_DEFAULTS)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     api.get('/landing/content')
@@ -357,7 +358,7 @@ export default function Landing() {
           <div className="flex items-center">
             <BlissLogo variant="lockup" dark={false} className="h-8 w-auto" />
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1 sm:gap-3">
             <Link
               to="/pricing"
               className="text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors hidden sm:block"
@@ -372,18 +373,53 @@ export default function Landing() {
             </Link>
             <Link
               to="/login"
-              className="text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors hidden sm:block"
+              className="text-sm text-gray-600 hover:text-gray-900 font-medium px-2 sm:px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Iniciar sesión
             </Link>
             <Link
               to="/register"
-              className="text-sm bg-primary-500 hover:bg-primary-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors shadow-sm shadow-primary-200"
+              className="text-sm bg-primary-500 hover:bg-primary-600 text-white font-semibold px-3 sm:px-4 py-2 rounded-lg transition-colors shadow-sm shadow-primary-200"
             >
               Crear cuenta
             </Link>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(v => !v)}
+              aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={mobileMenuOpen}
+              className="sm:hidden ml-1 p-2 -mr-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+            >
+              {mobileMenuOpen ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              )}
+            </button>
           </div>
         </div>
+        {mobileMenuOpen && (
+          <div className="sm:hidden border-t border-gray-100 px-4 py-2 bg-white">
+            <Link
+              to="/pricing"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Pricing
+            </Link>
+            <Link
+              to="/blog"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block text-sm text-gray-600 hover:text-gray-900 font-medium px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Blog
+            </Link>
+          </div>
+        )}
       </nav>
 
       {/* ── Hero ── */}
