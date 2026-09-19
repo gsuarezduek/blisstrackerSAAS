@@ -61,7 +61,11 @@ export default function ClientPortalConfig({ projectId, canEdit, filesEnabled })
   function openEdit() {
     setDraft(portal
       ? { slug: portal.slug, active: portal.active, contentEnabled: portal.contentEnabled, showMeetings: portal.showMeetings, showTeam: portal.showTeam, showObjectives: portal.showObjectives, showFiles: portal.showFiles, liveSections: portal.liveSections }
-      : { slug: '', active: true, contentEnabled: false, showMeetings: false, showTeam: false, showObjectives: false, showFiles: false, liveSections: [] })
+      // showFiles arranca en `true` para portales nuevos (a diferencia de los
+      // demás show* opt-in): decisión explícita de que la Nube se vea desde el
+      // inicio en proyectos nuevos, sin que el admin tenga que acordarse de
+      // tildarla. Un portal ya existente respeta lo que tenga guardado.
+      : { slug: '', active: true, contentEnabled: false, showMeetings: false, showTeam: false, showObjectives: false, showFiles: true, liveSections: [] })
     setError('')
     setEditing(true)
   }

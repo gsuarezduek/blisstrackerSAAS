@@ -171,6 +171,83 @@ function MoveModal({ projectId, items, onClose, onMoved }) {
   )
 }
 
+// "🔗 Compartir" — link público de solo lectura para una carpeta (a diferencia
+// de "🔗 Copiar enlace" de abajo, que es un deep-link interno que solo abre
+// dentro de la app logueado). Llama siempre a createPublicLink al montar: es
+// idempotente (devuelve el token existente si ya estaba compartida), así no
+// hace falta un GET aparte para saber de antemano si tenía link o no.
+function ShareFolderModal({ projectId, item, onClose, onChanged }) {
+  const [token, setToken] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
+  const [revoking, setRevoking] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    api.post(`/projects/${projectId}/files/${item.id}/public-link`)
+      .then(({ data }) => {
+        if (!active) return
+        setToken(data.publicToken)
+        if (!item.isPublic) onChanged() // recién se compartió: refresca el badge/estado en la grilla de fondo
+      })
+      .catch(() => { if (active) setError('No se pudo generar el link') })
+      .finally(() => active && setLoading(false))
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, item.id])
+
+  const link = token ? `${window.location.origin}/shared-folder/${token}` : ''
+
+  async function handleCopy() {
+    try { await navigator.clipboard.writeText(link) } catch { /* fallback: seleccionar el input */ }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
+
+  async function handleRevoke() {
+    setRevoking(true); setError('')
+    try {
+      await api.delete(`/projects/${projectId}/files/${item.id}/public-link`)
+      onChanged()
+      onClose()
+    } catch {
+      setError('No se pudo dejar de compartir')
+      setRevoking(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+        <p className="text-sm font-bold text-gray-900 dark:text-white mb-1">🔗 Compartir "{item.name}"</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          Cualquiera con este link puede ver y descargar el contenido de esta carpeta (y sus subcarpetas), sin necesidad de una cuenta.
+        </p>
+        {loading ? (
+          <LoadingSpinner className="py-4" />
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <input readOnly value={link} onFocus={e => e.target.select()} className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-xs" />
+              <button onClick={handleCopy} className="text-sm px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-medium shrink-0">
+                {copied ? '✓ Copiado' : 'Copiar'}
+              </button>
+            </div>
+            {error && <p className="text-xs text-red-500 dark:text-red-400 mt-2">{error}</p>}
+            <div className="flex justify-between items-center mt-4">
+              <button onClick={handleRevoke} disabled={revoking} className="text-xs text-red-500 dark:text-red-400 hover:text-red-600 disabled:opacity-50">
+                {revoking ? 'Desactivando…' : '🚫 Dejar de compartir'}
+              </button>
+              <button onClick={onClose} className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Cerrar</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // "🔗 Copiar enlace" — deep-link para pegar en la descripción/comentario de una
 // tarea (linkify.jsx la vuelve clickeable). Al abrirlo, ProjectFiles resuelve
 // la carpeta contenedora y abre el archivo automáticamente (ver `locate`).
@@ -357,7 +434,7 @@ function TrashModal({ projectId, isAdmin, onClose, onRestored }) {
 
 // ─── Tarjeta de ítem (carpeta o archivo) con menú contextual ──────────────────
 
-function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onCreateTask, onLinkToContent, caption, selected, onToggleSelect }) {
+function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onMove, onDelete, onDownload, onCopyLink, onShare, onCreateTask, onLinkToContent, caption, selected, onToggleSelect }) {
   const isFolder = item.type === 'folder'
   const isImage = !isFolder && item.mimeType?.startsWith('image/')
   const isPreviewable = !isFolder && !isImage && item.previewable
@@ -368,11 +445,17 @@ function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onM
         className="w-full flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary-300 dark:hover:border-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-center"
         title={item.name}
       >
-        <div className="w-14 h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-900/40 overflow-hidden">
+        <div className="w-14 h-14 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-900/40 overflow-hidden relative">
           {isImage && item.url ? (
             <img src={item.url} alt="" className="w-full h-full object-cover" />
           ) : (
             <span className="text-3xl">{isFolder ? '📁' : iconFor(item.mimeType)}</span>
+          )}
+          {isFolder && item.isPublic && (
+            <span
+              className="absolute bottom-0.5 right-0.5 text-[9px] bg-primary-600 text-white rounded-full w-4 h-4 flex items-center justify-center leading-none"
+              title="Carpeta compartida por link público"
+            >🔗</span>
           )}
         </div>
         <span className="text-xs text-gray-700 dark:text-gray-200 truncate w-full">{item.name}</span>
@@ -426,6 +509,11 @@ function ItemCard({ item, projectId, menuOpen, onOpenMenu, onOpen, onRename, onM
             )}
             <button onClick={() => { onOpenMenu(null); onRename(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">✏️ Renombrar</button>
             <button onClick={() => { onOpenMenu(null); onMove(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">📂 Mover</button>
+            {isFolder && onShare && (
+              <button onClick={() => { onOpenMenu(null); onShare(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">
+                🔗 {item.isPublic ? 'Compartido' : 'Compartir'}
+              </button>
+            )}
             {!isFolder && (
               <>
                 <button onClick={() => { onOpenMenu(null); onDownload(item) }} className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">⬇️ Descargar</button>
@@ -799,6 +887,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
                 onDelete={it => setModal({ type: 'delete', item: it })}
                 onDownload={handleDownload}
                 onCopyLink={it => setModal({ type: 'copyLink', item: it })}
+                onShare={it => setModal({ type: 'share', item: it })}
                 onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
                 onLinkToContent={contenidoEnabled ? it => setModal({ type: 'linkContent', item: it }) : null}
                 caption={item.path.length ? `🏠 / ${item.path.map(p => p.name).join(' / ')}` : '🏠 Raíz'}
@@ -829,6 +918,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
                 onDelete={it => setModal({ type: 'delete', item: it })}
                 onDownload={handleDownload}
                 onCopyLink={it => setModal({ type: 'copyLink', item: it })}
+                onShare={it => setModal({ type: 'share', item: it })}
                 onCreateTask={onCreateTaskFromFile ? it => onCreateTaskFromFile(it, fileDeepLink(projectId, it)) : null}
                 onLinkToContent={contenidoEnabled ? it => setModal({ type: 'linkContent', item: it }) : null}
                 caption={item.uploadedBy ? `${item.uploadedBy.name} · ${fmtDate(item.createdAt)}` : fmtDate(item.createdAt)}
@@ -873,6 +963,13 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
       )}
       {modal?.type === 'copyLink' && (
         <CopyLinkModal projectId={projectId} item={modal.item} onClose={() => setModal(null)} />
+      )}
+      {modal?.type === 'share' && (
+        <ShareFolderModal
+          projectId={projectId} item={modal.item}
+          onClose={() => setModal(null)}
+          onChanged={() => reload(folderId)}
+        />
       )}
       {modal?.type === 'linkContent' && (
         <ContentFilePiecesModal projectId={projectId} file={modal.item} onClose={() => setModal(null)} />

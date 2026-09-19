@@ -103,6 +103,7 @@ const Calendario       = lazyWithReload(() => import('./pages/Calendario'))
 const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
 const ReportOrClientPortal = lazyWithReload(() => import('./pages/ReportOrClientPortal'))
 const ProposalPublic   = lazyWithReload(() => import('./pages/ProposalPublic'))
+const SharedFolderPublic = lazyWithReload(() => import('./pages/SharedFolderPublic'))
 const Blog              = lazyWithReload(() => import('./pages/Blog'))
 const BlogPost          = lazyWithReload(() => import('./pages/BlogPost'))
 
@@ -181,6 +182,7 @@ export default function App() {
           <Route path="/oauth-result" element={<OAuthResult   />} />
           <Route path="/report/:token" element={<ReportOrClientPortal />} />
           <Route path="/proposal/:token" element={<ProposalPublic />} />
+          <Route path="/shared-folder/:token" element={<SharedFolderPublic />} />
           <Route path="/blog"         element={<Blog />} />
           <Route path="/blog/:slug"   element={<BlogPost />} />
           <Route path="/condiciones"  element={<LegalPage docKey="terms_of_service" />} />

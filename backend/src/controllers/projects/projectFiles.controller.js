@@ -8,6 +8,7 @@
 // presign→PUT directo→confirm que usa Contenido (contentAssets.controller.js),
 // pero sin whitelist de MIME por tipo: acá se acepta cualquier archivo salvo
 // un denylist muy chico de tipos con riesgo real de XSS al servirse (html/svg).
+const { randomUUID } = require('crypto')
 const prisma = require('../../lib/prisma')
 const objectStorage = require('../../services/objectStorage.service')
 const { getSetting } = require('../../lib/platformSettings')
@@ -85,6 +86,10 @@ function shapeItem(f) {
     uploadedBy: f.uploadedBy ? { id: f.uploadedBy.id, name: f.uploadedBy.name } : null,
     createdAt: f.createdAt,
     contentPieces: f.contentLinks ? f.contentLinks.map(l => ({ id: l.piece.id, title: l.piece.title })) : [],
+    // Solo un booleano — el token en sí nunca viaja acá (ni al equipo ni al
+    // portal de cliente, que reusa este mismo shapeItem): se obtiene únicamente
+    // desde createPublicLink, que es quien lo genera/gestiona.
+    isPublic: Boolean(f.publicToken),
   }
 }
 
@@ -556,6 +561,55 @@ async function purgeItem(req, res, next) {
 }
 
 /**
+ * POST /api/projects/:id/files/:itemId/public-link
+ * Genera (o devuelve, si ya existe) un link público de solo lectura para una
+ * CARPETA — cualquiera con el link navega/descarga su contenido y el de sus
+ * subcarpetas sin loguearse, mismo criterio "no-adivinable = control de
+ * acceso" que Proposal.publicToken/MonthlyReport.token. Solo aplica a
+ * carpetas: idempotente, así el frontend puede llamarlo siempre al abrir el
+ * modal de "Compartir" sin necesitar un GET aparte para saber si ya existía.
+ */
+async function createPublicLink(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId, type: 'folder', deletedAt: null } })
+    if (!item) return res.status(404).json({ error: 'Carpeta no encontrada' })
+
+    let token = item.publicToken
+    if (!token) {
+      token = randomUUID()
+      await prisma.projectFile.update({ where: { id: item.id }, data: { publicToken: token } })
+    }
+    res.json({ publicToken: token })
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/projects/:id/files/:itemId/public-link
+ * Revoca el link (queda `null` — no hay historial de tokens viejos, mismo
+ * criterio simple que el resto del repo). El link viejo deja de funcionar al
+ * instante: publicFiles.controller.js resuelve la carpeta por el token.
+ */
+async function revokePublicLink(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const item = await prisma.projectFile.findFirst({ where: { id: Number(req.params.itemId), projectId, type: 'folder', deletedAt: null } })
+    if (!item) return res.status(404).json({ error: 'Carpeta no encontrada' })
+
+    if (item.publicToken) {
+      await prisma.projectFile.update({ where: { id: item.id }, data: { publicToken: null } })
+    }
+    res.json({ revoked: true })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/projects/:id/files/:fileId/download[?inline=1]
  * Autenticado (a diferencia del serve público de Contenido, pensado para el
  * portal de cliente) — por eso NO se puede resolver con un 302 a una URL
@@ -632,6 +686,8 @@ module.exports = {
   listTrash,
   restoreItem,
   purgeItem,
+  createPublicLink,
+  revokePublicLink,
   downloadFile,
   locateFile,
   // exportados para tests

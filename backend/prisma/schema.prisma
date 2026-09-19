@@ -618,6 +618,15 @@ model ProjectFile {
   createdAt    DateTime  @default(now())
   confirmedAt  DateTime?
 
+  // Link público de solo lectura — solo tiene sentido en carpetas (type:'folder').
+  // null = no compartida. Generado bajo demanda (crypto.randomUUID(), no default
+  // de columna) por createPublicLink; revocar lo vuelve a null (no hay historial
+  // de links viejos, mismo criterio simple que el resto del repo). Cualquiera con
+  // el token navega/descarga el subárbol de esa carpeta sin login — ver
+  // publicFiles.controller.js (isWithinSharedTree acota la navegación a ese
+  // subárbol, aunque se adivine un parentId/fileId de otra parte del proyecto).
+  publicToken String? @unique
+
   // Papelera: "eliminar" es soft-delete (mismo patrón que ContentPiece — no
   // dispara el Cascade de R2/hijos, queda todo intacto para restaurar). Al
   // borrar una carpeta se cascadea el mismo deletedAt/deletedById a todo su
