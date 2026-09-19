@@ -88,6 +88,12 @@ export default function ContentCalendarView({ pieces, month, onMonthChange, canE
                     >
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDotClass(p.status)}`} />
                       <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">{p.title}</span>
+                      {p.task?.status === 'IN_PROGRESS' && (
+                        <span
+                          title={`${p.owner?.name ?? 'Alguien'} está trabajando en esto ahora`}
+                          className="shrink-0 w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse"
+                        />
+                      )}
                     </div>
                   ))}
                   {items.length > MAX_CHIPS_PER_DAY && (

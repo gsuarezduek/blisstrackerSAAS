@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ConfirmModal from '../ConfirmModal'
+import { findDriveEmbeds, driveThumbnailUrl } from '../../utils/driveEmbed'
 
 function formatDuration(sec) {
   if (!sec && sec !== 0) return null
@@ -12,6 +13,18 @@ function formatSize(bytes) {
   if (!bytes) return ''
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+// Miniatura de un asset kind:'link' — Drive expone una imagen real (foto o
+// frame del video) sin API; el resto de los links externos se quedan con el
+// ícono genérico. `onError` cae al ícono si el archivo no es público (permiso
+// "Cualquiera con el link" no configurado).
+function LinkThumb({ url }) {
+  const [broken, setBroken] = useState(false)
+  const drive = !broken ? findDriveEmbeds(url)[0] : null
+  const thumb = drive ? driveThumbnailUrl(drive) : null
+  if (!thumb) return <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xl">🔗</div>
+  return <img src={thumb} alt="" onError={() => setBroken(true)} className="w-full h-full object-cover" />
 }
 
 /**
@@ -75,7 +88,7 @@ export default function ContentAssetGallery({ assets, activeId, onSelectActive, 
                 <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xl">🎬</div>
               )
             ) : a.kind === 'link' ? (
-              <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-xl">🔗</div>
+              <LinkThumb url={a.url} />
             ) : (
               <img src={a.url} alt="" className="w-full h-full object-cover" />
             )}

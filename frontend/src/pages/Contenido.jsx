@@ -10,6 +10,7 @@ import ContentKanbanView from '../components/contenido/ContentKanbanView'
 import ContentCalendarView, { currentMonthStr } from '../components/contenido/ContentCalendarView'
 import ContentPieceModal from '../components/contenido/ContentPieceModal'
 import ContentTrashModal from '../components/contenido/ContentTrashModal'
+import ConfirmModal from '../components/ConfirmModal'
 import useContentPieces from '../components/contenido/useContentPieces'
 import useContentSocket from '../components/contenido/useContentSocket'
 import { useFeatureFlag } from '../hooks/useFeatureFlag'
@@ -149,6 +150,48 @@ export default function Contenido() {
     else refetchPiece()
   }
 
+  // Al asignar un responsable del EQUIPO a una pieza que todavía no tiene tarea
+  // vinculada, ofrece (opcional, no bloqueante) crearla ya en su dashboard —
+  // así no queda librado a acordarse de tocar "Enviar al dashboard" a mano.
+  // Asignar al cliente (ownerContactId) queda afuera a propósito: el cliente no
+  // es un User, no se le puede crear una Task interna.
+  const [dashboardPrompt, setDashboardPrompt] = useState(null) // { pieceId, projectId, ownerName }
+  const [sendingPrompt, setSendingPrompt] = useState(false)
+
+  function findPieceById(id) {
+    return pieces.find(p => String(p.id) === String(id))
+      ?? (openPiece && String(openPiece.id) === String(id) ? openPiece : null)
+  }
+
+  async function updateAndMaybePromptDashboard(id, patch, updateFn) {
+    const before = findPieceById(id)
+    const result = await updateFn(id, patch)
+    if (
+      patch.ownerId !== undefined && patch.ownerId !== null &&
+      before && !before.taskId && before.owner?.id !== patch.ownerId
+    ) {
+      const member = members.find(m => m.id === patch.ownerId)
+      setDashboardPrompt({ pieceId: id, projectId: before.projectId, ownerName: member?.name ?? 'el responsable' })
+    }
+    return result
+  }
+
+  async function handleConfirmDashboardPrompt() {
+    if (!dashboardPrompt) return
+    setSendingPrompt(true)
+    try {
+      await api.post(`/contenido/projects/${dashboardPrompt.projectId}/pieces/${dashboardPrompt.pieceId}/send-to-dashboard`)
+      setDashboardPrompt(null)
+      if (pieceInList || String(pieceId) === String(dashboardPrompt.pieceId)) reload()
+      if (String(pieceId) === String(dashboardPrompt.pieceId) && !pieceInList) refetchPiece()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo enviar al dashboard')
+      setDashboardPrompt(null)
+    } finally {
+      setSendingPrompt(false)
+    }
+  }
+
   // Conteo por estado (incluye `awaitingClient`, el badge del botón "Pedir
   // aprobación"). Independiente de `filters`/`view` — siempre refleja TODAS las
   // piezas del proyecto, no solo las que la vista actual tiene cargadas.
@@ -245,7 +288,7 @@ export default function Contenido() {
             loading={loading}
             canEdit={canEdit}
             onCreate={create}
-            onUpdate={update}
+            onUpdate={(id, patch) => updateAndMaybePromptDashboard(id, patch, update)}
             onDelete={handleDelete}
             onOpen={p => patchParams({ piece: p.id })}
           />
@@ -415,7 +458,7 @@ export default function Contenido() {
           canEdit={canEdit}
           currentUserId={user?.id}
           isAdmin={user?.isAdmin}
-          onUpdate={handleModalUpdate}
+          onUpdate={(id, patch) => updateAndMaybePromptDashboard(id, patch, handleModalUpdate)}
           onDelete={handleDelete}
           onPieceChanged={handleModalPieceChanged}
           onClose={() => patchParams({ piece: '' })}
@@ -430,6 +473,18 @@ export default function Contenido() {
           onRestored={reload}
         />
       )}
+
+      <ConfirmModal
+        open={!!dashboardPrompt}
+        title="Enviar al dashboard"
+        message={dashboardPrompt ? `¿Querés crear ya la tarea para que ${dashboardPrompt.ownerName} la vea en su dashboard?` : ''}
+        confirmLabel="Enviar"
+        cancelLabel="Ahora no"
+        danger={false}
+        loading={sendingPrompt}
+        onConfirm={handleConfirmDashboardPrompt}
+        onCancel={() => setDashboardPrompt(null)}
+      />
     </div>
   )
 }

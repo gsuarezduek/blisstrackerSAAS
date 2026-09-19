@@ -87,7 +87,15 @@ export default function ContentKanbanView({ pieces, canEdit, onMove, onOpen }) {
                       dragId === p.id ? 'opacity-50' : 'border-gray-200 dark:border-gray-700'} ${
                       dropTarget?.beforeId === p.id ? 'border-t-2 border-t-primary-500' : ''}`}
                   >
-                    <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{p.title}</div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-medium text-sm text-gray-900 dark:text-white truncate">{p.title}</span>
+                      {p.task?.status === 'IN_PROGRESS' && (
+                        <span
+                          title={`${p.owner?.name ?? 'Alguien'} está trabajando en esto ahora`}
+                          className="shrink-0 w-2 h-2 rounded-full bg-primary-500 animate-pulse"
+                        />
+                      )}
+                    </div>
                     <div className="flex items-center justify-between mt-2 gap-2">
                       <ContentNetworkChips networks={p.networks} size="w-3.5 h-3.5" />
                       {(p.owner || p.ownerContact) && (

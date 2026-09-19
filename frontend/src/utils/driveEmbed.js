@@ -33,3 +33,11 @@ export function driveEmbedUrl({ id, type }) {
     ? `https://drive.google.com/embeddedfolderview?id=${id}#grid`
     : `https://drive.google.com/file/d/${id}/preview`
 }
+
+// Miniatura real (Google la sirve para cualquier archivo "Cualquiera con el
+// link" — imagen o frame de video — sin API ni credenciales). Solo para
+// archivos puntuales; una carpeta no tiene una miniatura única. El caller debe
+// manejar `onError` — un archivo sin ese permiso devuelve una imagen rota.
+export function driveThumbnailUrl({ id, type }, size = 320) {
+  return type === 'folder' ? null : `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`
+}

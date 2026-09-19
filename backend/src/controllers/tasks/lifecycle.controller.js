@@ -8,7 +8,7 @@ const { resolveMentions } = require('../../lib/mentions')
 const { emitTo } = require('../../lib/socket')
 const { nextOnTaskDone } = require('../../lib/contentCatalog')
 const { maybeAutoFinishMeeting } = require('../../lib/projectMeetingLifecycle')
-const { statusSideEffects, logEvent, loadPiece, formatPiece } = require('../content.controller')
+const { statusSideEffects, logEvent, loadPiece, formatPiece, emitPieceUpdated } = require('../content.controller')
 const { taskInclude, assertNoActiveTask, handleActiveTaskConflict } = require('./_shared')
 const { sendPushToUser } = require('../../services/pushNotification.service')
 
@@ -41,6 +41,20 @@ async function taskLifecycleRecipients(task, actorId) {
   for (const f of followers) recipients.add(f.userId)
   if (task.createdById && task.createdById !== actorId) recipients.add(task.createdById)
   return recipients
+}
+
+// Si la tarea viene de "Enviar al dashboard" de una pieza de Contenido (ver
+// `taskInclude.contentPiece`), reemite la pieza actualizada por socket cada vez
+// que la tarea cambia de estado — así la Tabla/Kanban/Calendario/detalle de
+// Contenido reflejan en vivo "alguien está trabajando en esto ahora"
+// (piece.task.status === 'IN_PROGRESS') sin que nadie tenga que refrescar.
+// Best-effort: nunca debe romper la acción real sobre la tarea.
+async function notifyContentPieceTaskChange(task, workspaceId) {
+  if (!task.contentPiece) return
+  try {
+    const fresh = await loadPiece(task.contentPiece.id, task.projectId, workspaceId)
+    if (fresh) emitPieceUpdated(workspaceId, task.projectId, formatPiece(fresh))
+  } catch (err) { console.error('[contenido] notifyContentPieceTaskChange error:', err.message) }
 }
 
 async function create(req, res, next) {
@@ -275,6 +289,7 @@ async function startTask(req, res, next) {
     await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.leadAction.updateMany({ where: { taskId }, data: { status: 'pending', doneAt: null, doneById: null } })
+    await notifyContentPieceTaskChange(task, req.workspace.id)
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -299,6 +314,7 @@ async function pauseTask(req, res, next) {
       }),
       prisma.taskSession.updateMany({ where: { taskId, endedAt: null }, data: { endedAt: now } }),
     ])
+    await notifyContentPieceTaskChange(task, req.workspace.id)
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -337,6 +353,7 @@ async function resumeTask(req, res, next) {
     await prisma.eOSTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.projectMeetingTodo.updateMany({ where: { taskId }, data: { done: false, completedAt: null } })
     await prisma.leadAction.updateMany({ where: { taskId }, data: { status: 'pending', doneAt: null, doneById: null } })
+    await notifyContentPieceTaskChange(task, req.workspace.id)
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -410,11 +427,12 @@ async function completeTask(req, res, next) {
           pieceId: linkedPiece.id, workspaceId: linkedPiece.workspaceId,
           action: 'task_completed', fromStatus: linkedPiece.status, toStatus, req,
         })
-        const freshPiece = await loadPiece(linkedPiece.id, linkedPiece.projectId, linkedPiece.workspaceId)
-        emitTo(`workspace:${linkedPiece.workspaceId}`, 'content:piece:updated', {
-          projectId: linkedPiece.projectId, piece: formatPiece(freshPiece),
-        })
       }
+      // Se reemite siempre, avance o no la pieza de estado: `piece.task.status`
+      // pasó a COMPLETED y la Tabla/Kanban/Calendario necesitan enterarse para
+      // dejar de mostrar "en curso".
+      const freshPiece = await loadPiece(linkedPiece.id, linkedPiece.projectId, linkedPiece.workspaceId)
+      emitPieceUpdated(linkedPiece.workspaceId, linkedPiece.projectId, formatPiece(freshPiece))
     }
 
     // Si viene de una próxima acción de Ventas, resolverla también (sync en ambos
@@ -486,6 +504,7 @@ async function blockTask(req, res, next) {
       }
     }
 
+    await notifyContentPieceTaskChange(task, workspaceId)
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })
@@ -541,6 +560,7 @@ async function unblockTask(req, res, next) {
       }
     }
 
+    await notifyContentPieceTaskChange(task, workspaceId)
     res.json(task)
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Tarea no encontrada' })

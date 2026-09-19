@@ -364,7 +364,15 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                             className="flex items-center gap-2.5 min-w-0 flex-1 text-left"
                             title={link.file.name}
                           >
-                            <span className="text-base shrink-0">{iconFor(link.file.mimeType)}</span>
+                            {link.file.url || link.file.posterUrl ? (
+                              <img
+                                src={link.file.url || link.file.posterUrl}
+                                alt=""
+                                className="w-7 h-7 rounded object-cover shrink-0"
+                              />
+                            ) : (
+                              <span className="text-base shrink-0">{iconFor(link.file.mimeType)}</span>
+                            )}
                             <span className="min-w-0 flex-1">
                               <span className="block text-sm text-gray-700 dark:text-gray-200 truncate">{link.file.name}</span>
                               <span className="block text-[11px] text-gray-400 dark:text-gray-500">
@@ -441,11 +449,22 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
 
               {canEdit && piece.taskId && (
                 <div className="sm:col-span-2">
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                  <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${
                     piece.task?.status === 'COMPLETED'
                       ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
-                    {piece.task?.status === 'COMPLETED' ? '✅ Tarea completada' : '⏳ En el dashboard de ' + (piece.owner?.name ?? '—')}
+                      : piece.task?.status === 'IN_PROGRESS'
+                        ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
+                    {piece.task?.status === 'COMPLETED' ? (
+                      '✅ Tarea completada'
+                    ) : piece.task?.status === 'IN_PROGRESS' ? (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse" />
+                        {(piece.owner?.name ?? 'Alguien') + ' está trabajando en esto ahora'}
+                      </>
+                    ) : (
+                      '⏳ En el dashboard de ' + (piece.owner?.name ?? '—')
+                    )}
                   </span>
                 </div>
               )}
