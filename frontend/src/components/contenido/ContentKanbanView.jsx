@@ -89,7 +89,7 @@ export default function ContentKanbanView({ pieces, canEdit, onMove, onOpen }) {
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className="font-medium text-sm text-gray-900 dark:text-white truncate">{p.title}</span>
-                      {p.task?.status === 'IN_PROGRESS' && (
+                      {p.currentTask?.status === 'IN_PROGRESS' && (
                         <span
                           title={`${p.owner?.name ?? 'Alguien'} está trabajando en esto ahora`}
                           className="shrink-0 w-2 h-2 rounded-full bg-primary-500 animate-pulse"

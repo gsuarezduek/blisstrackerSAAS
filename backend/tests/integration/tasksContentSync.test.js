@@ -28,6 +28,7 @@ const WORKSPACE_SLUG = 'bliss'
 const WORKSPACE_ID   = 1
 const USER_ID        = 1
 const TASK_ID        = 50
+const PIECE_ID       = 20
 
 function authHeader(userId = USER_ID) {
   const token = jwt.sign(
@@ -60,15 +61,17 @@ function mockBase() {
   prisma.taskSession.create.mockResolvedValue({ id: 1 })
 }
 
+// `contentPieceId` es el FK real (Task.contentPieceId, sin unique del lado de
+// ContentPiece — una pieza puede tener muchas Task a lo largo de su vida).
 const dbTask = (over = {}) => ({
   id: TASK_ID, userId: USER_ID, projectId: 7, workDayId: 1, status: 'IN_PROGRESS',
-  description: 'Tarea de contenido', createdById: null,
+  description: 'Tarea de contenido', createdById: null, contentPieceId: null,
   ...over,
 })
 
 const dbPiece = (over = {}) => ({
-  id: 20, workspaceId: WORKSPACE_ID, projectId: 7, title: 'Reel de lanzamiento',
-  status: 'produccion', taskId: TASK_ID,
+  id: PIECE_ID, workspaceId: WORKSPACE_ID, projectId: 7, title: 'Reel de lanzamiento',
+  status: 'produccion',
   ...over,
 })
 
@@ -78,19 +81,20 @@ describe('PATCH /tasks/:id/complete — sync con ContentPiece', () => {
   it('avanza la pieza de producción a revisión y registra el evento', async () => {
     mockBase()
     prisma.task.findUnique.mockResolvedValue(dbTask())
-    prisma.task.update.mockResolvedValue(dbTask({ status: 'COMPLETED' }))
+    prisma.task.update.mockResolvedValue(dbTask({ status: 'COMPLETED', contentPieceId: PIECE_ID }))
     prisma.contentPiece.findUnique.mockResolvedValue(dbPiece({ status: 'produccion' })) // linkedPiece (tasks.controller)
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ status: 'revision', assets: [] })) // loadPiece (content.controller)
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ status: 'revision', assets: [], tasks: [] })) // loadPiece (content.controller)
 
     const res = await req('patch', `/api/tasks/${TASK_ID}/complete`)
 
     expect(res.status).toBe(200)
+    expect(prisma.contentPiece.findUnique).toHaveBeenCalledWith({ where: { id: PIECE_ID } })
     expect(prisma.contentPiece.update).toHaveBeenCalledWith({
-      where: { id: 20 },
+      where: { id: PIECE_ID },
       data:  expect.objectContaining({ status: 'revision' }),
     })
     expect(prisma.contentStatusEvent.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ pieceId: 20, action: 'task_completed', fromStatus: 'produccion', toStatus: 'revision' }),
+      data: expect.objectContaining({ pieceId: PIECE_ID, action: 'task_completed', fromStatus: 'produccion', toStatus: 'revision' }),
     }))
     expect(emitTo).toHaveBeenCalledWith(
       `workspace:${WORKSPACE_ID}`, 'content:piece:updated',
@@ -101,9 +105,9 @@ describe('PATCH /tasks/:id/complete — sync con ContentPiece', () => {
   it('no mueve una pieza en un estado fuera de ADVANCE_ON_TASK_DONE (ej. ya aprobada), pero igual reemite la pieza — su tarea pasó a COMPLETED', async () => {
     mockBase()
     prisma.task.findUnique.mockResolvedValue(dbTask())
-    prisma.task.update.mockResolvedValue(dbTask({ status: 'COMPLETED' }))
+    prisma.task.update.mockResolvedValue(dbTask({ status: 'COMPLETED', contentPieceId: PIECE_ID }))
     prisma.contentPiece.findUnique.mockResolvedValue(dbPiece({ status: 'aprobado' }))
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ status: 'aprobado', assets: [] })) // loadPiece
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ status: 'aprobado', assets: [], tasks: [] })) // loadPiece
 
     const res = await req('patch', `/api/tasks/${TASK_ID}/complete`)
 
@@ -119,12 +123,12 @@ describe('PATCH /tasks/:id/complete — sync con ContentPiece', () => {
   it('una tarea sin pieza vinculada no toca ContentPiece', async () => {
     mockBase()
     prisma.task.findUnique.mockResolvedValue(dbTask())
-    prisma.task.update.mockResolvedValue(dbTask({ status: 'COMPLETED' }))
-    prisma.contentPiece.findUnique.mockResolvedValue(null)
+    prisma.task.update.mockResolvedValue(dbTask({ status: 'COMPLETED', contentPieceId: null }))
 
     const res = await req('patch', `/api/tasks/${TASK_ID}/complete`)
 
     expect(res.status).toBe(200)
+    expect(prisma.contentPiece.findUnique).not.toHaveBeenCalled()
     expect(prisma.contentPiece.update).not.toHaveBeenCalled()
   })
 })
@@ -157,8 +161,8 @@ describe('PATCH /tasks/:id/start y /pause — reemiten la pieza vinculada (indic
   it('startTask reemite la pieza cuando la tarea viene de "Enviar al dashboard"', async () => {
     mockBase()
     prisma.task.findUnique.mockResolvedValue(dbTask({ status: 'PENDING', isBacklog: false }))
-    prisma.task.update.mockResolvedValue(dbTask({ status: 'IN_PROGRESS', contentPiece: { id: 20 } }))
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ assets: [] })) // loadPiece
+    prisma.task.update.mockResolvedValue(dbTask({ status: 'IN_PROGRESS', contentPiece: { id: PIECE_ID } }))
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ assets: [], tasks: [] })) // loadPiece
 
     const res = await req('patch', `/api/tasks/${TASK_ID}/start`)
 
@@ -172,8 +176,8 @@ describe('PATCH /tasks/:id/start y /pause — reemiten la pieza vinculada (indic
   it('pauseTask reemite la pieza cuando la tarea viene de "Enviar al dashboard"', async () => {
     mockBase()
     prisma.task.findUnique.mockResolvedValue(dbTask({ status: 'IN_PROGRESS' }))
-    prisma.task.update.mockResolvedValue(dbTask({ status: 'PAUSED', contentPiece: { id: 20 } }))
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ assets: [] })) // loadPiece
+    prisma.task.update.mockResolvedValue(dbTask({ status: 'PAUSED', contentPiece: { id: PIECE_ID } }))
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ assets: [], tasks: [] })) // loadPiece
 
     const res = await req('patch', `/api/tasks/${TASK_ID}/pause`)
 

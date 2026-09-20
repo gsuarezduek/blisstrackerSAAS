@@ -112,7 +112,22 @@ const PIECE_INCLUDE = {
   owner:       { select: { id: true, name: true, avatar: true } },
   ownerContact:{ select: { id: true, name: true, email: true } },
   createdBy:   { select: { id: true, name: true, avatar: true } },
-  task:        { select: { id: true, status: true } },
+  // Todas las tareas del dashboard que pasaron por esta pieza, más reciente
+  // primero (`tasks[0]` = la actual). Una pieza acumula una tarea por cada
+  // handoff de responsable (CM arma el copy → diseñador arma el reel → CM
+  // revisa → CM publica) — ver concepto "Tareas del dashboard vinculadas" en
+  // ContentPiece.tasks (schema.prisma). `sessions` viaja para poder calcular
+  // los minutos trabajados de cada tramo con el mismo helper que el resto de
+  // la app (frontend/src/utils/format.js activeMinutes).
+  tasks: {
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true, status: true, userId: true, createdAt: true, startedAt: true,
+      completedAt: true, pausedAt: true, pausedMinutes: true, minutesOverride: true,
+      user: { select: { id: true, name: true, avatar: true } },
+      sessions: { select: { startedAt: true, endedAt: true } },
+    },
+  },
   approvedBy:  { select: { id: true, name: true, email: true } },
   assets:      { where: { status: 'ready' }, orderBy: { order: 'asc' } },
   // Archivos vinculados desde el repositorio de Archivos del proyecto (ver
@@ -182,6 +197,22 @@ function formatLinkedFile(link) {
   }
 }
 
+// Un tramo de trabajo de la pieza (una Task de su historial — ver PIECE_INCLUDE.tasks).
+function formatPieceTask(t) {
+  return {
+    id:              t.id,
+    status:          t.status,
+    user:            t.user ? { id: t.user.id, name: t.user.name, avatar: t.user.avatar } : null,
+    createdAt:       t.createdAt,
+    startedAt:       t.startedAt,
+    completedAt:     t.completedAt,
+    pausedAt:        t.pausedAt,
+    pausedMinutes:   t.pausedMinutes,
+    minutesOverride: t.minutesOverride,
+    sessions:        t.sessions || [],
+  }
+}
+
 // Formatter INTERNO (equipo). El del portal del cliente es una función aparte en
 // contentPortal.controller.js y nunca expone internalNotes ni datos de equipo.
 function formatPiece(p) {
@@ -208,8 +239,12 @@ function formatPiece(p) {
     // owner?.name ?? ownerContact?.name para mostrar uno u otro.
     ownerContact:  p.ownerContact ? { id: p.ownerContact.id, name: p.ownerContact.name || p.ownerContact.email } : null,
     createdBy:     p.createdBy ? { id: p.createdBy.id, name: p.createdBy.name, avatar: p.createdBy.avatar } : null,
-    taskId:        p.taskId ?? null,
-    task:          p.task ? { id: p.task.id, status: p.task.status } : null,
+    // Historial completo de tareas de la pieza (más reciente primero) +
+    // `currentTask`/`taskId` como alias de `tasks[0]` — el tramo activo o el
+    // último cerrado. Una pieza sin ningún tramo enviado todavía tiene [] / null.
+    tasks:         p.tasks ? p.tasks.map(formatPieceTask) : [],
+    currentTask:   p.tasks && p.tasks.length > 0 ? formatPieceTask(p.tasks[0]) : null,
+    taskId:        p.tasks && p.tasks.length > 0 ? p.tasks[0].id : null,
     assets:        p.assets ? p.assets.map(formatAsset) : [],
     files:         p.files ? p.files.map(formatLinkedFile) : [],
     commentCount:  p._count?.comments ?? 0,
@@ -800,9 +835,13 @@ async function getSummary(req, res, next) {
 /**
  * POST /api/contenido/projects/:id/pieces/:pid/send-to-dashboard
  * Crea una Task en el dashboard del responsable y la vincula a la pieza
- * (taskId @unique). Copia el patrón de sendTodoToDashboard en
- * projectMeetings.controller.js:478-548 — mismas validaciones, mismo
- * ensureWorkDay con manejo de P2002, misma notificación TASK_MENTION.
+ * (Task.contentPieceId, SIN unique). Una pieza real pasa por varios tramos de
+ * trabajo a lo largo de su vida (CM arma el copy → diseñador arma el reel →
+ * CM revisa → CM publica): cada llamada acá crea una tarea NUEVA para el
+ * responsable ACTUAL de la pieza, sin importar si ya hubo tramos anteriores.
+ * Copia el patrón de sendTodoToDashboard en projectMeetings.controller.js —
+ * mismas validaciones, mismo ensureWorkDay con manejo de P2002, misma
+ * notificación TASK_MENTION.
  */
 async function sendToDashboard(req, res, next) {
   try {
@@ -821,13 +860,37 @@ async function sendToDashboard(req, res, next) {
         : 'Asigná un responsable a la pieza primero'
       return res.status(400).json({ error: msg })
     }
-    if (piece.taskId)   return res.status(409).json({ error: 'Esta pieza ya tiene una tarea vinculada' })
+
+    // Tramo anterior de trabajo, si hay alguno (piece.tasks viene ordenado por
+    // createdAt desc — ver PIECE_INCLUDE). Con el cronómetro corriendo no se
+    // puede saber cuánto tiempo real le llevó a esa persona: hay que pausar o
+    // completar esa tarea antes de pasarle la posta a otra.
+    const previousTask = piece.tasks?.[0] ?? null
+    if (previousTask && previousTask.status === 'IN_PROGRESS') {
+      return res.status(409).json({
+        error: `${previousTask.user?.name ?? 'Alguien'} está trabajando ahora en esta pieza — pausá o completá esa tarea antes de reasignarla.`,
+      })
+    }
 
     const member = await prisma.workspaceMember.findUnique({
       where:  { workspaceId_userId: { workspaceId, userId: piece.ownerId } },
       select: { active: true },
     })
     if (!member || !member.active) return res.status(400).json({ error: 'El responsable no es un miembro activo del workspace' })
+
+    // El tramo anterior quedó sin cerrar (nunca se empezó, o se pausó/bloqueó):
+    // se completa solo al hacer el handoff — no debe quedar colgado en el
+    // dashboard de alguien que ya no es el responsable de esta pieza.
+    if (previousTask && previousTask.status !== 'COMPLETED') {
+      const now = new Date()
+      await prisma.$transaction([
+        prisma.task.update({
+          where: { id: previousTask.id },
+          data:  { status: 'COMPLETED', completedAt: now, pausedAt: null, blockedReason: null },
+        }),
+        prisma.taskSession.updateMany({ where: { taskId: previousTask.id, endedAt: null }, data: { endedAt: now } }),
+      ])
+    }
 
     // WorkDay de hoy del responsable (crear si falta — mismo patrón que projectMeetings/tasks.create).
     const today = todayString(timezone)
@@ -850,10 +913,9 @@ async function sendToDashboard(req, res, next) {
         userId:      piece.ownerId,
         workDayId:   workDay.id,
         createdById: piece.ownerId !== requesterId ? requesterId : null,
+        contentPieceId: piece.id,
       },
     })
-
-    await prisma.contentPiece.update({ where: { id: piece.id }, data: { taskId: task.id } })
 
     if (piece.ownerId !== requesterId) {
       const desc = piece.title.length > 60 ? `${piece.title.slice(0, 57)}...` : piece.title

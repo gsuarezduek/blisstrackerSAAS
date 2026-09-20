@@ -417,22 +417,27 @@ async function completeTask(req, res, next) {
     // arriba esto NO es un updateMany ciego: hace falta leer el estado ACTUAL de la
     // pieza para saber a qué estado avanza (ADVANCE_ON_TASK_DONE), y dejar el salto
     // registrado en su historial (ContentStatusEvent). Fuera del mapa (ej. una pieza
-    // ya aprobada) no pasa nada — completar la tarea no la mueve.
-    const linkedPiece = await prisma.contentPiece.findUnique({ where: { taskId: task.id } })
-    if (linkedPiece) {
-      const toStatus = nextOnTaskDone(linkedPiece.status)
-      if (toStatus) {
-        await prisma.contentPiece.update({ where: { id: linkedPiece.id }, data: statusSideEffects(toStatus) })
-        await logEvent({
-          pieceId: linkedPiece.id, workspaceId: linkedPiece.workspaceId,
-          action: 'task_completed', fromStatus: linkedPiece.status, toStatus, req,
-        })
+    // ya aprobada) no pasa nada — completar la tarea no la mueve. Esta tarea es UN
+    // TRAMO del historial de la pieza (Task.contentPieceId, sin unique) — completarla
+    // no significa que la pieza en sí terminó, solo que este responsable terminó su
+    // parte; el próximo tramo se crea aparte vía "Enviar al dashboard".
+    if (task.contentPieceId) {
+      const linkedPiece = await prisma.contentPiece.findUnique({ where: { id: task.contentPieceId } })
+      if (linkedPiece) {
+        const toStatus = nextOnTaskDone(linkedPiece.status)
+        if (toStatus) {
+          await prisma.contentPiece.update({ where: { id: linkedPiece.id }, data: statusSideEffects(toStatus) })
+          await logEvent({
+            pieceId: linkedPiece.id, workspaceId: linkedPiece.workspaceId,
+            action: 'task_completed', fromStatus: linkedPiece.status, toStatus, req,
+          })
+        }
+        // Se reemite siempre, avance o no la pieza de estado: `piece.currentTask.status`
+        // pasó a COMPLETED y la Tabla/Kanban/Calendario necesitan enterarse para
+        // dejar de mostrar "en curso".
+        const freshPiece = await loadPiece(linkedPiece.id, linkedPiece.projectId, linkedPiece.workspaceId)
+        emitPieceUpdated(linkedPiece.workspaceId, linkedPiece.projectId, formatPiece(freshPiece))
       }
-      // Se reemite siempre, avance o no la pieza de estado: `piece.task.status`
-      // pasó a COMPLETED y la Tabla/Kanban/Calendario necesitan enterarse para
-      // dejar de mostrar "en curso".
-      const freshPiece = await loadPiece(linkedPiece.id, linkedPiece.projectId, linkedPiece.workspaceId)
-      emitPieceUpdated(linkedPiece.workspaceId, linkedPiece.projectId, formatPiece(freshPiece))
     }
 
     // Si viene de una próxima acción de Ventas, resolverla también (sync en ambos

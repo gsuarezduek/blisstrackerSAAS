@@ -150,13 +150,18 @@ export default function Contenido() {
     else refetchPiece()
   }
 
-  // Al asignar un responsable del EQUIPO a una pieza que todavía no tiene tarea
-  // vinculada, ofrece (opcional, no bloqueante) crearla ya en su dashboard —
-  // así no queda librado a acordarse de tocar "Enviar al dashboard" a mano.
-  // Asignar al cliente (ownerContactId) queda afuera a propósito: el cliente no
-  // es un User, no se le puede crear una Task interna.
+  // Una pieza real pasa por varios responsables/tramos de trabajo a lo largo de
+  // su vida (CM arma el copy → diseñador arma el reel → CM revisa → CM publica):
+  // cada vez que se le asigna un responsable del EQUIPO y el tramo actual ya
+  // terminó (o nunca existió), se ofrece (opcional, no bloqueante) crear ya el
+  // tramo nuevo en su dashboard. Asignar al cliente (ownerContactId) queda
+  // afuera a propósito: el cliente no es un User, no se le puede crear una Task
+  // interna. Si el tramo actual sigue EN CURSO, el backend rechaza con 409 (hay
+  // que pausarlo/completarlo primero) — ese error se muestra dentro del propio
+  // modal en vez de cerrarlo en silencio.
   const [dashboardPrompt, setDashboardPrompt] = useState(null) // { pieceId, projectId, ownerName }
   const [sendingPrompt, setSendingPrompt] = useState(false)
+  const [dashboardPromptError, setDashboardPromptError] = useState(null)
 
   function findPieceById(id) {
     return pieces.find(p => String(p.id) === String(id))
@@ -166,11 +171,13 @@ export default function Contenido() {
   async function updateAndMaybePromptDashboard(id, patch, updateFn) {
     const before = findPieceById(id)
     const result = await updateFn(id, patch)
+    const tramoLibre = !before?.currentTask || before.currentTask.status === 'COMPLETED'
     if (
       patch.ownerId !== undefined && patch.ownerId !== null &&
-      before && !before.taskId && before.owner?.id !== patch.ownerId
+      before && tramoLibre && before.owner?.id !== patch.ownerId
     ) {
       const member = members.find(m => m.id === patch.ownerId)
+      setDashboardPromptError(null)
       setDashboardPrompt({ pieceId: id, projectId: before.projectId, ownerName: member?.name ?? 'el responsable' })
     }
     return result
@@ -179,14 +186,16 @@ export default function Contenido() {
   async function handleConfirmDashboardPrompt() {
     if (!dashboardPrompt) return
     setSendingPrompt(true)
+    setDashboardPromptError(null)
     try {
       await api.post(`/contenido/projects/${dashboardPrompt.projectId}/pieces/${dashboardPrompt.pieceId}/send-to-dashboard`)
       setDashboardPrompt(null)
       if (pieceInList || String(pieceId) === String(dashboardPrompt.pieceId)) reload()
       if (String(pieceId) === String(dashboardPrompt.pieceId) && !pieceInList) refetchPiece()
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo enviar al dashboard')
-      setDashboardPrompt(null)
+      // Se deja el modal abierto (ej. 409 porque el tramo anterior sigue en
+      // curso) para que se vea el motivo, en vez de perderlo al cerrarlo solo.
+      setDashboardPromptError(err.response?.data?.error || 'No se pudo enviar al dashboard')
     } finally {
       setSendingPrompt(false)
     }
@@ -477,13 +486,17 @@ export default function Contenido() {
       <ConfirmModal
         open={!!dashboardPrompt}
         title="Enviar al dashboard"
-        message={dashboardPrompt ? `¿Querés crear ya la tarea para que ${dashboardPrompt.ownerName} la vea en su dashboard?` : ''}
-        confirmLabel="Enviar"
-        cancelLabel="Ahora no"
+        message={
+          dashboardPromptError
+            ? `⚠️ ${dashboardPromptError}`
+            : dashboardPrompt ? `¿Querés crear ya la tarea para que ${dashboardPrompt.ownerName} la vea en su dashboard?` : ''
+        }
+        confirmLabel={dashboardPromptError ? 'Reintentar' : 'Enviar'}
+        cancelLabel={dashboardPromptError ? 'Cerrar' : 'Ahora no'}
         danger={false}
         loading={sendingPrompt}
         onConfirm={handleConfirmDashboardPrompt}
-        onCancel={() => setDashboardPrompt(null)}
+        onCancel={() => { setDashboardPrompt(null); setDashboardPromptError(null) }}
       />
     </div>
   )

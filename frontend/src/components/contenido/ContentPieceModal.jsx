@@ -8,6 +8,7 @@ import ContentNetworkChips from './ContentNetworkChips'
 import ContentHistoryList from './ContentHistoryList'
 import ContentAssetGallery from './ContentAssetGallery'
 import ContentAssetUploader from './ContentAssetUploader'
+import ContentTaskHistory from './ContentTaskHistory'
 import ContentCommentThread from './ContentCommentThread'
 import ContentFileBrowserModal from './ContentFileBrowserModal'
 import { useContentHistory, useContentComments } from './useContentPieces'
@@ -221,11 +222,22 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {canEdit && !piece.taskId && (
+            {/* Una pieza puede tener varios tramos de trabajo a lo largo de su vida (ver
+                ContentTaskHistory) — el botón reaparece cada vez que el tramo actual ya
+                se completó, y sigue disponible aunque haya quedado abierto (PENDING/
+                PAUSED/BLOCKED: se auto-completa al hacer el handoff). Solo se oculta
+                mientras alguien la está trabajando en curso, caso en que el backend
+                igual rechazaría el pedido. */}
+            {canEdit && piece.currentTask?.status !== 'IN_PROGRESS' && (
               <button
                 onClick={handleSendToDashboard}
                 disabled={sendingToDashboard || !piece.owner}
-                title={!piece.owner ? 'Asigná un responsable primero' : 'Crea una tarea para el responsable en su dashboard'}
+                title={
+                  !piece.owner ? 'Asigná un responsable primero'
+                  : piece.currentTask && piece.currentTask.status !== 'COMPLETED'
+                    ? 'Cierra el tramo anterior y crea una tarea nueva para el responsable actual'
+                    : 'Crea una tarea para el responsable en su dashboard'
+                }
                 className="flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium border border-primary-200 dark:border-primary-800 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
               >
                 📋 {sendingToDashboard ? 'Enviando…' : 'Enviar al dashboard'}
@@ -447,17 +459,17 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                 </select>
               </div>
 
-              {canEdit && piece.taskId && (
+              {canEdit && piece.currentTask && (
                 <div className="sm:col-span-2">
                   <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${
-                    piece.task?.status === 'COMPLETED'
+                    piece.currentTask.status === 'COMPLETED'
                       ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                      : piece.task?.status === 'IN_PROGRESS'
+                      : piece.currentTask.status === 'IN_PROGRESS'
                         ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
-                    {piece.task?.status === 'COMPLETED' ? (
-                      '✅ Tarea completada'
-                    ) : piece.task?.status === 'IN_PROGRESS' ? (
+                    {piece.currentTask.status === 'COMPLETED' ? (
+                      '✅ Tramo completado'
+                    ) : piece.currentTask.status === 'IN_PROGRESS' ? (
                       <>
                         <span className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse" />
                         {(piece.owner?.name ?? 'Alguien') + ' está trabajando en esto ahora'}
@@ -468,6 +480,8 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
                   </span>
                 </div>
               )}
+
+              <ContentTaskHistory tasks={piece.tasks} />
 
               <div className="sm:col-span-2">
                 <label className={LABEL}>Tipo <span className="italic text-gray-400">(podés elegir más de uno, ej. Historia + Post)</span></label>

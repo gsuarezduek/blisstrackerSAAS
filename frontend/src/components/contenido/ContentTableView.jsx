@@ -57,7 +57,7 @@ function TitleCell({ piece, canEdit, onSave, onOpen }) {
           >
             {piece.title}
           </button>
-          {piece.task?.status === 'IN_PROGRESS' && (
+          {piece.currentTask?.status === 'IN_PROGRESS' && (
             <span
               title={`${piece.owner?.name ?? 'Alguien'} está trabajando en esto ahora`}
               className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400"

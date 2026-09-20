@@ -847,8 +847,13 @@ model Task {
   meetingTodo           ProjectMeetingTodo? // To-Do de reunión de proyecto vinculado (uno a uno); completar la tarea lo tilda
   meetingParticipant    ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
   leadAction            LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
-  contentPiece          ContentPiece? // Pieza de Contenido vinculada (uno a uno); completar la tarea la hace avanzar de estado
   files                 TaskFile[] // Adjuntos — archivos de la Nube del proyecto (ProjectFile) linkeados a esta tarea
+  // Pieza de Contenido de la que esta tarea es UN TRAMO (no @unique del lado de
+  // ContentPiece: una pieza puede tener muchas Task a lo largo de su vida, una
+  // por handoff de responsable — ver ContentPiece.tasks). Completar la tarea
+  // activa (la más reciente) hace avanzar la pieza según ADVANCE_ON_TASK_DONE.
+  contentPieceId        Int?
+  contentPiece          ContentPiece?   @relation(fields: [contentPieceId], references: [id], onDelete: SetNull)
 
   @@unique([recurrenceId, scheduledFor])
   @@index([userId, status])
@@ -857,6 +862,7 @@ model Task {
   @@index([userId, scheduledFor])
   @@index([recurrenceId])
   @@index([status, completedAt])
+  @@index([contentPieceId])
 }
 
 // Plantilla de tarea recurrente. Genera instancias Task (con scheduledFor + recurrenceId) que
@@ -3601,10 +3607,6 @@ model ContentPiece {
   ownerContactId Int?
   ownerContact   ClientPortalContact? @relation("ContentPieceOwnerContact", fields: [ownerContactId], references: [id], onDelete: SetNull)
   order          Int                  @default(0) // orden dentro de la columna del Kanban
-  // Tarea del dashboard vinculada ("enviar al dashboard"). Completarla avanza la
-  // pieza según ADVANCE_ON_TASK_DONE. SetNull: borrar la tarea no borra la pieza.
-  taskId         Int?                 @unique
-  task           Task?                @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   // Denormalizados para filtros y badges sin joinear el log. La verdad histórica
   // completa (quién aprobó qué y cuándo) vive en ContentStatusEvent.
@@ -3632,6 +3634,13 @@ model ContentPiece {
   statusEvents  ContentStatusEvent[]
   notifications Notification[]
   files         ContentPieceFile[]
+  // Tareas del dashboard vinculadas a lo largo de la vida de la pieza ("enviar al
+  // dashboard") — UNA pieza puede pasar por VARIAS tareas/responsables (CM arma
+  // el copy → diseñador arma el reel → CM revisa → CM publica): cada handoff crea
+  // una Task nueva, no reasigna la anterior. `tasks[0]` (ordenada por createdAt
+  // desc en content.controller.js#loadPiece) es la actual/más reciente. Completar
+  // la task activa avanza la pieza según ADVANCE_ON_TASK_DONE.
+  tasks         Task[]
 
   @@index([workspaceId])
   @@index([projectId, scheduledDate]) // vista Calendario (rango de mes)

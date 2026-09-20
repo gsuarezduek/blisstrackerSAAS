@@ -10,7 +10,8 @@ jest.mock('../../src/lib/prisma', () => ({
   projectClientPortal:  { findUnique: jest.fn() },
   clientPortalContact:  { findMany: jest.fn() },
   workDay:            { findUnique: jest.fn(), create: jest.fn() },
-  task:               { create: jest.fn() },
+  task:               { create: jest.fn(), update: jest.fn() },
+  taskSession:        { updateMany: jest.fn() },
   notification:       { create: jest.fn() },
   $transaction:       jest.fn(),
 }))
@@ -65,10 +66,10 @@ const dbPiece = (over = {}) => ({
   title: 'Reel de lanzamiento', status: 'idea', types: '["reel"]',
   networks: '["instagram"]', designDetails: null, copy: null, hashtags: null, internalNotes: null,
   scheduledAt: null, scheduledDate: null, publishedAt: null, publishedUrl: null,
-  order: 0, ownerId: null, taskId: null,
+  order: 0, ownerId: null,
   submittedAt: null, approvedAt: null, approvedByContactId: null, changesRequestedAt: null,
   createdById: 1, createdAt: new Date(), updatedAt: new Date(),
-  owner: null, createdBy: null, task: null, approvedBy: null, assets: [],
+  owner: null, createdBy: null, tasks: [], approvedBy: null, assets: [],
   _count: { comments: 0 },
   ...over,
 })
@@ -661,13 +662,13 @@ describe('POST /pieces/:pid/send-to-dashboard', () => {
   // middleware/workspace.js:33-37), así que la única llamada real es la del chequeo
   // de "el responsable sigue siendo miembro activo" dentro de sendToDashboard.
   function mockHappyPath(over = {}) {
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: OWNER_ID, taskId: null, ...over }))
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: OWNER_ID, tasks: [], ...over }))
     prisma.workspaceMember.findUnique.mockResolvedValue({ active: true })
     prisma.workDay.findUnique.mockResolvedValue({ id: 99 })
     prisma.task.create.mockResolvedValue({ id: 500 })
   }
 
-  it('crea la Task en el dashboard del responsable y la vincula a la pieza', async () => {
+  it('crea la Task en el dashboard del responsable y la vincula a la pieza (sin tramos previos)', async () => {
     mockBase({ workspaceRole: 'admin' })
     mockHappyPath()
 
@@ -675,9 +676,12 @@ describe('POST /pieces/:pid/send-to-dashboard', () => {
 
     expect(res.status).toBe(201)
     expect(prisma.task.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ description: 'Contenido - Reel de lanzamiento', userId: OWNER_ID, projectId: PROJECT_ID }),
+      data: expect.objectContaining({
+        description: 'Contenido - Reel de lanzamiento', userId: OWNER_ID, projectId: PROJECT_ID, contentPieceId: 10,
+      }),
     }))
-    expect(prisma.contentPiece.update).toHaveBeenCalledWith({ where: { id: 10 }, data: { taskId: 500 } })
+    // No hay tramo anterior que cerrar — el handoff es puramente crear la Task nueva.
+    expect(prisma.task.update).not.toHaveBeenCalled()
   })
 
   it('notifica al responsable cuando quien envía es otra persona', async () => {
@@ -693,7 +697,7 @@ describe('POST /pieces/:pid/send-to-dashboard', () => {
 
   it('no se auto-notifica si el responsable es quien envía', async () => {
     mockBase({ workspaceRole: 'admin' })
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: 1, taskId: null })) // ownerId === requester (userId 1)
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: 1, tasks: [] })) // ownerId === requester (userId 1)
     prisma.workspaceMember.findUnique.mockResolvedValue({ active: true })
     prisma.workDay.findUnique.mockResolvedValue({ id: 99 })
     prisma.task.create.mockResolvedValue({ id: 500 })
@@ -709,7 +713,7 @@ describe('POST /pieces/:pid/send-to-dashboard', () => {
 
   it('crea el WorkDay del responsable si todavía no tiene uno hoy', async () => {
     mockBase({ workspaceRole: 'admin' })
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: OWNER_ID, taskId: null }))
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: OWNER_ID, tasks: [] }))
     prisma.workspaceMember.findUnique.mockResolvedValue({ active: true })
     prisma.workDay.findUnique.mockResolvedValue(null)
     prisma.workDay.create.mockResolvedValue({ id: 99 })
@@ -725,7 +729,7 @@ describe('POST /pieces/:pid/send-to-dashboard', () => {
 
   it('400 si la pieza no tiene responsable', async () => {
     mockBase({ workspaceRole: 'admin' })
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: null, taskId: null }))
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: null, tasks: [] }))
 
     const res = await req('post', `${BASE}/10/send-to-dashboard`)
 
@@ -736,7 +740,7 @@ describe('POST /pieces/:pid/send-to-dashboard', () => {
 
   it('400 con mensaje distinto si el responsable es un contacto del cliente (no un User)', async () => {
     mockBase({ workspaceRole: 'admin' })
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: null, ownerContactId: 9, taskId: null }))
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: null, ownerContactId: 9, tasks: [] }))
 
     const res = await req('post', `${BASE}/10/send-to-dashboard`)
 
@@ -745,19 +749,53 @@ describe('POST /pieces/:pid/send-to-dashboard', () => {
     expect(prisma.task.create).not.toHaveBeenCalled()
   })
 
-  it('409 si la pieza ya tiene una tarea vinculada', async () => {
+  it('409 si hay una tarea EN CURSO vinculada a la pieza (otro responsable la está trabajando)', async () => {
     mockBase({ workspaceRole: 'admin' })
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: OWNER_ID, taskId: 123 }))
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({
+      id: 10, ownerId: OWNER_ID,
+      tasks: [{ id: 123, status: 'IN_PROGRESS', user: { id: 3, name: 'Bruno' } }],
+    }))
 
     const res = await req('post', `${BASE}/10/send-to-dashboard`)
 
     expect(res.status).toBe(409)
+    expect(res.body.error).toMatch(/Bruno/)
     expect(prisma.task.create).not.toHaveBeenCalled()
+    expect(prisma.task.update).not.toHaveBeenCalled()
+  })
+
+  it('si el tramo anterior quedó PENDING (nunca se empezó), se auto-completa y se crea el tramo nuevo', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    mockHappyPath({ tasks: [{ id: 111, status: 'PENDING', user: { id: 3, name: 'Bruno' } }] })
+
+    const res = await req('post', `${BASE}/10/send-to-dashboard`)
+
+    expect(res.status).toBe(201)
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: 111 },
+      data:  expect.objectContaining({ status: 'COMPLETED' }),
+    })
+    expect(prisma.taskSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { taskId: 111, endedAt: null },
+    }))
+    expect(prisma.task.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ contentPieceId: 10, userId: OWNER_ID }),
+    }))
+  })
+
+  it('si el tramo anterior ya estaba COMPLETED, no lo vuelve a tocar', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    mockHappyPath({ tasks: [{ id: 111, status: 'COMPLETED', user: { id: 3, name: 'Bruno' } }] })
+
+    const res = await req('post', `${BASE}/10/send-to-dashboard`)
+
+    expect(res.status).toBe(201)
+    expect(prisma.task.update).not.toHaveBeenCalled()
   })
 
   it('400 si el responsable ya no es miembro activo del workspace', async () => {
     mockBase({ workspaceRole: 'admin' })
-    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: OWNER_ID, taskId: null }))
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, ownerId: OWNER_ID, tasks: [] }))
     prisma.workspaceMember.findUnique.mockResolvedValue({ active: false })
 
     const res = await req('post', `${BASE}/10/send-to-dashboard`)
