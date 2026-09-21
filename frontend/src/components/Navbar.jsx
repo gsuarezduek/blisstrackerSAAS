@@ -175,7 +175,7 @@ export default function Navbar() {
       ? [{ to: isAdmin ? '/admin/ventas' : '/ventas', label: '💰 Ventas' }]
       : []),
     ...(marketingEnabled && user?.moduleAccess?.marketing ? [{ to: '/marketing', label: '🎯 Marketing' }] : []),
-    ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ to: '/contenido', label: '📅 Contenido' }] : []),
+    ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ to: '/contenido', label: '📣 Contenido' }] : []),
     ...(rrhhEnabled && user?.moduleAccess?.rrhh ? [{ to: '/admin/rrhh', label: '👥 RRHH' }] : []),
     ...(calendarioEnabled && user?.moduleAccess?.calendario ? [{ to: '/calendario', label: '🗓️ Calendario' }] : []),
   ]

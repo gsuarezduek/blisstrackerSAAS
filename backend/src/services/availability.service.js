@@ -79,7 +79,7 @@ async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate }) {
       },
       select: {
         userId: true, status: true,
-        event: { select: { id: true, date: true, startTime: true, durationMins: true, title: true, projectId: true } },
+        event: { select: { id: true, date: true, startTime: true, durationMins: true, title: true, projectId: true, recurrenceId: true } },
       },
     }),
   ])
@@ -123,7 +123,7 @@ async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate }) {
       date: ev.date, start: ev.startTime,
       end: minsToTime(timeToMins(ev.startTime) + ev.durationMins),
       kind: 'calendar_event', tentative: p.status === 'pending',
-      refId: ev.id, title: ev.title, projectId: ev.projectId,
+      refId: ev.id, title: ev.title, projectId: ev.projectId, recurrenceId: ev.recurrenceId,
     })
   }
 

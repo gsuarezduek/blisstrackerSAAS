@@ -10,8 +10,11 @@ import { avatarUrl } from '../../utils/avatarUrl'
  *
  * `value`: array de userIds seleccionados. `onChange(nextArray)`.
  * `excludeIds`: ids a no ofrecer (ej. el propio organizador, ya incluido aparte).
+ * `projectMemberIds`: si viene (ScheduleEventModal, equipo del proyecto elegido),
+ * suma un botón "+ Equipo del proyecto" además de "+ Todo el workspace" — invitar
+ * a una reunión grande de una sola vez sin tildear uno por uno.
  */
-export default function PeoplePicker({ value, onChange, excludeIds = [], placeholder = 'Buscar personas…' }) {
+export default function PeoplePicker({ value, onChange, excludeIds = [], placeholder = 'Buscar personas…', projectMemberIds }) {
   const { members } = useMembers()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -32,8 +35,40 @@ export default function PeoplePicker({ value, onChange, excludeIds = [], placeho
     onChange(selected.has(id) ? value.filter(v => v !== id) : [...value, id])
   }
 
+  function addAll(ids) {
+    const selectableIds = new Set(selectable.map(m => m.id))
+    const toAdd = ids.filter(id => selectableIds.has(id) && !selected.has(id))
+    if (toAdd.length) onChange([...value, ...toAdd])
+  }
+
+  const validProjectIds = useMemo(
+    () => (projectMemberIds || []).filter(id => !excluded.has(id)),
+    [projectMemberIds, excluded]
+  )
+
   return (
     <div>
+      {(validProjectIds.length > 0 || selectable.length > 0) && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {validProjectIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => addAll(validProjectIds)}
+              className="text-[11px] font-medium px-2 py-1 rounded-full border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              + Equipo del proyecto ({validProjectIds.length})
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => addAll(selectable.map(m => m.id))}
+            className="text-[11px] font-medium px-2 py-1 rounded-full border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            + Todo el workspace ({selectable.length})
+          </button>
+        </div>
+      )}
+
       {selectedMembers.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {selectedMembers.map(m => (

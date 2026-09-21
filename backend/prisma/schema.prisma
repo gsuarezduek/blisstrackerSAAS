@@ -204,6 +204,7 @@ model Workspace {
   deviceTokens               DeviceToken[]
   calendarEvents             CalendarEvent[]
   calendarEventParticipants  CalendarEventParticipant[]
+  calendarEventRecurrences   CalendarEventRecurrence[]
   googleCalendarConnections  GoogleCalendarConnection[]
 
   @@index([slug])
@@ -399,6 +400,7 @@ model User {
   deviceTokens                   DeviceToken[]
   calendarEventsOrganized        CalendarEvent[]             @relation("CalendarEventOrganizer")
   calendarEventParticipations    CalendarEventParticipant[]  @relation("CalendarEventParticipant")
+  calendarEventRecurrencesOrganized CalendarEventRecurrence[] @relation("CalendarEventRecurrenceOrganizer")
   googleCalendarConnections      GoogleCalendarConnection[]
 }
 
@@ -583,6 +585,7 @@ model Project {
   files                  ProjectFile[]
   deletedTaskNotices     DeletedTaskNotice[]
   calendarEvents         CalendarEvent[]
+  calendarEventRecurrences CalendarEventRecurrence[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -846,6 +849,7 @@ model Task {
   eosMeetingParticipant EOSMeetingParticipant? // Tarea auto-creada por una reunión L10 (uno a uno); su tiempo es la participación en la reunión
   meetingTodo           ProjectMeetingTodo? // To-Do de reunión de proyecto vinculado (uno a uno); completar la tarea lo tilda
   meetingParticipant    ProjectMeetingParticipant? // Tarea auto-creada por una reunión de proyecto (uno a uno); su tiempo es la participación en la reunión
+  calendarEventParticipant CalendarEventParticipant? // Tarea "reserva" creada al aceptar una invitación de Calendario (uno a uno)
   leadAction            LeadAction? // Próxima acción de Ventas vinculada (uno a uno); completar la tarea la resuelve y viceversa
   files                 TaskFile[] // Adjuntos — archivos de la Nube del proyecto (ProjectFile) linkeados a esta tarea
   // Pieza de Contenido de la que esta tarea es UN TRAMO (no @unique del lado de
@@ -2549,6 +2553,10 @@ model CalendarEvent {
   date          String // "YYYY-MM-DD"
   startTime     String // "HH:MM"
   durationMins  Int             @default(30)
+  // Requerido a nivel de aplicación (validado en calendar.controller.js#createEvent) —
+  // queda nullable en el schema solo por compatibilidad con eventos legacy creados
+  // antes de esta regla. Sin proyecto no hay dónde crear la Task "reserva" del
+  // participante (ver CalendarEventParticipant.taskId / lib/calendarEventTasks.js).
   projectId     Int?
   meetLink      String?
   notes         String?
@@ -2561,6 +2569,13 @@ model CalendarEvent {
   // GoogleCalendarConnection activa) — ver googleCalendarSync.service.js. null =
   // nunca se empujó (el organizador no tiene Google conectado, o falló el push).
   googleEventId String?
+  // Serie de la que esta ocurrencia forma parte (null = evento suelto, no
+  // recurrente). Cada ocurrencia es una fila real e independiente — ver
+  // CalendarEventRecurrence y calendarEventRecurrence.service.js. `date` es la
+  // identidad estable de la ocurrencia dentro de la serie (@@unique abajo): mover
+  // una ocurrencia a otro día no está soportado desde "editar solo esta" — cambiar
+  // el día real se hace vía "esta y las siguientes" (edita la serie completa).
+  recurrenceId Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2568,12 +2583,68 @@ model CalendarEvent {
   workspace     Workspace                  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   organizer     User                       @relation("CalendarEventOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
   project       Project?                   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  recurrence    CalendarEventRecurrence?   @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
   participants  CalendarEventParticipant[]
   notifications Notification[]
 
+  @@unique([recurrenceId, date])
   @@index([workspaceId, date])
   @@index([organizerId])
   @@index([projectId])
+}
+
+// Plantilla de una serie de reuniones recurrentes ("reunión de EOS todos los
+// lunes a las 9") — mismo espíritu que TaskRecurrence, pero acá cada ocurrencia
+// generada es un CalendarEvent real con sus propios participantes/aceptaciones
+// (ver calendarEventRecurrence.service.js#materializeOccurrence), no solo una
+// Task. `participantIds` son los invitados de la serie (sin el organizador, que
+// siempre queda "accepted" en cada ocurrencia, igual que un evento suelto).
+// Editar/borrar "esta y las siguientes" (estilo Google Calendar) actualiza estos
+// campos + las ocurrencias futuras ya materializadas que todavía no arrancaron;
+// no soporta cambiar el patrón (frequency/weekdays) de una serie ya creada — para
+// eso hay que terminarla y crear una nueva.
+model CalendarEventRecurrence {
+  id             Int      @id @default(autoincrement())
+  workspaceId    Int
+  organizerId    Int
+  title          String
+  projectId      Int
+  meetLink       String?
+  notes          String?
+  startTime      String // "HH:MM"
+  durationMins   Int      @default(30)
+  participantIds String   @default("[]") // JSON array de userId (sin el organizador)
+  frequency      String // daily | weekly | monthly | annual
+  weekdays       String   @default("[]") // JSON [0-6] (0=domingo) — solo weekly
+  dayOfMonth     Int? // 1-31 — monthly/annual
+  month          Int? // 1-12 — annual
+  startDate      String // "YYYY-MM-DD" — primera ocurrencia posible
+  endDate        String? // "YYYY-MM-DD" — null = nunca termina; "borrar esta y las siguientes" la setea al día anterior a la ocurrencia borrada
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace  Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organizer  User                      @relation("CalendarEventRecurrenceOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  project    Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  events     CalendarEvent[]
+  exceptions CalendarEventException[]
+
+  @@index([workspaceId, active])
+}
+
+// Ocurrencia borrada individualmente ("solo esta", estilo Google Calendar) — sin
+// esto, la próxima vez que se pida un rango que cubra esa fecha,
+// ensureOccurrences la volvería a materializar.
+model CalendarEventException {
+  id           Int      @id @default(autoincrement())
+  recurrenceId Int
+  date         String // "YYYY-MM-DD"
+  createdAt    DateTime @default(now())
+
+  recurrence CalendarEventRecurrence @relation(fields: [recurrenceId], references: [id], onDelete: Cascade)
+
+  @@unique([recurrenceId, date])
 }
 
 // Participante de un CalendarEvent, con estado de aceptación — a diferencia de
@@ -2587,11 +2658,19 @@ model CalendarEventParticipant {
   userId      Int
   status      String    @default("pending") // "pending" | "accepted" | "declined"
   respondedAt DateTime?
+  // Task "reserva" del dashboard creada al ACEPTAR la invitación (uno a uno, ver
+  // lib/calendarEventTasks.js) — aparece como tarea de hoy (con scheduledTime) o
+  // futura (scheduledFor), según la fecha del evento. Se borra si sigue PENDING y
+  // el participante rechaza, el evento se cancela/reprograma, o arranca la reunión
+  // real (que crea su propia Task IN_PROGRESS vía ProjectMeetingParticipant.taskId).
+  // Una tarea ya iniciada/completada nunca se toca.
+  taskId      Int?      @unique
   createdAt   DateTime  @default(now())
 
   event     CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
   workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User          @relation("CalendarEventParticipant", fields: [userId], references: [id], onDelete: Cascade)
+  task      Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@unique([eventId, userId])
   @@index([eventId])

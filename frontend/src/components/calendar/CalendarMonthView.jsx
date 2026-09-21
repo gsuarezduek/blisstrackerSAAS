@@ -49,7 +49,10 @@ export default function CalendarMonthView({ events, month, onMonthChange, onOpen
                       className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-900/40 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"
                     >
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[e.confirmationStatus] || 'bg-gray-300'}`} />
-                      <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">{e.startTime} {e.title}</span>
+                      <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">
+                        {e.recurrenceId && <span title="Reunión recurrente">🔁 </span>}
+                        {e.startTime} {e.title}
+                      </span>
                     </div>
                   ))}
                   {items.length > MAX_CHIPS_PER_DAY && (

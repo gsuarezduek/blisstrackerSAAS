@@ -141,12 +141,45 @@ export default function Calendario() {
         id: `${b.kind}-${b.refId ?? `${b.date}${b.start}`}`,
         start: b.start,
         end: b.end,
-        title: b.title || (b.kind === 'task' ? 'Tarea' : 'Ocupado'),
+        title: (b.recurrenceId ? '🔁 ' : '') + (b.title || (b.kind === 'task' ? 'Tarea' : 'Ocupado')),
         tentative: b.tentative,
         tone: b.kind === 'task' ? 'task' : 'event',
         onClick: b.kind === 'calendar_event' && b.refId ? () => openEventById(b.refId) : undefined,
       }))
   }
+
+  // ── Rango horario de la grilla: recortado al horario laboral real ──────────
+  // Por defecto WeekTimeGrid mostraría 7–22, y la mayor parte de esa franja no
+  // la trabaja nadie. Acá se calcula el rango efectivo a partir del horario
+  // laboral configurado (WorkspaceMember.workStartTime/workEndTime) de las
+  // columnas visibles + cualquier bloque real que caiga fuera de ese horario
+  // (para no recortar una reunión agendada fuera de hora) — con un margen de 1h
+  // a cada lado. Sin horarios configurados ni bloques fuera de rango, cae a un
+  // 9–18 razonable en vez de 7–22.
+  function hourFloor(hhmm) { return Number(hhmm.slice(0, 2)) }
+  function hourCeil(hhmm) {
+    const [h, m] = hhmm.split(':').map(Number)
+    return m > 0 ? h + 1 : h
+  }
+  function computeHourRange(keys) {
+    let min = null, max = null
+    for (const key of keys) {
+      const state = availability[key]
+      if (!state) continue
+      if (state.workStart) min = min === null ? hourFloor(state.workStart) : Math.min(min, hourFloor(state.workStart))
+      if (state.workEnd)   max = max === null ? hourCeil(state.workEnd)   : Math.max(max, hourCeil(state.workEnd))
+      for (const b of state.blocks || []) {
+        min = min === null ? hourFloor(b.start) : Math.min(min, hourFloor(b.start))
+        max = max === null ? hourCeil(b.end)   : Math.max(max, hourCeil(b.end))
+      }
+    }
+    if (min === null || max === null || max <= min) return { startHour: 9, endHour: 18 }
+    const startHour = Math.max(0, min - 1)
+    const endHour = Math.min(24, Math.max(max + 1, startHour + 6)) // franja mínima de 6h para que no quede aplastada
+    return { startHour, endHour }
+  }
+  const weekHourRange = useMemo(() => computeHourRange([targetUserId]), [availability, targetUserId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const teamHourRange = useMemo(() => computeHourRange([user.id, ...peopleIds]), [availability, user.id, peopleIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const weekColumns = useMemo(() => weekDates(date).map(d => ({ key: d, label: weekdayLabel(d) })), [date])
   const teamColumns = useMemo(() => (
@@ -264,6 +297,8 @@ export default function Calendario() {
         {!loading && !loadError && view === 'semana' && (
           <WeekTimeGrid
             columns={weekColumns}
+            startHour={weekHourRange.startHour}
+            endHour={weekHourRange.endHour}
             getBlocks={colDate => blocksFor(targetUserId, colDate)}
             getWorkWindow={() => {
               const s = availability[targetUserId]
@@ -280,6 +315,8 @@ export default function Calendario() {
         {!loading && !loadError && view === 'equipo' && (
           <WeekTimeGrid
             columns={teamColumns}
+            startHour={teamHourRange.startHour}
+            endHour={teamHourRange.endHour}
             getBlocks={uid => blocksFor(uid, date)}
             getWorkWindow={uid => {
               const s = availability[uid]

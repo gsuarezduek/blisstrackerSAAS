@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 /**
- * Buscador/selector de UN proyecto (o "Sin proyecto") — mismo patrón que
- * PersonSearchSelect: botón que despliega un input de búsqueda + lista
- * filtrada en vivo, en vez del <select> nativo con scroll largo.
- * `value`: projectId elegido (string) o '' = sin proyecto.
+ * Buscador/selector de UN proyecto — mismo patrón que PersonSearchSelect: botón
+ * que despliega un input de búsqueda + lista filtrada en vivo, en vez del
+ * <select> nativo con scroll largo. Usado solo por ScheduleEventModal, donde el
+ * proyecto es obligatorio (sin él no hay dónde crear la Task "reserva" del
+ * participante que acepte — ver lib/calendarEventTasks.js) — no ofrece "Sin
+ * proyecto" como opción. `value`: projectId elegido (string), o '' = todavía sin elegir.
  */
 export default function ProjectSearchSelect({ projects, value, onChange, placeholder = 'Buscar proyecto…' }) {
   const [query, setQuery] = useState('')
@@ -33,7 +35,7 @@ export default function ProjectSearchSelect({ projects, value, onChange, placeho
     setOpen(false)
   }
 
-  const label = selected ? selected.name : 'Sin proyecto'
+  const label = selected ? selected.name : 'Elegí un proyecto'
 
   return (
     <div ref={containerRef} className="relative">
@@ -56,14 +58,6 @@ export default function ProjectSearchSelect({ projects, value, onChange, placeho
             className="w-full px-3 py-2 text-sm border-b border-gray-100 dark:border-gray-700 focus:outline-none dark:bg-gray-800 dark:text-gray-100"
           />
           <div className="max-h-56 overflow-y-auto">
-            <button
-              type="button"
-              onClick={() => pick('')}
-              className={`w-full flex items-center px-3 py-2 text-sm text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-                !value ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}
-            >
-              <span className="text-gray-500 dark:text-gray-400">Sin proyecto</span>
-            </button>
             {filtered.map(p => (
               <button
                 key={p.id}

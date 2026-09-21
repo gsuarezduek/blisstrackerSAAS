@@ -43,6 +43,16 @@ export default function ScheduleEventModal({ open, initial, onClose, onCreated }
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Reunión recurrente ("todos los lunes a las 9") — mismo estilo/controles que
+  // AddTaskModal, pero sin un picker de "día del mes" aparte: `date` ya está
+  // siempre presente acá y sirve de primera ocurrencia (monthly/annual derivan
+  // el día/mes de esa misma fecha, ver buildRecurrenceParams en el backend).
+  const [repeat, setRepeat] = useState(false)
+  const [frequency, setFrequency] = useState('weekly') // daily | weekly | monthly | annual
+  const [weekdays, setWeekdays] = useState([]) // 0=domingo … 6=sábado (solo weekly)
+  const [endMode, setEndMode] = useState('never') // never | custom
+  const [endDate, setEndDate] = useState('')
+
   useEffect(() => {
     if (!open) return
     setTitle('')
@@ -55,9 +65,17 @@ export default function ScheduleEventModal({ open, initial, onClose, onCreated }
     setNotes('')
     setFreeSlots(null)
     setError('')
+    setRepeat(false)
+    setFrequency('weekly')
+    setWeekdays([])
+    setEndMode('never')
+    setEndDate('')
     api.get('/projects').then(r => setProjects(r.data)).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial])
+
+  const toggleWeekday = (d) => setWeekdays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b))
+  const projectMemberIds = projects.find(p => String(p.id) === String(projectId))?.members?.map(pm => pm.user.id) || []
 
   // Ayuda visual: huecos comunes del día elegido entre el organizador + invitados.
   useEffect(() => {
@@ -73,16 +91,30 @@ export default function ScheduleEventModal({ open, initial, onClose, onCreated }
 
   async function submit() {
     if (!title.trim() || !date || !startTime) { setError('Completá título, fecha y hora'); return }
+    if (!projectId) { setError('Elegí un proyecto para la reunión'); return }
+    if (repeat) {
+      if (frequency === 'weekly' && weekdays.length === 0) { setError('Elegí al menos un día de la semana.'); return }
+      if (endMode === 'custom' && !endDate) { setError('Elegí la fecha de finalización o seleccioná "Nunca".'); return }
+      if (endMode === 'custom' && endDate && endDate < date) { setError('La fecha de finalización no puede ser anterior a la primera reunión.'); return }
+    }
     setSaving(true)
     setError('')
     try {
-      const res = await api.post('/calendar/events', {
+      const body = {
         title: title.trim(), date, startTime, durationMins,
-        projectId: projectId || null,
+        projectId,
         participantIds,
         meetLink: meetLink.trim() || null,
         notes: notes.trim() || null,
-      })
+      }
+      if (repeat) {
+        body.recurrence = {
+          frequency,
+          ...(frequency === 'weekly' ? { weekdays } : {}),
+          ...(endMode === 'custom' && endDate ? { endDate } : {}),
+        }
+      }
+      const res = await api.post('/calendar/events', body)
       onCreated(res.data)
       onClose()
     } catch (e) {
@@ -129,21 +161,22 @@ export default function ScheduleEventModal({ open, initial, onClose, onCreated }
         </div>
 
         <div>
-          <label className={LABEL_CLS}>Proyecto (opcional)</label>
+          <label className={LABEL_CLS}>Proyecto</label>
           <div className="mt-1">
             <ProjectSearchSelect projects={projects} value={projectId} onChange={setProjectId} />
           </div>
-          {projectId && (
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-              Con proyecto vas a poder iniciar la reunión real (con cronómetro) desde el evento, una vez que llegue la hora.
-            </p>
-          )}
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+            Cada invitado que acepte le va a ver aparecer una tarea en su dashboard en este proyecto (con el título de la reunión) — y vas a poder iniciar la reunión real (con cronómetro) una vez que llegue la hora.
+          </p>
         </div>
 
         <div>
           <label className={LABEL_CLS}>Participantes</label>
           <div className="mt-1">
-            <PeoplePicker value={participantIds} onChange={setParticipantIds} excludeIds={user ? [user.id] : []} />
+            <PeoplePicker
+              value={participantIds} onChange={setParticipantIds} excludeIds={user ? [user.id] : []}
+              projectMemberIds={projectMemberIds}
+            />
           </div>
           {freeSlots && (
             <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
@@ -151,6 +184,93 @@ export default function ScheduleEventModal({ open, initial, onClose, onCreated }
                 ? `Libres ese día para todos: ${freeSlots.map(s => `${s.start}–${s.end}`).join(', ')}`
                 : 'No hay huecos libres en común ese día.'}
             </p>
+          )}
+        </div>
+
+        <div>
+          <button
+            type="button"
+            onClick={() => setRepeat(r => !r)}
+            className={`w-full rounded-lg py-1.5 text-xs font-medium border transition-colors ${
+              repeat
+                ? 'bg-primary-50 dark:bg-primary-900/30 border-primary-300 text-primary-700 dark:text-primary-400'
+                : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            🔁 Reunión recurrente
+          </button>
+
+          {repeat && (
+            <div className="mt-2 space-y-3 rounded-lg bg-gray-50 dark:bg-gray-700/40 p-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Se repite</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[['daily', 'Diaria'], ['weekly', 'Semanal'], ['monthly', 'Mensual'], ['annual', 'Anual']].map(([val, lbl]) => (
+                    <button
+                      key={val} type="button" onClick={() => setFrequency(val)}
+                      className={`rounded-md py-1.5 text-xs font-medium border transition-colors ${
+                        frequency === val
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                      }`}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {frequency === 'weekly' && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Los días</label>
+                  <div className="flex gap-1">
+                    {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((lbl, idx) => (
+                      <button
+                        key={idx} type="button" onClick={() => toggleWeekday(idx)}
+                        className={`flex-1 rounded-md py-1.5 text-[11px] font-medium border transition-colors ${
+                          weekdays.includes(idx)
+                            ? 'bg-primary-600 border-primary-600 text-white'
+                            : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300'
+                        }`}
+                      >
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(frequency === 'monthly' || frequency === 'annual') && date && (
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                  {frequency === 'monthly'
+                    ? `Se repite el día ${Number(date.slice(8, 10))} de cada mes.`
+                    : `Se repite cada año en esa misma fecha.`}
+                </p>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Fecha de finalización</label>
+                <div className="flex gap-2 items-center">
+                  <select
+                    value={endMode} onChange={e => setEndMode(e.target.value)}
+                    className="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="never">Nunca</option>
+                    <option value="custom">Personalizada</option>
+                  </select>
+                  {endMode === 'custom' && (
+                    <input
+                      type="date" min={date} value={endDate} onChange={e => setEndDate(e.target.value)}
+                      className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                Cada ocurrencia se agenda por separado — cada invitado la acepta cuando le toca, y aparece como tarea del día en su dashboard.
+              </p>
+            </div>
           )}
         </div>
 
