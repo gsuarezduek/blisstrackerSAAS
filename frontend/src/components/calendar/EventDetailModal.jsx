@@ -195,6 +195,21 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
                 {event.project && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Proyecto: {event.project.name}</p>}
               </div>
 
+              {/* Estado de mi invitación, siempre visible arriba (no solo en el
+                  footer de acciones) — con muchos participantes el footer puede
+                  quedar lejos del scroll, y esto tiene que notarse de entrada. */}
+              {canRespond && (
+                <div className={`rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-1.5 ${
+                  myParticipation.status === 'accepted' ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                  : myParticipation.status === 'declined' ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
+                  : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400'
+                }`}>
+                  {myParticipation.status === 'accepted' && <>✓ Ya aceptaste esta invitación{isRecurring ? ' (toda la serie)' : ''}</>}
+                  {myParticipation.status === 'declined' && <>✕ Rechazaste esta invitación</>}
+                  {myParticipation.status === 'pending' && <>⏳ Todavía no respondiste esta invitación</>}
+                </div>
+              )}
+
               {event.meetLink && (
                 <a href={event.meetLink} target="_blank" rel="noreferrer" className="text-sm text-primary-600 hover:underline break-all">
                   🔗 {event.meetLink}
@@ -340,29 +355,21 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
           ) : (
             <>
               {canRespond && myParticipation.status === 'accepted' && (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs text-center text-green-600 dark:text-green-400 font-medium">
-                    ✓ Aceptaste esta invitación{isRecurring ? ' (toda la serie)' : ''}
-                  </p>
-                  <button
-                    onClick={requestDecline} disabled={busy}
-                    className="w-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
-                  >
-                    Cancelar asistencia
-                  </button>
-                </div>
+                <button
+                  onClick={requestDecline} disabled={busy}
+                  className="w-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                >
+                  Cancelar asistencia
+                </button>
               )}
 
               {canRespond && myParticipation.status === 'declined' && (
-                <div className="flex flex-col gap-2">
-                  <p className="text-xs text-center text-gray-400 dark:text-gray-500">Rechazaste esta invitación</p>
-                  <button
-                    onClick={() => respond('accepted')} disabled={busy}
-                    className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
-                  >
-                    Aceptar{isRecurring ? ' (toda la serie)' : ''}
-                  </button>
-                </div>
+                <button
+                  onClick={() => respond('accepted')} disabled={busy}
+                  className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                >
+                  Aceptar{isRecurring ? ' (toda la serie)' : ''}
+                </button>
               )}
 
               {canRespond && myParticipation.status === 'pending' && (
