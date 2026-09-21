@@ -2615,6 +2615,12 @@ model CalendarEventRecurrence {
   startTime      String // "HH:MM"
   durationMins   Int      @default(30)
   participantIds String   @default("[]") // JSON array de userId (sin el organizador)
+  // Participantes que aceptaron "toda la serie" (ver respondEventAcceptSeries en
+  // calendar.controller.js): aceptar UNA ocurrencia de una serie recurrente
+  // acepta automáticamente todas las demás en vez de tener que confirmar semana
+  // por semana. materializeOccurrence crea las futuras ya "accepted" para estos
+  // userId — rechazar (con scope=series) los saca de acá.
+  autoAcceptUserIds String @default("[]") // JSON array de userId
   frequency      String // daily | weekly | monthly | annual
   weekdays       String   @default("[]") // JSON [0-6] (0=domingo) — solo weekly
   dayOfMonth     Int? // 1-31 — monthly/annual

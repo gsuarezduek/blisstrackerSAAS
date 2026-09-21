@@ -255,6 +255,107 @@ describe('POST /api/calendar/events/:id/respond', () => {
   })
 })
 
+// ── POST /api/calendar/events/:id/respond — serie recurrente ───────────────
+// Aceptar una ocurrencia acepta automáticamente toda la serie; rechazar sigue
+// siendo por ocurrencia salvo que se pida ?scope=series.
+
+describe('POST /api/calendar/events/:id/respond — serie recurrente', () => {
+  function occurrence(id, date, invitedStatus) {
+    return {
+      id, workspaceId: WORKSPACE_ID, organizerId: 1, title: 'EOS', date, startTime: '09:00',
+      durationMins: 30, projectId: 7, meetLink: null, notes: null, realMeetingId: null, recurrenceId: 50,
+      createdAt: new Date(), updatedAt: new Date(), organizer: { id: 1, name: 'Organizador', avatar: 'x' }, project: { id: 7, name: 'Proyecto' },
+      participants: [
+        { id: id * 10, userId: 1, status: 'accepted', respondedAt: new Date(), user: { id: 1, name: 'Organizador', avatar: 'x' } },
+        { id: id * 10 + 1, userId: 2, status: invitedStatus, respondedAt: null, user: { id: 2, name: 'Invitado', avatar: 'y' } },
+      ],
+    }
+  }
+
+  it('aceptar una ocurrencia acepta automáticamente las demás ya materializadas de la serie', async () => {
+    const occ1 = occurrence(10, '2026-09-28', 'pending')
+    const occ2 = occurrence(11, '2026-10-05', 'pending')
+    prisma.calendarEvent.findFirst.mockImplementation(({ where }) => Promise.resolve([occ1, occ2].find(o => o.id === where.id) || null))
+    prisma.calendarEventRecurrence.findFirst.mockResolvedValue({ id: 50, workspaceId: WORKSPACE_ID, organizerId: 1, autoAcceptUserIds: '[]' })
+    prisma.calendarEvent.findMany.mockResolvedValue([{ id: 10 }, { id: 11 }])
+    prisma.workDay.findUnique.mockResolvedValue({ id: 900, userId: 2, workspaceId: WORKSPACE_ID })
+    prisma.task.create.mockResolvedValue({ id: 800 })
+
+    const res = await request(app)
+      .post('/api/calendar/events/10/respond')
+      .set('Authorization', makeToken(2))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ status: 'accepted' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.calendarEventRecurrence.update).toHaveBeenCalledWith({
+      where: { id: 50 },
+      data:  { autoAcceptUserIds: JSON.stringify([2]) },
+    })
+    expect(prisma.calendarEventParticipant.update).toHaveBeenCalledWith({ where: { id: 101 }, data: { status: 'accepted', respondedAt: expect.any(Date) } })
+    expect(prisma.calendarEventParticipant.update).toHaveBeenCalledWith({ where: { id: 111 }, data: { status: 'accepted', respondedAt: expect.any(Date) } })
+  })
+
+  it('aceptar no vuelve a tocar una ocurrencia que ya estaba accepted', async () => {
+    const occ1 = occurrence(10, '2026-09-28', 'pending')
+    const occ2 = occurrence(11, '2026-10-05', 'accepted')
+    prisma.calendarEvent.findFirst.mockImplementation(({ where }) => Promise.resolve([occ1, occ2].find(o => o.id === where.id) || null))
+    prisma.calendarEventRecurrence.findFirst.mockResolvedValue({ id: 50, workspaceId: WORKSPACE_ID, organizerId: 1, autoAcceptUserIds: '[]' })
+    prisma.calendarEvent.findMany.mockResolvedValue([{ id: 10 }, { id: 11 }])
+    prisma.workDay.findUnique.mockResolvedValue({ id: 900, userId: 2, workspaceId: WORKSPACE_ID })
+    prisma.task.create.mockResolvedValue({ id: 800 })
+
+    const res = await request(app)
+      .post('/api/calendar/events/10/respond')
+      .set('Authorization', makeToken(2))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ status: 'accepted' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.calendarEventParticipant.update).toHaveBeenCalledWith({ where: { id: 101 }, data: { status: 'accepted', respondedAt: expect.any(Date) } })
+    expect(prisma.calendarEventParticipant.update).not.toHaveBeenCalledWith({ where: { id: 111 }, data: expect.anything() })
+  })
+
+  it('rechazar sin scope solo afecta la ocurrencia abierta', async () => {
+    const occ1 = occurrence(10, '2026-09-28', 'accepted')
+    prisma.calendarEvent.findFirst.mockResolvedValue(occ1)
+    prisma.task.findUnique.mockResolvedValue(null)
+
+    const res = await request(app)
+      .post('/api/calendar/events/10/respond')
+      .set('Authorization', makeToken(2))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ status: 'declined' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.calendarEventRecurrence.findFirst).not.toHaveBeenCalled()
+    expect(prisma.calendarEventParticipant.update).toHaveBeenCalledWith({ where: { id: 101 }, data: { status: 'declined', respondedAt: expect.any(Date) } })
+  })
+
+  it('rechazar con ?scope=series declina esta y las siguientes, y saca al usuario de autoAcceptUserIds', async () => {
+    const occ1 = occurrence(10, '2026-09-28', 'accepted')
+    const occ2 = occurrence(11, '2026-10-05', 'accepted')
+    prisma.calendarEvent.findFirst.mockImplementation(({ where }) => Promise.resolve([occ1, occ2].find(o => o.id === where.id) || null))
+    prisma.calendarEventRecurrence.findFirst.mockResolvedValue({ id: 50, workspaceId: WORKSPACE_ID, organizerId: 1, autoAcceptUserIds: JSON.stringify([2]) })
+    prisma.calendarEvent.findMany.mockResolvedValue([{ id: 10 }, { id: 11 }])
+    prisma.task.findUnique.mockResolvedValue(null)
+
+    const res = await request(app)
+      .post('/api/calendar/events/10/respond?scope=series')
+      .set('Authorization', makeToken(2))
+      .set('X-Workspace', WORKSPACE_SLUG)
+      .send({ status: 'declined' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.calendarEventRecurrence.update).toHaveBeenCalledWith({
+      where: { id: 50 },
+      data:  { autoAcceptUserIds: '[]' },
+    })
+    expect(prisma.calendarEventParticipant.update).toHaveBeenCalledWith({ where: { id: 101 }, data: { status: 'declined', respondedAt: expect.any(Date) } })
+    expect(prisma.calendarEventParticipant.update).toHaveBeenCalledWith({ where: { id: 111 }, data: { status: 'declined', respondedAt: expect.any(Date) } })
+  })
+})
+
 // ── DELETE /api/calendar/events/:id ─────────────────────────────────────────
 
 describe('DELETE /api/calendar/events/:id', () => {

@@ -579,6 +579,11 @@ async function deleteEventSeries(req, res, next, existing) {
 }
 
 // ─── POST /api/calendar/events/:id/respond ──────────────────────────────────
+// Aceptar una ocurrencia de una serie recurrente acepta automáticamente TODA la
+// serie (ver respondEventAcceptSeries) — no hay que confirmar semana por semana
+// una reunión fija. Rechazar/cancelar, en cambio, sigue siendo por ocurrencia
+// salvo que se pida `?scope=series` (mismo estilo Google Calendar que editar/
+// borrar): "solo esta" vs "esta y las siguientes".
 async function respondEvent(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -593,6 +598,13 @@ async function respondEvent(req, res, next) {
 
     const participant = existing.participants.find(p => p.userId === userId)
     if (!participant) return res.status(403).json({ error: 'No fuiste invitado a este evento' })
+
+    if (existing.recurrenceId && status === 'accepted') {
+      return respondEventAcceptSeries(req, res, next, existing)
+    }
+    if (existing.recurrenceId && req.query.scope === 'series') {
+      return respondEventDeclineSeries(req, res, next, existing)
+    }
 
     await prisma.calendarEventParticipant.update({
       where: { id: participant.id },
@@ -612,6 +624,95 @@ async function respondEvent(req, res, next) {
 
     const fresh = await loadEvent(existing.id, workspaceId)
     emitTo(`workspace:${workspaceId}`, 'calendar:event:responded', { event: formatEvent(fresh) })
+    res.json(formatEvent(fresh))
+  } catch (err) { next(err) }
+}
+
+// Aceptar UNA ocurrencia de una serie recurrente acepta automáticamente todas
+// las demás: actualiza las ya materializadas (pasadas o futuras, sin arrancar)
+// y guarda la preferencia en la plantilla (`autoAcceptUserIds`) para que las que
+// se materialicen más adelante nazcan ya aceptadas para este participante — ver
+// materializeOccurrence en calendarEventRecurrence.service.js.
+async function respondEventAcceptSeries(req, res, next, existing) {
+  try {
+    const workspaceId = req.workspace.id
+    const userId = req.user.userId
+    const tz = req.workspace.timezone
+
+    const rec = await prisma.calendarEventRecurrence.findFirst({ where: { id: existing.recurrenceId, workspaceId } })
+    if (!rec) return res.status(404).json({ error: 'Serie no encontrada' })
+
+    const autoAccept = new Set(JSON.parse(rec.autoAcceptUserIds || '[]'))
+    if (!autoAccept.has(userId)) {
+      autoAccept.add(userId)
+      await prisma.calendarEventRecurrence.update({
+        where: { id: rec.id },
+        data:  { autoAcceptUserIds: JSON.stringify([...autoAccept]) },
+      })
+    }
+
+    const occurrences = await prisma.calendarEvent.findMany({
+      where: { recurrenceId: rec.id, realMeetingId: null, participants: { some: { userId } } },
+      select: { id: true },
+    })
+
+    for (const { id: occId } of occurrences) {
+      const occ = await loadEvent(occId, workspaceId)
+      const p = occ.participants.find(pp => pp.userId === userId)
+      if (!p || p.status === 'accepted') continue
+      await prisma.calendarEventParticipant.update({ where: { id: p.id }, data: { status: 'accepted', respondedAt: new Date() } })
+      const freshOcc = await loadEvent(occId, workspaceId)
+      const freshP = freshOcc.participants.find(pp => pp.userId === userId)
+      await createTaskForParticipant(freshOcc, freshP, { tz })
+      emitTo(`workspace:${workspaceId}`, 'calendar:event:responded', { event: formatEvent(freshOcc) })
+    }
+
+    await notifyOne(existing, existing.organizerId, userId, `aceptó tu invitación a "${existing.title}" (y todas las siguientes de la serie)`)
+
+    const fresh = await loadEvent(existing.id, workspaceId)
+    res.json(formatEvent(fresh))
+  } catch (err) { next(err) }
+}
+
+// Rechazar "esta y las siguientes" de una serie: además de esta ocurrencia,
+// declina las futuras ya materializadas (sin arrancar) y saca al participante de
+// `autoAcceptUserIds` — si había aceptado toda la serie, las ocurrencias que se
+// materialicen de ahora en más vuelven a nacer "pending" para él/ella.
+async function respondEventDeclineSeries(req, res, next, existing) {
+  try {
+    const workspaceId = req.workspace.id
+    const userId = req.user.userId
+
+    const rec = await prisma.calendarEventRecurrence.findFirst({ where: { id: existing.recurrenceId, workspaceId } })
+    if (!rec) return res.status(404).json({ error: 'Serie no encontrada' })
+
+    const autoAccept = new Set(JSON.parse(rec.autoAcceptUserIds || '[]'))
+    if (autoAccept.has(userId)) {
+      autoAccept.delete(userId)
+      await prisma.calendarEventRecurrence.update({
+        where: { id: rec.id },
+        data:  { autoAcceptUserIds: JSON.stringify([...autoAccept]) },
+      })
+    }
+
+    const occurrences = await prisma.calendarEvent.findMany({
+      where: { recurrenceId: rec.id, date: { gte: existing.date }, realMeetingId: null, participants: { some: { userId } } },
+      select: { id: true },
+    })
+
+    for (const { id: occId } of occurrences) {
+      const occ = await loadEvent(occId, workspaceId)
+      const p = occ.participants.find(pp => pp.userId === userId)
+      if (!p) continue
+      await prisma.calendarEventParticipant.update({ where: { id: p.id }, data: { status: 'declined', respondedAt: new Date() } })
+      await removeTaskIfPending(p)
+      const freshOcc = await loadEvent(occId, workspaceId)
+      emitTo(`workspace:${workspaceId}`, 'calendar:event:responded', { event: formatEvent(freshOcc) })
+    }
+
+    await notifyOne(existing, existing.organizerId, userId, `rechazó tu invitación a "${existing.title}" (y las siguientes de la serie)`)
+
+    const fresh = await loadEvent(existing.id, workspaceId)
     res.json(formatEvent(fresh))
   } catch (err) { next(err) }
 }

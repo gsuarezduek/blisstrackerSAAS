@@ -38,7 +38,7 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
   const [mode, setMode] = useState('view') // 'view' | 'edit'
   const [projects, setProjects] = useState([])
   const [form, setForm] = useState(null)
-  const [scopePrompt, setScopePrompt] = useState(null) // null | 'save' | 'delete'
+  const [scopePrompt, setScopePrompt] = useState(null) // null | 'save' | 'delete' | 'decline'
 
   useEffect(() => {
     setMode('view')
@@ -55,16 +55,27 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
   const canEdit = isOrganizer && !event.realMeetingId
   const isRecurring = !!event.recurrenceId
 
-  async function respond(status) {
+  // Aceptar una ocurrencia de una serie recurrente acepta automáticamente toda
+  // la serie (lo resuelve el backend) — no hace falta elegir alcance. Rechazar
+  // sí lo pregunta (ver requestDecline), igual que editar/borrar.
+  async function respond(status, scope) {
     setBusy(true); setError('')
     try {
-      const res = await api.post(`/calendar/events/${event.id}/respond`, { status })
+      const qs = scope === 'series' ? '?scope=series' : ''
+      const res = await api.post(`/calendar/events/${event.id}/respond${qs}`, { status })
       onChanged(res.data)
+      setScopePrompt(null)
     } catch (e) {
       setError(e.response?.data?.error || 'No se pudo responder')
+      setScopePrompt(null)
     } finally {
       setBusy(false)
     }
+  }
+
+  function requestDecline() {
+    if (isRecurring) { setScopePrompt('decline'); return }
+    respond('declined')
   }
 
   function startEdit() {
@@ -289,19 +300,19 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
           {scopePrompt ? (
             <>
               <p className="text-xs text-gray-500 dark:text-gray-400 text-center px-2">
-                {scopePrompt === 'save' ? '¿Aplicar el cambio a...?' : '¿Cancelar...?'}
+                {scopePrompt === 'save' ? '¿Aplicar el cambio a...?' : scopePrompt === 'decline' ? '¿Rechazar...?' : '¿Cancelar...?'}
               </p>
               <div className="flex gap-2">
                 <button
                   disabled={busy}
-                  onClick={() => (scopePrompt === 'save' ? doSave('this') : doDelete('this'))}
+                  onClick={() => (scopePrompt === 'save' ? doSave('this') : scopePrompt === 'decline' ? respond('declined', 'this') : doDelete('this'))}
                   className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2 text-xs font-medium transition-colors disabled:opacity-60"
                 >
                   Solo esta reunión
                 </button>
                 <button
                   disabled={busy}
-                  onClick={() => (scopePrompt === 'save' ? doSave('series') : doDelete('series'))}
+                  onClick={() => (scopePrompt === 'save' ? doSave('series') : scopePrompt === 'decline' ? respond('declined', 'series') : doDelete('series'))}
                   className="flex-1 bg-primary-600 hover:bg-primary-700 text-white rounded-xl py-2 text-xs font-medium transition-colors disabled:opacity-60"
                 >
                   Esta y las siguientes
@@ -330,9 +341,11 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
             <>
               {canRespond && myParticipation.status === 'accepted' && (
                 <div className="flex flex-col gap-2">
-                  <p className="text-xs text-center text-green-600 dark:text-green-400 font-medium">✓ Aceptaste esta invitación</p>
+                  <p className="text-xs text-center text-green-600 dark:text-green-400 font-medium">
+                    ✓ Aceptaste esta invitación{isRecurring ? ' (toda la serie)' : ''}
+                  </p>
                   <button
-                    onClick={() => respond('declined')} disabled={busy}
+                    onClick={requestDecline} disabled={busy}
                     className="w-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
                   >
                     Cancelar asistencia
@@ -347,25 +360,32 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
                     onClick={() => respond('accepted')} disabled={busy}
                     className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
                   >
-                    Aceptar
+                    Aceptar{isRecurring ? ' (toda la serie)' : ''}
                   </button>
                 </div>
               )}
 
               {canRespond && myParticipation.status === 'pending' && (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => respond('declined')} disabled={busy}
-                    className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
-                  >
-                    Rechazar
-                  </button>
-                  <button
-                    onClick={() => respond('accepted')} disabled={busy}
-                    className="flex-1 bg-primary-600 hover:bg-primary-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
-                  >
-                    Aceptar
-                  </button>
+                <div className="flex flex-col gap-2">
+                  {isRecurring && (
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center">
+                      🔁 Es una reunión recurrente — aceptar aplica a toda la serie.
+                    </p>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={requestDecline} disabled={busy}
+                      className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                    >
+                      Rechazar
+                    </button>
+                    <button
+                      onClick={() => respond('accepted')} disabled={busy}
+                      className="flex-1 bg-primary-600 hover:bg-primary-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                    >
+                      Aceptar
+                    </button>
+                  </div>
                 </div>
               )}
 

@@ -36,6 +36,11 @@ function occurrenceDatesInRange(rec, from, to) {
 async function materializeOccurrence(rec, date, tz) {
   const requestedIds = JSON.parse(rec.participantIds || '[]').filter(id => id !== rec.organizerId)
   const inviteeIds = await filterActiveMembers(rec.workspaceId, requestedIds)
+  // Participantes que ya aceptaron "toda la serie" (ver respondEventAcceptSeries
+  // en calendar.controller.js) — sus ocurrencias nuevas nacen ya aceptadas, sin
+  // tener que confirmar semana por semana.
+  const autoAccept = new Set(JSON.parse(rec.autoAcceptUserIds || '[]'))
+  const now = new Date()
 
   let event
   try {
@@ -47,7 +52,11 @@ async function materializeOccurrence(rec, date, tz) {
         participants: {
           create: [
             { workspaceId: rec.workspaceId, userId: rec.organizerId, status: 'accepted', respondedAt: new Date() },
-            ...inviteeIds.map(userId => ({ workspaceId: rec.workspaceId, userId, status: 'pending' })),
+            ...inviteeIds.map(userId => ({
+              workspaceId: rec.workspaceId, userId,
+              status: autoAccept.has(userId) ? 'accepted' : 'pending',
+              respondedAt: autoAccept.has(userId) ? now : null,
+            })),
           ],
         },
       },
@@ -65,7 +74,14 @@ async function materializeOccurrence(rec, date, tz) {
 
   const organizerParticipant = event.participants.find(p => p.userId === rec.organizerId)
   if (organizerParticipant) await createTaskForParticipant(event, organizerParticipant, { tz })
-  await notifyInvitees(event, inviteeIds, rec.organizerId)
+
+  // Los que auto-aceptaron ya tienen su lugar reservado — se les crea la Task
+  // "reserva" directo, sin invitación (no hace falta que respondan nada).
+  const autoAcceptedInvitees = event.participants.filter(p => p.userId !== rec.organizerId && autoAccept.has(p.userId))
+  for (const p of autoAcceptedInvitees) await createTaskForParticipant(event, p, { tz })
+
+  const pendingInviteeIds = inviteeIds.filter(id => !autoAccept.has(id))
+  await notifyInvitees(event, pendingInviteeIds, rec.organizerId)
   emitTo(`workspace:${rec.workspaceId}`, 'calendar:event:created', { event: formatEvent(event) })
   setImmediate(() => googleCalendarSync.pushEvent(event.id).catch(() => {}))
   return event

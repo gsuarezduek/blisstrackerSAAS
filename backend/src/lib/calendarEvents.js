@@ -68,6 +68,7 @@ function formatRecurrence(rec) {
     meetLink:     rec.meetLink,
     notes:        rec.notes,
     participantIds: JSON.parse(rec.participantIds || '[]'),
+    autoAcceptUserIds: JSON.parse(rec.autoAcceptUserIds || '[]'),
     frequency:    rec.frequency,
     weekdays:     JSON.parse(rec.weekdays || '[]'),
     dayOfMonth:   rec.dayOfMonth,
