@@ -150,10 +150,20 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[85vh]"
+        className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[85vh]"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="absolute top-3 right-3 z-10 p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+        <div className="flex-1 overflow-y-auto p-6 pr-10 flex flex-col gap-4">
           {mode === 'view' ? (
             <>
               <div>
@@ -318,7 +328,31 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
             </div>
           ) : (
             <>
-              {canRespond && (
+              {canRespond && myParticipation.status === 'accepted' && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-center text-green-600 dark:text-green-400 font-medium">✓ Aceptaste esta invitación</p>
+                  <button
+                    onClick={() => respond('declined')} disabled={busy}
+                    className="w-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                  >
+                    Cancelar asistencia
+                  </button>
+                </div>
+              )}
+
+              {canRespond && myParticipation.status === 'declined' && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-center text-gray-400 dark:text-gray-500">Rechazaste esta invitación</p>
+                  <button
+                    onClick={() => respond('accepted')} disabled={busy}
+                    className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
+                  >
+                    Aceptar
+                  </button>
+                </div>
+              )}
+
+              {canRespond && myParticipation.status === 'pending' && (
                 <div className="flex gap-3">
                   <button
                     onClick={() => respond('declined')} disabled={busy}

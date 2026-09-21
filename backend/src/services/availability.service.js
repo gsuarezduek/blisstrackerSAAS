@@ -78,11 +78,18 @@ async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate }) {
         event:  { workspaceId, date: { gte: fromDate, lte: toDate } },
       },
       select: {
-        userId: true, status: true,
+        userId: true, status: true, taskId: true,
         event: { select: { id: true, date: true, startTime: true, durationMins: true, title: true, projectId: true, recurrenceId: true } },
       },
     }),
   ])
+
+  // Aceptar una invitación crea una Task "reserva" en el dashboard con el mismo
+  // horario del evento (ver calendarEventTasks.js#createTaskForParticipant) — sin
+  // excluirla acá, el bloque de esa Task y el del CalendarEvent quedarían
+  // superpuestos exactamente en el mismo horario (mismo bug: texto "duplicado"
+  // en la grilla semanal). El CalendarEvent ya la representa, así que se ignora.
+  const reservationTaskIds = new Set(participations.map(p => p.taskId).filter(Boolean))
 
   for (const m of members) {
     const u = byUser[m.userId]
@@ -103,6 +110,7 @@ async function getBusyBlocks({ workspaceId, userIds, fromDate, toDate }) {
   }
 
   for (const t of tasks) {
+    if (reservationTaskIds.has(t.id)) continue
     const u = byUser[t.userId]
     if (!u) continue
     const date = t.scheduledFor || t.workDay?.date

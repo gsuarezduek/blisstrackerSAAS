@@ -67,6 +67,18 @@ describe('getBusyBlocks', () => {
     expect(accepted.tentative).toBe(false)
     expect(accepted.end).toBe('15:00')
   })
+
+  it('excluye la Task "reserva" de un CalendarEvent aceptado (no duplica el bloque)', async () => {
+    prisma.calendarEventParticipant.findMany.mockResolvedValue([
+      { userId: 1, status: 'accepted', taskId: 99, event: { id: 2, date: '2026-09-20', startTime: '09:00', durationMins: 60, title: 'EOS', projectId: 5 } },
+    ])
+    prisma.task.findMany.mockResolvedValue([
+      { id: 99, userId: 1, description: 'EOS', scheduledFor: '2026-09-20', scheduledTime: '09:00', scheduledDurationMins: 60, workDay: null },
+    ])
+    const result = await getBusyBlocks({ workspaceId: WS, userIds: [1], fromDate: '2026-09-20', toDate: '2026-09-20' })
+    expect(result[1].blocks).toHaveLength(1)
+    expect(result[1].blocks[0].kind).toBe('calendar_event')
+  })
 })
 
 describe('findCommonFreeSlots', () => {
