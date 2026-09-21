@@ -31,6 +31,7 @@
     "@tiptap/html": "3.22.2",
     "@tiptap/pm": "3.22.2",
     "@tiptap/starter-kit": "3.22.2",
+    "archiver": "^7.0.1",
     "axios": "^1.15.2",
     "bcryptjs": "^2.4.3",
     "cheerio": "^1.2.0",

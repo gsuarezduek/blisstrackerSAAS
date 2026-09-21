@@ -572,6 +572,7 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
   const [highlightId, setHighlightId] = useState(null) // resalta brevemente el ítem abierto por deep-link
   const [sortBy, setSortBy] = useState('name-asc')
   const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [downloadingZip, setDownloadingZip] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null) // null = no buscando
   const [searching, setSearching] = useState(false)
@@ -730,6 +731,35 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
     }
   }
 
+  // Descarga en lote: un solo archivo suelto se baja igual que siempre (sin
+  // pasar por el backend de zip); cualquier otra combinación (varios ítems, o
+  // al menos una carpeta) arma un .zip en el servidor y lo baja como blob,
+  // mismo patrón que handleDownload de arriba.
+  async function handleBulkDownload(items) {
+    if (items.length === 0) return
+    if (items.length === 1 && items[0].type !== 'folder') { handleDownload(items[0]); return }
+    setDownloadingZip(true); setError('')
+    try {
+      const res = await api.post(
+        `/projects/${projectId}/files/download-zip`,
+        { ids: items.map(it => it.id) },
+        { responseType: 'blob' }
+      )
+      const blobUrl = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = items.length === 1 && items[0].type === 'folder' ? `${items[0].name}.zip` : 'archivos.zip'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(blobUrl)
+    } catch {
+      setError('No se pudo descargar el ZIP')
+    } finally {
+      setDownloadingZip(false)
+    }
+  }
+
   async function handleDeleteConfirmed(items) {
     await Promise.allSettled(items.map(it => api.delete(`/projects/${projectId}/files/${it.id}`)))
     setModal(null)
@@ -825,6 +855,11 @@ export default function ProjectFiles({ projectId, deepLinkFileId, onCreateTaskFr
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 text-sm bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg px-3 py-2">
           <span className="text-primary-700 dark:text-primary-300 font-medium">{selectedIds.size} seleccionado{selectedIds.size > 1 ? 's' : ''}</span>
+          <button
+            onClick={() => handleBulkDownload([...folders, ...files].filter(it => selectedIds.has(it.id)))}
+            disabled={downloadingZip}
+            className="text-gray-600 dark:text-gray-300 hover:text-primary-700 dark:hover:text-primary-300 disabled:opacity-50"
+          >{downloadingZip ? '⏳ Preparando…' : '⬇️ Descargar'}</button>
           <button
             onClick={() => setModal({ type: 'bulkMove', items: [...folders, ...files].filter(it => selectedIds.has(it.id)) })}
             className="text-gray-600 dark:text-gray-300 hover:text-primary-700 dark:hover:text-primary-300"

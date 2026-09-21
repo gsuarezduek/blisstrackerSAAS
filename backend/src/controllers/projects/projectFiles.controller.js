@@ -9,6 +9,7 @@
 // pero sin whitelist de MIME por tipo: acá se acepta cualquier archivo salvo
 // un denylist muy chico de tipos con riesgo real de XSS al servirse (html/svg).
 const { randomUUID } = require('crypto')
+const archiver = require('archiver')
 const prisma = require('../../lib/prisma')
 const objectStorage = require('../../services/objectStorage.service')
 const { getSetting } = require('../../lib/platformSettings')
@@ -23,6 +24,8 @@ const DENIED_MIME = ['text/html', 'application/xhtml+xml', 'image/svg+xml']
 const PRESIGN_EXPIRES_IN = 900 // 15 min (más margen que Contenido: archivos más pesados)
 const PENDING_MAX_AGE_MS = 60 * 60 * 1000
 const MAX_PENDING_PER_PROJECT = 5
+const MAX_ZIP_ENTRIES = 2000 // tope de archivos por ZIP — protege memoria/tiempo del proceso
+const MAX_ZIP_BYTES = 2 * 1024 * 1024 * 1024 // 2GB por descarga en lote
 
 // Resuelve el proyecto dentro del workspace actual + chequea el toggle filesEnabled.
 async function resolveFilesGuard(req) {
@@ -650,6 +653,108 @@ async function downloadFile(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Une una selección (archivos y/o carpetas) en una lista plana de entradas
+// para el ZIP: { objectKey, sizeBytes, zipPath }. Una carpeta aporta todo su
+// subárbol (recursivo, solo archivos 'ready') con su nombre como prefijo de
+// carpeta dentro del ZIP; un archivo suelto va directo a la raíz del ZIP.
+// `dedupe` evita que dos entradas terminen con el mismo path dentro del ZIP
+// (ej. dos archivos sueltos con el mismo nombre — el modelo no exige nombres
+// únicos por carpeta) agregando un sufijo " (2)" antes de la extensión.
+async function collectZipEntries(itemIds, projectId) {
+  const usedPaths = new Set()
+  function dedupe(path) {
+    if (!usedPaths.has(path)) { usedPaths.add(path); return path }
+    const dot = path.lastIndexOf('.')
+    const base = dot > 0 ? path.slice(0, dot) : path
+    const ext = dot > 0 ? path.slice(dot) : ''
+    let i = 2, candidate
+    do { candidate = `${base} (${i})${ext}`; i++ } while (usedPaths.has(candidate))
+    usedPaths.add(candidate)
+    return candidate
+  }
+
+  const entries = []
+  async function walkFolder(folderId, prefix) {
+    const children = await prisma.projectFile.findMany({
+      where: { projectId, parentId: folderId, deletedAt: null, OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }] },
+    })
+    for (const child of children) {
+      if (child.type === 'folder') await walkFolder(child.id, `${prefix}${child.name}/`)
+      else if (child.objectKey) entries.push({ objectKey: child.objectKey, sizeBytes: child.sizeBytes || 0, zipPath: dedupe(`${prefix}${child.name}`) })
+    }
+  }
+
+  const roots = await prisma.projectFile.findMany({
+    where: { id: { in: itemIds }, projectId, deletedAt: null, OR: [{ type: 'folder' }, { type: 'file', status: 'ready' }] },
+  })
+  for (const root of roots) {
+    if (root.type === 'folder') await walkFolder(root.id, `${root.name}/`)
+    else if (root.objectKey) entries.push({ objectKey: root.objectKey, sizeBytes: root.sizeBytes || 0, zipPath: dedupe(root.name) })
+  }
+  return entries
+}
+
+/**
+ * POST /api/projects/:id/files/download-zip — { ids: [itemId, ...] }
+ * Descarga en lote: arma un .zip al vuelo (archiver) con los archivos
+ * seleccionados y el contenido completo de las carpetas seleccionadas
+ * (subcarpetas incluidas, aplanadas como rutas dentro del ZIP), y lo
+ * *streamea* directo a la respuesta — nunca lo arma en memoria/disco. Cada
+ * archivo se trae de R2 recién al momento de agregarlo al ZIP (mismo proxy
+ * autenticado que `downloadFile`, nunca un link directo al bucket). Un
+ * objeto faltante en R2 (huérfano) se omite en vez de tumbar todo el ZIP.
+ */
+async function downloadZip(req, res, next) {
+  try {
+    const guard = await resolveFilesGuard(req)
+    if (guard.error) return res.status(guard.status).json({ error: guard.error })
+    const { projectId } = guard
+
+    const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : []
+    const ids = [...new Set(rawIds.map(Number).filter(n => Number.isInteger(n) && n > 0))]
+    if (ids.length === 0) return res.status(400).json({ error: 'Nada seleccionado para descargar' })
+
+    const entries = await collectZipEntries(ids, projectId)
+    if (entries.length === 0) return res.status(404).json({ error: 'No se encontraron archivos para descargar' })
+    if (entries.length > MAX_ZIP_ENTRIES) {
+      return res.status(413).json({ error: `Se puede descargar hasta ${MAX_ZIP_ENTRIES} archivos por vez.` })
+    }
+    const totalBytes = entries.reduce((sum, e) => sum + e.sizeBytes, 0)
+    if (totalBytes > MAX_ZIP_BYTES) {
+      return res.status(413).json({ error: `La selección supera el máximo de ${Math.round(MAX_ZIP_BYTES / (1024 * 1024 * 1024))}GB para descargar de una vez.` })
+    }
+
+    // Nombre del .zip: si se seleccionó una sola carpeta, usa su nombre; si no,
+    // uno genérico (la selección puede mezclar archivos y carpetas sueltas).
+    let zipName = 'archivos.zip'
+    if (ids.length === 1) {
+      const only = await prisma.projectFile.findFirst({ where: { id: ids[0], projectId, type: 'folder', deletedAt: null }, select: { name: true } })
+      if (only) zipName = `${only.name}.zip`
+    }
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', safeContentDisposition(zipName, { type: 'attachment' }))
+
+    const archive = archiver('zip', { zlib: { level: 6 } })
+    archive.on('warning', () => {}) // entradas de advertencia (ej. stat de un stream) no deben tumbar el ZIP
+    archive.on('error', err => {
+      if (!res.headersSent) next(err)
+      else res.destroy(err)
+    })
+    archive.pipe(res)
+
+    for (const entry of entries) {
+      try {
+        const { body } = await objectStorage.getObjectStream(entry.objectKey)
+        archive.append(body, { name: entry.zipPath })
+      } catch {
+        // objeto faltante/ilegible en R2 — se omite, el resto del ZIP sigue
+      }
+    }
+    await archive.finalize()
+  } catch (err) { next(err) }
+}
+
 /**
  * GET /api/projects/:id/files/:fileId/locate
  * Para el deep-link "🔗 Copiar enlace" de un archivo (ej. pegado en la
@@ -689,6 +794,7 @@ module.exports = {
   createPublicLink,
   revokePublicLink,
   downloadFile,
+  downloadZip,
   locateFile,
   // exportados para tests
   MAX_FILE_BYTES,
