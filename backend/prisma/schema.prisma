@@ -2468,7 +2468,8 @@ model ProjectMeeting {
   date         String // "YYYY-MM-DD"
   title        String? // título opcional de la reunión (para identificarla entre varias)
   type         String    @default("internal") // 'internal' (equipo) | 'client' (cliente)
-  notes        String? // HTML del editor de notas
+  notes        String? // HTML del editor de notas — derivado de `notesYdoc` en cada guardado colaborativo (ver backend/src/lib/collab/)
+  notesYdoc    Bytes? // estado binario Yjs (CRDT) del editor colaborativo; `notes` es la proyección HTML de esto, para lectores read-only (portal de cliente, etc.)
   startedAt    DateTime? // cronómetro: arranca al iniciar la reunión
   endedAt      DateTime? // cronómetro: se setea al finalizar
   durationMins Int? // duración en minutos, congelada al finalizar
@@ -3054,7 +3055,8 @@ model EOSMeeting {
   workspaceId  Int
   week         String // "2026-W18"
   date         String? // "2026-05-06"
-  notes        String?
+  notes        String? // HTML del editor de notas — derivado de `notesYdoc` en cada guardado colaborativo (ver backend/src/lib/collab/)
+  notesYdoc    Bytes? // estado binario Yjs (CRDT) del editor colaborativo; `notes` es la proyección HTML de esto
   type         String    @default("weekly") // 'weekly' | 'quarterly' | 'annual'
   startedAt    DateTime? // cronómetro: arranca al iniciar la reunión
   endedAt      DateTime? // cronómetro: se setea al finalizar
@@ -3363,7 +3365,8 @@ model Lead {
   estimatedValue Float? // valor estimado
   currency       String    @default("ARS")
   nextContactAt  DateTime? // próximo contacto (seguimiento)
-  notes          String? // notas de reunión, HTML del WYSIWYG (separado del timeline de LeadActivity)
+  notes          String? // notas de reunión, HTML del WYSIWYG (separado del timeline de LeadActivity) — derivado de `notesYdoc` en cada guardado colaborativo
+  notesYdoc      Bytes? // estado binario Yjs (CRDT) del editor colaborativo; `notes` es la proyección HTML de esto
 
   // Conversión a cliente (estado Ganado → Crear Proyecto)
   convertedProjectId Int?      @unique

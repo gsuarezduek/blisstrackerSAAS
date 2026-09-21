@@ -21,12 +21,15 @@ const { FEATURE_FLAGS } = require('./config/featureFlags')
 const { PLATFORM_SETTINGS } = require('./config/platformSettings')
 const { DEFAULT_TZ } = require('./utils/dates')
 const { initSocket } = require('./lib/socket')
+const { initCollabServer, shutdownCollabServer } = require('./lib/collab/hocuspocusServer')
 
 const PORT = process.env.PORT || 3001
 const server = app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`)
   initSocket(server)
   console.log('[Socket.IO] Inicializado — chat en tiempo real activo.')
+  initCollabServer(server)
+  console.log('[Collab] Hocuspocus inicializado — edición colaborativa en /collab.')
   // Sincronizar catálogo de feature flags — upsert para que siempre existan en DB
   for (const { key, name, description } of FEATURE_FLAGS) {
     await prisma.featureFlag.upsert({
@@ -63,6 +66,7 @@ async function shutdown(signal) {
   }, 15000)
   forced.unref()
   server.close(async () => {
+    try { await shutdownCollabServer() } catch (err) { console.error('[shutdown] Error al cerrar el server de colaboración:', err.message) }
     try { await prisma.$disconnect() } catch (err) { console.error('[shutdown] Error al desconectar Prisma:', err.message) }
     clearTimeout(forced)
     console.log('[shutdown] Cierre limpio completado.')

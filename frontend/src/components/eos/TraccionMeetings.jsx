@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import api from '../../api/client'
 import { adminMemberOptions } from '../../utils/adminMembers'
 import { avatarUrl } from '../../utils/avatarUrl'
-import RichTextEditor from '../RichTextEditor'
-import DOMPurify from 'dompurify'
+import CollaborativeRichTextEditor from '../CollaborativeRichTextEditor'
 
 export function currentWeekStr() {
   const now = new Date()
@@ -564,7 +563,6 @@ export const MEETING_TYPES = [
 export function MeetingCard({ week, meeting, members, meetingProjectReady, onSave, onStart, onFinish, onAddParticipant, onRemoveParticipant, onSeedFromProject }) {
   const [date, setDate]     = useState(meeting?.date || '')
   const [type, setType]     = useState(meeting?.type || 'weekly')
-  const notes               = meeting?.notes || ''
 
   const started      = !!meeting?.started
   const participants = meeting?.participants || []
@@ -572,16 +570,9 @@ export function MeetingCard({ week, meeting, members, meetingProjectReady, onSav
   const participantIds = new Set(participants.map(p => p.userId))
   const teamToAdd = members.filter(m => m.inTeam && !participantIds.has(m.id)).length
 
-  // Edit/Save/Cancel del WYSIWYG (sólo para las notas)
-  const [editingNotes, setEditingNotes] = useState(false)
-  const [notesDraft,   setNotesDraft]   = useState(notes)
-  const [savingNotes,  setSavingNotes]  = useState(false)
-
   useEffect(() => {
     setDate(meeting?.date || '')
     setType(meeting?.type || 'weekly')
-    setEditingNotes(false)
-    setNotesDraft(meeting?.notes || '')
   }, [week, meeting?.id])
 
   function save(patch) {
@@ -592,28 +583,6 @@ export function MeetingCard({ week, meeting, members, meetingProjectReady, onSav
     }
     onSave(payload)
   }
-
-  function handleEditNotes() {
-    setNotesDraft(notes)
-    setEditingNotes(true)
-  }
-
-  async function handleSaveNotes() {
-    setSavingNotes(true)
-    try {
-      await onSave({ date, type, notes: notesDraft })
-      setEditingNotes(false)
-    } finally {
-      setSavingNotes(false)
-    }
-  }
-
-  function handleCancelNotes() {
-    setNotesDraft(notes)
-    setEditingNotes(false)
-  }
-
-  const notesIsEmpty = !notes || notes === '<p></p>'
 
   return (
     <div className={`bg-white dark:bg-gray-800 border rounded-xl p-4 space-y-3 ${
@@ -732,53 +701,16 @@ export function MeetingCard({ week, meeting, members, meetingProjectReady, onSav
         </p>
       </div>
 
-      {/* Notas */}
+      {/* Notas — colaborativas en tiempo real (ver CollaborativeRichTextEditor) */}
       <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="text-xs text-gray-500 dark:text-gray-400">Notas / Decisiones / Compromisos</label>
-          {!editingNotes && (
-            <button
-              onClick={handleEditNotes}
-              className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
-            >
-              {notesIsEmpty ? '+ Agregar' : 'Editar'}
-            </button>
-          )}
-        </div>
-
-        {editingNotes ? (
-          <div>
-            <RichTextEditor
-              defaultContent={notesDraft}
-              onChange={setNotesDraft}
-              minHeight={220}
-            />
-            <div className="flex items-center gap-2 mt-2">
-              <button
-                onClick={handleSaveNotes}
-                disabled={savingNotes}
-                className="text-sm px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
-              >
-                {savingNotes ? 'Guardando...' : 'Guardar'}
-              </button>
-              <button
-                onClick={handleCancelNotes}
-                className="text-sm px-3 py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        ) : notesIsEmpty ? (
-          <p className="text-sm text-gray-400 dark:text-gray-500 italic">
-            Sin notas registradas todavía.
-          </p>
-        ) : (
-          <div
-            className="situation-content text-sm text-gray-700 dark:text-gray-300"
-            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(notes) }}
-          />
-        )}
+        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Notas / Decisiones / Compromisos</label>
+        <CollaborativeRichTextEditor
+          key={`eosMeeting:${week}`}
+          docKey={`eosMeeting:${week}`}
+          fallbackContent={meeting?.notes || ''}
+          emptyText="Sin notas registradas todavía."
+          minHeight={220}
+        />
       </div>
     </div>
   )

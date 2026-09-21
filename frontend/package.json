@@ -10,22 +10,28 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@hocuspocus/provider": "3.4.4",
     "@react-oauth/google": "^0.13.4",
     "@tiptap/core": "3.22.2",
+    "@tiptap/extension-collaboration": "3.22.2",
+    "@tiptap/extension-collaboration-caret": "3.22.2",
     "@tiptap/extension-color": "^3.22.2",
     "@tiptap/extension-highlight": "^3.22.2",
     "@tiptap/extension-link": "^3.22.2",
     "@tiptap/extension-table": "3.22.2",
     "@tiptap/extension-text-style": "^3.22.2",
+    "@tiptap/pm": "3.22.2",
     "@tiptap/react": "^3.22.2",
     "@tiptap/starter-kit": "^3.22.2",
+    "@tiptap/y-tiptap": "^3.0.2",
     "axios": "^1.6.7",
     "dompurify": "^3.4.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-helmet-async": "^3.0.0",
     "react-router-dom": "^6.22.3",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "yjs": "^13.6.32"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
-import AutosaveNotes from '../AutosaveNotes'
+import CollaborativeRichTextEditor from '../CollaborativeRichTextEditor'
 import HowToButton from '../HowToButton'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ function MeetingTimer({ meeting, canEdit, onStart, onFinish }) {
 
 // ─── MeetingCard ──────────────────────────────────────────────────────────────
 
-function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, onSaveNotes, onDelete, onStart, onFinish,
+function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, onDelete, onStart, onFinish,
                        onAddParticipant, onRemoveParticipant, onAddTodo, onUpdateTodo, onDeleteTodo }) {
   const tm = typeMeta(meeting.type)
 
@@ -454,16 +454,20 @@ function MeetingCard({ meeting, members, canEdit, expanded, onToggle, onSave, on
             </p>
           </div>
 
-          {/* Notas */}
-          <AutosaveNotes
-            editorKey={meeting.id}
-            content={meeting.notes || ''}
-            onSave={html => onSaveNotes(meeting.id, html)}
-            canEdit={canEdit}
-            label="Notas / Anotaciones de la reunión"
-            emptyText="Sin anotaciones todavía."
-            minHeight={200}
-          />
+          {/* Notas — colaborativas en tiempo real (ver CollaborativeRichTextEditor) */}
+          <div>
+            <label className="text-xs text-gray-500 dark:text-gray-400">Notas / Anotaciones de la reunión</label>
+            <div className="mt-1">
+              <CollaborativeRichTextEditor
+                key={`meeting:${meeting.id}:${canEdit}`}
+                docKey={`meeting:${meeting.id}`}
+                editable={canEdit}
+                fallbackContent={meeting.notes || ''}
+                emptyText="Sin anotaciones todavía."
+                minHeight={200}
+              />
+            </div>
+          </div>
 
           {/* Tareas */}
           <div>
@@ -628,13 +632,6 @@ export default function ProjectMeetings({ projectId, canEdit }) {
     } catch (e) { setError(e.response?.data?.error || 'No se pudo guardar') }
   }
 
-  // A diferencia de handleSaveMeeting, no atrapa el error acá: AutosaveNotes necesita que la
-  // promesa rechace para saber que falló, mostrar el aviso y bloquear el cierre de pestaña.
-  async function handleSaveMeetingNotes(id, notes) {
-    const { data } = await api.patch(`/projects/${projectId}/meetings/${id}`, { notes })
-    replaceMeeting(data)
-  }
-
   async function handleDeleteMeeting(id) {
     setMeetings(prev => prev.filter(m => m.id !== id))
     setTotal(t => Math.max(0, t - 1))
@@ -772,7 +769,6 @@ export default function ProjectMeetings({ projectId, canEdit }) {
               expanded={openId === meeting.id}
               onToggle={() => setOpenId(prev => prev === meeting.id ? null : meeting.id)}
               onSave={handleSaveMeeting}
-              onSaveNotes={handleSaveMeetingNotes}
               onDelete={handleDeleteMeeting}
               onStart={handleStart}
               onFinish={handleFinish}
