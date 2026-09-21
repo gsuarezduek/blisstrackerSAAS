@@ -337,6 +337,7 @@ export function SectionBlog() {
             {creating ? 'Nuevo post' : 'Editar post'}
           </p>
           <BlogPostForm
+            key={editing ? `edit-${editing.id}` : 'create'}
             initial={editing}
             onSave={creating ? handleCreate : handleEdit}
             onCancel={() => { setCreating(false); setEditing(null) }}
