@@ -12,6 +12,7 @@ const {
   sanitizeTypes,
   statusMeta,
   CONTENT_NETWORKS,
+  OPEN_STATUSES,
 } = require('../lib/contentCatalog')
 const { SYSTEM_TYPES, postProjectSystemMessage } = require('../lib/chatSystemMessage')
 const { shapeItem: shapeProjectFile } = require('./projects/projectFiles.controller')
@@ -47,6 +48,11 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 200
 const MAX_TITLE = 200
+
+// Tope de destacadas simultáneas por proyecto (mismo número que tareas, ver
+// starPiece). Publicado/Archivado no cuentan — ya no hay nada que priorizar.
+const MAX_STARRED = 3
+const OPEN_STATUS_KEYS = OPEN_STATUSES.map(s => s.key)
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -232,6 +238,7 @@ function formatPiece(p) {
     scheduledDate: p.scheduledDate,
     publishedAt:   p.publishedAt,
     publishedUrl:  p.publishedUrl,
+    starred:       p.starred,
     order:         p.order,
     owner:         p.owner ? { id: p.owner.id, name: p.owner.name, avatar: p.owner.avatar } : null,
     // El responsable puede ser el cliente en vez del equipo — mutuamente
@@ -743,6 +750,48 @@ async function movePiece(req, res, next) {
   } catch (err) { next(err) }
 }
 
+/**
+ * PATCH /api/contenido/projects/:id/pieces/:pid/star
+ * Cicla la prioridad 0→1(verde)→2(amarillo)→3(rojo)→0 — mismo formato y mismos
+ * colores que Task.starred, pero acá es UNA sola estrella COMPARTIDA por todo
+ * el equipo del proyecto (no por usuario): el CM la deja marcada y cualquiera
+ * que abra el Kanban/Tabla ve la misma prioridad. Tope de 3 piezas destacadas
+ * a la vez por proyecto (excluyendo estados terminales — publicado/archivado,
+ * que ya no compiten por prioridad de trabajo).
+ */
+async function starPiece(req, res, next) {
+  try {
+    const ctx = await resolveCtx(req, res, { write: true })
+    if (!ctx) return
+    const { workspaceId, projectId } = ctx
+
+    const existing = await loadPiece(req.params.pid, projectId, workspaceId)
+    if (!existing) return res.status(404).json({ error: 'Pieza no encontrada' })
+
+    const nextLevel = (existing.starred + 1) % 4
+
+    if (nextLevel === 1) {
+      const starredCount = await prisma.contentPiece.count({
+        where: {
+          projectId, workspaceId, deletedAt: null,
+          starred: { gt: 0 },
+          status: { in: OPEN_STATUS_KEYS },
+        },
+      })
+      if (starredCount >= MAX_STARRED) {
+        return res.status(409).json({ error: `Máximo ${MAX_STARRED} piezas destacadas. Quitá una primero.` })
+      }
+    }
+
+    await prisma.contentPiece.update({ where: { id: existing.id }, data: { starred: nextLevel } })
+
+    const fresh = await loadPiece(existing.id, projectId, workspaceId)
+    const formatted = formatPiece(fresh)
+    emitPieceUpdated(workspaceId, projectId, formatted)
+    res.json(formatted)
+  } catch (err) { next(err) }
+}
+
 function formatEvent(e) {
   return {
     id:         e.id,
@@ -1030,6 +1079,7 @@ module.exports = {
   restorePiece,
   purgePiece,
   movePiece,
+  starPiece,
   getHistory,
   getSummary,
   sendToDashboard,

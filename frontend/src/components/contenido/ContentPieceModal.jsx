@@ -5,6 +5,8 @@ import { findDriveEmbeds, driveEmbedUrl } from '../../utils/driveEmbed'
 import ConfirmModal from '../ConfirmModal'
 import ContentStatusBadge from './ContentStatusBadge'
 import ContentNetworkChips from './ContentNetworkChips'
+import ContentStarButton from './ContentStarButton'
+import ContentOwnerSelect from './ContentOwnerSelect'
 import ContentHistoryList from './ContentHistoryList'
 import ContentAssetGallery from './ContentAssetGallery'
 import ContentAssetUploader from './ContentAssetUploader'
@@ -60,7 +62,7 @@ function useDebouncedCommit(value, onCommit, delay = 600) {
  * el equipo escribe desde acá sigue siendo siempre `internal` (`postVisibility`)
  * — no hay, hoy, una forma de responderle al cliente desde este tab.
  */
-export default function ContentPieceModal({ piece, members = [], clientContacts = [], canEdit, currentUserId, isAdmin, onUpdate, onDelete, onPieceChanged, onClose }) {
+export default function ContentPieceModal({ piece, members = [], clientContacts = [], canEdit, currentUserId, isAdmin, onUpdate, onStar, onDelete, onPieceChanged, onClose }) {
   const [tab, setTab] = useState('detalles')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -207,15 +209,18 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-gray-100 dark:border-gray-700 shrink-0">
           <div className="flex-1 min-w-0">
-            {canEdit ? (
-              <input
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                className="w-full text-lg font-bold text-gray-900 dark:text-white bg-transparent border-none p-0 focus:ring-0 focus:outline-none"
-              />
-            ) : (
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white truncate">{piece.title}</h2>
-            )}
+            <div className="flex items-center gap-2">
+              <ContentStarButton starred={piece.starred} onClick={() => onStar(piece.id)} disabled={!canEdit} size="w-5 h-5" />
+              {canEdit ? (
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  className="w-full text-lg font-bold text-gray-900 dark:text-white bg-transparent border-none p-0 focus:ring-0 focus:outline-none"
+                />
+              ) : (
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white truncate">{piece.title}</h2>
+              )}
+            </div>
             <div className="flex items-center gap-2 mt-1.5">
               <ContentStatusBadge status={piece.status} />
               <ContentNetworkChips networks={piece.networks} />
@@ -433,30 +438,14 @@ export default function ContentPieceModal({ piece, members = [], clientContacts 
 
               <div>
                 <label className={LABEL}>Responsable</label>
-                <select
-                  value={piece.ownerContact ? `c-${piece.ownerContact.id}` : piece.owner ? `u-${piece.owner.id}` : ''}
-                  onChange={e => {
-                    const v = e.target.value
-                    if (!v) onUpdate(piece.id, { ownerId: null, ownerContactId: null })
-                    else if (v.startsWith('c-')) onUpdate(piece.id, { ownerContactId: Number(v.slice(2)), ownerId: null })
-                    else onUpdate(piece.id, { ownerId: Number(v.slice(2)), ownerContactId: null })
-                  }}
+                <ContentOwnerSelect
+                  members={members}
+                  clientContacts={clientContacts}
+                  owner={piece.owner}
+                  ownerContact={piece.ownerContact}
+                  onChange={patch => onUpdate(piece.id, patch)}
                   disabled={!canEdit}
-                  className={INPUT}
-                >
-                  <option value="">Sin asignar</option>
-                  {clientContacts.length > 0 && (
-                    <optgroup label="Cliente">
-                      {clientContacts.map(c => <option key={`c-${c.id}`} value={`c-${c.id}`}>{c.name}</option>)}
-                    </optgroup>
-                  )}
-                  <optgroup label="Equipo del proyecto">
-                    {members.filter(m => m.inTeam).map(m => <option key={`u-${m.id}`} value={`u-${m.id}`}>{m.name}</option>)}
-                  </optgroup>
-                  <optgroup label="Otros del workspace">
-                    {members.filter(m => !m.inTeam).map(m => <option key={`u-${m.id}`} value={`u-${m.id}`}>{m.name}</option>)}
-                  </optgroup>
-                </select>
+                />
               </div>
 
               {canEdit && piece.currentTask && (

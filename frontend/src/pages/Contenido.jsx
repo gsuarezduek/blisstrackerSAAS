@@ -81,7 +81,7 @@ export default function Contenido() {
       : { ...rest, ...scheduledMonthParams(scheduledMonth) }
   }, [view, month, filters])
 
-  const { pieces, members, clientContacts, total, loading, error, setError, reload, create, update, move, remove } =
+  const { pieces, members, clientContacts, total, loading, error, setError, reload, create, update, move, star, remove } =
     useContentPieces(projectId, effectiveFilters)
 
   // Cualquier pieza creada/editada/movida/borrada por otra persona (u otra
@@ -142,6 +142,16 @@ export default function Contenido() {
     const { data } = await api.patch(`/contenido/projects/${projectId}/pieces/${id}`, patch)
     setFetchedPiece(data)
     if (patch.status !== undefined) reload()
+    return data
+  }
+
+  // Espejo de handleModalUpdate para el toggle de estrella — misma razón: la
+  // pieza abierta en el modal puede venir de `fetchedPiece` (deep-link fuera de
+  // los filtros activos), no de `pieces`.
+  async function handleModalStar(id) {
+    if (pieceInList) return star(id)
+    const { data } = await api.patch(`/contenido/projects/${projectId}/pieces/${id}/star`)
+    setFetchedPiece(data)
     return data
   }
 
@@ -298,6 +308,7 @@ export default function Contenido() {
             canEdit={canEdit}
             onCreate={create}
             onUpdate={(id, patch) => updateAndMaybePromptDashboard(id, patch, update)}
+            onStar={star}
             onDelete={handleDelete}
             onOpen={p => patchParams({ piece: p.id })}
           />
@@ -306,6 +317,7 @@ export default function Contenido() {
             pieces={pieces}
             canEdit={canEdit}
             onMove={move}
+            onStar={star}
             onOpen={p => patchParams({ piece: p.id })}
           />
         ) : (
@@ -468,6 +480,7 @@ export default function Contenido() {
           currentUserId={user?.id}
           isAdmin={user?.isAdmin}
           onUpdate={(id, patch) => updateAndMaybePromptDashboard(id, patch, handleModalUpdate)}
+          onStar={handleModalStar}
           onDelete={handleDelete}
           onPieceChanged={handleModalPieceChanged}
           onClose={() => patchParams({ piece: '' })}

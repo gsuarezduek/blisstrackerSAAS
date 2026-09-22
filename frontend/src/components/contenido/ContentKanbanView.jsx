@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import ContentNetworkChips from './ContentNetworkChips'
+import ContentStarButton from './ContentStarButton'
 import { OPEN_STATUSES, STATUS_BADGE } from './contentCatalog'
 import { formatDateTime } from './dateHelpers'
 
@@ -12,7 +13,7 @@ import { formatDateTime } from './dateHelpers'
  * Solo columnas de OPEN_STATUSES: "Publicado" y "Archivado" son terminales y
  * no tienen sentido como destino de un drag (se marcan desde el detalle).
  */
-export default function ContentKanbanView({ pieces, canEdit, onMove, onOpen }) {
+export default function ContentKanbanView({ pieces, canEdit, onMove, onStar, onOpen }) {
   const [dragId, setDragId] = useState(null)
   // { status, beforeId } — beforeId null = soltar al final de la columna.
   const [dropTarget, setDropTarget] = useState(null)
@@ -88,6 +89,12 @@ export default function ContentKanbanView({ pieces, canEdit, onMove, onOpen }) {
                       dropTarget?.beforeId === p.id ? 'border-t-2 border-t-primary-500' : ''}`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
+                      <ContentStarButton
+                        starred={p.starred}
+                        onClick={() => onStar(p.id)}
+                        disabled={!canEdit}
+                        size="w-3.5 h-3.5"
+                      />
                       <span className="font-medium text-sm text-gray-900 dark:text-white truncate">{p.title}</span>
                       {p.currentTask?.status === 'IN_PROGRESS' && (
                         <span

@@ -44,6 +44,7 @@ router.delete('/projects/:id/pieces/:pid',           content.deletePiece)
 router.post  ('/projects/:id/pieces/:pid/restore',   content.restorePiece)
 router.delete('/projects/:id/pieces/:pid/purge',     content.purgePiece)
 router.patch ('/projects/:id/pieces/:pid/position',  content.movePiece)
+router.patch ('/projects/:id/pieces/:pid/star',      content.starPiece)
 router.get   ('/projects/:id/pieces/:pid/history',   content.getHistory)
 router.post  ('/projects/:id/pieces/:pid/send-to-dashboard', content.sendToDashboard)
 

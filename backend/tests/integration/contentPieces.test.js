@@ -599,6 +599,83 @@ describe('PATCH /pieces/:pid/position', () => {
   })
 })
 
+describe('PATCH /pieces/:pid/star', () => {
+  it('cicla 0 → 1 (verde), chequeando el tope', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst
+      .mockResolvedValueOnce(dbPiece({ id: 10, starred: 0 }))
+      .mockResolvedValueOnce(dbPiece({ id: 10, starred: 1 }))
+    prisma.contentPiece.count.mockResolvedValue(0)
+
+    const res = await req('patch', `${BASE}/10/star`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.starred).toBe(1)
+    expect(prisma.contentPiece.update).toHaveBeenCalledWith({ where: { id: 10 }, data: { starred: 1 } })
+    expect(prisma.contentPiece.count).toHaveBeenCalledTimes(1)
+  })
+
+  it('cicla 1 → 2 → 3 → 0 (vuelve a ninguna) sin chequear el tope', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst
+      .mockResolvedValueOnce(dbPiece({ id: 10, starred: 3 }))
+      .mockResolvedValueOnce(dbPiece({ id: 10, starred: 0 }))
+
+    const res = await req('patch', `${BASE}/10/star`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.starred).toBe(0)
+    expect(prisma.contentPiece.update).toHaveBeenCalledWith({ where: { id: 10 }, data: { starred: 0 } })
+    expect(prisma.contentPiece.count).not.toHaveBeenCalled()
+  })
+
+  it('409 si ya hay 3 piezas destacadas en el proyecto al pasar de 0 a 1', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, starred: 0 }))
+    prisma.contentPiece.count.mockResolvedValue(3)
+
+    const res = await req('patch', `${BASE}/10/star`)
+
+    expect(res.status).toBe(409)
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
+  })
+
+  it('excluye publicado/archivado del conteo del tope', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(dbPiece({ id: 10, starred: 0 }))
+    prisma.contentPiece.count.mockResolvedValue(2)
+
+    const res = await req('patch', `${BASE}/10/star`)
+
+    expect(res.status).toBe(200)
+    expect(prisma.contentPiece.count).toHaveBeenCalledWith({
+      where: {
+        projectId: PROJECT_ID, workspaceId: WORKSPACE_ID, deletedAt: null,
+        starred: { gt: 0 },
+        status: { in: expect.arrayContaining(['idea', 'produccion']) },
+      },
+    })
+    const statusFilter = prisma.contentPiece.count.mock.calls[0][0].where.status.in
+    expect(statusFilter).not.toContain('publicado')
+    expect(statusFilter).not.toContain('archivado')
+  })
+
+  it('404 si la pieza no es del proyecto', async () => {
+    mockBase({ workspaceRole: 'admin' })
+    prisma.contentPiece.findFirst.mockResolvedValue(null)
+    const res = await req('patch', `${BASE}/999/star`)
+    expect(res.status).toBe(404)
+  })
+
+  it('403 si no puede escribir', async () => {
+    mockBase({ workspaceRole: 'member' })
+    prisma.projectMember.findUnique.mockResolvedValue(null)
+    const res = await req('patch', `${BASE}/10/star`)
+    expect(res.status).toBe(403)
+    expect(prisma.contentPiece.update).not.toHaveBeenCalled()
+  })
+})
+
 describe('GET /pieces/:pid/history', () => {
   it('devuelve el timeline de eventos, más antiguo primero', async () => {
     mockBase()

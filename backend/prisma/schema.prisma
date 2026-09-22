@@ -3670,6 +3670,13 @@ model ContentPiece {
   project        Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title          String
   status         String               @default("idea") // clave de CONTENT_STATUSES
+  // Prioridad compartida por todo el equipo (no por usuario, a diferencia de
+  // Task.starred) — mismo formato 0-3 / mismos colores que las tareas: el CM
+  // la marca para señalar "hacé esta primero" y cualquiera que abra la pieza
+  // ve la misma estrella. Tope de 3 destacadas simultáneas por PROYECTO
+  // (validado en content.controller.js#starPiece), excluyendo estados
+  // terminales (publicado/archivado).
+  starred        Int                  @default(0)
   types          String               @default("[]") // JSON array de claves de CONTENT_TYPES (multi-selección, mismo patrón que networks)
   networks       String               @default("[]") // JSON array de claves de CONTENT_NETWORKS (una pieza puede salir a varias)
   // Brief de diseño (WYSIWYG, HTML) — interno, NUNCA viaja al portal del cliente (mismo

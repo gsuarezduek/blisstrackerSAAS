@@ -113,6 +113,27 @@ export function useContentPieces(projectId, filters = {}) {
     }
   }, [projectId, reload])
 
+  // Cicla la prioridad compartida 0→1→2→3→0 (ver ContentStarButton). El
+  // optimismo local solo aproxima el próximo nivel — el backend es quien valida
+  // el tope de 3 destacadas por proyecto (409 si se supera, revierte el optimismo).
+  const star = useCallback(async (id) => {
+    setError(null)
+    let snapshot
+    setPieces(prev => {
+      snapshot = prev
+      return prev.map(p => (p.id === id ? { ...p, starred: ((p.starred || 0) + 1) % 4 } : p))
+    })
+    try {
+      const { data } = await api.patch(`/contenido/projects/${projectId}/pieces/${id}/star`)
+      setPieces(prev => prev.map(p => (p.id === id ? data : p)))
+      return data
+    } catch (err) {
+      if (snapshot) setPieces(snapshot)
+      setError(err.response?.data?.error || 'No se pudo destacar la pieza')
+      throw err
+    }
+  }, [projectId])
+
   const remove = useCallback(async (id) => {
     setError(null)
     let snapshot
@@ -131,7 +152,7 @@ export function useContentPieces(projectId, filters = {}) {
     }
   }, [projectId])
 
-  return { pieces, members, clientContacts, total, loading, error, setError, reload, create, update, move, remove }
+  return { pieces, members, clientContacts, total, loading, error, setError, reload, create, update, move, star, remove }
 }
 
 /**

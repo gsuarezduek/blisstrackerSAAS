@@ -3,6 +3,8 @@ import ConfirmModal from '../ConfirmModal'
 import ContentStatusBadge from './ContentStatusBadge'
 import ContentNetworkChips from './ContentNetworkChips'
 import ContentTypeChips from './ContentTypeChips'
+import ContentStarButton from './ContentStarButton'
+import ContentOwnerSelect from './ContentOwnerSelect'
 import { CONTENT_STATUSES, statusMeta, statusBadgeClass, typeLabel } from './contentCatalog'
 import { toLocalInput, formatDateTime as formatDate } from './dateHelpers'
 
@@ -121,6 +123,7 @@ function NewPieceRow({ onCreate, busy }) {
   return (
     <tr className="bg-gray-50/60 dark:bg-gray-900/40">
       <td className={CELL} />
+      <td className={CELL} />
       <td className={CELL} colSpan={5}>
         <div className="flex items-center gap-2">
           <input
@@ -145,6 +148,7 @@ function NewPieceRow({ onCreate, busy }) {
 
 // ── Tabla ───────────────────────────────────────────────────────────────────
 const COLUMNS = [
+  { key: 'starred',     label: '★',           sortable: true },
   { key: 'scheduledAt', label: 'Fecha',       sortable: true },
   { key: 'title',       label: 'Título',      sortable: true },
   { key: 'status',      label: 'Estado',      sortable: true },
@@ -153,7 +157,7 @@ const COLUMNS = [
   { key: 'owner',       label: 'Responsable', sortable: true },
 ]
 
-export default function ContentTableView({ pieces, members, clientContacts = [], loading, canEdit, onCreate, onUpdate, onDelete, onOpen }) {
+export default function ContentTableView({ pieces, members, clientContacts = [], loading, canEdit, onCreate, onUpdate, onStar, onDelete, onOpen }) {
   // Por defecto, fecha más próxima arriba (no última edición) — mismo criterio
   // que el orderBy del backend (content.controller.js listPieces).
   const [sort, setSort] = useState({ key: 'scheduledAt', dir: 'asc' })
@@ -164,6 +168,7 @@ export default function ContentTableView({ pieces, members, clientContacts = [],
     const val = (p) => {
       switch (sort.key) {
         case 'scheduledAt': return p.scheduledAt ? new Date(p.scheduledAt).getTime() : null
+        case 'starred':     return p.starred || 0
         case 'title':       return p.title?.toLowerCase() ?? ''
         case 'status':      return statusMeta(p.status).order ?? 0
         // Ordena por las etiquetas de los tipos (ya no hay un único valor).
@@ -188,7 +193,9 @@ export default function ContentTableView({ pieces, members, clientContacts = [],
   function toggleSort(key) {
     setSort(prev => prev.key === key
       ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-      : { key, dir: 'asc' })
+      // Prioridad: el primer click arranca mostrando las más urgentes (rojo)
+      // arriba, no al revés.
+      : { key, dir: key === 'starred' ? 'desc' : 'asc' })
   }
 
   async function handleCreate(payload) {
@@ -239,6 +246,11 @@ export default function ContentTableView({ pieces, members, clientContacts = [],
                 {/* Fila destacada: el cliente aprobó esta pieza y todavía nadie la
                     movió del estado — mismo criterio de "recién pasó algo, no te lo pierdas"
                     que el comentario debajo del título. */}
+                {/* Prioridad */}
+                <td className={`${CELL} w-10 text-center`}>
+                  <ContentStarButton starred={p.starred} onClick={() => onStar(p.id)} disabled={!canEdit} />
+                </td>
+
                 {/* Fecha */}
                 <td className={`${CELL} w-44`}>
                   {canEdit ? (
@@ -284,33 +296,16 @@ export default function ContentTableView({ pieces, members, clientContacts = [],
                   <ContentNetworkChips networks={p.networks} />
                 </td>
 
-                {/* Responsable — puede ser el equipo (ownerId) o el cliente (ownerContactId),
-                    mutuamente excluyentes; "c-"/"u-" distinguen el id en el mismo <select>. */}
-                <td className={`${CELL} w-44`}>
+                {/* Responsable — puede ser el equipo (ownerId) o el cliente (ownerContactId), mutuamente excluyentes. */}
+                <td className={`${CELL} w-48`}>
                   {canEdit ? (
-                    <select
-                      value={p.ownerContact ? `c-${p.ownerContact.id}` : p.owner ? `u-${p.owner.id}` : ''}
-                      onChange={e => {
-                        const v = e.target.value
-                        if (!v) onUpdate(p.id, { ownerId: null, ownerContactId: null })
-                        else if (v.startsWith('c-')) onUpdate(p.id, { ownerContactId: Number(v.slice(2)), ownerId: null })
-                        else onUpdate(p.id, { ownerId: Number(v.slice(2)), ownerContactId: null })
-                      }}
-                      className={`${INLINE} w-full`}
-                    >
-                      <option value="">Sin asignar</option>
-                      {clientContacts.length > 0 && (
-                        <optgroup label="Cliente">
-                          {clientContacts.map(c => <option key={`c-${c.id}`} value={`c-${c.id}`}>{c.name}</option>)}
-                        </optgroup>
-                      )}
-                      <optgroup label="Equipo del proyecto">
-                        {members.filter(m => m.inTeam).map(m => <option key={`u-${m.id}`} value={`u-${m.id}`}>{m.name}</option>)}
-                      </optgroup>
-                      <optgroup label="Otros del workspace">
-                        {members.filter(m => !m.inTeam).map(m => <option key={`u-${m.id}`} value={`u-${m.id}`}>{m.name}</option>)}
-                      </optgroup>
-                    </select>
+                    <ContentOwnerSelect
+                      members={members}
+                      clientContacts={clientContacts}
+                      owner={p.owner}
+                      ownerContact={p.ownerContact}
+                      onChange={patch => onUpdate(p.id, patch)}
+                    />
                   ) : (
                     <span className="text-sm text-gray-600 dark:text-gray-400">
                       {p.ownerContact ? `🤝 ${p.ownerContact.name}` : p.owner?.name ?? '—'}
@@ -335,7 +330,7 @@ export default function ContentTableView({ pieces, members, clientContacts = [],
 
             {!loading && sorted.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-sm text-gray-400 dark:text-gray-500">
+                <td colSpan={8} className="px-3 py-10 text-center text-sm text-gray-400 dark:text-gray-500">
                   {canEdit
                     ? 'Todavía no hay piezas. Escribí un título arriba para crear la primera.'
                     : 'Todavía no hay piezas en este proyecto.'}
