@@ -77,7 +77,7 @@ export function scrollToMessage(id) {
 
 export default function MessageList({
   messages, loading, loadingMore, hasMore, onLoadMore,
-  firstUnreadMessageId, currentUserId, canModerate, members = [],
+  firstUnreadMessageId, currentUserId, canModerate, members = [], projectId,
   onSaveEdit, onDelete, onTogglePin, onToggleReaction, onReply,
   jumpToMessageId, onJumpHandled,
 }) {
@@ -329,7 +329,7 @@ export default function MessageList({
                   <>
                     {m.content && (
                       <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug whitespace-pre-wrap break-words">
-                        {renderRichText(m.content, { members, everyone: true })}
+                        {renderRichText(m.content, { members, everyone: true, equipo: !!projectId })}
                         {m.editedAt && <span className="text-[11px] text-gray-400 dark:text-gray-500 ml-1">(editado)</span>}
                       </p>
                     )}

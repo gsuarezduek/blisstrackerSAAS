@@ -47,9 +47,10 @@ function bestMemberMatch(lower, start, candidates) {
  * persona real se envuelve en <UserLink> — click navega a /users/:id. Si no
  * matchea a nadie (o es ambigua entre homónimos) queda resaltada pero no
  * clickeable. `everyone: true` (solo Chat) le da su propio estilo a
- * "@everyone" en vez de tratarlo como una persona.
+ * "@everyone" en vez de tratarlo como una persona; `equipo: true` (solo Chat,
+ * solo canales de proyecto) hace lo mismo para "@equipo".
  */
-export function renderRichText(text, { members = [], everyone = false } = {}) {
+export function renderRichText(text, { members = [], everyone = false, equipo = false } = {}) {
   if (!text) return text
   const lower = text.toLowerCase()
   const candidates = members
@@ -88,14 +89,19 @@ export function renderRichText(text, { members = [], everyone = false } = {}) {
     }
 
     if (ch === '@') {
-      if (everyone && lower.startsWith('everyone', i + 1) && !isNameChar(lower[i + 9])) {
+      // Palabras especiales de mención colectiva (solo Chat, cada una gateada por su
+      // propio flag): "@everyone" y "@equipo" (esta última solo en canales de proyecto)
+      // se resaltan igual que un nombre pero sin envolver en <UserLink>.
+      const specialWords = [everyone && 'everyone', equipo && 'equipo'].filter(Boolean)
+      const specialHit = specialWords.find(word => lower.startsWith(word, i + 1) && !isNameChar(lower[i + 1 + word.length]))
+      if (specialHit) {
         if (i > lastIndex) parts.push(text.slice(lastIndex, i))
         parts.push(
           <span key={i} className="px-1 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold">
-            {text.slice(i, i + 9)}
+            {text.slice(i, i + 1 + specialHit.length)}
           </span>
         )
-        i = lastIndex = i + 9
+        i = lastIndex = i + 1 + specialHit.length
         continue
       }
 

@@ -436,6 +436,7 @@ export default function ChatWidget() {
                     currentUserId={user?.id}
                     canModerate={!!user?.isAdmin}
                     members={members}
+                    projectId={activeChannel.projectId}
                     onSaveEdit={handleSaveEdit}
                     onDelete={handleDelete}
                     onTogglePin={handleTogglePin}
@@ -471,6 +472,7 @@ export default function ChatWidget() {
                   replyingTo={replyingTo}
                   onCancelReply={() => setReplyingTo(null)}
                   channelId={activeChannel.id}
+                  projectId={activeChannel.projectId}
                 />
                   </>
                 )}

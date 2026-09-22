@@ -74,6 +74,18 @@ describe('renderRichText', () => {
     expect(screen.getByText('@everyone')).toBeInTheDocument()
   })
 
+  it('"@equipo" con equipo:true no se trata como persona', () => {
+    renderWrapper('aviso a @equipo del proyecto', { members, equipo: true })
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByText('@equipo')).toBeInTheDocument()
+  })
+
+  it('"@equipo" sin equipo:true (canal sin proyecto) queda como texto plano, sin resaltar', () => {
+    renderWrapper('aviso a @equipo del proyecto', { members })
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByText('aviso a @equipo del proyecto')).toBeInTheDocument()
+  })
+
   it('preserva texto y URL mezclados con una mención', () => {
     renderWrapper('@Gastón Suarez mirá https://ejemplo.com por favor', { members })
     expect(screen.getByRole('link', { name: '@Gastón Suarez' })).toBeInTheDocument()

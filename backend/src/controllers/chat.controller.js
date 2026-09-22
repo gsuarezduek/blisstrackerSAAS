@@ -311,7 +311,7 @@ async function resolveReplyTarget(channelId, requestedReplyToId) {
 
 // Compartido por sendMessage y sendMessageWithMedia — se llama DESPUÉS de crear
 // el ChatMessage (con MESSAGE_INCLUDE ya resuelto): marca leído para el autor,
-// resuelve @menciones (+ @everyone) y "responder = mención", y hace el broadcast.
+// resuelve @menciones (+ @everyone / @equipo) y "responder = mención", y hace el broadcast.
 async function finalizeSentMessage({ req, channel, channelId, workspaceId, userId, message, text, replyTarget }) {
   // El autor no debe ver su propio mensaje como no-leído.
   await prisma.chatChannelRead.upsert({
@@ -322,11 +322,14 @@ async function finalizeSentMessage({ req, channel, channelId, workspaceId, userI
 
   // Menciones contra miembros activos del workspace (cualquier canal es abierto a todos).
   // "@everyone" (con límite de palabra, insensible a mayúsculas) notifica a todo el equipo
-  // en vez de resolver nombres individuales. En un canal privado sólo pueden verlo (y por
-  // ende ser notificados) admin/owner — mencionar a alguien sin acceso sería un callejón
-  // sin salida (notificación a un canal que no puede abrir).
+  // en vez de resolver nombres individuales. "@equipo", solo válido en un canal de proyecto
+  // (channel.projectId), notifica únicamente al equipo principal de ESE proyecto (ProjectMember)
+  // — un subconjunto más chico, útil en canales grandes donde "@everyone" sería demasiado ruido.
+  // En un canal privado sólo pueden verlo (y por ende ser notificados) admin/owner — mencionar a
+  // alguien sin acceso sería un callejón sin salida (notificación a un canal que no puede abrir).
   let mentionedUserIds = new Set()
   let isEveryoneMention = false
+  let isEquipoMention = false
   if (text.includes('@')) {
     const members = await prisma.workspaceMember.findMany({
       where: { workspaceId, active: true, ...(channel.isPrivate ? { role: { in: ['admin', 'owner'] } } : {}) },
@@ -334,15 +337,27 @@ async function finalizeSentMessage({ req, channel, channelId, workspaceId, userI
     })
     const allUsers = members.map(m => m.user)
     isEveryoneMention = /@everyone\b/i.test(text)
-    mentionedUserIds = isEveryoneMention
-      ? new Set(allUsers.filter(u => u.id !== userId).map(u => u.id))
-      : resolveMentions(text, allUsers, userId)
+    isEquipoMention = !isEveryoneMention && !!channel.projectId && /@equipo\b/i.test(text)
+    if (isEveryoneMention) {
+      mentionedUserIds = new Set(allUsers.filter(u => u.id !== userId).map(u => u.id))
+    } else if (isEquipoMention) {
+      const projMembers = await prisma.projectMember.findMany({
+        where: { projectId: channel.projectId },
+        select: { userId: true },
+      })
+      const projMemberIds = new Set(projMembers.map(p => p.userId))
+      mentionedUserIds = new Set(allUsers.filter(u => u.id !== userId && projMemberIds.has(u.id)).map(u => u.id))
+    } else {
+      mentionedUserIds = resolveMentions(text, allUsers, userId)
+    }
   }
 
   if (mentionedUserIds.size > 0) {
     const notifMessage = isEveryoneMention
       ? `mencionó a todo el equipo en #${channelLabel(channel)}`
-      : `te mencionó en #${channelLabel(channel)}`
+      : isEquipoMention
+        ? `mencionó al equipo del proyecto en #${channelLabel(channel)}`
+        : `te mencionó en #${channelLabel(channel)}`
     await prisma.notification.createMany({
       data: Array.from(mentionedUserIds).map(uid => ({
         userId: uid,

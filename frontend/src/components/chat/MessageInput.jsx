@@ -18,8 +18,14 @@ const TYPING_EMIT_THROTTLE_MS = 2500
 const EVERYONE_ID = '__everyone__'
 const EVERYONE_ITEM = { id: EVERYONE_ID, name: 'everyone' }
 
+// Igual que @everyone, pero acotado al equipo principal del proyecto del canal — solo
+// tiene sentido en un canal de proyecto (channel.projectId), por eso se agrega
+// condicionalmente vía el prop `projectId`.
+const EQUIPO_ID = '__equipo__'
+const EQUIPO_ITEM = { id: EQUIPO_ID, name: 'equipo' }
+
 // Input del chat: texto + @menciones + GIF + adjunto + responder.
-export default function MessageInput({ onSend, onSendMedia, members, replyingTo, onCancelReply, channelId }) {
+export default function MessageInput({ onSend, onSendMedia, members, replyingTo, onCancelReply, channelId, projectId }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
@@ -30,7 +36,10 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
   const fileInputRef = useRef(null)
   const lastTypingEmitRef = useRef(0)
 
-  const mentionable = useMemo(() => [EVERYONE_ITEM, ...members], [members])
+  const mentionable = useMemo(
+    () => [EVERYONE_ITEM, ...(projectId ? [EQUIPO_ITEM] : []), ...members],
+    [members, projectId]
+  )
   const { mentionQuery, mentionMatches, mentionIdx, handleTextChange, handleMentionKeyDown, selectMention } =
     useMentionAutocomplete({ text, setText, textareaRef, members: mentionable })
 
@@ -209,7 +218,7 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
                   onMouseDown={e => { e.preventDefault(); selectMention(m) }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${i === mentionIdx ? 'bg-primary-50 dark:bg-primary-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                 >
-                  {m.id === EVERYONE_ID ? (
+                  {m.id === EVERYONE_ID || m.id === EQUIPO_ID ? (
                     <span className="w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex items-center justify-center flex-shrink-0 text-xs font-bold">@</span>
                   ) : (
                     <img src={avatarUrl(m.avatar)} alt={m.name} className="w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0" />
@@ -217,6 +226,9 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
                   <span className="text-gray-800 dark:text-gray-200 font-medium">{m.name}</span>
                   {m.id === EVERYONE_ID && (
                     <span className="text-xs text-gray-400 dark:text-gray-500">notifica a todo el equipo</span>
+                  )}
+                  {m.id === EQUIPO_ID && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500">notifica al equipo del proyecto</span>
                   )}
                 </button>
               ))}

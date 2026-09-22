@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { CHAT_SOUND_OPTIONS } from '../../lib/chatSound'
 
 const LABELS = {
-  mentions: { label: 'Solo menciones', hint: 'Sonar cuando me mencionan a mí o a @everyone' },
+  mentions: { label: 'Solo menciones', hint: 'Sonar cuando me mencionan a mí, a @everyone o a @equipo' },
   favorites: { label: 'Mis proyectos favoritos', hint: 'Sonar con cualquier mensaje en canales de proyectos destacados' },
   none: { label: 'Ninguna', hint: 'No reproducir sonido' },
 }
