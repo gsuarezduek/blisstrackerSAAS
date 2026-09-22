@@ -29,9 +29,12 @@ export default function PersonSearchSelect({ value, onChange }) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return active
-    return active.filter(m => m.name.toLowerCase().includes(q))
-  }, [active, query])
+    const base = q ? active.filter(m => m.name.toLowerCase().includes(q)) : active
+    // "Mi calendario" siempre primero en la lista, sin importar la búsqueda
+    const mine = base.filter(m => m.id === user.id)
+    const rest = base.filter(m => m.id !== user.id)
+    return [...mine, ...rest]
+  }, [active, query, user.id])
 
   function pick(id) {
     onChange(id === user.id ? null : id)

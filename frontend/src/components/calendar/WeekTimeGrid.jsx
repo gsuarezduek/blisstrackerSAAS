@@ -30,7 +30,11 @@ export default function WeekTimeGrid({
   }, [startHour, endHour])
 
   const totalMins = (endHour - startHour) * 60
-  const totalHeight = hours.length * HOUR_HEIGHT_PX
+  // hours incluye el límite superior (ej. 9..18 = 10 etiquetas para 9 horas de
+  // rango) — la altura del contenedor debe representar las horas de rango
+  // (N), no la cantidad de etiquetas (N+1), o las posiciones por porcentaje
+  // (líneas, bloques) se estiran de más y se van desalineando hora a hora.
+  const totalHeight = Math.max(1, hours.length - 1) * HOUR_HEIGHT_PX
 
   function topPct(hhmm) {
     const mins = Math.max(startHour * 60, Math.min(endHour * 60, toMins(hhmm)))
@@ -46,17 +50,22 @@ export default function WeekTimeGrid({
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
       <div className="overflow-x-auto">
         <div className="flex" style={{ minWidth: 64 + columns.length * 140 }}>
-          {/* Columna de horas */}
-          <div className="shrink-0 w-16 border-r border-gray-100 dark:border-gray-700 pt-8">
-            {hours.map(h => (
-              <div
-                key={h}
-                style={{ height: HOUR_HEIGHT_PX }}
-                className="text-[10px] text-gray-400 dark:text-gray-500 text-right pr-2 -translate-y-2"
-              >
-                {String(h).padStart(2, '0')}:00
-              </div>
-            ))}
+          {/* Columna de horas — mismo sistema de posicionamiento por porcentaje
+              que las líneas/bloques de las columnas de al lado, para que
+              queden siempre alineadas (ver fix de totalHeight arriba) */}
+          <div className="shrink-0 w-16 border-r border-gray-100 dark:border-gray-700">
+            <div className="h-8" />
+            <div className="relative" style={{ height: totalHeight }}>
+              {hours.map(h => (
+                <div
+                  key={h}
+                  style={{ top: `${topPct(`${String(h).padStart(2, '0')}:00`)}%` }}
+                  className="absolute right-2 -translate-y-1/2 text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap"
+                >
+                  {String(h).padStart(2, '0')}:00
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Columnas (días o personas, según el caller) */}
@@ -91,7 +100,15 @@ export default function WeekTimeGrid({
                     <div
                       key={h}
                       className="absolute left-0 right-0 border-t border-gray-50 dark:border-gray-700/50"
-                      style={{ top: `${((h - startHour) * 60 / totalMins) * 100}%` }}
+                      style={{ top: `${topPct(`${String(h).padStart(2, '0')}:00`)}%` }}
+                    />
+                  ))}
+                  {/* Líneas de media hora, más sutiles, para ubicar mejor los bloques */}
+                  {hours.slice(0, -1).map(h => (
+                    <div
+                      key={`half-${h}`}
+                      className="absolute left-0 right-0 border-t border-dashed border-gray-100 dark:border-gray-700/30"
+                      style={{ top: `${topPct(`${String(h).padStart(2, '0')}:30`)}%` }}
                     />
                   ))}
 

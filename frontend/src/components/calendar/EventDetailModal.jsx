@@ -54,6 +54,12 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
   const canRespond = !!myParticipation && !isOrganizer && !event.realMeetingId
   const canEdit = isOrganizer && !event.realMeetingId
   const isRecurring = !!event.recurrenceId
+  // El detalle ahora es visible para cualquier miembro del workspace (ver
+  // getEvent en calendar.controller.js), pero "Iniciar reunión" solo tiene
+  // sentido para quien organiza o fue invitado — un tercero que la vea desde
+  // el calendario de otra persona no debería ni ver ese botón (el backend
+  // igual lo bloquearía por acceso al proyecto, pero mostrarlo sería engañoso).
+  const isParticipant = isOrganizer || !!myParticipation
 
   // Aceptar una ocurrencia de una serie recurrente acepta automáticamente toda
   // la serie (lo resuelve el backend) — no hace falta elegir alcance. Rechazar
@@ -405,7 +411,7 @@ export default function EventDetailModal({ event, onClose, onChanged, onDeleted,
                 </button>
               )}
 
-              {event.projectId && !event.realMeetingId && (
+              {isParticipant && event.projectId && !event.realMeetingId && (
                 <button
                   onClick={startMeeting} disabled={busy}
                   className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"

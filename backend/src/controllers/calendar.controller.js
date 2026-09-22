@@ -8,7 +8,7 @@ const { createTaskForParticipant, syncTaskFields, removeTaskIfPending } = requir
 const googleCalendarSync = require('../services/googleCalendarSync.service')
 const {
   DATE_RE, TIME_RE, MIN_DURATION_MINS, MAX_DURATION_MINS, TITLE_MAX, MEET_LINK_MAX,
-  parseUserIds, formatEvent, formatRecurrence, EVENT_INCLUDE, loadEvent, isParticipantOrOrganizer,
+  parseUserIds, formatEvent, formatRecurrence, EVENT_INCLUDE, loadEvent,
   notifyInvitees, notifyOne, filterActiveMembers,
 } = require('../lib/calendarEvents')
 const {
@@ -51,15 +51,13 @@ async function listEvents(req, res, next) {
 }
 
 // ─── GET /api/calendar/availability?userIds=&from=&to= ─────────────────────
-// Alimenta la vista semanal / el filtro multi-persona. No expone título/proyecto
-// de eventos ajenos a quien no es organizador/participante de ese evento puntual
-// — solo franjas ocupadas/tentativas, para poder comparar disponibilidad sin
-// filtrar el contenido de reuniones de terceros. Una tarea (`kind:'task'`) es
-// siempre de una sola persona, así que solo se revela en la propia columna del
-// requester; un `calendar_event` puede compartirse — se revela en CUALQUIER
-// columna si el requester es organizador/participante de ESE evento puntual
-// (no solo en su propia columna), para que comparar disponibilidad con un
-// invitado no le esconda el título de la reunión que ambos comparten.
+// Alimenta la vista semanal / el filtro multi-persona. Un `calendar_event`
+// (reunión) es visible con su título/proyecto para cualquier miembro del
+// workspace, sea o no organizador/participante — mismo criterio "equipo =
+// etiqueta, no barrera" que ya rige proyectos/tareas: cualquiera puede ver qué
+// reunión ocupa el hueco de otra persona y abrir su detalle (participantes,
+// proyecto, link) desde ahí. Una tarea (`kind:'task'`) sigue siendo personal —
+// solo se revela con título en la propia columna del requester.
 async function getAvailability(req, res, next) {
   try {
     const workspaceId = req.workspace.id
@@ -77,13 +75,6 @@ async function getAvailability(req, res, next) {
 
     const busy = await getBusyBlocks({ workspaceId, userIds, fromDate: from, toDate: to })
 
-    const myEventIds = new Set(
-      (await prisma.calendarEventParticipant.findMany({
-        where:  { userId: requesterId, event: { workspaceId, date: { gte: from, lte: to } } },
-        select: { eventId: true },
-      })).map(p => p.eventId)
-    )
-
     const sanitized = {}
     for (const [uid, state] of Object.entries(busy)) {
       const isSelf = Number(uid) === requesterId
@@ -92,7 +83,7 @@ async function getAvailability(req, res, next) {
         workEnd:    state.workEnd,
         fullDayOff: [...state.fullDayOff],
         blocks: state.blocks.map((b) => {
-          const revealed = isSelf || (b.kind === 'calendar_event' && myEventIds.has(b.refId))
+          const revealed = isSelf || b.kind === 'calendar_event'
           return revealed ? b : { date: b.date, start: b.start, end: b.end, kind: b.kind, tentative: b.tentative }
         }),
       }
@@ -225,12 +216,16 @@ async function createEvent(req, res, next) {
 }
 
 // ─── GET /api/calendar/events/:id ───────────────────────────────────────────
+// Cualquier miembro activo del workspace puede ver el detalle completo de
+// cualquier reunión (participantes, proyecto, link, notas), sea o no
+// organizador/invitado — mismo criterio que getAvailability arriba. Las
+// acciones (editar/responder/cancelar) siguen restringidas más abajo en cada
+// endpoint puntual; acá solo se lee.
 async function getEvent(req, res, next) {
   try {
     const workspaceId = req.workspace.id
     const event = await loadEvent(req.params.id, workspaceId)
     if (!event) return res.status(404).json({ error: 'Evento no encontrado' })
-    if (!isParticipantOrOrganizer(event, req.user.userId)) return res.status(403).json({ error: 'No tenés acceso a este evento' })
     res.json(formatEvent(event))
   } catch (err) { next(err) }
 }

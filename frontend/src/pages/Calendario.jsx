@@ -117,9 +117,20 @@ export default function Calendario() {
     return map
   }, [events])
 
-  function openEventById(id) {
+  // La mayoría de los clicks resuelven contra `events` (mis reuniones, ya
+  // cargadas). Para una reunión ajena (visible en el calendario de otra
+  // persona pero donde no participo) no está en esa lista — se pide su
+  // detalle completo al backend, que ahora lo expone a cualquier miembro del
+  // workspace (ver getEvent en calendar.controller.js).
+  async function openEventById(id) {
     const ev = eventsById.get(id)
-    if (ev) setDetailEvent(ev)
+    if (ev) { setDetailEvent(ev); return }
+    try {
+      const res = await api.get(`/calendar/events/${id}`)
+      setDetailEvent(res.data)
+    } catch {
+      // el evento pudo haberse cancelado justo antes del click; no hacemos nada
+    }
   }
 
   function shiftView(delta) {
