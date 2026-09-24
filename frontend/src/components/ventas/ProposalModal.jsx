@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import RichTextEditor from '../RichTextEditor'
 import { exportProposalPdf } from './proposalPdf'
+import ProposalDocView from './ProposalDocView'
+import ProposalDocEditor from './ProposalDocEditor'
+import ProposalBriefStep, { initialBriefState, buildBriefing } from './ProposalBriefStep'
 
 const input = 'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 const label = 'block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1'
@@ -9,9 +12,14 @@ const CURRENCIES = ['ARS', 'USD', 'EUR']
 
 function newPlan(label, currency) { return { id: crypto.randomUUID(), label, price: '', currency, serviceIds: [] } }
 
-// Modal de propuesta. Dos pasos: (1) armar planes de precio (servicios + precio mensual, ej.
-// Básico/Completo) + objetivos → generar con IA; (2) editar el HTML generado y guardar/confirmar.
-// Si recibe `proposal`, entra directo a editar.
+// Modal de propuesta. Tres pasos: (1) form: armar planes de precio (servicios + precio mensual, ej.
+// Básico/Completo) + objetivos; (2) brief: la IA analiza el caso y muestra qué entendió, hace
+// preguntas con opciones sugeridas, marca datos faltantes y propone secciones (se puede saltear con
+// "Generar directo"); (3) edit: revisar, editar y guardar/confirmar.
+// Las propuestas nuevas son un documento estructurado (`proposal.doc`): pestaña Vista previa
+// (mismo renderer que el link público y el PDF) + pestaña Editar bloques. Las anteriores (solo
+// HTML en `proposal.content`) se siguen editando con el WYSIWYG. Si recibe `proposal`, entra
+// directo a editar.
 export default function ProposalModal({ leadId, companyName, currency: defaultCurrency = 'ARS', proposal: initial, onClose, onSaved }) {
   const [step, setStep] = useState(initial ? 'edit' : 'form')
   const [proposal, setProposal] = useState(initial || null)
@@ -20,10 +28,17 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
   const [plans, setPlans] = useState(() => initial ? [] : [newPlan('Básico', defaultCurrency), newPlan('Completo', defaultCurrency)])
   const [objectives, setObjectives] = useState('')
   const [instructions, setInstructions] = useState('')
+  const [quality, setQuality] = useState('standard') // standard | max
   const [generating, setGenerating] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [brief, setBrief] = useState(null)
+  const [briefState, setBriefState] = useState(null)
 
   const [title, setTitle] = useState(initial?.title || '')
   const [content, setContent] = useState(initial?.content || '')
+  const [doc, setDoc] = useState(initial?.doc || null)
+  const [tab, setTab] = useState('preview') // preview | edit (solo propuestas con doc)
+  const [accent, setAccent] = useState('')
   const [signatures, setSignatures] = useState([])
   const [signatureId, setSignatureId] = useState(initial?.signatureId || '')
   const [saving, setSaving] = useState(false)
@@ -36,6 +51,9 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
     api.get('/workspaces/current').then(({ data }) => {
       const list = Array.isArray(data.salesSignatures) ? data.salesSignatures : []
       setSignatures(list)
+      let colors = data.brandColors
+      if (typeof colors === 'string') { try { colors = JSON.parse(colors) } catch { colors = [] } }
+      setAccent(Array.isArray(colors) && colors[0]?.hex ? colors[0].hex : '')
       setSignatureId(id => id || (list.length === 1 ? list[0].id : ''))
     }).catch(() => {})
   }, [])
@@ -49,19 +67,38 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
   function addPlan() { setPlans(ps => [...ps, newPlan(`Plan ${ps.length + 1}`, defaultCurrency)]) }
   function removePlan(id) { setPlans(ps => ps.length > 1 ? ps.filter(p => p.id !== id) : ps) }
 
-  async function generate() {
+  const payloadPlans = () => plans.map(p => ({
+    label: p.label.trim(),
+    price: p.price === '' ? null : Number(p.price),
+    currency: p.currency,
+    serviceIds: p.serviceIds,
+  }))
+
+  // Paso 2: la IA analiza el caso (notas, investigación, planes) antes de redactar.
+  async function analyze() {
+    setAnalyzing(true); setError('')
+    try {
+      const { data } = await api.post(`/ventas/leads/${leadId}/proposals/brief`, { plans: payloadPlans(), objectives, instructions })
+      setBrief(data)
+      setBriefState(initialBriefState(data))
+      setStep('brief')
+    } catch (err) {
+      setError((err.response?.data?.error || 'No se pudo analizar el caso') + ' Podés generar la propuesta directamente.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  async function generate({ useBriefing = false } = {}) {
     setGenerating(true); setError('')
     try {
-      const payloadPlans = plans.map(p => ({
-        label: p.label.trim(),
-        price: p.price === '' ? null : Number(p.price),
-        currency: p.currency,
-        serviceIds: p.serviceIds,
-      }))
-      const { data } = await api.post(`/ventas/leads/${leadId}/proposals`, { plans: payloadPlans, objectives, instructions, signatureId: signatureId || null })
+      const briefing = useBriefing && brief && briefState ? buildBriefing(brief, briefState) : undefined
+      const { data } = await api.post(`/ventas/leads/${leadId}/proposals`, { plans: payloadPlans(), objectives, instructions, quality, briefing, signatureId: signatureId || null })
       setProposal(data)
       setTitle(data.title || '')
       setContent(data.content || '')
+      setDoc(data.doc || null)
+      setTab('preview')
       setSignatureId(data.signatureId || '')
       setStep('edit')
       onSaved?.() // refresca la lista con la nueva versión
@@ -87,7 +124,7 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
     setSaving(true); setError('')
     try {
       const { data } = await api.patch(`/ventas/leads/${leadId}/proposals/${proposal.id}`, {
-        title: title.trim() || null, content, signatureId: signatureId || null, ...(confirm ? { status: 'confirmed' } : {}),
+        title: title.trim() || null, ...(doc ? { doc } : { content }), signatureId: signatureId || null, ...(confirm ? { status: 'confirmed' } : {}),
       })
       setProposal(data)
       onSaved?.()
@@ -101,10 +138,10 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4 py-6 overflow-y-auto">
-      <div className={`bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full p-6 my-auto ${step === 'edit' ? 'max-w-4xl' : 'max-w-3xl'}`}>
+      <div className={`bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full p-6 my-auto ${step === 'edit' ? (doc ? 'max-w-5xl' : 'max-w-4xl') : step === 'brief' ? 'max-w-4xl' : 'max-w-3xl'}`}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-bold text-gray-900 dark:text-white">
-            {step === 'form' ? 'Nueva propuesta' : (proposal?.title || 'Propuesta')}
+            {step === 'form' ? 'Nueva propuesta' : step === 'brief' ? 'Antes de redactar…' : (proposal?.title || 'Propuesta')}
             {proposal?.version ? <span className="ml-2 text-xs text-gray-400">v{proposal.version}</span> : ''}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xl leading-none">×</button>
@@ -152,7 +189,22 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
             <div>
               <label className={label}>Instrucciones específicas para esta propuesta (opcional)</label>
               <textarea className={input} rows={2} placeholder="Ej. Enfatizar resultados a 90 días, incluir un plan por etapas, tono cercano…" value={instructions} onChange={e => setInstructions(e.target.value)} />
-              <p className="text-[11px] text-gray-400 mt-1">Se suman a las indicaciones generales de la agencia (Configuración de Ventas).</p>
+              <p className="text-[11px] text-gray-400 mt-1">Se suman a las indicaciones generales de la agencia (Configuración de Ventas). La IA también usa las notas de reunión, la investigación de la empresa y las notas del seguimiento del lead, si los hay: cuanto más contexto cargado, mejor la propuesta.</p>
+            </div>
+            <div>
+              <label className={label}>Calidad de la redacción</label>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {[
+                  ['standard', 'Estándar', 'Rápida (~30-40 s). Muy buena para la mayoría de las propuestas.'],
+                  ['max', 'Máxima calidad', 'Modelo más grande: más criterio comercial y especificidad. Tarda 1-2 min y consume más IA.'],
+                ].map(([k, name, desc]) => (
+                  <button key={k} type="button" onClick={() => setQuality(k)}
+                    className={`text-left rounded-xl border px-3 py-2 transition-colors ${quality === k ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                    <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">{name}</div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">{desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
             {signatures.length > 0 && (
               <div>
@@ -163,11 +215,28 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
                 </select>
               </div>
             )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button onClick={onClose} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">Cancelar</button>
+              <button onClick={() => generate()} disabled={generating || analyzing} title="Genera la propuesta sin el paso de preguntas" className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 font-medium rounded-xl py-2.5 px-4 text-sm flex items-center gap-2">
+                {generating && <span className="inline-block w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />}
+                {generating ? 'Generando…' : 'Generar directo'}
+              </button>
+              <button onClick={analyze} disabled={generating || analyzing} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2">
+                {analyzing && <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {analyzing ? 'Analizando el caso…' : '🔎 Continuar: revisar el caso con IA'}
+              </button>
+            </div>
+          </div>
+        ) : step === 'brief' && brief ? (
+          <div className="space-y-4">
+            <div className="max-h-[62vh] overflow-y-auto pr-1">
+              <ProposalBriefStep brief={brief} state={briefState} onChange={setBriefState} />
+            </div>
             <div className="flex gap-2 pt-1">
-              <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 text-sm">Cancelar</button>
-              <button onClick={generate} disabled={generating} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2">
+              <button onClick={() => setStep('form')} disabled={generating} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 font-medium rounded-xl py-2.5 px-4 text-sm">← Volver</button>
+              <button onClick={() => generate({ useBriefing: true })} disabled={generating} className="flex-1 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold rounded-xl py-2.5 text-sm flex items-center justify-center gap-2">
                 {generating && <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                {generating ? 'Generando con IA…' : '✨ Generar con IA'}
+                {generating ? (quality === 'max' ? 'Generando con IA (1-2 min)…' : 'Generando con IA…') : '✨ Generar propuesta'}
               </button>
             </div>
           </div>
@@ -188,13 +257,35 @@ export default function ProposalModal({ leadId, companyName, currency: defaultCu
                 </div>
               )}
             </div>
-            <div>
-              <label className={label}>Contenido (editable)</label>
-              <RichTextEditor defaultContent={content} onChange={setContent} minHeight={480} autoFocus={false} resizable />
-            </div>
+            {doc ? (
+              <div>
+                <div className="flex gap-1 mb-3 border-b border-gray-200 dark:border-gray-700">
+                  {[['preview', '👁 Vista previa'], ['edit', '✏️ Editar bloques']].map(([k, l]) => (
+                    <button key={k} type="button" onClick={() => setTab(k)}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? 'border-primary-600 text-primary-700 dark:text-primary-300' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                {tab === 'preview' ? (
+                  <div className="bg-white text-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 p-6 sm:p-8 max-h-[65vh] overflow-y-auto">
+                    <ProposalDocView doc={doc} plans={proposal?.plans} accent={accent} title={title} />
+                  </div>
+                ) : (
+                  <div className="max-h-[65vh] overflow-y-auto pr-1">
+                    <ProposalDocEditor doc={doc} onChange={setDoc} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className={label}>Contenido (editable)</label>
+                <RichTextEditor defaultContent={content} onChange={setContent} minHeight={480} autoFocus={false} resizable />
+              </div>
+            )}
             <div className="flex flex-wrap gap-2 pt-1">
               <button onClick={onClose} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">Cerrar</button>
-              <button onClick={() => exportProposalPdf({ ...proposal, title, content, signatureId }, { companyName })} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">🖨️ PDF</button>
+              <button onClick={() => exportProposalPdf({ ...proposal, title, content, doc, signatureId }, { companyName })} className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl py-2.5 px-4 text-sm">🖨️ PDF</button>
               <button
                 onClick={copyPublicLink}
                 disabled={proposal?.status !== 'confirmed'}

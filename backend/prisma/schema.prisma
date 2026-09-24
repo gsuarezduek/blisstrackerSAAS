@@ -3475,7 +3475,8 @@ model Proposal {
   services    Json      @default("[]") // unión de nombres de servicios de todos los planes (referencia rápida)
   plans       Json      @default("[]") // planes de precio propuestos: [{ label, price, currency, services: [{ name, description }] }]
   objectives  String? // objetivos del cliente (input del usuario)
-  content     String? // propuesta generada por IA (HTML editable)
+  content     String? // propuesta generada por IA (HTML editable) — LEGACY: las propuestas nuevas usan `doc`; queda para las creadas antes
+  doc         Json? // propuesta como documento estructurado de bloques tipados (ver lib/proposalDoc.js) — un único renderer lo dibuja igual en preview, link público y PDF
   signatureId String? // id (dentro de Workspace.salesSignatures) de la firma elegida para esta propuesta
   status      String    @default("draft") // draft | confirmed
   publicToken String    @unique // UUID (crypto.randomUUID(), generado en createProposal, mismo criterio que MonthlyReport.token) — GET /api/public/proposal/:token solo sirve la propuesta si status:'confirmed' (mismo gate draft/published de los Informes)

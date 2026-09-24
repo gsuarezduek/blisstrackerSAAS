@@ -5,7 +5,8 @@ jest.mock('../../src/lib/prisma', () => {
     lead: { findFirst: jest.fn() },
     service: { findMany: jest.fn() },
     proposal: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
-    leadActivity: { create: jest.fn() },
+    leadActivity: { create: jest.fn(), findMany: jest.fn() },
+    leadResearch: { findFirst: jest.fn() },
   }
   prisma.$transaction = jest.fn((arg) => (typeof arg === 'function' ? arg(prisma) : Promise.all(arg)))
   return prisma
@@ -13,13 +14,14 @@ jest.mock('../../src/lib/prisma', () => {
 
 jest.mock('../../src/lib/tokenBudget', () => ({ assertTokenBudget: jest.fn().mockResolvedValue(undefined) }))
 jest.mock('../../src/services/salesProposal.service', () => ({
-  generateProposalHtml: jest.fn().mockResolvedValue({ html: '<p>Propuesta generada</p>', usage: { input_tokens: 10, output_tokens: 20 } }),
+  generateProposalBrief: jest.fn().mockResolvedValue({ brief: { understanding: ['x'], questions: [], missing: [], sections: [] }, usage: {} }),
+  generateProposalDoc: jest.fn().mockResolvedValue({ doc: { title: 'Propuesta de Marketing', subtitle: 'x', lead: '', blocks: [{ type: 'pricing', heading: 'Inversión' }] }, usage: { input_tokens: 10, output_tokens: 20 } }),
 }))
 
 const request = require('supertest')
 const jwt = require('jsonwebtoken')
 const prisma = require('../../src/lib/prisma')
-const { generateProposalHtml } = require('../../src/services/salesProposal.service')
+const { generateProposalDoc, generateProposalBrief } = require('../../src/services/salesProposal.service')
 const app = require('../../src/app')
 
 const SECRET = process.env.JWT_SECRET
@@ -50,7 +52,9 @@ function req(method, url) {
 describe('POST /api/ventas/leads/:id/proposals', () => {
   it('genera una propuesta con IA y la guarda como v1, con publicToken', async () => {
     mockWorkspace()
-    prisma.lead.findFirst.mockResolvedValue({ id: 1, currency: 'ARS', title: 'Rediseño', company: { name: 'Acme', industry: null } })
+    prisma.lead.findFirst.mockResolvedValue({ id: 1, currency: 'ARS', title: 'Rediseño', notes: '<p>Quieren <strong>más leads</strong></p>', company: { name: 'Acme', industry: null }, primaryContact: null })
+    prisma.leadResearch.findFirst.mockResolvedValue({ result: { description: 'Empresa X' } })
+    prisma.leadActivity.findMany.mockResolvedValue([{ content: 'Llamado inicial' }])
     prisma.service.findMany.mockResolvedValue([{ id: 1, name: 'SEO', description: 'Posicionamiento' }])
     prisma.proposal.findFirst.mockResolvedValue(null) // sin versión previa
     prisma.proposal.create.mockResolvedValue({ id: 1, version: 1, status: 'draft', title: 'Propuesta v1' })
@@ -61,13 +65,63 @@ describe('POST /api/ventas/leads/:id/proposals', () => {
     })
 
     expect(res.status).toBe(201)
-    expect(generateProposalHtml).toHaveBeenCalled()
+    // La IA recibe las notas (HTML → texto), la investigación y las notas del seguimiento.
+    expect(generateProposalDoc).toHaveBeenCalledWith(expect.objectContaining({
+      notesText: 'Quieren más leads',
+      research: { description: 'Empresa X' },
+      activityNotes: ['Llamado inicial'],
+    }), expect.anything())
     expect(prisma.proposal.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         workspaceId: WORKSPACE_ID, leadId: 1, version: 1, status: 'draft',
+        title: 'Propuesta de Marketing',
+        doc: expect.objectContaining({ blocks: expect.any(Array) }),
         publicToken: expect.any(String),
       }),
     }))
+  })
+
+  it('usa Sonnet por defecto y Opus si se pide quality:max (valores inválidos caen al default)', async () => {
+    mockWorkspace()
+    prisma.lead.findFirst.mockResolvedValue({ id: 1, currency: 'ARS', title: 'x', notes: null, company: { name: 'Acme' }, primaryContact: null })
+    prisma.leadResearch.findFirst.mockResolvedValue(null)
+    prisma.leadActivity.findMany.mockResolvedValue([])
+    prisma.proposal.findFirst.mockResolvedValue(null)
+    prisma.proposal.create.mockResolvedValue({ id: 1, version: 1 })
+    const plans = [{ label: 'Básico', price: 1 }]
+
+    generateProposalDoc.mockClear()
+    await req('post', '/api/ventas/leads/1/proposals').send({ plans })
+    expect(generateProposalDoc.mock.calls[0][1]).toEqual(expect.objectContaining({ model: 'claude-sonnet-5' }))
+
+    generateProposalDoc.mockClear()
+    await req('post', '/api/ventas/leads/1/proposals').send({ plans, quality: 'max' })
+    expect(generateProposalDoc.mock.calls[0][1]).toEqual(expect.objectContaining({ model: 'claude-opus-5' }))
+
+    generateProposalDoc.mockClear()
+    await req('post', '/api/ventas/leads/1/proposals').send({ plans, quality: 'inventado' })
+    expect(generateProposalDoc.mock.calls[0][1]).toEqual(expect.objectContaining({ model: 'claude-sonnet-5' }))
+  })
+
+  it('pasa el briefing (sanitizado) a la generación', async () => {
+    mockWorkspace()
+    prisma.lead.findFirst.mockResolvedValue({ id: 1, currency: 'ARS', title: 'x', notes: null, company: { name: 'Acme' }, primaryContact: null })
+    prisma.leadResearch.findFirst.mockResolvedValue(null)
+    prisma.leadActivity.findMany.mockResolvedValue([])
+    prisma.proposal.findFirst.mockResolvedValue(null)
+    prisma.proposal.create.mockResolvedValue({ id: 1, version: 1 })
+    generateProposalDoc.mockClear()
+
+    await req('post', '/api/ventas/leads/1/proposals').send({
+      plans: [{ label: 'Básico' }],
+      briefing: { answers: [{ question: '¿Ángulo?', answer: 'Elaboración propia' }], excludeSections: ['expansion', 'hack'] },
+    })
+
+    expect(generateProposalDoc.mock.calls[0][0].briefing).toEqual({
+      answers: [{ question: '¿Ángulo?', answer: 'Elaboración propia' }],
+      includeSections: [],
+      excludeSections: ['expansion'],
+    })
   })
 
   it('rechaza sin ningún plan', async () => {
@@ -75,7 +129,7 @@ describe('POST /api/ventas/leads/:id/proposals', () => {
     prisma.lead.findFirst.mockResolvedValue({ id: 1, currency: 'ARS', title: 'Rediseño', company: { name: 'Acme' } })
     const res = await req('post', '/api/ventas/leads/1/proposals').send({ plans: [] })
     expect(res.status).toBe(400)
-    expect(generateProposalHtml).not.toHaveBeenCalled()
+    expect(generateProposalDoc).not.toHaveBeenCalled()
   })
 
   it('404 si el lead no existe en el workspace', async () => {
@@ -83,6 +137,31 @@ describe('POST /api/ventas/leads/:id/proposals', () => {
     prisma.lead.findFirst.mockResolvedValue(null)
     const res = await req('post', '/api/ventas/leads/999/proposals').send({ plans: [{ label: 'Básico' }] })
     expect(res.status).toBe(404)
+  })
+})
+
+describe('POST /api/ventas/leads/:id/proposals/brief', () => {
+  it('devuelve el briefing de la IA sin guardar nada', async () => {
+    mockWorkspace()
+    prisma.lead.findFirst.mockResolvedValue({ id: 1, currency: 'ARS', title: 'x', notes: null, company: { name: 'Acme' }, primaryContact: null })
+    prisma.leadResearch.findFirst.mockResolvedValue(null)
+    prisma.leadActivity.findMany.mockResolvedValue([])
+    prisma.proposal.create.mockClear()
+
+    const res = await req('post', '/api/ventas/leads/1/proposals/brief').send({ plans: [{ label: 'Básico' }] })
+
+    expect(res.status).toBe(200)
+    expect(res.body.understanding).toEqual(['x'])
+    expect(generateProposalBrief).toHaveBeenCalled()
+    expect(prisma.proposal.create).not.toHaveBeenCalled()
+  })
+
+  it('400 sin planes y 404 si el lead no existe', async () => {
+    mockWorkspace()
+    prisma.lead.findFirst.mockResolvedValueOnce({ id: 1, currency: 'ARS', company: { name: 'Acme' } })
+    expect((await req('post', '/api/ventas/leads/1/proposals/brief').send({ plans: [] })).status).toBe(400)
+    prisma.lead.findFirst.mockResolvedValueOnce(null)
+    expect((await req('post', '/api/ventas/leads/9/proposals/brief').send({ plans: [{ label: 'x' }] })).status).toBe(404)
   })
 })
 

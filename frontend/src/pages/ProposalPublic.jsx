@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import DOMPurify from 'dompurify'
 import { exportProposalPdf } from '../components/ventas/proposalPdf'
+import ProposalDocView from '../components/ventas/ProposalDocView'
 import '../components/situation-editor.css'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -59,7 +60,7 @@ export default function ProposalPublic() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto px-6 py-10">
+      <div className={`${data.doc ? 'max-w-4xl' : 'max-w-3xl'} mx-auto px-6 py-10`}>
         <div className="flex items-end justify-between gap-4 border-b-[3px] pb-5 mb-7" style={{ borderColor: accent }}>
           {logoUrl
             ? <img src={logoUrl} alt={ws.name} className="max-h-14 max-w-[200px] object-contain" />
@@ -70,12 +71,19 @@ export default function ProposalPublic() {
           </div>
         </div>
 
-        <h1 className="text-2xl font-extrabold text-gray-900 mb-6">{data.title || `Propuesta v${data.version}`}</h1>
-
-        <div
-          className="situation-content bg-white border border-gray-100 rounded-2xl p-6 sm:p-8 shadow-sm"
-          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.content || '<p>(Sin contenido)</p>') }}
-        />
+        {data.doc ? (
+          <div className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-10 shadow-sm">
+            <ProposalDocView doc={data.doc} plans={data.plans} accent={accent} title={data.title || `Propuesta v${data.version}`} />
+          </div>
+        ) : (
+          <>
+            <h1 className="text-2xl font-extrabold text-gray-900 mb-6">{data.title || `Propuesta v${data.version}`}</h1>
+            <div
+              className="situation-content bg-white border border-gray-100 rounded-2xl p-6 sm:p-8 shadow-sm"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.content || '<p>(Sin contenido)</p>') }}
+            />
+          </>
+        )}
 
         {sigHasData && (
           <div className="mt-8 pt-6 border-t-2" style={{ borderColor: accent }}>
@@ -97,7 +105,7 @@ export default function ProposalPublic() {
         <div className="mt-8 flex justify-center">
           <button
             onClick={() => exportProposalPdf(
-              { createdAt: data.createdAt, title: data.title, content: data.content, version: data.version, signatureId: data.signatureId },
+              { createdAt: data.createdAt, title: data.title, content: data.content, doc: data.doc, plans: data.plans, version: data.version, signatureId: data.signatureId },
               { companyName: data.companyName, workspace: ws },
             )}
             className="px-4 py-2 text-sm font-medium rounded-xl text-white"

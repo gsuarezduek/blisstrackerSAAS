@@ -1,4 +1,6 @@
+import DOMPurify from 'dompurify'
 import api from '../../api/client'
+import { PROPOSAL_DOC_CSS, renderProposalDoc } from './proposalDocHtml'
 
 // Escapa texto para inyectarlo seguro en el HTML de impresión.
 function esc(s = '') {
@@ -9,6 +11,10 @@ function esc(s = '') {
  * Exporta una propuesta a PDF con diseño branded del workspace.
  * Abre una ventana de impresión con una plantilla propia (portada + contenido tipografiado
  * + sección Contacto/firma configurable) y dispara window.print() → guardar como PDF.
+ *
+ * Propuestas nuevas traen `proposal.doc` (+ `proposal.plans`) y se dibujan con el mismo renderer que
+ * la vista previa y el link público; las anteriores (solo `proposal.content` en HTML) siguen con la
+ * plantilla legacy.
  *
  * `workspace`: opcional — si el caller ya tiene el branding a mano (ej. la
  * vista pública de la propuesta, que no tiene JWT para pegarle a
@@ -53,6 +59,12 @@ export async function exportProposalPdf(proposal, { companyName, workspace } = {
       </div>
     </div>` : ''
 
+  const isDoc = !!proposal.doc
+  const bodyHtml = isDoc
+    ? renderProposalDoc(proposal.doc, { plans: proposal.plans, accent, title })
+    : `<h1 class="doc-title">${esc(title)}</h1>
+    <div class="content">${DOMPurify.sanitize(proposal.content || '<p>(Sin contenido)</p>')}</div>`
+
   const doc = `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><title>${esc(title)} — ${esc(companyName || '')}</title>
 <style>
@@ -85,20 +97,33 @@ export async function exportProposalPdf(proposal, { companyName, workspace } = {
   .sig-role { color: #6b7280; font-size: 12px; }
   .sig-info div { line-height: 1.5; }
   .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; text-align: center; }
-  @page { margin: 16mm; }
-  @media print { .page { padding: 0; max-width: none; } body { font-size: 12px; } }
+  ${isDoc ? PROPOSAL_DOC_CSS : ''}
+  /* @page sin margen = el navegador no imprime su encabezado/pie ("about:blank", fecha, n° de página).
+     El margen real de cada hoja lo dan el thead/tfoot de .sheet, que se repiten en todas las páginas. */
+  @page { margin: 0; }
+  .sheet { width: 100%; border-collapse: collapse; }
+  .sheet > thead > tr > td, .sheet > tbody > tr > td, .sheet > tfoot > tr > td { padding: 0; }
+  .pad { height: 0; }
+  @media print {
+    .pad { height: 16mm; }
+    .page { padding: 0 16mm; max-width: none; }
+    body { font-size: 12px; }
+    .pd { font-size: 12.5px; }
+    .pd .pd-title { font-size: 27px; }
+  }
 </style></head>
 <body>
+<table class="sheet"><thead><tr><td><div class="pad"></div></td></tr></thead><tbody><tr><td>
   <div class="page">
     <div class="cover">
       <div>${hasLogo ? `<img class="logo" src="${logoUrl}" alt="${esc(agency)}"/>` : (agency ? `<div class="agency">${esc(agency)}</div>` : '')}</div>
       <div class="meta">${companyName ? `Para: ${esc(companyName)}<br>` : ''}${esc(date)}</div>
     </div>
-    <h1 class="doc-title">${esc(title)}</h1>
-    <div class="content">${proposal.content || '<p>(Sin contenido)</p>'}</div>
+    ${bodyHtml}
     ${signatureHtml}
     <div class="footer">${esc(agency)}${agency ? ' · ' : ''}Documento generado el ${esc(date)}</div>
   </div>
+</td></tr></tbody><tfoot><tr><td><div class="pad"></div></td></tr></tfoot></table>
   <script>window.onload = function () { window.focus(); window.print(); }</script>
 </body></html>`
 
