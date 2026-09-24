@@ -27,6 +27,7 @@ const monthlyReport = {
   ...require('../controllers/monthlyReport/reportCrud.controller'),
   ...require('../controllers/monthlyReport/reportGeneration.controller'),
   ...require('../controllers/monthlyReport/reportPublishing.controller'),
+  ...require('../controllers/monthlyReport/reportPdf.controller'),
 }
 const cannibalization   = require('../controllers/cannibalization.controller')
 const competitors       = require('../controllers/competitors.controller')
@@ -180,6 +181,7 @@ router.get('/projects/:id/reports/:month/generation-log',                      m
 router.patch('/projects/:id/reports/:month/status',                            monthlyReport.setReportStatus)
 router.post('/projects/:id/reports/:month/notify',                             monthlyReport.notifyReportPublished)
 router.patch('/projects/:id/reports/:month/sections',                          monthlyReport.removeReportSections)
+router.get('/projects/:id/reports/:month/pdf',                                 monthlyReport.downloadReportPdf)
 
 // Objetivos de marketing (estructurados, persistentes por proyecto)
 router.get('/projects/:id/objectives/progress',   objectives.getObjectivesProgress)

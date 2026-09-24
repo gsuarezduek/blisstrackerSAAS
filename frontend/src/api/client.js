@@ -6,7 +6,7 @@ import { isWorkspaceSubdomain } from '../utils/domain'
 // que quedó en localStorage de una sesión anterior) no debe expulsar al visitante al
 // login — la página en sí nunca pidió autenticación.
 const PUBLIC_PATH_PREFIXES = [
-  '/report/', '/login', '/register', '/pricing', '/join', '/oauth', '/auth',
+  '/report/', '/report-print/', '/login', '/register', '/pricing', '/join', '/oauth', '/auth',
   '/oauth-result', '/condiciones', '/privacidad', '/forgot-password',
   '/reset-password', '/verify-email-change', '/soluciones/', '/blog',
 ]

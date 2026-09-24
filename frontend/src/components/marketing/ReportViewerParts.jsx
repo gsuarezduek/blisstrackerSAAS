@@ -307,7 +307,7 @@ export function SectionCard({ title, icon, children, className = '', action, sec
 
 export function GroupHeader({ title, groupKeys = null }) {
   return (
-    <div className="flex items-center gap-3 pt-1">
+    <div className="flex items-center gap-3 pt-1 print-keep-with-next">
       <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
       <span className="flex items-center gap-1.5">
         <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{title}</span>

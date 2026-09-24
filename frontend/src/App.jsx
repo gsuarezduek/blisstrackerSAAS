@@ -102,6 +102,7 @@ const Contenido        = lazyWithReload(() => import('./pages/Contenido'))
 const Calendario       = lazyWithReload(() => import('./pages/Calendario'))
 const LegalPage        = lazyWithReload(() => import('./pages/TermsPage'))
 const ReportOrClientPortal = lazyWithReload(() => import('./pages/ReportOrClientPortal'))
+const ReportPrint      = lazyWithReload(() => import('./pages/ReportPrint'))
 const ProposalPublic   = lazyWithReload(() => import('./pages/ProposalPublic'))
 const SharedFolderPublic = lazyWithReload(() => import('./pages/SharedFolderPublic'))
 const Blog              = lazyWithReload(() => import('./pages/Blog'))
@@ -181,6 +182,7 @@ export default function App() {
           <Route path="/auth"         element={<AuthCallback  />} />
           <Route path="/oauth-result" element={<OAuthResult   />} />
           <Route path="/report/:token" element={<ReportOrClientPortal />} />
+          <Route path="/report-print/:printToken" element={<ReportPrint />} />
           <Route path="/proposal/:token" element={<ProposalPublic />} />
           <Route path="/shared-folder/:token" element={<SharedFolderPublic />} />
           <Route path="/blog"         element={<Blog />} />

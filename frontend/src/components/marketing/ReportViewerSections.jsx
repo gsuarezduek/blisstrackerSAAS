@@ -48,7 +48,7 @@ function ContextNote({ sectionKey, analysisKey, contextValue, canEdit, contextEd
   // Con contenido: bloque de info + acciones de admin
   if (contextValue) {
     return (
-      <div className="bg-primary-50/60 dark:bg-primary-900/10 border border-primary-100 dark:border-primary-900/30 rounded-2xl px-5 py-4">
+      <div className="bg-primary-50/60 dark:bg-primary-900/10 border border-primary-100 dark:border-primary-900/30 rounded-2xl px-5 py-4 print-keep-with-next">
         <div className="flex items-start justify-between gap-3">
           {isHtml ? (
             <div className="situation-content text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(contextValue) }} />

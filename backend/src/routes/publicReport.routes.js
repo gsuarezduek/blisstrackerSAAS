@@ -2,12 +2,14 @@ const express             = require('express')
 const router              = express.Router()
 const prisma              = require('../lib/prisma')
 const { getPublicReport, getPublicReportMeta } = require('../controllers/monthlyReport/reportPublic.controller')
+const { getReportForPrint } = require('../controllers/monthlyReport/reportPdf.controller')
 const { submitReportFeedback } = require('../controllers/monthlyReport/reportFeedback.controller')
 
 // Sin auth — endpoint público para informes mensuales de clientes
 router.get('/report/:token/meta', getPublicReportMeta)   // metadata liviana para Open Graph (Vercel)
 router.post('/report/:token/feedback', submitReportFeedback) // el cliente califica el informe (1–5 + comentario)
 router.get('/report/:token', getPublicReport)
+router.get('/report-print/:printToken', getReportForPrint) // solo la abre el render de PDF (token firmado, vence en minutos)
 
 /**
  * GET /api/public/logo/:slug

@@ -10,7 +10,7 @@ import {
 } from './ReportViewerParts'
 import { RRSSSection, PublicidadSection, SeoGeoSection, SitioWebSection } from './ReportViewerSections'
 
-export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onRemoveSection, report = null, workspace = null, showFooter = true, compactHero = false }) {
+export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, onRemoveSection, report = null, workspace = null, showFooter = true, compactHero = false, printMode = false }) {
   const [pendingRemove,    setPendingRemove]    = useState(null)   // { keys, label } — confirmación de borrado de sección
   const [removing,         setRemoving]         = useState(false)
   const [editingResumen,   setEditingResumen]   = useState(false)
@@ -37,6 +37,10 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
   // "Próximos pasos → tareas": estado por índice de paso ('creating' | 'done' | 'error')
   const [createdSteps, setCreatedSteps] = useState({})
 
+  // Descarga del PDF (lo genera el servidor: portada + layout A4, no la página que se ve en pantalla)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [pdfError,       setPdfError]       = useState(null)
+
   if (!data) return null
 
   const { project, month, dataMonth, sections, analysis, period } = data
@@ -58,6 +62,31 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       setPendingRemove(null)
     } finally {
       setRemoving(false)
+    }
+  }
+
+  async function handleDownloadPdf() {
+    const reportMonth = report?.month || month
+    if (!project?.id || !reportMonth || downloadingPdf) return
+    setDownloadingPdf(true)
+    setPdfError(null)
+    try {
+      const res = await api.get(`/marketing/projects/${project.id}/reports/${reportMonth}/pdf`, { responseType: 'blob', timeout: 120000 })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Informe ${project.name} - ${periodTitle}.pdf`.replace(/[\\/:*?"<>|]+/g, '-')
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+    } catch (err) {
+      // Con responseType blob el JSON de error llega como Blob: hay que leerlo
+      let msg = 'No se pudo generar el PDF. Probá de nuevo en un momento.'
+      try { msg = JSON.parse(await err.response?.data?.text?.())?.error || msg } catch { /* mensaje genérico */ }
+      setPdfError(msg)
+    } finally {
+      setDownloadingPdf(false)
     }
   }
 
@@ -258,8 +287,8 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
       {/* Print CSS */}
       <style>{PRINT_STYLES}</style>
 
-      {/* ── Header ── */}
-      {isPublic && compactHero ? (
+      {/* ── Header ── (en printMode la portada del PDF lo reemplaza) */}
+      {printMode ? null : isPublic && compactHero ? (
         /* Hero compacto: el portal de cliente ya muestra nombre del proyecto + logo/nombre
            de la agencia en su propio hero (ver PortalHero) — acá solo lo que no se repite. */
         <div className="flex items-center justify-between gap-3">
@@ -334,12 +363,18 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
                   </a>
                 )}
               </div>
-              <button
-                onClick={() => window.print()}
-                className="no-print flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shrink-0"
-              >
-                🖨️ Descargar PDF
-              </button>
+              <div className="no-print flex flex-col items-end gap-1 shrink-0">
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={downloadingPdf}
+                  className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60 disabled:cursor-wait"
+                >
+                  {downloadingPdf
+                    ? <><span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> Generando PDF…</>
+                    : <>📄 Descargar PDF</>}
+                </button>
+                {pdfError && <p className="text-xs text-red-500 max-w-[16rem] text-right">{pdfError}</p>}
+              </div>
             </div>
           </div>
         </div>
@@ -710,7 +745,7 @@ export default function ReportViewer({ data, isPublic = false, onSaveAnalysis, o
 
       {/* ── Footer público ── (se apaga dentro del portal de cliente, que ya
           muestra su propio footer institucional a nivel de página) */}
-      {isPublic && showFooter && (
+      {isPublic && showFooter && !printMode && (
         <div className="text-center py-4 space-y-1">
           {workspace?.companyName && (
             <p className="text-xs font-semibold" style={{ color: brandPrimary }}>{workspace.companyName}</p>
