@@ -51,7 +51,9 @@ async function saveSituation(req, res, next) {
     if (!projectId) return res.status(404).json({ error: 'Proyecto no encontrado' })
     await assertToggleEnabled(projectId, 'situationEnabled', 'Situación')
 
-    if (!(await canWrite(req, projectId))) return res.status(403).json({ error: 'No tenés acceso a este proyecto' })
+    // Abierto a cualquier miembro activo del workspace (resolveWorkspace ya lo validó),
+    // no solo al equipo del proyecto: la situación de la cuenta es información compartida
+    // y el editor se muestra a todos, así que rechazar acá daba un error confuso.
 
     const { situation } = req.body
     if (typeof situation !== 'string') {

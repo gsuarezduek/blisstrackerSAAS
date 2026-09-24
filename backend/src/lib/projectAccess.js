@@ -7,8 +7,9 @@ function isAdmin(req) {
 }
 
 // Escritura sobre un proyecto: admin/owner del workspace, o miembro del equipo
-// del proyecto (ProjectMember). Mismo criterio en saveInfo/saveSituation/saveLinks,
-// briefs, meetings y el portal de cliente.
+// del proyecto (ProjectMember). Mismo criterio en saveInfo/saveLinks,
+// briefs, meetings y el portal de cliente. La Situación (saveSituation) es la
+// excepción: la puede editar cualquier miembro del workspace.
 async function canWrite(req, projectId) {
   if (isAdmin(req)) return true
   const member = await prisma.projectMember.findUnique({
