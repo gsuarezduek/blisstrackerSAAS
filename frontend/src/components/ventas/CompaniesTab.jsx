@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../../api/client'
 import LoadingSpinner from '../LoadingSpinner'
 import ConfirmModal from '../ConfirmModal'
@@ -8,7 +8,7 @@ import ContactModal from './ContactModal'
 
 const input = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
 
-export default function CompaniesTab({ onDataChange }) {
+export default function CompaniesTab({ onDataChange, focusCompanyId }) {
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -26,6 +26,17 @@ export default function CompaniesTab({ onDataChange }) {
   }, [search])
 
   useEffect(() => { load() }, [load])
+
+  // Deep-link desde el buscador global (?company=id): abre los contactos de esa
+  // empresa y la trae a la vista. Una sola vez por id, no en cada recarga.
+  const focusedRef = useRef(null)
+  useEffect(() => {
+    const id = Number(focusCompanyId)
+    if (!id || loading || focusedRef.current === id || !companies.some(c => c.id === id)) return
+    focusedRef.current = id
+    api.get(`/ventas/contacts?companyId=${id}`).then(({ data }) => { setContacts(data); setExpanded(id) }).catch(() => {})
+    requestAnimationFrame(() => document.getElementById(`company-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
+  }, [focusCompanyId, loading, companies])
 
   async function loadContacts(companyId) {
     if (expanded === companyId) { setExpanded(null); return }
@@ -70,7 +81,7 @@ export default function CompaniesTab({ onDataChange }) {
       ) : (
         <div className="space-y-3">
           {companies.map(c => (
-            <div key={c.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
+            <div key={c.id} id={`company-${c.id}`} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden">
               <div className="flex items-center justify-between gap-4 p-4">
                 <button onClick={() => loadContacts(c.id)} className="flex-1 text-left min-w-0">
                   <div className="font-medium text-gray-900 dark:text-white truncate">{c.name}</div>

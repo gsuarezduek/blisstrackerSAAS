@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { isWorkspaceSubdomain } from '../utils/domain'
 import AddTaskModal from './AddTaskModal'
 import CommandPalette from './CommandPalette'
+import TaskCommentsModal from './TaskCommentsModal'
 
 // Catálogo de atajos — alimenta el overlay de ayuda (tecla "?"). Se sacaron los
 // atajos de navegación (Shift + D/Y/A/M/R) y las acciones de tarea con Shift
@@ -41,6 +42,8 @@ export default function GlobalShortcuts() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [toast, setToast] = useState('')
+  // Tarea abierta desde el buscador global (evento `bliss:open-task`, detail = la tarea).
+  const [viewTask, setViewTask] = useState(null)
   // Proyecto actual, publicado por ProjectDetail vía evento (null fuera de un proyecto).
   // Si hay uno, la tarea creada desde el atajo/botón flotante queda asociada a él.
   const [projectContext, setProjectContext] = useState(null)
@@ -63,6 +66,16 @@ export default function GlobalShortcuts() {
     function onOpenAddTask() { setTaskOpen(true) }
     window.addEventListener('bliss:open-add-task', onOpenAddTask)
     return () => window.removeEventListener('bliss:open-add-task', onOpenAddTask)
+  }, [enabled])
+
+  // Disparado por CommandPalette al elegir una tarea — abre el mismo modal de
+  // detalle/comentarios que el Dashboard sin navegar (sirve también para tareas
+  // ya completadas, que ?task= de ProjectDetail no encuentra).
+  useEffect(() => {
+    if (!enabled) return
+    function onOpenTask(e) { if (e.detail) setViewTask(e.detail) }
+    window.addEventListener('bliss:open-task', onOpenTask)
+    return () => window.removeEventListener('bliss:open-task', onOpenTask)
   }, [enabled])
 
   useEffect(() => {
@@ -126,6 +139,20 @@ export default function GlobalShortcuts() {
       )}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+
+      {viewTask && (
+        <TaskCommentsModal
+          task={viewTask}
+          onClose={() => setViewTask(null)}
+          // Editar/borrar desde acá no pasa por el Dashboard: se le avisa con el mismo
+          // evento que ya refresca la lista al crear una tarea (ignora el detail).
+          onTaskEdited={updated => {
+            setViewTask(prev => ({ ...prev, ...updated }))
+            window.dispatchEvent(new CustomEvent('bliss:task-created', { detail: updated }))
+          }}
+          onTaskDeleted={() => window.dispatchEvent(new CustomEvent('bliss:task-created'))}
+        />
+      )}
 
       {/* Overlay de ayuda de atajos */}
       {helpOpen && (

@@ -133,6 +133,17 @@ export default function Calendario() {
     }
   }
 
+  // Deep-links del buscador global (Cmd/Ctrl+K): ?event=id abre el detalle de esa
+  // reunión y ?schedule=1 abre el modal de agendar. Se consumen y se sacan de la URL.
+  const eventParam = searchParams.get('event')
+  const scheduleParam = searchParams.get('schedule')
+  useEffect(() => {
+    if (!moduleAllowed) return
+    if (eventParam && Number.isInteger(Number(eventParam))) openEventById(Number(eventParam))
+    if (scheduleParam) setScheduleModal({})
+    if (eventParam || scheduleParam) updateParams({ event: null, schedule: null })
+  }, [moduleAllowed, eventParam, scheduleParam]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function shiftView(delta) {
     if (view === 'equipo') updateParams({ date: shiftDay(date, delta) })
     else updateParams({ date: shiftDay(date, delta * 7) })
@@ -316,6 +327,7 @@ export default function Calendario() {
               return s?.workStart && s?.workEnd ? { start: s.workStart, end: s.workEnd } : null
             }}
             isFullDayOff={key => availability[targetUserId]?.fullDayOff?.includes(key)}
+            isPast={key => key < todayYMD()}
             onSlotClick={(dateKey, time) => setScheduleModal({
               date: dateKey, startTime: time,
               ...(viewingOther ? { participantIds: [targetUserId] } : {}),
@@ -334,6 +346,7 @@ export default function Calendario() {
               return s?.workStart && s?.workEnd ? { start: s.workStart, end: s.workEnd } : null
             }}
             isFullDayOff={uid => availability[uid]?.fullDayOff?.includes(date)}
+            isPast={() => date < todayYMD()}
             onSlotClick={(_uid, time) => setScheduleModal({ date, startTime: time, participantIds: peopleIds })}
           />
         )}

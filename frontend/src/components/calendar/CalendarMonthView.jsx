@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import MonthGrid from './MonthGrid'
-import { monthLabel } from './dateHelpers'
+import { monthLabel, todayYMD } from './dateHelpers'
 
 const STATUS_DOT = { confirmed: 'bg-green-500', pending: 'bg-amber-400', partial: 'bg-red-400' }
 const MAX_CHIPS_PER_DAY = 4
@@ -19,6 +19,8 @@ export default function CalendarMonthView({ events, month, onMonthChange, onOpen
     return map
   }, [events])
 
+  const today = todayYMD()
+
   return (
     <MonthGrid
       month={month}
@@ -27,17 +29,21 @@ export default function CalendarMonthView({ events, month, onMonthChange, onOpen
       renderCell={(dateStr, isToday) => {
         const items = dateStr ? (byDay[dateStr] ?? []) : []
         const dayNum = dateStr ? Number(dateStr.split('-')[2]) : null
+        const past = !!dateStr && dateStr < today
 
         return (
           <div
             onClick={() => dateStr && onOpenDay(dateStr)}
             className={`min-h-[92px] border-b border-r border-gray-100 dark:border-gray-700 p-1.5 transition-colors ${
-              !dateStr ? 'bg-gray-50/50 dark:bg-gray-900/20' : 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30'}`}
+              !dateStr ? 'bg-gray-50/50 dark:bg-gray-900/20'
+                : past ? 'bg-gray-100/80 dark:bg-gray-900/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-900/70'
+                : 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30'}`}
           >
             {dateStr && (
               <>
                 <div className={`text-xs mb-1 w-5 h-5 flex items-center justify-center rounded-full ${
-                  isToday ? 'bg-primary-600 text-white font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>
+                  isToday ? 'bg-primary-600 text-white font-semibold'
+                    : past ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'}`}>
                   {dayNum}
                 </div>
                 <div className="space-y-1">
@@ -46,7 +52,8 @@ export default function CalendarMonthView({ events, month, onMonthChange, onOpen
                       key={e.id}
                       onClick={ev => { ev.stopPropagation(); onOpenEvent(e) }}
                       title={e.title}
-                      className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-900/40 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-900/40 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors ${
+                        past ? 'opacity-60 grayscale' : ''}`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[e.confirmationStatus] || 'bg-gray-300'}`} />
                       <span className="text-[11px] text-gray-700 dark:text-gray-300 truncate">

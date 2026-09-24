@@ -18,10 +18,12 @@ const HOUR_HEIGHT_PX = 48
  * `getBlocks(key)`: → [{ id, start:"HH:MM", end:"HH:MM", title, tentative?, tone?, onClick? }]
  * `getWorkWindow(key)`: → { start, end } | null (null = todo el día disponible, sin sombreado)
  * `isFullDayOff(key)`: → boolean (licencia aprobada — sombrea toda la columna)
+ * `isPast(key)`: → boolean (día ya transcurrido — la columna se pinta en gris suave,
+ *   como Google Calendar, y sus bloques se atenúan; sigue siendo clickeable)
  * `onSlotClick(key, "HH:MM")`: click en un hueco vacío (para agendar ahí, redondeado a 15min)
  */
 export default function WeekTimeGrid({
-  columns, startHour = 7, endHour = 22, getBlocks, getWorkWindow, isFullDayOff, onSlotClick,
+  columns, startHour = 7, endHour = 22, getBlocks, getWorkWindow, isFullDayOff, isPast, onSlotClick,
 }) {
   const hours = useMemo(() => {
     const arr = []
@@ -73,12 +75,18 @@ export default function WeekTimeGrid({
             const blocks = getBlocks ? getBlocks(col.key) : []
             const window = getWorkWindow ? getWorkWindow(col.key) : null
             const dayOff = isFullDayOff ? isFullDayOff(col.key) : false
+            const past = isPast ? isPast(col.key) : false
 
             return (
-              <div key={col.key} className="flex-1 min-w-[140px] border-r border-gray-100 dark:border-gray-700 last:border-r-0">
+              <div
+                key={col.key}
+                className={`flex-1 min-w-[140px] border-r border-gray-100 dark:border-gray-700 last:border-r-0 ${
+                  past ? 'bg-gray-100/80 dark:bg-gray-900/50' : ''}`}
+              >
                 <div className="h-8 flex items-center justify-center border-b border-gray-100 dark:border-gray-700 px-1">
                   <div className="text-center">
-                    <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">{col.label}</div>
+                    <div className={`text-xs font-semibold truncate ${
+                      past ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>{col.label}</div>
                     {col.subLabel && <div className="text-[10px] text-gray-400 dark:text-gray-500">{col.subLabel}</div>}
                   </div>
                 </div>
@@ -131,6 +139,7 @@ export default function WeekTimeGrid({
                       onClick={e => { e.stopPropagation(); b.onClick?.() }}
                       title={b.title}
                       className={`absolute left-1 right-1 rounded-md px-1.5 py-0.5 overflow-hidden cursor-pointer border ${
+                        past ? 'opacity-60 grayscale' : ''} ${
                         b.tentative
                           ? 'border-dashed border-amber-400 bg-amber-50/80 dark:bg-amber-900/20 dark:border-amber-600'
                           : b.tone === 'task'

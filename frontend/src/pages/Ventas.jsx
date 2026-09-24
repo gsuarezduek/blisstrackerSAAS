@@ -125,7 +125,7 @@ export default function Ventas() {
             {tab === 'dashboard' && <DashboardTab key={leadsTick} team={team} onOpenLead={openLead} onDataChange={loadShared} />}
             {tab === 'pipeline'  && <PipelineTab key={leadsTick} onOpenLead={openLead} />}
             {tab === 'metricas'  && <MetricsTab />}
-            {tab === 'empresas'  && <CompaniesTab onDataChange={loadShared} />}
+            {tab === 'empresas'  && <CompaniesTab onDataChange={loadShared} focusCompanyId={searchParams.get('company')} />}
             {tab === 'whatsapp'  && whatsappEnabled && <WhatsappTab onOpenLead={openLead} />}
           </>
         )}
