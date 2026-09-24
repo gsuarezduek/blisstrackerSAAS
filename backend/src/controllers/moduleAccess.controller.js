@@ -17,7 +17,7 @@ async function list(req, res, next) {
 
 /**
  * PATCH /api/workspaces/current/module-access/:key
- * Body: { allMembers: boolean, roles: string[] }
+ * Body: { allMembers: boolean, roles: string[], userIds?: number[] }
  * Actualiza la config de UN módulo dentro del JSON, sin pisar los demás.
  */
 async function update(req, res, next) {
@@ -26,23 +26,26 @@ async function update(req, res, next) {
     if (!MODULE_KEYS.includes(key)) {
       return res.status(400).json({ error: 'Módulo inválido' })
     }
-    const { allMembers, roles } = req.body
+    const { allMembers, roles, userIds } = req.body
     if (typeof allMembers !== 'boolean') {
       return res.status(400).json({ error: 'allMembers (boolean) es requerido' })
     }
     const cleanRoles = Array.isArray(roles) ? roles.filter(r => typeof r === 'string') : []
+    const cleanUserIds = Array.isArray(userIds)
+      ? [...new Set(userIds.filter(Number.isInteger))]
+      : []
 
     const current = (req.workspace.moduleAccess && typeof req.workspace.moduleAccess === 'object')
       ? req.workspace.moduleAccess
       : {}
-    const nextModuleAccess = { ...current, [key]: { allMembers, roles: cleanRoles } }
+    const nextModuleAccess = { ...current, [key]: { allMembers, roles: cleanRoles, userIds: cleanUserIds } }
 
     await prisma.workspace.update({
       where: { id: req.workspace.id },
       data:  { moduleAccess: nextModuleAccess },
     })
 
-    res.json({ [key]: { allMembers, roles: cleanRoles } })
+    res.json({ [key]: { allMembers, roles: cleanRoles, userIds: cleanUserIds } })
   } catch (err) { next(err) }
 }
 

@@ -39,6 +39,7 @@ function flattenMember(m) {
   return {
     ...m.user,
     role: m.teamRole,
+    extraRoles: Array.isArray(m.extraTeamRoles) ? m.extraTeamRoles : [],
     workspaceJoinedAt: m.joinedAt,
     isAdmin: m.role === 'admin' || m.role === 'owner',
     active: m.active,

@@ -217,7 +217,10 @@ model WorkspaceMember {
   user        User      @relation(fields: [userId], references: [id])
 
   role         String  @default("member") // "owner" | "admin" | "member"
-  teamRole     String  @default("") // ej: "DESIGNER", "CM" (referencia a UserRole.name)
+  teamRole     String  @default("") // rol principal, ej: "DESIGNER", "CM" (referencia a UserRole.name)
+  // Roles de equipo adicionales (string[] de UserRole.name). El principal sigue siendo teamRole
+  // (lo que muestran reportes/insights); estos suman a los permisos de módulo y al contexto de IA.
+  extraTeamRoles Json  @default("[]")
   active       Boolean @default(true)
   vacationDays Int     @default(0)
 

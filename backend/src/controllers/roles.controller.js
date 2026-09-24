@@ -38,7 +38,13 @@ async function remove(req, res, next) {
 
     // Verificar que ningún miembro del workspace tenga ese rol
     const usersWithRole = await prisma.workspaceMember.count({
-      where: { workspaceId: req.workspace.id, teamRole: roleName.name },
+      where: {
+        workspaceId: req.workspace.id,
+        OR: [
+          { teamRole: roleName.name },
+          { extraTeamRoles: { array_contains: roleName.name } },
+        ],
+      },
     })
     if (usersWithRole > 0) {
       return res.status(409).json({ error: `No se puede eliminar: ${usersWithRole} usuario(s) tienen este rol` })

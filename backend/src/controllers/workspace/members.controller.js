@@ -11,6 +11,7 @@ const MEMBER_SELECT = {
   userId: true,
   role: true,
   teamRole: true,
+  extraTeamRoles: true,
   active: true,
   vacationDays: true,
   workStartTime: true,
@@ -48,6 +49,7 @@ async function listMembers(req, res, next) {
     const result = members.map(m => ({
       ...m.user,
       role: m.teamRole,
+      extraRoles: Array.isArray(m.extraTeamRoles) ? m.extraTeamRoles : [],
       isAdmin: m.role === 'admin' || m.role === 'owner',
       memberRole: m.role,
       active: m.active,
@@ -130,7 +132,7 @@ async function addMember(req, res, next) {
 async function updateMember(req, res, next) {
   try {
     const userId = Number(req.params.userId)
-    const { name, email, password, teamRole, memberRole, workStartTime, workEndTime } = req.body
+    const { name, email, password, teamRole, extraRoles, memberRole, workStartTime, workEndTime } = req.body
     const workspaceId = req.workspace.id
 
     // Seguridad: el usuario objetivo DEBE ser miembro de este workspace. Sin esta verificación,
@@ -156,6 +158,26 @@ async function updateMember(req, res, next) {
 
     const memberUpdates = {}
     if (teamRole !== undefined) memberUpdates.teamRole = teamRole
+    if (extraRoles !== undefined) {
+      if (!Array.isArray(extraRoles)) return res.status(400).json({ error: 'extraRoles debe ser una lista' })
+      const requested = [...new Set(extraRoles.filter(r => typeof r === 'string' && r))]
+      const valid = await prisma.userRole.findMany({
+        where: { workspaceId, name: { in: requested } },
+        select: { name: true },
+      })
+      const validNames = new Set(valid.map(r => r.name))
+      if (requested.some(r => !validNames.has(r))) {
+        return res.status(400).json({ error: 'Alguno de los roles adicionales no existe en este workspace' })
+      }
+      memberUpdates.extraTeamRoles = requested
+    }
+    // El rol principal no se repite entre los adicionales (si cambió, o si vienen ambos).
+    const effectivePrimary = memberUpdates.teamRole ?? target.teamRole
+    const effectiveExtras = memberUpdates.extraTeamRoles
+      ?? (Array.isArray(target.extraTeamRoles) ? target.extraTeamRoles : [])
+    if (effectivePrimary && effectiveExtras.includes(effectivePrimary)) {
+      memberUpdates.extraTeamRoles = effectiveExtras.filter(r => r !== effectivePrimary)
+    }
     if (memberRole !== undefined) memberUpdates.role = memberRole
     const start = normalizeTime(workStartTime)
     const end = normalizeTime(workEndTime)
@@ -184,6 +206,7 @@ async function updateMember(req, res, next) {
     res.json({
       ...user,
       role: member.teamRole,
+      extraRoles: Array.isArray(member.extraTeamRoles) ? member.extraTeamRoles : [],
       isAdmin: member.role === 'admin' || member.role === 'owner',
       memberRole: member.role,
       active: member.active,

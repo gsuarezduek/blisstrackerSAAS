@@ -49,7 +49,9 @@ const FREQ_LABEL = {
   friday:     'viernes (cierre de semana)',
 }
 
+// Acepta una expectativa o un array (persona con varios roles): concatena el bloque de cada una.
 function buildRoleContext(roleExpectation) {
+  if (Array.isArray(roleExpectation)) return roleExpectation.map(buildRoleContext).join('')
   if (!roleExpectation) return ''
   let ctx = ''
   if (roleExpectation.description) ctx += `\nPROPÓSITO DEL ROL: ${roleExpectation.description}\n`
@@ -153,7 +155,7 @@ function buildContext(user, todayTasks, carryOver, completedThisWeek, roleExpect
   const completedToday = todayTasks.filter(t => t.status === 'COMPLETED')
 
   const carryOverIds = new Set(carryOver.map(t => t.id))
-  const teamRole = user.teamRole ?? user.role ?? ''
+  const teamRole = [user.teamRole ?? user.role ?? '', ...(user.extraTeamRoles ?? [])].filter(Boolean).join(', ')
   const roleCtx   = buildRoleContext(roleExpectation)
   const memoryCtx = buildMemoryContext(memory)
   let ctx = `FECHA: ${dateStr}\nHORA: ${timeStr}\nROL DEL USUARIO: ${teamRole}${roleCtx}${memoryCtx}\n`
@@ -245,6 +247,8 @@ async function generateInsight(userId, workspace, member) {
   const yesterday = dateNDaysAgo(1, tz)
   const weekStart = getWeekStart(tz)
   const teamRole  = member?.teamRole ?? ''
+  const extraTeamRoles = Array.isArray(member?.extraTeamRoles) ? member.extraTeamRoles : []
+  const roleNames = [teamRole, ...extraTeamRoles].filter(Boolean)
   const insightMemoryEnabled = member?.insightMemoryEnabled ?? true
   const taskQualityEnabled   = member?.taskQualityEnabled   ?? true
 
@@ -286,9 +290,9 @@ async function generateInsight(userId, workspace, member) {
   ])
 
   const [roleExpectation, memory, yesterdayInsight] = await Promise.all([
-    teamRole
-      ? prisma.roleExpectation.findUnique({
-          where: { workspaceId_roleName: { workspaceId, roleName: teamRole } },
+    roleNames.length > 0
+      ? prisma.roleExpectation.findMany({
+          where: { workspaceId, roleName: { in: roleNames } },
         })
       : null,
     insightMemoryEnabled
@@ -304,7 +308,7 @@ async function generateInsight(userId, workspace, member) {
     }),
   ])
 
-  const userWithRole = { ...user, teamRole }
+  const userWithRole = { ...user, teamRole, extraTeamRoles }
   const todayTasks = workDay?.tasks ?? []
   const context = buildContext(userWithRole, todayTasks, carryOver, completedThisWeek, roleExpectation, memory, yesterdayInsight, today, tz)
 

@@ -33,7 +33,7 @@ async function generateMemoryForUser(userId, workspace, opts = {}) {
     }),
     prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
-      select: { teamRole: true, insightMemoryEnabled: true },
+      select: { teamRole: true, extraTeamRoles: true, insightMemoryEnabled: true },
     }),
     prisma.dailyInsight.findMany({
       where: {
@@ -49,6 +49,8 @@ async function generateMemoryForUser(userId, workspace, opts = {}) {
   if (!user || !member) return null
 
   const teamRole = member.teamRole || null
+  const extraRoles = Array.isArray(member.extraTeamRoles) ? member.extraTeamRoles : []
+  const allRoleNames = [teamRole, ...extraRoles].filter(Boolean)
 
   // Métricas determinísticas (período actual vs previo) + benchmark del equipo
   const stats = opts.stats || await getMemberStats(userId, workspaceId, tz)
@@ -59,12 +61,12 @@ async function generateMemoryForUser(userId, workspace, opts = {}) {
   const c = stats.current, p = stats.previous, d = stats.delta
 
   // Perfil del rol
-  const roleExpectation = teamRole
-    ? await prisma.roleExpectation.findUnique({
-        where: { workspaceId_roleName: { workspaceId, roleName: teamRole } },
+  const roleExpectations = allRoleNames.length > 0
+    ? await prisma.roleExpectation.findMany({
+        where: { workspaceId, roleName: { in: allRoleNames } },
         select: { description: true, expectedResults: true, operationalResponsibilities: true },
       })
-    : null
+    : []
 
   // Asistencia del período (para distinguir "menos días" por licencia/ausencia de bajo rendimiento)
   const windowEnd = todayString(tz)
@@ -89,9 +91,9 @@ async function generateMemoryForUser(userId, workspace, opts = {}) {
 
   // Contexto para Claude
   let ctx = `PERFIL DE PRODUCTIVIDAD — ÚLTIMAS 4 SEMANAS vs 4 SEMANAS PREVIAS\n`
-  ctx += `Rol: ${teamRole || 'sin rol definido'}\n`
+  ctx += `Rol: ${allRoleNames.join(', ') || 'sin rol definido'}\n`
 
-  if (roleExpectation) {
+  for (const roleExpectation of roleExpectations) {
     if (roleExpectation.description) ctx += `Propósito del rol: ${roleExpectation.description}\n`
     const results = Array.isArray(roleExpectation.expectedResults) ? roleExpectation.expectedResults : []
     if (results.length > 0) ctx += `Resultados esperados: ${results.join(' | ')}\n`

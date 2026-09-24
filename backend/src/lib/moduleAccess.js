@@ -3,7 +3,8 @@
  * Generaliza a 5 módulos (ventas/marketing/contenido/rrhh/calendario) el mecanismo que antes era
  * exclusivo de Ventas (Workspace.salesRoleNames): un miembro accede si es
  * admin/owner, o si el módulo está abierto a todo el workspace (`allMembers`),
- * o si su teamRole está en la lista configurada.
+ * o si alguno de sus roles (principal o adicionales) está en la lista configurada (`roles`), o si fue agregado
+ * individualmente por userId (`userIds`, aunque su rol no esté en la lista).
  * Independiente del feature-flag catalog (backend/src/lib/featureFlags.js) —
  * ese decide si SuperAdmin habilitó el módulo para el workspace; esto decide
  * quién DENTRO del workspace lo ve. Configurable desde Preferencias.
@@ -40,16 +41,28 @@ const MODULE_ACCESS_DEFAULTS = {
  * Workspace.moduleAccess[key] si existe, si no el default del catálogo.
  * @param {{ moduleAccess?: any } | null} workspace
  * @param {string} key
- * @returns {{ allMembers: boolean, roles: string[] }}
+ * @returns {{ allMembers: boolean, roles: string[], userIds: number[] }}
  */
 function resolveModuleAccess(workspace, key) {
   const stored = workspace?.moduleAccess?.[key]
   const def = MODULE_ACCESS_DEFAULTS[key] || { allMembers: false }
-  if (!stored) return { allMembers: def.allMembers, roles: [] }
+  if (!stored) return { allMembers: def.allMembers, roles: [], userIds: [] }
   return {
     allMembers: !!stored.allMembers,
     roles: Array.isArray(stored.roles) ? stored.roles : [],
+    userIds: Array.isArray(stored.userIds) ? stored.userIds.filter(Number.isInteger) : [],
   }
+}
+
+/**
+ * Todos los roles de equipo de un miembro: el principal (teamRole) + los adicionales
+ * (extraTeamRoles), sin duplicados ni vacíos.
+ * @param {{ teamRole?: string|null, extraTeamRoles?: any } | null} member
+ * @returns {string[]}
+ */
+function memberRoleNames(member) {
+  const extra = Array.isArray(member?.extraTeamRoles) ? member.extraTeamRoles : []
+  return [...new Set([member?.teamRole, ...extra].filter(r => typeof r === 'string' && r))]
 }
 
 /**
@@ -63,9 +76,11 @@ function hasModuleAccess(req, key) {
   const m = req.workspaceMember
   if (!m) return false
   if (m.role === 'admin' || m.role === 'owner') return true
-  const { allMembers, roles } = resolveModuleAccess(req.workspace, key)
+  const { allMembers, roles, userIds } = resolveModuleAccess(req.workspace, key)
   if (allMembers) return true
-  return !!m.teamRole && roles.includes(m.teamRole)
+  const userId = m.userId ?? req.user?.userId
+  if (userId != null && userIds.includes(userId)) return true
+  return memberRoleNames(m).some(r => roles.includes(r))
 }
 
 /**
@@ -92,5 +107,5 @@ function getAllModuleAccess(req) {
 
 module.exports = {
   MODULE_KEYS, MODULE_ACCESS_DEFAULTS,
-  resolveModuleAccess, hasModuleAccess, moduleAccessGuard, getAllModuleAccess,
+  resolveModuleAccess, hasModuleAccess, memberRoleNames, moduleAccessGuard, getAllModuleAccess,
 }

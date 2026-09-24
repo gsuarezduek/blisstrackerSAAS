@@ -79,6 +79,7 @@ export default function TeamTab() {
     setEditId(u.id)
     setEditForm({
       teamRole: u.role || '',
+      extraRoles: u.extraRoles || [],
       memberRole: u.memberRole || 'member',
       workStartTime: u.workStartTime || '',
       workEndTime: u.workEndTime || '',
@@ -98,6 +99,7 @@ export default function TeamTab() {
     try {
       const { data } = await api.put(`/workspaces/current/members/${editId}`, {
         teamRole: editForm.teamRole,
+        extraRoles: (editForm.extraRoles || []).filter(r => r !== editForm.teamRole),
         memberRole: editForm.memberRole,
         workStartTime: editForm.workStartTime || null,
         workEndTime: editForm.workEndTime || null,
@@ -276,6 +278,7 @@ export default function TeamTab() {
                     </span>
                   )}
                   <RoleBadge role={u.role} />
+                  {(u.extraRoles || []).map(r => <RoleBadge key={r} role={r} />)}
                   {u.workStartTime && (
                     <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                       🕒 {u.workStartTime}{u.workEndTime ? `–${u.workEndTime}` : ''}
@@ -298,15 +301,50 @@ export default function TeamTab() {
                 <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-4 bg-gray-50 dark:bg-gray-900/40">
                   <form onSubmit={handleEditSubmit} className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
-                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol en equipo</label>
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Rol principal en el equipo</label>
                       <select
                         value={editForm.teamRole}
-                        onChange={e => setEditForm(p => ({ ...p, teamRole: e.target.value }))}
+                        onChange={e => setEditForm(p => ({
+                          ...p,
+                          teamRole: e.target.value,
+                          extraRoles: (p.extraRoles || []).filter(r => r !== e.target.value),
+                        }))}
                         className="mt-1 w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
                         <option value="">Sin rol</option>
                         {roles.map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
                       </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Roles adicionales</label>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {(editForm.extraRoles || []).map(name => (
+                          <span key={name} className="inline-flex items-center gap-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full pl-3 pr-2 py-1 text-xs font-medium">
+                            {labelFor(name)}
+                            <button
+                              type="button"
+                              onClick={() => setEditForm(p => ({ ...p, extraRoles: p.extraRoles.filter(x => x !== name) }))}
+                              className="hover:text-primary-900 dark:hover:text-white text-sm leading-none"
+                            >×</button>
+                          </span>
+                        ))}
+                        {roles.some(r => r.name !== editForm.teamRole && !(editForm.extraRoles || []).includes(r.name)) && (
+                          <select
+                            value=""
+                            onChange={e => e.target.value && setEditForm(p => ({ ...p, extraRoles: [...(p.extraRoles || []), e.target.value] }))}
+                            className="border border-dashed border-primary-300 dark:border-primary-700 dark:bg-gray-700 dark:text-gray-100 rounded-full px-3 py-1 text-xs text-primary-600"
+                          >
+                            <option value="">+ Agregar rol</option>
+                            {roles
+                              .filter(r => r.name !== editForm.teamRole && !(editForm.extraRoles || []).includes(r.name))
+                              .map(r => <option key={r.id} value={r.name}>{r.label}</option>)}
+                          </select>
+                        )}
+                        {!(editForm.extraRoles || []).length && <span className="text-xs text-gray-400">Ninguno.</span>}
+                      </div>
+                      <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                        El rol principal es el que se muestra en reportes e insights. Los adicionales suman permisos de módulos y contexto de IA.
+                      </p>
                     </div>
                     <div>
                       <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Inicio de jornada</label>
@@ -476,6 +514,7 @@ export default function TeamTab() {
                         </span>
                       )}
                       <RoleBadge role={u.role} />
+                      {(u.extraRoles || []).map(r => <RoleBadge key={r} role={r} />)}
                       <button onClick={() => toggleActive(u)} className="text-xs text-green-500 hover:text-green-700">
                         Activar
                       </button>

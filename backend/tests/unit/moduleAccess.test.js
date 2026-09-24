@@ -1,29 +1,29 @@
 const {
-  MODULE_KEYS, resolveModuleAccess, hasModuleAccess, moduleAccessGuard, getAllModuleAccess,
+  MODULE_KEYS, resolveModuleAccess, hasModuleAccess, memberRoleNames, moduleAccessGuard, getAllModuleAccess,
 } = require('../../src/lib/moduleAccess')
 
-function req({ role, teamRole = null, moduleAccess = {} }) {
-  return { workspaceMember: { role, teamRole }, workspace: { moduleAccess } }
+function req({ role, teamRole = null, extraTeamRoles = [], userId = 1, moduleAccess = {} }) {
+  return { workspaceMember: { role, teamRole, extraTeamRoles, userId }, workspace: { moduleAccess } }
 }
 
 describe('resolveModuleAccess (defaults del catálogo)', () => {
   test('marketing/contenido: default allMembers true sin config guardada', () => {
-    expect(resolveModuleAccess({ moduleAccess: {} }, 'marketing')).toEqual({ allMembers: true, roles: [] })
-    expect(resolveModuleAccess({ moduleAccess: {} }, 'contenido')).toEqual({ allMembers: true, roles: [] })
+    expect(resolveModuleAccess({ moduleAccess: {} }, 'marketing')).toEqual({ allMembers: true, roles: [], userIds: [] })
+    expect(resolveModuleAccess({ moduleAccess: {} }, 'contenido')).toEqual({ allMembers: true, roles: [], userIds: [] })
   })
   test('ventas: default allMembers false sin config guardada', () => {
-    expect(resolveModuleAccess({ moduleAccess: {} }, 'ventas')).toEqual({ allMembers: false, roles: [] })
+    expect(resolveModuleAccess({ moduleAccess: {} }, 'ventas')).toEqual({ allMembers: false, roles: [], userIds: [] })
   })
   test('rrhh: default allMembers false sin config guardada (opt-in explícito, expone datos sensibles)', () => {
-    expect(resolveModuleAccess({ moduleAccess: {} }, 'rrhh')).toEqual({ allMembers: false, roles: [] })
+    expect(resolveModuleAccess({ moduleAccess: {} }, 'rrhh')).toEqual({ allMembers: false, roles: [], userIds: [] })
   })
   test('config guardada pisa el default', () => {
     const ws = { moduleAccess: { marketing: { allMembers: false, roles: ['DESIGNER'] } } }
-    expect(resolveModuleAccess(ws, 'marketing')).toEqual({ allMembers: false, roles: ['DESIGNER'] })
+    expect(resolveModuleAccess(ws, 'marketing')).toEqual({ allMembers: false, roles: ['DESIGNER'], userIds: [] })
   })
   test('workspace sin moduleAccess (undefined) no rompe', () => {
-    expect(resolveModuleAccess({}, 'ventas')).toEqual({ allMembers: false, roles: [] })
-    expect(resolveModuleAccess(null, 'ventas')).toEqual({ allMembers: false, roles: [] })
+    expect(resolveModuleAccess({}, 'ventas')).toEqual({ allMembers: false, roles: [], userIds: [] })
+    expect(resolveModuleAccess(null, 'ventas')).toEqual({ allMembers: false, roles: [], userIds: [] })
   })
   test('eos/gamification no son módulos configurables (quedaron admin-only, fuera de este mecanismo)', () => {
     expect(MODULE_KEYS).not.toContain('eos')
@@ -51,6 +51,24 @@ describe('hasModuleAccess', () => {
   test('member con teamRole NO incluido: no pasa', () => {
     const r = req({ role: 'member', teamRole: 'DESIGNER', moduleAccess: { ventas: { allMembers: false, roles: ['SALES'] } } })
     expect(hasModuleAccess(r, 'ventas')).toBe(false)
+  })
+  test('member agregado por userId pasa aunque su rol no esté en la lista', () => {
+    const cfg = { ventas: { allMembers: false, roles: ['SALES'], userIds: [7] } }
+    expect(hasModuleAccess(req({ role: 'member', teamRole: 'DESIGNER', userId: 7, moduleAccess: cfg }), 'ventas')).toBe(true)
+    expect(hasModuleAccess(req({ role: 'member', teamRole: null, userId: 7, moduleAccess: cfg }), 'ventas')).toBe(true)
+  })
+  test('member no incluido en userIds ni roles: no pasa', () => {
+    const cfg = { ventas: { allMembers: false, roles: ['SALES'], userIds: [7] } }
+    expect(hasModuleAccess(req({ role: 'member', teamRole: 'DESIGNER', userId: 8, moduleAccess: cfg }), 'ventas')).toBe(false)
+  })
+  test('userIds ausente en config legacy no rompe', () => {
+    const cfg = { ventas: { allMembers: false, roles: ['SALES'] } }
+    expect(hasModuleAccess(req({ role: 'member', teamRole: 'DESIGNER', userId: 7, moduleAccess: cfg }), 'ventas')).toBe(false)
+  })
+  test('member con un rol ADICIONAL incluido en la lista: pasa aunque el principal no', () => {
+    const cfg = { ventas: { allMembers: false, roles: ['SALES'] } }
+    expect(hasModuleAccess(req({ role: 'member', teamRole: 'DESIGNER', extraTeamRoles: ['SALES'], moduleAccess: cfg }), 'ventas')).toBe(true)
+    expect(hasModuleAccess(req({ role: 'member', teamRole: 'DESIGNER', extraTeamRoles: ['CM'], moduleAccess: cfg }), 'ventas')).toBe(false)
   })
   test('sin workspaceMember: no pasa', () => {
     expect(hasModuleAccess({ workspaceMember: null, workspace: {} }, 'marketing')).toBe(false)
@@ -87,5 +105,17 @@ describe('getAllModuleAccess', () => {
     const result = getAllModuleAccess(req({ role: 'admin' }))
     expect(Object.keys(result).sort()).toEqual([...MODULE_KEYS].sort())
     expect(Object.values(result).every(v => v === true)).toBe(true)
+  })
+})
+
+describe('memberRoleNames', () => {
+  test('junta principal + adicionales sin duplicados ni vacíos', () => {
+    expect(memberRoleNames({ teamRole: 'A', extraTeamRoles: ['B', 'A', '', 'C'] })).toEqual(['A', 'B', 'C'])
+    expect(memberRoleNames({ teamRole: '', extraTeamRoles: ['B'] })).toEqual(['B'])
+  })
+  test('tolera extraTeamRoles ausente o inválido', () => {
+    expect(memberRoleNames({ teamRole: 'A' })).toEqual(['A'])
+    expect(memberRoleNames({ teamRole: 'A', extraTeamRoles: 'x' })).toEqual(['A'])
+    expect(memberRoleNames(null)).toEqual([])
   })
 })

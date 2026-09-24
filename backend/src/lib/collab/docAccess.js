@@ -40,7 +40,7 @@ async function resolveDocAccess(docKey, token) {
   // WorkspaceMember.
   const req = {
     workspace,
-    workspaceMember: { role, teamRole },
+    workspaceMember: { role, teamRole, userId },
     user: { userId, isSuperAdmin },
   }
 
@@ -59,6 +59,12 @@ async function resolveDocAccess(docKey, token) {
     const id = Number(parsed.rawId)
     const lead = id && await prisma.lead.findFirst({ where: { id, workspaceId }, select: { id: true } })
     if (!lead) throw new Error('Lead no encontrado')
+    // El JWT no lleva los roles adicionales: se leen de la DB solo cuando hace falta.
+    const member = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      select: { extraTeamRoles: true },
+    })
+    req.workspaceMember.extraTeamRoles = member?.extraTeamRoles ?? []
     if (!hasModuleAccess(req, 'ventas')) throw new Error('Sin acceso al módulo de Ventas')
     await assertFeatureFlag('ventas', workspace, isSuperAdmin)
     return { userId, workspaceId, name }

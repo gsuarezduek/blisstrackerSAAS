@@ -1,6 +1,6 @@
 const prisma = require('../../lib/prisma')
 const { todayString } = require('../../utils/dates')
-const { resolveModuleAccess } = require('../../lib/moduleAccess')
+const { resolveModuleAccess, memberRoleNames } = require('../../lib/moduleAccess')
 
 // Rango [inicio, finExclusivo) del mes en curso, anclado al mes local del workspace.
 // Usa límites UTC del mes (skew de horas en el borde, irrelevante para tarjetas de dashboard).
@@ -70,23 +70,23 @@ async function getDashboard(req, res, next) {
 
 // GET /api/ventas/team
 // Responsables comerciales asignables: miembros activos admin/owner o con teamRole
-// habilitado para el módulo ventas (ver lib/moduleAccess).
+// habilitado (o agregados por persona) para el módulo ventas (ver lib/moduleAccess).
 async function getTeam(req, res, next) {
   try {
     const workspaceId = req.workspace.id
-    const salesRoles = resolveModuleAccess(req.workspace, 'ventas').roles
+    const { roles: salesRoles, userIds: salesUserIds } = resolveModuleAccess(req.workspace, 'ventas')
 
     const members = await prisma.workspaceMember.findMany({
       where: { workspaceId, active: true },
       select: {
-        role: true, teamRole: true,
+        role: true, teamRole: true, extraTeamRoles: true,
         user: { select: { id: true, name: true, avatar: true } },
       },
       orderBy: { user: { name: 'asc' } },
     })
 
     const team = members
-      .filter(m => ['admin', 'owner'].includes(m.role) || salesRoles.includes(m.teamRole))
+      .filter(m => ['admin', 'owner'].includes(m.role) || memberRoleNames(m).some(r => salesRoles.includes(r)) || salesUserIds.includes(m.user.id))
       .map(m => ({ id: m.user.id, name: m.user.name, avatar: m.user.avatar, teamRole: m.teamRole, role: m.role }))
 
     res.json(team)
