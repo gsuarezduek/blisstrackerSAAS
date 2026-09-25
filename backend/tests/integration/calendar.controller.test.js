@@ -62,7 +62,7 @@ describe('POST /api/calendar/events', () => {
     prisma.project.findFirst.mockResolvedValue({ id: 7 })
     const created = {
       id: 10, workspaceId: WORKSPACE_ID, organizerId: 1, title: 'Sync semanal',
-      date: '2026-09-25', startTime: '10:00', durationMins: 30, projectId: 7,
+      date: '2027-03-25', startTime: '10:00', durationMins: 30, projectId: 7,
       meetLink: null, notes: null, realMeetingId: null, createdAt: new Date(), updatedAt: new Date(),
       organizer: { id: 1, name: 'Organizador', avatar: 'x.png' }, project: { id: 7, name: 'Proyecto X' },
       participants: [
@@ -88,7 +88,7 @@ describe('POST /api/calendar/events', () => {
       .post('/api/calendar/events')
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ title: 'Sync semanal', date: '2026-09-25', startTime: '10:00', durationMins: 30, projectId: 7, participantIds: [2, 3] })
+      .send({ title: 'Sync semanal', date: '2027-03-25', startTime: '10:00', durationMins: 30, projectId: 7, participantIds: [2, 3] })
 
     expect(res.status).toBe(201)
     expect(res.body.confirmationStatus).toBe('pending')
@@ -105,11 +105,11 @@ describe('POST /api/calendar/events', () => {
     expect(prisma.notification.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ userId: 2, type: 'CALENDAR_INVITE', calendarEventId: 10 })],
     })
-    // Tarea "reserva" del organizador: el evento (2026-09-25) es a futuro -> scheduledFor con esa fecha.
+    // Tarea "reserva" del organizador: el evento (2027-03-25) es a futuro -> scheduledFor con esa fecha.
     expect(prisma.task.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         description: 'Sync semanal', projectId: 7, userId: 1, workDayId: 900,
-        scheduledFor: '2026-09-25', scheduledTime: '10:00', scheduledDurationMins: 30,
+        scheduledFor: '2027-03-25', scheduledTime: '10:00', scheduledDurationMins: 30,
       }),
     })
     expect(prisma.calendarEventParticipant.update).toHaveBeenCalledWith({ where: { id: 1000 }, data: { taskId: 701 } })
@@ -129,7 +129,7 @@ describe('POST /api/calendar/events', () => {
       .post('/api/calendar/events')
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
-      .send({ title: 'x', date: '2026-09-25', startTime: '10:00' })
+      .send({ title: 'x', date: '2027-03-25', startTime: '10:00' })
     expect(res.status).toBe(400)
     expect(prisma.calendarEvent.create).not.toHaveBeenCalled()
   })
@@ -140,7 +140,7 @@ describe('POST /api/calendar/events', () => {
 describe('POST /api/calendar/events/:id/respond', () => {
   function mockEvent(overrides = {}) {
     const base = {
-      id: 10, workspaceId: WORKSPACE_ID, organizerId: 1, title: 'Sync', date: '2026-09-25', startTime: '10:00',
+      id: 10, workspaceId: WORKSPACE_ID, organizerId: 1, title: 'Sync', date: '2027-03-25', startTime: '10:00',
       durationMins: 30, projectId: null, meetLink: null, notes: null, realMeetingId: null,
       createdAt: new Date(), updatedAt: new Date(), organizer: { id: 1, name: 'Organizador', avatar: 'x' }, project: null,
       participants: [
@@ -206,7 +206,7 @@ describe('POST /api/calendar/events/:id/respond', () => {
     expect(prisma.task.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         description: 'Sync', projectId: 7, userId: 2, workDayId: 900,
-        scheduledFor: '2026-09-25', scheduledTime: '10:00', scheduledDurationMins: 30,
+        scheduledFor: '2027-03-25', scheduledTime: '10:00', scheduledDurationMins: 30,
         createdById: 1, // organizador != invitado -> queda como quien la delegó
       }),
     })
@@ -374,7 +374,7 @@ describe('DELETE /api/calendar/events/:id', () => {
 
   it('cancelar borra las tareas "reserva" de los participantes que seguían PENDING', async () => {
     prisma.calendarEvent.findFirst.mockResolvedValue({
-      id: 10, workspaceId: WORKSPACE_ID, organizerId: 1, realMeetingId: null, title: 'x', date: '2026-09-25', startTime: '10:00',
+      id: 10, workspaceId: WORKSPACE_ID, organizerId: 1, realMeetingId: null, title: 'x', date: '2027-03-25', startTime: '10:00',
       participants: [
         { userId: 1, taskId: 700 }, // organizador, tarea aún pendiente
         { userId: 2, taskId: 800 }, // invitado, ya la había empezado
@@ -403,7 +403,7 @@ describe('POST /api/calendar/events/:id/start-meeting', () => {
   it('crea la ProjectMeeting real solo con los participantes accepted y la vincula al evento', async () => {
     mockWorkspace('admin') // canWrite() necesita admin/owner (o ProjectMember) para iniciar la reunión real
     prisma.calendarEvent.findFirst.mockResolvedValue({
-      id: 10, workspaceId: WORKSPACE_ID, organizerId: 1, title: 'Kickoff', date: '2026-09-25', startTime: '10:00',
+      id: 10, workspaceId: WORKSPACE_ID, organizerId: 1, title: 'Kickoff', date: '2027-03-25', startTime: '10:00',
       durationMins: 30, projectId: 7, meetLink: null, notes: null, realMeetingId: null,
       createdAt: new Date(), updatedAt: new Date(), organizer: { id: 1, name: 'Organizador', avatar: 'x' },
       project: { id: 7, name: 'Proyecto X' },
@@ -466,11 +466,11 @@ describe('POST /api/calendar/events — serie recurrente', () => {
       id: 50, workspaceId: WORKSPACE_ID, organizerId: 1, projectId: 7,
       title: 'Standup diario', meetLink: null, notes: null, startTime: '09:00', durationMins: 15,
       participantIds: JSON.stringify([2]), frequency: 'daily', weekdays: '[]', dayOfMonth: null, month: null,
-      startDate: '2026-09-25', endDate: null, active: true,
+      startDate: '2027-03-25', endDate: null, active: true,
     })
     prisma.calendarEvent.create.mockResolvedValue({
       id: 900, workspaceId: WORKSPACE_ID, organizerId: 1, title: 'Standup diario',
-      date: '2026-09-25', startTime: '09:00', durationMins: 15, projectId: 7, recurrenceId: 50,
+      date: '2027-03-25', startTime: '09:00', durationMins: 15, projectId: 7, recurrenceId: 50,
       meetLink: null, notes: null, realMeetingId: null, createdAt: new Date(), updatedAt: new Date(),
       organizer: { id: 1, name: 'Organizador', avatar: 'x' }, project: { id: 7, name: 'Proyecto X' },
       participants: [
@@ -486,7 +486,7 @@ describe('POST /api/calendar/events — serie recurrente', () => {
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
       .send({
-        title: 'Standup diario', date: '2026-09-25', startTime: '09:00', durationMins: 15, projectId: 7,
+        title: 'Standup diario', date: '2027-03-25', startTime: '09:00', durationMins: 15, projectId: 7,
         participantIds: [2], recurrence: { frequency: 'daily' },
       })
 
@@ -495,12 +495,12 @@ describe('POST /api/calendar/events — serie recurrente', () => {
       data: expect.objectContaining({
         workspaceId: WORKSPACE_ID, organizerId: 1, projectId: 7, title: 'Standup diario',
         startTime: '09:00', durationMins: 15, participantIds: JSON.stringify([2]),
-        frequency: 'daily', startDate: '2026-09-25', endDate: null,
+        frequency: 'daily', startDate: '2027-03-25', endDate: null,
       }),
     })
     // Primera ocurrencia materializada de una — mismo criterio de creación que un evento suelto.
     expect(prisma.calendarEvent.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ recurrenceId: 50, date: '2026-09-25' }),
+      data: expect.objectContaining({ recurrenceId: 50, date: '2027-03-25' }),
       include: expect.any(Object),
     })
     expect(res.body.recurrence).toEqual(expect.objectContaining({ id: 50, frequency: 'daily' }))
@@ -514,7 +514,7 @@ describe('POST /api/calendar/events — serie recurrente', () => {
       .set('Authorization', makeToken())
       .set('X-Workspace', WORKSPACE_SLUG)
       .send({
-        title: 'x', date: '2026-09-25', startTime: '09:00', projectId: 7,
+        title: 'x', date: '2027-03-25', startTime: '09:00', projectId: 7,
         recurrence: { frequency: 'hourly' },
       })
     expect(res.status).toBe(400)
@@ -601,7 +601,7 @@ describe('DELETE /api/calendar/events/:id?scope=series', () => {
   it('cancela esta ocurrencia y las siguientes ya materializadas, y corta la serie ahí', async () => {
     prisma.calendarEvent.findFirst.mockResolvedValue({
       id: 10, workspaceId: WORKSPACE_ID, organizerId: 1, realMeetingId: null, recurrenceId: 50,
-      title: 'Standup', date: '2026-09-25', startTime: '09:00',
+      title: 'Standup', date: '2027-03-25', startTime: '09:00',
       participants: [{ userId: 1, taskId: null }, { userId: 2, taskId: null }],
     })
     prisma.calendarEventRecurrence.findFirst.mockResolvedValue({
@@ -609,7 +609,7 @@ describe('DELETE /api/calendar/events/:id?scope=series', () => {
     })
     prisma.calendarEvent.findMany.mockResolvedValue([
       {
-        id: 10, date: '2026-09-25', title: 'Standup', startTime: '09:00',
+        id: 10, date: '2027-03-25', title: 'Standup', startTime: '09:00',
         participants: [{ userId: 1, taskId: null }, { userId: 2, taskId: null }],
       },
       {
@@ -628,10 +628,10 @@ describe('DELETE /api/calendar/events/:id?scope=series', () => {
     expect(res.body.seriesEnded).toBe(true)
     expect(prisma.calendarEvent.delete).toHaveBeenCalledWith({ where: { id: 10 } })
     expect(prisma.calendarEvent.delete).toHaveBeenCalledWith({ where: { id: 11 } })
-    // La ocurrencia borrada (25/9) no era la primera de la serie (18/9) -> la
+    // La ocurrencia borrada (25/3) no era la primera de la serie (18/9) -> la
     // serie se corta el día anterior, no se desactiva por completo.
     expect(prisma.calendarEventRecurrence.update).toHaveBeenCalledWith({
-      where: { id: 50 }, data: { endDate: '2026-09-24' },
+      where: { id: 50 }, data: { endDate: '2027-03-24' },
     })
   })
 })
@@ -642,7 +642,7 @@ describe('PATCH /api/calendar/events/:id — serie recurrente', () => {
   function mockOccurrence(overrides = {}) {
     return {
       id: 10, workspaceId: WORKSPACE_ID, organizerId: 1, realMeetingId: null, recurrenceId: 50,
-      title: 'Standup', date: '2026-09-25', startTime: '09:00', durationMins: 15, projectId: 7,
+      title: 'Standup', date: '2027-03-25', startTime: '09:00', durationMins: 15, projectId: 7,
       meetLink: null, notes: null, createdAt: new Date(), updatedAt: new Date(),
       organizer: { id: 1, name: 'Organizador', avatar: 'x' }, project: { id: 7, name: 'Proyecto X' },
       participants: [
@@ -690,7 +690,7 @@ describe('PATCH /api/calendar/events/:id — serie recurrente', () => {
       data: { title: 'Standup renombrado', startTime: '09:30' },
     })
     expect(prisma.calendarEvent.findMany).toHaveBeenCalledWith({
-      where: { recurrenceId: 50, date: { gte: '2026-09-25' }, realMeetingId: null },
+      where: { recurrenceId: 50, date: { gte: '2027-03-25' }, realMeetingId: null },
       select: { id: true },
     })
     expect(prisma.calendarEvent.update).toHaveBeenCalledWith({
