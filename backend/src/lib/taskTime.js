@@ -4,8 +4,14 @@
 // y a pausas/cron no registrados. Si la tarea no trae `sessions` (datos legacy), cae al
 // cálculo viejo por startedAt/completedAt/pausedMinutes.
 //
-// La query debe incluir `sessions: { select: { startedAt: true, endedAt: true } }`.
+// Si la tarea está completada y se editó la duración a mano (`minutesOverride`), esa edición
+// manda sobre las sesiones — igual que en Reportes/Productividad (`taskMins`).
+//
+// La query debe incluir `sessions: { select: { startedAt: true, endedAt: true } }`
+// y `minutesOverride` para que respete la edición manual.
 function taskWorkedMinutes(task, now = Date.now()) {
+  if (task.status === 'COMPLETED' && task.minutesOverride != null) return task.minutesOverride
+
   const sessions = task.sessions
   if (Array.isArray(sessions) && sessions.length > 0) {
     let ms = 0

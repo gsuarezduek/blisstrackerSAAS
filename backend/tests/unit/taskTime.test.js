@@ -3,6 +3,24 @@ const { taskWorkedMinutes } = require('../../src/lib/taskTime')
 const NOW = new Date('2024-01-15T10:00:00Z').getTime()
 
 describe('taskWorkedMinutes', () => {
+  it('usa minutesOverride en tareas completadas (duración editada a mano)', () => {
+    const task = {
+      status: 'COMPLETED',
+      minutesOverride: 90,
+      sessions: [{ startedAt: '2024-01-15T09:00:00Z', endedAt: '2024-01-15T09:20:00Z' }], // 20
+    }
+    expect(taskWorkedMinutes(task, NOW)).toBe(90)
+  })
+
+  it('minutesOverride = 0 también cuenta como edición', () => {
+    const task = {
+      status: 'COMPLETED',
+      minutesOverride: 0,
+      sessions: [{ startedAt: '2024-01-15T09:00:00Z', endedAt: '2024-01-15T09:20:00Z' }],
+    }
+    expect(taskWorkedMinutes(task, NOW)).toBe(0)
+  })
+
   it('suma intervalos de sesiones cerradas', () => {
     const task = {
       status: 'COMPLETED',
