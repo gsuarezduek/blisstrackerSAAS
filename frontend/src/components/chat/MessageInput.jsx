@@ -13,6 +13,10 @@ const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 // receptor (ChatWidget.jsx onTyping) para que un typer continuo no parpadee.
 const TYPING_EMIT_THROTTLE_MS = 2500
 
+// Alto máximo del textarea autoexpandible (~9 líneas de texto). Por encima de esto
+// scrollea adentro en vez de seguir empujando el panel del chat.
+const TEXTAREA_MAX_HEIGHT_PX = 200
+
 // Entrada especial de autocompletado: notifica a todo el equipo del canal, no a una persona.
 // Se antepone a la lista real para que "@ev..." la matchee y quede siempre primera.
 const EVERYONE_ID = '__everyone__'
@@ -131,6 +135,15 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
     if (replyingTo) textareaRef.current?.focus()
   }, [replyingTo])
 
+  // Auto-crece con el contenido hasta TEXTAREA_MAX_HEIGHT_PX; más allá de eso el
+  // propio textarea scrollea (comportamiento default de overflow en un <textarea>).
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT_PX)}px`
+  }, [text])
+
   return (
     <div className="px-3 py-2.5 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
       {replyingTo && (
@@ -207,7 +220,7 @@ export default function MessageInput({ onSend, onSendMedia, members, replyingTo,
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={file ? 'Agregá un texto (opcional)…' : 'Escribí un mensaje... Usá @ para mencionar'}
-            className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none max-h-28"
+            className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none overflow-y-auto"
           />
           {mentionQuery !== null && mentionMatches.length > 0 && (
             <div className="absolute bottom-full mb-1 left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-lg overflow-hidden z-10">
