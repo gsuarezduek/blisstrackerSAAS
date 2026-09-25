@@ -87,10 +87,11 @@ async function dismissDelegated(req, res, next) {
       taskCount = r.count
     }
 
-    // Sin filtro (ALL) o filtrando específicamente por los avisos: limpiar también
-    // DeletedTaskNotice — "Borrar todas" debe incluir los avisos de eliminación.
+    // Sin filtro, filtrando por avisos, o por completadas (el bulk-clear por default
+    // de "Delegadas" apunta a COMPLETED — ver DashboardParts.jsx): limpiar también
+    // DeletedTaskNotice, que son igual de "resueltas" que una tarea ya completada.
     let noticeCount = 0
-    if (!status || status === 'DELETED') {
+    if (!status || status === 'DELETED' || status === 'COMPLETED') {
       const r = await prisma.deletedTaskNotice.updateMany({
         where: { createdById, workspaceId, dismissed: false, deletedAt: { gte: weekAgo } },
         data: { dismissed: true },

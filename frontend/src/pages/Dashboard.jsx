@@ -85,12 +85,19 @@ export default function Dashboard() {
 
   useEffect(() => { loadToday() }, [loadToday])
 
-  // Refrescar cuando se crea una tarea desde el atajo global (tecla N en otra página)
+  // Refrescar cuando se crea una tarea desde el atajo global (tecla N en otra página).
+  // Si quedó delegada a otra persona, además refresca Delegadas (no aparece en loadToday()).
   useEffect(() => {
-    function onTaskCreated() { loadToday() }
+    function onTaskCreated(e) {
+      loadToday()
+      const task = e.detail
+      if (task?.userId && user?.id && task.userId !== user.id) {
+        api.get('/tasks/delegated').then(r => setDelegated(r.data)).catch(() => {})
+      }
+    }
     window.addEventListener('bliss:task-created', onTaskCreated)
     return () => window.removeEventListener('bliss:task-created', onTaskCreated)
-  }, [loadToday])
+  }, [loadToday, user?.id])
 
   const seguimientoTabInit = useRef(false)
   useEffect(() => {
@@ -176,6 +183,17 @@ export default function Dashboard() {
   }
 
   function handleAddTask(task) {
+    // Tarea delegada a otra persona: no es mía, no debe aparecer en mi foco de hoy.
+    // La respuesta de POST /tasks no trae el `user` (asignado) con avatar incluido
+    // (taskInclude solo trae `createdBy`), así que refrescamos /tasks/delegated en
+    // vez de armar la fila a mano — aparece ya mismo en Seguimiento, sin recargar.
+    if (task.userId && user?.id && task.userId !== user.id) {
+      api.get('/tasks/delegated').then(r => setDelegated(r.data)).catch(() => {})
+      setSeguimientoTab('DELEGADAS')
+      setDelegatedOpen(true)
+      setDelegatedFilter('ALL')
+      return
+    }
     // Tarea programada a futuro: no va al foco de hoy, va a la sección "Futuras".
     if (task.scheduledFor && workDay && task.scheduledFor > workDay.date) {
       setFuture(prev => [...prev, task].sort((a, b) => (a.scheduledFor > b.scheduledFor ? 1 : -1)))
@@ -332,17 +350,35 @@ export default function Dashboard() {
   }, [seguimientoByProject, delegatedFilter])
   const hasActiveTask = !!activeTask
 
+  // Cuántas Delegadas están completadas — es lo único que el botón "Borrar" bulk
+  // toca por default (ver handleBulkRemoveSeguimiento). Excluye avisos de eliminación
+  // (status 'DELETED', no 'COMPLETED'; el backend igual los limpia junto con las
+  // completadas — ver delegation.controller.js).
+  const delegatedCompletedCount = useMemo(
+    () => delegated.filter(t => t.status === 'COMPLETED').length,
+    [delegated]
+  )
+
+  // Visibilidad del botón bulk: en Delegadas sin filtro, solo si hay completadas
+  // que borrar (si no, no hay nada que el botón "Borrar completadas" pueda hacer).
+  const showSeguimientoBulkButton = seguimientoTab === 'DELEGADAS' && delegatedFilter === 'ALL'
+    ? delegatedCompletedCount > 0
+    : filteredSeguimientoByProject.length > 0
+
   // Borrar/dejar de seguir en bulk — mismo botón para ambas pestañas, apunta al endpoint
-  // correspondiente (dismiss de Delegadas o unfollow de Seguidas).
+  // correspondiente (dismiss de Delegadas o unfollow de Seguidas). En Delegadas sin un
+  // filtro de estado explícito, el bulk-clear apunta solo a completadas — nunca a las
+  // que siguen pendientes/en curso/bloqueadas, que siguen siendo trabajo por hacer.
   async function handleBulkRemoveSeguimiento() {
     setDismissing(true)
     try {
-      const params = delegatedFilter !== 'ALL' ? `?status=${delegatedFilter}` : ''
       if (seguimientoTab === 'DELEGADAS') {
-        await api.delete(`/tasks/delegated${params}`)
+        const status = delegatedFilter !== 'ALL' ? delegatedFilter : 'COMPLETED'
+        await api.delete(`/tasks/delegated?status=${status}`)
         const { data } = await api.get('/tasks/delegated')
         setDelegated(data)
       } else {
+        const params = delegatedFilter !== 'ALL' ? `?status=${delegatedFilter}` : ''
         await api.delete(`/tasks/followed${params}`)
         const { data } = await api.get('/tasks/followed')
         setFollowedTasks(data)
@@ -747,6 +783,8 @@ export default function Dashboard() {
             setDismissConfirm={setDismissConfirm}
             dismissing={dismissing}
             onBulkRemove={handleBulkRemoveSeguimiento}
+            showBulkButton={showSeguimientoBulkButton}
+            delegatedCompletedCount={delegatedCompletedCount}
             seguimientoStatuses={seguimientoStatuses}
             filteredSeguimientoByProject={filteredSeguimientoByProject}
             seguimientoSeen={seguimientoSeen}

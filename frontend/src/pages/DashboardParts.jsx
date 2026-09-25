@@ -319,7 +319,7 @@ export function SeguimientoSection({
   seguimientoTab, onChangeTab,
   delegatedFilter, onChangeFilter,
   dismissConfirm, setDismissConfirm,
-  dismissing, onBulkRemove,
+  dismissing, onBulkRemove, showBulkButton, delegatedCompletedCount,
   seguimientoStatuses, filteredSeguimientoByProject,
   seguimientoSeen, onOpenTask, onRemoveOne,
 }) {
@@ -392,7 +392,7 @@ export function SeguimientoSection({
             </div>
 
             {/* Borrar del dashboard: dismiss en Delegadas, dejar de seguir en Seguidas — mismo botón en ambas */}
-            {filteredSeguimientoByProject.length > 0 && (
+            {showBulkButton && (
               dismissConfirm ? (
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   <span className="text-xs text-gray-500 dark:text-gray-400">¿Confirmar?</span>
@@ -417,7 +417,7 @@ export function SeguimientoSection({
                   title={
                     seguimientoTab === 'SEGUIDAS'
                       ? (delegatedFilter === 'ALL' ? 'Dejar de seguir todas' : `Dejar de seguir ${delegatedFilter === 'COMPLETED' ? 'las completadas' : 'las filtradas'}`)
-                      : (delegatedFilter === 'ALL' ? 'Borrar todas del dashboard' : `Borrar ${delegatedFilter === 'COMPLETED' ? 'completadas' : 'filtradas'} del dashboard`)
+                      : (delegatedFilter === 'ALL' ? 'Borrar las completadas del dashboard' : `Borrar ${delegatedFilter === 'COMPLETED' ? 'completadas' : 'filtradas'} del dashboard`)
                   }
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
@@ -425,7 +425,7 @@ export function SeguimientoSection({
                   </svg>
                   {seguimientoTab === 'SEGUIDAS'
                     ? (delegatedFilter === 'ALL' ? 'Dejar de seguir todas' : `Dejar de seguir ${filteredSeguimientoByProject.reduce((s, g) => s + g.tasks.length, 0)}`)
-                    : (delegatedFilter === 'ALL' ? 'Borrar todas' : `Borrar ${filteredSeguimientoByProject.reduce((s, g) => s + g.tasks.length, 0)}`)}
+                    : (delegatedFilter === 'ALL' ? `Borrar completadas (${delegatedCompletedCount})` : `Borrar ${filteredSeguimientoByProject.reduce((s, g) => s + g.tasks.length, 0)}`)}
                 </button>
               )
             )}
