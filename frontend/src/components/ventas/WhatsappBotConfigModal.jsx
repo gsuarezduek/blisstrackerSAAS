@@ -213,21 +213,72 @@ function QualityPanel({ escalations, loading }) {
   )
 }
 
-function TestPanel({ messages, input, setInput, loading, error, onSend }) {
+// Corrección inline de una respuesta del bot en el playground: 👎 abre un
+// textarea "¿qué hubieras respondido vos?" — al guardar, esa corrección se
+// suma como ejemplo few-shot (mismo mecanismo que la pestaña Ejemplos), así
+// que el bot "aprende" el caso puntual desde el próximo mensaje de la prueba
+// y al guardar la config queda persistido.
+function CorrectionControl({ corrected, onSubmit }) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  if (corrected) {
+    return <span className="text-[11px] text-green-600 dark:text-green-400 mt-1">✓ Se agregó como ejemplo</span>
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-[11px] text-gray-400 hover:text-red-500 mt-1">
+        👎 No me gusta
+      </button>
+    )
+  }
+
+  function submit() {
+    const text = draft.trim()
+    if (!text) return
+    onSubmit(text)
+  }
+
+  return (
+    <div className="mt-1.5 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-2">
+      <textarea
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        placeholder="¿Qué hubieras respondido vos?"
+        rows={2}
+        autoFocus
+        className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+      />
+      <div className="flex justify-end gap-2 mt-1">
+        <button type="button" onClick={() => { setOpen(false); setDraft('') }} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Cancelar</button>
+        <button type="button" onClick={submit} disabled={!draft.trim()} className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-40">Guardar como ejemplo</button>
+      </div>
+    </div>
+  )
+}
+
+function TestPanel({ messages, input, setInput, loading, error, onSend, onCorrect }) {
   return (
     <div className="flex flex-col h-full">
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Probá el bot con la configuración actual del formulario (aunque no la hayas guardado todavía) — no se manda nada por
-        WhatsApp real ni se guarda en ninguna conversación.
+        WhatsApp real ni se guarda en ninguna conversación. Si una respuesta no te gusta, marcala con 👎 y decile qué hubieras
+        respondido vos: se agrega como ejemplo en la pestaña Ejemplos.
       </p>
-      <div className="flex-1 min-h-[240px] overflow-y-auto space-y-2 bg-gray-50 dark:bg-gray-900/30 rounded-xl p-3 mb-3">
+      <div className="flex-1 min-h-[320px] overflow-y-auto space-y-2 bg-gray-50 dark:bg-gray-900/30 rounded-xl p-3 mb-3">
         {messages.length === 0 && <p className="text-sm text-gray-400 text-center py-8">Escribí como si fueras el cliente para empezar.</p>}
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'cliente' ? 'justify-start' : 'justify-end'}`}>
-            <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.role === 'cliente' ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100' : 'bg-primary-600 text-white'}`}>
-              {m.text}
-              {m.escalate && (
-                <div className="mt-1 text-[11px] font-semibold text-amber-200" title={m.escalateReason}>🚩 Esto pasaría a un humano</div>
+            <div className={`max-w-[80%] flex flex-col ${m.role === 'cliente' ? 'items-start' : 'items-end'}`}>
+              <div className={`rounded-2xl px-3 py-2 text-sm ${m.role === 'cliente' ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100' : 'bg-primary-600 text-white'}`}>
+                {m.text}
+                {m.escalate && (
+                  <div className="mt-1 text-[11px] font-semibold text-amber-200" title={m.escalateReason}>🚩 Esto pasaría a un humano</div>
+                )}
+              </div>
+              {m.role === 'bot' && (
+                <CorrectionControl corrected={m.corrected} onSubmit={text => onCorrect(i, text)} />
               )}
             </div>
           </div>
@@ -338,6 +389,22 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
     await loadDocuments()
   }
 
+  // Corrección de una respuesta del bot en el playground: busca el mensaje del
+  // "cliente" inmediatamente anterior (la pregunta que originó esa respuesta)
+  // y suma { question, answer: correctionText } a `examples` — mismo estado
+  // que edita la pestaña Ejemplos, así que ya alimenta el próximo mensaje de
+  // esta prueba y queda persistido al guardar la config.
+  function handleTestCorrect(index, correctionText) {
+    let question = ''
+    for (let j = index - 1; j >= 0; j--) {
+      if (testMessages[j]?.role === 'cliente') { question = testMessages[j].text; break }
+    }
+    if (question) {
+      setExamples(prev => [...prev, { question, answer: correctionText }])
+    }
+    setTestMessages(msgs => msgs.map((m, i) => (i === index ? { ...m, corrected: true } : m)))
+  }
+
   async function handleTestSend() {
     const text = testInput.trim()
     if (!text) return
@@ -363,7 +430,7 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <form
         onSubmit={handleSubmit}
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-3xl h-[88vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 pt-5 pb-0 shrink-0">
@@ -457,7 +524,7 @@ export default function WhatsappBotConfigModal({ config, onClose, onSaved }) {
           )}
 
           {tab === 'probar' && (
-            <TestPanel messages={testMessages} input={testInput} setInput={setTestInput} loading={testLoading} error={testError} onSend={handleTestSend} />
+            <TestPanel messages={testMessages} input={testInput} setInput={setTestInput} loading={testLoading} error={testError} onSend={handleTestSend} onCorrect={handleTestCorrect} />
           )}
         </div>
 
