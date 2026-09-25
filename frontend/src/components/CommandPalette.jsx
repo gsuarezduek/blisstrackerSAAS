@@ -311,7 +311,7 @@ export default function CommandPalette({ open, onClose }) {
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-          <span className="text-gray-400">🔎</span>
+          <img src="/mascot-bee.png" alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
           <input
             ref={inputRef}
             value={query}
@@ -325,7 +325,10 @@ export default function CommandPalette({ open, onClose }) {
 
         <div className="max-h-[50vh] overflow-y-auto py-1.5">
           {results.length === 0 && !searching && !serverLoading ? (
-            <p className="px-4 py-6 text-sm text-gray-400 text-center">Sin resultados para "{query}".</p>
+            <div className="flex flex-col items-center gap-2 px-4 py-6">
+              <img src="/mascot-bee.png" alt="" className="w-10 h-10 rounded-full object-cover opacity-80" />
+              <p className="text-sm text-gray-400 text-center">Sin resultados para "{query}".</p>
+            </div>
           ) : (
             results.map((item, i) => (
               <button
