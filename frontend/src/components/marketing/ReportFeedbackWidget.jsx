@@ -36,7 +36,9 @@ function Star({ filled, onClick, onEnter, onLeave }) {
  * Botón flotante de feedback para el informe público del cliente.
  * Al hacer click: nombre + calificación 1–5 estrellas + comentario.
  */
-export default function ReportFeedbackWidget({ token, brandPrimary = '#f97316', agencyName }) {
+// `positionClass`: el portal de cliente tiene una barra de navegación fija
+// abajo en mobile, así que sube el botón para no taparla.
+export default function ReportFeedbackWidget({ token, brandPrimary = '#f97316', agencyName, positionClass = 'bottom-5 right-5' }) {
   const [open, setOpen]       = useState(false)
   const [sent, setSent]       = useState(false)
   const [name, setName]       = useState('')
@@ -91,7 +93,7 @@ export default function ReportFeedbackWidget({ token, brandPrimary = '#f97316', 
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="no-print fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full pl-3.5 pr-4 py-3 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 active:translate-y-0"
+          className={`no-print fixed ${positionClass} z-40 flex items-center gap-2 rounded-full pl-3.5 pr-4 py-3 shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 active:translate-y-0`}
           style={{ backgroundColor: brandPrimary, color: fg }}
           aria-label="Dejar tu opinión sobre el informe"
         >

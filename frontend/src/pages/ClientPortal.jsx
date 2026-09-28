@@ -1,138 +1,288 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
-import ReportViewer from '../components/marketing/ReportViewer'
-import { monthLabel } from '../components/marketing/ReportViewerParts'
-import ReportFeedbackWidget from '../components/marketing/ReportFeedbackWidget'
 import ClientBriefsView from '../components/ClientBriefsView'
 import PortalLoginGate from '../components/portal/PortalLoginGate'
-import ClientContentTab from '../components/portal/ClientContentTab'
+import ClientContentTab, { QUEUE_START } from '../components/portal/ClientContentTab'
+import ClientReportsSection from '../components/portal/ClientReportsSection'
 import PortalHome from '../components/portal/PortalHome'
 import ClientTeamTab from '../components/portal/ClientTeamTab'
 import ClientFilesTab from '../components/portal/ClientFilesTab'
 import PortalFooter from '../components/portal/PortalFooter'
+import { Card, ErrorState, Icon, Segmented, SectionTitle, Skeleton, ToastProvider, readableOn } from '../components/portal/portalUi'
 
 const API = import.meta.env.VITE_API_URL || ''
-const LIVE_REFRESH_COOLDOWN_MS = 15 * 60 * 1000
 
-function capitalize(str) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : str }
-
-function TabButton({ active, onClick, children, brandPrimary }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
-        active ? 'text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
-      style={active ? { backgroundColor: brandPrimary } : undefined}
-    >
-      {children}
-    </button>
-  )
+// ─── Arquitectura de información ─────────────────────────────────────────────
+// Antes: 7 pestañas planas del mismo peso (Inicio, Contenido, Informes, Briefs,
+// Tu equipo, Datos Actuales, Nube). Ahora 4 secciones, ordenadas por lo que el
+// cliente HACE (revisar) antes de lo que CONSULTA:
+//   inicio     → qué me toca + novedades
+//   contenido  → revisar/aprobar + calendario
+//   informes   → "Resultados": informes mensuales + métricas en vivo
+//   proyecto   → equipo y reuniones, archivos, briefs
+// 4 ítems entran en una barra inferior en mobile sin scroll horizontal.
+//
+// Sección y sub-vista viven en la URL (?tab=&view=&report=&piece=) para que
+// recargar, volver atrás o compartir un link no pierda el lugar. Los valores
+// viejos de ?tab= (los links de emails ya enviados) se siguen aceptando.
+const LEGACY_TABS = {
+  vivo:     ['informes', 'vivo'],
+  briefs:   ['proyecto', 'briefs'],
+  equipo:   ['proyecto', 'equipo'],
+  archivos: ['proyecto', 'archivos'],
 }
 
-// Contenido del tab "Datos Actuales" — recibe el token del portal (ya
-// autenticado a nivel raíz por <PortalLoginGate>) y `requireReauth` (se llama
-// si algún fetch propio devuelve 401, ej. el contacto quedó desactivado
-// mientras el token seguía vigente).
-function LiveDataPanel({ slug, token, requireReauth, workspace }) {
-  const [liveData,     setLiveData]     = useState(null)
-  const [liveCachedAt, setLiveCachedAt] = useState(null)
-  const [liveLoading,  setLiveLoading]  = useState(true)
-  const [liveError,    setLiveError]    = useState(null)
-  const [refreshing,   setRefreshing]   = useState(false)
+function buildSections(meta) {
+  const reports = meta.reports || []
+  const project = []
+  if (meta.team?.length > 0 || meta.meetings?.length > 0) project.push({ key: 'equipo', label: 'Equipo y reuniones' })
+  if (meta.showFiles) project.push({ key: 'archivos', label: 'Archivos' })
+  if (meta.briefs?.length > 0) project.push({ key: 'briefs', label: 'Briefs' })
 
+  const sections = [{ key: 'inicio', label: 'Inicio', icon: 'home' }]
+  if (meta.hasContent) sections.push({ key: 'contenido', label: 'Contenido', icon: 'content' })
+  if (reports.length > 0 || meta.hasLiveSections) sections.push({ key: 'informes', label: 'Resultados', icon: 'reports' })
+  if (project.length > 0) sections.push({ key: 'proyecto', label: 'Proyecto', icon: 'folder', subs: project })
+  return sections
+}
+
+// ─── Header + navegación ─────────────────────────────────────────────────────
+
+function ViewerMenu({ viewer, onLogout }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
   useEffect(() => {
-    setLiveLoading(true)
-    setLiveError(null)
-    axios.get(`${API}/api/public/client-portal/${slug}/live`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => { setLiveData(r.data.data); setLiveCachedAt(r.data.cachedAt) })
-      .catch(err => {
-        if (err.response?.status === 401) requireReauth()
-        else setLiveError(err.response?.data?.error || 'No se pudieron cargar los datos en vivo')
-      })
-      .finally(() => setLiveLoading(false))
-  }, [slug, token, requireReauth])
+    if (!open) return
+    const onDoc = e => { if (!ref.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
 
-  async function handleRefreshLive() {
-    setRefreshing(true); setLiveError(null)
-    try {
-      const r = await axios.post(`${API}/api/public/client-portal/${slug}/live/refresh`, {}, { headers: { Authorization: `Bearer ${token}` } })
-      setLiveData(r.data.data); setLiveCachedAt(r.data.cachedAt)
-    } catch (err) {
-      if (err.response?.status === 401) {
-        requireReauth()
-      } else if (err.response?.status === 429) {
-        setLiveError(`Esperá ${err.response.data.waitMins} min antes de actualizar de nuevo.`)
-      } else {
-        setLiveError(err.response?.data?.error || 'No se pudo actualizar')
-      }
-    } finally { setRefreshing(false) }
-  }
-
-  const cooldownRemainingMs = liveCachedAt ? LIVE_REFRESH_COOLDOWN_MS - (Date.now() - new Date(liveCachedAt).getTime()) : 0
-  const canRefresh = cooldownRemainingMs <= 0
-
+  const label = viewer?.name || viewer?.email || 'Mi cuenta'
+  const initial = label.trim().charAt(0).toUpperCase()
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-xs text-gray-400">
-          {liveCachedAt ? `Actualizado el ${new Date(liveCachedAt).toLocaleString('es-AR')}` : 'Sin datos aún'}
-        </p>
-        <button
-          onClick={handleRefreshLive}
-          disabled={refreshing || !canRefresh}
-          className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
-        >
-          {refreshing ? 'Actualizando…' : canRefresh ? 'Actualizar' : `Actualizar (${Math.ceil(cooldownRemainingMs / 60000)} min)`}
-        </button>
-      </div>
-      {liveError && <p className="text-sm text-red-600 mb-3">{liveError}</p>}
-      {liveLoading && <p className="text-sm text-gray-500">Cargando datos en vivo...</p>}
-      {!liveLoading && liveData && <ReportViewer data={liveData} isPublic={true} report={null} workspace={workspace} showFooter={false} compactHero={true} />}
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-label="Mi cuenta" aria-expanded={open}
+        className="w-9 h-9 rounded-full bg-gray-900 text-white text-sm font-semibold flex items-center justify-center hover:ring-4 hover:ring-gray-200 transition-all">
+        {initial}
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-gray-200 shadow-xl p-2 z-50">
+          <div className="px-3 py-2.5">
+            {viewer?.name && <p className="text-sm font-semibold text-gray-900 truncate">{viewer.name}</p>}
+            {viewer?.email && <p className="text-xs text-gray-500 truncate">{viewer.email}</p>}
+          </div>
+          <button type="button" onClick={onLogout}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-700 hover:bg-gray-50">
+            <Icon name="logout" className="w-4 h-4" /> Cerrar sesión
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
-// Hero del portal — banner propio (uno solo, sube el admin desde ClientPortalConfig)
-// o, si no hay, gradiente de marca. Visible ya en la pantalla de login (branding
-// pública), mismo look premium que el hero de un informe individual.
-function PortalHero({ slug, branding, workspace, brandPrimary, brandSecondary }) {
-  const [imgOk, setImgOk] = useState(true)
-  const hasBanner = !!branding.hasBanner && imgOk
+function PortalHeader({ workspace, projectName, sections, active, onNavigate, pendingCount, brandPrimary, viewer, onLogout }) {
   const agencyName = workspace?.companyName || workspace?.name || ''
+  return (
+    <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-md border-b border-gray-200/70">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1 md:flex-none">
+          {workspace?.hasLogo && workspace?.slug ? (
+            <img src={`${API}/api/public/logo/${workspace.slug}`} alt={agencyName} className="h-7 max-w-[110px] object-contain shrink-0"
+              onError={e => { e.currentTarget.style.display = 'none' }} />
+          ) : agencyName ? <span className="text-sm font-semibold text-gray-900 shrink-0">{agencyName}</span> : null}
+          <span className="w-px h-6 bg-gray-200 shrink-0" />
+          <span className="text-sm font-medium text-gray-600 truncate">{projectName}</span>
+        </div>
+
+        <nav className="hidden md:flex flex-1 justify-center gap-1" aria-label="Secciones">
+          {sections.map(s => {
+            const isActive = s.key === active
+            return (
+              <button key={s.key} type="button" onClick={() => onNavigate(s.key)} aria-current={isActive ? 'page' : undefined}
+                className={`relative inline-flex items-center gap-2 px-3.5 h-16 text-sm font-medium transition-colors ${
+                  isActive ? 'text-gray-900' : 'text-gray-500 hover:text-gray-800'}`}>
+                {s.label}
+                {s.key === 'contenido' && pendingCount > 0 && (
+                  <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full text-[11px] font-semibold inline-flex items-center justify-center"
+                    style={{ backgroundColor: brandPrimary, color: readableOn(brandPrimary) }}>{pendingCount}</span>
+                )}
+                {isActive && <span className="absolute left-3 right-3 bottom-0 h-0.5 rounded-full" style={{ backgroundColor: brandPrimary }} />}
+              </button>
+            )
+          })}
+        </nav>
+
+        <ViewerMenu viewer={viewer} onLogout={onLogout} />
+      </div>
+    </header>
+  )
+}
+
+function MobileNav({ sections, active, onNavigate, pendingCount, brandPrimary }) {
+  if (sections.length < 2) return null
+  return (
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 pb-[env(safe-area-inset-bottom)]" aria-label="Secciones">
+      <div className="flex">
+        {sections.map(s => {
+          const isActive = s.key === active
+          return (
+            <button key={s.key} type="button" onClick={() => onNavigate(s.key)} aria-current={isActive ? 'page' : undefined}
+              className="relative flex-1 flex flex-col items-center gap-0.5 pt-2.5 pb-2 text-[11px] font-medium"
+              style={{ color: isActive ? brandPrimary : '#6b7280' }}>
+              <span className="relative">
+                <Icon name={s.icon} className="w-6 h-6" strokeWidth={isActive ? 2.1 : 1.7} />
+                {s.key === 'contenido' && pendingCount > 0 && (
+                  <span className="absolute -top-1 -right-2.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ring-2 ring-white"
+                    style={{ backgroundColor: brandPrimary, color: readableOn(brandPrimary) }}>{pendingCount}</span>
+                )}
+              </span>
+              {s.label}
+            </button>
+          )
+        })}
+      </div>
+    </nav>
+  )
+}
+
+function PortalCover({ slug }) {
+  const [ok, setOk] = useState(true)
+  if (!ok) return null
+  return (
+    <div className="relative h-32 sm:h-48 rounded-3xl overflow-hidden mb-6 sm:mb-8 bg-gray-100">
+      <img src={`${API}/api/public/client-portal-banner/${slug}`} alt="" className="w-full h-full object-cover" onError={() => setOk(false)} />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/15 to-transparent" />
+    </div>
+  )
+}
+
+function PortalSkeleton() {
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <Skeleton className="h-9 w-56" />
+      <Skeleton className="h-40 rounded-3xl" />
+      <div className="grid sm:grid-cols-2 gap-3"><Skeleton className="h-32" /><Skeleton className="h-32" /></div>
+    </div>
+  )
+}
+
+// ─── Portal autenticado ──────────────────────────────────────────────────────
+
+function PortalApp({ slug, token, requireReauth, brandPrimary, projectName, hasBanner }) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [meta,    setMeta]    = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState(null)
+  const [nonce,   setNonce]   = useState(0)
+  const [pendingCount, setPendingCount] = useState(0)
+  // ?piece= de la URL o elegido desde Inicio — lo consume ClientContentTab al montar.
+  const [pieceToOpen, setPieceToOpen] = useState(() => searchParams.get('piece'))
+
+  useEffect(() => {
+    setLoading(true); setError(null)
+    axios.get(`${API}/api/public/client-portal/${slug}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => { setMeta(r.data); setPendingCount(r.data.pendingApprovalCount || 0) })
+      .catch(err => {
+        if (err.response?.status === 401) requireReauth()
+        else setError(err.response?.data?.error || 'No se pudo cargar el portal')
+      })
+      .finally(() => setLoading(false))
+  }, [slug, token, requireReauth, nonce])
+
+  const sections = meta ? buildSections(meta) : []
+
+  // Resolver sección/sub-vista desde la URL (con compatibilidad de links viejos).
+  let rawTab = searchParams.get('tab')
+  let rawView = searchParams.get('view')
+  if (LEGACY_TABS[rawTab]) [rawTab, rawView] = LEGACY_TABS[rawTab]
+  if (!rawTab && searchParams.get('report')) rawTab = 'informes'
+  const active = sections.some(s => s.key === rawTab) ? rawTab : 'inicio'
+  const reports = meta?.reports || []
+  const reportParam = searchParams.get('report')
+  const selectedReport = reports.some(r => r.token === reportParam) ? reportParam : (reports[0]?.token ?? null)
+
+  const navigate = useCallback((tab, view, extra = {}) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams()
+      if (tab && tab !== 'inicio') next.set('tab', tab)
+      if (view) next.set('view', view)
+      for (const [k, v] of Object.entries(extra)) if (v != null) next.set(k, v)
+      // conserva el informe elegido si seguimos en Resultados
+      if (tab === 'informes' && !extra.report && prev.get('report')) next.set('report', prev.get('report'))
+      return next
+    }, { replace: false })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [setSearchParams])
+
+  const handlePending = useCallback(n => setPendingCount(n), [])
+
+  if (loading) return <PortalSkeleton />
+  if (error || !meta) {
+    return <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10"><Card><ErrorState message={error} onRetry={() => setNonce(n => n + 1)} /></Card></div>
+  }
+
+  const viewer = meta.viewer || null
+  const projectSection = sections.find(s => s.key === 'proyecto')
+  const projectView = projectSection?.subs.some(s => s.key === rawView) ? rawView : projectSection?.subs[0]?.key
 
   return (
-    <div className="relative rounded-2xl overflow-hidden shadow-sm">
-      {hasBanner ? (
-        <>
-          <img
-            src={`${API}/api/public/client-portal-banner/${slug}`}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-            onError={() => setImgOk(false)}
+    <div className="min-h-screen flex flex-col" style={{ background: '#f7f7f8' }}>
+      <PortalHeader workspace={meta.workspace} projectName={meta.project?.name || projectName} sections={sections}
+        active={active} onNavigate={t => navigate(t)} pendingCount={pendingCount} brandPrimary={brandPrimary}
+        viewer={viewer} onLogout={requireReauth} />
+
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10 pb-28 md:pb-12">
+        {active === 'inicio' && (
+          <>
+            {hasBanner && <PortalCover slug={slug} />}
+            <PortalHome
+              meta={meta} pendingCount={pendingCount} brandPrimary={brandPrimary} projectName={meta.project?.name || projectName}
+              onNavigate={navigate}
+              onReview={pieceId => { setPieceToOpen(pieceId ?? QUEUE_START); navigate('contenido') }}
+            />
+          </>
+        )}
+
+        {active === 'contenido' && (
+          <ClientContentTab
+            slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary}
+            viewerCanApprove={viewer ? viewer.canApprove !== false : true}
+            initialPieceId={pieceToOpen}
+            onInitialPieceConsumed={() => setPieceToOpen(null)}
+            onPendingChange={handlePending}
           />
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,.25) 50%, rgba(0,0,0,.05))' }} />
-        </>
-      ) : (
-        <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${brandPrimary}, ${brandSecondary})` }} />
-      )}
-      <div className="relative flex items-end justify-between gap-4 p-6 sm:p-7" style={{ minHeight: hasBanner ? '13rem' : '8rem' }}>
-        <div>
-          <h1 className="text-white text-2xl sm:text-3xl font-bold leading-tight" style={{ textShadow: '0 2px 14px rgba(0,0,0,.35)' }}>
-            {branding.project?.name}
-          </h1>
-          {agencyName && <p className="text-white/85 text-sm font-medium mt-1">{agencyName}</p>}
-        </div>
-        {workspace?.hasLogo && workspace?.slug ? (
-          <img
-            src={`${API}/api/public/logo/${workspace.slug}`}
-            alt={agencyName}
-            className="h-9 max-w-[140px] object-contain shrink-0"
-            style={{ filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.45))' }}
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
+        )}
+
+        {active === 'informes' && (
+          <ClientReportsSection
+            slug={slug} token={token} requireReauth={requireReauth} meta={meta} brandPrimary={brandPrimary}
+            sub={rawView} onSubChange={v => navigate('informes', v)}
+            selectedReport={selectedReport} onSelectReport={t => navigate('informes', 'mensuales', { report: t })}
           />
-        ) : null}
-      </div>
+        )}
+
+        {active === 'proyecto' && projectSection && (
+          <div>
+            <SectionTitle title="Proyecto" subtitle="Quiénes trabajan en tu cuenta, lo que acordamos y los materiales" />
+            {projectSection.subs.length > 1 && (
+              <Segmented className="mb-5" brandPrimary={brandPrimary} value={projectView} onChange={v => navigate('proyecto', v)}
+                options={projectSection.subs} />
+            )}
+            {projectView === 'equipo' && <ClientTeamTab team={meta.team} meetings={meta.meetings} today={meta.today} />}
+            {projectView === 'archivos' && (
+              <Card className="p-4 sm:p-6"><ClientFilesTab slug={slug} token={token} requireReauth={requireReauth} /></Card>
+            )}
+            {projectView === 'briefs' && <ClientBriefsView briefs={meta.briefs} />}
+          </div>
+        )}
+      </main>
+
+      <div className="pb-20 md:pb-0"><PortalFooter /></div>
+
+      <MobileNav sections={sections} active={active} onNavigate={t => navigate(t)} pendingCount={pendingCount} brandPrimary={brandPrimary} />
     </div>
   )
 }
@@ -140,214 +290,70 @@ function PortalHero({ slug, branding, workspace, brandPrimary, brandSecondary })
 // Portal inactivo/inexistente — nunca llegamos siquiera a mostrar el login.
 function PortalUnavailable({ error }) {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="text-center max-w-sm">
-        <p className="text-4xl mb-4">🔒</p>
-        <p className="text-lg font-semibold text-gray-800 mb-2">Portal no disponible</p>
-        <p className="text-sm text-gray-500">{error}</p>
-      </div>
+    <div className="min-h-screen bg-[#f7f7f8] flex items-center justify-center px-4">
+      <Card className="text-center max-w-sm p-8">
+        <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-gray-100 text-gray-400 flex items-center justify-center"><Icon name="lock" className="w-6 h-6" /></div>
+        <p className="text-lg font-semibold text-gray-900 mb-1">Este portal no está disponible</p>
+        <p className="text-sm text-gray-500">{error || 'Puede que el link haya cambiado. Pedile el link actualizado a tu agencia.'}</p>
+      </Card>
     </div>
-  )
-}
-
-// Todo lo que requiere haberse logueado: la meta completa del portal
-// (informes/briefs/contenido) + los 4 tabs. Vive DENTRO de <PortalLoginGate> —
-// antes de este componente el visitante solo vio la pantalla de marca y el
-// formulario de login, sin un solo dato del proyecto.
-function PortalTabs({ slug, token, requireReauth, brandPrimary, initialReportToken, initialTab }) {
-  const [meta,    setMeta]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState(null)
-  // Si el link ya trae un informe puntual (?report=<token>, ej. "Link del cliente" desde
-  // Informes) o una pestaña puntual (?tab=, ej. "Revisar y aprobar" del email de
-  // Contenido), arrancamos directo ahí en vez de "Inicio".
-  const [tab,     setTab]     = useState(initialTab || (initialReportToken ? 'informes' : 'inicio'))
-
-  // Informes
-  const [selectedToken, setSelectedToken] = useState(initialReportToken || null)
-  const [reportData,    setReportData]    = useState(null)
-  const [reportLoading, setReportLoading] = useState(false)
-  const [reportError,   setReportError]   = useState(null)
-
-  useEffect(() => {
-    setLoading(true)
-    setError(null)
-    axios.get(`${API}/api/public/client-portal/${slug}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => {
-        setMeta(r.data)
-        const reports = r.data.reports || []
-        // Conserva el token pedido por query param (o el ya elegido) si sigue existiendo
-        // entre los informes publicados; si no (link viejo, informe despublicado, o
-        // primera carga sin query param), cae al más reciente.
-        setSelectedToken(prev => (prev && reports.some(r2 => r2.token === prev)) ? prev : (reports[0]?.token ?? null))
-      })
-      .catch(err => {
-        if (err.response?.status === 401) requireReauth()
-        else setError(err.response?.data?.error || 'No se pudo cargar el portal')
-      })
-      .finally(() => setLoading(false))
-  }, [slug, token, requireReauth])
-
-  useEffect(() => {
-    if (!selectedToken || tab !== 'informes') return
-    setReportLoading(true)
-    setReportError(null)
-    axios.get(`${API}/api/public/client-portal/${slug}/reports/${selectedToken}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => setReportData(r.data))
-      .catch(err => {
-        if (err.response?.status === 401) requireReauth()
-        else setReportError(err.response?.data?.error || 'No se pudo cargar el informe.')
-        setReportData(null)
-      })
-      .finally(() => setReportLoading(false))
-  }, [slug, token, selectedToken, tab, requireReauth])
-
-  const workspace   = meta?.workspace || null
-  const agencyName  = workspace?.companyName || workspace?.name || ''
-  const reports = meta?.reports || []
-  const briefs  = meta?.briefs  || []
-
-  if (loading) return <p className="text-sm text-gray-500 text-center py-10">Cargando portal...</p>
-  if (error || !meta) return <p className="text-sm text-red-600 text-center py-10">{error}</p>
-
-  return (
-    <>
-      <div className="bg-white/80 backdrop-blur rounded-xl border border-gray-200/80 shadow-sm px-3 py-2 flex items-center gap-2 overflow-x-auto mb-5">
-        <TabButton active={tab === 'inicio'} onClick={() => setTab('inicio')} brandPrimary={brandPrimary}>Inicio</TabButton>
-        {meta.hasContent && (
-          <TabButton active={tab === 'contenido'} onClick={() => setTab('contenido')} brandPrimary={brandPrimary}>
-            Contenido{meta.pendingApprovalCount > 0 ? ` (${meta.pendingApprovalCount})` : ''}
-          </TabButton>
-        )}
-        {reports.length > 0 && <TabButton active={tab === 'informes'} onClick={() => setTab('informes')} brandPrimary={brandPrimary}>Informes</TabButton>}
-        {briefs.length > 0  && <TabButton active={tab === 'briefs'}   onClick={() => setTab('briefs')}   brandPrimary={brandPrimary}>Briefs</TabButton>}
-        {(meta.team?.length > 0 || meta.meetings?.length > 0) && (
-          <TabButton active={tab === 'equipo'} onClick={() => setTab('equipo')} brandPrimary={brandPrimary}>Tu equipo</TabButton>
-        )}
-        {meta.hasLiveSections && (
-          <TabButton active={tab === 'vivo'} onClick={() => setTab('vivo')} brandPrimary={brandPrimary}>Datos Actuales</TabButton>
-        )}
-        {meta.showFiles && (
-          <TabButton active={tab === 'archivos'} onClick={() => setTab('archivos')} brandPrimary={brandPrimary}>Nube</TabButton>
-        )}
-      </div>
-
-      {tab === 'inicio' && <PortalHome meta={meta} onNavigate={setTab} brandPrimary={brandPrimary} />}
-
-      {tab === 'informes' && (
-        <>
-          {reports.length > 1 && (
-            <div className="flex items-center gap-2 mb-5">
-              <label htmlFor="portal-report-month" className="text-xs text-gray-400 font-medium shrink-0">Mes</label>
-              <select
-                id="portal-report-month"
-                value={selectedToken || ''}
-                onChange={e => setSelectedToken(e.target.value)}
-                className="text-sm font-semibold text-gray-700 bg-white/80 backdrop-blur border border-gray-200/80 rounded-lg px-3 py-1.5 shadow-sm focus:outline-none"
-              >
-                {reports.map(r => (
-                  <option key={r.token} value={r.token}>{capitalize(monthLabel(r.month))}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          {reportLoading && <p className="text-sm text-gray-500">Cargando informe...</p>}
-          {!reportLoading && reportData && (
-            <>
-              <ReportViewer data={reportData.data} isPublic={true} report={reportData.report} workspace={reportData.workspace} showFooter={false} compactHero={true} />
-              {/* key={selectedToken}: resetea el widget (estrellas/comentario) al cambiar de mes */}
-              <ReportFeedbackWidget key={selectedToken} token={selectedToken} brandPrimary={brandPrimary} agencyName={agencyName} />
-            </>
-          )}
-          {!reportLoading && !reportData && (
-            <p className="text-sm text-red-600 text-center py-8">{reportError || 'No se pudo cargar el informe.'}</p>
-          )}
-        </>
-      )}
-
-      {tab === 'briefs' && <ClientBriefsView briefs={briefs} />}
-
-      {tab === 'equipo' && <ClientTeamTab team={meta.team} meetings={meta.meetings} today={meta.today} />}
-
-      {tab === 'contenido' && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <ClientContentTab slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary} />
-        </div>
-      )}
-
-      {tab === 'vivo' && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <LiveDataPanel slug={slug} token={token} requireReauth={requireReauth} workspace={workspace} />
-        </div>
-      )}
-
-      {tab === 'archivos' && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <ClientFilesTab slug={slug} token={token} requireReauth={requireReauth} />
-        </div>
-      )}
-    </>
   )
 }
 
 export default function ClientPortal() {
   const { token: slug } = useParams()
   const [searchParams]  = useSearchParams()
-  const initialReportToken = searchParams.get('report') || null
-  const initialTab         = searchParams.get('tab') || null
   // ?mt=<magic-token>, viene del email "Pedir aprobación" de Contenido — deja
   // entrar directo por 72h desde el envío, sin pasar por el código OTP.
-  const magicToken          = searchParams.get('mt') || null
+  const magicToken = searchParams.get('mt') || null
   const [branding, setBranding] = useState(null)
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState(null)
 
   // Único fetch público de todo el portal: nombre de proyecto + branding del
-  // workspace, lo justo para pintar la pantalla de login. Todo lo demás
-  // (informes, briefs, contenido, datos en vivo) vive detrás de <PortalLoginGate>.
+  // workspace, lo justo para pintar la pantalla de ingreso. Todo lo demás
+  // vive detrás de <PortalLoginGate>.
   useEffect(() => {
     if (!slug) return
     setLoading(true)
     axios.get(`${API}/api/public/client-portal/${slug}/branding`)
       .then(r => setBranding(r.data))
-      .catch(err => setError(err.response?.data?.error || 'No se pudo cargar el portal'))
+      .catch(err => setError(err.response?.data?.error || null))
       .finally(() => setLoading(false))
   }, [slug])
 
-  const workspace = branding?.workspace || null
+  const workspace      = branding?.workspace || null
   const brandPrimary   = workspace?.brandColors?.[0]?.hex || '#f97316'
-  const brandSecondary = workspace?.brandColors?.[1]?.hex || '#3b82f6'
+  const brandSecondary = workspace?.brandColors?.[1]?.hex || null
+
+  useEffect(() => {
+    if (branding?.project?.name) document.title = `${branding.project.name} · Portal`
+  }, [branding])
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#f7f7f8] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" />
       </div>
     )
   }
-
   if (error || !branding) return <PortalUnavailable error={error} />
 
+  const agencyName = workspace?.companyName || workspace?.name || ''
   return (
-    <div
-      className="min-h-screen py-8 px-4"
-      style={{ background: `radial-gradient(1200px 500px at 50% -10%, ${brandPrimary}14, transparent 60%), #f6f7f9` }}
-    >
-      <div className="max-w-4xl mx-auto mb-5">
-        <PortalHero slug={slug} branding={branding} workspace={workspace} brandPrimary={brandPrimary} brandSecondary={brandSecondary} />
-      </div>
-
-      <div className="max-w-4xl mx-auto">
-        <PortalLoginGate slug={slug} brandPrimary={brandPrimary} projectName={branding.project?.name} magicToken={magicToken}>
-          {(token, { requireReauth }) => (
-            <PortalTabs slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary} initialReportToken={initialReportToken} initialTab={initialTab} />
-          )}
-        </PortalLoginGate>
-      </div>
-
-      <div className="max-w-4xl mx-auto">
-        <PortalFooter />
-      </div>
-    </div>
+    <ToastProvider>
+      <PortalLoginGate
+        slug={slug} brandPrimary={brandPrimary} brandSecondary={brandSecondary}
+        projectName={branding.project?.name} agencyName={agencyName}
+        logoUrl={workspace?.hasLogo && workspace?.slug ? `${API}/api/public/logo/${workspace.slug}` : null}
+        bannerUrl={branding.hasBanner ? `${API}/api/public/client-portal-banner/${slug}` : null}
+        magicToken={magicToken}
+      >
+        {(token, { requireReauth }) => (
+          <PortalApp slug={slug} token={token} requireReauth={requireReauth} brandPrimary={brandPrimary}
+            projectName={branding.project?.name} hasBanner={!!branding.hasBanner} />
+        )}
+      </PortalLoginGate>
+    </ToastProvider>
   )
 }

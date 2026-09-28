@@ -570,23 +570,29 @@ describe('Portal de cliente — meta completa (requiere token)', () => {
     prisma.monthlyReport.findFirst.mockResolvedValue(null)
   }
 
-  it('pendingPreview trae hasta 2 títulos cuando hay piezas esperando aprobación', async () => {
+  it('pendingPreview trae hasta 3 piezas (título, fecha, miniatura) cuando hay piezas esperando aprobación', async () => {
     prisma.projectClientPortal.findUnique.mockResolvedValue(makePortal({ contentEnabled: true }))
     mockBaseData()
     prisma.featureFlag.findUnique.mockResolvedValue({ key: 'contenido', enabledGlobally: true, enabledWorkspaceIds: '[]' })
     prisma.contentPiece.count
       .mockResolvedValueOnce(3) // visibleCount
       .mockResolvedValueOnce(2) // pendingCount
-    prisma.contentPiece.findMany.mockResolvedValue([{ id: 1, title: 'Post jueves' }, { id: 2, title: 'Reel viernes' }])
+    prisma.contentPiece.findMany.mockResolvedValue([
+      { id: 1, title: 'Post jueves', scheduledDate: '2026-10-02', assets: [{ id: 9, kind: 'image', publicId: 'abc', status: 'ready' }] },
+      { id: 2, title: 'Reel viernes', scheduledDate: null, assets: [] },
+    ])
 
     const res = await request(app)
       .get('/api/public/client-portal/kahuak')
       .set('Authorization', `Bearer ${legacyLiveToken()}`)
 
     expect(res.status).toBe(200)
-    expect(res.body.pendingPreview).toEqual([{ id: 1, title: 'Post jueves' }, { id: 2, title: 'Reel viernes' }])
+    expect(res.body.pendingPreview).toEqual([
+      { id: 1, title: 'Post jueves', scheduledDate: '2026-10-02', thumbUrl: expect.stringContaining('/api/public/content-asset/abc') },
+      { id: 2, title: 'Reel viernes', scheduledDate: null, thumbUrl: null },
+    ])
     expect(prisma.contentPiece.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ status: 'aprobacion' }), take: 2,
+      where: expect.objectContaining({ status: 'aprobacion' }), take: 3,
     }))
   })
 

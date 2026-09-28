@@ -1,10 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 
-vi.mock('../../components/portal/ClientPieceCard', () => ({
-  default: ({ piece }) => <div data-testid="piece-card">{piece.title}</div>,
-}))
-
 import ClientContentCalendar from '../../components/portal/ClientContentCalendar'
 import { currentMonthStr } from '../../components/calendar/MonthGrid'
 
@@ -18,16 +14,18 @@ const pieces = [
 ]
 
 describe('ClientContentCalendar', () => {
-  it('muestra las piezas en su día, avisa de las sin fecha y abre la tarjeta al tocar', () => {
-    render(<ClientContentCalendar pieces={pieces} slug="x" token="t" requireReauth={() => {}} onChanged={() => {}} />)
+  it('muestra las piezas en su día, avisa de las sin fecha y avisa al padre al tocar una', () => {
+    const onOpen = vi.fn()
+    render(<ClientContentCalendar pieces={pieces} onOpen={onOpen} />)
     expect(screen.getByText('Post del jueves')).toBeTruthy()
     expect(screen.getByText('Reel de lanzamiento')).toBeTruthy()
     expect(screen.queryByText('Sin fecha aún')).toBeNull()
     expect(screen.getByText(/todavía no tiene fecha/)).toBeTruthy()
 
+    // El tooltip usa el estado en lenguaje del cliente, no el interno ("Idea").
+    expect(screen.getByTitle('Reel de lanzamiento — En preparación')).toBeTruthy()
+
     fireEvent.click(screen.getByText('Post del jueves'))
-    expect(screen.getByTestId('piece-card').textContent).toBe('Post del jueves')
-    fireEvent.click(screen.getByLabelText('Cerrar'))
-    expect(screen.queryByTestId('piece-card')).toBeNull()
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }))
   })
 })

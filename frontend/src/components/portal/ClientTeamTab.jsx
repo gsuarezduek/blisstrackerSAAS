@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { roleColor } from '../../utils/roleColor'
 import '../situation-editor.css'
+import { friendlyDate } from './portalUi'
 
 // Pestaña "Tu equipo" del portal de cliente — dos secciones independientes,
 // cada una condicional a su propio toggle (showTeam / showMeetings):
@@ -13,14 +14,11 @@ import '../situation-editor.css'
 // presente). Se gatea a nivel ClientPortal.jsx (no se monta si ambas
 // están vacías).
 
-function formatDate(dateStr) {
-  const [y, m, d] = dateStr.split('-')
-  return `${d}/${m}/${y}`
-}
+const formatDate = ymd => friendlyDate(ymd)
 
 function TeamMemberCard({ member }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3">
+    <div className="bg-white rounded-2xl border border-gray-200/80 p-4 flex items-center gap-3">
       <img
         src={avatarUrl(member.avatar)}
         alt={member.name}
@@ -54,7 +52,7 @@ function MeetingRow({ meeting }) {
         <span className="text-sm font-medium text-gray-700 shrink-0">{formatDate(meeting.date)}</span>
         {meeting.title && <span className="text-sm text-gray-500 truncate">{meeting.title}</span>}
         {hasDetails && (
-          <span className="ml-auto text-xs font-medium text-primary-600 shrink-0">{open ? 'Ocultar detalle ▲' : 'Ver detalle ▾'}</span>
+          <span className="ml-auto text-xs font-medium text-gray-500 shrink-0">{open ? 'Ocultar' : 'Ver notas y acuerdos'}</span>
         )}
       </button>
       {hasDetails && open && (
@@ -96,7 +94,7 @@ export default function ClientTeamTab({ team = [], meetings = [], today }) {
     <div className="space-y-6">
       {team.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">Tu equipo</h3>
+          <h3 className="text-sm font-semibold text-gray-500 mb-3">Quiénes trabajan en tu cuenta</h3>
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
             {team.map(m => <TeamMemberCard key={m.id} member={m} />)}
           </div>
@@ -105,7 +103,7 @@ export default function ClientTeamTab({ team = [], meetings = [], today }) {
 
       {meetings.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">Reuniones</h3>
+          <h3 className="text-sm font-semibold text-gray-500 mb-3">Reuniones y acuerdos</h3>
           <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
             {upcoming.length > 0 && (
               <div className="px-3 pt-3 pb-1">

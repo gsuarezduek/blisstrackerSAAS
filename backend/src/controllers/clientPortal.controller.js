@@ -13,6 +13,7 @@ const { buildPublicReportPayload } = require('./monthlyReport/reportPublic.contr
 const { canWrite } = require('../lib/projectAccess')
 const { isFlagEnabledForWorkspace } = require('../lib/featureFlags')
 const { emitTo } = require('../lib/socket')
+const { formatAsset } = require('./content.controller')
 const { getProjectNotifyRecipients } = require('../lib/projectRecipients')
 
 const ALLOWED_BANNER_TYPES = ['image/png', 'image/jpeg', 'image/webp']
@@ -492,13 +493,23 @@ async function getPortalData(req, res, next) {
         hasContent = visibleCount > 0
         pendingApprovalCount = pendingCount
         if (pendingCount > 0) {
+          // Hasta 3 piezas para la tarjeta "Necesitamos tu OK" del Inicio:
+          // título + fecha de publicación + miniatura (primer asset listo).
+          // Solo campos ya públicos en el tab Contenido (formatPiecePublic).
           const previewRows = await prisma.contentPiece.findMany({
             where:   { projectId: portal.projectId, workspaceId: portal.workspaceId, status: 'aprobacion', deletedAt: null },
-            select:  { id: true, title: true },
+            select:  {
+              id: true, title: true, scheduledDate: true,
+              assets: { where: { status: 'ready' }, orderBy: { order: 'asc' }, take: 1 },
+            },
             orderBy: { updatedAt: 'desc' },
-            take:    2,
+            take:    3,
           })
-          pendingPreview = previewRows
+          pendingPreview = (previewRows || []).map(p => {
+            const a = p.assets?.[0] ? formatAsset(p.assets[0]) : null
+            const thumbUrl = !a || a.kind === 'link' ? null : (a.kind === 'video' ? a.posterUrl : a.url)
+            return { id: p.id, title: p.title, scheduledDate: p.scheduledDate || null, thumbUrl }
+          })
         }
       }
     }
@@ -547,7 +558,15 @@ async function getPortalData(req, res, next) {
       })
     }
 
+    // Quién está mirando (para saludarlo por su nombre y mostrarle con qué
+    // email entró). null con tokens legacy sin contactId.
+    const contact = req.clientPortalContact
+    const viewer = contact
+      ? { name: contact.name || null, email: contact.email, canApprove: contact.canApprove !== false }
+      : null
+
     res.json({
+      viewer,
       project: project ? { name: project.name } : null,
       workspace: workspace ? {
         slug:               workspace.slug,
