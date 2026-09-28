@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import { avatarUrl } from '../../utils/avatarUrl'
 import { adminMemberOptions } from '../../utils/adminMembers'
+import CollaborativeRichTextEditor from '../CollaborativeRichTextEditor'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Helpers de períodos (ISO week + meses)
@@ -480,6 +481,52 @@ function AutoMetricCard({ metric, value, detail, period, monthStatus }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// PeriodNavHeader — badge "Ahora"/"Cargar atrasado" + título + navegación
+// ‹ Hoy › de un período puntual. Compartido por CurrentPeriodPanel (tab Datos)
+// y MonthNotesPanel (tab Notas): ambos operan sobre el mismo período, con el
+// mismo control de navegación.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function PeriodNavHeader({ title, subtitle, isCurrent, canGoForward, onPrev, onNext, onToday, extra }) {
+  return (
+    <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap min-w-0">
+        <span className={`px-2 py-0.5 text-white text-[10px] font-bold uppercase tracking-wider rounded ${
+          isCurrent ? 'bg-primary-600' : 'bg-gray-500 dark:bg-gray-600'
+        }`}>
+          {isCurrent ? 'Ahora' : 'Cargar atrasado'}
+        </span>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
+        {subtitle && <span className="text-xs text-gray-500 dark:text-gray-400">· {subtitle}</span>}
+        {extra}
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={onPrev}
+          title="Período anterior"
+          className="w-7 h-7 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-white dark:hover:bg-gray-700 transition-colors text-sm font-semibold"
+        >‹</button>
+        {!isCurrent && (
+          <button
+            onClick={onToday}
+            className="px-2.5 py-1 text-xs font-medium text-primary-700 dark:text-primary-300 bg-white dark:bg-gray-800 hover:bg-primary-50 dark:hover:bg-primary-900/30 border border-primary-300 dark:border-primary-700 rounded-lg transition-colors"
+          >
+            Hoy
+          </button>
+        )}
+        <button
+          onClick={onNext}
+          disabled={!canGoForward}
+          title={canGoForward ? 'Período siguiente' : 'No se puede avanzar al futuro'}
+          className="w-7 h-7 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-white dark:hover:bg-gray-700 transition-colors text-sm font-semibold disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+        >›</button>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // CurrentPeriodPanel — panel destacado del período actual
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -491,39 +538,10 @@ function CurrentPeriodPanel({
 
   return (
     <div className="bg-gradient-to-br from-primary-50/80 via-white to-white dark:from-primary-900/20 dark:via-gray-800 dark:to-gray-800 border-2 border-primary-200 dark:border-primary-800/60 rounded-2xl p-5 mb-4">
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap min-w-0">
-          <span className={`px-2 py-0.5 text-white text-[10px] font-bold uppercase tracking-wider rounded ${
-            isCurrent ? 'bg-primary-600' : 'bg-gray-500 dark:bg-gray-600'
-          }`}>
-            {isCurrent ? 'Ahora' : 'Cargar atrasado'}
-          </span>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
-          {subtitle && <span className="text-xs text-gray-500 dark:text-gray-400">· {subtitle}</span>}
-        </div>
-
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={onPrev}
-            title="Período anterior"
-            className="w-7 h-7 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-white dark:hover:bg-gray-700 transition-colors text-sm font-semibold"
-          >‹</button>
-          {!isCurrent && (
-            <button
-              onClick={onToday}
-              className="px-2.5 py-1 text-xs font-medium text-primary-700 dark:text-primary-300 bg-white dark:bg-gray-800 hover:bg-primary-50 dark:hover:bg-primary-900/30 border border-primary-300 dark:border-primary-700 rounded-lg transition-colors"
-            >
-              Hoy
-            </button>
-          )}
-          <button
-            onClick={onNext}
-            disabled={!canGoForward}
-            title={canGoForward ? 'Período siguiente' : 'No se puede avanzar al futuro'}
-            className="w-7 h-7 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-white dark:hover:bg-gray-700 transition-colors text-sm font-semibold disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-          >›</button>
-        </div>
-      </div>
+      <PeriodNavHeader
+        title={title} subtitle={subtitle} isCurrent={isCurrent} canGoForward={canGoForward}
+        onPrev={onPrev} onNext={onNext} onToday={onToday}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {metrics.map(metric => {
@@ -552,6 +570,60 @@ function CurrentPeriodPanel({
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MonthNotesPanel — nota colaborativa del mes (tab "Notas"). Mismo período y
+// misma navegación ‹ Hoy › que CurrentPeriodPanel — un único texto por mes
+// calendario, editado en tiempo real (varias personas a la vez, con sus
+// cursores) vía el motor Yjs/Hocuspocus ya usado por reuniones/leads.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function MonthNotesPanel({ period, title, subtitle, isCurrent, canGoForward, onPrev, onNext, onToday, fallbackContent }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
+      <PeriodNavHeader
+        title={title} subtitle={subtitle} isCurrent={isCurrent} canGoForward={canGoForward}
+        onPrev={onPrev} onNext={onNext} onToday={onToday}
+      />
+      <CollaborativeRichTextEditor
+        key={`scorecardNote:${period}`}
+        docKey={`scorecardNote:${period}`}
+        fallbackContent={fallbackContent ?? ''}
+        emptyText="Sin notas para este mes todavía."
+        minHeight={240}
+      />
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SectionTabs — Datos / Notas / Histórico
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function SectionTabs({ tabs, active, onChange }) {
+  return (
+    <div className="flex items-center gap-1 mb-4 border-b border-gray-100 dark:border-gray-700">
+      {tabs.map(t => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={`relative px-3.5 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+            active === t.key
+              ? 'text-primary-700 dark:text-primary-300'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+          }`}
+        >
+          {t.label}
+          {t.dot && <span className="w-1.5 h-1.5 rounded-full bg-primary-500" />}
+          {active === t.key && (
+            <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-primary-600 rounded-full" />
+          )}
+        </button>
+      ))}
     </div>
   )
 }
@@ -833,6 +905,7 @@ function ScorecardTable({
   onEntryChange, onEdit, onDelete,
   containerRef, currentPeriodRef,
   isWeekly,
+  notesIndex, onNoteClick,
 }) {
   function avg(metric) {
     const vals = periods.map(p => metricValueAt(metric, p, entriesMap, autoData)).filter(v => v != null)
@@ -868,7 +941,17 @@ function ScorecardTable({
                     : 'text-gray-400 dark:text-gray-500'
                 }`}
               >
-                {labelFn(p)}
+                {notesIndex?.[p] && onNoteClick ? (
+                  <button
+                    type="button"
+                    onClick={() => onNoteClick(p)}
+                    title="Este mes tiene una nota — ver"
+                    className="inline-flex items-center gap-1 hover:underline"
+                  >
+                    {labelFn(p)}
+                    <span className="w-1 h-1 rounded-full bg-primary-500" />
+                  </button>
+                ) : labelFn(p)}
               </th>
             ))}
 
@@ -896,7 +979,7 @@ function ScorecardTable({
             return (
               <tr key={metric.id} className="group hover:bg-gray-50/50 dark:hover:bg-gray-700/20">
                 {/* Métrica sticky — nombre + meta + responsable apilados (semanal y mensual) */}
-                <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20 px-4 py-2 transition-colors align-top">
+                <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50 dark:group-hover:bg-gray-700 px-4 py-2 transition-colors align-top">
                   <div className="flex flex-col gap-1 py-1">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight">{metric.name}</span>
@@ -953,7 +1036,7 @@ function ScorecardTable({
 
                 {/* Promedio */}
                 <td className={`px-3 py-2 text-right w-[64px] ${
-                  !isWeekly ? 'sticky right-10 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20 border-l border-gray-100 dark:border-gray-700' : ''
+                  !isWeekly ? 'sticky right-10 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50 dark:group-hover:bg-gray-700 border-l border-gray-100 dark:border-gray-700' : ''
                 }`}>
                   {avgVal != null ? (
                     <span className={`text-xs font-medium whitespace-nowrap ${
@@ -970,7 +1053,7 @@ function ScorecardTable({
 
                 {/* Acciones */}
                 <td className={`px-2 py-2 text-center w-10 ${
-                  !isWeekly ? 'sticky right-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50/50 dark:group-hover:bg-gray-700/20' : ''
+                  !isWeekly ? 'sticky right-0 z-10 bg-white dark:bg-gray-800 group-hover:bg-gray-50 dark:group-hover:bg-gray-700' : ''
                 }`}>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-center">
                     <button onClick={() => onEdit(metric)} title="Editar"
@@ -1103,8 +1186,19 @@ export default function DatosTab() {
   const [panelWeek,   setPanelWeek]   = useState(() => shiftWeekPeriod(TODAY_WEEK, -1))
   const [panelMonth,  setPanelMonth]  = useState(() => shiftMonthPeriod(TODAY_MONTH, -1))
 
+  // Sección mensual: Datos / Notas / Histórico (ver SectionTabs). Índice de
+  // meses con nota ({ [period]: true }, para el puntito del tab/tabla) + cache
+  // del HTML de cada nota ya pedida (fallbackContent del editor colaborativo).
+  const [monthlyTab,      setMonthlyTab]      = useState('datos')
+  const [notesIndex,      setNotesIndex]      = useState({})
+  const [noteContentCache, setNoteContentCache] = useState({})
+
   // Años de los que ya cargamos los valores automáticos (para no re-pedir).
   const loadedAutoYears = useRef(new Set())
+  // Años de los que ya cargamos el índice de notas, y períodos cuyo contenido
+  // ya se pidió (para no re-pedir).
+  const loadedNoteYears   = useRef(new Set())
+  const loadedNotePeriods = useRef(new Set())
 
   // Refs para auto-scroll de tablas
   const weekContainerRef  = useRef(null)
@@ -1136,6 +1230,39 @@ export default function DatosTab() {
       if (status && Object.keys(status).length) setCurrentStatus(prev => ({ ...prev, ...status }))
     } catch {
       loadedAutoYears.current.delete(year)
+    }
+  }, [])
+
+  // Índice de meses con nota de un año (`force` re-pide aunque ya se haya
+  // cargado — se usa al abrir el tab Histórico, para reflejar notas recién
+  // agregadas/vaciadas sin depender de un refresh de página).
+  const fetchNotesYear = useCallback(async (year, force = false) => {
+    if (!force && loadedNoteYears.current.has(year)) return
+    loadedNoteYears.current.add(year)
+    try {
+      const res = await api.get(`/eos/scorecard/notes?year=${year}`)
+      const periods = res.data?.periods || []
+      setNotesIndex(prev => {
+        const next = { ...prev }
+        Object.keys(next).forEach(p => { if (p.startsWith(`${year}-`)) delete next[p] })
+        periods.forEach(p => { next[p] = true })
+        return next
+      })
+    } catch {
+      loadedNoteYears.current.delete(year)
+    }
+  }, [])
+
+  // Contenido de la nota de un período puntual (fallbackContent del editor
+  // colaborativo mientras conecta — ver MonthNotesPanel).
+  const fetchNoteContent = useCallback(async (period) => {
+    if (loadedNotePeriods.current.has(period)) return
+    loadedNotePeriods.current.add(period)
+    try {
+      const res = await api.get(`/eos/scorecard/notes/${period}`)
+      setNoteContentCache(prev => ({ ...prev, [period]: res.data?.notes || '' }))
+    } catch {
+      loadedNotePeriods.current.delete(period)
     }
   }, [])
 
@@ -1172,6 +1299,15 @@ export default function DatosTab() {
     if (hasAuto) fetchAutoYear(parseInt(panelMonth.split('-')[0]))
   }, [panelMonth, hasAuto, fetchAutoYear])
 
+  // Índice de notas del año mostrado en el histórico mensual (puntito en Tabs +
+  // en los encabezados de mes de la tabla) + contenido de la nota del período
+  // seleccionado, pedido recién al abrir el tab Notas.
+  const hasMonthly = metrics.some(m => m.frequency === 'monthly')
+  useEffect(() => { if (hasMonthly) fetchNotesYear(monthYear) }, [monthYear, hasMonthly, fetchNotesYear])
+  useEffect(() => {
+    if (monthlyTab === 'notas') fetchNoteContent(panelMonth)
+  }, [monthlyTab, panelMonth, fetchNoteContent])
+
   // Auto-scroll semanal: centra la semana actual al cargar o cambiar de año
   useEffect(() => {
     if (loading) return
@@ -1191,9 +1327,10 @@ export default function DatosTab() {
     })
   }, [weekYear, loading])
 
-  // Auto-scroll mensual
+  // Auto-scroll mensual — también al abrir el tab Histórico (antes de eso,
+  // `monthContainerRef` no existe todavía: la tabla ya no queda siempre montada).
   useEffect(() => {
-    if (loading) return
+    if (loading || monthlyTab !== 'historico') return
     const container = monthContainerRef.current
     if (!container) return
 
@@ -1208,7 +1345,7 @@ export default function DatosTab() {
         container.scrollLeft = 0
       }
     })
-  }, [monthYear, loading])
+  }, [monthYear, loading, monthlyTab])
 
   // ── Guardar valor de celda
   const handleEntryChange = useCallback(async (metricId, period, value) => {
@@ -1432,7 +1569,7 @@ export default function DatosTab() {
         </div>
       )}
 
-      {/* ── Sección mensual: panel rápido + histórico ── */}
+      {/* ── Sección mensual: Datos / Notas / Histórico ── */}
       {monthlyMetrics.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -1440,37 +1577,65 @@ export default function DatosTab() {
               <span className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Mensuales</span>
               <span className="text-xs text-gray-400 dark:text-gray-500">· Ene – Dic</span>
             </div>
-            <YearNav
-              year={monthYear}
-              onPrev={() => setMonthYear(y => y - 1)}
-              onNext={() => setMonthYear(y => y + 1)}
-              isCurrentYear={monthYear === TODAY_MONTH_YEAR}
-              onToday={() => setMonthYear(TODAY_MONTH_YEAR)}
-            />
+            {/* El año solo afecta al histórico — Datos/Notas navegan por período propio */}
+            {monthlyTab === 'historico' && (
+              <YearNav
+                year={monthYear}
+                onPrev={() => setMonthYear(y => y - 1)}
+                onNext={() => setMonthYear(y => y + 1)}
+                isCurrentYear={monthYear === TODAY_MONTH_YEAR}
+                onToday={() => setMonthYear(TODAY_MONTH_YEAR)}
+              />
+            )}
           </div>
 
-          <CurrentPeriodPanel
-            metrics={monthlyMetrics}
-            entriesMap={entriesMap}
-            autoData={autoData}
-            currentStatus={currentStatus}
-            members={members}
-            period={panelMonth}
-            title={monthPanelTitle}
-            subtitle={monthPanelSubtitle}
-            onEntryChange={handleEntryChange}
-            isCurrent={panelMonth === TODAY_MONTH}
-            canGoForward={canGoForwardMonth}
-            onPrev={() => setPanelMonth(p => shiftMonthPeriod(p, -1))}
-            onNext={() => setPanelMonth(p => shiftMonthPeriod(p, +1))}
-            onToday={() => setPanelMonth(TODAY_MONTH)}
+          <SectionTabs
+            active={monthlyTab}
+            onChange={key => {
+              setMonthlyTab(key)
+              if (key === 'historico') fetchNotesYear(monthYear, true)
+            }}
+            tabs={[
+              { key: 'datos',     label: '📊 Datos' },
+              { key: 'notas',     label: '📝 Notas', dot: !!notesIndex[panelMonth] },
+              { key: 'historico', label: '📈 Histórico' },
+            ]}
           />
 
-          <details className="group" open>
-            <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-3 select-none flex items-center gap-1.5">
-              <span className="transition-transform group-open:rotate-90 inline-block">›</span>
-              Histórico mensual (scroll horizontal)
-            </summary>
+          {monthlyTab === 'datos' && (
+            <CurrentPeriodPanel
+              metrics={monthlyMetrics}
+              entriesMap={entriesMap}
+              autoData={autoData}
+              currentStatus={currentStatus}
+              members={members}
+              period={panelMonth}
+              title={monthPanelTitle}
+              subtitle={monthPanelSubtitle}
+              onEntryChange={handleEntryChange}
+              isCurrent={panelMonth === TODAY_MONTH}
+              canGoForward={canGoForwardMonth}
+              onPrev={() => setPanelMonth(p => shiftMonthPeriod(p, -1))}
+              onNext={() => setPanelMonth(p => shiftMonthPeriod(p, +1))}
+              onToday={() => setPanelMonth(TODAY_MONTH)}
+            />
+          )}
+
+          {monthlyTab === 'notas' && (
+            <MonthNotesPanel
+              period={panelMonth}
+              title={monthPanelTitle}
+              subtitle={monthPanelSubtitle}
+              isCurrent={panelMonth === TODAY_MONTH}
+              canGoForward={canGoForwardMonth}
+              onPrev={() => setPanelMonth(p => shiftMonthPeriod(p, -1))}
+              onNext={() => setPanelMonth(p => shiftMonthPeriod(p, +1))}
+              onToday={() => setPanelMonth(TODAY_MONTH)}
+              fallbackContent={noteContentCache[panelMonth]}
+            />
+          )}
+
+          {monthlyTab === 'historico' && (
             <ScorecardTable
               metrics={monthlyMetrics}
               entriesMap={entriesMap}
@@ -1486,8 +1651,10 @@ export default function DatosTab() {
               containerRef={monthContainerRef}
               currentPeriodRef={monthCurrentThRef}
               isWeekly={false}
+              notesIndex={notesIndex}
+              onNoteClick={period => { setPanelMonth(period); setMonthlyTab('notas') }}
             />
-          </details>
+          )}
         </div>
       )}
 

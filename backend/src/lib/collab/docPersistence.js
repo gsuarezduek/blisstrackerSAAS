@@ -72,6 +72,24 @@ const HANDLERS = {
       })
     },
   },
+  // Nota mensual del Scorecard EOS (ver eosScorecard.controller.js) — mismo
+  // criterio "se crea al vuelo" que eosMeeting: no hay fila hasta que hay algo
+  // que guardar. `rawId` es el período "YYYY-MM".
+  scorecardNote: {
+    async load(rawId, workspaceId) {
+      return prisma.eOSScorecardNote.findUnique({
+        where: { workspaceId_period: { workspaceId, period: rawId } },
+        select: { notes: true, notesYdoc: true },
+      })
+    },
+    async save(rawId, data, workspaceId) {
+      await prisma.eOSScorecardNote.upsert({
+        where: { workspaceId_period: { workspaceId, period: rawId } },
+        create: { workspaceId, period: rawId, ...data },
+        update: data,
+      })
+    },
+  },
 }
 
 // { notes: string|null, notesYdoc: Buffer|null } | null (null = el recurso no

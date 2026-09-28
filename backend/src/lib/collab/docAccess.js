@@ -76,6 +76,13 @@ async function resolveDocAccess(docKey, token) {
     return { userId, workspaceId, name }
   }
 
+  if (parsed.kind === 'scorecardNote') {
+    if (!/^\d{4}-\d{2}$/.test(parsed.rawId)) throw new Error('Período inválido')
+    await assertFeatureFlag('eos', workspace, isSuperAdmin)
+    if (role !== 'admin' && role !== 'owner') throw new Error('Se requieren permisos de administrador')
+    return { userId, workspaceId, name }
+  }
+
   throw new Error('Tipo de documento desconocido')
 }
 

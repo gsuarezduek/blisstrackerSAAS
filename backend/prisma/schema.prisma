@@ -145,6 +145,7 @@ model Workspace {
   accountabilityNodes        AccountabilityNode[]
   scorecardMetrics           ScorecardMetric[]
   scorecardEntries           ScorecardEntry[]
+  eosScorecardNotes          EOSScorecardNote[]
   eosProcesses               EOSProcess[]
   eosProcessSteps            EOSProcessStep[]
   eosIssues                  EOSIssue[]
@@ -2954,6 +2955,25 @@ model ScorecardEntry {
 
   @@unique([metricId, period])
   @@index([metricId])
+  @@index([workspaceId])
+}
+
+// Nota mensual del Scorecard — un texto colaborativo por mes calendario (no por
+// métrica), para dejar contexto/decisiones del cierre de mes. Mismo motor de
+// edición en tiempo real (Yjs/Hocuspocus) que ProjectMeeting/Lead/EOSMeeting —
+// ver backend/src/lib/collab/.
+model EOSScorecardNote {
+  id          Int      @id @default(autoincrement())
+  workspaceId Int
+  period      String // "YYYY-MM" (mensual únicamente)
+  notes       String? // HTML del editor — derivado de `notesYdoc` en cada guardado colaborativo
+  notesYdoc   Bytes? // estado binario Yjs (CRDT) del editor colaborativo
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, period])
   @@index([workspaceId])
 }
 

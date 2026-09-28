@@ -268,6 +268,54 @@ async function upsertEntry(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── GET /api/eos/scorecard/notes?year=YYYY ───────────────────────────────────
+// Períodos ("YYYY-MM") de ese año que ya tienen una nota con contenido — para
+// marcar con un indicador los meses del histórico que vale la pena abrir.
+
+// Mismo criterio de "vacío" que usa CollaborativeRichTextEditor en el frontend
+// (`isEmpty`): sin HTML, o el párrafo vacío por default de Tiptap.
+function hasContent(html) {
+  return !!html && html !== '<p></p>'
+}
+
+async function getScorecardNotesIndex(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const year = Number(req.query.year)
+    if (!Number.isInteger(year) || year < 2000 || year > 3000) {
+      return res.status(400).json({ error: 'year inválido' })
+    }
+
+    const rows = await prisma.eOSScorecardNote.findMany({
+      where: { workspaceId, period: { startsWith: `${year}-` } },
+      select: { period: true, notes: true },
+    })
+
+    res.json({ periods: rows.filter(r => hasContent(r.notes)).map(r => r.period) })
+  } catch (err) { next(err) }
+}
+
+// ─── GET /api/eos/scorecard/notes/:period ─────────────────────────────────────
+// HTML de la nota de un mes puntual — usado como `fallbackContent` del editor
+// colaborativo mientras conecta (ver CollaborativeRichTextEditor).
+
+async function getScorecardNote(req, res, next) {
+  try {
+    const workspaceId = req.workspace.id
+    const period = req.params.period
+    if (!/^\d{4}-\d{2}$/.test(period)) {
+      return res.status(400).json({ error: 'Formato de período inválido. Usar YYYY-MM' })
+    }
+
+    const row = await prisma.eOSScorecardNote.findUnique({
+      where: { workspaceId_period: { workspaceId, period } },
+      select: { notes: true },
+    })
+
+    res.json({ notes: row?.notes || '' })
+  } catch (err) { next(err) }
+}
+
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
 function formatMetric(m) {
@@ -284,4 +332,7 @@ function formatMetric(m) {
   }
 }
 
-module.exports = { getScorecard, getAutoScorecard, createMetric, updateMetric, deleteMetric, upsertEntry }
+module.exports = {
+  getScorecard, getAutoScorecard, createMetric, updateMetric, deleteMetric, upsertEntry,
+  getScorecardNotesIndex, getScorecardNote,
+}
