@@ -1186,6 +1186,10 @@ export default function DatosTab() {
   const [panelWeek,   setPanelWeek]   = useState(() => shiftWeekPeriod(TODAY_WEEK, -1))
   const [panelMonth,  setPanelMonth]  = useState(() => shiftMonthPeriod(TODAY_MONTH, -1))
 
+  // Sección semanal: Datos / Histórico (ver SectionTabs) — sin tab de notas,
+  // a diferencia de la mensual.
+  const [weeklyTab, setWeeklyTab] = useState('datos')
+
   // Sección mensual: Datos / Notas / Histórico (ver SectionTabs). Índice de
   // meses con nota ({ [period]: true }, para el puntito del tab/tabla) + cache
   // del HTML de cada nota ya pedida (fallbackContent del editor colaborativo).
@@ -1308,9 +1312,10 @@ export default function DatosTab() {
     if (monthlyTab === 'notas') fetchNoteContent(panelMonth)
   }, [monthlyTab, panelMonth, fetchNoteContent])
 
-  // Auto-scroll semanal: centra la semana actual al cargar o cambiar de año
+  // Auto-scroll semanal: centra la semana actual al cargar o cambiar de año,
+  // o al abrir el tab Histórico (antes de eso la tabla no queda montada).
   useEffect(() => {
-    if (loading) return
+    if (loading || weeklyTab !== 'historico') return
     const container = weekContainerRef.current
     if (!container) return
 
@@ -1325,7 +1330,7 @@ export default function DatosTab() {
         container.scrollLeft = 0
       }
     })
-  }, [weekYear, loading])
+  }, [weekYear, loading, weeklyTab])
 
   // Auto-scroll mensual — también al abrir el tab Histórico (antes de eso,
   // `monthContainerRef` no existe todavía: la tabla ya no queda siempre montada).
@@ -1510,7 +1515,7 @@ export default function DatosTab() {
         </div>
       )}
 
-      {/* ── Sección semanal: panel rápido + histórico ── */}
+      {/* ── Sección semanal: Datos / Histórico ── */}
       {weeklyMetrics.length > 0 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -1518,37 +1523,47 @@ export default function DatosTab() {
               <span className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Semanales</span>
               <span className="text-xs text-gray-400 dark:text-gray-500">· {weeklyPeriods.length} semanas</span>
             </div>
-            <YearNav
-              year={weekYear}
-              onPrev={() => setWeekYear(y => y - 1)}
-              onNext={() => setWeekYear(y => y + 1)}
-              isCurrentYear={weekYear === TODAY_WEEK_YEAR}
-              onToday={() => setWeekYear(TODAY_WEEK_YEAR)}
-            />
+            {/* El año solo afecta al histórico — Datos navega por período propio */}
+            {weeklyTab === 'historico' && (
+              <YearNav
+                year={weekYear}
+                onPrev={() => setWeekYear(y => y - 1)}
+                onNext={() => setWeekYear(y => y + 1)}
+                isCurrentYear={weekYear === TODAY_WEEK_YEAR}
+                onToday={() => setWeekYear(TODAY_WEEK_YEAR)}
+              />
+            )}
           </div>
 
-          <CurrentPeriodPanel
-            metrics={weeklyMetrics}
-            entriesMap={entriesMap}
-            autoData={autoData}
-            currentStatus={currentStatus}
-            members={members}
-            period={panelWeek}
-            title={weekPanelTitle}
-            subtitle={weekPanelSubtitle}
-            onEntryChange={handleEntryChange}
-            isCurrent={panelWeek === TODAY_WEEK}
-            canGoForward={canGoForwardWeek}
-            onPrev={() => setPanelWeek(p => shiftWeekPeriod(p, -1))}
-            onNext={() => setPanelWeek(p => shiftWeekPeriod(p, +1))}
-            onToday={() => setPanelWeek(TODAY_WEEK)}
+          <SectionTabs
+            active={weeklyTab}
+            onChange={setWeeklyTab}
+            tabs={[
+              { key: 'datos',     label: '📊 Datos' },
+              { key: 'historico', label: '📈 Histórico' },
+            ]}
           />
 
-          <details className="group" open>
-            <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-3 select-none flex items-center gap-1.5">
-              <span className="transition-transform group-open:rotate-90 inline-block">›</span>
-              Histórico semanal (scroll horizontal)
-            </summary>
+          {weeklyTab === 'datos' && (
+            <CurrentPeriodPanel
+              metrics={weeklyMetrics}
+              entriesMap={entriesMap}
+              autoData={autoData}
+              currentStatus={currentStatus}
+              members={members}
+              period={panelWeek}
+              title={weekPanelTitle}
+              subtitle={weekPanelSubtitle}
+              onEntryChange={handleEntryChange}
+              isCurrent={panelWeek === TODAY_WEEK}
+              canGoForward={canGoForwardWeek}
+              onPrev={() => setPanelWeek(p => shiftWeekPeriod(p, -1))}
+              onNext={() => setPanelWeek(p => shiftWeekPeriod(p, +1))}
+              onToday={() => setPanelWeek(TODAY_WEEK)}
+            />
+          )}
+
+          {weeklyTab === 'historico' && (
             <ScorecardTable
               metrics={weeklyMetrics}
               entriesMap={entriesMap}
@@ -1565,7 +1580,7 @@ export default function DatosTab() {
               currentPeriodRef={weekCurrentThRef}
               isWeekly={true}
             />
-          </details>
+          )}
         </div>
       )}
 
