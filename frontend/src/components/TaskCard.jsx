@@ -2,36 +2,89 @@ import { useState, useRef, useEffect, memo } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { renderRichText } from '../utils/richText'
-import { fmtMins, activeMinutes, completedDuration, completedMinutes } from '../utils/format'
+import { fmtMins, activeMinutes } from '../utils/format'
 import UserLink from './UserLink'
 import useMembers from '../hooks/useMembers'
+import StarButton from './dashboard/StarButton'
 
-function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments }) {
+// Fila de tarea del Dashboard (foco del día, Backlog y Programadas). Una sola acción
+// principal visible según el estado — el resto (mover al Backlog, eliminar) vive en
+// el menú "⋯" para que la lista no se llene de botones. La tarea EN CURSO no se
+// renderiza acá sino en <NowCard>, que tiene cronómetro y sus propias acciones.
+//
+// Con otra tarea en curso, "Iniciar"/"Retomar" no quedan deshabilitados: pausan la
+// activa y arrancan esta en un solo click (el backend sigue exigiendo una sola tarea
+// IN_PROGRESS por persona; acá solo se encadenan las dos llamadas que antes el
+// usuario tenía que hacer a mano). El tooltip avisa qué tarea se va a pausar.
+
+function OverflowMenu({ items }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = e => { if (!ref.current?.contains(e.target)) setOpen(false) }
+    const onKey = e => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    window.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDoc); window.removeEventListener('keydown', onKey) }
+  }, [open])
+  if (items.length === 0) return <div className="w-8 flex-shrink-0" />
+  return (
+    <div className="relative flex-shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label="Más acciones"
+        aria-expanded={open}
+        className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition-colors"
+      >
+        <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10 6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm0 5.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm0 5.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z" /></svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-9 z-30 w-48 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg p-1">
+          {items.map(it => (
+            <button
+              key={it.label}
+              type="button"
+              onClick={() => { setOpen(false); it.onClick() }}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                it.danger ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+            >
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAddToToday, onBringToToday, onMoveToBacklog, onOpenComments }) {
   const { members } = useMembers()
   const [loading, setLoading] = useState(false)
-  const [showBlockForm, setShowBlockForm] = useState(false)
-  const [blockReason, setBlockReason] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [editingDuration, setEditingDuration] = useState(false)
-  const [durationInput, setDurationInput] = useState('')
-  const blockInputRef   = useRef(null)
-  const durationInputRef = useRef(null)
-  const cancelDuration  = useRef(false)
 
-  useEffect(() => {
-    if (showBlockForm) blockInputRef.current?.focus()
-  }, [showBlockForm])
+  async function patch(endpoint) {
+    const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`)
+    return data
+  }
 
-  async function call(endpoint) {
+  async function run(fn) {
     setLoading(true)
-    try {
-      const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`)
-      onUpdate(data)
-    } catch (err) {
+    try { await fn() } catch (err) {
       if (err.response?.data?.error) alert(err.response.data.error)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
+  }
+
+  // Iniciar / retomar / desbloquear — si hay otra tarea en curso, primero la pausa.
+  function startOrSwitch(endpoint) {
+    return run(async () => {
+      if (activeTask && activeTask.id !== task.id) {
+        const { data: paused } = await api.patch(`/tasks/${activeTask.id}/pause`)
+        onUpdate(paused)
+      }
+      onUpdate(await patch(endpoint))
+    })
   }
 
   async function handleDelete(scope) {
@@ -45,427 +98,120 @@ function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, on
     }
   }
 
-  async function handleBringToToday() {
-    setLoading(true)
-    try {
-      const { data } = await api.patch(`/tasks/${task.id}/bring-to-today`)
-      onBringToToday?.(data)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Fecha de aparición de una tarea futura, formateada "DD/MM"
+  const switching = !!activeTask && activeTask.id !== task.id
+  const isBlocked = task.status === 'BLOCKED'
+  const isPaused = task.status === 'PAUSED'
   const scheduledLabel = task.scheduledFor
-    ? task.scheduledFor.slice(8, 10) + '/' + task.scheduledFor.slice(5, 7)
+    ? new Date(`${task.scheduledFor}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
     : null
 
-  async function handleStar() {
-    setLoading(true)
-    try {
-      const { data } = await api.patch(`/tasks/${task.id}/star`)
-      onUpdate(data)
-    } catch (err) {
-      if (err.response?.status === 409) alert(err.response.data.error)
-    } finally {
-      setLoading(false)
-    }
+  // Acción principal (una sola, según contexto)
+  let primary = null
+  if (future) {
+    primary = { label: 'Traer a hoy', onClick: () => run(async () => { const { data } = await api.patch(`/tasks/${task.id}/bring-to-today`); onBringToToday?.(data) }) }
+  } else if (backlog) {
+    primary = { label: 'Agregar a hoy', onClick: () => run(async () => { const { data } = await api.patch(`/tasks/${task.id}/add-to-today`); onAddToToday?.(data) }) }
+  } else if (task.status === 'PENDING') {
+    primary = { label: 'Iniciar', onClick: () => startOrSwitch('start'), strong: true }
+  } else if (isPaused) {
+    primary = { label: 'Retomar', onClick: () => startOrSwitch('resume'), strong: true }
+  } else if (isBlocked) {
+    primary = { label: 'Desbloquear', onClick: () => startOrSwitch('unblock') }
   }
 
-  function startEditDuration() {
-    cancelDuration.current = false
-    setDurationInput(String(completedMinutes(task) ?? 0))
-    setEditingDuration(true)
-    setTimeout(() => { durationInputRef.current?.select() }, 0)
+  const menu = []
+  if (!backlog && !future && onMoveToBacklog && task.status === 'PENDING') {
+    menu.push({ label: 'Mover al Backlog', onClick: () => run(async () => onUpdate(await patch('move-to-backlog'))) })
+  }
+  if (onOpenComments) menu.push({ label: 'Abrir detalle', onClick: () => onOpenComments(task) })
+  if (task.status === 'PENDING' || task.status === 'PAUSED') {
+    menu.push({ label: 'Eliminar', danger: true, onClick: () => setShowDeleteConfirm(true) })
   }
 
-  async function handleSaveDuration() {
-    if (cancelDuration.current) return
-    const mins = parseInt(durationInput, 10)
-    if (isNaN(mins) || mins < 0) { setEditingDuration(false); return }
-    setLoading(true)
-    try {
-      const { data } = await api.patch(`/tasks/${task.id}/duration`, { minutes: mins })
-      onUpdate(data)
-    } catch (err) {
-      if (err.response?.data?.error) alert(err.response.data.error)
-    } finally {
-      setLoading(false)
-      setEditingDuration(false)
-    }
-  }
-
-  async function handleBlock() {
-    if (!blockReason.trim()) return
-    setLoading(true)
-    try {
-      const { data } = await api.patch(`/tasks/${task.id}/block`, { reason: blockReason.trim() })
-      onUpdate(data)
-      setShowBlockForm(false)
-      setBlockReason('')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleAddToToday() {
-    setLoading(true)
-    try {
-      const { data } = await api.patch(`/tasks/${task.id}/add-to-today`)
-      onAddToToday?.(data)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleMoveToBacklog() {
-    setLoading(true)
-    try {
-      const { data } = await api.patch(`/tasks/${task.id}/move-to-backlog`)
-      onUpdate(data)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const statusBadge = {
-    PENDING:     'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
-    IN_PROGRESS: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400',
-    PAUSED:      'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
-    BLOCKED:     'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400',
-    COMPLETED:   'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400',
-  }
-
-  const statusLabel = {
-    PENDING:     'Pendiente',
-    IN_PROGRESS: 'En curso',
-    PAUSED:      'Pausada',
-    BLOCKED:     'Bloqueada',
-    COMPLETED:   'Completada',
-  }
-
-  const canStart  = task.status === 'PENDING'  && !hasActiveTask
-  const canResume = task.status === 'PAUSED'   && !hasActiveTask
-  const isBlocked = task.status === 'BLOCKED'
-
-  const canMoveToBacklog = !backlog
-    && !future
-    && onMoveToBacklog
-    && task.status === 'PENDING'
-
-  const borderClass = isBlocked
-    ? 'border-red-300 dark:border-red-700'
-    : 'dark:border-gray-700'
-
-  return (
-    <div className={`relative bg-white dark:bg-gray-800 rounded-xl border p-4 flex flex-col gap-3 transition-opacity ${task.status === 'COMPLETED' ? 'opacity-70' : ''} ${borderClass}`}>
-
-      {/* Delete button — top-right corner, for PENDING and PAUSED tasks */}
-      {(task.status === 'PENDING' || task.status === 'PAUSED') && (
+  const actions = (
+    <>
+      {primary && (
         <button
-          onClick={() => setShowDeleteConfirm(true)}
-          title="Eliminar tarea"
-          className="absolute -top-2.5 -right-2.5 w-5 h-5 flex items-center justify-center rounded-full text-gray-400 dark:text-gray-500 hover:text-red-400 dark:hover:text-red-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-red-300 dark:hover:border-red-700 transition-colors text-xs leading-none shadow-sm"
+          type="button"
+          onClick={primary.onClick}
+          disabled={loading}
+          title={switching && primary.strong ? `Pausa «${activeTask.description.slice(0, 60)}» y empieza esta` : undefined}
+          className="text-sm font-medium rounded-lg px-3 py-1.5 whitespace-nowrap transition-colors disabled:opacity-50 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:border-primary-400 hover:text-primary-700 hover:bg-primary-50 dark:hover:bg-gray-700"
         >
-          ×
+          {loading ? '…' : primary.label}
         </button>
       )}
+      <OverflowMenu items={menu} />
+    </>
+  )
 
-      {/* Main row */}
-      <div className="flex items-start gap-3">
-        {/* Star (unified status + priority indicator) */}
-        <div className="flex flex-col items-center flex-shrink-0 mt-0.5">
-          {future ? (
-            <div className="w-4 h-4 flex items-center justify-center text-indigo-400" title="Tarea futura">📅</div>
-          ) : task.status !== 'COMPLETED' ? (
-            <button
-              onClick={handleStar}
-              disabled={loading}
-              title={task.starred ? 'Cambiar prioridad' : 'Destacar tarea'}
-              className="transition-transform hover:scale-110 disabled:opacity-50"
-            >
-              {task.starred === 0 && task.status === 'IN_PROGRESS' && (
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-green-400 animate-pulse">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                </svg>
-              )}
-              {task.starred === 0 && task.status !== 'IN_PROGRESS' && (
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-gray-300 dark:text-gray-600 hover:text-green-400">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                </svg>
-              )}
-              {task.starred === 1 && (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-4 h-4 text-green-400 ${task.status === 'IN_PROGRESS' ? 'animate-pulse' : ''}`}>
-                  <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
-                </svg>
-              )}
-              {task.starred === 2 && (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-4 h-4 text-yellow-400 ${task.status === 'IN_PROGRESS' ? 'animate-pulse' : ''}`}>
-                  <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
-                </svg>
-              )}
-              {task.starred === 3 && (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-4 h-4 text-red-500 ${task.status === 'IN_PROGRESS' ? 'animate-pulse' : ''}`}>
-                  <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
-                </svg>
-              )}
-            </button>
-          ) : (
-            <div className="w-4 h-4" />
-          )}
-        </div>
+  const comments = task._count?.comments ?? 0
+  const files = task._count?.files ?? 0
 
-        <div className="flex-1 min-w-0">
-          <p
-            onClick={() => onOpenComments?.(task)}
-            className={`text-sm font-medium text-justify whitespace-pre-wrap break-words ${task.status === 'COMPLETED' ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'} ${onOpenComments ? 'cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors' : ''}`}
-          >
-            {renderRichText(task.description, { members })}
-          </p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <Link to={`/my-projects/${task.project.id}`} className="text-xs bg-primary-50 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 rounded px-2 py-0.5 hover:bg-primary-100 dark:hover:bg-primary-900/70 transition-colors">{task.project.name}</Link>
-            {future
-              ? <span className="text-xs rounded px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">📅 {scheduledLabel}</span>
-              : <span className={`text-xs rounded px-2 py-0.5 ${statusBadge[task.status]}`}>{statusLabel[task.status]}</span>}
-            {task.recurrenceId && (
-              <span title="Tarea recurrente" className="text-xs rounded px-2 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">🔁</span>
-            )}
-            {task.contentPiece && (
-              <Link
-                to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`}
-                title="Ver pieza de contenido"
-                className="text-xs rounded px-2 py-0.5 bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900/70 transition-colors"
-              >
-                📅 Contenido
-              </Link>
-            )}
-
-            {task.status === 'IN_PROGRESS' && task.startedAt && (
-              <span className="text-xs text-blue-500">⏱ {fmtMins(activeMinutes(task))}</span>
-            )}
-            {task.status === 'PAUSED' && (
-              <span className="text-xs text-yellow-600">⏸ {fmtMins(activeMinutes(task))} trabajadas</span>
-            )}
-            {task.status === 'COMPLETED' && (
-              editingDuration ? (
-                <span className="flex items-center gap-1">
-                  <input
-                    ref={durationInputRef}
-                    type="number"
-                    min="0"
-                    value={durationInput}
-                    onChange={e => setDurationInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter')  { e.preventDefault(); handleSaveDuration() }
-                      if (e.key === 'Escape') { cancelDuration.current = true; setEditingDuration(false) }
-                    }}
-                    onBlur={handleSaveDuration}
-                    className="w-14 text-xs border border-green-400 dark:border-green-600 rounded px-1.5 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-green-400 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-                  />
-                  <span className="text-xs text-gray-400">min</span>
-                  <button
-                    onMouseDown={() => { cancelDuration.current = true; setEditingDuration(false) }}
-                    className="text-xs text-gray-400 hover:text-gray-600 leading-none"
-                    title="Cancelar">✕</button>
-                </span>
-              ) : (
-                <button
-                  onClick={startEditDuration}
-                  title="Editar duración"
-                  className="group flex items-center gap-0.5 text-xs text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors"
-                >
-                  ✓ {completedDuration(task) ?? '—'}
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor"
-                    className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity ml-0.5">
-                    <path d="M8.54.47a1.6 1.6 0 0 1 2.26 2.26L9.5 4.03 7.97 2.5 8.54.47ZM7.03 3.44 1.5 9a.5.5 0 0 0-.13.24L1 11.17a.25.25 0 0 0 .3.3l1.93-.37A.5.5 0 0 0 3.47 11l5.56-5.53L7.03 3.44Z"/>
-                  </svg>
-                </button>
-              )
-            )}
-            {task.createdBy && (
-              <span className="text-xs text-gray-400 dark:text-gray-500">
-                Asignada por{' '}
-                <UserLink userId={task.createdBy.id} className="hover:text-primary-600 dark:hover:text-primary-400">
-                  {task.createdBy.name.split(' ')[0]}
-                </UserLink>
-              </span>
-            )}
-            {onOpenComments && (task._count?.comments ?? 0) > 0 && (
-              <button
-                onClick={() => onOpenComments(task)}
-                className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-              >
-                💬 {task._count.comments}
-              </button>
-            )}
-            {onOpenComments && (task._count?.comments ?? 0) === 0 && (
-              <button
-                onClick={() => onOpenComments(task)}
-                title="Comentar"
-                className="text-xs text-gray-300 dark:text-gray-600 hover:text-primary-500 dark:hover:text-primary-400 transition-colors"
-              >
-                💬
-              </button>
-            )}
-            {onOpenComments && (task._count?.files ?? 0) > 0 && (
-              <button
-                onClick={() => onOpenComments(task)}
-                title="Ver adjuntos"
-                className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-              >
-                📎 {task._count.files}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Action column */}
-        <div className={`flex flex-col gap-1.5 flex-shrink-0 ${backlog || future ? 'w-28' : 'w-24'}`}>
-
-          {/* Future mode: single "Traer a hoy" action */}
-          {future && (
-            <button
-              onClick={handleBringToToday}
-              disabled={loading}
-              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-40"
-            >
-              {loading ? '...' : 'Traer a hoy'}
-            </button>
-          )}
-
-          {/* Backlog mode: single "Agregar a hoy" action */}
-          {!future && backlog && (
-            <button
-              onClick={handleAddToToday}
-              disabled={loading}
-              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 hover:bg-primary-100 dark:hover:bg-primary-900/50 disabled:opacity-40"
-            >
-              {loading ? '...' : 'Agregar a hoy'}
-            </button>
-          )}
-
-          {/* Normal mode: state-based actions */}
-          {!backlog && !future && task.status === 'PENDING' && (
-            <button
-              onClick={() => call('start')}
-              disabled={loading || !canStart}
-              title={hasActiveTask ? 'Pausá o completá la tarea en curso primero' : ''}
-              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-40 ${
-                canStart
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              Iniciar
-            </button>
-          )}
-
-          {!backlog && task.status === 'IN_PROGRESS' && (
-            <>
-              <button
-                onClick={() => call('complete')}
-                disabled={loading}
-                className="w-full text-xs border border-green-400 text-green-600 dark:text-green-400 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                Completar
-              </button>
-              <button
-                onClick={() => call('pause')}
-                disabled={loading}
-                className="w-full text-xs border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                Pausar
-              </button>
-              <button
-                onClick={() => { setShowBlockForm(v => !v); setBlockReason('') }}
-                disabled={loading}
-                className="w-full text-xs border border-red-300 dark:border-red-700 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                Bloquear
-              </button>
-            </>
-          )}
-
-          {!backlog && task.status === 'PAUSED' && (
-            <button
-              onClick={() => call('resume')}
-              disabled={loading || !canResume}
-              title={hasActiveTask ? 'Pausá o completá la tarea en curso primero' : ''}
-              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-40 ${
-                canResume
-                  ? 'border border-primary-400 dark:border-primary-600 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20'
-                  : 'border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              Continuar
-            </button>
-          )}
-
-          {!backlog && isBlocked && (
-            <button
-              onClick={() => call('unblock')}
-              disabled={loading}
-              className="text-xs border border-primary-400 dark:border-primary-600 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
-              Continuar
-            </button>
-          )}
-
-          {/* Move to backlog — secondary action solo para tareas PENDING (no empezadas) de hoy */}
-          {canMoveToBacklog && (
-            <button
-              onClick={handleMoveToBacklog}
-              disabled={loading}
-              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-40 text-center w-full mt-0.5"
-              title="Mover al Backlog"
-            >
-              → Backlog
-            </button>
-          )}
-        </div>
+  return (
+    <div className={`group flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-800/60 ${loading ? 'opacity-60' : ''}`}>
+      <div className="pt-0.5 flex-shrink-0">
+        {future
+          ? <span className="w-5 h-5 flex items-center justify-center text-indigo-400" title="Programada">
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clipRule="evenodd" /></svg>
+            </span>
+          : <StarButton task={task} onUpdate={onUpdate} />}
       </div>
 
-      {/* Blocked reason display */}
-      {isBlocked && task.blockedReason && (
-        <div className="ml-6 flex items-start gap-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg px-3 py-2">
-          <span className="text-red-400 text-xs mt-0.5 flex-shrink-0">⚠</span>
-          <p className="text-xs text-red-700 dark:text-red-400">{task.blockedReason}</p>
-        </div>
-      )}
+      <div className="flex-1 min-w-0">
+        <p
+          onClick={() => onOpenComments?.(task)}
+          className={`text-[15px] leading-snug whitespace-pre-wrap break-words text-gray-900 dark:text-gray-100 ${onOpenComments ? 'cursor-pointer hover:text-primary-700 dark:hover:text-primary-400' : ''}`}
+        >
+          {renderRichText(task.description, { members })}
+        </p>
 
-      {/* Block form */}
-      {showBlockForm && (
-        <div className="ml-6 flex flex-col gap-2">
-          <textarea
-            ref={blockInputRef}
-            rows={2}
-            value={blockReason}
-            onChange={e => setBlockReason(e.target.value)}
-            placeholder="¿Por qué está bloqueada esta tarea?"
-            className="w-full border border-red-300 dark:border-red-700 dark:bg-gray-700 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={handleBlock}
-              disabled={loading || !blockReason.trim()}
-              className="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
-              Confirmar bloqueo
+        <div className="flex items-center gap-x-2.5 gap-y-1 mt-1.5 flex-wrap text-xs text-gray-500 dark:text-gray-400">
+          <Link to={`/my-projects/${task.project.id}`} className="font-medium text-gray-600 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400">
+            {task.project.name}
+          </Link>
+          {future && scheduledLabel && <span className="text-indigo-600 dark:text-indigo-300 capitalize">Aparece el {scheduledLabel}</span>}
+          {isPaused && <span className="text-amber-700 dark:text-amber-400">Pausada · {fmtMins(activeMinutes(task))} trabajadas</span>}
+          {task.recurrenceId && <span title="Tarea recurrente">🔁 Recurrente</span>}
+          {task.contentPiece && (
+            <Link to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`} className="text-sky-700 dark:text-sky-300 hover:underline" title="Ver pieza de contenido">
+              📅 Contenido
+            </Link>
+          )}
+          {task.createdBy && (
+            <span>
+              De{' '}
+              <UserLink userId={task.createdBy.id} className="hover:text-primary-600 dark:hover:text-primary-400">
+                {task.createdBy.name.split(' ')[0]}
+              </UserLink>
+            </span>
+          )}
+          {onOpenComments && comments > 0 && (
+            <button type="button" onClick={() => onOpenComments(task)} className="hover:text-primary-600 dark:hover:text-primary-400" title="Comentarios">
+              💬 {comments}
             </button>
-            <button
-              onClick={() => { setShowBlockForm(false); setBlockReason('') }}
-              className="text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg font-medium transition-colors"
-            >
-              Cancelar
+          )}
+          {onOpenComments && files > 0 && (
+            <button type="button" onClick={() => onOpenComments(task)} className="hover:text-primary-600 dark:hover:text-primary-400" title="Adjuntos">
+              📎 {files}
             </button>
-          </div>
+          )}
         </div>
-      )}
 
-      {/* Delete confirmation modal */}
+        {isBlocked && task.blockedReason && (
+          <p className="mt-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
+            <span className="font-medium">Bloqueada:</span> {task.blockedReason}
+          </p>
+        )}
+
+        <div className="sm:hidden flex items-center justify-between gap-2 mt-2.5">{actions}</div>
+      </div>
+
+      <div className="hidden sm:flex items-center gap-1 flex-shrink-0">{actions}</div>
+
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
             <div className="flex flex-col gap-1">
               <h3 className="text-base font-bold text-gray-900 dark:text-white">Eliminar tarea{task.recurrenceId ? ' recurrente' : ''}</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">"{task.description}"</p>
@@ -474,25 +220,16 @@ function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, on
               <>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Es una tarea recurrente. ¿Qué querés eliminar?</p>
                 <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => handleDelete('one')}
-                    disabled={loading}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
-                  >
+                  <button onClick={() => handleDelete('one')} disabled={loading}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60">
                     Solo esta
                   </button>
-                  <button
-                    onClick={() => handleDelete('series')}
-                    disabled={loading}
-                    className="w-full border border-red-400 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
-                  >
+                  <button onClick={() => handleDelete('series')} disabled={loading}
+                    className="w-full border border-red-400 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60">
                     Esta y todas las siguientes
                   </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    disabled={loading}
-                    className="w-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors"
-                  >
+                  <button onClick={() => setShowDeleteConfirm(false)} disabled={loading}
+                    className="w-full border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors">
                     Cancelar
                   </button>
                 </div>
@@ -501,18 +238,12 @@ function TaskCard({ task, onUpdate, onDelete, hasActiveTask, backlog, future, on
               <>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Esta acción no se puede deshacer.</p>
                 <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    disabled={loading}
-                    className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors"
-                  >
+                  <button onClick={() => setShowDeleteConfirm(false)} disabled={loading}
+                    className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl py-2.5 text-sm font-medium transition-colors">
                     Cancelar
                   </button>
-                  <button
-                    onClick={() => handleDelete('one')}
-                    disabled={loading}
-                    className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60"
-                  >
+                  <button onClick={() => handleDelete('one')} disabled={loading}
+                    className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-60">
                     {loading ? 'Eliminando...' : 'Eliminar'}
                   </button>
                 </div>
