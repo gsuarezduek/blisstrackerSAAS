@@ -10,6 +10,7 @@ import ComparisonTable from '../components/landing/ComparisonTable'
 import TestimonialsSection from '../components/landing/TestimonialsSection'
 import FounderBio from '../components/landing/FounderBio'
 import { useTypewriter } from '../hooks/useTypewriter'
+import usePublicPricing from '../hooks/usePublicPricing'
 
 // ─── Accent del hero: "de tu " + palabra animada (typewriter) + "." ───────────
 
@@ -282,6 +283,10 @@ const CONTENT_DEFAULTS = {
 }
 
 export default function Landing() {
+  const { pricingTiers, freeSeatLimit, trialDays } = usePublicPricing()
+  const proPrice = pricingTiers[0].pricePerSeat
+  const scalePrice = pricingTiers[pricingTiers.length - 1].pricePerSeat
+  const scaleThreshold = (pricingTiers[0].upTo ?? 0) + 1 // primer seat fuera del tier de Pro
   const [openFaq, setOpenFaq] = useState(null)
   const [hero, setHero] = useState(CONTENT_DEFAULTS)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -314,7 +319,7 @@ export default function Landing() {
           '@type': 'Offer',
           price: '0',
           priceCurrency: 'USD',
-          description: 'Plan Gratis hasta 3 usuarios. Trial de 14 días para Pro y Scale.',
+          description: `Plan Gratis hasta ${freeSeatLimit} usuarios. Trial de ${trialDays} días para Pro y Scale.`,
         },
         publisher: { '@id': 'https://blisstracker.app/#org' },
       },
@@ -639,7 +644,7 @@ export default function Landing() {
                   <span className="text-gray-400 text-sm ml-1">/mes</span>
                 </div>
                 <ul className="space-y-3 mb-8">
-                  {['Hasta 3 usuarios', 'Proyectos ilimitados', 'Coach de IA incluido', 'Resúmenes semanales'].map((item) => (
+                  {[`Hasta ${freeSeatLimit} usuarios`, 'Proyectos ilimitados', 'Coach de IA incluido', 'Resúmenes semanales'].map((item) => (
                     <li key={item} className="flex items-center gap-2.5 text-sm text-gray-600">
                       <span className="text-primary-500 font-bold">✓</span> {item}
                     </li>
@@ -665,7 +670,7 @@ export default function Landing() {
                 <h3 className="font-bold text-gray-900 text-xl mb-1">Pro</h3>
                 <p className="text-gray-400 text-sm mb-6">Para agencias y equipos en crecimiento</p>
                 <div className="mb-7">
-                  <span className="text-4xl font-extrabold text-gray-900">$3</span>
+                  <span className="text-4xl font-extrabold text-gray-900">${proPrice}</span>
                   <span className="text-gray-400 text-sm ml-1">/usuario/mes</span>
                 </div>
                 <ul className="space-y-3 mb-8">
@@ -688,7 +693,7 @@ export default function Landing() {
                   to="/register"
                   className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-semibold py-3 rounded-xl transition-colors shadow-md shadow-primary-200"
                 >
-                  Empezar — 14 días gratis
+                  Empezar — {trialDays} días gratis
                 </Link>
               </div>
             </div>
@@ -697,13 +702,13 @@ export default function Landing() {
             <div className="rounded-2xl border border-gray-200 p-8 flex flex-col">
               <div>
                 <h3 className="font-bold text-gray-900 text-xl mb-1">Scale</h3>
-                <p className="text-gray-400 text-sm mb-6">Para equipos de más de 20 personas</p>
+                <p className="text-gray-400 text-sm mb-6">Para equipos de más de {scaleThreshold - 1} personas</p>
                 <div className="mb-7">
-                  <span className="text-4xl font-extrabold text-gray-900">$2</span>
+                  <span className="text-4xl font-extrabold text-gray-900">${scalePrice}</span>
                   <span className="text-gray-400 text-sm ml-1">/usuario/mes</span>
                 </div>
                 <ul className="space-y-3 mb-8">
-                  {['+20 usuarios', 'Todo lo del plan Pro', 'Precio reducido por escala', 'Onboarding personalizado'].map((item) => (
+                  {[`+${scaleThreshold} usuarios`, 'Todo lo del plan Pro', 'Precio reducido por escala', 'Onboarding personalizado'].map((item) => (
                     <li key={item} className="flex items-center gap-2.5 text-sm text-gray-600">
                       <span className="text-primary-500 font-bold">✓</span> {item}
                     </li>

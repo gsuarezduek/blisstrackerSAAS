@@ -3,29 +3,29 @@ import { useState, useMemo, useEffect } from 'react'
 import { Helmet } from 'react-helmet-async'
 import BlissLogo from '../components/BlissLogo'
 import { trackEvent } from '../lib/analytics'
+import usePublicPricing from '../hooks/usePublicPricing'
 
-// Pricing tiers en sincronía con backend/src/controllers/superadmin.controller.js (default).
-// Si más adelante se exponen vía GET /api/public/pricing-tiers, reemplazar este array por un fetch.
-const TIERS = [
-  { upTo: 19,   pricePerSeat: 3 },
-  { upTo: null, pricePerSeat: 2 },
-]
-
-function calcMonthly(seats) {
+// Tiers/límites vienen de GET /api/public/pricing (usePublicPricing), que lee
+// PlatformSetting — mismo valor que edita SuperAdmin → Configuración →
+// Comercial. calcMonthly/priceForSeats toman los tiers como parámetro para no
+// depender de un array hardcodeado que se desincroniza del real.
+function calcMonthly(seats, tiers) {
   if (seats <= 0) return 0
-  const tier = TIERS.find(t => t.upTo == null || seats <= t.upTo) ?? TIERS[TIERS.length - 1]
+  const tier = tiers.find(t => t.upTo == null || seats <= t.upTo) ?? tiers[tiers.length - 1]
   return seats * tier.pricePerSeat
 }
 
-function priceForSeats(seats) {
-  const tier = TIERS.find(t => t.upTo == null || seats <= t.upTo) ?? TIERS[TIERS.length - 1]
+function priceForSeats(seats, tiers) {
+  const tier = tiers.find(t => t.upTo == null || seats <= t.upTo) ?? tiers[tiers.length - 1]
   return tier.pricePerSeat
 }
 
 // ─── Tabla comparativa: filas ────────────────────────────────────────────────
+// `free`/`scale` de la fila "Usuarios" se completan en el componente con los
+// valores dinámicos (freeSeatLimit / umbral de Scale) — acá quedan null.
 const COMPARISON = [
   { group: 'Gestión de tareas', rows: [
-    { feature: 'Usuarios',                                        free: 'Hasta 3',  pro: 'Ilimitados',  scale: 'Desde 20' },
+    { feature: 'Usuarios',                                        free: null,       pro: 'Ilimitados',  scale: null },
     { feature: 'Proyectos',                                       free: 'Ilimitados', pro: 'Ilimitados', scale: 'Ilimitados' },
     { feature: 'Foco forzado (1 tarea activa)',                   free: true,       pro: true,          scale: true },
     { feature: 'Tareas destacadas + Backlog',                     free: true,       pro: true,          scale: true },
@@ -76,14 +76,20 @@ function Cell({ v }) {
 
 // ─── Página ──────────────────────────────────────────────────────────────────
 export default function Pricing() {
+  const { pricingTiers, freeSeatLimit, trialDays } = usePublicPricing()
   const [seats,    setSeats]    = useState(5)
   const [annual,   setAnnual]   = useState(false)
   const [openFaq,  setOpenFaq]  = useState(null)
 
-  const monthly = useMemo(() => calcMonthly(seats), [seats])
+  const proPrice = pricingTiers[0].pricePerSeat
+  const scalePrice = pricingTiers[pricingTiers.length - 1].pricePerSeat
+  // Primer seat que ya no entra en el tier de Pro — arranca Scale.
+  const scaleThreshold = (pricingTiers[0].upTo ?? 0) + 1
+
+  const monthly = useMemo(() => calcMonthly(seats, pricingTiers), [seats, pricingTiers])
   const annualPrice = useMemo(() => monthly * 12 * 0.85, [monthly]) // 15% descuento anual hipotético
   const savings = useMemo(() => Math.round(monthly * 12 - annualPrice), [monthly, annualPrice])
-  const perSeat = useMemo(() => priceForSeats(seats), [seats])
+  const perSeat = useMemo(() => priceForSeats(seats, pricingTiers), [seats, pricingTiers])
 
   useEffect(() => {
     trackEvent('pricing_page_viewed')
@@ -102,7 +108,7 @@ export default function Pricing() {
     { q: '¿Puedo cancelar cuando quiera?',
       a: 'Sí. Desde /billing entrás al portal de Stripe y cancelás con un click. Mantenés acceso hasta el fin del período pagado y tus datos quedan accesibles después.' },
     { q: '¿Puedo cambiar de plan?',
-      a: 'Sí. Sumás o restás miembros cuando quieras y el cargo se ajusta prorrateado automáticamente. Si bajás a 3 o menos miembros, podés quedarte en Gratis sin perder datos.' },
+      a: `Sí. Sumás o restás miembros cuando quieras y el cargo se ajusta prorrateado automáticamente. Si bajás a ${freeSeatLimit} o menos miembros, podés quedarte en Gratis sin perder datos.` },
     { q: '¿Qué cuenta como "usuario"?',
       a: 'Cualquier miembro activo del workspace. Los usuarios desactivados no consumen seat. Los clientes que ven informes mensuales con URL pública NO cuentan — no necesitan cuenta.' },
     { q: '¿Hay descuento anual?',
@@ -112,8 +118,16 @@ export default function Pricing() {
     { q: '¿Mis datos son míos?',
       a: 'Siempre. Exportás todo en JSON desde Preferencias en cualquier momento. Si cancelás, programás eliminación con 48h de gracia (cancellable) y todo se borra de manera definitiva.' },
     { q: '¿Necesito tarjeta para el trial?',
-      a: 'No. Te registrás con email y arrancás. Si decidís continuar después de los 14 días, ingresás la tarjeta. Si no, automáticamente quedás en Gratis (hasta 3 usuarios).' },
+      a: `No. Te registrás con email y arrancás. Si decidís continuar después de los ${trialDays} días, ingresás la tarjeta. Si no, automáticamente quedás en Gratis (hasta ${freeSeatLimit} usuarios).` },
   ]
+
+  // Completa la fila "Usuarios" de COMPARISON con los umbrales dinámicos.
+  const comparisonRows = useMemo(() => COMPARISON.map(group => ({
+    ...group,
+    rows: group.rows.map(row => row.feature === 'Usuarios'
+      ? { ...row, free: `Hasta ${freeSeatLimit}`, scale: `Desde ${scaleThreshold}` }
+      : row),
+  })), [freeSeatLimit, scaleThreshold])
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -130,11 +144,11 @@ export default function Pricing() {
 
       <Helmet>
         <title>Pricing — BlissTracker</title>
-        <meta name="description" content="Pricing simple para agencias que crecen. Gratis hasta 3 usuarios. Plan Pro $3/seat/mes. Sin tarjeta de crédito para empezar." />
+        <meta name="description" content={`Pricing simple para agencias que crecen. Gratis hasta ${freeSeatLimit} usuarios. Plan Pro $${proPrice}/seat/mes. Sin tarjeta de crédito para empezar.`} />
         <link rel="canonical" href="https://blisstracker.app/pricing" />
         <meta property="og:url" content="https://blisstracker.app/pricing" />
         <meta property="og:title" content="Pricing — BlissTracker" />
-        <meta property="og:description" content="Pricing simple para agencias que crecen. Gratis hasta 3 usuarios." />
+        <meta property="og:description" content={`Pricing simple para agencias que crecen. Gratis hasta ${freeSeatLimit} usuarios.`} />
         <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
       </Helmet>
 
@@ -167,7 +181,7 @@ export default function Pricing() {
           Simple para agencias que crecen.
         </h1>
         <p className="text-lg text-gray-600 mt-4 max-w-2xl mx-auto">
-          Empezás gratis hasta 3 usuarios. Cuando crece el equipo, pagás solo por seat activo. Sin trampas, sin contratos anuales obligatorios, sin tarjeta de crédito para arrancar.
+          Empezás gratis hasta {freeSeatLimit} usuarios. Cuando crece el equipo, pagás solo por seat activo. Sin trampas, sin contratos anuales obligatorios, sin tarjeta de crédito para arrancar.
         </p>
       </section>
 
@@ -182,7 +196,7 @@ export default function Pricing() {
             <span className="text-gray-500 ml-1">/mes</span>
           </div>
           <ul className="mt-6 space-y-3 text-sm text-gray-700 flex-1">
-            <li>✓ Hasta 3 usuarios</li>
+            <li>✓ Hasta {freeSeatLimit} usuarios</li>
             <li>✓ Proyectos ilimitados</li>
             <li>✓ Coach de IA diario</li>
             <li>✓ Resúmenes semanales</li>
@@ -202,7 +216,7 @@ export default function Pricing() {
           <h2 className="text-2xl font-bold">Pro</h2>
           <p className="text-gray-500 text-sm mt-1">Para agencias y equipos en crecimiento.</p>
           <div className="mt-6">
-            <span className="text-5xl font-bold">$3</span>
+            <span className="text-5xl font-bold">${proPrice}</span>
             <span className="text-gray-500 ml-1">/usuario/mes</span>
           </div>
           <ul className="mt-6 space-y-3 text-sm text-gray-700 flex-1">
@@ -216,20 +230,20 @@ export default function Pricing() {
           </ul>
           <Link to="/register"
             className="mt-6 block w-full text-center bg-primary-500 hover:bg-primary-600 text-white px-5 py-3 rounded-xl font-medium transition-colors">
-            Empezar — 14 días gratis
+            Empezar — {trialDays} días gratis
           </Link>
         </div>
 
         {/* Scale */}
         <div className="border border-gray-200 rounded-2xl p-6 bg-white flex flex-col">
           <h2 className="text-2xl font-bold">Scale</h2>
-          <p className="text-gray-500 text-sm mt-1">Para equipos de más de 20 personas.</p>
+          <p className="text-gray-500 text-sm mt-1">Para equipos de más de {scaleThreshold - 1} personas.</p>
           <div className="mt-6">
-            <span className="text-5xl font-bold">$2</span>
+            <span className="text-5xl font-bold">${scalePrice}</span>
             <span className="text-gray-500 ml-1">/usuario/mes</span>
           </div>
           <ul className="mt-6 space-y-3 text-sm text-gray-700 flex-1">
-            <li>✓ Desde 20 usuarios</li>
+            <li>✓ Desde {scaleThreshold} usuarios</li>
             <li>✓ Todo lo del plan Pro</li>
             <li>✓ Precio reducido por escala</li>
             <li>✓ Onboarding personalizado</li>
@@ -269,18 +283,18 @@ export default function Pricing() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 text-left">
               <div className="bg-gray-50 rounded-xl p-4">
                 <p className="text-xs text-gray-500">Plan recomendado</p>
-                <p className="text-xl font-bold mt-1">{seats <= 3 ? 'Gratis' : seats >= 20 ? 'Scale' : 'Pro'}</p>
-                <p className="text-xs text-gray-500 mt-1">{seats <= 3 ? 'Sin costo' : `$${perSeat}/seat/mes`}</p>
+                <p className="text-xl font-bold mt-1">{seats <= freeSeatLimit ? 'Gratis' : seats >= scaleThreshold ? 'Scale' : 'Pro'}</p>
+                <p className="text-xs text-gray-500 mt-1">{seats <= freeSeatLimit ? 'Sin costo' : `$${perSeat}/seat/mes`}</p>
               </div>
               <div className="bg-primary-50 rounded-xl p-4 border border-primary-100">
                 <p className="text-xs text-primary-700">Costo mensual</p>
                 <p className="text-3xl font-bold text-primary-700 mt-1">${monthly}</p>
-                <p className="text-xs text-primary-600 mt-1">{seats <= 3 ? 'Para siempre' : 'USD / mes'}</p>
+                <p className="text-xs text-primary-600 mt-1">{seats <= freeSeatLimit ? 'Para siempre' : 'USD / mes'}</p>
               </div>
               <div className="bg-gray-50 rounded-xl p-4">
                 <p className="text-xs text-gray-500">Pagando anual</p>
                 <p className="text-xl font-bold mt-1">${Math.round(annualPrice)}</p>
-                <p className="text-xs text-green-600 mt-1">{seats > 3 ? `Ahorrás $${savings}/año` : '—'}</p>
+                <p className="text-xs text-green-600 mt-1">{seats > freeSeatLimit ? `Ahorrás $${savings}/año` : '—'}</p>
               </div>
             </div>
 
@@ -307,7 +321,7 @@ export default function Pricing() {
               </tr>
             </thead>
             <tbody>
-              {COMPARISON.map(group => (
+              {comparisonRows.map(group => (
                 <>
                   <tr key={group.group} className="bg-gray-50/50 border-b border-gray-100">
                     <td colSpan={4} className="px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -374,7 +388,7 @@ export default function Pricing() {
           <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
             <Link to="/register"
               className="inline-block bg-primary-500 hover:bg-primary-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-colors shadow-lg">
-              Probá 14 días gratis →
+              Probá {trialDays} días gratis →
             </Link>
             <a href="mailto:gaston@blissmkt.ar?subject=Quiero%20saber%20m%C3%A1s%20de%20BlissTracker"
               className="inline-block border border-gray-700 hover:border-gray-500 text-gray-200 px-8 py-4 rounded-xl font-semibold text-lg transition-colors">
