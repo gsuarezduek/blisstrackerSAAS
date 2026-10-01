@@ -42,6 +42,7 @@ export default function ProjectDetail() {
   const { user: authUser } = useAuth()
   const { enabled: marketingEnabled } = useFeatureFlag('marketing')
   const { enabled: contenidoEnabled } = useFeatureFlag('contenido')
+  const { enabled: calendarioEnabled } = useFeatureFlag('calendario')
   const { members: workspaceMembers } = useMembers()
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -378,31 +379,38 @@ export default function ProjectDetail() {
                 </div>
               </div>
 
-              {/* Nueva tarea y Chat viven en el botón flotante (FloatingDock); acá solo
-                  los atajos a módulos que muestran este proyecto en otra pantalla. */}
-              {(marketingEnabled || contenidoEnabled) && (
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {marketingEnabled && (
-                    <button
-                      onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-xl transition-colors"
-                    >
-                      <span className="text-base leading-none">🎯</span>
-                      Marketing
-                    </button>
-                  )}
-                  {contenidoEnabled && (
-                    <button
-                      onClick={() => navigate(`/contenido?projectId=${data.project.id}`)}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-xl transition-colors"
-                      title="Calendario de contenido"
-                    >
-                      <span className="text-base leading-none">📅</span>
-                      Contenido
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* "+ Nueva tarea" abre el MISMO modal global que la tecla N y el botón flotante
+                  (GlobalShortcuts, vía `bliss:open-add-task`): ya sabe que estamos en este
+                  proyecto por `bliss:project-context`. Chat sigue solo en el botón flotante. */}
+              <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                {marketingEnabled && (
+                  <button
+                    onClick={() => navigate(`/marketing?tab=geo-seo&sub=geo&projectId=${data.project.id}`)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-xl transition-colors"
+                  >
+                    <span className="text-base leading-none">🎯</span>
+                    Marketing
+                  </button>
+                )}
+                {contenidoEnabled && (
+                  <button
+                    onClick={() => navigate(`/contenido?projectId=${data.project.id}`)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 rounded-xl transition-colors"
+                    title="Calendario de contenido"
+                  >
+                    <span className="text-base leading-none">📅</span>
+                    Contenido
+                  </button>
+                )}
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('bliss:open-add-task'))}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-sm font-semibold text-white rounded-xl shadow-sm transition-colors"
+                  title="Nueva tarea en este proyecto (tecla N)"
+                >
+                  <span className="text-base leading-none">+</span>
+                  Nueva tarea
+                </button>
+              </div>
             </header>
 
             {/* Pestañas — subrayado, con scroll horizontal en mobile */}
@@ -444,6 +452,7 @@ export default function ProjectDetail() {
                   onOpenComments={setCommentTask}
                   goTab={goTab}
                   contentEnabled={contenidoEnabled && authUser?.moduleAccess?.contenido !== false}
+                  calendarEnabled={calendarioEnabled && authUser?.moduleAccess?.calendario !== false}
                   onOpenTeamEdit={openTeamEdit}
                 />
               )}

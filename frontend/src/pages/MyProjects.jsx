@@ -90,13 +90,39 @@ const COUNT_CONFIG = [
   { key: 'COMPLETED_WEEK', label: 'Esta semana', bg: 'bg-green-100 dark:bg-green-900/30',      text: 'text-green-700 dark:text-green-400' },
 ]
 
-// Cada entrada tiene [clave, label en estado normal, label al togglear]
-const SORT_OPTIONS = [
-  { key: 'name',    toggle: 'name_desc', label: 'Nombre A–Z',        labelAlt: 'Nombre Z–A'    },
-  { key: 'newest',  toggle: 'oldest',    label: 'Más nuevos',         labelAlt: 'Más antiguos'  },
-  { key: 'active',  toggle: 'inactive',  label: 'Más activos',        labelAlt: 'Más inactivos' },
-  { key: 'blocked', toggle: null,        label: 'Bloqueadas primero',  labelAlt: null            },
+const SORT_CHOICES = [
+  { key: 'name',      label: 'Nombre A–Z' },
+  { key: 'name_desc', label: 'Nombre Z–A' },
+  { key: 'newest',    label: 'Más nuevos' },
+  { key: 'oldest',    label: 'Más antiguos' },
+  { key: 'active',    label: 'Más activos' },
+  { key: 'inactive',  label: 'Menos activos' },
+  { key: 'blocked',   label: 'Bloqueadas primero' },
 ]
+
+// Select compacto de la barra de herramientas; resaltado cuando filtra algo.
+function ToolbarSelect({ value, onChange, active = false, label, children }) {
+  return (
+    <div className="relative min-w-0">
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        aria-label={label}
+        className={`pl-3 pr-8 py-2 text-sm font-medium rounded-xl border appearance-none cursor-pointer truncate transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+          active
+            ? 'bg-primary-50 dark:bg-primary-900/30 border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300'
+            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-gray-400'
+        }`}
+      >
+        {children}
+      </select>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+        className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+        <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+      </svg>
+    </div>
+  )
+}
 
 function sortProjects(projects, sort) {
   return [...projects].sort((a, b) => {
@@ -310,9 +336,10 @@ export default function MyProjects() {
         )}
 
         {!loading && projects.length > 0 && (
-          <div className="space-y-3 mb-5">
-            {/* Búsqueda */}
-            <div className="relative">
+          // Buscador + filtros + orden en UNA fila (antes eran tres): en mobile el
+          // buscador ocupa todo el ancho y los tres selects bajan a una fila propia.
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-6">
+            <div className="relative flex-1 min-w-0">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
                 <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
@@ -321,96 +348,32 @@ export default function MyProjects() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar proyecto..."
-                className="w-full pl-9 pr-9 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-xl py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full pl-9 pr-9 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-xl py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <button onClick={() => setSearch('')} aria-label="Limpiar búsqueda" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
                     <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
                   </svg>
                 </button>
               )}
             </div>
-
-            {/* Filtros por Servicio y Persona */}
-            {(allServices.length > 0 || allMembers.length > 0) && (
-              <div className="flex items-center gap-2 flex-wrap">
-                {allServices.length > 0 && (
-                  <div className="relative">
-                    <select
-                      value={filterService}
-                      onChange={e => setFilterService(e.target.value)}
-                      className={`pl-3 pr-7 py-1.5 text-xs font-medium rounded-lg border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                        filterService
-                          ? 'bg-primary-600 border-primary-600 text-white'
-                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
-                      }`}
-                    >
-                      <option value="">Servicio</option>
-                      {allServices.map(s => (
-                        <option key={s.id} value={String(s.id)}>{s.name}</option>
-                      ))}
-                    </select>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                      className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${filterService ? 'text-white' : 'text-gray-400'}`}>
-                      <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                )}
-                {allMembers.length > 0 && (
-                  <div className="relative">
-                    <select
-                      value={filterPerson}
-                      onChange={e => setFilterPerson(e.target.value)}
-                      className={`pl-3 pr-7 py-1.5 text-xs font-medium rounded-lg border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${
-                        filterPerson
-                          ? 'bg-primary-600 border-primary-600 text-white'
-                          : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
-                      }`}
-                    >
-                      <option value="">Persona</option>
-                      {allMembers.map(m => (
-                        <option key={m.id} value={String(m.id)}>{m.name}</option>
-                      ))}
-                    </select>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                      className={`w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none ${filterPerson ? 'text-white' : 'text-gray-400'}`}>
-                      <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Ordenar por */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">Ordenar:</span>
-              {SORT_OPTIONS.map(opt => {
-                const isActive   = sort === opt.key || sort === opt.toggle
-                const isAltState = sort === opt.toggle
-                const isBlockedOpt = opt.key === 'blocked'
-                return (
-                  <button
-                    key={opt.key}
-                    onClick={() => {
-                      if (!isActive) {
-                        setSort(opt.key)
-                      } else if (opt.toggle) {
-                        setSort(isAltState ? opt.key : opt.toggle)
-                      }
-                    }}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                      isActive
-                        ? isBlockedOpt
-                          ? 'bg-red-600 border-red-600 text-white'
-                          : 'bg-primary-600 border-primary-600 text-white'
-                        : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
-                    }`}
-                  >
-                    {isAltState ? opt.labelAlt : opt.label}
-                  </button>
-                )
-              })}
+            <div className="flex flex-wrap gap-2">
+              {allServices.length > 0 && (
+                <ToolbarSelect value={filterService} onChange={setFilterService} active={!!filterService} label="Servicio">
+                  <option value="">Servicio</option>
+                  {allServices.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+                </ToolbarSelect>
+              )}
+              {allMembers.length > 0 && (
+                <ToolbarSelect value={filterPerson} onChange={setFilterPerson} active={!!filterPerson} label="Persona">
+                  <option value="">Persona</option>
+                  {allMembers.map(m => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
+                </ToolbarSelect>
+              )}
+              <ToolbarSelect value={sort} onChange={setSort} label="Ordenar">
+                {SORT_CHOICES.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+              </ToolbarSelect>
             </div>
           </div>
         )}

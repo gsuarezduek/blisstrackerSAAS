@@ -6,6 +6,7 @@ import { fmtMins, activeMinutes } from '../utils/format'
 import UserLink from './UserLink'
 import useMembers from '../hooks/useMembers'
 import StarButton from './dashboard/StarButton'
+import ReasonModal from './ventas/ReasonModal'
 
 // Fila de tarea del Dashboard (foco del día, Backlog y Programadas). Una sola acción
 // principal visible según el estado — el resto (mover al Backlog, eliminar) vive en
@@ -63,6 +64,7 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
   const { members } = useMembers()
   const [loading, setLoading] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showBlock, setShowBlock] = useState(false)
 
   async function patch(endpoint) {
     const { data } = await api.patch(`/tasks/${task.id}/${endpoint}`)
@@ -122,6 +124,11 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
   const menu = []
   if (!backlog && !future && onMoveToBacklog && task.status === 'PENDING') {
     menu.push({ label: 'Mover al Backlog', onClick: () => run(async () => onUpdate(await patch('move-to-backlog'))) })
+  }
+  // Bloquear solo existe desde "en curso" (regla del backend). La tarjeta "Ahora"
+  // tiene su propio botón; esto cubre la tarea en curso cuando aparece en una lista.
+  if (task.status === 'IN_PROGRESS') {
+    menu.push({ label: 'Marcar como bloqueada', onClick: () => setShowBlock(true) })
   }
   if (onOpenComments) menu.push({ label: 'Abrir detalle', onClick: () => onOpenComments(task) })
   if (task.status === 'PENDING' || task.status === 'PAUSED') {
@@ -252,6 +259,20 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
           </div>
         </div>
       )}
+      <ReasonModal
+        open={showBlock}
+        loading={loading}
+        title="¿Qué te está frenando?"
+        description="La tarea queda bloqueada con este motivo y avisamos al equipo del proyecto."
+        placeholder="Ej. Falta que el cliente mande los accesos…"
+        confirmLabel="Marcar como bloqueada"
+        onCancel={() => setShowBlock(false)}
+        onConfirm={reason => run(async () => {
+          const { data } = await api.patch(`/tasks/${task.id}/block`, { reason })
+          onUpdate(data)
+          setShowBlock(false)
+        })}
+      />
     </div>
   )
 }

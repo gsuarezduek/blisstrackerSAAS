@@ -5,7 +5,7 @@ import ProjectSituation from '../../components/ProjectSituation'
 import UserLink from '../../components/UserLink'
 import RoleBadge from '../../components/RoleBadge'
 import { linkify } from '../../utils/linkify'
-import { fmtMins } from '../../utils/format'
+import { fmtMins, activeMinutes } from '../../utils/format'
 import { Card, CardHeader, TextButton, Avatar, EmptyNote } from './ui'
 
 // Pestaña "Resumen" — lo primero que se ve al entrar a un proyecto. Responde
@@ -42,7 +42,7 @@ function TaskLine({ task, user, onOpen, tone = 'default' }) {
 // Horas registradas en el mes vs. horas contratadas (100%, sin ponderar por días
 // transcurridos — mismo criterio que Reportes). Muestra también el avance del mes
 // para leer si el ritmo es razonable.
-function HoursCard({ projectId, timezone, goTab }) {
+function HoursCard({ projectId, timezone, goTab, openMins = 0 }) {
   const [state, setState] = useState({ loading: true })
 
   useEffect(() => {
@@ -91,7 +91,67 @@ function HoursCard({ projectId, timezone, goTab }) {
             {month.taskCount} tarea{month.taskCount !== 1 ? 's' : ''} completada{month.taskCount !== 1 ? 's' : ''} este mes
           </p>
         )}
+        {openMins > 0 && (
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400" title="Las horas se registran al completar cada tarea, igual que en Reportes">
+            + {fmtMins(openMins)} en tareas abiertas · se suman al completarlas
+          </p>
+        )}
       </div>
+    </Card>
+  )
+}
+
+function ymdInTz(tz) {
+  return new Date().toLocaleDateString('en-CA', { timeZone: tz || 'America/Argentina/Buenos_Aires' })
+}
+function hmInTz(tz) {
+  return new Date().toLocaleTimeString('en-GB', { timeZone: tz || 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false })
+}
+function addDaysYmd(ymd, n) {
+  const [y, m, d] = ymd.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + n))
+  return dt.toISOString().slice(0, 10)
+}
+
+// Próxima reunión agendada en Calendario para este proyecto (las próximas 2 semanas).
+// Solo se monta con el módulo Calendario habilitado y con acceso.
+function NextMeetingCard({ projectId, timezone }) {
+  const [next, setNext] = useState(undefined) // undefined = cargando, null = no hay
+
+  useEffect(() => {
+    let alive = true
+    const today = ymdInTz(timezone)
+    api.get('/calendar/events', { params: { from: today, to: addDaysYmd(today, 14), projectId } })
+      .then(r => {
+        if (!alive) return
+        const now = hmInTz(timezone)
+        const upcoming = (r.data || []).find(e => !e.realMeetingId && (e.date > today || e.startTime >= now))
+        setNext(upcoming || null)
+      })
+      .catch(() => { if (alive) setNext(null) })
+    return () => { alive = false }
+  }, [projectId, timezone])
+
+  if (!next) return null
+  const accepted = (next.participants || []).filter(p => p.status === 'accepted').length
+  const total = (next.participants || []).length
+  const isToday = next.date === ymdInTz(timezone)
+
+  return (
+    <Card>
+      <CardHeader title="Próxima reunión" action={<Link to={`/calendario?event=${next.id}`} className="whitespace-nowrap text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline">Ver en Calendario</Link>} />
+      <Link to={`/calendario?event=${next.id}`} className="block px-4 pb-4 group">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
+            {next.recurrenceId ? '🔁 ' : ''}{next.title}
+          </p>
+          {isToday && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">Hoy</span>}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          {fmtMeetingDate(next.date)} · {next.startTime} · {fmtMins(next.durationMins)}
+          {total > 0 && ` · ${accepted}/${total} confirmados`}
+        </p>
+      </Link>
     </Card>
   )
 }
@@ -181,7 +241,7 @@ function ContentCard({ projectId }) {
   )
 }
 
-export default function OverviewTab({ data, encodedId, authUser, onOpenComments, goTab, contentEnabled, onOpenTeamEdit }) {
+export default function OverviewTab({ data, encodedId, authUser, onOpenComments, goTab, contentEnabled, calendarEnabled, onOpenTeamEdit }) {
   const project = data.project
   const rows = data.byUser.flatMap(({ user, tasks }) => tasks.map(task => ({ task, user })))
   const blocked = rows.filter(r => r.task.status === 'BLOCKED')
@@ -189,6 +249,7 @@ export default function OverviewTab({ data, encodedId, authUser, onOpenComments,
   const members = (project.members ?? []).map(pm => pm.user)
   const links = project.linksEnabled !== false ? (project.links ?? []) : []
   const services = (project.services ?? []).map(ps => ps.service)
+  const openMins = rows.reduce((sum, r) => sum + activeMinutes(r.task), 0)
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
@@ -228,12 +289,13 @@ export default function OverviewTab({ data, encodedId, authUser, onOpenComments,
           )}
         </Card>
 
+        {calendarEnabled && <NextMeetingCard projectId={project.id} timezone={project.timezone} />}
         <LastMeetingCard projectId={project.id} goTab={goTab} />
       </div>
 
       {/* Columna lateral */}
       <aside className="space-y-4 min-w-0">
-        <HoursCard projectId={project.id} timezone={project.timezone} goTab={goTab} />
+        <HoursCard projectId={project.id} timezone={project.timezone} goTab={goTab} openMins={openMins} />
 
         {contentEnabled && <ContentCard projectId={project.id} />}
 

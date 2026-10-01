@@ -104,7 +104,7 @@ export default function TareasTab({
       {all.length === 0 ? (
         <Card className="px-6 py-10 text-center">
           <p className="text-base font-semibold text-gray-900 dark:text-white">Todo al día</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">No hay tareas activas en este proyecto. Creá una con la tecla N o desde el botón flotante.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">No hay tareas activas en este proyecto. Creá una con «+ Nueva tarea» o la tecla N.</p>
         </Card>
       ) : groups.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">No hay tareas con ese estado.</p>

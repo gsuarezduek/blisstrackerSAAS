@@ -59,15 +59,70 @@ async function downloadReportPdf(req, res, next) {
       return res.status(404).json({ error: 'Todavía no generaste este informe.' })
     }
 
-    const url = `${frontendBaseUrl(req.workspace.slug)}/report-print/${signPrintToken(report.id)}`
-    const pdf = await renderUrlToPdf(url, { readyFlag: '__REPORT_PRINT_READY__' })
+    const pdf = await renderReportPdf(report.id, req.workspace.slug)
+    sendPdf(res, pdf, report)
+  } catch (err) {
+    next(err)
+  }
+}
 
-    const filename = `Informe ${report.project?.name ?? ''} - ${reportLabel(report)}.pdf`.replace(/\s+/g, ' ')
-    res.set('Content-Type', 'application/pdf')
-    res.set('Content-Disposition', contentDisposition(filename))
-    res.set('Content-Length', String(pdf.length))
-    res.set('Cache-Control', 'no-store')
-    res.send(pdf)
+async function renderReportPdf(reportId, slug) {
+  const url = `${frontendBaseUrl(slug)}/report-print/${signPrintToken(reportId)}`
+  return renderUrlToPdf(url, { readyFlag: '__REPORT_PRINT_READY__' })
+}
+
+function sendPdf(res, pdf, report) {
+  const filename = `Informe ${report.project?.name ?? ''} - ${reportLabel(report)}.pdf`.replace(/\s+/g, ' ')
+  res.set('Content-Type', 'application/pdf')
+  res.set('Content-Disposition', contentDisposition(filename))
+  res.set('Content-Length', String(pdf.length))
+  res.set('Cache-Control', 'no-store')
+  res.send(pdf)
+}
+
+// Cache en memoria de los PDF públicos: el link del cliente lo puede abrir mucha gente
+// (o el mismo cliente varias veces) y cada render de Chromium cuesta ~5-10 s y memoria.
+// Se invalida si el informe cambió (updatedAt) y vence a los 30 min.
+const PUBLIC_PDF_TTL_MS = 30 * 60 * 1000
+const PUBLIC_PDF_MAX_ENTRIES = 20
+const publicPdfCache = new Map() // token -> { pdf, version, at }
+
+/**
+ * GET /api/public/report/:token/pdf
+ * Mismo PDF que descarga el equipo (portada + A4), para la vista pública del cliente
+ * (link del informe y portal). Solo informes PUBLICADOS — igual que el link público.
+ * Protegido con rate limit por IP en la ruta + el cache de arriba.
+ */
+async function downloadPublicReportPdf(req, res, next) {
+  try {
+    const { token } = req.params
+    const report = await prisma.monthlyReport.findUnique({
+      where:  { token },
+      select: {
+        id: true, month: true, periodStart: true, periodEnd: true, status: true, updatedAt: true,
+        enabledSections: true, dataCache: true, analysis: true,
+        project:   { select: { name: true } },
+        workspace: { select: { slug: true } },
+      },
+    })
+    const isGenerated = report && (report.enabledSections !== null || !!report.dataCache || !!report.analysis)
+    if (!isGenerated) return res.status(404).json({ error: 'Informe no encontrado' })
+    if (report.status !== 'published') {
+      return res.status(404).json({ error: 'Este informe todavía no está publicado.', code: 'REPORT_DRAFT' })
+    }
+
+    const version = report.updatedAt ? new Date(report.updatedAt).getTime() : 0
+    const hit = publicPdfCache.get(token)
+    if (hit && hit.version === version && Date.now() - hit.at < PUBLIC_PDF_TTL_MS) {
+      return sendPdf(res, hit.pdf, report)
+    }
+
+    const pdf = await renderReportPdf(report.id, report.workspace?.slug)
+    publicPdfCache.set(token, { pdf, version, at: Date.now() })
+    if (publicPdfCache.size > PUBLIC_PDF_MAX_ENTRIES) {
+      publicPdfCache.delete(publicPdfCache.keys().next().value) // el más viejo (orden de inserción)
+    }
+    sendPdf(res, pdf, report)
   } catch (err) {
     next(err)
   }
@@ -110,4 +165,4 @@ async function getReportForPrint(req, res, next) {
   }
 }
 
-module.exports = { downloadReportPdf, getReportForPrint }
+module.exports = { downloadReportPdf, downloadPublicReportPdf, getReportForPrint, _publicPdfCache: publicPdfCache }
