@@ -7,7 +7,7 @@ export default function ProjectSituation({ encodedProjectId, initialContent }) {
   }
 
   return (
-    <div className="mb-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
       <AutosaveNotes
         editorKey={encodedProjectId}
         content={initialContent || ''}

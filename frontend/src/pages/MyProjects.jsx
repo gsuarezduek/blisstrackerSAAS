@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar'
 import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { AvatarStack } from './project-detail/ui'
 
 // ─── Iconos de integraciones ─────────────────────────────────────────────────
 
@@ -201,6 +202,8 @@ export default function MyProjects() {
     const activePills = COUNT_CONFIG.filter(c => counts[c.key] > 0)
     const isBlocked   = (counts.BLOCKED ?? 0) > 0
     const integTypes  = (p.integrations ?? []).map(i => i.type)
+    const members     = (p.members ?? []).map(pm => pm.user)
+    const services    = (p.services ?? []).map(ps => ps.service.name)
 
     return (
       <div
@@ -254,19 +257,31 @@ export default function MyProjects() {
           <p className="text-xs text-gray-400 dark:text-gray-500 italic">Sin tareas pendientes esta semana</p>
         )}
 
-        {/* Iconos de integraciones */}
-        {integTypes.length > 0 && (
-          <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-700">
-            {integTypes.map(type => {
-              const cfg = INTEGRATION_ICONS[type]
-              if (!cfg) return null
-              const { Icon, label } = cfg
-              return (
-                <span key={type} title={label} className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-50 dark:bg-gray-700 hover:scale-110 transition-transform">
-                  <Icon />
+        {/* Pie: equipo + servicios a la izquierda, integraciones a la derecha */}
+        {(members.length > 0 || integTypes.length > 0 || services.length > 0) && (
+          <div className="mt-auto flex items-center justify-between gap-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+            <div className="flex items-center gap-2 min-w-0">
+              {members.length > 0 && <AvatarStack users={members} max={4} size="xs" />}
+              {services.length > 0 && (
+                <span className="text-xs text-gray-500 dark:text-gray-400 truncate" title={services.join(', ')}>
+                  {services.join(' · ')}
                 </span>
-              )
-            })}
+              )}
+            </div>
+            {integTypes.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {integTypes.map(type => {
+                  const cfg = INTEGRATION_ICONS[type]
+                  if (!cfg) return null
+                  const { Icon, label } = cfg
+                  return (
+                    <span key={type} title={label} className="flex items-center justify-center w-6 h-6 rounded-md bg-gray-50 dark:bg-gray-700">
+                      <Icon />
+                    </span>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
