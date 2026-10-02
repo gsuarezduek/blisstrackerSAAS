@@ -36,7 +36,7 @@ export default function TrialBanner() {
       <span className="flex-1 text-center">
         {isPastDue ? (
           <>
-            ⚠️ Tu suscripción tiene un <strong>pago pendiente</strong>.{' '}
+            Tu suscripción tiene un <strong>pago pendiente</strong>.{' '}
             <Link to="/billing" className="underline font-semibold hover:opacity-80">
               Regularizá tu cuenta
             </Link>{' '}
@@ -44,7 +44,7 @@ export default function TrialBanner() {
           </>
         ) : trialDaysLeft === 0 ? (
           <>
-            🕐 Tu trial <strong>vence hoy</strong>.{' '}
+            Tu trial <strong>vence hoy</strong>.{' '}
             <Link to="/billing" className="underline font-semibold hover:opacity-80">
               Suscribite ahora
             </Link>{' '}
@@ -52,7 +52,7 @@ export default function TrialBanner() {
           </>
         ) : (
           <>
-            🕐 Tu trial vence en{' '}
+            Tu trial vence en{' '}
             <strong>{trialDaysLeft} día{trialDaysLeft !== 1 ? 's' : ''}</strong>.{' '}
             <Link to="/billing" className="underline font-semibold hover:opacity-80">
               Ver planes

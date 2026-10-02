@@ -36,31 +36,27 @@ import { invalidateFeatureFlag } from '../hooks/useFeatureFlag'
 
 const INTRO_STEPS = [
   {
-    emoji: '👋',
     title: '¡Bienvenido a BlissTracker!',
     body: 'Primero elegís qué módulos usar, después te muestro las cosas que importan. Podés saltar cuando quieras — queda guardado, no volvemos a molestar.',
   },
   {
-    emoji: '🤖',
     title: 'Tu coach de IA',
     body: 'Cada mañana tenés una tarjeta arriba del dashboard con prioridades del día — generada con tu historial, tu rol y tus tareas pendientes. Llegás con un plan, no con preguntas.',
   },
   {
-    emoji: '🎯',
     title: 'Una tarea activa a la vez',
     body: 'BlissTracker te obliga a comprometerte con una sola tarea en curso. Las otras esperan en sus secciones (Pendiente, Pausada, Bloqueada). Foco no es disciplina personal — es default del sistema.',
   },
 ]
 
 const FINAL_STEP = {
-  emoji: '👥',
   title: 'Invitá a tu equipo',
   body: 'En Admin → Equipo invitás por email con un click. Cada persona acepta su invitación y empieza a usar. Cuando esté tu equipo dentro, vas a sentir la diferencia real.',
 }
 
 function moduleStep(feat) {
   const meta = moduleMeta(feat.key, feat.name)
-  return { emoji: meta.icon, title: meta.label ?? feat.name, body: meta.tourBody }
+  return { title: meta.label ?? feat.name, body: meta.tourBody }
 }
 
 export default function OnboardingWizard() {
@@ -165,7 +161,6 @@ export default function OnboardingWizard() {
       >
         {phase === 'demo' ? (
           <>
-            <div className="text-5xl mb-4 text-center">🚀</div>
             <h2 id="onboarding-title" className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
               ¿Cómo querés arrancar?
             </h2>
@@ -182,7 +177,6 @@ export default function OnboardingWizard() {
                   onClick={() => chooseDemo(true)}
                   className="w-full flex items-start gap-3 text-left rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3.5 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
                 >
-                  <span className="text-2xl flex-shrink-0">🧪</span>
                   <div>
                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Cargar proyecto de ejemplo</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">
@@ -194,7 +188,6 @@ export default function OnboardingWizard() {
                   onClick={() => chooseDemo(false)}
                   className="w-full flex items-start gap-3 text-left rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3.5 hover:border-primary-300 dark:hover:border-primary-600 transition-colors"
                 >
-                  <span className="text-2xl flex-shrink-0">🌱</span>
                   <div>
                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Empezar vacío</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">
@@ -216,7 +209,6 @@ export default function OnboardingWizard() {
           </>
         ) : phase === 'modules' ? (
           <>
-            <div className="text-5xl mb-4 text-center">🧩</div>
             <h2 id="onboarding-title" className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
               ¿Qué querés activar?
             </h2>
@@ -230,7 +222,6 @@ export default function OnboardingWizard() {
             ) : (
               <div className="space-y-2 mb-6 max-h-72 overflow-y-auto">
                 <div className="flex items-center gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 px-4 py-3">
-                  <span className="text-xl flex-shrink-0">✅</span>
                   <p className="flex-1 text-sm font-medium text-gray-600 dark:text-gray-300">
                     Ejecución diaria (tareas, foco, coach IA)
                   </p>
@@ -250,7 +241,6 @@ export default function OnboardingWizard() {
                         onChange={() => setSelected(s => ({ ...s, [f.key]: !s[f.key] }))}
                         className="mt-1 w-4 h-4 accent-primary-500 flex-shrink-0"
                       />
-                      <span className="text-xl flex-shrink-0">{meta.icon}</span>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{f.name}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">{meta.detail}</p>
@@ -290,8 +280,6 @@ export default function OnboardingWizard() {
                 />
               ))}
             </div>
-
-            <div className="text-5xl mb-4 text-center">{STEPS[step].emoji}</div>
 
             <h2 id="onboarding-title" className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-3">
               {STEPS[step].title}

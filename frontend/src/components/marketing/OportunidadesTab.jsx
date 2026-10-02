@@ -4,6 +4,7 @@ import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import SetupHintCard from '../SetupHintCard'
 import LoadingSpinner from '../LoadingSpinner'
+import { Globe } from 'lucide-react'
 
 // ─── Crear tarea (copiado del patrón de GeoTab, prefijo "SEO -") ───────────────
 function CreateTaskModal({ title, projectId, projectName, onClose }) {
@@ -187,7 +188,7 @@ export default function OportunidadesTab({ projectId, projects, onSelectProject 
 
   if (err) {
     if (err.code === 'NO_SITE_URL') {
-      return <SetupHintCard icon="🌐" label="Este proyecto no tiene una URL configurada"
+      return <SetupHintCard icon={Globe} label="Este proyecto no tiene una URL configurada"
         hint="Agregá la URL del sitio para calcular las oportunidades SEO desde Search Console."
         to={selectedProject ? `/my-projects/${selectedProject.id}?infoTab=info` : undefined} ctaLabel="Agregar URL en Info →" />
     }

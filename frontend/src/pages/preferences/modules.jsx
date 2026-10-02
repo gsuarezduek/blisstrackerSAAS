@@ -145,7 +145,6 @@ export default function ModulesTab({ loaded }) {
           return (
             <div key={feat.key} className={`py-4 ${isLast ? '' : 'border-b dark:border-gray-700'}`}>
               <div className="flex items-start gap-4">
-                <span className="text-2xl flex-shrink-0 mt-0.5">{meta.icon}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{feat.name}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mt-0.5">{meta.detail}</p>
@@ -308,7 +307,7 @@ export default function ModulesTab({ loaded }) {
                               disabled={marketingDigestTest.sending}
                               className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
                             >
-                              {marketingDigestTest.sending ? 'Enviando…' : '✉️ Enviar ahora a mi correo'}
+                              {marketingDigestTest.sending ? 'Enviando…' : 'Enviar ahora a mi correo'}
                             </button>
                             {marketingDigestTest.msg && (
                               <span className={`text-xs ${marketingDigestTest.error ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{marketingDigestTest.msg}</span>

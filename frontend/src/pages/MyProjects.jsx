@@ -5,6 +5,8 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import api from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { AvatarStack } from './project-detail/ui'
+import { FolderOpen } from 'lucide-react'
+import { Icon } from '../components/ui/Icon'
 
 // ─── Iconos de integraciones ─────────────────────────────────────────────────
 
@@ -329,7 +331,7 @@ export default function MyProjects() {
 
         {!loading && projects.length === 0 && (
           <div className="text-center py-16 text-gray-400">
-            <p className="text-4xl mb-3">📂</p>
+            <Icon as={FolderOpen} size={32} strokeWidth={1.5} className="mx-auto mb-3" />
             <p className="font-medium">No hay proyectos en este workspace todavía</p>
             <p className="text-sm mt-1">Pedile a un administrador que cree el primero</p>
           </div>

@@ -172,12 +172,12 @@ export default function Navbar() {
   // admin-only, sin acceso configurable por rol, en `adminSublinks`).
   const moduleSublinks = [
     ...(ventasEnabled && (isAdmin || user?.isSales)
-      ? [{ to: isAdmin ? '/admin/ventas' : '/ventas', label: '💰 Ventas' }]
+      ? [{ to: isAdmin ? '/admin/ventas' : '/ventas', label: 'Ventas' }]
       : []),
-    ...(marketingEnabled && user?.moduleAccess?.marketing ? [{ to: '/marketing', label: '🎯 Marketing' }] : []),
-    ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ to: '/contenido', label: '📣 Contenido' }] : []),
-    ...(rrhhEnabled && user?.moduleAccess?.rrhh ? [{ to: '/admin/rrhh', label: '👥 RRHH' }] : []),
-    ...(calendarioEnabled && user?.moduleAccess?.calendario ? [{ to: '/calendario', label: '🗓️ Calendario' }] : []),
+    ...(marketingEnabled && user?.moduleAccess?.marketing ? [{ to: '/marketing', label: 'Marketing' }] : []),
+    ...(contenidoEnabled && user?.moduleAccess?.contenido ? [{ to: '/contenido', label: 'Contenido' }] : []),
+    ...(rrhhEnabled && user?.moduleAccess?.rrhh ? [{ to: '/admin/rrhh', label: 'RRHH' }] : []),
+    ...(calendarioEnabled && user?.moduleAccess?.calendario ? [{ to: '/calendario', label: 'Calendario' }] : []),
   ]
 
   // ── Sublinks de Administración ────────────────────────────────────────────
@@ -185,10 +185,10 @@ export default function Navbar() {
   // Ventas/Marketing/Contenido/RRHH se mudaron a "Módulos" (arriba, con acceso
   // configurable por rol). EOS y Gamification quedan acá, estrictamente admin-only.
   const adminSublinks = [
-    { to: '/reports',    label: '📈 Reportes' },
-    ...(eosEnabled ? [{ to: '/admin/eos', label: '🔷 EOS' }] : []),
-    ...(gamificationEnabled ? [{ to: '/admin/gamification', label: '🏆 Gamification' }] : []),
-    { to: '/admin',      label: '⚙️ Panel' },
+    { to: '/reports',    label: 'Reportes' },
+    ...(eosEnabled ? [{ to: '/admin/eos', label: 'EOS' }] : []),
+    ...(gamificationEnabled ? [{ to: '/admin/gamification', label: 'Gamification' }] : []),
+    { to: '/admin',      label: 'Panel' },
   ]
 
   // ── Secciones del menú de perfil ──────────────────────────────────────────

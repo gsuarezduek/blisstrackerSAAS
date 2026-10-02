@@ -3,6 +3,7 @@ import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import SetupHintCard from '../SetupHintCard'
 import LoadingSpinner from '../LoadingSpinner'
+import { Globe } from 'lucide-react'
 
 const SEV = {
   high:   { label: 'Alta',  cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
@@ -200,7 +201,7 @@ export default function OnPageTab({ projectId, projects }) {
   }
 
   if (noUrl) {
-    return <SetupHintCard icon="🌐" label="Este proyecto no tiene una URL configurada"
+    return <SetupHintCard icon={Globe} label="Este proyecto no tiene una URL configurada"
       hint="Agregá la URL del sitio para correr la auditoría on-page."
       to={`/my-projects/${selectedProject.id}?infoTab=info`} ctaLabel="Agregar URL en Info →" />
   }

@@ -5,6 +5,8 @@ import DateRangeFilter from '../../components/DateRangeFilter'
 import RoleBadge from '../../components/RoleBadge'
 import UserLink from '../../components/UserLink'
 import { Card, Avatar, StatusBadge, STATUS_META } from './ui'
+import { Repeat, MessageSquare, Pencil } from 'lucide-react'
+import { Icon } from '../../components/ui/Icon'
 
 // Pestaña "Tareas" — el tablero completo del proyecto. Filtro por estado arriba
 // (con conteo, así "Bloqueadas" se ve de un vistazo), tareas activas agrupadas
@@ -36,10 +38,10 @@ function TaskRow({ task, onOpenComments }) {
           </p>
           <div className="mt-1 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-gray-500 dark:text-gray-400">
             <StatusBadge status={task.status} />
-            {task.recurrenceId && <span>🔁 Recurrente</span>}
+            {task.recurrenceId && <span className="inline-flex items-center gap-1"><Icon as={Repeat} size={13} />Recurrente</span>}
             {task.createdBy && <span>De {task.createdBy.name.split(' ')[0]}</span>}
-            <button type="button" onClick={() => onOpenComments(task)} className="hover:text-primary-600 dark:hover:text-primary-400">
-              💬 {comments > 0 ? comments : 'Comentar'}
+            <button type="button" onClick={() => onOpenComments(task)} className="inline-flex items-center gap-1 hover:text-primary-600 dark:hover:text-primary-400">
+              <Icon as={MessageSquare} size={13} />{comments > 0 ? comments : 'Comentar'}
             </button>
           </div>
           {blocked && task.blockedReason && (
@@ -177,12 +179,12 @@ export default function TareasTab({
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
                         <button type="button" onClick={() => onOpenComments(task)} title="Ver comentarios"
-                          className="text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400">
-                          💬{(task._count?.comments ?? 0) > 0 ? ` ${task._count.comments}` : ''}
+                          className="inline-flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400">
+                          <Icon as={MessageSquare} size={13} />{(task._count?.comments ?? 0) > 0 ? task._count.comments : ''}
                         </button>
                         {dur && (
                           <span className="text-xs text-gray-500 dark:text-gray-400 font-medium tabular-nums">
-                            {task.minutesOverride != null && <span className="text-amber-500 mr-0.5" title="Duración editada manualmente">✎</span>}
+                            {task.minutesOverride != null && <span className="inline-flex align-[-2px] text-amber-500 mr-1" title="Duración editada manualmente"><Icon as={Pencil} size={11} /></span>}
                             {dur}
                           </span>
                         )}

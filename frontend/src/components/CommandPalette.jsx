@@ -132,10 +132,10 @@ export default function CommandPalette({ open, onClose }) {
       items.push({ id: `project-${p.id}`, type: 'project', label: p.name, to: `/my-projects/${p.id}` })
       if (i < 2) {
         if (canJumpToMarketing) {
-          items.push({ id: `project-${p.id}-marketing`, type: 'project-link', label: p.name, module: '🎯 Marketing', to: `/marketing?projectId=${p.id}` })
+          items.push({ id: `project-${p.id}-marketing`, type: 'project-link', label: p.name, module: 'Marketing', to: `/marketing?projectId=${p.id}` })
         }
         if (canJumpToContenido) {
-          items.push({ id: `project-${p.id}-contenido`, type: 'project-link', label: p.name, module: '📅 Contenido', to: `/contenido?projectId=${p.id}` })
+          items.push({ id: `project-${p.id}-contenido`, type: 'project-link', label: p.name, module: 'Contenido', to: `/contenido?projectId=${p.id}` })
         }
       }
     })
@@ -343,15 +343,15 @@ export default function CommandPalette({ open, onClose }) {
                   {item.type === 'lead' && <span className="text-gray-400 mr-1.5">Lead ·</span>}
                   {item.type === 'project' && <span className="text-gray-400 mr-1.5">Proyecto ·</span>}
                   {item.type === 'member' && <span className="text-gray-400 mr-1.5">Persona ·</span>}
-                  {item.type === 'channel' && <span className="text-gray-400 mr-1.5">💬 Chat ·</span>}
-                  {item.type === 'action' && <span className="text-gray-400 mr-1.5">⚡</span>}
+                  {item.type === 'channel' && <span className="text-gray-400 mr-1.5">Chat ·</span>}
+                  {item.type === 'action' && <span className="text-gray-400 mr-1.5">Acción ·</span>}
                   {item.type === 'task' && <span className="text-gray-400 mr-1.5">Tarea ·</span>}
-                  {item.type === 'piece' && <span className="text-gray-400 mr-1.5">📅 Contenido ·</span>}
-                  {item.type === 'event' && <span className="text-gray-400 mr-1.5">🗓️ Reunión ·</span>}
-                  {item.type === 'file' && <span className="text-gray-400 mr-1.5">{item.isFolder ? '📁' : '📄'} Archivo ·</span>}
-                  {item.type === 'company' && <span className="text-gray-400 mr-1.5">🏢 Empresa ·</span>}
-                  {item.type === 'service' && <span className="text-gray-400 mr-1.5">🛠 Servicio ·</span>}
-                  {item.type === 'role' && <span className="text-gray-400 mr-1.5">🏷 Rol ·</span>}
+                  {item.type === 'piece' && <span className="text-gray-400 mr-1.5">Contenido ·</span>}
+                  {item.type === 'event' && <span className="text-gray-400 mr-1.5">Reunión ·</span>}
+                  {item.type === 'file' && <span className="text-gray-400 mr-1.5">{item.isFolder ? 'Carpeta' : 'Archivo'} ·</span>}
+                  {item.type === 'company' && <span className="text-gray-400 mr-1.5">Empresa ·</span>}
+                  {item.type === 'service' && <span className="text-gray-400 mr-1.5">Servicio ·</span>}
+                  {item.type === 'role' && <span className="text-gray-400 mr-1.5">Rol ·</span>}
                   {item.label}
                   {item.type === 'project-link' && <span className="text-gray-400"> → {item.module}</span>}
                 </span>

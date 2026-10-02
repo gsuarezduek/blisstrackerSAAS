@@ -5,6 +5,8 @@ import ChatWidget from './chat/ChatWidget'
 import GamificationFab from './GamificationFab'
 import VoiceCallIndicator from './VoiceCallIndicator'
 import VoiceReconnectPrompt from './VoiceReconnectPrompt'
+import { Plus, MessageSquare, Trophy } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 // Punto único de entrada para los widgets flotantes que antes se apilaban
 // verticalmente en la esquina inferior derecha (bottom-6 / bottom-24 / bottom-[168px]):
@@ -38,9 +40,9 @@ export default function FloatingDock() {
   const mainBadge = chatBadge?.n ? chatBadge : gamesBadge?.n ? gamesBadge : chatBadge?.dot ? chatBadge : null
 
   const items = [
-    { key: 'task', icon: '➕', label: 'Nueva tarea', onClick: openTask, badge: null },
-    { key: 'chat', icon: '💬', label: 'Chat', onClick: openChat, badge: chatBadge },
-    ...(gamificationVisible ? [{ key: 'games', icon: '🏆', label: 'Juegos', onClick: openGames, badge: gamesBadge }] : []),
+    { key: 'task', icon: Plus, label: 'Nueva tarea', onClick: openTask, badge: null },
+    { key: 'chat', icon: MessageSquare, label: 'Chat', onClick: openChat, badge: chatBadge },
+    ...(gamificationVisible ? [{ key: 'games', icon: Trophy, label: 'Juegos', onClick: openGames, badge: gamesBadge }] : []),
   ]
 
   return (
@@ -63,7 +65,7 @@ export default function FloatingDock() {
               onClick={item.onClick}
               className="relative flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 pl-3 pr-4 py-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
             >
-              <span className="text-lg leading-none">{item.icon}</span>
+              <Icon as={item.icon} size={17} className="text-gray-500 dark:text-gray-400" />
               <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
               {item.badge?.n > 0 && (
                 <span className="absolute -top-1 -left-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none ring-2 ring-white dark:ring-gray-800">

@@ -7,6 +7,8 @@ import UserLink from './UserLink'
 import useMembers from '../hooks/useMembers'
 import StarButton from './dashboard/StarButton'
 import ReasonModal from './ventas/ReasonModal'
+import { Repeat, CalendarDays, MessageSquare, Paperclip } from 'lucide-react'
+import { Icon } from './ui/Icon'
 
 // Fila de tarea del Dashboard (foco del día, Backlog y Programadas). Una sola acción
 // principal visible según el estado — el resto (mover al Backlog, eliminar) vive en
@@ -179,10 +181,10 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
           </Link>
           {future && scheduledLabel && <span className="text-indigo-600 dark:text-indigo-300 capitalize">Aparece el {scheduledLabel}</span>}
           {isPaused && <span className="text-amber-700 dark:text-amber-400">Pausada · {fmtMins(activeMinutes(task))} trabajadas</span>}
-          {task.recurrenceId && <span title="Tarea recurrente">🔁 Recurrente</span>}
+          {task.recurrenceId && <span className="inline-flex items-center gap-1" title="Tarea recurrente"><Icon as={Repeat} size={13} />Recurrente</span>}
           {task.contentPiece && (
-            <Link to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`} className="text-sky-700 dark:text-sky-300 hover:underline" title="Ver pieza de contenido">
-              📅 Contenido
+            <Link to={`/contenido?projectId=${task.project.id}&piece=${task.contentPiece.id}`} className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 hover:underline" title="Ver pieza de contenido">
+              <Icon as={CalendarDays} size={13} />Contenido
             </Link>
           )}
           {task.createdBy && (
@@ -194,13 +196,13 @@ function TaskCard({ task, onUpdate, onDelete, activeTask, backlog, future, onAdd
             </span>
           )}
           {onOpenComments && comments > 0 && (
-            <button type="button" onClick={() => onOpenComments(task)} className="hover:text-primary-600 dark:hover:text-primary-400" title="Comentarios">
-              💬 {comments}
+            <button type="button" onClick={() => onOpenComments(task)} className="inline-flex items-center gap-1 hover:text-primary-600 dark:hover:text-primary-400" title="Comentarios">
+              <Icon as={MessageSquare} size={13} />{comments}
             </button>
           )}
           {onOpenComments && files > 0 && (
-            <button type="button" onClick={() => onOpenComments(task)} className="hover:text-primary-600 dark:hover:text-primary-400" title="Adjuntos">
-              📎 {files}
+            <button type="button" onClick={() => onOpenComments(task)} className="inline-flex items-center gap-1 hover:text-primary-600 dark:hover:text-primary-400" title="Adjuntos">
+              <Icon as={Paperclip} size={13} />{files}
             </button>
           )}
         </div>

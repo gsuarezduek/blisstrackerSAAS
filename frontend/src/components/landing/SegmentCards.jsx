@@ -9,13 +9,15 @@
  * el mismo pitch de marketing con otro nombre y no mencionaba Ventas ni RRHH.
  */
 import { Link } from 'react-router-dom'
+import { Target } from 'lucide-react'
 import { MODULE_CATALOG } from '../../lib/moduleCatalog'
+import { Icon } from '../ui/Icon'
 
 const TILES = [
   {
     id: 'core',
     primary: true,
-    icon: '🎯',
+    icon: Target,
     label: 'Siempre activo',
     title: 'Ejecución diaria',
     desc: 'La base de todo workspace, sin activar nada: tareas con foco forzado, coach de IA, visibilidad de equipo en vivo y reportes semanales.',
@@ -91,7 +93,7 @@ export default function SegmentCards() {
                   ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-xl shadow-primary-200'
                   : 'bg-gray-50 border border-gray-200 text-gray-900'
               }`}>
-              <span className="text-2xl mb-2">{t.icon}</span>
+              <Icon as={t.icon} size={26} strokeWidth={1.5} className="mb-3" />
               <span className={`text-xs font-bold uppercase tracking-wider ${t.primary ? 'text-primary-100' : 'text-gray-500'}`}>
                 {t.label}
               </span>

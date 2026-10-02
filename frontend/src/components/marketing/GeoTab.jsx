@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 import SetupHintCard from '../SetupHintCard'
+import { Globe } from 'lucide-react'
 
 // Techo del polling de auditorías async: si el job no terminó en este tiempo, se
 // asume colgado y se deja de pollear en vez de reintentar indefinidamente.
@@ -728,7 +729,7 @@ export default function GeoTab({ projectId, projects, onSelectProject }) {
       {/* Sin URL configurada → invitación a completarla */}
       {noUrl && (
         <SetupHintCard
-          icon="🌐"
+          icon={Globe}
           label="Este proyecto no tiene una URL configurada"
           hint="Agregá la URL del sitio para correr la auditoría GEO y medir la visibilidad en buscadores con IA."
           to={`/my-projects/${selectedProject.id}?infoTab=info`}

@@ -25,7 +25,7 @@ export default function InfoTab({
                 onClick={onOpenServicesEdit}
                 className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
               >
-                ✏️ Editar
+                Editar
               </button>
             )}
           </div>
@@ -98,7 +98,7 @@ export default function InfoTab({
               onClick={onOpenTeamEdit}
               className="text-xs text-primary-600 dark:text-primary-400 hover:underline font-medium"
             >
-              ✏️ Editar equipo
+              Editar equipo
             </button>
           )}
         </div>

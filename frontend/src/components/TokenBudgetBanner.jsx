@@ -44,7 +44,7 @@ export default function TokenBudgetBanner() {
       <span className="flex-1 text-center">
         {isExceeded ? (
           <>
-            🚫 El workspace alcanzó el <strong>límite mensual de tokens de IA</strong>.
+            El workspace alcanzó el <strong>límite mensual de tokens de IA</strong>.
             Las funcionalidades de IA están deshabilitadas hasta el próximo mes.
             {user?.isAdmin && (
               <>{' '}<Link to="/preferences" className="underline font-semibold hover:opacity-80">Ver consumo</Link></>
@@ -52,14 +52,14 @@ export default function TokenBudgetBanner() {
           </>
         ) : isCritical ? (
           <>
-            ⚠️ Solo quedan <strong>{fmtTokens(remaining)} tokens</strong> disponibles este mes ({pct}% usado).
+            Solo quedan <strong>{fmtTokens(remaining)} tokens</strong> disponibles este mes ({pct}% usado).
             {user?.isAdmin && (
               <>{' '}<Link to="/preferences" className="underline font-semibold hover:opacity-80">Ver consumo</Link></>
             )}
           </>
         ) : (
           <>
-            ⚠️ Se usó el <strong>{pct}% del límite mensual de IA</strong> — quedan {fmtTokens(remaining)} tokens.
+            Se usó el <strong>{pct}% del límite mensual de IA</strong> — quedan {fmtTokens(remaining)} tokens.
             {user?.isAdmin && (
               <>{' '}<Link to="/preferences" className="underline font-semibold hover:opacity-80">Ver consumo</Link></>
             )}
